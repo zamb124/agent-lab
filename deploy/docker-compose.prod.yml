@@ -3,13 +3,13 @@ version: '3.8'
 services:
   app:
     build:
-      context: .
+      context: ..
       dockerfile: backend/Dockerfile
     container_name: agents-lab-app
     environment:
       - ENVIRONMENT=production
     volumes:
-      - ./conf.json:/app/conf.json:ro
+      - ../conf.json:/app/conf.json:ro
       - ~/.postgresql:/app/.postgresql:ro
       - app_logs:/app/logs
     ports:
