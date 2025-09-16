@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: agents-lab-postgres
+    environment:
+      POSTGRES_DB: agents_lab
+      POSTGRES_USER: agents_lab_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - agents-lab-network
+
+  app:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: agents-lab-app
+    environment:
+      - DATABASE_URL=postgresql://agents_lab_user:${POSTGRES_PASSWORD}@postgres:5432/agents_lab
+      - ENVIRONMENT=production
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - app_logs:/app/logs
+    ports:
+      - "8001:8001"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    networks:
+      - agents-lab-network
+
+volumes:
+  postgres_data:
+  app_logs:
+
+networks:
+  agents-lab-network:
+    driver: bridge
