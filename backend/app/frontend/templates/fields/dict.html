@@ -1,0 +1,26 @@
+{% if view_mode == "table" %}
+  {# В таблице показываем JSON кратко #}
+  <td class="field-cell">
+    <code class="small text-truncate d-block" style="max-width: 150px;">
+      {{ value|tojson if value else '{}' }}
+    </code>
+  </td>
+{% else %}
+  {# В форме показываем как JSON textarea #}
+  {% extends "fields/base_field.html" %}
+  
+  {% block field_type_class %}field-dict{% endblock %}
+  
+  {% block field_input %}
+    {% if readonly %}
+      <textarea class="form-control" readonly rows="3">{{ value|tojson(indent=2) if value else '{}' }}</textarea>
+    {% else %}
+      <textarea class="form-control" 
+                id="{{ field_name }}" 
+                name="{{ field_name }}" 
+                rows="3"
+                {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}>{{ value|tojson(indent=2) if value else '{}' }}</textarea>
+      <small class="text-muted">Формат: JSON</small>
+    {% endif %}
+  {% endblock %}
+{% endif %}

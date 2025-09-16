@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Авторизация - Agent Platform{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md">
+        <div class="card glass-effect animate-fade-in-up">
+            <div class="card-body p-6 text-center">
+                <div class="mb-6">
+                    <div class="flex items-center justify-center gap-3 mb-4">
+                        <i class="bi bi-robot text-4xl text-primary"></i>
+                        <div>
+                            <h1 class="text-xl font-bold langflow-gradient">Agent Platform</h1>
+                            <div class="text-xs text-muted">Платформа для агентов</div>
+                        </div>
+                    </div>
+                    <p class="text-secondary">Выберите способ входа в систему</p>
+                </div>
+                
+                <div class="flex flex-col gap-3">
+                    {% for provider in providers %}
+                    <a href="/auth/login/{{ provider.value }}" 
+                       class="btn btn-outline interactive glow-primary">
+                        {% if provider.value == 'yandex' %}
+                            <i class="bi bi-cloud"></i>
+                        {% elif provider.value == 'google' %}
+                            <i class="bi bi-google"></i>
+                        {% elif provider.value == 'github' %}
+                            <i class="bi bi-github"></i>
+                        {% else %}
+                            <i class="bi bi-person"></i>
+                        {% endif %}
+                        <span>Войти через {{ provider.name }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+                
+                <div id="auth-result" class="mt-4"></div>
+                
+                <div class="mt-6 pt-4 border-t border-primary">
+                    <p class="text-xs text-muted">
+                        Безопасная авторизация через OAuth 2.0
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Декоративные элементы -->
+        <div class="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden -z-10">
+            <div class="absolute top-20 left-10 w-32 h-32 bg-accent-primary opacity-10 rounded-full blur-xl"></div>
+            <div class="absolute bottom-20 right-10 w-40 h-40 bg-accent-secondary opacity-10 rounded-full blur-xl"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}

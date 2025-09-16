@@ -1,0 +1,60 @@
+{% if view_mode == "table" %}
+  <td class="field-cell">
+    {% if readonly %}
+      <div class="datetime-display">
+        <span class="datetime-date">{{ value.strftime('%Y-%m-%d') if value else '-' }}</span>
+        <span class="datetime-time-badge">{{ value.strftime('%H:%M') if value else '' }}</span>
+      </div>
+    {% else %}
+      <div class="field-input-wrapper d-flex align-items-center gap-2">
+        <div id="loading-{{ field_name }}-{{ model_id }}" class="field-loading-indicator htmx-indicator"></div>
+        <input type="datetime-local" 
+               class="form-control form-control-sm transition-fast flex-grow-1" 
+               value="{{ value.strftime('%Y-%m-%dT%H:%M') if value else '' }}"
+               name="{{ field_name }}"
+               {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+               hx-put="/frontend/models/{{ model_type }}/{{ model_id }}?view={{ view_mode }}"
+               hx-ext="json-enc"
+               hx-trigger="blur"
+               hx-target="closest tr"
+               hx-swap="outerHTML"
+               hx-indicator="#loading-{{ field_name }}-{{ model_id }}">
+      </div>
+    {% endif %}
+  </td>
+{% else %}
+  <div class="field field-datetime">
+    <label for="{{ field_name }}" class="field-label {% if required %}required{% endif %}">
+      {{ title }}
+    </label>
+    {% if description %}
+      <div class="field-description">{{ description }}</div>
+    {% endif %}
+    
+    <div class="field-input-wrapper">
+      {% if readonly %}
+        <div class="datetime-readonly">
+          <div class="datetime-full">
+            <i class="bi bi-calendar3"></i>
+            <span>{{ value.strftime('%Y-%m-%d') if value else 'Не указано' }}</span>
+            <i class="bi bi-clock"></i>
+            <span>{{ value.strftime('%H:%M:%S') if value else '' }}</span>
+          </div>
+        </div>
+      {% else %}
+        <input type="datetime-local" 
+               id="{{ field_name }}" 
+               name="{{ field_name }}" 
+               value="{{ value.strftime('%Y-%m-%dT%H:%M') if value else '' }}" 
+               class="form-control transition-fast"
+               {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+               {% if required %}required{% endif %}
+               {% for attr, val in widget_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}>
+      {% endif %}
+    </div>
+    
+    {% if help_text %}
+      <div class="field-help">{{ help_text }}</div>
+    {% endif %}
+  </div>
+{% endif %}

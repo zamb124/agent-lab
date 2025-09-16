@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # PostgreSQL база данных
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: agent_platform
+      POSTGRES_USER: agent_user
+      POSTGRES_PASSWORD: agent_password
+    ports:
+      - "5436:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent_user -d agent_platform"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Agent Platform API
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://agent_user:agent_password@postgres:5432/agent_platform
+      HOST: 0.0.0.0
+      PORT: 8000
+      DEBUG: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: python run.py
+
+  # Task Worker
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://agent_user:agent_password@postgres:5432/agent_platform
+      DEBUG: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: python run_worker.py
+
+volumes:
+  postgres_data:

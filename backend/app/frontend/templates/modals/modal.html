@@ -1,0 +1,29 @@
+<div class="modal-overlay" onclick="this.remove()" style="position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important; z-index: 99999 !important; display: flex !important; align-items: center !important; justify-content: center !important; background: rgba(0,0,0,0.8) !important; margin: 0 !important; padding: 20px !important; box-sizing: border-box !important; width: 100vw !important; height: 100vh !important;">
+    <div class="modal-content" onclick="event.stopPropagation()" style="position: relative !important; background: white !important; border-radius: 8px !important; box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important; max-width: 90vw !important; max-height: 90vh !important; width: 600px !important; overflow: auto !important;">
+        <div class="modal-header">
+            <div class="d-flex align-items-center gap-3">
+                <div class="table-icon">
+                    <i class="bi bi-eye"></i>
+                </div>
+                <div>
+                    <h5 class="mb-0 font-semibold">{{ model_type.title() if model_type else 'Детали' }}</h5>
+                    <small class="text-muted">Подробная информация</small>
+                </div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="this.closest('.modal-overlay').remove()">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+        
+        <div class="modal-body">
+            {{ content|safe }}
+        </div>
+        
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
+                <i class="bi bi-x"></i>
+                Закрыть
+            </button>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,36 @@
+{% if view_mode == "table" %}
+  {# В таблице показываем теги #}
+  <td class="field-cell">
+    {% if value %}
+      {% for item in value %}
+        <span class="badge bg-secondary me-1">{{ item }}</span>
+      {% endfor %}
+    {% else %}
+      <span class="text-muted">-</span>
+    {% endif %}
+  </td>
+{% else %}
+  {# В форме показываем как текстовое поле с разделителями #}
+  {% extends "fields/base_field.html" %}
+  
+  {% block field_type_class %}field-list-str{% endblock %}
+  
+  {% block field_input %}
+    {% if readonly %}
+      <input type="text" 
+             id="{{ field_name }}" 
+             name="{{ field_name }}" 
+             value="{{ value|join(', ') if value else '' }}" 
+             readonly 
+             class="form-control">
+    {% else %}
+      <input type="text" 
+             id="{{ field_name }}" 
+             name="{{ field_name }}" 
+             value="{{ value|join(', ') if value else '' }}" 
+             class="form-control"
+             {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}>
+      <small class="text-muted">Разделяйте элементы запятыми</small>
+    {% endif %}
+  {% endblock %}
+{% endif %}

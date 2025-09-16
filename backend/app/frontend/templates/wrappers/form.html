@@ -1,0 +1,50 @@
+<div class="card">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-3">
+                <div class="table-icon">
+                    <i class="bi bi-pencil"></i>
+                </div>
+                <div>
+                    <h5 class="mb-0 font-semibold">{{ model_type.title() if model_type else 'Форма' }}</h5>
+                    <small class="text-muted">Редактирование</small>
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary btn-sm active">
+                    <i class="bi bi-pencil"></i>
+                    Форма
+                </button>
+                <button class="btn btn-ghost btn-sm" 
+                        hx-get="/frontend/models/{{ model_type }}?view=table" 
+                        hx-target="#content"
+                        hx-push-url="true"
+                        hx-indicator="#content-loading">
+                    <i class="bi bi-table"></i>
+                    Таблица
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <form hx-ext="json-enc" 
+              hx-post="/frontend/models/{{ model_type }}" 
+              hx-target="#content"
+              hx-indicator="#content-loading">
+            {{ fields_html|safe }}
+            
+            <div class="d-flex gap-3 justify-content-end mt-4">
+                <button type="button" class="btn btn-secondary" 
+                        hx-get="/frontend/models/{{ model_type }}?view=table" 
+                        hx-target="#content">
+                    <i class="bi bi-x"></i>
+                    Отмена
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check"></i>
+                    Сохранить
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
