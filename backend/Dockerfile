@@ -12,16 +12,18 @@ RUN pip install uv
 # Создаем рабочую директорию
 WORKDIR /app
 
-# Копируем файлы проекта
-COPY ../pyproject.toml ./
-COPY app/ ./app/
-COPY run.py ./
+# Копируем файлы проекта (context = .)
+COPY pyproject.toml ./
+COPY backend/app/ ./app/
+COPY backend/run.py ./
+COPY backend/run_worker.py ./
+COPY conf.json ./
 
 # Устанавливаем зависимости
 RUN uv pip install --system -e .
 
 # Открываем порт
-EXPOSE 8000
+EXPOSE 8001
 
 # Команда запуска
 CMD ["python", "run.py"]
