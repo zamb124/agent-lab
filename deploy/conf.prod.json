@@ -1,0 +1,98 @@
+{
+  "server": {
+    "env": "production",
+    "port": 8001,
+    "debug": false
+  },
+  "auth": {
+    "enabled": true,
+    "secret_key": "CHANGE_THIS_SECRET_KEY_IN_PRODUCTION",
+    "session_timeout": 7200,
+    "providers": {
+      "yandex": {
+        "client_id": "YOUR_YANDEX_CLIENT_ID",
+        "client_secret": "YOUR_YANDEX_CLIENT_SECRET",
+        "auth_url": "https://oauth.yandex.ru/authorize",
+        "token_url": "https://oauth.yandex.ru/token",
+        "userinfo_url": "https://login.yandex.ru/info",
+        "scope": "login:email login:avatar",
+        "enabled": false
+      }
+    }
+  },
+  "database": {
+    "url": "postgresql+asyncpg://agents_lab_user:POSTGRES_PASSWORD_HERE@postgres:5432/agents_lab",
+    "checkpointer_url": "postgresql://agents_lab_user:POSTGRES_PASSWORD_HERE@postgres:5432/agents_lab"
+  },
+  "llm": {
+    "default_provider": "openai",
+    "providers": {
+      "openai": {
+        "api_key": "YOUR_OPENAI_API_KEY",
+        "base_url": "https://api.openai.com/v1",
+        "default_model": "gpt-4",
+        "default_temperature": 0.2,
+        "timeout": 30,
+        "max_retries": 3,
+        "enabled": true,
+        "models": {
+          "gpt-4": {
+            "max_tokens": 4000,
+            "cost_per_token": 0.00003
+          },
+          "gpt-3.5-turbo": {
+            "max_tokens": 4000,
+            "cost_per_token": 0.000002
+          }
+        }
+      },
+      "yandex": {
+        "api_key": "YOUR_YANDEX_API_KEY",
+        "base_url": "https://llm.api.cloud.yandex.net",
+        "default_model": "yandexgpt/latest",
+        "default_temperature": 0.2,
+        "timeout": 30,
+        "max_retries": 3,
+        "enabled": false,
+        "models": {
+          "yandexgpt/latest": {
+            "max_tokens": 8000,
+            "cost_per_token": 0.000001
+          }
+        }
+      },
+      "mock": {
+        "api_key": null,
+        "base_url": null,
+        "default_model": "mock-gpt",
+        "default_temperature": 0.2,
+        "timeout": 30,
+        "max_retries": 3,
+        "enabled": false,
+        "models": {
+          "mock-gpt": {
+            "max_tokens": 4000,
+            "cost_per_token": 0.0
+          }
+        }
+      }
+    }
+  },
+  "worker": {
+    "max_workers": 4,
+    "task_poll_interval": 3
+  },
+  "s3": {
+    "enabled": false,
+    "default_bucket": null,
+    "buckets": {}
+  },
+  "fashn": {
+    "enabled": false,
+    "api_key": null,
+    "base_url": "https://api.fashn.ai/v1",
+    "timeout": 60,
+    "poll_interval": 5.0,
+    "poll_timeout": 180
+  }
+}
