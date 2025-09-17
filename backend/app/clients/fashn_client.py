@@ -4,9 +4,10 @@ FASHN API клиент для виртуальной примерки одежд
 import io
 import asyncio
 import logging
-from typing import Literal, Optional
+from typing import Literal, Optional, Tuple
 from PIL import Image
 import httpx
+import numpy as np
 from pydantic import BaseModel
 
 from ..core.config import settings
@@ -81,11 +82,157 @@ class FashnClient:
         return product_rgba.resize((target_w_px, target_h_px), Image.LANCZOS)
     
     def _resize_product_by_dimensions(self, product_rgba: Image.Image, target_w_px: int, target_h_px: int) -> Image.Image:
-        """Изменяет размер продукта по заданным ширине и высоте"""
+        """Изменяет размер продукта точно по заданным размерам (реальные размеры сумки в см)"""
         target_w_px = max(1, int(round(target_w_px)))
         target_h_px = max(1, int(round(target_h_px)))
         return product_rgba.resize((target_w_px, target_h_px), Image.LANCZOS)
     
+    def _analyze_product_bounds(self, product_image: Image.Image) -> Tuple[Optional[float], Optional[Tuple[int, int, int, int]]]:
+        """
+        Анализирует реальные границы продукта на изображении
+        
+        Args:
+            product_image: PIL изображение продукта
+            
+        Returns:
+            tuple: (aspect_ratio, bounds) где bounds = (left, top, right, bottom)
+        """
+        try:
+            # Конвертируем в RGB если нужно
+            if product_image.mode != 'RGB':
+                product_image = product_image.convert('RGB')
+            
+            # Конвертируем в numpy array
+            img_array = np.array(product_image)
+            
+            # Определяем фоновый цвет по углам изображения
+            h, w = img_array.shape[:2]
+            corner_size = min(50, w//10, h//10)
+            
+            # Берем пиксели из углов
+            corners = [
+                img_array[0:corner_size, 0:corner_size],  # Верхний левый
+                img_array[0:corner_size, -corner_size:],  # Верхний правый
+                img_array[-corner_size:, 0:corner_size], # Нижний левый
+                img_array[-corner_size:, -corner_size:]  # Нижний правый
+            ]
+            
+            # Находим средний цвет углов
+            corner_pixels = np.concatenate([corner.reshape(-1, 3) for corner in corners])
+            bg_color = np.mean(corner_pixels, axis=0).astype(int)
+            
+            # Создаем маску для пикселей, похожих на фон
+            color_diff = np.sqrt(np.sum((img_array - bg_color) ** 2, axis=2))
+            bg_threshold = 30  # Порог различия цветов
+            
+            background_mask = color_diff < bg_threshold
+            non_bg_mask = ~background_mask
+            
+            # Находим координаты всех не фоновых пикселей
+            non_bg_coords = np.where(non_bg_mask)
+            
+            if len(non_bg_coords[0]) == 0:
+                logger.warning("Не удалось найти границы продукта на изображении")
+                return None, None
+            
+            # Находим границы
+            top = np.min(non_bg_coords[0])
+            bottom = np.max(non_bg_coords[0])
+            left = np.min(non_bg_coords[1])
+            right = np.max(non_bg_coords[1])
+            
+            product_width = right - left + 1
+            product_height = bottom - top + 1
+            
+            # Вычисляем соотношение сторон (высота/ширина)
+            aspect_ratio = product_height / product_width
+            
+            logger.info(f"Анализ границ продукта: {product_width}×{product_height}px, соотношение {aspect_ratio:.3f}")
+            logger.info(f"Фоновый цвет: RGB{tuple(bg_color)}")
+            
+            return aspect_ratio, (left, top, right, bottom)
+            
+        except Exception as e:
+            logger.error(f"Ошибка анализа границ продукта: {e}")
+            return None, None
+    
+    def debug_scaling_calculation(
+        self,
+        model_height_cm: float,
+        model_img_width: int,
+        model_img_height: int,
+        product_width_cm: float,
+        product_height_cm: float,
+        visible_top_pct: float = 0.04,
+        visible_bottom_pct: float = 0.98,
+        scale_bias: float = 1.0
+    ) -> dict:
+        """Отладочная функция для анализа масштабирования сумки"""
+        
+        print(f"\n=== АНАЛИЗ МАСШТАБИРОВАНИЯ СУМКИ ===")
+        print(f"Размеры модели: {model_img_width}×{model_img_height} пикселей")
+        print(f"Рост модели: {model_height_cm} см")
+        print(f"Размеры сумки: {product_width_cm}×{product_height_cm} см")
+        print(f"Видимая часть модели: {visible_top_pct:.2%} - {visible_bottom_pct:.2%}")
+        print(f"Scale bias: {scale_bias}")
+        
+        # Шаг 1: Вычисляем пиксели на мм
+        H = model_img_height
+        top = max(0.0, min(1.0, visible_top_pct))
+        bot = max(0.0, min(1.0, visible_bottom_pct))
+        
+        if bot <= top:
+            top, bot = 0.0, 1.0
+        
+        visible_px = max(1, int(round((bot - top) * H)))
+        height_mm = model_height_cm * 10.0
+        px_per_mm = visible_px / height_mm
+        
+        print(f"\nШаг 1: Расчет масштаба")
+        print(f"  Видимая высота в пикселях: {visible_px} px")
+        print(f"  Рост модели в мм: {height_mm} мм")
+        print(f"  Пикселей на мм: {px_per_mm:.3f} px/mm")
+        
+        # Шаг 2: Переводим размеры сумки в пиксели
+        product_width_mm = product_width_cm * 10.0
+        product_height_mm = product_height_cm * 10.0
+        
+        base_w_px = max(1, int(round(product_width_mm * px_per_mm)))
+        base_h_px = max(1, int(round(product_height_mm * px_per_mm)))
+        
+        target_w_px = max(1, int(round(base_w_px * scale_bias)))
+        target_h_px = max(1, int(round(base_h_px * scale_bias)))
+        
+        print(f"\nШаг 2: Размеры сумки в пикселях")
+        print(f"  Ширина: {product_width_cm} см = {product_width_mm} мм = {base_w_px} px")
+        print(f"  Высота: {product_height_cm} см = {product_height_mm} мм = {base_h_px} px")
+        print(f"  С учетом scale_bias ({scale_bias}): {target_w_px}×{target_h_px} px")
+        
+        # Шаг 3: Анализируем пропорции
+        original_ratio = product_height_cm / product_width_cm
+        pixel_ratio = target_h_px / target_w_px
+        
+        print(f"\nШаг 3: Анализ пропорций")
+        print(f"  Исходные пропорции сумки: {product_height_cm}/{product_width_cm} = {original_ratio:.3f}")
+        print(f"  Пропорции в пикселях: {target_h_px}/{target_w_px} = {pixel_ratio:.3f}")
+        print(f"  Разница в пропорциях: {abs(original_ratio - pixel_ratio):.6f}")
+        
+        # Шаг 4: Процент от размера модели
+        model_width_pct = (target_w_px / model_img_width) * 100
+        model_height_pct = (target_h_px / model_img_height) * 100
+        
+        print(f"\nШаг 4: Размер относительно модели")
+        print(f"  Ширина сумки: {model_width_pct:.1f}% от ширины модели")
+        print(f"  Высота сумки: {model_height_pct:.1f}% от высоты модели")
+        
+        return {
+            "px_per_mm": px_per_mm,
+            "target_size_px": (target_w_px, target_h_px),
+            "original_ratio": original_ratio,
+            "pixel_ratio": pixel_ratio,
+            "model_percentage": (model_width_pct, model_height_pct)
+        }
+
     async def _upload_image(self, data: bytes, filename: str) -> str:
         """Загружает изображение через FileProcessor платформы с публичным доступом"""
         file_record = await self.file_processor.process_file_from_bytes(
@@ -312,8 +459,15 @@ class FashnClient:
         model_img = self._pil_open(model_image_bytes, rgba=False)
         product_img = self._pil_open(product_image_bytes, rgba=True)
         
+        # Анализируем реальные пропорции продукта на изображении
+        real_aspect_ratio, product_bounds = self._analyze_product_bounds(product_img)
+        
         if item_kind.lower() == "bag":
-            # Для сумок: масштабируем и композим
+            # Для сумок: НЕ делаем пред-композицию, позволяем FASHN самому разместить сумку
+            # Это предотвращает размещение сумки на голове
+            logger.info("Для сумок отключена пред-композиция - FASHN сам разместит сумку")
+            
+            # Просто масштабируем сумку для лучшего качества
             px_per_mm = self._compute_px_per_mm_visible(
                 model_height_cm=model_height_cm,
                 model_img=model_img,
@@ -321,43 +475,67 @@ class FashnClient:
                 visible_bottom_pct=visible_bottom_pct,
             )
             
+            # Определяем пропорции для масштабирования
+            if real_aspect_ratio is not None:
+                # Используем реальные пропорции с изображения
+                logger.info(f"Используем реальные пропорции с изображения: {real_aspect_ratio:.3f}")
+                use_real_proportions = True
+                effective_aspect_ratio = real_aspect_ratio
+            elif product_height_cm > 0:
+                # Используем заявленные размеры
+                logger.info(f"Используем заявленные размеры: {product_width_cm}×{product_height_cm} см")
+                use_real_proportions = False
+                effective_aspect_ratio = product_height_cm / product_width_cm
+            else:
+                # Сохраняем исходные пропорции изображения
+                logger.info("Сохраняем исходные пропорции изображения")
+                use_real_proportions = False
+                effective_aspect_ratio = product_img.height / product_img.width
+            
             # Конвертируем см в мм для внутренних вычислений
             product_width_mm = product_width_cm * 10.0
             base_w_px = max(1, int(round(product_width_mm * px_per_mm)))
-            target_w_px = max(1, int(round(base_w_px * scale_bias)))
+            initial_target_w_px = max(1, int(round(base_w_px * scale_bias)))
             
-            # Если указана высота, используем её, иначе сохраняем пропорции
-            if product_height_cm > 0:
-                product_height_mm = product_height_cm * 10.0
-                base_h_px = max(1, int(round(product_height_mm * px_per_mm)))
-                target_h_px = max(1, int(round(base_h_px * scale_bias)))
-                product_scaled = self._resize_product_by_dimensions(product_img, target_w_px, target_h_px)
-            else:
-                # Масштабируем только по ширине, сохраняя пропорции
-                product_scaled = self._resize_product_by_width(product_img, target_w_px)
+            # Вычисляем высоту на основе выбранных пропорций
+            initial_target_h_px = max(1, int(round(initial_target_w_px * effective_aspect_ratio)))
             
-            # Пред-композиция
-            composed = self._compose_product_on_model(
-                model_img_rgb=model_img,
-                product_rgba=product_scaled,
-                placement=placement,
-                offset_x_pct=offset_x_pct,
-                offset_y_pct=offset_y_pct,
-            )
+            # Автоматическая коррекция для сумок
+            auto_scale_correction = 1.0
+            correction_needed = False
             
-            # Загружаем через FileProcessor платформы
+            # Находим минимальный размер для коррекции
+            min_dimension = min(initial_target_w_px, initial_target_h_px)
+            if min_dimension < 120:  # Увеличиваем порог для лучшего качества
+                auto_scale_correction = 120 / min_dimension
+                correction_needed = True
+                logger.info(f"Применяем автокоррекцию: {auto_scale_correction:.2f}x (было {initial_target_w_px}×{initial_target_h_px}px)")
+            
+            if not correction_needed:
+                logger.info(f"Автокоррекция не нужна: размер {initial_target_w_px}×{initial_target_h_px}px достаточен")
+            
+            # Применяем коррекцию
+            target_w_px = max(1, int(round(base_w_px * scale_bias * auto_scale_correction)))
+            target_h_px = max(1, int(round(target_w_px * effective_aspect_ratio)))
+            
+            # Масштабируем сумку с правильными пропорциями
+            product_scaled = self._resize_product_by_dimensions(product_img, target_w_px, target_h_px)
+            logger.info(f"Финальный размер сумки: {target_w_px}×{target_h_px}px (соотношение {target_h_px/target_w_px:.3f})")
+            
+            # Загружаем ЧИСТОЕ изображение модели (без пред-композиции)
             m_buf = io.BytesIO()
-            composed.save(m_buf, format="PNG")
+            model_img.save(m_buf, format="PNG")
             model_url = await self._upload_image(
                 m_buf.getvalue(), 
-                "model_composed.png"
+                "model_clean.png"
             )
             
+            # Загружаем масштабированную сумку
             p_buf = io.BytesIO()
             product_scaled.save(p_buf, format="PNG")
             product_url = await self._upload_image(
                 p_buf.getvalue(), 
-                "product_scaled.png"
+                "bag_scaled.png"
             )
         else:
             # Для одежды: не композим, FASHN сам обработает

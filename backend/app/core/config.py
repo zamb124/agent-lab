@@ -34,8 +34,8 @@ class AuthConfig(BaseModel):
 
 class DatabaseConfig(BaseModel):
     """Конфигурация базы данных"""
-    url: str = "postgresql+asyncpg://agent_user:agent_password@localhost:5433/agent_platform"
-    checkpointer_url: str = "postgresql://agent_user:agent_password@localhost:5433/agent_platform"
+    url: str = "postgresql+asyncpg://agent_user:agent_password@127.0.0.1:5432/agent_platform"
+    checkpointer_url: str = "postgresql://agent_user:agent_password@127.0.0.1:5432/agent_platform"
 
 
 class LLMProviderConfig(BaseModel):

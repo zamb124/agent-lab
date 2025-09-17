@@ -226,7 +226,7 @@ class FashnApp {
                 return {
                     title: `Товар ${idMatch[1]}`,
                     imageUrl: null,
-                    dimensions: { width: 30, height: 0 }, // Значения по умолчанию для сумки
+                    dimensions: { length: 30, height: 0 }, // Значения по умолчанию для сумки
                     originalUrl: url,
                     productId: idMatch[1]
                 };
@@ -243,14 +243,14 @@ class FashnApp {
 
         let infoHtml = `<strong>${productInfo.title}</strong><br>`;
         
+        if (productInfo.dimensions.length) {
+            infoHtml += `Длина: ${productInfo.dimensions.length} см<br>`;
+        }
         if (productInfo.dimensions.width) {
             infoHtml += `Ширина: ${productInfo.dimensions.width} см<br>`;
         }
         if (productInfo.dimensions.height) {
-            infoHtml += `Высота: ${productInfo.dimensions.height} см<br>`;
-        }
-        if (productInfo.dimensions.length) {
-            infoHtml += `Длина: ${productInfo.dimensions.length} см`;
+            infoHtml += `Высота: ${productInfo.dimensions.height} см`;
         }
 
         detailsDiv.innerHTML = infoHtml;
@@ -302,7 +302,7 @@ class FashnApp {
                 model_image_url: userPhotoUpload.url,
                 product_image_url: this.productData.imageUrl,
                 model_height_cm: parseFloat(document.getElementById('height').value),
-                product_width_cm: this.productData.dimensions.width || 30,
+                product_width_cm: this.productData.dimensions.length || 30,
                 product_height_cm: this.productData.dimensions.height || 0,
                 item_kind: document.getElementById('itemKind').value,
                 placement: document.getElementById('placement').value,

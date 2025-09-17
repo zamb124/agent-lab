@@ -214,14 +214,53 @@ async def parse_product_url(url: str):
                 title = title_el.get_text(strip=True)
                 value = value_el.get_text(strip=True)
                 
+                logger.info(f"Найдено поле: '{title}' = '{value}'")
+                
                 try:
-                    numeric_value = float(re.search(r'\d+(?:\.\d+)?', value).group())
-                    if 'длина' in title.lower():
-                        dimensions['length'] = numeric_value
-                    elif 'ширина' in title.lower():
-                        dimensions['width'] = numeric_value
-                    elif 'высота' in title.lower():
-                        dimensions['height'] = numeric_value
+                    # Ищем все числа в строке
+                    numbers = re.findall(r'\d+(?:\.\d+)?', value)
+                    if not numbers:
+                        continue
+                    
+                    # Берем первое число
+                    numeric_value = float(numbers[0])
+                    
+                    title_lower = title.lower()
+                    
+                    # Проверяем, что это размеры самой сумки, а не ремней/ручек
+                    if 'длина' in title_lower:
+                        # Исключаем размеры ремней и ручек
+                        if any(word in title_lower for word in ['ремн', 'ручк', 'цепочк', 'шнур']):
+                            logger.info(f"🚫 Пропустили '{title}' - это размер ремня/ручки")
+                            continue
+                        # Длина сумки обычно 15-50 см
+                        if 10 <= numeric_value <= 60:
+                            dimensions['length'] = numeric_value
+                            logger.info(f"✅ Сохранили длину: {numeric_value} см")
+                        else:
+                            logger.info(f"❌ Пропустили длину {numeric_value} см (вне диапазона 10-60)")
+                    elif 'ширина' in title_lower:
+                        # Исключаем размеры ремней
+                        if any(word in title_lower for word in ['ремн', 'ручк', 'цепочк', 'шнур']):
+                            logger.info(f"🚫 Пропустили '{title}' - это размер ремня/ручки")
+                            continue
+                        # Ширина сумки обычно 3-40 см
+                        if 2 <= numeric_value <= 50:
+                            dimensions['width'] = numeric_value
+                            logger.info(f"✅ Сохранили ширину: {numeric_value} см")
+                        else:
+                            logger.info(f"❌ Пропустили ширину {numeric_value} см (вне диапазона 2-50)")
+                    elif 'высота' in title_lower:
+                        # Исключаем размеры ремней
+                        if any(word in title_lower for word in ['ремн', 'ручк', 'цепочк', 'шнур']):
+                            logger.info(f"🚫 Пропустили '{title}' - это размер ремня/ручки")
+                            continue
+                        # Высота сумки обычно 5-40 см
+                        if 3 <= numeric_value <= 50:
+                            dimensions['height'] = numeric_value
+                            logger.info(f"✅ Сохранили высоту: {numeric_value} см")
+                        else:
+                            logger.info(f"❌ Пропустили высоту {numeric_value} см (вне диапазона 3-50)")
                 except (AttributeError, ValueError):
                     continue
         
