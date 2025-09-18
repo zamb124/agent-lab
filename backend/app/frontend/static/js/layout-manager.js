@@ -116,7 +116,8 @@ class LayoutManager {
             
             // Если перешли с мобильного на десктоп
             if (wasMobile && !this.isMobile) {
-                this.resetToDesktop();
+                this.closeMobileMenu();
+                this.applySidebarState();
             }
             
             // Если перешли с десктопа на мобильный
@@ -124,27 +125,6 @@ class LayoutManager {
                 this.expandSidebar();
             }
         });
-    }
-    
-    resetToDesktop() {
-        const sidebar = document.querySelector('.sidebar');
-        const mainContent = document.querySelector('.main-content');
-        const overlay = document.querySelector('.sidebar-overlay');
-        
-        if (sidebar) {
-            // Убираем все мобильные стили и классы
-            sidebar.style.removeProperty('transform');
-            sidebar.classList.remove('open');
-        }
-        if (mainContent) {
-            mainContent.style.removeProperty('margin-left');
-        }
-        if (overlay) {
-            overlay.classList.remove('active');
-        }
-        
-        // Применяем состояние десктопного сайдбара
-        this.applySidebarState();
     }
     
     toggleMobileMenu() {
