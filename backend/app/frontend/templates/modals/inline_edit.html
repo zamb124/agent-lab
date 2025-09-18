@@ -1,7 +1,8 @@
 <div class="p-3">
     <form hx-put="/frontend/models/{{ parent_model_type }}/{{ parent_model_id }}" 
           hx-ext="json-enc"
-          hx-swap="none">
+          hx-swap="none"
+          hx-on::after-request="if(event.detail.successful) this.closest('.modal-overlay').remove()">
         <div class="mb-3">
             <label class="form-label">Поле {{ field_name }}:</label>
             <textarea name="{{ field_name }}" 

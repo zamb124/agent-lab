@@ -20,13 +20,34 @@ class APP {
     async setupManagers() {
         // Инициализируем менеджеры
         try {
+            console.log('🔄 Загружаем модули менеджеров...');
             const { default: ThemeManager } = await import('./theme-manager.js');
             const { default: LayoutManager } = await import('./layout-manager.js');
             const { default: HTMXManager } = await import('./htmx-manager.js');
+            const { default: ChatManager } = await import('./chat.js');
             
+            console.log('✅ Модули загружены, создаем экземпляры...');
             this.themeManager = new ThemeManager();
             this.layoutManager = new LayoutManager();
             this.htmxManager = new HTMXManager();
+            this.chatManager = new ChatManager(this);
+            
+            // Инициализируем все менеджеры
+            console.log('🔄 Инициализируем layout manager...');
+            this.layoutManager.init();
+            console.log('🔄 Инициализируем chat manager...');
+            this.chatManager.init();
+            
+            // Создаем глобальный API для чата
+            this.chat = {
+                open: (options) => this.chatManager.open(options),
+                close: () => this.chatManager.closeChat(),
+                send: (message) => this.chatManager.sendUserMessage(message)
+            };
+            
+            // Создаем глобальный доступ к layoutManager
+            window.app = this;
+            
         } catch (error) {
             console.warn('Не удалось загрузить модули менеджеров:', error);
             // Fallback к встроенным методам
@@ -48,6 +69,7 @@ class APP {
         
         this.layoutManager = {
             toggleSidebar: () => {
+                console.log('🔥 FALLBACK toggleSidebar вызван!');
                 const sidebar = document.querySelector('.sidebar');
                 const mainContent = document.querySelector('.main-content');
                 sidebar?.classList.toggle('collapsed');
@@ -59,6 +81,16 @@ class APP {
             showModal: () => console.log('HTMXManager fallback: showModal'),
             closeModal: () => console.log('HTMXManager fallback: closeModal')
         };
+        
+        // Fallback для чата
+        this.chat = {
+            open: (options) => console.log('Chat fallback: open', options),
+            close: () => console.log('Chat fallback: close'),
+            send: (message) => console.log('Chat fallback: send', message)
+        };
+        
+        // Устанавливаем глобальный доступ
+        window.app = this;
     }
     
     setupAuth() {

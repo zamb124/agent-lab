@@ -1,16 +1,20 @@
 """
 Middleware для создания глобального контекста запроса
 """
+
 import logging
 import json
+from typing import List, Optional
 from fastapi import Request, HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from fastapi.responses import RedirectResponse, JSONResponse
 from ..core.context import set_context, clear_context
-from ..core.models import Context
+from ..models import Context
 from ..core.config import settings
-from ..identity.models import User, AuthProvider
-from ..identity.auth_service import auth_service
+from ..identity.models import User, AuthProvider, UserStatus, Company
+from ..identity.auth_service import AuthService
+from ..core.storage import Storage
 
 logger = logging.getLogger(__name__)
 
@@ -18,89 +22,143 @@ logger = logging.getLogger(__name__)
 class AuthMiddleware(BaseHTTPMiddleware):
     """Middleware для создания RequestContext с пользователем"""
     
+    def __init__(self, app):
+        super().__init__(app)
+        self.storage = Storage()
+
     async def dispatch(self, request: Request, call_next):
         # Пропускаем middleware для статики и служебных путей
-        if (request.url.path.startswith("/static/") or 
-            request.url.path.startswith("/.well-known/") or
-            request.url.path.startswith("/favicon.ico")):
+        if (
+            request.url.path.startswith("/static/")
+            or request.url.path.startswith("/.well-known/")
+            or request.url.path.startswith("/favicon.ico")
+        ):
             return await call_next(request)
-        
+
         try:
             # Создаем контекст на основе типа запроса
             context = await self._create_request_context(request)
-            
+
             # Устанавливаем глобальный контекст
             set_context(context)
-            
+
             # Также сохраняем в request.state для совместимости
             request.state.context = context
             request.state.user = context.user
-            
+
             # Продолжаем обработку
             response = await call_next(request)
             return response
-            
+
         except HTTPException as e:
             # Для HTML запросов редиректим на авторизацию
             accept_header = request.headers.get("accept", "")
             if e.status_code == 401 and "text/html" in accept_header:
-                from fastapi.responses import RedirectResponse
                 return RedirectResponse(url="/frontend/auth", status_code=302)
-            
+
             # Для AJAX/JSON запросов возвращаем JSON
-            from fastapi.responses import JSONResponse
-            return JSONResponse(
-                status_code=e.status_code,
-                content={"detail": e.detail}
-            )
+            return JSONResponse(status_code=e.status_code, content={"detail": e.detail})
         finally:
             # Очищаем контекст после обработки
             clear_context()
-    
+
     async def _create_request_context(self, request: Request) -> Context:
         """Создает контекст на основе типа запроса"""
-        
+
         path = request.url.path
         logger.info(f"🔍 Обрабатываем путь: {path}")
-        
+
+        # НОВОЕ: Определяем запрашиваемую компанию по Host
+        requested_company = await self._get_company_from_host(request)
+
         # Определяем платформу по URL
         if "/webhook/telegram/" in path:
             logger.info("📱 Telegram контекст")
-            return await self._create_telegram_context(request)
+            return await self._create_telegram_context(request, requested_company)
         elif "/api/v1/" in path:
             logger.info("🔌 API контекст")
-            return await self._create_api_context(request)
+            return await self._create_api_context(request, requested_company)
         elif path == "/frontend/auth":
             logger.info("🔐 Страница авторизации - публичная")
-            return await self._create_anonymous_context(request)
+            return await self._create_anonymous_context(request, requested_company)
         elif path.startswith("/frontend/"):
             logger.info("🖥️ Frontend контекст - требует авторизации")
-            return await self._create_frontend_context(request)
+            return await self._create_frontend_context(request, requested_company)
         elif path.startswith("/auth/"):
             logger.info("🔐 OAuth контекст")
-            return await self._create_anonymous_context(request)
+            return await self._create_anonymous_context(request, requested_company)
+        elif path == "/":
+            logger.info("🏠 Корневой путь - пропускаем через middleware")
+            return await self._create_anonymous_context(request, requested_company)
         else:
             logger.warning(f"❌ Неизвестный путь: {path}")
             raise HTTPException(status_code=404, detail="Not Found")
-    
-    async def _create_telegram_context(self, request: Request) -> Context:
+
+    async def _get_company_from_host(self, request: Request) -> Company:
+        """Определяет компанию по Host заголовку"""
+        host = request.headers.get("host", "")
+        domain = settings.server.domain
+        
+        if host.endswith(f".{domain}") and not host.startswith(domain):
+            subdomain = host.split(".")[0]
+            # Ищем в Storage: subdomain:slando -> company_id
+            company_id = await self.storage.get(f"subdomain:{subdomain}", force_global=True)
+            if company_id:
+                company_data = await self.storage.get(f"company:{company_id.strip('\"')}", force_global=True)
+                if company_data:
+                    return Company.model_validate_json(company_data)
+        
+        # Если компания не найдена по поддомену - возвращаем системную компанию
+        return await self._get_system_company()
+
+    async def _get_default_company(self) -> Company:
+        """Возвращает главную компанию по умолчанию"""
+        # Ищем главную компанию или создаем если не существует
+        company_data = await self.storage.get("company:main", force_global=True)
+        if company_data:
+            return Company.model_validate_json(company_data)
+        
+        # Создаем главную компанию
+        main_company = Company(
+            company_id="main",
+            subdomain="main",
+            name="Agent Platform",
+            status="active"
+        )
+        await self.storage.set("company:main", main_company.model_dump_json(), force_global=True)
+        await self.storage.set("subdomain:main", "main", force_global=True)
+        return main_company
+
+    async def _get_system_company(self) -> Company:
+        """Возвращает системную компанию"""
+        company_data = await self.storage.get("company:system", force_global=True)
+        if company_data:
+            return Company.model_validate_json(company_data)
+        
+        # Если системной компании нет - что-то пошло не так
+        raise Exception("Системная компания не найдена - нужно запустить миграцию")
+
+    async def _create_telegram_context(self, request: Request, requested_company: Company) -> Context:
         """Создает контекст для Telegram запросов"""
         try:
             body = await request.body()
             data = json.loads(body)
-            
+
             # Извлекаем данные Telegram пользователя
             tg_user = data.get("message", {}).get("from", {})
             telegram_user_id = str(tg_user.get("id", "unknown"))
             username = tg_user.get("username", "")
             first_name = tg_user.get("first_name", "")
             last_name = tg_user.get("last_name", "")
-            
+
             # Формируем полное имя
-            full_name = f"{first_name} {last_name}".strip() or username or f"User_{telegram_user_id}"
-            
+            full_name = (
+                f"{first_name} {last_name}".strip()
+                or username
+                or f"User_{telegram_user_id}"
+            )
+
             # Создаем реального Telegram пользователя
-            from app.identity.models import UserStatus
             user = User(
                 user_id=f"telegram_{telegram_user_id}",
                 provider=AuthProvider.YANDEX,  # Placeholder
@@ -108,39 +166,42 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 email="",  # У Telegram нет email
                 name=full_name,
                 status=UserStatus.ACTIVE,
-                groups=["user"]
+                groups=["user"],
+                companies={requested_company.company_id: ["user"]},
+                active_company_id=requested_company.company_id,
             )
-            
+
             return Context(
                 user=user,
                 platform="telegram",
+                active_company=requested_company,
+                user_companies=[requested_company],
                 metadata={
                     "telegram_user_id": telegram_user_id,
                     "username": username,
                     "first_name": first_name,
-                    "last_name": last_name
-                }
+                    "last_name": last_name,
+                },
             )
-            
+
         except Exception as e:
             logger.warning(f"Ошибка парсинга Telegram запроса: {e}")
-            return await self._create_anonymous_context(request)
-    
-    async def _create_api_context(self, request: Request) -> Context:
+            return await self._create_anonymous_context(request, requested_company)
+
+    async def _create_api_context(self, request: Request, requested_company: Company) -> Context:
         """Создает контекст для API запросов"""
-        
+
         # Проверяем включена ли авторизация
         if not settings.auth.enabled:
             # Авторизация отключена - создаем анонимного пользователя
-            return await self._create_anonymous_context(request)
-        
+            return await self._create_anonymous_context(request, requested_company)
+
         # TODO: Реализовать полную авторизацию через токены
         # Пока создаем анонимного пользователя
-        return await self._create_anonymous_context(request)
-    
-    async def _create_anonymous_context(self, request: Request) -> Context:
+        return await self._create_anonymous_context(request, requested_company)
+
+    async def _create_anonymous_context(self, request: Request, requested_company: Company) -> Context:
         """Создает анонимный контекст"""
-        from app.identity.models import UserStatus
         user = User(
             user_id="anonymous",
             provider=AuthProvider.YANDEX,  # Placeholder
@@ -148,35 +209,77 @@ class AuthMiddleware(BaseHTTPMiddleware):
             email="",
             name="Anonymous",
             status=UserStatus.ACTIVE,
-            groups=["guest"]
+            groups=["guest"],
+            companies={requested_company.company_id: ["guest"]},
+            active_company_id=requested_company.company_id,
         )
-        
+
         return Context(
-            user=user,
-            platform="api",
+            user=user, 
+            platform="api", 
+            active_company=requested_company,
+            user_companies=[requested_company],
             metadata={"anonymous": True}
         )
-    
-    
-    async def _create_frontend_context(self, request: Request) -> Context:
+
+    async def _create_frontend_context(self, request: Request, requested_company: Company) -> Context:
         """Создает контекст для frontend запросов на основе куки"""
         # Получаем session_id из куки
         session_id = request.cookies.get("session_id")
-        
+
         if not session_id:
             raise HTTPException(status_code=401, detail="Unauthorized")
-        
+
         # Пытаемся найти пользователя по сессии
-        from app.identity.auth_service import AuthService
         auth_service = AuthService()
-        
+
         user = await auth_service.get_user_by_session(session_id)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid session")
+
+        # Получаем все компании пользователя
+        user_companies = await self._get_user_companies(user)
         
+        # Если у пользователя нет компаний - показываем страницу выбора компании
+        if not user.companies:
+            return Context(
+                user=user,
+                session_id=session_id,
+                platform="frontend",
+                active_company=None,
+                user_companies=[],
+                metadata={"authenticated": True, "needs_company_selection": True},
+            )
+        
+        # Проверяем доступ к запрашиваемой компании
+        if requested_company.company_id not in user.companies:
+            raise HTTPException(status_code=403, detail="Access to company denied")
+        
+        # Обновляем активную компанию у пользователя если нужно
+        if user.active_company_id != requested_company.company_id:
+            user.active_company_id = requested_company.company_id
+            await self._update_user_active_company(user)
+
         return Context(
             user=user,
             session_id=session_id,
             platform="frontend",
-            metadata={"authenticated": True}
+            active_company=requested_company,
+            user_companies=user_companies,
+            metadata={"authenticated": True},
         )
+
+    async def _get_user_companies(self, user: User) -> List[Company]:
+        """Получает все компании пользователя"""
+        companies = []
+        for company_id in user.companies.keys():
+            company_data = await self.storage.get(f"company:{company_id}", force_global=True)
+            if company_data:
+                companies.append(Company.model_validate_json(company_data))
+        return companies
+
+    async def _update_user_active_company(self, user: User):
+        """Обновляет активную компанию пользователя в БД"""
+        # Находим основной ключ пользователя
+        user_key = f"user:{user.provider.value}:{user.provider_user_id}"
+        await self.storage.set(user_key, user.model_dump_json(), force_global=True)

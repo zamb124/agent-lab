@@ -21,7 +21,112 @@
     top: 0;
     height: 100vh;
     z-index: var(--z-sidebar);
-    transition: transform var(--transition-normal);
+    transition: width var(--transition-normal), transform var(--transition-normal);
+}
+
+/* Свернутый сайдбар */
+.app-container .sidebar.collapsed {
+    width: 60px !important;
+    overflow: hidden;
+}
+
+.app-container .sidebar.collapsed .sidebar-nav-text {
+    display: none !important;
+}
+
+.app-container .sidebar.collapsed .sidebar-brand span {
+    display: none !important;
+}
+
+.app-container .sidebar.collapsed .sidebar-brand {
+    justify-content: center !important;
+}
+
+.app-container .sidebar.collapsed .sidebar-header {
+    padding: 1rem 0.5rem !important;
+    text-align: center;
+}
+
+/* Навигация в свернутом состоянии */
+.app-container .sidebar.collapsed .sidebar-nav-link {
+    justify-content: center !important;
+    padding: 0.75rem !important;
+}
+
+.app-container .sidebar.collapsed .sidebar-nav-link i {
+    margin: 0 !important;
+}
+
+/* Футер в свернутом состоянии */
+.app-container .sidebar.collapsed .sidebar-footer .d-flex > div:not(:last-child) {
+    display: none !important;
+}
+
+.app-container .sidebar.collapsed .sidebar-footer .d-flex {
+    justify-content: center !important;
+}
+
+/* Контент при свернутом сайдбаре */
+.app-container .main-content.sidebar-collapsed {
+    margin-left: 60px !important;
+}
+
+/* Мобильная версия */
+@media (max-width: 768px) {
+    /* Скрываем кнопку сворачивания на мобильных */
+    .btn[onclick*="toggleSidebar"] {
+        display: none !important;
+    }
+    
+    /* Сайдбар скрыт по умолчанию на мобильных */
+    .app-container .sidebar {
+        transform: translateX(-100%) !important;
+    }
+    
+    /* Открытый сайдбар на мобильных */
+    .app-container .sidebar.open {
+        transform: translateX(0) !important;
+    }
+    
+    /* Контент на мобильных занимает всю ширину */
+    .app-container .main-content {
+        margin-left: 0 !important;
+    }
+    
+    /* Overlay для мобильного меню */
+    .sidebar-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: calc(var(--z-sidebar) - 1);
+        display: none;
+    }
+    
+    .sidebar-overlay.active {
+        display: block !important;
+    }
+    
+    /* Кнопка закрытия в мобильном меню */
+    .mobile-close-btn {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        z-index: 9999;
+    }
+}
+
+/* Скрываем кнопку закрытия на десктопе */
+@media (min-width: 769px) {
+    .mobile-close-btn {
+        display: none !important;
+    }
+    
+    .sidebar-header {
+        position: relative;
+    }
 }
 
 .sidebar-header {
@@ -104,6 +209,7 @@
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    transition: margin-left var(--transition-normal);
     width: calc(100vw - var(--sidebar-width));
     overflow: visible;
 }

@@ -1,6 +1,7 @@
 """
 Настройка Jinja2 окружения для рендеринга шаблонов
 """
+
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
@@ -22,8 +23,19 @@ jinja_env = Environment(
     autoescape=True,
     trim_blocks=True,
     lstrip_blocks=True,
-    auto_reload=True  # Автоперезагрузка шаблонов
+    auto_reload=True,  # Автоперезагрузка шаблонов
 )
+
+# Добавляем глобальные функции в Jinja2
+def _add_global_functions():
+    """Добавить глобальные функции в Jinja2"""
+    try:
+        from app.frontend.field_extensions import render_model_safe
+        jinja_env.globals['render_model_safe'] = render_model_safe
+    except ImportError:
+        pass
+
+_add_global_functions()
 
 
 def render_template(template_name: str, **context) -> str:
@@ -36,9 +48,16 @@ def render_template(template_name: str, **context) -> str:
             autoescape=True,
             trim_blocks=True,
             lstrip_blocks=True,
-            auto_reload=True
+            auto_reload=True,
         )
         
+        # Добавляем глобальные функции каждый раз
+        try:
+            from app.frontend.field_extensions import render_model_safe
+            jinja_env.globals['render_model_safe'] = render_model_safe
+        except ImportError:
+            pass
+
         template = jinja_env.get_template(template_name)
         return template.render(**context)
     except Exception as e:
@@ -51,5 +70,5 @@ def template_exists(template_name: str) -> bool:
     try:
         jinja_env.get_template(template_name)
         return True
-    except:
+    except Exception:
         return False

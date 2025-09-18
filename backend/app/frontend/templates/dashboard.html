@@ -11,6 +11,13 @@
                 <i class="bi bi-robot icon-lg"></i>
                 <span class="langflow-gradient">Agent Platform</span>
             </a>
+            <button class="btn btn-ghost btn-sm d-md-none mobile-close-btn" onclick="
+                document.querySelector('.sidebar').style.setProperty('transform', 'translateX(-100%)', 'important');
+                document.querySelector('.sidebar-overlay').classList.remove('active');
+                document.querySelector('.sidebar').classList.remove('open');
+            ">
+                <i class="bi bi-x-lg"></i>
+            </button>
         </div>
         
         <div class="sidebar-content">
@@ -21,6 +28,7 @@
                        hx-target="#content"
                        hx-push-url="true"
                        hx-indicator="#content-loading"
+                       onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
                        class="sidebar-nav-link">
                         <i class="bi bi-robot"></i>
                         <span class="sidebar-nav-text">Агенты</span>
@@ -32,6 +40,7 @@
                        hx-target="#content"
                        hx-push-url="true"
                        hx-indicator="#content-loading"
+                       onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
                        class="sidebar-nav-link">
                         <i class="bi bi-diagram-3"></i>
                         <span class="sidebar-nav-text">Потоки</span>
@@ -43,6 +52,7 @@
                        hx-target="#content"
                        hx-push-url="true"
                        hx-indicator="#content-loading"
+                       onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
                        class="sidebar-nav-link">
                         <i class="bi bi-list-task"></i>
                         <span class="sidebar-nav-text">Задачи</span>
@@ -83,16 +93,28 @@
     <div class="main-content">
         <div class="header">
             <div class="header-left">
-                <button class="mobile-menu-toggle">
+                <button class="mobile-menu-toggle" onclick="window.app.layoutManager.toggleMobileMenu()">
                     <i class="bi bi-list"></i>
                 </button>
-                <button class="btn btn-ghost btn-sm d-none d-md-block" data-sidebar-toggle data-tooltip="Свернуть меню">
+                <button class="btn btn-ghost btn-sm d-none d-md-block" onclick="window.app.layoutManager.toggleSidebar()" data-tooltip="Свернуть меню">
                     <i class="bi bi-chevron-left"></i>
                 </button>
                 <h1 class="header-title">Панель управления</h1>
             </div>
             <div class="header-right">
-                <button class="btn btn-primary btn-sm">
+                <button class="btn btn-outline-primary btn-sm" onclick="openWeatherChat()" data-tooltip="Чат с погодным агентом">
+                    <i class="bi bi-chat-dots"></i>
+                    Погода
+                </button>
+                <button class="btn btn-outline-success btn-sm ms-1" onclick="openCalculatorChat()" data-tooltip="Чат с калькулятором">
+                    <i class="bi bi-calculator"></i>
+                    Калькулятор
+                </button>
+                <button class="btn btn-outline-info btn-sm ms-1" onclick="openExplainerChat()" data-tooltip="Чат с объяснителем">
+                    <i class="bi bi-question-circle"></i>
+                    Объяснитель
+                </button>
+                <button class="btn btn-primary btn-sm ms-2">
                     <i class="bi bi-plus"></i>
                     Создать
                 </button>
@@ -139,4 +161,45 @@
         </div>
     </div>
 </div>
+
+<script>
+// Функция для открытия чата с погодным агентом
+function openWeatherChat() {
+    if (window.app && window.app.chat) {
+        window.app.chat.open({
+            agent_id: "app.flows.weather_flow.weather_flow_config",
+            initial_message: "/clear"  // Сначала очищаем контекст
+        });
+    } else {
+        console.error('Чат не инициализирован');
+        alert('Чат временно недоступен');
+    }
+}
+
+// Функция для открытия чата с калькулятором
+function openCalculatorChat() {
+    if (window.app && window.app.chat) {
+        window.app.chat.open({
+            agent_id: "app.flows.smart_flow.smart_flow_config",
+            initial_message: "Привет! Помоги мне с вычислениями"
+        });
+    } else {
+        console.error('Чат не инициализирован');
+        alert('Чат временно недоступен');
+    }
+}
+
+// Функция для открытия чата с объяснителем  
+function openExplainerChat() {
+    if (window.app && window.app.chat) {
+        window.app.chat.open({
+            agent_id: "app.flows.test_flow.test_flow_config",
+            initial_message: "Привет! Объясни мне что-нибудь"
+        });
+    } else {
+        console.error('Чат не инициализирован');
+        alert('Чат временно недоступен');
+    }
+}
+</script>
 {% endblock %}

@@ -1,6 +1,7 @@
 """
 Простой агент для работы с погодой и путешествиями.
 """
+
 from app.agents.base import BaseAgent
 from app.tools.standard import ask_user
 from app.tools.weather_tools import suggest_travel, get_weather
@@ -9,16 +10,12 @@ from app.tools.file_tools import read_file
 
 class TravelInfoAgent(BaseAgent):
     """Субагент для сбора информации о направлении путешествия"""
-    
+
     name = "travel_info_agent"
     description = "Определяет куда пользователь хочет поехать в путешествие"
-    
-    llm_config = {
-        "provider": "openai",
-        "model": "gpt-4",
-        "temperature": 0.3
-    }
-    
+
+    llm_config = {"provider": "openai", "model": "gpt-4", "temperature": 0.3}
+
     prompt = """
 Ты специалист по определению направлений путешествий.
 
@@ -31,25 +28,20 @@ class TravelInfoAgent(BaseAgent):
 - ВСЕГДА отвечай на названия городов/стран
 - Будь позитивным и полезным
 """
-    
-    tools = [
-        ask_user,
-        read_file
-    ]
+
+    tools = [ask_user, read_file]
 
 
 class WeatherAgent(BaseAgent):
     """Агент для помощи с погодой и путешествиями"""
-    
+
     name = "weather_agent"
-    description = "Помогает с выбором места для путешествий и получением информации о погоде"
-    
-    llm_config = {
-        "provider": "openai",
-        "model": "gpt-4",
-        "temperature": 0.7
-    }
-    
+    description = (
+        "Помогает с выбором места для путешествий и получением информации о погоде"
+    )
+
+    llm_config = {"provider": "openai", "model": "gpt-4", "temperature": 0.7}
+
     prompt = """
 Ты помощник по путешествиям и погоде. 
 
@@ -67,11 +59,11 @@ class WeatherAgent(BaseAgent):
 Используй инструменты для получения информации.
 Будь дружелюбным и полезным.
 """
-    
+
     tools = [
         ask_user,
-        suggest_travel, 
+        suggest_travel,
         get_weather,
         read_file,
-        "agent:app.agents.weather.agent.TravelInfoAgent"  # Ссылка на субагента
+        "agent:app.agents.weather.agent.TravelInfoAgent",  # Ссылка на субагента
     ]

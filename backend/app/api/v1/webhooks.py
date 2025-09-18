@@ -1,7 +1,8 @@
 """
 Простые webhook эндпоинты для внешних интеграций.
 """
-from fastapi import APIRouter, HTTPException
+
+from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Dict, Any
 
@@ -10,6 +11,7 @@ router = APIRouter()
 
 class WebhookPayload(BaseModel):
     """Базовая модель для webhook данных"""
+
     platform: str  # telegram, slack, etc.
     data: Dict[str, Any]
 
@@ -22,9 +24,9 @@ async def handle_webhook(platform: str, payload: WebhookPayload):
     """
     # TODO: Добавить обработку webhook'ов
     return {
-        "status": "received", 
+        "status": "received",
         "platform": platform,
-        "message": "Webhook received successfully"
+        "message": "Webhook received successfully",
     }
 
 

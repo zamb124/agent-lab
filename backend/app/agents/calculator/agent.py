@@ -1,6 +1,7 @@
 """
 Агент-калькулятор для математических вычислений.
 """
+
 from app.agents.base import BaseAgent
 from app.tools.standard import ask_user
 from app.tools.calc_tools import calculate, get_math_help
@@ -8,10 +9,10 @@ from app.tools.calc_tools import calculate, get_math_help
 
 class CalculatorAgent(BaseAgent):
     """Агент для математических вычислений"""
-    
+
     name = "calculator_agent"
     description = "Помогает с математическими вычислениями"
-    
+
     prompt = """
 Ты калькулятор-помощник.
 
@@ -23,9 +24,5 @@ class CalculatorAgent(BaseAgent):
 
 Будь точным и полезным в математических вопросах.
 """
-    
-    tools = [
-        ask_user,
-        calculate,
-        get_math_help
-    ]
+
+    tools = [ask_user, calculate, get_math_help]

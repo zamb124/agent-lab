@@ -33,8 +33,12 @@ class LayoutManager {
     setupSidebar() {
         // Кнопка сворачивания сайдбара
         const collapseBtn = document.querySelector('[data-sidebar-toggle]');
+        console.log('🔍 Кнопка сайдбара найдена:', collapseBtn);
         if (collapseBtn) {
-            collapseBtn.addEventListener('click', () => this.toggleSidebar());
+            collapseBtn.addEventListener('click', () => {
+                console.log('🔄 Клик по кнопке сайдбара');
+                this.toggleSidebar();
+            });
         }
     }
     
@@ -44,19 +48,45 @@ class LayoutManager {
         const sidebar = document.querySelector('.sidebar');
         const overlay = document.querySelector('.sidebar-overlay');
         
+        console.log('🔍 Мобильное меню - кнопка:', toggleBtn, 'sidebar:', sidebar);
+        
         if (toggleBtn && sidebar) {
             toggleBtn.addEventListener('click', () => {
-                sidebar.classList.toggle('open');
-                overlay?.classList.toggle('active');
+                console.log('🔄 Клик по мобильному меню');
+                
+                const isOpen = sidebar.classList.contains('open');
+                
+                if (isOpen) {
+                    // Закрываем меню
+                    sidebar.classList.remove('open');
+                    sidebar.style.setProperty('transform', 'translateX(-100%)', 'important');
+                    overlay?.classList.remove('active');
+                } else {
+                    // Открываем меню
+                    sidebar.classList.add('open');
+                    sidebar.style.setProperty('transform', 'translateX(0)', 'important');
+                    overlay?.classList.add('active');
+                }
+                
+                console.log('🔍 Меню', isOpen ? 'закрыто' : 'открыто');
             });
         }
         
         if (overlay) {
             overlay.addEventListener('click', () => {
-                sidebar?.classList.remove('open');
-                overlay.classList.remove('active');
+                this.closeMobileMenu();
             });
         }
+        
+        // Закрываем меню при клике на навигационные ссылки
+        const navLinks = document.querySelectorAll('.sidebar-nav-link');
+        navLinks.forEach(link => {
+            link.addEventListener('click', () => {
+                if (this.isMobile) {
+                    this.closeMobileMenu();
+                }
+            });
+        });
     }
     
     setupNavigation() {
@@ -86,8 +116,7 @@ class LayoutManager {
             
             // Если перешли с мобильного на десктоп
             if (wasMobile && !this.isMobile) {
-                this.closeMobileMenu();
-                this.applySidebarState();
+                this.resetToDesktop();
             }
             
             // Если перешли с десктопа на мобильный
@@ -97,13 +126,71 @@ class LayoutManager {
         });
     }
     
+    resetToDesktop() {
+        const sidebar = document.querySelector('.sidebar');
+        const mainContent = document.querySelector('.main-content');
+        const overlay = document.querySelector('.sidebar-overlay');
+        
+        if (sidebar) {
+            // Убираем все мобильные стили и классы
+            sidebar.style.removeProperty('transform');
+            sidebar.classList.remove('open');
+        }
+        if (mainContent) {
+            mainContent.style.removeProperty('margin-left');
+        }
+        if (overlay) {
+            overlay.classList.remove('active');
+        }
+        
+        // Применяем состояние десктопного сайдбара
+        this.applySidebarState();
+    }
+    
+    toggleMobileMenu() {
+        const sidebar = document.querySelector('.sidebar');
+        const overlay = document.querySelector('.sidebar-overlay');
+        
+        if (!sidebar) return;
+        
+        const isOpen = sidebar.classList.contains('open');
+        
+        if (isOpen) {
+            // Закрываем меню
+            sidebar.classList.remove('open');
+            sidebar.style.setProperty('transform', 'translateX(-100%)', 'important');
+            overlay?.classList.remove('active');
+        } else {
+            // Открываем меню
+            sidebar.classList.add('open');
+            sidebar.style.setProperty('transform', 'translateX(0)', 'important');
+            overlay?.classList.add('active');
+        }
+    }
+    
+    closeMobileMenu() {
+        const sidebar = document.querySelector('.sidebar');
+        const overlay = document.querySelector('.sidebar-overlay');
+        
+        if (sidebar) {
+            sidebar.classList.remove('open');
+            sidebar.style.setProperty('transform', 'translateX(-100%)', 'important');
+        }
+        if (overlay) {
+            overlay.classList.remove('active');
+        }
+    }
+    
     toggleSidebar() {
+        console.log('🔄 toggleSidebar вызван, isMobile:', this.isMobile);
         if (this.isMobile) {
             // На мобильных не сворачиваем, а открываем/закрываем
+            console.log('📱 Мобильное устройство - пропускаем');
             return;
         }
         
         this.sidebarCollapsed = !this.sidebarCollapsed;
+        console.log('🔄 Новое состояние сайдбара:', this.sidebarCollapsed);
         this.applySidebarState();
         this.saveSidebarState();
     }
@@ -115,9 +202,14 @@ class LayoutManager {
         if (!sidebar || !mainContent) return;
         
         if (this.sidebarCollapsed && !this.isMobile) {
+            sidebar.style.setProperty('width', '60px', 'important');
+            mainContent.style.setProperty('margin-left', '60px', 'important');
             sidebar.classList.add('collapsed');
             mainContent.classList.add('sidebar-collapsed');
         } else {
+            // Убираем inline стили - возвращаем к CSS переменным
+            sidebar.style.removeProperty('width');
+            mainContent.style.removeProperty('margin-left');
             sidebar.classList.remove('collapsed');
             mainContent.classList.remove('sidebar-collapsed');
         }
@@ -127,7 +219,7 @@ class LayoutManager {
     }
     
     updateToggleIcon() {
-        const toggleBtn = document.querySelector('[data-sidebar-toggle] i');
+        const toggleBtn = document.querySelector('button[onclick*="toggleSidebar"] i');
         if (toggleBtn) {
             toggleBtn.className = this.sidebarCollapsed ? 'bi bi-chevron-right' : 'bi bi-chevron-left';
         }

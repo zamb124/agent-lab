@@ -1,12 +1,13 @@
 """
 Настройка подключения к базе данных.
 """
+
 import logging
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.orm import declarative_base
 
 from app.core.config import settings
+from app.db.models import Base
 
 logger = logging.getLogger(__name__)
 
@@ -14,15 +15,13 @@ logger = logging.getLogger(__name__)
 engine = create_async_engine(
     settings.database.url,
     echo=False,  # Отключаем логирование SQL запросов
-    pool_pre_ping=True,   # Проверка соединений перед использованием
-    pool_recycle=3600,    # Пересоздание соединений каждый час
+    pool_pre_ping=True,  # Проверка соединений перед использованием
+    pool_recycle=3600,  # Пересоздание соединений каждый час
 )
 
 # Создаем фабрику сессий
 AsyncSessionLocal = async_sessionmaker(
-    engine,
-    class_=AsyncSession,
-    expire_on_commit=False
+    engine, class_=AsyncSession, expire_on_commit=False
 )
 
 
@@ -43,21 +42,17 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 async def create_tables():
     """Создает таблицы в БД"""
-    from app.db.models import Base
-    
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
+
     logger.info("Таблицы созданы")
 
 
 async def drop_tables():
     """Удаляет все таблицы"""
-    from app.db.models import Base
-    
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
-    
+
     logger.info("Таблицы удалены")
 
 

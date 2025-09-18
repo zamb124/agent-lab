@@ -2,22 +2,22 @@
 Pydantic модели для конфигурации агентов и флоу.
 Это источник правды для Storage, Migrator и FlowFactory.
 """
-from pydantic import BaseModel, field_validator
-from app.frontend.field_extensions import Field
-from typing import Optional, List, Dict, Any, Union
+
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any
 from enum import Enum
 from datetime import datetime, timezone
 
-from app.identity.models import User
+from .context_models import Context
 
 
 class HistorySource(str):
     """Специальный тип для источника истории диалогов"""
-    
+
     @classmethod
     def __get_validators__(cls):
         yield cls.validate
-    
+
     @classmethod
     def validate(cls, v):
         if v is None:
@@ -26,16 +26,17 @@ class HistorySource(str):
             return v
         if isinstance(v, list) and all(isinstance(item, str) for item in v):
             return v
-        raise ValueError('history_from должен быть строкой, списком строк или None')
-    
+        raise ValueError("history_from должен быть строкой, списком строк или None")
+
     def __repr__(self):
-        return f'HistorySource({super().__repr__()})'
+        return f"HistorySource({super().__repr__()})"
 
 
 class NodeType(str, Enum):
     """Типы нод в графе"""
+
     AGENT_NODE = "agent_node"
-    TOOL_NODE = "tool_node" 
+    TOOL_NODE = "tool_node"
     FUNCTION_NODE = "function_node"
     FLOW_NODE = "flow_node"
     CONDITIONAL_EDGE = "conditional_edge"
@@ -44,74 +45,75 @@ class NodeType(str, Enum):
 
 class AgentType(str, Enum):
     """Типы агентов"""
+
     REACT = "react"
     STATEGRAPH = "stategraph"
 
 
 class CodeMode(str, Enum):
     """Режим хранения кода"""
+
     CODE_REFERENCE = "code_reference"  # Ссылка на код в файлах
-    INLINE_CODE = "inline_code"        # Код хранится в БД
+    INLINE_CODE = "inline_code"  # Код хранится в БД
 
 
 class ConditionType(str, Enum):
     """Типы условий в графе"""
-    ROUTER = "router"      # Функция возвращает ID следующей ноды
+
+    ROUTER = "router"  # Функция возвращает ID следующей ноды
     EXPRESSION = "expression"  # Простое условное выражение (true/false)
 
 
 class GraphNode(BaseModel):
     """Нода в графе"""
+
     id: str = Field(
         title="ID ноды",
         description="Уникальный идентификатор ноды в графе",
-        readonly=True
+        readonly=True,
     )
-    type: NodeType = Field(
-        title="Тип ноды",
-        description="Тип ноды в графе"
-    )
+    type: NodeType = Field(title="Тип ноды", description="Тип ноды в графе")
     params: Dict[str, Any] = Field(
         default_factory=dict,
         title="Параметры",
         description="Параметры ноды",
     )
-    
+
     # Режим хранения кода ноды
     code_mode: CodeMode = Field(
         default=CodeMode.CODE_REFERENCE,
         title="Режим кода",
         description="Режим хранения кода ноды",
     )
-    
+
     # Для CODE_REFERENCE режима
     function_class: Optional[str] = Field(
         default=None,
         title="Класс функции",
         description="Путь к классу агента",
-        placeholder="app.agents.calculator.CalculatorAgent"
+        placeholder="app.agents.calculator.CalculatorAgent",
     )
     function_path: Optional[str] = Field(
         default=None,
-        title="Путь к функции", 
+        title="Путь к функции",
         description="Путь к функции",
-        placeholder="app.tools.calc_tools.add_numbers"
+        placeholder="app.tools.calc_tools.add_numbers",
     )
-    
-    # Для INLINE_CODE режима  
+
+    # Для INLINE_CODE режима
     inline_code: Optional[str] = Field(
         default=None,
         title="Инлайн код",
         description="Python код ноды",
-        widget_attrs={"rows": 10, "class": "code-editor"}
+        widget_attrs={"rows": 10, "class": "code-editor"},
     )
     prompt: Optional[str] = Field(
         default=None,
         title="Промпт",
         description="Промпт для ReAct нод",
-        widget_attrs={"rows": 5}
+        widget_attrs={"rows": 5},
     )
-    
+
     # Маппинг данных
     input_mapping: Optional[Dict[str, str]] = Field(
         default=None,
@@ -120,26 +122,21 @@ class GraphNode(BaseModel):
     )
     output_mapping: Optional[Dict[str, str]] = Field(
         default=None,
-        title="Маппинг выходных данных", 
+        title="Маппинг выходных данных",
         description="Как сохранять результат в state",
     )
 
 
 class GraphEdge(BaseModel):
     """Ребро в графе"""
-    source: str = Field(
-        title="Источник",
-        description="ID исходной ноды"
-    )
-    target: str = Field(
-        title="Цель",
-        description="ID целевой ноды"
-    )
+
+    source: str = Field(title="Источник", description="ID исходной ноды")
+    target: str = Field(title="Цель", description="ID целевой ноды")
     condition: Optional[str] = Field(
         default=None,
         title="Условие",
         description="Условие или выражение для перехода",
-        widget_attrs={"rows": 3}
+        widget_attrs={"rows": 3},
     )
     condition_type: ConditionType = Field(
         default=ConditionType.EXPRESSION,
@@ -150,32 +147,34 @@ class GraphEdge(BaseModel):
 
 class GraphDefinition(BaseModel):
     """Определение графа"""
+
     nodes: List[GraphNode] = Field(
         title="Ноды",
         description="Список нод в графе",
     )
     edges: List[GraphEdge] = Field(
         title="Ребра",
-        description="Список ребер в графе", 
+        description="Список ребер в графе",
     )
     entry_point: str = Field(
         title="Точка входа",
-        description="ID ноды, с которой начинается выполнение графа"
+        description="ID ноды, с которой начинается выполнение графа",
     )
 
 
 class ToolReference(BaseModel):
     """Ссылка на инструмент"""
+
     tool_id: str = Field(
         title="ID инструмента",
-        description="ID инструмента (путь к функции, ID агента, MCP tool)"
+        description="ID инструмента (путь к функции, ID агента, MCP tool)",
     )
     params: Dict[str, Any] = Field(
         default_factory=dict,
         title="Параметры",
         description="Параметры инструмента",
     )
-    
+
     # Новые поля для поддержки inline кода
     code_mode: CodeMode = Field(
         default=CodeMode.CODE_REFERENCE,
@@ -186,24 +185,25 @@ class ToolReference(BaseModel):
         default=None,
         title="Путь к функции",
         description="Путь к функции для CODE_REFERENCE",
-        placeholder="app.tools.calc_tools.add_numbers"
+        placeholder="app.tools.calc_tools.add_numbers",
     )
     inline_code: Optional[str] = Field(
         default=None,
         title="Инлайн код",
         description="Python код для INLINE_CODE",
-        widget_attrs={"rows": 8, "class": "code-editor"}
+        widget_attrs={"rows": 8, "class": "code-editor"},
     )
     description: Optional[str] = Field(
         default=None,
         title="Описание",
         description="Описание инструмента",
-        widget_attrs={"rows": 3}
+        widget_attrs={"rows": 3},
     )
 
 
 class LLMConfig(BaseModel):
     """Конфигурация LLM"""
+
     provider: str = Field(
         default="openai",
         title="Провайдер",
@@ -213,20 +213,20 @@ class LLMConfig(BaseModel):
         default="gpt-4",
         title="Модель",
         description="Название модели",
-        placeholder="gpt-4, claude-3-sonnet, yandexgpt"
+        placeholder="gpt-4, claude-3-sonnet, yandexgpt",
     )
     temperature: float = Field(
         default=0.2,
         title="Температура",
         description="Температура для генерации (0.0-1.0)",
         ge=0.0,
-        le=1.0
+        le=1.0,
     )
     max_tokens: Optional[int] = Field(
         default=None,
         title="Максимум токенов",
         description="Максимальное количество токенов в ответе",
-        ge=1
+        ge=1,
     )
     api_key: Optional[str] = Field(
         default=None,
@@ -237,7 +237,7 @@ class LLMConfig(BaseModel):
         default=None,
         title="Базовый URL",
         description="Базовый URL для API",
-        placeholder="https://api.openai.com/v1"
+        placeholder="https://api.openai.com/v1",
     )
     additional_params: Dict[str, Any] = Field(
         default_factory=dict,
@@ -248,72 +248,70 @@ class LLMConfig(BaseModel):
 
 class AgentConfig(BaseModel):
     """Конфигурация агента"""
-    
+
     class Config:
         storage_prefix = "agent"
-    
+
     agent_id: str = Field(
         ...,
         frozen=True,
         title="ID агента",
         description="Уникальный идентификатор агента",
-        readonly=True
+        readonly=True,
     )
     name: str = Field(
-        title="Название",
-        description="Название агента",
-        placeholder="Мой агент"
+        title="Название", description="Название агента", placeholder="Мой агент"
     )
     description: Optional[str] = Field(
         default=None,
         title="Описание",
         description="Описание агента",
-        widget_attrs={"rows": 4}
+        widget_attrs={"rows": 4},
     )
     type: AgentType = Field(
         default=AgentType.REACT,
         title="Тип агента",
         description="Тип агента (ReAct или StateGraph)",
     )
-    
+
     # Режим хранения кода
     code_mode: CodeMode = Field(
         default=CodeMode.CODE_REFERENCE,
         title="Режим кода",
         description="Режим хранения кода агента",
     )
-    
+
     # Для CODE_REFERENCE режима
     function_class: Optional[str] = Field(
         default=None,
         title="Класс агента",
         description="Путь к классу-наследнику BaseAgent",
-        placeholder="app.agents.calculator.CalculatorAgent"
+        placeholder="app.agents.calculator.CalculatorAgent",
     )
-    
+
     # Для INLINE_CODE режима
     inline_code: Optional[str] = Field(
         default=None,
         title="Инлайн код",
         description="Python код агента",
-        widget_attrs={"rows": 15, "class": "code-editor"}
+        widget_attrs={"rows": 15, "class": "code-editor"},
     )
-    
+
     # Поля для ReAct агентов
     prompt: Optional[str] = Field(
         default=None,
         title="Промпт",
         description="Системный промпт для ReAct агента",
-        widget_attrs={"rows": 8}
+        widget_attrs={"rows": 8},
     )
-    
-    # Поля для StateGraph агентов  
+
+    # Поля для StateGraph агентов
     graph_definition: Optional[GraphDefinition] = Field(
         default=None,
         title="Определение графа",
         description="Определение графа для StateGraph агента",
     )
-    
+
     # Общие поля
     tools: List[ToolReference] = Field(
         default_factory=list,
@@ -325,112 +323,96 @@ class AgentConfig(BaseModel):
         title="Конфигурация LLM",
         description="Конфигурация языковой модели",
     )
-    
+
     # История диалогов
     history_from: Optional[HistorySource] = Field(
         default=None,
         title="История от",
         description="Источник истории диалогов (global, список агентов или None)",
-        placeholder="global или agent1,agent2"
+        placeholder="global или agent1,agent2",
     )
-    
+
     # Метаданные
     source: str = Field(
         default="manual",
         title="Источник",
         description="Источник создания агента",
-        readonly=True
+        readonly=True,
     )
     created_at: Optional[datetime] = Field(
-        default=None,
-        title="Создан",
-        description="Дата создания",
-        readonly=True
+        default=None, title="Создан", description="Дата создания", readonly=True
     )
     updated_at: Optional[datetime] = Field(
-        default=None,
-        title="Обновлен", 
-        description="Дата обновления",
-        readonly=True
+        default=None, title="Обновлен", description="Дата обновления", readonly=True
     )
 
 
 class FlowConfig(BaseModel):
     """Конфигурация флоу - простая административная сущность"""
-    
+
     class Config:
         storage_prefix = "flow"
-    
-    flow_id: str = Field(
-        ...,
+
+    flow_id: Optional[str] = Field(
+        default=None,
         frozen=True,
         title="ID флоу",
         description="Уникальный идентификатор флоу",
-        readonly=True
+        readonly=True,
     )
     name: str = Field(
-        title="Название",
-        description="Название флоу",
-        placeholder="Мой флоу"
+        title="Название", description="Название флоу", placeholder="Мой флоу"
     )
     description: Optional[str] = Field(
         default=None,
         title="Описание",
         description="Описание флоу",
-        widget_attrs={"rows": 4}
+        widget_attrs={"rows": 4},
     )
-    
+
     # Точка входа - агент который обрабатывает запросы
     entry_point_agent: str = Field(
         title="Агент точки входа",
         description="ID агента который обрабатывает запросы",
-        placeholder="app.agents.calculator.agent.CalculatorAgent"
+        placeholder="app.agents.calculator.agent.CalculatorAgent",
     )
-    
+
     # Платформы на которых работает flow с настройками
     platforms: Dict[str, Dict[str, Any]] = Field(
         default_factory=lambda: {"api": {}},
         title="Платформы",
         description="Платформы на которых работает флоу с настройками",
     )
-    
+
     # Настройки выполнения
     timeout: Optional[int] = Field(
-        default=None,
-        title="Таймаут",
-        description="Таймаут выполнения в секундах",
-        ge=1
+        default=None, title="Таймаут", description="Таймаут выполнения в секундах", ge=1
     )
     max_retries: int = Field(
         default=0,
         title="Максимум повторов",
         description="Максимальное количество повторов при ошибке",
-        ge=0
+        ge=0,
     )
-    
+
     # Метаданные
     source: str = Field(
         default="manual",
         title="Источник",
         description="Источник создания флоу",
-        readonly=True
+        readonly=True,
     )
     created_at: Optional[datetime] = Field(
-        default=None,
-        title="Создан",
-        description="Дата создания",
-        readonly=True
+        default=None, title="Создан", description="Дата создания", readonly=True
     )
     updated_at: Optional[datetime] = Field(
-        default=None,
-        title="Обновлен",
-        description="Дата обновления", 
-        readonly=True
+        default=None, title="Обновлен", description="Дата обновления", readonly=True
     )
 
 
 class TaskStatus(str, Enum):
     """Статусы задач"""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -441,20 +423,15 @@ class TaskStatus(str, Enum):
 
 class TaskConfig(BaseModel):
     """Конфигурация задачи"""
-    
+
     class Config:
         storage_prefix = "task"
-    
+
     task_id: str = Field(
-        title="ID задачи",
-        description="Уникальный идентификатор задачи",
-        readonly=True
+        title="ID задачи", description="Уникальный идентификатор задачи", readonly=True
     )
-    flow_id: str = Field(
-        title="ID флоу",
-        description="Идентификатор флоу для задачи"
-    )
-    context: 'Context' = Field(
+    flow_id: str = Field(title="ID флоу", description="Идентификатор флоу для задачи")
+    context: Context = Field(
         title="Контекст",
         description="Контекст выполнения задачи",
     )
@@ -472,43 +449,42 @@ class TaskConfig(BaseModel):
         default=None,
         title="Выходные данные",
         description="Результат выполнения задачи",
-
-        readonly=True
+        readonly=True,
     )
     error_message: Optional[str] = Field(
         default=None,
         title="Сообщение об ошибке",
         description="Сообщение об ошибке при выполнении",
-        readonly=True
+        readonly=True,
     )
     created_at: Optional[datetime] = Field(
         default=None,
         title="Создано",
         description="Время создания задачи",
-        readonly=True
+        readonly=True,
     )
     started_at: Optional[datetime] = Field(
         default=None,
         title="Запущено",
         description="Время начала выполнения",
-        readonly=True
+        readonly=True,
     )
     completed_at: Optional[datetime] = Field(
         default=None,
         title="Завершено",
         description="Время завершения выполнения",
-        readonly=True
+        readonly=True,
     )
-    
+
     # Свойства для обратной совместимости
     @property
     def user_id(self) -> str:
         return self.context.user.user_id
-    
+
     @property
     def session_id(self) -> str:
         return self.context.session_id or ""
-    
+
     @property
     def platform(self) -> str:
         return self.context.platform
@@ -516,30 +492,28 @@ class TaskConfig(BaseModel):
 
 class SessionStatus(str, Enum):
     """Статусы сессии"""
+
     ACTIVE = "active"
+    PROCESSING = "processing"  # Агент обрабатывает запрос
+    WAITING_INPUT = "waiting_input"  # Ждет ответа на interrupt
     INACTIVE = "inactive"
     EXPIRED = "expired"
 
 
 class SessionConfig(BaseModel):
     """Конфигурация сессии"""
+
     session_id: str = Field(
-        title="ID сессии",
-        description="Уникальный идентификатор сессии",
-        readonly=True
+        title="ID сессии", description="Уникальный идентификатор сессии", readonly=True
     )
     platform: str = Field(
         title="Платформа",
         description="Платформа (telegram, api, web)",
     )
     user_id: str = Field(
-        title="ID пользователя",
-        description="Идентификатор пользователя"
+        title="ID пользователя", description="Идентификатор пользователя"
     )
-    flow_id: str = Field(
-        title="ID флоу",
-        description="Идентификатор флоу"
-    )
+    flow_id: str = Field(title="ID флоу", description="Идентификатор флоу")
     status: SessionStatus = Field(
         default=SessionStatus.ACTIVE,
         title="Статус",
@@ -554,23 +528,24 @@ class SessionConfig(BaseModel):
         default=None,
         title="Создано",
         description="Время создания сессии",
-        readonly=True
+        readonly=True,
     )
     last_activity: Optional[datetime] = Field(
         default=None,
         title="Последняя активность",
         description="Время последней активности",
-        readonly=True
+        readonly=True,
     )
 
     @property
     def session_key(self) -> str:
-        key = self.session_id.split('_')[-1]
+        key = self.session_id.split("_")[-1]
         return f"session:{self.platform}:{self.user_id}:{self.flow_id}:{key}"
 
 
 class FileStatus(str, Enum):
     """Статус файла"""
+
     UPLOADING = "uploading"
     UPLOADED = "uploaded"
     FAILED = "failed"
@@ -579,62 +554,48 @@ class FileStatus(str, Enum):
 
 class FileRecord(BaseModel):
     """Запись о файле в системе"""
+
     file_id: str = Field(
-        title="ID файла",
-        description="Уникальный ID файла в системе",
-        readonly=True
+        title="ID файла", description="Уникальный ID файла в системе", readonly=True
     )
     provider: str = Field(
         title="Провайдер",
         description="Провайдер S3 (aws, yandex, minio, etc.)",
     )
     original_name: str = Field(
-        title="Оригинальное имя",
-        description="Оригинальное имя файла"
+        title="Оригинальное имя", description="Оригинальное имя файла"
     )
-    s3_key: str = Field(
-        title="Ключ S3",
-        description="Ключ файла в S3",
-        readonly=True
-    )
-    s3_bucket: str = Field(
-        title="Bucket S3",
-        description="Bucket в S3",
-        readonly=True
-    )
+    s3_key: str = Field(title="Ключ S3", description="Ключ файла в S3", readonly=True)
+    s3_bucket: str = Field(title="Bucket S3", description="Bucket в S3", readonly=True)
     s3_endpoint: Optional[str] = Field(
         default=None,
         title="Endpoint S3",
         description="Endpoint URL провайдера",
-        readonly=True
+        readonly=True,
     )
     content_type: str = Field(
-        title="Тип содержимого",
-        description="MIME тип файла",
-        readonly=True
+        title="Тип содержимого", description="MIME тип файла", readonly=True
     )
     file_size: int = Field(
-        title="Размер файла",
-        description="Размер файла в байтах",
-        readonly=True
+        title="Размер файла", description="Размер файла в байтах", readonly=True
     )
     checksum: Optional[str] = Field(
         default=None,
         title="Контрольная сумма",
         description="MD5 или другая контрольная сумма",
-        readonly=True
+        readonly=True,
     )
     status: FileStatus = Field(
         default=FileStatus.UPLOADING,
         title="Статус",
         description="Статус файла",
-        readonly=True
+        readonly=True,
     )
     uploaded_by: Optional[str] = Field(
         default=None,
         title="Загрузил",
         description="ID пользователя который загрузил",
-        readonly=True
+        readonly=True,
     )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
@@ -650,48 +611,36 @@ class FileRecord(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc),
         title="Создан",
         description="Время создания файла",
-        readonly=True
+        readonly=True,
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         title="Обновлен",
         description="Время обновления файла",
-        readonly=True
+        readonly=True,
     )
-    
+
     @property
     def key(self) -> str:
         """Ключ для хранения в БД"""
         return f"s3:{self.provider}:{self.file_id}"
-    
+
     @property
     def url(self) -> Optional[str]:
-        """Публичный URL файла"""
+        """URL для скачивания файла через нашу платформу"""
+        if not self.file_id:
+            return None
+
+        # Возвращаем ссылку на наш API endpoint для скачивания
+        return f"/api/v1/files/download/{self.file_id}"
+
+    @property
+    def direct_s3_url(self) -> Optional[str]:
+        """Прямая ссылка на S3 (для внутреннего использования)"""
         if not self.s3_bucket or not self.s3_key or not self.s3_endpoint:
             return None
-        
-        base_url = self.s3_endpoint.rstrip('/')
+
+        base_url = self.s3_endpoint.rstrip("/")
         return f"{base_url}/{self.s3_bucket}/{self.s3_key}"
 
 
-class Context(BaseModel):
-    """Глобальный контекст запроса"""
-    user: User = Field(
-        title="Пользователь",
-        description="Пользователь выполняющий запрос",
-    )
-    session_id: Optional[str] = Field(
-        default=None,
-        title="ID сессии",
-        description="Идентификатор сессии",
-        readonly=True
-    )
-    platform: str = Field(
-        title="Платформа",
-        description="Платформа откуда поступил запрос",
-    )
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        title="Метаданные",
-        description="Дополнительные метаданные контекста",
-    )

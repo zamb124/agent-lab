@@ -1,23 +1,25 @@
 """
 Инструменты для работы с файлами.
 """
+
 import json
 from typing import Optional
 from langchain_core.tools import tool
 
 from ..core.storage import Storage
 from ..core.core_clients.s3_client import get_default_s3_client
+from ..core.config import settings
 
 
 @tool
 async def read_file(file_id: str, provider: Optional[str] = None) -> str:
     """
     Читает содержимое файла по его ID.
-    
+
     Args:
         file_id: ID файла в системе
         provider: Провайдер S3 (если не указан, используется дефолтный)
-        
+
     Returns:
         Содержимое файла
     """
@@ -26,8 +28,10 @@ async def read_file(file_id: str, provider: Optional[str] = None) -> str:
         key = f"s3:{provider}:{file_id}"
     else:
         # Используем дефолтный провайдер из конфига
-        from ..core.config import settings
-        if settings.s3.default_bucket and settings.s3.default_bucket in settings.s3.buckets:
+        if (
+            settings.s3.default_bucket
+            and settings.s3.default_bucket in settings.s3.buckets
+        ):
             bucket_config = settings.s3.buckets[settings.s3.default_bucket]
             provider = bucket_config.provider
             key = f"s3:{provider}:{file_id}"
@@ -38,18 +42,16 @@ async def read_file(file_id: str, provider: Optional[str] = None) -> str:
                     key = f"s3:{bucket_config.provider}:{file_id}"
                     break
             else:
-                return f"❌ Нет доступных S3 провайдеров"
-                
-    
+                return "❌ Нет доступных S3 провайдеров"
+
     # Получаем информацию о файле из хранилища
     storage = Storage()
     file_data = await storage.get(key)
-    
+
     if not file_data:
         # Детальная отладка для понимания проблемы
-        from ..core.config import settings
         debug_info = f"Ключ: {key}, Default bucket: {settings.s3.default_bucket}"
-        
+
         # Попробуем найти файл по всем возможным ключам
         for bucket_name, bucket_config in settings.s3.buckets.items():
             if bucket_config.enabled:
@@ -60,34 +62,65 @@ async def read_file(file_id: str, provider: Optional[str] = None) -> str:
                     break
                 else:
                     debug_info += f", НЕ НАЙДЕН: {test_key}"
-        
+
         return f"❌ Файл с ID {file_id} не найден. {debug_info}"
-    
+
     file_info = json.loads(file_data)
-    
+
     if file_info["status"] != "uploaded":
         return f"❌ Файл {file_info['original_name']} недоступен (статус: {file_info['status']})"
-    
+
     # Получаем S3 клиент
     s3_client = await get_default_s3_client()
-    
+
     if not s3_client:
-        return f"❌ S3 клиент недоступен"
-    
+        return "❌ S3 клиент недоступен"
+
     # Скачиваем файл
     file_content = await s3_client.download_bytes(file_info["s3_key"])
     await s3_client.close()
-    
+
     if file_content is None:
         return f"❌ Не удалось скачать файл {file_info['original_name']}"
-    
+
     # Пробуем декодировать как текст
     content_type = file_info["content_type"].lower()
-    
-    if content_type.startswith('text/') or content_type in ['application/json', 'application/xml']:
-        text_content = file_content.decode('utf-8')
-        return f"📄 Файл: {file_info['original_name']}\n\n{text_content}"
-    
+    file_name = file_info["original_name"].lower()
+
+    # Проверяем по MIME типу или по расширению файла
+    is_text_file = (
+        content_type.startswith("text/")
+        or content_type in ["application/json", "application/xml"]
+        or file_name.endswith(
+            (
+                ".txt",
+                ".csv",
+                ".log",
+                ".md",
+                ".py",
+                ".js",
+                ".html",
+                ".css",
+                ".sql",
+                ".yaml",
+                ".yml",
+            )
+        )
+    )
+
+    if is_text_file:
+        try:
+            text_content = file_content.decode("utf-8")
+            return f"📄 Файл: {file_info['original_name']}\n\n{text_content}"
+        except UnicodeDecodeError:
+            # Если не удалось декодировать как UTF-8, пробуем другие кодировки
+            try:
+                text_content = file_content.decode("cp1251")  # Русская кодировка
+                return f"📄 Файл: {file_info['original_name']}\n\n{text_content}"
+            except UnicodeDecodeError:
+                # Если все попытки провалились, возвращаем как бинарный
+                pass
+
     # Для остальных типов возвращаем метаданные
     return (
         f"📁 Файл: {file_info['original_name']}\n"

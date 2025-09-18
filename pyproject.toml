@@ -59,3 +59,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["backend/app"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.13.0",
+]

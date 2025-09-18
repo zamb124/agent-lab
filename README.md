@@ -16,6 +16,13 @@ Agent Lab - LangGraph Platform
 ├── run_tests.py           # Скрипт запуска тестов
 ├── test_simple.py         # Простые тесты
 ├── uv.lock               # Блокировка зависимостей UV
+├── conf.json             # Конфигурация деплоя
+│
+├── certs/                # SSL сертификаты
+├── deploy/               # Конфигурация деплоя
+│   ├── conf.json
+│   ├── nginx.conf
+│   └── README.md
 │
 ├── backend/
 │   ├── debug_task.py      # Скрипт отладки задач
@@ -31,6 +38,9 @@ Agent Lab - LangGraph Platform
 │       │   └── v1/
 │       │       ├── __init__.py
 │       │       ├── admin.py      # REST API управления агентами/флоу
+│       │       ├── auth.py       # API авторизации
+│       │       ├── fashn.py      # API виртуальной примерки FASHN
+│       │       ├── files.py      # API работы с файлами
 │       │       ├── flows.py      # API выполнения флоу
 │       │       ├── telegram.py   # Telegram webhook endpoints
 │       │       ├── tokens.py     # Управление токенами ботов
@@ -50,17 +60,29 @@ Agent Lab - LangGraph Platform
 │       │       ├── __init__.py
 │       │       └── agent.py      # WeatherAgent
 │       │
+│       ├── clients/              # External API Clients
+│       │   ├── __init__.py
+│       │   ├── fashn_client.py   # Клиент FASHN для виртуальной примерки
+│       │   └── README.md
+│       │
 │       ├── core/                 # Core System Components
 │       │   ├── __init__.py
 │       │   ├── agent_factory.py  # Фабрика создания агентов из БД
+│       │   ├── checkpointer.py   # Чекпоинтер для LangGraph
+│       │   ├── config_utils.py   # Утилиты конфигурации
 │       │   ├── config.py         # Конфигурация приложения
+│       │   ├── context.py        # Контекст выполнения
+│       │   ├── file_processor.py # Обработчик файлов (S3)
 │       │   ├── flow_factory.py   # Фабрика создания флоу из БД
 │       │   ├── graph_builder.py  # Построитель StateGraph графов
 │       │   ├── llm_factory.py    # Фабрика LLM экземпляров
 │       │   ├── migrator.py       # Миграция из кода в БД
 │       │   ├── models.py         # Pydantic модели (AgentConfig, FlowConfig)
 │       │   ├── storage.py        # Key-Value Storage (единая таблица)
-│       │   └── tool_factory.py   # Фабрика создания инструментов
+│       │   ├── tool_factory.py   # Фабрика создания инструментов
+│       │   └── core_clients/
+│       │       ├── __init__.py
+│       │       └── s3_client.py  # S3 клиент для файлов
 │       │
 │       ├── db/                   # Database Layer
 │       │   ├── __init__.py
@@ -76,20 +98,66 @@ Agent Lab - LangGraph Platform
 │       │   ├── test_flow.py      # TestFlow конфигурация
 │       │   └── weather_flow.py   # WeatherFlow конфигурация
 │       │
-│       ├── integrations/         # External API Clients
+│       ├── frontend/             # Web Frontend
+│       │   ├── __init__.py
+│       │   ├── environment.py    # Конфигурация окружения
+│       │   ├── field_extensions.py # Расширения полей форм
+│       │   ├── model_registry.py # Реестр моделей
+│       │   ├── wrappers.py       # Обертки для форм
+│       │   ├── README.md
+│       │   │
+│       │   ├── api/              # Frontend API
+│       │   │   ├── __init__.py
+│       │   │   ├── models.py     # Модели для API
+│       │   │   ├── pages.py      # API страниц
+│       │   │   └── websocket.py  # WebSocket API
+│       │   │
+│       │   ├── chat/             # Чат интерфейс
+│       │   │   ├── __init__.py
+│       │   │   ├── api/
+│       │   │   │   ├── __init__.py
+│       │   │   │   ├── router.py  # Роутер чата
+│       │   │   │   └── websocket.py # WebSocket чата
+│       │   │   └── templates/
+│       │   │       ├── chat.html
+│       │   │       ├── chat_widget.html
+│       │   │       └── chat_widget_inline.html
+│       │   │
+│       │   ├── examples/         # Скриншоты примеров
+│       │   │   └── [8 скриншотов]
+│       │   │
+│       │   ├── static/           # Статические файлы
+│       │   │   ├── css/          # CSS стили
+│       │   │   │   └── [7 CSS файлов]
+│       │   │   └── js/           # JavaScript файлы
+│       │   │       └── [6 JS файлов]
+│       │   │
+│       │   └── templates/        # HTML шаблоны
+│       │       └── [28 HTML файлов]
+│       │
+│       ├── identity/             # Система авторизации
+│       │   ├── __init__.py
+│       │   ├── auth_service.py   # Сервис авторизации
+│       │   ├── base_provider.py  # Базовый провайдер авторизации
+│       │   ├── models.py         # Модели авторизации
+│       │   └── providers/
+│       │       └── yandex.py     # Yandex OAuth провайдер
+│       │
+│       ├── integrations/         # External API Integrations
 │       │   └── __init__.py
 │       │
 │       ├── interfaces/           # Platform Adapters
 │       │   ├── __init__.py
+│       │   ├── api_interface.py  # API интерфейс
 │       │   ├── base.py           # BaseInterface абстракция
 │       │   ├── factory.py        # InterfaceFactory
-│       │   └── telegram_interface.py # TelegramInterface
+│       │   ├── telegram_interface.py # TelegramInterface
+│       │   └── web_interface.py  # Web интерфейс
 │       │
 │       ├── main.py               # FastAPI точка входа
 │       │
 │       ├── middleware/           # FastAPI Middleware
-│       │   ├── auth.py           # Простая аутентификация
-│       │   └── __pycache__/
+│       │   └── auth.py           # Аутентификация
 │       │
 │       ├── services/             # Background Services
 │       │   ├── __init__.py
@@ -98,24 +166,14 @@ Agent Lab - LangGraph Platform
 │       ├── tools/                # Tool Functions
 │       │   ├── __init__.py
 │       │   ├── calc_tools.py     # Математические инструменты
+│       │   ├── fashn_tools.py    # Инструменты FASHN
+│       │   ├── file_tools.py     # Инструменты работы с файлами
 │       │   ├── standard.py       # Стандартные инструменты (ask_user)
 │       │   └── weather_tools.py  # Погодные инструменты
 │       │
 │       └── workers/              # Background Workers
 │           ├── __init__.py
 │           └── task_processor.py # Основной воркер задач
-│
-└── tests/                       # Архитектурные тесты
-        ├── __init__.py
-    ├── arch/
-        │   ├── __init__.py
-    │   ├── test_01_migration.py
-    │   ├── test_02_execution_from_db.py
-    │   ├── test_03_db_react_agent.py
-    │   ├── test_04_stategraph_with_flows.py
-    │   ├── test_05_hybrid_stategraph.py
-    │   └── test_06_tools_in_db.py
-    └── conftest.py
 ```
 
 
@@ -135,6 +193,12 @@ Agent Lab - LangGraph Platform
 
 **admin.py** - REST API для управления агентами и флоу. CRUD операции через Storage. Используется для административного управления системой.
 
+**auth.py** - API авторизации через внешние провайдеры (Yandex OAuth). Обрабатывает начало авторизации, callback, получение информации о пользователе и выход из системы.
+
+**fashn.py** - API виртуальной примерки одежды и аксессуаров через FASHN сервис. Принимает URL изображений модели и продукта, выполняет примерку с настраиваемыми параметрами размещения и масштабирования.
+
+**files.py** - API работы с файлами. Скачивание файлов через платформу с проверкой доступа, получение информации о файлах. Поддерживает стриминг файлов из S3.
+
 **flows.py** - API выполнения флоу. Создает задачи в БД для TaskProcessor. Поддерживает синхронное и асинхронное выполнение через очередь задач.
 
 **telegram.py** - Telegram webhook endpoints. Создает TelegramInterface на лету для каждого флоу. Поддерживает универсальные webhooks вида `/webhook/telegram/{flow_id}`.
@@ -142,9 +206,13 @@ Agent Lab - LangGraph Platform
 **tokens.py** - Управление токенами ботов. Сохраняет токены в БД в формате `token:platform:username`.
 
 **webhooks.py** - Универсальные webhook endpoints. Базовая заглушка для будущих интеграций.
-### 3. Core System (app/core/)
+### 3. External Clients (app/clients/)
 
-**models.py** - Pydantic модели всей системы. AgentConfig, FlowConfig, TaskConfig, SessionConfig. Поддерживает два режима: CODE_REFERENCE (импорт из кода) и INLINE_CODE (код в БД). Основа Database-First архитектуры.
+**fashn_client.py** - Клиент для FASHN API виртуальной примерки. Обрабатывает загрузку изображений, масштабирование продуктов, композицию с моделями, запуск задач FASHN и polling результатов. Поддерживает различные типы продуктов (сумки, одежда).
+
+### 4. Core System (app/core/)
+
+**models.py** - Pydantic модели всей системы. AgentConfig, FlowConfig, TaskConfig, SessionConfig, FileRecord. Поддерживает два режима: CODE_REFERENCE (импорт из кода) и INLINE_CODE (код в БД). Основа Database-First архитектуры.
 
 **storage.py** - Key-Value Storage на одной таблице PostgreSQL. Все сущности хранятся с префиксами: agent:, flow:, task:, session:. JSONB для эффективного поиска. Принцип: одна таблица, простые операции.
 
@@ -156,12 +224,22 @@ Agent Lab - LangGraph Platform
 
 **graph_builder.py** - Построитель StateGraph графов. Динамически создает LangGraph на основе JSON-описания. Поддерживает различные типы нод: agent_node, tool_node, function_node. Обрабатывает conditional edges через router функции.
 
-**llm_factory.py** - Фабрика LLM экземпляров. Поддерживает OpenAI, Anthropic (заглушка для Yandex). Создает экземпляры на основе LLMConfig.
+**llm_factory.py** - Фабрика LLM экземпляров. Поддерживает OpenAI, Anthropic, Yandex GPT. Создает экземпляры на основе LLMConfig.
 
-**tool_factory.py** - Фабрика инструментов. Создает tools из ToolReference. Поддерживает функции, агенты как инструменты, MCP инструменты (заглушка). Принцип: любой агент может быть инструментом.
+**tool_factory.py** - Фабрика инструментов. Создает tools из ToolReference. Поддерживает функции, агенты как инструменты, MCP инструменты. Принцип: любой агент может быть инструментом.
 
-**config.py** - Конфигурация приложения через Pydantic Settings. Настройки БД, LLM, сервера. Создает простой PostgresCheckpointer для LangGraph без сложных зависимостей.
-### 4. Agents (app/agents/)
+**config.py** - Конфигурация приложения через Pydantic Settings. Настройки БД, LLM, сервера, FASHN, S3. Создает простой PostgresCheckpointer для LangGraph без сложных зависимостей.
+
+**config_utils.py** - Утилиты для работы с конфигурацией. Помощники для загрузки и валидации настроек.
+
+**context.py** - Контекст выполнения запросов. Управляет информацией о текущем пользователе и сессии в рамках обработки запроса.
+
+**checkpointer.py** - Чекпоинтер для LangGraph. Сохраняет состояние графов между вызовами для поддержки прерываний и возобновления выполнения.
+
+**file_processor.py** - Обработчик файлов с интеграцией S3. Загрузка, сохранение, получение файлов. Поддерживает публичные и приватные файлы, метаданные, теги.
+
+**core_clients/s3_client.py** - S3 клиент для работы с объектным хранилищем. Поддерживает различных провайдеров S3 (AWS, VK Cloud).
+### 5. Agents (app/agents/)
 
 **base.py** - BaseAgent - единый базовый класс. Поддерживает ReAct и StateGraph агентов. Компилирует граф на основе config.type. Загружает tools ТОЛЬКО из БД для единообразия. Метод as_tool() превращает агента в инструмент.
 
@@ -171,7 +249,7 @@ Agent Lab - LangGraph Platform
 
 **weather/agent.py** - WeatherAgent для погоды и путешествий. ReAct агент с инструментами для работы с погодой.
 
-### 5. Flows (app/flows/)
+### 6. Flows (app/flows/)
 
 **flow.py** - Flow класс-обертка. Административная сущность над entry_point_agent. Содержит настройки платформ, таймауты, метаданные. Простой паттерн делегирования.
 
@@ -181,41 +259,87 @@ Agent Lab - LangGraph Platform
 
 **test_flow.py** - Тестовая конфигурация флоу.
 
-### 6. Tools (app/tools/)
+### 7. Frontend (app/frontend/)
+
+**environment.py** - Конфигурация окружения для фронтенда. Определяет переменные среды и настройки для веб-интерфейса.
+
+**field_extensions.py** - Расширения полей форм. Кастомные поля для работы с агентами и флоу в веб-интерфейсе.
+
+**model_registry.py** - Реестр моделей для фронтенда. Централизованное управление моделями данных в веб-интерфейсе.
+
+**wrappers.py** - Обертки для форм. Упрощают работу с формами создания и редактирования агентов.
+
+**api/models.py** - Модели данных для Frontend API. Pydantic модели для обмена данными между фронтендом и бэкендом.
+
+**api/pages.py** - API страниц фронтенда. Рендеринг HTML страниц dashboard, создания агентов, управления флоу.
+
+**api/websocket.py** - WebSocket API для фронтенда. Реальное время обновления интерфейса.
+
+**chat/api/router.py** - Роутер чат API. Обработка сообщений чата через REST API.
+
+**chat/api/websocket.py** - WebSocket для чата. Реальное время сообщений в чат интерфейсе.
+
+**chat/templates/** - HTML шаблоны чата. Виджеты чата для встраивания и отдельные страницы.
+
+**static/css/** - CSS стили фронтенда. Современный responsive дизайн.
+
+**static/js/** - JavaScript фронтенда. Интерактивность, AJAX, WebSocket клиент.
+
+**templates/** - HTML шаблоны. Полный набор страниц веб-интерфейса.
+
+### 8. Identity System (app/identity/)
+
+**auth_service.py** - Сервис авторизации. Управляет сессиями пользователей, интеграция с внешними провайдерами OAuth.
+
+**base_provider.py** - Базовый провайдер авторизации. Абстрактный класс для реализации различных провайдеров OAuth.
+
+**models.py** - Модели авторизации. User, Session, AuthProvider и другие модели для системы аутентификации.
+
+**providers/yandex.py** - Yandex OAuth провайдер. Реализация авторизации через Yandex ID.
+
+### 9. Tools (app/tools/)
 
 **standard.py** - Стандартные инструменты. ask_user() - базовый инструмент для запроса данных у пользователя через GraphInterrupt.
 
 **calc_tools.py** - Математические инструменты. calculate() и get_math_help() с декораторами @tool. Безопасная оценка выражений.
 
+**fashn_tools.py** - Инструменты FASHN. virtual_try_on() и upload_image_for_try_on() для виртуальной примерки одежды.
+
+**file_tools.py** - Инструменты работы с файлами. Загрузка, сохранение, обработка файлов в S3.
+
 **weather_tools.py** - Погодные инструменты. suggest_travel() и get_weather() с моковыми данными.
 
-### 7. Interfaces (app/interfaces/)
+### 10. Interfaces (app/interfaces/)
 
 **base.py** - BaseInterface абстракция. Определяет унифицированный Message и методы handle_message(), send_message(). Управляет сессиями и командами платформ.
 
 **factory.py** - InterfaceFactory. Создает интерфейсы на лету для разных платформ. Получает токены из БД.
 
+**api_interface.py** - API интерфейс. Обработка HTTP запросов к агентам через REST API.
+
 **telegram_interface.py** - TelegramInterface адаптер. Парсит Telegram Updates, создает Message, отправляет ответы через Bot API. Поддерживает команды и webhook/polling режимы.
 
-### 8. Workers (app/workers/)
+**web_interface.py** - Web интерфейс. Обработка запросов от веб-интерфейса, интеграция с чатом.
+
+### 11. Workers (app/workers/)
 
 **task_processor.py** - Основной воркер системы. Обрабатывает задачи из БД в цикле. Поддерживает GraphInterrupt для пользовательского ввода. Отправляет результаты через InterfaceFactory. Принцип: отдельный процесс для фонового выполнения.
 
-### 9. Services (app/services/)
+### 12. Services (app/services/)
 
 **telegram_poller.py** - Long polling для разработки. Обнаруживает ботов в БД, запускает polling задачи, эмулирует webhooks через локальные HTTP запросы.
 
-### 10. Database (app/db/)
+### 13. Database (app/db/)
 
 **database.py** - SQLAlchemy настройка. Асинхронный движок, фабрика сессий, функции создания/удаления таблиц.
 
 **models.py** - SQLAlchemy модели. Одна таблица Storage для key-value хранения. JSONB поля, GIN индексы для быстрого поиска.
 
-### 11. Middleware (app/middleware/)
+### 14. Middleware (app/middleware/)
 
-**auth.py** - SimpleAuthMiddleware. Простая заглушка аутентификации для будущего развития.
+**auth.py** - Middleware аутентификации. Проверка сессий пользователей, установка контекста авторизации.
 
-### 12. Main Application
+### 15. Main Application
 
 **main.py** - FastAPI приложение. Lifespan управление: инициализация БД, checkpointer, миграции, Telegram polling. Подключение всех роутеров.
 

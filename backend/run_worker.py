@@ -2,6 +2,7 @@
 """
 Запуск воркера для обработки задач.
 """
+
 import asyncio
 from app.workers.task_processor import main
 

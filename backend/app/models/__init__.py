@@ -1,0 +1,49 @@
+"""
+Модели данных для Agent Platform.
+Реорганизованы для устранения циклических зависимостей.
+"""
+
+# Экспортируем все основные модели для обратной совместимости
+from .context_models import Context
+from .core_models import (
+    HistorySource,
+    NodeType,
+    AgentType,
+    CodeMode,
+    ConditionType,
+    GraphNode,
+    GraphEdge,
+    GraphDefinition,
+    ToolReference,
+    LLMConfig,
+    AgentConfig,
+    FlowConfig,
+    TaskStatus,
+    TaskConfig,
+    SessionStatus,
+    SessionConfig,
+    FileStatus,
+    FileRecord,
+)
+
+__all__ = [
+    "Context",
+    "HistorySource",
+    "NodeType", 
+    "AgentType",
+    "CodeMode",
+    "ConditionType",
+    "GraphNode",
+    "GraphEdge", 
+    "GraphDefinition",
+    "ToolReference",
+    "LLMConfig",
+    "AgentConfig",
+    "FlowConfig",
+    "TaskStatus",
+    "TaskConfig",
+    "SessionStatus", 
+    "SessionConfig",
+    "FileStatus",
+    "FileRecord",
+]

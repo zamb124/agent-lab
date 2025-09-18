@@ -16,7 +16,8 @@
                hx-ext="json-enc"
                hx-trigger="blur"
                hx-swap="none"
-               hx-indicator="#loading-{{ field_name }}-{{ model_id }}">
+               hx-indicator="#loading-{{ field_name }}-{{ model_id }}"
+               hx-on::after-request="if(!event.detail.successful) console.error('Update failed:', event.detail.xhr.responseText)">
       </div>
     {% endif %}
   </td>

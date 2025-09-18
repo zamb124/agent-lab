@@ -1,6 +1,7 @@
 {% if parent_view_mode == "table" %}
   <!-- Обычная строка таблицы -->
   <tr class="interactive transition-fast" data-model-type="{{ model_type }}" data-model-id="{{ model_id }}">
+      <!-- DEBUG: fields_html length = {{ fields_html|length if fields_html else 0 }} -->
       {{ fields_html|safe }}
       <td class="text-center">
           <div class="btn-group">

@@ -1,20 +1,32 @@
 {% if view_mode == "table" %}
-  <!-- Компактный бейдж для таблицы -->
-  <!-- FROM: wrappers/compact.html -->
-  <div class="nested-model-summary">
-    <span class="badge badge-info">
-      <i class="bi bi-box"></i>
-      {{ model_type.title() if model_type else 'Модель' }}
-    </span>
-    {% if model_id %}
-    <button class="btn btn-ghost btn-xs" 
-            hx-get="/frontend/models/{{ model_type }}/{{ model_id }}?view=modal" 
-            hx-target="#modal-container"
-            data-tooltip="Показать в модальном окне">
-        <i class="bi bi-eye"></i>
-    </button>
-    {% endif %}
-  </div>
+  <!-- Компактный бейдж для таблицы в ячейке -->
+  <td class="field-cell">
+    <div class="nested-model-summary">
+      <span class="badge badge-info">
+        <i class="bi bi-box"></i> {{ model_type.title() if model_type else 'Модель' }}
+      </span>
+      {% if model_id %}
+      <!-- Это ссылка на отдельную модель в БД -->
+      <button class="btn btn-ghost btn-xs" 
+              hx-get="/frontend/models/{{ model_type }}/{{ model_id }}?view=modal" 
+              hx-target="#modal-container"
+              data-tooltip="Показать {{ model_type }}">
+          <i class="bi bi-eye"></i>
+      </button>
+      {% else %}
+      <!-- Это поле текущей модели - показываем в модальном окне -->
+      <button class="btn btn-ghost btn-xs" 
+              hx-post="/frontend/models/show-inline-modal"
+              hx-ext="json-enc"
+              hx-vals='{"field_name": "{{ field_name }}", "parent_model_type": "{{ parent_model_type }}", "parent_model_id": "{{ parent_model_id }}", "model_data": "{}"}'
+              hx-target="body"
+              hx-swap="beforeend"
+              data-tooltip="Редактировать {{ title|default(field_name) }}">
+          <i class="bi bi-pencil"></i>
+      </button>
+      {% endif %}
+    </div>
+  </td>
 {% else %}
   <!-- Компактная карточка для формы -->
   <div class="compact-model-card">

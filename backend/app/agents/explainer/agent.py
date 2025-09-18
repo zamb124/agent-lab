@@ -1,15 +1,16 @@
 """
 Агент-объяснитель для финального резюме.
 """
+
 from app.agents.base import BaseAgent
 
 
 class ExplainerAgent(BaseAgent):
     """Агент который объясняет что произошло в процессе"""
-    
+
     name = "explainer_agent"
     description = "Объясняет результаты работы других агентов"
-    
+
     prompt = """
 Ты аналитик-объяснитель.
 
@@ -26,5 +27,5 @@ class ExplainerAgent(BaseAgent):
 
 Будь кратким и понятным.
 """
-    
+
     tools = []  # Финальный агент не использует дополнительные инструменты
