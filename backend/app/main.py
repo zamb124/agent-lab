@@ -12,7 +12,7 @@ import re
 import uvicorn
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
@@ -25,6 +25,7 @@ from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, fi
 from app.frontend.api import models as frontend_models
 from app.frontend.api import pages as frontend_pages
 from app.frontend.api import websocket as frontend_websocket
+from app.frontend.main.api import pages as main_pages
 from app.frontend.chat.api import router as chat_router
 from app.frontend.chat.api import websocket as chat_websocket
 from app.middleware.auth import AuthMiddleware
@@ -218,6 +219,7 @@ app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
 app.include_router(frontend_models.router, tags=["frontend"])
 app.include_router(frontend_pages.router, tags=["frontend-pages"])
 app.include_router(frontend_websocket.router, tags=["frontend-websocket"])
+app.include_router(main_pages.router, tags=["main-pages"])
 app.include_router(chat_router.router, prefix="/frontend/chat", tags=["chat"])
 app.include_router(
     chat_websocket.router, prefix="/frontend/chat", tags=["chat-websocket"]
@@ -229,9 +231,10 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
 @app.get("/")
-async def root():
-    """Корневой эндпоинт - редирект на dashboard"""
-    return RedirectResponse(url="/frontend/dashboard")
+async def root(request: Request):
+    """Корневой эндпоинт - главная страница"""
+    from app.frontend.main.api.pages import landing_page
+    return await landing_page(request)
 
 
 @app.get("/health")
