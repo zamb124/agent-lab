@@ -35,10 +35,10 @@
                         Agents Lab — это собственная платформа, которая позволяет компаниям внедрять агентную автоматизацию + ИИ-ассистентов в процессы, коммуникации и управление.
                     </p>
                     <div class="hero-actions">
-                        <a href="/frontend/auth" class="btn btn-primary btn-lg">
+                        <button class="btn btn-primary btn-lg" onclick="openContactModal()">
                             <i class="bi bi-rocket"></i>
                             Начать работу
-                        </a>
+                        </button>
                         <button class="btn btn-outline-primary btn-lg" onclick="scrollToSection('about')">
                             <i class="bi bi-info-circle"></i>
                             Узнать больше
@@ -243,16 +243,16 @@
                 <p class="cta-subtitle">
                     Узнайте, как Agents Lab может помочь именно вашему бизнесу
                 </p>
-                <div class="cta-actions">
-                    <a href="/frontend/auth" class="btn btn-primary btn-lg">
-                        <i class="bi bi-rocket"></i>
-                        Войти в платформу
-                    </a>
-                    <button class="btn btn-outline-primary btn-lg" onclick="scrollToSection('contact')">
-                        <i class="bi bi-envelope"></i>
-                        Связаться с нами
-                    </button>
-                </div>
+                    <div class="cta-actions">
+                        <a href="/frontend/auth" class="btn btn-primary btn-lg">
+                            <i class="bi bi-rocket"></i>
+                            Войти в платформу
+                        </a>
+                        <button class="btn btn-outline-primary btn-lg" onclick="openContactModal()">
+                            <i class="bi bi-envelope"></i>
+                            Связаться с нами
+                        </button>
+                    </div>
             </div>
         </div>
     </section>
@@ -273,6 +273,43 @@
     </footer>
 </div>
 
+<!-- Модальное окно для связи -->
+<div id="contactModal" class="modal-overlay" onclick="closeContactModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3>Начать работу с Agents Lab</h3>
+            <button class="modal-close" onclick="closeContactModal()">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <form id="contactForm" onsubmit="submitContactForm(event)">
+                <div class="form-group">
+                    <label for="message">Сообщение *</label>
+                    <textarea id="message" name="message" rows="3" placeholder="Расскажите о ваших задачах и целях..." required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email *</label>
+                    <input type="email" id="email" name="email" placeholder="your@email.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="phone">Телефон</label>
+                    <input type="tel" id="phone" name="phone" placeholder="+7 (999) 123-45-67">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-outline-primary" onclick="closeContactModal()">
+                        Отмена
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-send"></i>
+                        Отправить
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
 function scrollToSection(sectionId) {
     const element = document.getElementById(sectionId);
@@ -280,5 +317,119 @@ function scrollToSection(sectionId) {
         element.scrollIntoView({ behavior: 'smooth' });
     }
 }
+
+function openContactModal() {
+    document.getElementById('contactModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeContactModal() {
+    document.getElementById('contactModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+    document.getElementById('contactForm').reset();
+}
+
+async function submitContactForm(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const data = {
+        message: formData.get('message'),
+        email: formData.get('email'),
+        phone: formData.get('phone') || null
+    };
+    
+    // Отключаем кнопку отправки
+    const submitButton = event.target.querySelector('button[type="submit"]');
+    const originalText = submitButton.innerHTML;
+    submitButton.disabled = true;
+    submitButton.innerHTML = '<i class="bi bi-hourglass-split"></i> Отправка...';
+    
+    try {
+        const response = await fetch('/api/v1/lead', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            showNotification('Сообщение отправлено', 'Мы свяжемся с вами в ближайшее время', 'success');
+            closeContactModal();
+        } else {
+            const errorData = await response.json();
+            let errorMessage = 'Попробуйте еще раз или свяжитесь с нами напрямую';
+            
+            // Обрабатываем ошибки валидации
+            if (errorData.detail && Array.isArray(errorData.detail)) {
+                const emailError = errorData.detail.find(err => err.loc && err.loc.includes('email'));
+                if (emailError) {
+                    errorMessage = 'Пожалуйста, введите корректный email адрес';
+                }
+            }
+            
+            throw new Error(errorMessage);
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showNotification('Ошибка отправки', error.message, 'error');
+    } finally {
+        // Восстанавливаем кнопку
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalText;
+    }
+}
+
+function showNotification(title, message, type = 'success') {
+    // Создаем элемент уведомления
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    
+    const icon = type === 'success' ? 'bi-check-circle' : 'bi-exclamation-triangle';
+    
+    notification.innerHTML = `
+        <div class="notification-icon">
+            <i class="bi ${icon}"></i>
+        </div>
+        <div class="notification-content">
+            <div class="notification-title">${title}</div>
+            <div class="notification-message">${message}</div>
+        </div>
+        <button class="notification-close" onclick="closeNotification(this)">
+            <i class="bi bi-x"></i>
+        </button>
+    `;
+    
+    // Добавляем в body
+    document.body.appendChild(notification);
+    
+    // Показываем с анимацией
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 10);
+    
+    // Автоматически скрываем через 4 секунды
+    setTimeout(() => {
+        closeNotification(notification.querySelector('.notification-close'));
+    }, 4000);
+}
+
+function closeNotification(button) {
+    const notification = button.closest('.notification');
+    notification.classList.remove('show');
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+        }
+    }, 300);
+}
+
+// Закрытие модального окна по Escape
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        closeContactModal();
+    }
+});
 </script>
 {% endblock %}

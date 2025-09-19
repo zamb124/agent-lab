@@ -21,7 +21,7 @@ from app.core.config import settings
 from app.core.checkpointer import init_checkpointer, close_checkpointer
 from app.db.database import create_tables, close_db
 from app.core.migrator import Migrator
-from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files
+from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads
 from app.frontend.api import models as frontend_models
 from app.frontend.api import pages as frontend_pages
 from app.frontend.api import websocket as frontend_websocket
@@ -216,6 +216,7 @@ app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(flows.router, prefix="/api/v1/flows", tags=["flows"])
 app.include_router(fashn.router, prefix="/api/v1/fashn", tags=["fashn"])
 app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
+app.include_router(leads.router, prefix="/api/v1", tags=["leads"])
 app.include_router(frontend_models.router, tags=["frontend"])
 app.include_router(frontend_pages.router, tags=["frontend-pages"])
 app.include_router(frontend_websocket.router, tags=["frontend-websocket"])

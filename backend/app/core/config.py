@@ -129,6 +129,13 @@ class CloudVoiceConfig(BaseModel):
     timeout: int = 30
 
 
+class TelegramConfig(BaseModel):
+    """Конфигурация Telegram ботов"""
+    
+    enabled: bool = True
+    bots: Dict[str, str] = Field(default_factory=dict)  # bot_name -> token
+
+
 class Settings(BaseSettings):
     """Настройки приложения с поддержкой JSON конфигурации"""
 
@@ -141,6 +148,7 @@ class Settings(BaseSettings):
     s3: S3Config = Field(default_factory=S3Config)
     fashn: FashnConfig = Field(default_factory=FashnConfig)
     cloud_voice: CloudVoiceConfig = Field(default_factory=CloudVoiceConfig)
+    telegram: TelegramConfig = Field(default_factory=TelegramConfig)
 
     def __init__(self, **data):
         # Загружаем JSON конфигурацию и объединяем с переданными данными
