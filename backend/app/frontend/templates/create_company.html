@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Создание компании - Agent Lab</title>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .logo h1 {
+            color: #333;
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .logo p {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            color: #333;
+            font-weight: 500;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .subdomain-group {
+            display: flex;
+            align-items: stretch;
+        }
+        
+        .subdomain-group input {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+            border-right: none;
+        }
+        
+        .subdomain-suffix {
+            background: #f8f9fa;
+            border: 2px solid #e1e5e9;
+            border-left: none;
+            border-top-right-radius: 8px;
+            border-bottom-right-radius: 8px;
+            padding: 12px 16px;
+            color: #666;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+            min-width: fit-content;
+        }
+        
+        .help-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+        
+        .submit-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .submit-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+        }
+        
+        .footer a {
+            color: #666;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        .footer a:hover {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <h1>Создание компании</h1>
+            <p>Добро пожаловать в Agent Lab!</p>
+        </div>
+
+        <!-- Форма -->
+        <form action="/api/v1/admin/create-my-company" method="post">
+            <div class="form-group">
+                <label for="name">Название компании</label>
+                <input 
+                    type="text" 
+                    id="name" 
+                    name="name"
+                    required
+                    placeholder="Моя компания"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="subdomain">Поддомен (необязательно)</label>
+                <div class="subdomain-group">
+                    <input 
+                        type="text" 
+                        id="subdomain" 
+                        name="subdomain"
+                        placeholder="mycompany"
+                        pattern="[a-z0-9-]+"
+                        title="Только строчные буквы, цифры и дефисы"
+                    >
+                    <div class="subdomain-suffix">
+                        .{{ domain }}
+                    </div>
+                </div>
+                <div class="help-text">
+                    Если не указан, будет сгенерирован автоматически
+                </div>
+            </div>
+
+            <button type="submit" class="submit-btn">
+                Создать компанию
+            </button>
+        </form>
+
+        <div class="footer">
+            <a href="/auth/logout">Выйти из аккаунта</a>
+        </div>
+    </div>
+
+    <script>
+        // Автогенерация поддомена на основе названия компании
+        document.addEventListener('DOMContentLoaded', function() {
+            const nameInput = document.getElementById('name');
+            const subdomainInput = document.getElementById('subdomain');
+            
+            nameInput.addEventListener('input', function(e) {
+                if (!subdomainInput.value) {
+                    // Генерируем поддомен из названия компании
+                    const subdomain = e.target.value
+                        .toLowerCase()
+                        .replace(/[^a-z0-9\s-]/g, '') // убираем спецсимволы
+                        .replace(/\s+/g, '-') // пробелы в дефисы
+                        .replace(/-+/g, '-') // множественные дефисы в один
+                        .slice(0, 20); // ограничиваем длину
+                    subdomainInput.value = subdomain;
+                }
+            });
+        });
+    </script>
+</body>
+</html>
