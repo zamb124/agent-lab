@@ -1,0 +1,286 @@
+{% extends "base_landing.html" %}
+
+{% block title %}Agents Lab - Лаборатория Агентов{% endblock %}
+
+{% block content %}
+<div class="landing-page">
+    <!-- Header -->
+    <header class="landing-header">
+        <div class="container">
+            <div class="header-content">
+                <div class="brand">
+                    <i class="bi bi-robot icon-lg"></i>
+                    <span class="brand-text langflow-gradient">Agents Lab</span>
+                </div>
+                <div class="header-actions">
+                    <a href="/frontend/auth" class="btn btn-outline-primary">
+                        <i class="bi bi-box-arrow-in-right"></i>
+                        Войти
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text">
+                    <h1 class="hero-title">
+                        Ваш бизнес. Под управлением агентов.
+                        <span class="langflow-gradient">Поддержка Искусственного Интеллекта.</span>
+                    </h1>
+                    <p class="hero-subtitle">
+                        Agents Lab — это собственная платформа, которая позволяет компаниям внедрять агентную автоматизацию + ИИ-ассистентов в процессы, коммуникации и управление.
+                    </p>
+                    <div class="hero-actions">
+                        <a href="/frontend/auth" class="btn btn-primary btn-lg">
+                            <i class="bi bi-rocket"></i>
+                            Начать работу
+                        </a>
+                        <button class="btn btn-outline-primary btn-lg" onclick="scrollToSection('about')">
+                            <i class="bi bi-info-circle"></i>
+                            Узнать больше
+                        </button>
+                    </div>
+                </div>
+                <div class="hero-visual">
+                    <div class="hero-image">
+                        <img src="/static/img/empty.png" alt="Agents Lab Platform" class="platform-preview">
+                        <div class="visual-overlay">
+                            <div class="floating-card card-1">
+                                <i class="bi bi-robot"></i>
+                                <span>Агенты</span>
+                            </div>
+                            <div class="floating-card card-2">
+                                <i class="bi bi-diagram-3"></i>
+                                <span>Потоки</span>
+                            </div>
+                            <div class="floating-card card-3">
+                                <i class="bi bi-cpu"></i>
+                                <span>ИИ</span>
+                            </div>
+                            <div class="floating-card card-4">
+                                <i class="bi bi-lightning"></i>
+                                <span>Быстро</span>
+                            </div>
+                            <div class="floating-card card-5">
+                                <i class="bi bi-shield-check"></i>
+                                <span>Безопасно</span>
+                            </div>
+                            <div class="floating-card card-6">
+                                <i class="bi bi-graph-up"></i>
+                                <span>Эффективно</span>
+                            </div>
+                            <div class="floating-card card-7">
+                                <i class="bi bi-puzzle"></i>
+                                <span>Интеграции</span>
+                            </div>
+                            <div class="floating-card card-8">
+                                <i class="bi bi-gear"></i>
+                                <span>Настройки</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="about-section">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Что такое Agents Lab</h2>
+                <p class="section-subtitle">
+                    Мы помогаем не просто автоматизировать рутинные задачи, но трансформировать бизнес-операции, выводя их на новый уровень эффективности.
+                </p>
+            </div>
+            
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="bi bi-robot"></i>
+                    </div>
+                    <h3 class="feature-title">Автономные агенты</h3>
+                    <p class="feature-description">
+                        Агенты, которые действуют вместо человека, принимают решения, обучаются и взаимодействуют между собой.
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="bi bi-diagram-3"></i>
+                    </div>
+                    <h3 class="feature-title">Мультиагентные системы</h3>
+                    <p class="feature-description">
+                        Несколько агентов работают совместно: фронт-офис, служба поддержки, отдел продаж, аналитика, логистика.
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="bi bi-code-slash"></i>
+                    </div>
+                    <h3 class="feature-title">Low-code / No-code</h3>
+                    <p class="feature-description">
+                        Бизнес-команды могут быстро формировать решения без узкой разработки.
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="bi bi-puzzle"></i>
+                    </div>
+                    <h3 class="feature-title">Гибкие интеграции</h3>
+                    <p class="feature-description">
+                        Интеграции с системами, мессенджерами, базами данных и внутренним ПО предприятия.
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="bi bi-shield-check"></i>
+                    </div>
+                    <h3 class="feature-title">Безопасность</h3>
+                    <p class="feature-description">
+                        Развёртывание в облаке или on-premise, контроль данных, соответствие требованиям регуляторов.
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="bi bi-graph-up"></i>
+                    </div>
+                    <h3 class="feature-title">Масштабируемость</h3>
+                    <p class="feature-description">
+                        От одного агента до целой сети агентов, взаимодействующих между собой.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Benefits Section -->
+    <section class="benefits-section">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Наши сильные стороны</h2>
+            </div>
+            
+            <div class="benefits-grid">
+                <div class="benefit-item">
+                    <div class="benefit-header">
+                        <i class="bi bi-lightning"></i>
+                        <h3>Скорость внедрения</h3>
+                    </div>
+                    <p>MVP или прототип агента уже через несколько дней; старт без огромных бюджетов.</p>
+                </div>
+                
+                <div class="benefit-item">
+                    <div class="benefit-header">
+                        <i class="bi bi-shield-lock"></i>
+                        <h3>Контроль и безопасность</h3>
+                    </div>
+                    <p>Шифрование данных, строгие политики доступа, возможность развёртывания в вашей инфраструктуре.</p>
+                </div>
+                
+                <div class="benefit-item">
+                    <div class="benefit-header">
+                        <i class="bi bi-arrows-expand"></i>
+                        <h3>Масштабируемость</h3>
+                    </div>
+                    <p>От одного агента до целой сети агентов, взаимодействующих между собой.</p>
+                </div>
+                
+                <div class="benefit-item">
+                    <div class="benefit-header">
+                        <i class="bi bi-gear"></i>
+                        <h3>Управляемость</h3>
+                    </div>
+                    <p>Мониторинг, аналитика, отчетность, оптимизация рабочих процессов.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Target Audience Section -->
+    <section class="audience-section">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Для кого мы</h2>
+                <p class="section-subtitle">Agents Lab будет особенно полезна:</p>
+            </div>
+            
+            <div class="audience-list">
+                <div class="audience-item">
+                    <i class="bi bi-building"></i>
+                    <p>Среднему и крупному бизнесу, где есть повторяющиеся процессы, коммуникации с клиентами, или задачи, требующие быстрого реагирования</p>
+                </div>
+                
+                <div class="audience-item">
+                    <i class="bi bi-graph-down"></i>
+                    <p>Компаниям, которые хотят снизить операционные расходы и ошибки при ручной работе</p>
+                </div>
+                
+                <div class="audience-item">
+                    <i class="bi bi-code"></i>
+                    <p>Тем, кто хочет ввести ИИ-агентов, но не имеет большой команды разработчиков</p>
+                </div>
+                
+                <div class="audience-item">
+                    <i class="bi bi-shield"></i>
+                    <p>Тем, кто ценит безопасность и контроль над данными, и которым важно соответствие стандартам и регуляциям</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <div class="container">
+            <div class="cta-content">
+                <h2 class="cta-title">Готовы начать?</h2>
+                <p class="cta-subtitle">
+                    Узнайте, как Agents Lab может помочь именно вашему бизнесу
+                </p>
+                <div class="cta-actions">
+                    <a href="/frontend/auth" class="btn btn-primary btn-lg">
+                        <i class="bi bi-rocket"></i>
+                        Войти в платформу
+                    </a>
+                    <button class="btn btn-outline-primary btn-lg" onclick="scrollToSection('contact')">
+                        <i class="bi bi-envelope"></i>
+                        Связаться с нами
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="landing-footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <i class="bi bi-robot icon-lg"></i>
+                    <span class="brand-text langflow-gradient">Agents Lab</span>
+                </div>
+                <div class="footer-text">
+                    <p>&copy; 2025 Agents Lab. Лаборатория Агентов.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+</div>
+
+<script>
+function scrollToSection(sectionId) {
+    const element = document.getElementById(sectionId);
+    if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+    }
+}
+</script>
+{% endblock %}
