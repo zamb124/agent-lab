@@ -127,7 +127,7 @@ async def _periodic_cleanup():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Жизненный цикл приложения"""
-    logger.info("🚀 Запуск Agent Platform...")
+    logger.info("🚀 Запуск Agents Lab...")
 
     try:
         # Инициализация БД
@@ -159,7 +159,7 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(_periodic_cleanup())
         logger.info("✅ Периодическая очистка запущена")
 
-        logger.info("✅ Agent Platform запущена успешно!")
+        logger.info("✅ Agents Lab запущена успешно!")
 
         yield
 
@@ -182,12 +182,12 @@ async def lifespan(app: FastAPI):
 
         await close_checkpointer()
         await close_db()
-        logger.info("✅ Agent Platform остановлена")
+        logger.info("✅ Agents Lab остановлена")
 
 
 # Создание FastAPI приложения
 app = FastAPI(
-    title="Agent Platform",
+    title="Agents Lab",
     description="Платформа для создания и управления ИИ агентами с LangGraph",
     version="0.1.0",
     debug=settings.server.debug,

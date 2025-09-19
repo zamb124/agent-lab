@@ -1,5 +1,5 @@
 /**
- * Agent Platform - Главный JavaScript файл
+ * Agents Lab - Главный JavaScript файл
  */
 
 class APP {

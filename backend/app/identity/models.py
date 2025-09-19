@@ -234,11 +234,13 @@ class CreateCompanyForm(BaseModel):
         description="Введите название вашей компании",
         placeholder="Моя компания"
     )
-    subdomain: Optional[str] = Field(
-        default=None,
-        title="Поддомен",
-        description="Уникальный поддомен (необязательно)",
-        placeholder="mycompany"
+    slug: str = Field(
+        title="Slug компании",
+        description="Уникальный идентификатор для URL (только латинские буквы и цифры)",
+        placeholder="mycompany",
+        min_length=3,
+        max_length=20,
+        pattern=r"^[a-z0-9]+$"
     )
 
 

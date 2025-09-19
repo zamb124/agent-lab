@@ -414,15 +414,18 @@ async def create_my_company(request: Request):
     
     # Создаем компанию
     company_name = company_data.get("name", f"Компания {user.name}")
-    subdomain = company_data.get("subdomain") or f"user_{user.user_id.split('_')[-1]}"
+    slug = company_data.get("slug")
+    if not slug:
+        raise HTTPException(status_code=400, detail="Slug компании обязателен")
     
-    # Проверяем уникальность поддомена
-    existing_subdomain = await storage.get(f"subdomain:{subdomain}", force_global=True)
+    # Проверяем уникальность slug
+    existing_subdomain = await storage.get(f"subdomain:{slug}", force_global=True)
     if existing_subdomain:
-        raise HTTPException(status_code=400, detail=f"Поддомен {subdomain} уже занят")
+        raise HTTPException(status_code=400, detail=f"Slug {slug} уже занят")
     
-    # ID компании = поддомен (то что указал пользователь)
-    company_id = subdomain
+    # ID компании = slug (то что указал пользователь)
+    company_id = slug
+    subdomain = slug  # Для совместимости
     
     company = Company(
         company_id=company_id,

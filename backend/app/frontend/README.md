@@ -1,4 +1,4 @@
-# Agent Platform Frontend
+# Agents Lab Frontend
 
 Современный фронтенд на базе HTMX с темной темой в стиле Langflow. Основан на концепции **Backend-Driven Frontend** где Pydantic модели автоматически генерируют HTML через рекурсивный рендеринг.
 

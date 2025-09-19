@@ -156,7 +156,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         main_company = Company(
             company_id="main",
             subdomain="main",
-            name="Agent Platform",
+            name="Agents Lab",
             status="active"
         )
         await self.storage.set("company:main", main_company.model_dump_json(), force_global=True)

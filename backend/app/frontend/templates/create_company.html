@@ -161,22 +161,25 @@
             </div>
 
             <div class="form-group">
-                <label for="subdomain">Поддомен (необязательно)</label>
+                <label for="slug">Slug компании</label>
                 <div class="subdomain-group">
                     <input 
                         type="text" 
-                        id="subdomain" 
-                        name="subdomain"
+                        id="slug" 
+                        name="slug"
+                        required
                         placeholder="mycompany"
-                        pattern="[a-z0-9-]+"
-                        title="Только строчные буквы, цифры и дефисы"
+                        pattern="[a-z0-9]{3,20}"
+                        title="Только строчные латинские буквы и цифры, от 3 до 20 символов"
+                        minlength="3"
+                        maxlength="20"
                     >
                     <div class="subdomain-suffix">
                         .{{ domain }}
                     </div>
                 </div>
                 <div class="help-text">
-                    Если не указан, будет сгенерирован автоматически
+                    Только латинские буквы и цифры, без пробелов и спецсимволов
                 </div>
             </div>
 
@@ -191,21 +194,19 @@
     </div>
 
     <script>
-        // Автогенерация поддомена на основе названия компании
+        // Автогенерация slug на основе названия компании
         document.addEventListener('DOMContentLoaded', function() {
             const nameInput = document.getElementById('name');
-            const subdomainInput = document.getElementById('subdomain');
+            const slugInput = document.getElementById('slug');
             
             nameInput.addEventListener('input', function(e) {
-                if (!subdomainInput.value) {
-                    // Генерируем поддомен из названия компании
-                    const subdomain = e.target.value
+                if (!slugInput.value) {
+                    // Генерируем slug из названия компании
+                    const slug = e.target.value
                         .toLowerCase()
-                        .replace(/[^a-z0-9\s-]/g, '') // убираем спецсимволы
-                        .replace(/\s+/g, '-') // пробелы в дефисы
-                        .replace(/-+/g, '-') // множественные дефисы в один
+                        .replace(/[^a-z0-9]/g, '') // только латинские буквы и цифры
                         .slice(0, 20); // ограничиваем длину
-                    subdomainInput.value = subdomain;
+                    slugInput.value = slug;
                 }
             });
         });

@@ -1,3 +1,3 @@
 """
-Модуль чата для Agent Platform
+Модуль чата для Agents Lab
 """
