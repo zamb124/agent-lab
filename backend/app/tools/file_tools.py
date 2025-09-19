@@ -128,3 +128,9 @@ async def read_file(file_id: str, provider: Optional[str] = None) -> str:
         f"Размер: {file_info['file_size']} байт\n"
         f"Содержимое: бинарный файл, чтение недоступно"
     )
+
+
+# Список доступных инструментов для экспорта
+FILE_TOOLS = [
+    read_file,
+]

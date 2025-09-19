@@ -24,6 +24,8 @@ from .core_models import (
     SessionConfig,
     FileStatus,
     FileRecord,
+    AudioStatus,
+    AudioRecord,
 )
 
 __all__ = [
@@ -46,4 +48,6 @@ __all__ = [
     "SessionConfig",
     "FileStatus",
     "FileRecord",
+    "AudioStatus",
+    "AudioRecord",
 ]

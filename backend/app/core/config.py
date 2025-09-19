@@ -117,6 +117,18 @@ class FashnConfig(BaseModel):
     poll_timeout: int = 600  # Увеличиваем общий таймаут до 10 минут
 
 
+class CloudVoiceConfig(BaseModel):
+    """Конфигурация Cloud Voice API"""
+
+    enabled: bool = False
+    secret_key: Optional[str] = None
+    client_id: Optional[str] = None
+    auth_url: str = "https://mcs.mail.ru/auth/oauth/v1/token"
+    asr_url: str = "https://voice.mcs.mail.ru/asr"
+    tts_url: str = "https://voice.mcs.mail.ru/tts"
+    timeout: int = 30
+
+
 class Settings(BaseSettings):
     """Настройки приложения с поддержкой JSON конфигурации"""
 
@@ -128,6 +140,7 @@ class Settings(BaseSettings):
     worker: WorkerConfig = Field(default_factory=WorkerConfig)
     s3: S3Config = Field(default_factory=S3Config)
     fashn: FashnConfig = Field(default_factory=FashnConfig)
+    cloud_voice: CloudVoiceConfig = Field(default_factory=CloudVoiceConfig)
 
     def __init__(self, **data):
         # Загружаем JSON конфигурацию и объединяем с переданными данными

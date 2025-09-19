@@ -6,7 +6,7 @@ Pydantic модели для конфигурации агентов и флоу
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from enum import Enum
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from .context_models import Context
 
@@ -543,6 +543,46 @@ class SessionConfig(BaseModel):
         return f"session:{self.platform}:{self.user_id}:{self.flow_id}:{key}"
 
 
+class CloudVoiceTokenConfig(BaseModel):
+    """Конфигурация токенов Cloud Voice API"""
+    
+    client_id: str = Field(
+        title="Client ID",
+        description="Идентификатор клиента Cloud Voice API"
+    )
+    access_token: str = Field(
+        title="Access Token",
+        description="Токен доступа к API"
+    )
+    refresh_token: str = Field(
+        title="Refresh Token", 
+        description="Токен для обновления access_token"
+    )
+    expires_at: datetime = Field(
+        title="Время истечения",
+        description="Время когда истекает access_token"
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        title="Время создания",
+        description="Время создания токена"
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        title="Время обновления",
+        description="Время последнего обновления токена"
+    )
+    
+    def is_expired(self) -> bool:
+        """Проверяет истек ли access_token"""
+        return datetime.now(timezone.utc) >= self.expires_at
+    
+    def is_refresh_expired(self, refresh_ttl_days: int = 30) -> bool:
+        """Проверяет истек ли refresh_token (по умолчанию 30 дней)"""
+        refresh_expires_at = self.created_at + timedelta(days=refresh_ttl_days)
+        return datetime.now(timezone.utc) >= refresh_expires_at
+
+
 class FileStatus(str, Enum):
     """Статус файла"""
 
@@ -633,6 +673,150 @@ class FileRecord(BaseModel):
 
         # Возвращаем ссылку на наш API endpoint для скачивания
         return f"/api/v1/files/download/{self.file_id}"
+
+    @property
+    def direct_s3_url(self) -> Optional[str]:
+        """Прямая ссылка на S3 (для внутреннего использования)"""
+        if not self.s3_bucket or not self.s3_key or not self.s3_endpoint:
+            return None
+
+        base_url = self.s3_endpoint.rstrip("/")
+        return f"{base_url}/{self.s3_bucket}/{self.s3_key}"
+
+
+class AudioStatus(str, Enum):
+    """Статус аудиофайла"""
+    
+    UPLOADING = "uploading"
+    UPLOADED = "uploaded" 
+    PROCESSING = "processing"  # Распознается речь
+    PROCESSED = "processed"    # Речь распознана
+    ERROR = "error"           # Ошибка обработки
+    DELETED = "deleted"
+
+
+class AudioRecord(BaseModel):
+    """Запись об аудиофайле в системе"""
+    
+    audio_id: str = Field(
+        title="ID аудио", 
+        description="Уникальный ID аудиофайла в системе", 
+        readonly=True
+    )
+    provider: str = Field(
+        title="Провайдер",
+        description="Провайдер S3 (aws, yandex, minio, etc.)",
+    )
+    original_name: str = Field(
+        title="Оригинальное имя", 
+        description="Оригинальное имя аудиофайла"
+    )
+    s3_key: str = Field(
+        title="Ключ S3", 
+        description="Ключ аудиофайла в S3", 
+        readonly=True
+    )
+    s3_bucket: str = Field(
+        title="Bucket S3", 
+        description="Bucket в S3", 
+        readonly=True
+    )
+    s3_endpoint: Optional[str] = Field(
+        default=None,
+        title="Endpoint S3",
+        description="Endpoint URL провайдера",
+        readonly=True,
+    )
+    content_type: str = Field(
+        title="Тип содержимого", 
+        description="MIME тип аудиофайла", 
+        readonly=True
+    )
+    file_size: int = Field(
+        title="Размер файла", 
+        description="Размер аудиофайла в байтах", 
+        readonly=True
+    )
+    duration: Optional[float] = Field(
+        default=None,
+        title="Длительность", 
+        description="Длительность аудио в секундах",
+        readonly=True
+    )
+    checksum: Optional[str] = Field(
+        default=None,
+        title="Контрольная сумма",
+        description="MD5 или другая контрольная сумма",
+        readonly=True,
+    )
+    status: AudioStatus = Field(
+        default=AudioStatus.UPLOADING,
+        title="Статус",
+        description="Статус аудиофайла",
+        readonly=True,
+    )
+    uploaded_by: Optional[str] = Field(
+        default=None,
+        title="Загрузил",
+        description="ID пользователя который загрузил",
+        readonly=True,
+    )
+    
+    # Результаты распознавания речи
+    recognition_text: Optional[str] = Field(
+        default=None,
+        title="Распознанный текст",
+        description="Результат распознавания речи",
+        readonly=True
+    )
+    recognition_confidence: Optional[float] = Field(
+        default=None,
+        title="Уверенность распознавания",
+        description="Уверенность распознавания от 0.0 до 1.0",
+        readonly=True
+    )
+    recognition_qid: Optional[str] = Field(
+        default=None,
+        title="QID Cloud Voice",
+        description="ID запроса к Cloud Voice API",
+        readonly=True
+    )
+    
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        title="Метаданные",
+        description="Дополнительные метаданные аудиофайла",
+    )
+    tags: List[str] = Field(
+        default_factory=list,
+        title="Теги",
+        description="Теги для категоризации",
+    )
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        title="Создан",
+        description="Время создания аудиозаписи",
+        readonly=True,
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        title="Обновлен",
+        description="Время обновления аудиозаписи",
+        readonly=True,
+    )
+
+    @property
+    def key(self) -> str:
+        """Ключ для хранения в БД"""
+        return f"audio:{self.provider}:{self.audio_id}"
+
+    @property
+    def url(self) -> Optional[str]:
+        """URL для скачивания аудио через нашу платформу"""
+        if not self.audio_id:
+            return None
+
+        return f"/api/v1/files/download/audio/{self.audio_id}"
 
     @property
     def direct_s3_url(self) -> Optional[str]:

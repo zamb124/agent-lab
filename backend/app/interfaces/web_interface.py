@@ -90,10 +90,27 @@ class WebInterface(BaseInterface):
         # Обрабатываем файлы если есть
         processed_files = []
         if files_data:
-            processed_files = await self.process_files(files_data, user_id)
-            if processed_files:
+            # Разделяем аудиофайлы и обычные файлы
+            audio_files = [f for f in files_data if f.get("content_type", "").startswith("audio/")]
+            regular_files = [f for f in files_data if not f.get("content_type", "").startswith("audio/")]
+            
+            # Обрабатываем обычные файлы
+            file_messages = []
+            if regular_files:
+                file_messages = await self.process_files(regular_files, user_id)
+            
+            # Обрабатываем аудиофайлы
+            audio_messages = []
+            if audio_files:
+                audio_messages = await self.process_audio_files(audio_files, user_id)
+            
+            # Объединяем все сообщения
+            all_messages = file_messages + audio_messages
+            processed_files = all_messages
+
+            if all_messages:
                 # Добавляем информацию о файлах к тексту сообщения
-                files_text = "\n\n".join(processed_files)
+                files_text = "\n\n".join(all_messages)
                 if message_text:
                     message_text = f"{message_text}\n\n{files_text}"
                 else:
@@ -253,6 +270,38 @@ class WebInterface(BaseInterface):
         )
 
         return file_record
+
+    async def _process_single_audio_file(
+        self, audio_data: Dict[str, Any], user_id: str, audio_processor
+    ):
+        """Обрабатывает один аудиофайл из web чата"""
+        # Декодируем base64 содержимое
+        if "content" not in audio_data:
+            raise ValueError("Аудиофайл без содержимого в web запросе")
+
+        audio_content = base64.b64decode(audio_data["content"])
+
+        # Определяем content_type
+        content_type = audio_data.get("content_type", "audio/wav")
+        if not content_type.startswith("audio/"):
+            content_type = "audio/wav"
+
+        # Обрабатываем аудиофайл через AudioProcessor с автоматическим распознаванием
+        audio_record = await audio_processor.process_audio_from_bytes(
+            data=audio_content,
+            original_name=audio_data.get("name", f"web_audio_{uuid.uuid4().hex[:8]}.wav"),
+            content_type=content_type,
+            uploaded_by=user_id,
+            auto_recognize=True,  # Автоматически распознаем речь
+            metadata={
+                "platform": "web",
+                "web_upload": True,
+                "file_size": audio_data.get("size", len(audio_content)),
+            },
+            tags=["web", "upload", "audio"],
+        )
+
+        return audio_record
 
 
 web_interface = WebInterface({})

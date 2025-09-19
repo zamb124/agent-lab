@@ -13,8 +13,9 @@ from datetime import datetime, timezone
 from app.core.storage import Storage
 from app.models import TaskConfig, TaskStatus, SessionConfig, SessionStatus
 from app.core.file_processor import get_default_file_processor
+from app.core.audio_processor import get_default_audio_processor
 from app.core.context import get_context
-
+from app.core.audio_processor import AudioProcessor
 logger = logging.getLogger(__name__)
 
 
@@ -428,3 +429,81 @@ class BaseInterface(ABC):
             f"_process_single_file не реализован в {self.__class__.__name__}"
         )
         return None
+
+    async def process_audio_files(
+        self, audio_files_data: List[Dict[str, Any]], user_id: str
+    ) -> List[str]:
+        """
+        Обрабатывает аудиофайлы через AudioProcessor с автоматическим распознаванием речи.
+
+        Args:
+            audio_files_data: Список данных об аудиофайлах от платформы
+            user_id: ID пользователя
+
+        Returns:
+            Список отформатированных сообщений об аудиофайлах
+        """
+        if not audio_files_data:
+            return []
+
+        audio_processor = await get_default_audio_processor()
+        audio_messages = []
+
+        for audio_data in audio_files_data:
+            # Обрабатываем аудиофайл (должно быть переопределено в наследниках)
+            audio_record = await self._process_single_audio_file(
+                audio_data, user_id, audio_processor
+            )
+
+            if audio_record:
+                # Форматируем сообщение об аудиофайле
+                audio_message = audio_processor.format_audio_message(audio_record)
+                audio_messages.append(audio_message)
+                logger.info(f"🎵 Обработан аудиофайл: {audio_record.original_name}")
+
+        return audio_messages
+
+    async def _process_single_audio_file(
+        self, audio_data: Dict[str, Any], user_id: str, audio_processor
+    ):
+        """
+        Обрабатывает один аудиофайл. Должно быть переопределено в наследниках.
+
+        Args:
+            audio_data: Данные об аудиофайле от платформы
+            user_id: ID пользователя
+            audio_processor: Экземпляр аудио процессора
+
+        Returns:
+            AudioRecord или None
+        """
+        # Базовая реализация - ничего не делает
+        logger.warning(
+            f"_process_single_audio_file не реализован в {self.__class__.__name__}"
+        )
+        return None
+
+    def extract_outgoing_audio_from_message(self, message_content: str) -> tuple[str, List[Dict[str, Any]]]:
+        """
+        Извлекает [AUDIO] блоки из исходящего сообщения агента.
+        
+        Args:
+            message_content: Содержимое сообщения от агента
+            
+        Returns:
+            (текст_без_аудио, список_аудиофайлов)
+        """
+        
+        
+        # Извлекаем аудио блоки
+        audio_files = AudioProcessor.extract_audio_info_from_message(message_content)
+        
+        if not audio_files:
+            return message_content, []
+        
+        # Удаляем [AUDIO] блоки из текста сообщения
+        import re
+        pattern = r"\[AUDIO\].*?\[/AUDIO\]"
+        clean_text = re.sub(pattern, "", message_content, flags=re.DOTALL).strip()
+        
+        return clean_text, audio_files

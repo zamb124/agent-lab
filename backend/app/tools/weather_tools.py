@@ -46,3 +46,10 @@ def get_weather(city: str) -> str:
     temperature = random.choice(temperatures)
 
     return f"Погода в {city}: {condition}, {temperature}°C"
+
+
+# Список доступных инструментов для экспорта
+WEATHER_TOOLS = [
+    suggest_travel,
+    get_weather,
+]

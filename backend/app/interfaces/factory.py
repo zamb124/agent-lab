@@ -42,7 +42,7 @@ class InterfaceFactory:
 
             # Получаем токен из БД
             token_key = f"token:telegram:{bot_username}"
-            token_json = await self.storage.get(token_key)
+            token_json = await self.storage.get(token_key, force_global=True)
 
             if not token_json:
                 logger.error(f"Не найден токен для бота {bot_username}")

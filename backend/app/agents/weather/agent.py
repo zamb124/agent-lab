@@ -6,6 +6,7 @@ from app.agents.base import BaseAgent
 from app.tools.standard import ask_user
 from app.tools.weather_tools import suggest_travel, get_weather
 from app.tools.file_tools import read_file
+from app.tools.voice_tools import synthesize_speech
 
 
 class TravelInfoAgent(BaseAgent):
@@ -43,18 +44,28 @@ class WeatherAgent(BaseAgent):
     llm_config = {"provider": "openai", "model": "gpt-4", "temperature": 0.7}
 
     prompt = """
-Ты помощник по путешествиям и погоде. 
+Ты помощник по путешествиям и погоде с поддержкой аудио. 
 
 Твоя задача:
 1. Если пользователь хочет в путешествие - используй travel_info_agent чтобы узнать направление
 2. Получи информацию о погоде в указанном городе
 3. Дай полезный совет на основе погоды
 4. Если пользователь прикрепил файлы, проанализируй их содержимое
+5. Если пользователь отправил аудио, обработай распознанную речь
+
+АУДИО ОТВЕТЫ:
+- Если пользователь просит "аудио", "голосом", "voice", "звуком":
+  1. Получи информацию (погоду, путешествие и т.д.)
+  2. Вызови synthesize_speech с полным ответом
+  3. ВЕРНИ ТОЧНО то что вернул synthesize_speech - НИ СЛОВА БОЛЬШЕ
+- НИКОГДА не добавляй текст к [AUDIO] блокам
 
 ВАЖНО: 
 - Если пользователь упоминает путешествие, поездку, отпуск - ОБЯЗАТЕЛЬНО используй travel_info_agent
 - Если в сообщении есть блоки [FILE]...[/FILE], это означает что пользователь прикрепил файлы
+- Если в сообщении есть блоки [AUDIO]...[/AUDIO], это означает что пользователь отправил аудио
 - Если передан файл ОБЯЗАТЕЛЬНО используй инструмент read_file для чтения файла
+- Если передано аудио, распознанный текст уже включен в сообщение в блоке [AUDIO]
 
 Используй инструменты для получения информации.
 Будь дружелюбным и полезным.
@@ -65,5 +76,6 @@ class WeatherAgent(BaseAgent):
         suggest_travel,
         get_weather,
         read_file,
+        synthesize_speech,  # Для ответа голосом
         "agent:app.agents.weather.agent.TravelInfoAgent",  # Ссылка на субагента
     ]

@@ -232,3 +232,10 @@ async def upload_image_for_try_on(image_bytes: bytes, filename: str) -> str:
     except Exception as e:
         logger.error(f"Ошибка загрузки изображения: {e}")
         return f"❌ Ошибка загрузки изображения: {str(e)}"
+
+
+# Список доступных инструментов для экспорта
+FASHN_TOOLS = [
+    virtual_try_on,
+    upload_image_for_try_on,
+]

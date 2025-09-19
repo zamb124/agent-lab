@@ -4,7 +4,7 @@
 """
 
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, DateTime, Index
+from sqlalchemy import Column, String, DateTime, Index, UniqueConstraint, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -36,13 +36,19 @@ class Storage(Base):
     )
     expired_at = Column(DateTime(timezone=True), nullable=True)  # TTL поле
 
-    # Индексы для быстрого поиска по префиксам
+    # Индексы для быстрого поиска по префиксам и уникальность ключа
     __table_args__ = (
+        UniqueConstraint("key", name="uq_storage_key"),  # Явное ограничение уникальности
         Index("ix_storage_key_prefix", "key"),
         Index("ix_storage_updated_at", "updated_at"),
         Index("ix_storage_expired_at", "expired_at"),  # Для TTL очистки
-        # GIN индекс для поиска в JSON (для задач по статусу и т.д.)
-        Index("ix_storage_value_gin", "value", postgresql_using="gin"),
+        # Составные индексы для оптимизации запросов по ключу + временным полям
+        Index("ix_storage_key_created_at", "key", "created_at"),
+        Index("ix_storage_key_updated_at", "key", "updated_at"),
+        Index("ix_storage_key_expired_at", "key", "expired_at"),
+        # Индексы на конкретные JSON поля для быстрого поиска задач
+        Index("ix_storage_task_status", (text("(value->>'status')")), postgresql_where=text("key LIKE 'task:%'")),
+        Index("ix_storage_task_session_flow", (text("(value->>'session_id')")), (text("(value->>'flow_id')")), postgresql_where=text("key LIKE 'task:%'")),
     )
 
     def __repr__(self):

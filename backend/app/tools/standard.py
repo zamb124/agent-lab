@@ -36,3 +36,9 @@ def ask_user(question: str) -> str:
     except GraphInterrupt as e:
         logger.error(f"🔴 Ошибка в ask_user tool: {e}")
         raise
+
+
+# Список доступных инструментов для экспорта
+STANDARD_TOOLS = [
+    ask_user,
+]
