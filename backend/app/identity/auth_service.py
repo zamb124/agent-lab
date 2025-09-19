@@ -206,7 +206,7 @@ class AuthService:
         """Находит существующего пользователя или создает нового"""
         # Ищем пользователя по провайдеру и provider_user_id
         user_key = f"user:{provider.value}:{user_info.provider_user_id}"
-        user_data = await self.storage.get(user_key)
+        user_data = await self.storage.get(user_key, force_global=True)
 
         if user_data:
             # Пользователь существует, обновляем информацию
@@ -228,7 +228,7 @@ class AuthService:
             user.metadata = user_info.raw_data
             user.updated_at = datetime.now(timezone.utc)
 
-            await self.storage.set(user_key, user.model_dump_json())
+            await self.storage.set(user_key, user.model_dump_json(), force_global=True)
             logger.info(f"🔄 Обновлен пользователь {user.email}")
 
             return user
@@ -248,7 +248,7 @@ class AuthService:
                 active_company_id="",
             )
 
-            await self.storage.set(user_key, user.model_dump_json())
+            await self.storage.set(user_key, user.model_dump_json(), force_global=True)
 
             logger.info(f"👤 Создан новый пользователь {user.email}")
             return user
@@ -256,10 +256,10 @@ class AuthService:
     async def _get_user(self, user_id: str) -> Optional[User]:
         """Получает пользователя по ID через поиск по провайдеру"""
         # Ищем пользователя по паттерну user:*:*
-        keys = await self.storage.list_by_prefix("user:", 1000)
+        keys = await self.storage.list_by_prefix("user:", 1000, force_global=True)
         
         for key in keys:
-            user_data = await self.storage.get(key)
+            user_data = await self.storage.get(key, force_global=True)
             if user_data:
                 user_dict = json.loads(user_data)
                 if user_dict.get("user_id") == user_id:

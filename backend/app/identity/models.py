@@ -222,6 +222,26 @@ class Company(BaseModel):
     )
 
 
+class CreateCompanyForm(BaseModel):
+    """Форма создания компании"""
+
+    class Config:
+        storage_prefix = "create_company_form"
+
+    name: str = Field(
+        default="",
+        title="Название компании",
+        description="Введите название вашей компании",
+        placeholder="Моя компания"
+    )
+    subdomain: Optional[str] = Field(
+        default=None,
+        title="Поддомен",
+        description="Уникальный поддомен (необязательно)",
+        placeholder="mycompany"
+    )
+
+
 class AuthRequest(BaseModel):
     """Запрос на авторизацию"""
 

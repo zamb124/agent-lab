@@ -5,14 +5,17 @@
 import httpx
 import re
 import logging
-from fastapi import APIRouter, HTTPException, UploadFile, File
-from typing import List
+import uuid
+from fastapi import APIRouter, HTTPException, UploadFile, File, Request
+from typing import List, Dict, Any
 from bs4 import BeautifulSoup
+from datetime import datetime, timezone
 
 from app.models import AgentConfig, FlowConfig
+from app.identity.models import User, Company
 from app.core.storage import Storage
 from app.core.file_processor import FileProcessor
-
+from app.core.context import get_context
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -381,3 +384,79 @@ async def upload_file(file: UploadFile = File(...)):
     finally:
         if file_processor:
             await file_processor.close()
+
+
+# === Создание компании текущим пользователем ===
+
+@router.post("/create-my-company")
+async def create_my_company(request: Request):
+    """Создать компанию для текущего авторизованного пользователя"""
+    
+    # Получаем данные из формы
+    form_data = await request.form()
+    company_data = dict(form_data)
+    
+    # Отладка: что пришло из формы
+    logger.info(f"🐛 DEBUG: form_data = {company_data}")
+    
+    context = get_context()
+    if not context or not context.user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    user = context.user
+    storage = Storage()
+    
+    # Отладка: проверим что в контексте
+    logger.info(f"🐛 DEBUG: user.companies = {user.companies}")
+    logger.info(f"🐛 DEBUG: user.active_company_id = '{user.active_company_id}'")
+    
+    # Пользователь может создавать несколько компаний
+    
+    # Создаем компанию
+    company_name = company_data.get("name", f"Компания {user.name}")
+    subdomain = company_data.get("subdomain") or f"user_{user.user_id.split('_')[-1]}"
+    
+    # Проверяем уникальность поддомена
+    existing_subdomain = await storage.get(f"subdomain:{subdomain}", force_global=True)
+    if existing_subdomain:
+        raise HTTPException(status_code=400, detail=f"Поддомен {subdomain} уже занят")
+    
+    # ID компании = поддомен (то что указал пользователь)
+    company_id = subdomain
+    
+    company = Company(
+        company_id=company_id,
+        subdomain=subdomain,
+        name=company_name,
+        status="active",
+        created_at=datetime.now(timezone.utc)
+    )
+    
+    # Сохраняем компанию глобально
+    await storage.set(f"company:{company_id}", company.model_dump_json(), force_global=True)
+    
+    # Сохраняем mapping поддомена (как JSON строка)
+    subdomain_saved = await storage.set(f"subdomain:{subdomain}", f'"{company_id}"', force_global=True)
+    logger.info(f"🐛 DEBUG: subdomain:{subdomain} -> {company_id}, saved: {subdomain_saved}")
+    
+    # Обновляем глобального пользователя - добавляем компанию
+    user_key = f"user:{user.provider.value}:{user.provider_user_id}"
+    user.companies[company_id] = ["admin", "user"]  # Добавляем компанию с ролями
+    user.active_company_id = company_id  # Делаем активной
+    user.updated_at = datetime.now(timezone.utc)
+    
+    # Сохраняем обновленного глобального пользователя
+    await storage.set(user_key, user.model_dump_json(), force_global=True)
+    logger.info(f"🐛 DEBUG: Обновлен глобальный пользователь - добавлена компания {company_id}")
+    
+    # Редиректим на dashboard
+    from fastapi.responses import RedirectResponse
+    from app.core.config import settings
+    
+    # Для локальной разработки редиректим на localhost без поддомена
+    if settings.server.env == "local":
+        return RedirectResponse(url="/frontend/dashboard", status_code=302)
+    else:
+        # Для продакшена используем поддомен
+        company_url = f"http://{subdomain}.{settings.server.domain}/frontend/dashboard"
+        return RedirectResponse(url=company_url, status_code=302)

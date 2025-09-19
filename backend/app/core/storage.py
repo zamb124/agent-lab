@@ -38,9 +38,13 @@ class Storage:
             
         # Глобальные ключи (НЕ добавляем префикс)
         global_prefixes = [
-            'user:', 'company:', 'subdomain:', 
+            'company:', 'subdomain:', 
             'auth_session:', 'auth_state:'
         ]
+        
+        # ВАЖНО: 'user:' убран из глобальных префиксов!
+        # Теперь пользователи будут храниться с префиксом компании
+        # Исключение: системные операции должны использовать force_global=True
         
         if any(key.startswith(prefix) for prefix in global_prefixes):
             return key
