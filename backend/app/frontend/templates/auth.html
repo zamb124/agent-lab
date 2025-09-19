@@ -3,25 +3,25 @@
 {% block title %}Авторизация - Agents Lab{% endblock %}
 
 {% block content %}
-<div class="min-h-screen flex items-center justify-center p-4">
-    <div class="w-full max-w-md">
+<div class="auth-container">
+    <div class="auth-card-wrapper">
         <div class="card glass-effect animate-fade-in-up">
-            <div class="card-body p-6 text-center">
-                <div class="mb-6">
-                    <div class="flex items-center justify-center gap-3 mb-4">
-                        <i class="bi bi-robot text-4xl text-primary"></i>
-                        <div>
-                            <h1 class="text-xl font-bold langflow-gradient">Agents Lab</h1>
-                            <div class="text-xs text-muted">Платформа для агентов</div>
+            <div class="auth-card-body">
+                <div class="auth-header">
+                    <div class="auth-brand">
+                        <i class="bi bi-robot"></i>
+                        <div class="auth-brand-text">
+                            <h1 class="langflow-gradient">Agents Lab</h1>
+                            <div class="auth-subtitle">Платформа для агентов</div>
                         </div>
                     </div>
-                    <p class="text-secondary">Выберите способ входа в систему</p>
+                    <p class="auth-description">Выберите способ входа в систему</p>
                 </div>
                 
-                <div class="flex flex-col gap-3">
+                <div class="auth-providers">
                     {% for provider in providers %}
                     <a href="/auth/login/{{ provider.value }}" 
-                       class="btn btn-outline interactive glow-primary">
+                       class="btn btn-outline interactive glow-primary auth-btn">
                         {% if provider.value == 'yandex' %}
                             <i class="bi bi-cloud"></i>
                         {% elif provider.value == 'google' %}
@@ -36,10 +36,10 @@
                     {% endfor %}
                 </div>
                 
-                <div id="auth-result" class="mt-4"></div>
+                <div id="auth-result"></div>
                 
-                <div class="mt-6 pt-4 border-t border-primary">
-                    <p class="text-xs text-muted">
+                <div class="auth-footer">
+                    <p class="auth-footer-text">
                         Безопасная авторизация через OAuth 2.0
                     </p>
                 </div>
@@ -47,9 +47,9 @@
         </div>
         
         <!-- Декоративные элементы -->
-        <div class="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden -z-10">
-            <div class="absolute top-20 left-10 w-32 h-32 bg-accent-primary opacity-10 rounded-full blur-xl"></div>
-            <div class="absolute bottom-20 right-10 w-40 h-40 bg-accent-secondary opacity-10 rounded-full blur-xl"></div>
+        <div class="auth-decorations">
+            <div class="auth-decoration auth-decoration-1"></div>
+            <div class="auth-decoration auth-decoration-2"></div>
         </div>
     </div>
 </div>

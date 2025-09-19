@@ -20,8 +20,6 @@ class AuthProvider(str, Enum):
     """Поддерживаемые провайдеры авторизации"""
 
     YANDEX = "yandex"
-    GOOGLE = "google"
-    APPLE = "apple"
 
 
 class User(BaseModel):
