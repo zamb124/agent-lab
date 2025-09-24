@@ -62,7 +62,7 @@ class FashnApp {
             }
         } catch (error) {
             console.error('Ошибка загрузки товаров:', error);
-            this.showError('Не удалось загрузить товары: ' + error.message);
+            this.showError('Failed to load products: ' + error.message);
         }
     }
 
@@ -100,7 +100,7 @@ class FashnApp {
                 this.products.unshift(parsedProduct);
                 this.renderProducts(this.products);
                 
-                console.log(`Товар успешно добавлен: ${parsedProduct.name}`);
+                console.log(`Product successfully added: ${parsedProduct.name}`);
                 return parsedProduct;
             } catch (error) {
                 console.error(`Ошибка парсинга товара ${url}:`, error);
@@ -119,7 +119,7 @@ class FashnApp {
         const successCount = results.filter(r => r.status === 'fulfilled' && r.value !== null).length;
         
         if (successCount > 0) {
-            this.showSuccess(`Добавлено ${successCount} товаров из URL`);
+            this.showSuccess(`Added ${successCount} products from URLs`);
         }
     }
 
@@ -267,13 +267,13 @@ class FashnApp {
             
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.detail || 'Ошибка парсинга товара');
+                throw new Error(errorData.detail || 'Product parsing error');
             }
 
             const data = await response.json();
             
             if (data.status !== 'success') {
-                throw new Error('Не удалось получить данные товара');
+                throw new Error('Failed to get product data');
             }
 
             // Преобразуем данные в наш формат
@@ -314,11 +314,11 @@ class FashnApp {
             // Автоматически выбираем добавленный товар
             this.selectProduct(parsedProduct.id);
             
-            this.showSuccess(`Товар "${parsedProduct.name}" добавлен в коллекцию`);
+            this.showSuccess(`Product "${parsedProduct.name}" added to collection`);
             
             return parsedProduct;
         } catch (error) {
-            this.showError(`Не удалось добавить товар: ${error.message}`);
+            this.showError(`Failed to add product: ${error.message}`);
             throw error;
         }
     }
@@ -407,7 +407,7 @@ class FashnApp {
             addProductBtn.addEventListener('click', async () => {
                 const url = productUrlInput.value.trim();
                 if (!url) {
-                    this.showError('Пожалуйста, введите URL товара');
+                    this.showError('Please enter product URL');
                     return;
                 }
 
@@ -438,13 +438,13 @@ class FashnApp {
     async handleUserPhotoUpload(file) {
         // Проверка типа файла
         if (!file.type.startsWith('image/')) {
-            this.showError('Пожалуйста, выберите изображение');
+            this.showError('Please select an image');
             return;
         }
 
         // Проверка размера (макс 10MB)
         if (file.size > 10 * 1024 * 1024) {
-            this.showError('Размер файла не должен превышать 10MB');
+            this.showError('File size must not exceed 10MB');
             return;
         }
 
@@ -473,7 +473,7 @@ class FashnApp {
 
         } catch (error) {
             console.error('Ошибка загрузки фото:', error);
-            this.showError('Ошибка загрузки фото: ' + error.message);
+            this.showError('Photo upload error: ' + error.message);
         }
     }
 
@@ -495,12 +495,12 @@ class FashnApp {
 
     async generateTryOn() {
         if (!this.userPhotoFile || !this.selectedProduct) {
-            this.showError('Пожалуйста, загрузите фото и выберите товар');
+            this.showError('Please upload photo and select product');
             return;
         }
 
         if (!this.selectedProduct.imageUrl) {
-            this.showError('Не удалось получить изображение товара.');
+            this.showError('Failed to get product image.');
             return;
         }
 
@@ -516,7 +516,7 @@ class FashnApp {
             const userPhotoUpload = await this.uploadFile(this.userPhotoFile);
             
             if (!userPhotoUpload.success) {
-                throw new Error('Не удалось загрузить ваше фото: ' + userPhotoUpload.error);
+                throw new Error('Failed to upload your photo: ' + userPhotoUpload.error);
             }
 
             // Готовим параметры для API
@@ -541,18 +541,18 @@ class FashnApp {
             });
 
             if (!response.ok) {
-                let errorMessage = 'Ошибка API';
+                let errorMessage = 'API Error';
                 try {
                     const errorData = await response.json();
                     errorMessage = errorData.detail || errorMessage;
                 } catch (e) {
                     // Если не удается распарсить JSON ошибки, не читаем response.text() повторно
                     if (response.status === 500) {
-                        errorMessage = 'Ошибка сервера. Попробуйте еще раз или обратитесь к администратору.';
+                        errorMessage = 'Server error. Please try again or contact administrator.';
                     } else if (response.status === 400) {
                         errorMessage = 'Неверные данные запроса. Проверьте загруженные файлы и ссылку на товар.';
                     } else {
-                        errorMessage = `Ошибка ${response.status}: ${response.statusText}`;
+                        errorMessage = `Error ${response.status}: ${response.statusText}`;
                     }
                 }
                 throw new Error(errorMessage);
@@ -562,11 +562,11 @@ class FashnApp {
             
             // Показываем результаты
             this.displayResults(result);
-            this.showSuccess('Виртуальная примерка завершена успешно!');
+            this.showSuccess('Virtual try-on completed successfully!');
 
         } catch (error) {
             console.error('Ошибка генерации:', error);
-            this.showError('Ошибка генерации: ' + error.message);
+            this.showError('Generation error: ' + error.message);
         } finally {
             // Восстанавливаем кнопку
             generateBtn.innerHTML = originalText;
@@ -586,7 +586,7 @@ class FashnApp {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.detail || 'Ошибка загрузки файла');
+                throw new Error(errorData.detail || 'File upload error');
             }
 
             const result = await response.json();
