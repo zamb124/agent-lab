@@ -5,6 +5,8 @@
 import logging
 import importlib
 import inspect
+import functools
+import asyncio
 from typing import List, Any
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
@@ -12,6 +14,9 @@ from pydantic import BaseModel, Field
 from app.models import ToolReference
 from app.core.flow_factory import FlowFactory
 from app.core.container import get_container
+from app.core.context import get_context
+from app.services.billing_service import BillingService
+from app.models.billing_models import UsageType, TARIFF_LIMITS
 
 logger = logging.getLogger(__name__)
 
@@ -47,25 +52,33 @@ class ToolFactory:
         return created_tools
 
     async def _create_single_tool(self, ref: ToolReference) -> Any:
-        """Создает один инструмент по ссылке"""
+        """Создает один инструмент по ссылке с поддержкой биллинга"""
         tool_id = ref.tool_id
 
+        # Создаем базовый инструмент
         if tool_id.startswith("mcp:"):
-            return await self._create_mcp_tool(ref)
+            tool = await self._create_mcp_tool(ref)
         elif "agents" in tool_id:
-            return await self._create_agent_tool(ref)
+            tool = await self._create_agent_tool(ref)
         elif "flows" in tool_id:
-            return await self._create_flow_tool(ref)
+            tool = await self._create_flow_tool(ref)
         else:
-            return await self._create_function_tool(ref)
+            tool = await self._create_function_tool(ref)
+        
+        # Оборачиваем в биллинг если есть стоимость или лимиты
+        if ref.cost > 0 or ref.tariff_limits or ref.free_for_plans:
+            tool = self._wrap_tool_with_billing(tool, ref)
+        
+        return tool
 
     async def _create_function_tool(self, ref: ToolReference) -> Any:
         """Создает инструмент из обычной функции или класса"""
-        tool_id = ref.tool_id
+        # Используем function_path если есть, иначе tool_id
+        function_path = ref.function_path or ref.tool_id
 
         try:
             # Разделяем путь на модуль и имя объекта
-            module_path, name = tool_id.rsplit(".", 1)
+            module_path, name = function_path.rsplit(".", 1)
             module = importlib.import_module(module_path)
             tool_obj = getattr(module, name)
 
@@ -78,7 +91,7 @@ class ToolFactory:
                 return tool_obj
 
         except Exception as e:
-            logger.error(f"Ошибка создания функции-инструмента {tool_id}: {e}")
+            logger.error(f"Ошибка создания функции-инструмента {function_path}: {e}")
             raise
 
     async def _create_agent_tool(self, ref: ToolReference) -> Any:
@@ -137,3 +150,105 @@ class ToolFactory:
         # В будущем здесь будет интеграция с Model Context Protocol
         logger.warning(f"MCP инструменты пока не поддерживаются: {ref.tool_id}")
         return None
+    
+    def _wrap_tool_with_billing(self, tool, tool_ref: ToolReference):
+        """Оборачивает инструмент в биллинг логику"""
+        
+        billing_name = tool_ref.billing_name or tool_ref.tool_id
+        
+        # Получаем оригинальную функцию
+        original_func = tool.func if hasattr(tool, 'func') else tool._func
+        
+        @functools.wraps(original_func)
+        async def billing_wrapper(*args, **kwargs):
+            return await self._handle_tool_billing(
+                original_func,
+                tool_ref,
+                args, 
+                kwargs
+            )
+        
+        @functools.wraps(original_func) 
+        def sync_billing_wrapper(*args, **kwargs):
+            # Для синхронных функций
+            try:
+                loop = asyncio.get_event_loop()
+                return loop.run_until_complete(self._handle_tool_billing(
+                    original_func, tool_ref, args, kwargs, sync=True
+                ))
+            except RuntimeError:
+                # Если нет event loop, выполняем без биллинга
+                logger.warning("Нет event loop для биллинга, выполняем без учета")
+                return original_func(*args, **kwargs)
+        
+        # Выбираем нужную обертку
+        if asyncio.iscoroutinefunction(original_func):
+            wrapper = billing_wrapper
+        else:
+            wrapper = sync_billing_wrapper
+        
+        # Заменяем функцию в инструменте
+        if hasattr(tool, 'func'):
+            tool.func = wrapper
+        else:
+            tool._func = wrapper
+        
+        # Для StructuredTool нельзя менять ainvoke, биллинг работает через func
+        
+        # Добавляем метаданные биллинга
+        tool._billing_ref = tool_ref
+        
+        return tool
+    
+    async def _handle_tool_billing(self, func, tool_ref: ToolReference, args, kwargs, sync=False):
+        """Обрабатывает биллинг для инструмента"""
+        
+        context = get_context()
+        
+        # Если нет контекста - выполняем без биллинга
+        if not context or not context.user or not context.active_company:
+            if sync:
+                return func(*args, **kwargs)
+            else:
+                return await func(*args, **kwargs)
+        
+        billing_service = BillingService()
+        user = context.user
+        company = context.active_company
+        billing_name = tool_ref.billing_name or tool_ref.tool_id
+        
+        # Проверяем можно ли использовать ресурс
+        can_use, reason = await billing_service.can_use_resource(user, company, billing_name)
+        if not can_use:
+            raise Exception(f"Доступ запрещен: {reason}")
+        
+        # Проверяем бесплатные планы
+        actual_cost = 0.0 if company.tariff_plan in tool_ref.free_for_plans else tool_ref.cost
+        
+        # Выполняем функцию
+        try:
+            if sync:
+                result = func(*args, **kwargs)
+            else:
+                result = await func(*args, **kwargs)
+            
+            # Записываем использование
+            if actual_cost > 0 or tool_ref.tariff_limits:
+                await billing_service.record_usage(
+                    user=user,
+                    company=company,
+                    resource_name=billing_name,
+                    cost=actual_cost,
+                    usage_type=UsageType.TOOL_CALL,
+                    metadata={
+                        "tool_id": tool_ref.tool_id,
+                        "args_count": len(args),
+                        "kwargs_keys": list(kwargs.keys())
+                    }
+                )
+            
+            return result
+            
+        except Exception as e:
+            # Если функция упала, не списываем деньги
+            raise e

@@ -1,44 +1,325 @@
 /**
- * FASHN - JavaScript для управления виртуальной примеркой
+ * AI Stylist - JavaScript для управления виртуальной примеркой
  */
 
 class FashnApp {
     constructor() {
         this.userPhotoFile = null;
-        this.productData = null;
+        this.selectedProduct = null;
+        this.products = [];
+        this.currentSite = this.getSiteFromUrl();
         this.init();
     }
 
     init() {
         this.setupEventListeners();
-        this.loadProductFromUrl();
+        this.loadProducts();
         this.updateGenerateButton();
         this.initFullscreenViewer();
     }
     
-    loadProductFromUrl() {
-        // Получаем URL товара из параметров страницы
+    getSiteFromUrl() {
         const urlParams = new URLSearchParams(window.location.search);
-        const productUrl = urlParams.get('product_url');
+        return urlParams.get('site') || 'default';
+    }
+
+    getProductUrlsFromQuery() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const productUrls = [];
         
-        // Также пробуем получить из hash или query string без параметра
-        let finalProductUrl = productUrl;
-        
-        if (!finalProductUrl) {
-            // Если нет product_url параметра, пробуем извлечь из полного URL
-            const fullUrl = window.location.href;
-            const match = fullUrl.match(/https:\/\/thecultt\.com\/product\/[A-Z0-9]+/);
-            if (match) {
-                finalProductUrl = match[0];
+        // Получаем все параметры, которые могут содержать URL товаров
+        for (const [key, value] of urlParams.entries()) {
+            // Ищем параметры типа url, product_url, или параметры, которые выглядят как URL
+            if (key === 'url' || key === 'product_url' || key.startsWith('url') || value.startsWith('http')) {
+                try {
+                    // Простая проверка, что это URL
+                    new URL(value);
+                    productUrls.push(value);
+                } catch (e) {
+                    // Не валидный URL, пропускаем
+                }
             }
         }
         
-        if (finalProductUrl) {
-            document.getElementById('productUrl').value = finalProductUrl;
-            // Автоматически парсим товар
-            setTimeout(() => {
-                this.parseProduct();
-            }, 500);
+        return [...new Set(productUrls)]; // Убираем дубликаты
+    }
+    
+    async loadProducts() {
+        try {
+            // Инициализируем пустую коллекцию
+            this.products = [];
+            
+            // Проверяем URL параметры для товаров
+            const urlsFromQuery = this.getProductUrlsFromQuery();
+            if (urlsFromQuery.length > 0) {
+                console.log('Найдены URL товаров в параметрах:', urlsFromQuery);
+                // Показываем пустую сетку, затем асинхронно добавляем товары
+                this.renderProducts(this.products);
+                this.loadProductsFromUrls(urlsFromQuery);
+            } else {
+                // Показываем пустую коллекцию
+                this.renderEmptyState();
+            }
+        } catch (error) {
+            console.error('Ошибка загрузки товаров:', error);
+            this.showError('Не удалось загрузить товары: ' + error.message);
+        }
+    }
+
+    renderEmptyState() {
+        const grid = document.getElementById('productsGrid');
+        if (!grid) return;
+
+        grid.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-content">
+                    <i class="bi bi-bag" style="font-size: 48px; color: #9ca3af; margin-bottom: 16px;"></i>
+                    <h3>No products yet</h3>
+                    <p>Add product URLs above to start building your collection</p>
+                </div>
+            </div>
+        `;
+    }
+
+    async loadProductsFromUrls(urls) {
+        // Показываем индикатор загрузки для каждого URL
+        urls.forEach((url, index) => {
+            this.addLoadingProduct(`loading_${index}`, url);
+        });
+
+        // Асинхронно парсим каждый URL
+        const parsePromises = urls.map(async (url, index) => {
+            try {
+                console.log(`Парсинг товара: ${url}`);
+                const parsedProduct = await this.parseProductFromUrl(url);
+                
+                // Удаляем плейсхолдер загрузки
+                this.removeLoadingProduct(`loading_${index}`);
+                
+                // Добавляем распарсенный товар
+                this.products.unshift(parsedProduct);
+                this.renderProducts(this.products);
+                
+                console.log(`Товар успешно добавлен: ${parsedProduct.name}`);
+                return parsedProduct;
+            } catch (error) {
+                console.error(`Ошибка парсинга товара ${url}:`, error);
+                
+                // Удаляем плейсхолдер загрузки
+                this.removeLoadingProduct(`loading_${index}`);
+                
+                // Добавляем товар с ошибкой
+                this.addErrorProduct(url, error.message);
+                return null;
+            }
+        });
+
+        // Ждем завершения всех парсингов
+        const results = await Promise.allSettled(parsePromises);
+        const successCount = results.filter(r => r.status === 'fulfilled' && r.value !== null).length;
+        
+        if (successCount > 0) {
+            this.showSuccess(`Добавлено ${successCount} товаров из URL`);
+        }
+    }
+
+    addLoadingProduct(id, url) {
+        const loadingProduct = {
+            id: id,
+            name: 'Loading product...',
+            brand: 'LOADING',
+            price: '...',
+            category: 'tote',
+            color: 'Loading',
+            image: '/static/img/empty.png',
+            imageUrl: '/static/img/empty.png',
+            dimensions: { length: 30, height: 20, width: 10 },
+            source: 'loading',
+            originalUrl: url,
+            isLoading: true
+        };
+
+        this.products.unshift(loadingProduct);
+        this.renderProducts(this.products);
+    }
+
+    removeLoadingProduct(id) {
+        this.products = this.products.filter(p => p.id !== id);
+    }
+
+    addErrorProduct(url, errorMessage) {
+        const errorProduct = {
+            id: `error_${Date.now()}`,
+            name: 'Failed to load',
+            brand: 'ERROR',
+            price: 'Error',
+            category: 'tote',
+            color: 'Error',
+            image: '/static/img/empty.png',
+            imageUrl: '/static/img/empty.png',
+            dimensions: { length: 30, height: 20, width: 10 },
+            source: 'error',
+            originalUrl: url,
+            errorMessage: errorMessage,
+            isError: true
+        };
+
+        this.products.unshift(errorProduct);
+        this.renderProducts(this.products);
+    }
+
+
+    renderProducts(products) {
+        const grid = document.getElementById('productsGrid');
+        if (!grid) return;
+
+        grid.innerHTML = products.map(product => {
+            const isLoading = product.isLoading;
+            const isError = product.isError;
+            
+            let selectButtonContent = 'Select for Styling';
+            let selectButtonClass = 'select-button';
+            let selectButtonAction = `app.selectProduct('${product.id}')`;
+            
+            if (isLoading) {
+                selectButtonContent = '<div class="loading-spinner"></div> Loading...';
+                selectButtonClass = 'select-button loading';
+                selectButtonAction = 'void(0)'; // Отключаем клик
+            } else if (isError) {
+                selectButtonContent = 'Failed to load';
+                selectButtonClass = 'select-button error';
+                selectButtonAction = 'void(0)'; // Отключаем клик
+            }
+
+            return `
+                <div class="product-card ${isLoading ? 'loading' : ''} ${isError ? 'error' : ''}" data-category="${product.category}">
+                    <div class="product-image-container">
+                        <img src="${product.image}" alt="${product.name}" class="product-image">
+                        ${!isLoading && !isError ? `
+                            <button class="product-favorite">
+                                <i class="bi bi-heart"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                    <div class="product-info">
+                        <div class="product-brand">${product.brand}</div>
+                        <div class="product-name">${product.name}</div>
+                        <div class="product-price">${product.price}</div>
+                        <div class="product-category">${product.category}</div>
+                        <button class="${selectButtonClass}" onclick="${selectButtonAction}" ${isLoading || isError ? 'disabled' : ''}>
+                            ${selectButtonContent}
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    filterProducts(category) {
+        const cards = document.querySelectorAll('.product-card');
+        cards.forEach(card => {
+            if (category === 'all' || card.dataset.category === category) {
+                card.style.display = 'block';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    }
+
+    selectProduct(productId) {
+        // Снимаем выделение с предыдущих товаров
+        document.querySelectorAll('.select-button').forEach(btn => {
+            btn.classList.remove('selected');
+            btn.textContent = 'Select for Styling';
+        });
+
+        // Выделяем выбранный товар
+        const selectedButton = document.querySelector(`[onclick="app.selectProduct('${productId}')"]`);
+        if (selectedButton) {
+            selectedButton.classList.add('selected');
+            selectedButton.textContent = 'Selected ✓';
+        }
+
+        // Сохраняем выбранный товар
+        this.selectedProduct = this.products.find(p => p.id === productId);
+        document.getElementById('selectedProduct').value = productId;
+        
+        this.updateGenerateButton();
+        this.hideError();
+        
+        // Прокручиваем к фото, если оно загружено
+        if (this.userPhotoFile) {
+            document.getElementById('photoContainer').scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center' 
+            });
+        }
+    }
+
+    // Метод для парсинга товара по URL (для интеграции с существующим API)
+    async parseProductFromUrl(url) {
+        if (!url || !url.trim()) {
+            throw new Error('URL товара не указан');
+        }
+
+        try {
+            const response = await fetch(`/api/v1/admin/parse-product?url=${encodeURIComponent(url)}`);
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Ошибка парсинга товара');
+            }
+
+            const data = await response.json();
+            
+            if (data.status !== 'success') {
+                throw new Error('Не удалось получить данные товара');
+            }
+
+            // Преобразуем данные в наш формат
+            return {
+                id: `parsed_${data.product_id || Date.now()}`,
+                name: data.title || 'Товар',
+                brand: 'PARSED',
+                price: 'Price on request',
+                category: 'tote', // По умолчанию
+                color: 'Unknown',
+                image: data.image_url || '/static/img/empty.png',
+                imageUrl: data.image_url || '/static/img/empty.png',
+                dimensions: {
+                    length: data.dimensions?.length || 30,
+                    height: data.dimensions?.height || 20,
+                    width: data.dimensions?.width || 10
+                },
+                source: 'parsed',
+                originalUrl: url
+            };
+        } catch (error) {
+            console.error('Ошибка парсинга товара:', error);
+            throw error;
+        }
+    }
+
+    // Метод для добавления распарсенного товара в коллекцию
+    async addParsedProduct(url) {
+        try {
+            const parsedProduct = await this.parseProductFromUrl(url);
+            
+            // Добавляем товар в начало списка
+            this.products.unshift(parsedProduct);
+            
+            // Перерендериваем товары
+            this.renderProducts(this.products);
+            
+            // Автоматически выбираем добавленный товар
+            this.selectProduct(parsedProduct.id);
+            
+            this.showSuccess(`Товар "${parsedProduct.name}" добавлен в коллекцию`);
+            
+            return parsedProduct;
+        } catch (error) {
+            this.showError(`Не удалось добавить товар: ${error.message}`);
+            throw error;
         }
     }
 
@@ -47,20 +328,35 @@ class FashnApp {
         const photoContainer = document.getElementById('photoContainer');
         const photoInput = document.getElementById('photoInput');
         const removePhotoBtn = document.getElementById('removePhoto');
+        const uploadButton = document.querySelector('.upload-button');
 
-        // Клик по зоне загрузки
-        photoContainer.addEventListener('click', () => {
+        // Клик по зоне загрузки или кнопке
+        if (photoContainer) {
+            photoContainer.addEventListener('click', (e) => {
+                if (!e.target.closest('.remove-btn') && !e.target.closest('.generate-btn')) {
+                    photoInput.click();
+                }
+            });
+        }
+
+        if (uploadButton) {
+            uploadButton.addEventListener('click', (e) => {
+                e.stopPropagation();
             photoInput.click();
         });
+        }
 
         // Выбор файла
+        if (photoInput) {
         photoInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 this.handleUserPhotoUpload(e.target.files[0]);
             }
         });
+        }
 
         // Drag & Drop
+        if (photoContainer) {
         photoContainer.addEventListener('dragover', (e) => {
             e.preventDefault();
         });
@@ -72,26 +368,71 @@ class FashnApp {
                 this.handleUserPhotoUpload(e.dataTransfer.files[0]);
             }
         });
+        }
 
         // Удаление фото пользователя
-        removePhotoBtn.addEventListener('click', () => {
+        if (removePhotoBtn) {
+            removePhotoBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
             this.removeUserPhoto();
         });
-
-        // Парсинг товара
-        document.getElementById('parseBtn').addEventListener('click', () => {
-            this.parseProduct();
-        });
+        }
 
         // Генерация примерки
-        document.getElementById('generateBtn').addEventListener('click', () => {
+        const generateBtn = document.getElementById('generateBtn');
+        if (generateBtn) {
+            generateBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
             this.generateTryOn();
         });
+        }
 
-        // Обновление состояния кнопки при изменении URL
-        document.getElementById('productUrl').addEventListener('input', () => {
-            this.updateGenerateButton();
+        // Фильтры товаров
+        const filterTabs = document.querySelectorAll('.filter-tab');
+        filterTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                this.filterProducts(tab.dataset.filter);
+                
+                // Обновляем активную вкладку
+                filterTabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+            });
         });
+
+        // Добавление товара по URL
+        const addProductBtn = document.getElementById('addProductBtn');
+        const productUrlInput = document.getElementById('productUrl');
+        
+        if (addProductBtn && productUrlInput) {
+            addProductBtn.addEventListener('click', async () => {
+                const url = productUrlInput.value.trim();
+                if (!url) {
+                    this.showError('Пожалуйста, введите URL товара');
+                    return;
+                }
+
+                const originalText = addProductBtn.innerHTML;
+                try {
+                    addProductBtn.innerHTML = '<div class="loading-spinner"></div> Adding...';
+                    addProductBtn.disabled = true;
+
+                    await this.addParsedProduct(url);
+                    productUrlInput.value = ''; // Очищаем поле после успешного добавления
+                } catch (error) {
+                    // Ошибка уже показана в addParsedProduct
+                } finally {
+                    addProductBtn.innerHTML = originalText;
+                    addProductBtn.disabled = false;
+                }
+            });
+
+            // Добавление товара по Enter
+            productUrlInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    addProductBtn.click();
+                }
+            });
+        }
     }
 
     async handleUserPhotoUpload(file) {
@@ -111,16 +452,17 @@ class FashnApp {
             // Показываем превью
             const reader = new FileReader();
             reader.onload = (e) => {
-                const preview = document.getElementById('photoPreview');
+                const photoPreview = document.getElementById('photoPreview');
+                const photoImage = document.getElementById('photoImage');
                 const uploadZone = document.getElementById('uploadZone');
                 const removeBtn = document.getElementById('removePhoto');
-                const container = document.getElementById('photoContainer');
                 
-                preview.src = e.target.result;
+                if (photoImage && photoPreview && uploadZone) {
+                    photoImage.src = e.target.result;
                 uploadZone.style.display = 'none';
-                preview.style.display = 'block';
-                removeBtn.style.display = 'flex';
-                container.classList.add('has-photo');
+                    photoPreview.style.display = 'block';
+                    if (removeBtn) removeBtn.style.display = 'flex';
+                }
             };
             reader.readAsDataURL(file);
 
@@ -137,142 +479,28 @@ class FashnApp {
 
     removeUserPhoto() {
         this.userPhotoFile = null;
-        const preview = document.getElementById('photoPreview');
+        const photoPreview = document.getElementById('photoPreview');
         const uploadZone = document.getElementById('uploadZone');
         const removeBtn = document.getElementById('removePhoto');
-        const container = document.getElementById('photoContainer');
+        const photoInput = document.getElementById('photoInput');
         
-        preview.style.display = 'none';
-        uploadZone.style.display = 'block';
-        removeBtn.style.display = 'none';
-        container.classList.remove('has-photo');
-        document.getElementById('photoInput').value = '';
+        if (photoPreview) photoPreview.style.display = 'none';
+        if (uploadZone) uploadZone.style.display = 'block';
+        if (removeBtn) removeBtn.style.display = 'none';
+        if (photoInput) photoInput.value = '';
+        
         this.updateGenerateButton();
     }
 
-    async parseProduct() {
-        const url = document.getElementById('productUrl').value.trim();
-        
-        if (!url) {
-            this.showError('Пожалуйста, введите URL товара');
-            return;
-        }
-
-        // Проверяем, что это ссылка на thecultt.com
-        if (!url.includes('thecultt.com')) {
-            this.showError('Поддерживаются только ссылки с thecultt.com');
-            return;
-        }
-
-        const parseBtn = document.getElementById('parseBtn');
-        const originalText = parseBtn.innerHTML;
-        
-        try {
-            parseBtn.innerHTML = '<div class="loading-spinner"></div> Получение информации...';
-            parseBtn.disabled = true;
-
-            // Парсим страницу товара
-            const productInfo = await this.scrapeProductInfo(url);
-            
-            if (productInfo) {
-                this.productData = productInfo;
-                this.displayProductInfo(productInfo);
-                this.updateGenerateButton();
-                this.hideError();
-            } else {
-                this.showError('Не удалось получить информацию о товаре');
-            }
-
-        } catch (error) {
-            console.error('Ошибка парсинга товара:', error);
-            this.showError('Ошибка получения информации о товаре: ' + error.message);
-        } finally {
-            parseBtn.innerHTML = originalText;
-            parseBtn.disabled = false;
-        }
-    }
-
-    async scrapeProductInfo(url) {
-        try {
-            // Используем наш API для парсинга
-            const apiUrl = `/api/v1/admin/parse-product?url=${encodeURIComponent(url)}`;
-            const response = await fetch(apiUrl);
-            
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || 'Не удалось получить информацию о товаре');
-            }
-
-            const data = await response.json();
-            
-            if (data.status !== 'success') {
-                throw new Error('Ошибка парсинга товара');
-            }
-
-            return {
-                title: data.title,
-                imageUrl: data.image_url,
-                dimensions: data.dimensions,
-                originalUrl: data.original_url,
-                productId: data.product_id
-            };
-
-        } catch (error) {
-            console.error('Ошибка скрейпинга:', error);
-            
-            // Fallback: пытаемся извлечь ID товара из URL и использовать предположения
-            const idMatch = url.match(/\/([A-Z0-9]+)$/);
-            if (idMatch) {
-                return {
-                    title: `Товар ${idMatch[1]}`,
-                    imageUrl: null,
-                    dimensions: { length: 30, height: 0 }, // Значения по умолчанию для сумки
-                    originalUrl: url,
-                    productId: idMatch[1]
-                };
-            }
-            
-            throw error;
-        }
-    }
-
-    displayProductInfo(productInfo) {
-        const container = document.getElementById('productInfo');
-        const detailsDiv = document.getElementById('productDetails');
-        const imageEl = document.getElementById('productImage');
-
-        let infoHtml = `<strong>${productInfo.title}</strong><br>`;
-        
-        if (productInfo.dimensions.length) {
-            infoHtml += `Длина: ${productInfo.dimensions.length} см<br>`;
-        }
-        if (productInfo.dimensions.width) {
-            infoHtml += `Ширина: ${productInfo.dimensions.width} см<br>`;
-        }
-        if (productInfo.dimensions.height) {
-            infoHtml += `Высота: ${productInfo.dimensions.height} см`;
-        }
-
-        detailsDiv.innerHTML = infoHtml;
-
-        if (productInfo.imageUrl) {
-            imageEl.src = productInfo.imageUrl;
-            imageEl.style.display = 'block';
-        } else {
-            imageEl.style.display = 'none';
-        }
-
-        container.style.display = 'block';
-    }
 
     async generateTryOn() {
-        if (!this.userPhotoFile || !this.productData) {
-            this.showError('Пожалуйста, загрузите фото и укажите товар');
+        if (!this.userPhotoFile || !this.selectedProduct) {
+            this.showError('Пожалуйста, загрузите фото и выберите товар');
             return;
         }
 
-        if (!this.productData.imageUrl) {
-            this.showError('Не удалось получить изображение товара. Попробуйте другую ссылку.');
+        if (!this.selectedProduct.imageUrl) {
+            this.showError('Не удалось получить изображение товара.');
             return;
         }
 
@@ -280,15 +508,9 @@ class FashnApp {
         const originalText = generateBtn.innerHTML;
 
         try {
-            // Скрываем только кнопку, контейнер остается
-            generateBtn.style.display = 'none';
-            
-            // Показываем анимацию загрузки в контейнере результата
-            const resultContainer = document.getElementById('resultContainer');
-            if (resultContainer) {
-                resultContainer.classList.add('loading');
-                resultContainer.innerHTML = '<div style="text-align: center; color: #666;"><i class="bi bi-hourglass-split" style="font-size: 24px; margin-bottom: 10px; display: block; color: #666;"></i><p style="color: #666;">Генерация...</p></div>';
-            }
+            // Показываем загрузку
+            generateBtn.innerHTML = '<div class="loading-spinner"></div> Generating...';
+            generateBtn.disabled = true;
 
             // Загружаем фото пользователя
             const userPhotoUpload = await this.uploadFile(this.userPhotoFile);
@@ -300,13 +522,13 @@ class FashnApp {
             // Готовим параметры для API
             const requestData = {
                 model_image_url: userPhotoUpload.url,
-                product_image_url: this.productData.imageUrl,
-                model_height_cm: parseFloat(document.getElementById('height').value),
-                product_width_cm: this.productData.dimensions.length || 30,
-                product_height_cm: this.productData.dimensions.height || 0,
+                product_image_url: this.selectedProduct.imageUrl,
+                model_height_cm: parseFloat(document.getElementById('height').value) || 170,
+                product_width_cm: this.selectedProduct.dimensions.length || 30,
+                product_height_cm: this.selectedProduct.dimensions.height || 0,
                 item_kind: document.getElementById('itemKind').value,
                 placement: document.getElementById('placement').value,
-                variations: 0 // Пока без вариаций для простоты
+                variations: 0
             };
 
             // Вызываем API виртуальной примерки
@@ -346,18 +568,9 @@ class FashnApp {
             console.error('Ошибка генерации:', error);
             this.showError('Ошибка генерации: ' + error.message);
         } finally {
-            // Показываем кнопку обратно
-            generateBtn.style.display = '';
-            generateBtn.classList.remove('loading');
+            // Восстанавливаем кнопку
             generateBtn.innerHTML = originalText;
             generateBtn.disabled = false;
-            this.updateGenerationText();
-            
-            // Убираем анимацию загрузки из контейнера результата
-            const resultContainer = document.getElementById('resultContainer');
-            if (resultContainer) {
-                resultContainer.classList.remove('loading');
-            }
         }
     }
 
@@ -392,81 +605,106 @@ class FashnApp {
     }
 
     displayResults(result) {
-        const container = document.getElementById('resultContainer');
+        const resultsSection = document.getElementById('resultsSection');
+        const resultsGrid = document.getElementById('resultsGrid');
         
-        // Убираем анимацию загрузки
-        container.classList.remove('loading');
+        if (!resultsSection || !resultsGrid) return;
 
-        // Основной результат
+        // Показываем секцию результатов
+        resultsSection.style.display = 'block';
+
+        // Очищаем предыдущие результаты
+        resultsGrid.innerHTML = '';
+
+        // Отображаем результаты
         if (result.output_urls && result.output_urls.length > 0) {
-            const url = result.output_urls[0]; // Берем первый результат
-            
-            container.innerHTML = `
-                <img src="${url}" alt="Результат примерки" class="result-image" style="border-radius: 10px;">
+            result.output_urls.forEach((url, index) => {
+                const resultItem = document.createElement('div');
+                resultItem.className = 'result-item';
+                resultItem.innerHTML = `
+                    <div class="result-image-container">
+                        <img src="${url}" alt="Результат примерки ${index + 1}" class="result-image">
                 <a href="${url}" target="_blank" download class="download-btn">
                     <i class="bi bi-download"></i>
                 </a>
+                    </div>
             `;
 
             // Добавляем обработчик клика для полноэкранного просмотра
-            const resultImage = container.querySelector('.result-image');
+                const resultImage = resultItem.querySelector('.result-image');
             if (resultImage) {
                 resultImage.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     this.openFullscreen(url);
+                    });
+                }
+
+                resultsGrid.appendChild(resultItem);
                 });
                 
-                // Добавляем курсор указатель для изображения
-                resultImage.style.cursor = 'pointer';
-            }
+            // Прокручиваем к результатам после генерации
+            resultsSection.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'start' 
+            });
         }
     }
 
     updateGenerateButton() {
         const generateBtn = document.getElementById('generateBtn');
-        const hasPhoto = this.userPhotoFile !== null;
-        const hasProduct = this.productData !== null;
-        const hasUrl = document.getElementById('productUrl').value.trim() !== '';
+        if (!generateBtn) return;
 
-        generateBtn.disabled = !hasPhoto || (!hasProduct && !hasUrl);
-        this.updateGenerationText();
-    }
-    
-    updateGenerationText() {
         const hasPhoto = this.userPhotoFile !== null;
-        const hasProduct = this.productData !== null;
-        const hasUrl = document.getElementById('productUrl').value.trim() !== '';
-        
-        const generateBtn = document.getElementById('generateBtn');
-        
-        if (hasPhoto && hasProduct) {
-            generateBtn.disabled = false;
-        } else {
-            generateBtn.disabled = true;
-        }
+        const hasProduct = this.selectedProduct !== null;
+
+        generateBtn.disabled = !hasPhoto || !hasProduct;
     }
 
     showError(message) {
-        const errorDiv = document.getElementById('error');
+        const errorDiv = document.getElementById('errorMessage');
+        if (errorDiv) {
         errorDiv.textContent = message;
         errorDiv.style.display = 'block';
+            
+            // Автоматически скрываем через 5 секунд
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 5000);
+        }
         
         // Скрываем успешное сообщение
-        document.getElementById('success').style.display = 'none';
+        this.hideSuccess();
     }
 
     hideError() {
-        document.getElementById('error').style.display = 'none';
+        const errorDiv = document.getElementById('errorMessage');
+        if (errorDiv) {
+            errorDiv.style.display = 'none';
+        }
     }
 
     showSuccess(message) {
-        const successDiv = document.getElementById('success');
+        const successDiv = document.getElementById('successMessage');
+        if (successDiv) {
         successDiv.textContent = message;
         successDiv.style.display = 'block';
+            
+            // Автоматически скрываем через 5 секунд
+            setTimeout(() => {
+                successDiv.style.display = 'none';
+            }, 5000);
+        }
         
         // Скрываем ошибку
-        document.getElementById('error').style.display = 'none';
+        this.hideError();
+    }
+
+    hideSuccess() {
+        const successDiv = document.getElementById('successMessage');
+        if (successDiv) {
+            successDiv.style.display = 'none';
+        }
     }
 
     formatFileSize(bytes) {
@@ -519,7 +757,10 @@ class FashnApp {
     }
 }
 
+// Глобальная переменная для доступа к приложению из HTML
+let app;
+
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', () => {
-    new FashnApp();
+    app = new FashnApp();
 });

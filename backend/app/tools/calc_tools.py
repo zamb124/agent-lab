@@ -2,7 +2,7 @@
 Инструменты для калькулятора.
 """
 
-from langchain_core.tools import tool
+from ..core.tool_decorator import tool
 
 
 @tool

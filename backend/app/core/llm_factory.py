@@ -62,20 +62,26 @@ def get_llm(
     final_model = model_name or provider_config.default_model
 
     try:
+        # Создаем базовый LLM
         if provider_name == "openai":
             llm = _create_openai_llm(provider_config, final_model, **kwargs)
-            # ОТКЛЮЧАЕМ wrapper - используем стандартные логи
-            return llm
         elif provider_name == "anthropic":
-            return _create_anthropic_llm(provider_config, final_model)
+            llm = _create_anthropic_llm(provider_config, final_model)
         elif provider_name == "yandex":
-            return _create_yandex_llm(provider_config, final_model)
+            llm = _create_yandex_llm(provider_config, final_model)
         elif provider_name == "ollama":
-            return _create_ollama_llm(provider_config, final_model)
+            llm = _create_ollama_llm(provider_config, final_model)
         elif provider_name == "mock":
-            return _create_mock_llm(provider_config, final_model)
+            llm = _create_mock_llm(provider_config, final_model)
         else:
             raise ValueError(f"Неподдерживаемый провайдер LLM: {provider_name}")
+        
+        # Оборачиваем в биллинг (кроме mock)
+        if provider_name != "mock":
+            from .llm_billing_wrapper import LLMBillingWrapper
+            llm = LLMBillingWrapper(llm, provider_name, final_model)
+        
+        return llm
 
     except Exception as e:
         logger.error(f"Ошибка создания LLM {provider_name}: {e}")

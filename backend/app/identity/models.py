@@ -218,6 +218,32 @@ class Company(BaseModel):
         title="Создана",
         readonly=True,
     )
+    
+    # Поля для биллинга и тарификации
+    tariff_plan: str = Field(
+        default="free",
+        title="Тарифный план",
+        description="Тарифный план компании (free, basic, premium, enterprise)"
+    )
+    monthly_budget: float = Field(
+        default=0.0,
+        title="Месячный бюджет",
+        description="Месячный бюджет компании в RUB (0 = без лимитов)",
+        ge=0.0
+    )
+    current_month_spent: float = Field(
+        default=0.0,
+        title="Потрачено в месяце",
+        description="Потрачено компанией в текущем месяце в RUB",
+        readonly=True,
+        ge=0.0
+    )
+    billing_period_start: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0),
+        title="Начало расчетного периода",
+        description="Начало текущего расчетного периода",
+        readonly=True
+    )
 
 
 class CreateCompanyForm(BaseModel):

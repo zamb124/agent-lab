@@ -199,6 +199,33 @@ class ToolReference(BaseModel):
         description="Описание инструмента",
         widget_attrs={"rows": 3},
     )
+    
+    # Поля для биллинга
+    cost: float = Field(
+        default=0.0,
+        title="Стоимость",
+        description="Стоимость вызова инструмента в RUB",
+        ge=0.0,
+        widget_attrs={"step": "0.001", "placeholder": "0.001"}
+    )
+    billing_name: Optional[str] = Field(
+        default=None,
+        title="Название для биллинга",
+        description="Название для учета использования (по умолчанию tool_id)",
+        placeholder="weather_api"
+    )
+    free_for_plans: List[str] = Field(
+        default_factory=list,
+        title="Бесплатно для планов",
+        description="Тарифные планы для которых инструмент бесплатен",
+        widget_attrs={"multiple": True}
+    )
+    tariff_limits: Dict[str, int] = Field(
+        default_factory=dict,
+        title="Лимиты по тарифам",
+        description="Лимиты использования по тарифным планам (-1 = без лимитов, 0 = запрещено)",
+        widget_attrs={"rows": 4, "placeholder": '{"free": 10, "basic": 100, "premium": -1}'}
+    )
 
 
 class LLMConfig(BaseModel):

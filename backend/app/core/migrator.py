@@ -814,6 +814,11 @@ class Migrator:
             except Exception as e:
                 logger.warning(f"Не удалось извлечь параметры для {tool_obj.name}: {e}")
 
+        # Извлекаем метаданные платформы из декоратора
+        platform_cost = getattr(tool_obj, '_platform_cost', 0.0)
+        platform_billing_name = getattr(tool_obj, '_platform_billing_name', None)
+        platform_free_for_plans = getattr(tool_obj, '_platform_free_for_plans', [])
+        
         return ToolReference(
             tool_id=function_path,
             code_mode=CodeMode.CODE_REFERENCE,
@@ -821,4 +826,9 @@ class Migrator:
             inline_code=source_code,  # Сохраняем код для возможности INLINE режима
             description=tool_obj.description or f"Инструмент {tool_obj.name}",
             params=params,
+            # Метаданные платформы
+            cost=platform_cost,
+            billing_name=platform_billing_name,
+            free_for_plans=platform_free_for_plans,
+            tariff_limits={},  # Будут заполняться через UI или конфиг
         )

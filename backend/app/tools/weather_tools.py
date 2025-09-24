@@ -2,11 +2,11 @@
 Мок-инструменты для работы с погодой.
 """
 
-from langchain_core.tools import tool
+from ..core.tool_decorator import tool
 import random
 
 
-@tool
+@tool(cost=0.002, billing_name="travel_suggest")
 def suggest_travel(preferences: str = "") -> str:
     """
     Предложить место для путешествия.
@@ -31,7 +31,7 @@ def suggest_travel(preferences: str = "") -> str:
         return f"Рекомендую: {destination}"
 
 
-@tool
+@tool(cost=0.001, billing_name="weather_api")
 def get_weather(city: str) -> str:
     """
     Получить погоду в городе.
