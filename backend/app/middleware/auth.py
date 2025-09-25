@@ -56,9 +56,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return response
 
         except CompanyCreationRequired:
-            # Всегда редиректим на выбор компании
+            # Всегда редиректим на выбор компании на основном домене
             # Страница сама разберется - если компаний нет, перенаправит на создание
-            return RedirectResponse(url="/frontend/select-company", status_code=307)
+            base_url = f"https://{settings.server.domain}" if settings.server.env != "local" else "http://localhost:8001"
+            return RedirectResponse(url=f"{base_url}/frontend/select-company", status_code=307)
         except HTTPException as e:
             # Для HTML запросов редиректим на авторизацию
             accept_header = request.headers.get("accept", "")
@@ -338,6 +339,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         # Проверяем доступ к запрашиваемой компании (только если не разрешен доступ без компании)
         if not allow_no_company and requested_company.company_id not in user.companies:
+            logger.warning(f"Пользователь {user.user_id} не имеет доступа к компании {requested_company.company_id}. Доступные компании: {list(user.companies.keys())}")
             # Вместо ошибки - редиректим на выбор компании
             raise CompanyCreationRequired()  # Переиспользуем исключение для редиректа
         

@@ -56,7 +56,7 @@ async def select_company_page(request: Request):
         if settings.server.env == "local":
             company_url = f"http://{company_id}.localhost:8001/frontend/dashboard"
         else:
-            company_url = f"http://{company_id}.{settings.server.domain}/frontend/dashboard"
+            company_url = f"https://{company_id}.{settings.server.domain}/frontend/dashboard"
         
         # Загружаем название компании из БД
         company_data = await storage.get(f"company:{company_id}", force_global=True)
