@@ -156,9 +156,11 @@ async def lifespan(app: FastAPI):
             logger.info("✅ Telegram polling запущен")
 
         # Запуск периодической очистки истекших данных
-        logger.info("🧹 Запуск периодической очистки истекших данных...")
-        asyncio.create_task(_periodic_cleanup())
-        logger.info("✅ Периодическая очистка запущена")
+        # ВРЕМЕННО ОТКЛЮЧЕНО: может удалять записи subdomain
+        # logger.info("🧹 Запуск периодической очистки истекших данных...")
+        # asyncio.create_task(_periodic_cleanup())
+        # logger.info("✅ Периодическая очистка запущена")
+        logger.info("🚫 Периодическая очистка ОТКЛЮЧЕНА")
 
         logger.info("✅ Agents Lab запущена успешно!")
 

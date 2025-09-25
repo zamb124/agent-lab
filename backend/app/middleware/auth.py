@@ -149,9 +149,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 if company_data:
                     logger.info(f"✅ Найдена компания по поддомену: {clean_company_id}")
                     return Company.model_validate_json(company_data)
+            
+            # Если поддомен есть, но компания не найдена - это ошибка
+            logger.error(f"❌ Компания не найдена для поддомена: {subdomain}")
+            raise HTTPException(status_code=404, detail=f"Company not found for subdomain: {subdomain}")
         
-        # Если компания не найдена по поддомену - возвращаем системную компанию
-        logger.warning(f"❌ Компания не найдена по поддомену, возвращаем системную компанию")
+        # Если это основной домен (без поддомена) - возвращаем системную компанию
+        logger.info(f"🔍 Основной домен без поддомена, возвращаем системную компанию")
         return await self._get_system_company()
 
     async def _get_default_company(self) -> Company:

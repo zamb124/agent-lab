@@ -136,8 +136,18 @@ class Storage:
             if ttl is not None:
                 expired_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
             else:
-                # Дефолтный TTL = 5 дней
-                expired_at = datetime.now(timezone.utc) + timedelta(days=5)
+                # Критически важные записи НЕ должны иметь TTL
+                permanent_prefixes = [
+                    'company:', 'subdomain:', 'user:', 
+                    'auth_session:', 'auth_state:', 'token:'
+                ]
+                
+                if any(key.startswith(prefix) for prefix in permanent_prefixes):
+                    # Постоянные записи без TTL
+                    expired_at = None
+                else:
+                    # Дефолтный TTL = 5 дней для временных данных
+                    expired_at = datetime.now(timezone.utc) + timedelta(days=5)
 
             # Используем UPSERT (INSERT ... ON CONFLICT)
             stmt = insert(StorageModel).values(
