@@ -121,29 +121,37 @@ class AuthMiddleware(BaseHTTPMiddleware):
         host = request.headers.get("host", "")
         domain = settings.server.domain
         
+        logger.info(f"🔍 Определяем компанию: host={host}, domain={domain}, env={settings.server.env}")
+        
         # Специальная логика для локальной разработки
         if settings.server.env == "local" and ".localhost" in host:
             # Для localhost: ssd.localhost:8001 -> subdomain = ssd
             subdomain = host.split(".")[0]
+            logger.info(f"🔍 Local режим: subdomain={subdomain}")
             company_id = await self.storage.get(f"subdomain:{subdomain}", force_global=True)
             if company_id:
                 # Убираем кавычки если они есть
                 clean_company_id = company_id.strip('"') if isinstance(company_id, str) else company_id
                 company_data = await self.storage.get(f"company:{clean_company_id}", force_global=True)
                 if company_data:
+                    logger.info(f"✅ Найдена компания по поддомену: {clean_company_id}")
                     return Company.model_validate_json(company_data)
         
         # Продакшен логика
         elif host.endswith(f".{domain}") and not host.startswith(domain):
             subdomain = host.split(".")[0]
+            logger.info(f"🔍 Продакшен режим: subdomain={subdomain}")
             company_id = await self.storage.get(f"subdomain:{subdomain}", force_global=True)
+            logger.info(f"🔍 company_id из storage: {company_id}")
             if company_id:
                 clean_company_id = company_id.strip('"') if isinstance(company_id, str) else company_id
                 company_data = await self.storage.get(f"company:{clean_company_id}", force_global=True)
                 if company_data:
+                    logger.info(f"✅ Найдена компания по поддомену: {clean_company_id}")
                     return Company.model_validate_json(company_data)
         
         # Если компания не найдена по поддомену - возвращаем системную компанию
+        logger.warning(f"❌ Компания не найдена по поддомену, возвращаем системную компанию")
         return await self._get_system_company()
 
     async def _get_default_company(self) -> Company:
