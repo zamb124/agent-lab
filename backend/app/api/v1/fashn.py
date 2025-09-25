@@ -6,13 +6,18 @@ import io
 import re
 import logging
 import httpx
+import json
+from typing import Optional, List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from PIL import Image
 
 from ...core.file_processor import FileProcessor, get_default_file_processor
 from ...tools.fashn_tools import virtual_try_on
-
+from ...core.context import get_context
+from ...core.storage import Storage
+from ...core.context import get_context
+from ...core.storage import Storage
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -23,6 +28,7 @@ class TryOnRequest(BaseModel):
 
     model_image_url: str = Field(..., description="URL изображения модели")
     product_image_url: str = Field(..., description="URL изображения продукта")
+    product_url: Optional[str] = Field(None, description="Исходный URL товара с сайта")
     model_height_cm: float = Field(..., description="Рост модели в см", ge=100, le=250)
     product_width_cm: float = Field(
         default=30, description="Ширина продукта в см", ge=1, le=200
@@ -204,6 +210,7 @@ async def virtual_try_on_api(request: TryOnRequest):
                 "visible_bottom_pct": request.visible_bottom_pct,
                 "scale_bias": request.scale_bias,
                 "variations": request.variations,
+                "product_url": request.product_url,
             }
         )
 
@@ -316,3 +323,284 @@ async def get_fashn_help():
             },
         },
     }
+
+
+@router.get("/history", response_model=List[dict])
+async def get_try_on_history(limit: int = 20, offset: int = 0):
+    """
+    Получает историю примерок текущего пользователя
+    
+    Args:
+        limit: Количество записей для возврата (по умолчанию 20)
+        offset: Смещение для пагинации (по умолчанию 0)
+    
+    Returns:
+        Список записей TryOnRecord для текущего пользователя
+    """
+
+    
+    # Получаем пользователя из контекста
+    context = get_context()
+    if not context or not context.user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+    
+    user_id = context.user.user_id
+    
+    try:
+        storage = Storage()
+        
+        # Получаем все ключи примерок для пользователя
+        prefix = f"try_on:{user_id}:"
+        keys = await storage.list_by_prefix(prefix, limit=100)
+        
+        if not keys:
+            return []
+        
+        # Сортируем ключи по времени создания (новые первыми)
+        keys.sort(reverse=True)
+        
+        # Применяем пагинацию
+        paginated_keys = keys[offset:offset + limit]
+        
+        # Получаем данные для каждого ключа
+        try_on_records = []
+        for key in paginated_keys:
+            data = await storage.get(key)
+            if data:
+                # Парсим JSON обратно в dict
+                
+                try_on_data = json.loads(data) if isinstance(data, str) else data
+                try_on_records.append(try_on_data)
+        
+        logger.info(f"Возвращаем {len(try_on_records)} записей истории для пользователя {user_id}")
+        return try_on_records
+        
+    except Exception as e:
+        logger.error(f"Ошибка получения истории примерок для пользователя {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get try-on history: {str(e)}")
+
+
+@router.get("/history/{try_on_id}")
+async def get_try_on_details(try_on_id: str):
+    """
+    Получает детали конкретной примерки
+    
+    Args:
+        try_on_id: ID примерки (полный ключ: try_on:user_id:uuid)
+    
+    Returns:
+        Детали записи TryOnRecord
+    """
+
+    
+    # Получаем пользователя из контекста
+    context = get_context()
+    if not context or not context.user:
+        raise HTTPException(status_code=401, detail="User not authenticated")
+    
+    user_id = context.user.user_id
+    
+    # Проверяем, что примерка принадлежит текущему пользователю
+    if not try_on_id.startswith(f"try_on:{user_id}:"):
+        raise HTTPException(status_code=403, detail="Access denied to this try-on record")
+    
+    try:
+        storage = Storage()
+        data = await storage.get(try_on_id)
+        
+        if not data:
+            raise HTTPException(status_code=404, detail="Try-on record not found")
+        
+        try_on_data = json.loads(data) if isinstance(data, str) else data
+        return try_on_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ошибка получения примерки {try_on_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get try-on details: {str(e)}")
+
+
+@router.get("/history-panel")
+async def get_history_panel():
+    """
+    Возвращает HTML панель с историей примерок для HTMX
+    """
+    from fastapi.responses import HTMLResponse
+    from ...core.context import get_context
+    from ...core.storage import Storage
+    import json
+    
+    # Получаем пользователя из контекста
+    context = get_context()
+    if not context or not context.user:
+        return HTMLResponse("""
+            <div class="history-panel-content active">
+                <div class="history-panel-header">
+                    <h2 class="history-panel-title">Your Try-On History</h2>
+                    <button class="history-close-btn" onclick="closeHistoryPanel()">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+                <div class="history-content">
+                    <p style="text-align: center; color: #6b7280; padding: 40px;">
+                        Please log in to view your try-on history
+                    </p>
+                </div>
+            </div>
+        """)
+    
+    user_id = context.user.user_id
+    
+    try:
+        storage = Storage()
+        
+        # Получаем все ключи примерок для пользователя
+        prefix = f"try_on:{user_id}:"
+        keys = await storage.list_by_prefix(prefix, limit=100)
+        
+        if not keys:
+            return HTMLResponse("""
+                <div class="history-panel-content active">
+                    <div class="history-panel-header">
+                        <h2 class="history-panel-title">Your Try-On History</h2>
+                        <button class="history-close-btn" onclick="closeHistoryPanel()">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                    <div class="history-content">
+                        <div style="text-align: center; padding: 60px 20px;">
+                            <i class="bi bi-clock-history" style="font-size: 48px; color: #9ca3af; margin-bottom: 16px;"></i>
+                            <h3 style="color: var(--dark-gray); margin-bottom: 8px;">No try-ons yet</h3>
+                            <p style="color: #6b7280;">Start creating styled images to build your history</p>
+                        </div>
+                    </div>
+                </div>
+            """)
+        
+        # Сортируем ключи по времени создания (новые первыми)
+        keys.sort(reverse=True)
+        
+        # Ограничиваем до 20 последних записей для панели
+        recent_keys = keys[:20]
+        
+        # Получаем данные для каждого ключа
+        try_on_records = []
+        for key in recent_keys:
+            data = await storage.get(key)
+            if data:
+                try_on_data = json.loads(data) if isinstance(data, str) else data
+                try_on_records.append(try_on_data)
+        
+        # Генерируем HTML для каждой примерки
+        history_items_html = ""
+        for record in try_on_records:
+            # Форматируем дату
+            try:
+                from datetime import datetime
+                created_date = datetime.fromisoformat(record['created_at'].replace('Z', '+00:00'))
+                formatted_date = created_date.strftime('%d.%m.%Y %H:%M')
+            except:
+                formatted_date = "Unknown date"
+            
+            # Получаем первый результат для отображения
+            result_url = record['result_urls'][0] if record['result_urls'] else '/static/img/empty.png'
+            
+            # Получаем данные о товаре если есть product_url
+            product_info = None
+            product_link = "Product"
+            if record.get('product_url'):
+                try:
+                    # Вызываем функцию парсинга напрямую, без HTTP запроса
+                    from urllib.parse import urlparse
+                    from . import admin  # Импортируем модуль admin для доступа к функции парсинга
+                    
+                    # Вызываем функцию парсинга напрямую
+                    product_info = await admin.parse_product_url(record['product_url'])
+                    
+                    # Короткая ссылка на товар
+                    parsed_url = urlparse(record['product_url'])
+                    product_link = parsed_url.path.split('/')[-1][:8] + "..."
+                except Exception as e:
+                    logger.warning(f"Не удалось получить данные товара для {record.get('product_url')}: {e}")
+                    product_link = "Product"
+                    product_info = None
+            
+            # Формируем HTML для товара
+            product_section = ""
+            if product_info and product_info.get('status') == 'success':
+                product_image = product_info.get('image_url', '/static/img/empty.png')
+                product_title = product_info.get('title', 'Product')
+                dimensions = product_info.get('dimensions', {})
+                
+                dimensions_text = ""
+                if dimensions.get('length'):
+                    dimensions_text += f"L: {dimensions['length']}cm "
+                if dimensions.get('width'):
+                    dimensions_text += f"W: {dimensions['width']}cm "
+                if dimensions.get('height'):
+                    dimensions_text += f"H: {dimensions['height']}cm"
+                
+                product_section = f"""
+                    <div class="history-product-info">
+                        <a href="{record['product_url']}" target="_blank" class="history-product-image-link">
+                            <img src="{product_image}" alt="Product" class="history-product-image">
+                        </a>
+                        <div class="history-product-details">
+                            <div class="history-product-title">{product_title[:30]}...</div>
+                            <div class="history-product-dimensions">{dimensions_text}</div>
+                        </div>
+                    </div>
+                """
+            
+            history_items_html += f"""
+                <div class="history-item">
+                    <div class="history-item-date">{formatted_date}</div>
+                    
+                    <div class="history-original-photo" onclick="openFullscreen('{record['model_url']}')">
+                        <img src="{record['model_url']}" alt="Original photo">
+                    </div>
+                    
+                    <div class="history-connector">
+                        {product_section}
+                    </div>
+                    
+                    <div class="history-result-photo" onclick="openFullscreen('{result_url}')">
+                        <img src="{result_url}" alt="Result photo">
+                    </div>
+                </div>
+            """
+        
+        html_content = f"""
+            <div class="history-panel-content active">
+                <div class="history-panel-header">
+                    <h2 class="history-panel-title">Your Try-On History</h2>
+                    <button class="history-close-btn" onclick="closeHistoryPanel()">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+                <div class="history-content">
+                    {history_items_html}
+                </div>
+            </div>
+        """
+        
+        return HTMLResponse(html_content)
+        
+    except Exception as e:
+        logger.error(f"Ошибка получения панели истории для пользователя {user_id}: {e}")
+        return HTMLResponse(f"""
+            <div class="history-panel-content active">
+                <div class="history-panel-header">
+                    <h2 class="history-panel-title">Your Try-On History</h2>
+                    <button class="history-close-btn" onclick="closeHistoryPanel()">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+                <div class="history-content">
+                    <p style="text-align: center; color: #ef4444; padding: 40px;">
+                        Error loading history: {str(e)}
+                    </p>
+                </div>
+            </div>
+        """)

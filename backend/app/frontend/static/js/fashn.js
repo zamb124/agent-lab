@@ -522,7 +522,8 @@ class FashnApp {
             // Готовим параметры для API
             const requestData = {
                 model_image_url: userPhotoUpload.url,
-                product_image_url: this.selectedProduct.imageUrl,
+                product_image_url: this.selectedProduct.imageUrl, // URL изображения товара для генерации
+                product_url: this.selectedProduct.originalUrl || null, // Исходный URL товара с сайта (https://thecultt.com/product/...)
                 model_height_cm: parseFloat(document.getElementById('height').value) || 170,
                 product_width_cm: this.selectedProduct.dimensions.length || 30,
                 product_height_cm: this.selectedProduct.dimensions.height || 0,
@@ -759,6 +760,34 @@ class FashnApp {
 
 // Глобальная переменная для доступа к приложению из HTML
 let app;
+
+// Функции для управления панелью истории
+function closeHistoryPanel() {
+    const panel = document.getElementById('historyPanel');
+    if (panel) {
+        panel.classList.remove('active');
+        // Очищаем содержимое через 400ms (после анимации)
+        setTimeout(() => {
+            panel.innerHTML = '';
+        }, 400);
+    }
+}
+
+function openFullscreen(imageSrc) {
+    if (app && app.openFullscreen) {
+        app.openFullscreen(imageSrc);
+    }
+}
+
+// HTMX событие для показа панели после загрузки
+document.addEventListener('htmx:afterSwap', function(event) {
+    if (event.target.id === 'historyPanel') {
+        const panel = document.getElementById('historyPanel');
+        if (panel && panel.innerHTML.trim()) {
+            panel.classList.add('active');
+        }
+    }
+});
 
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', () => {

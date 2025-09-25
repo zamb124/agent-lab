@@ -225,14 +225,60 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def _create_api_context(self, request: Request, requested_company: Company) -> Context:
         """Создает контекст для API запросов"""
 
-        # Проверяем включена ли авторизация
-        if not settings.auth.enabled:
-            # Авторизация отключена - создаем анонимного пользователя
-            return await self._create_anonymous_context(request, requested_company)
+        # Получаем session_id из куки или заголовка Authorization
+        session_id = request.cookies.get("session_id")
+        
+        # Если нет куки, проверяем заголовок Authorization
+        if not session_id:
+            auth_header = request.headers.get("authorization", "")
+            if auth_header.startswith("Bearer "):
+                session_id = auth_header[7:]  # Убираем "Bearer "
+        
+        # Сессия обязательна для API запросов
+        if not session_id:
+            raise HTTPException(status_code=401, detail="Session required")
 
-        # TODO: Реализовать полную авторизацию через токены
-        # Пока создаем анонимного пользователя
-        return await self._create_anonymous_context(request, requested_company)
+        # Получаем пользователя по сессии
+        auth_service = AuthService()
+        user = await auth_service.get_user_by_session(session_id)
+        
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid session")
+
+        # Получаем все компании пользователя
+        user_companies = await self._get_user_companies(user)
+        
+        # Проверяем доступ к запрашиваемой компании
+        if requested_company.company_id not in user.companies:
+            # Если у пользователя нет доступа к запрашиваемой компании,
+            # используем его активную компанию или первую доступную
+            active_company = None
+            if user.active_company_id and user.active_company_id in user.companies:
+                company_data = await self.storage.get(f"company:{user.active_company_id}", force_global=True)
+                if company_data:
+                    active_company = Company.model_validate_json(company_data)
+            
+            if not active_company and user_companies:
+                active_company = user_companies[0]
+                
+            if not active_company:
+                # У пользователя нет доступных компаний
+                raise HTTPException(status_code=403, detail="No accessible companies")
+        else:
+            active_company = requested_company
+            # Обновляем активную компанию у пользователя если нужно
+            if user.active_company_id != requested_company.company_id:
+                user.active_company_id = requested_company.company_id
+                await self._update_user_active_company(user)
+
+        return Context(
+            user=user,
+            session_id=session_id,
+            platform="api",
+            active_company=active_company,
+            user_companies=user_companies,
+            metadata={"authenticated": True},
+        )
 
     async def _create_anonymous_context(self, request: Request, requested_company: Company) -> Context:
         """Создает анонимный контекст"""

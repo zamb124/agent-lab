@@ -8,6 +8,9 @@
     <!-- Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
     
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
     <!-- FASHN Styles -->
     <link rel="stylesheet" href="/static/css/fashn.css">
 </head>
@@ -145,6 +148,20 @@
         </button>
         <img class="fullscreen-image" id="fullscreenImage" alt="Результат примерки">
     </div>
+
+    <!-- History Panel -->
+    <div class="history-panel" id="historyPanel">
+        <!-- History content will be loaded here via HTMX -->
+    </div>
+
+    <!-- History Button - Fixed in top right corner -->
+    <button class="history-btn-fixed" 
+            hx-get="/api/v1/fashn/history-panel" 
+            hx-target="#historyPanel" 
+            hx-swap="innerHTML">
+        <i class="bi bi-clock-history"></i>
+        History
+    </button>
 
     <!-- Error/Success Messages -->
     <div class="message-container">

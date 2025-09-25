@@ -6,12 +6,16 @@ import json
 import uuid
 import httpx
 import logging
+from typing import Optional
+from datetime import datetime, timezone
 from langchain_core.tools import tool
 
 from ..clients.fashn_client import get_fashn_client
 from ..core.storage import Storage
 from ..models import FileRecord
+from ..models.fashn_models import TryOnRecord, TryOnParameters
 from ..core.core_clients.s3_client import get_default_s3_client
+from ..core.context import get_context
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +35,7 @@ async def virtual_try_on(
     visible_bottom_pct: float = 0.98,
     scale_bias: float = 1.0,
     variations: int = 0,
+    product_url: Optional[str] = None,
 ) -> str:
     """
     Выполняет виртуальную примерку одежды или аксессуаров.
@@ -151,6 +156,60 @@ async def virtual_try_on(
         logger.info(
             f"Виртуальная примерка завершена, создано {len(all_results)} результатов"
         )
+
+        # Сохраняем запись примерки в историю
+        context = get_context()
+        if not context or not context.user:
+            raise ValueError("Нет контекста пользователя для сохранения примерки")
+        
+        user_id = context.user.user_id
+        
+        # Генерируем ID примерки
+        try_on_uuid = uuid.uuid4().hex
+        try_on_id = f"try_on:{user_id}:{try_on_uuid}"
+        
+        # Получаем прямые S3 URLs модели и товара из FileRecord
+        model_url = model_record.direct_s3_url or model_record.url
+        product_image_url = product_record.direct_s3_url or product_record.url
+        
+        # Собираем URLs результатов
+        result_urls = []
+        if variations == 0:
+            result_urls = [all_results[0].output_url]
+        else:
+            result_urls = [result.output_url for result in all_results]
+        
+        # Создаем запись примерки
+        try_on_record = TryOnRecord(
+            id=try_on_id,
+            user_id=user_id,
+            created_at=datetime.now(timezone.utc).isoformat(),
+            model_file_id=model_image_file_id,
+            model_url=model_url,
+            product_file_id=product_image_file_id,
+            product_image_url=product_image_url,
+            product_url=product_url,
+            result_urls=result_urls,
+            parameters=TryOnParameters(
+                model_height_cm=model_height_cm,
+                product_width_cm=product_width_cm,
+                product_height_cm=product_height_cm,
+                item_kind=item_kind,
+                placement=placement,
+                offset_x_pct=offset_x_pct,
+                offset_y_pct=offset_y_pct,
+                visible_top_pct=visible_top_pct,
+                visible_bottom_pct=visible_bottom_pct,
+                scale_bias=scale_bias,
+                variations=variations
+            )
+        )
+        
+        # Сохраняем в Storage
+        storage = Storage()
+        await storage.set(try_on_id, json.dumps(try_on_record.model_dump()))
+        
+        logger.info(f"Примерка сохранена в историю: {try_on_id}")
 
         # Форматируем результат
         if variations == 0:
