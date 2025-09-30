@@ -136,6 +136,15 @@ class TelegramConfig(BaseModel):
     bots: Dict[str, str] = Field(default_factory=dict)  # bot_name -> token
 
 
+class NanoBananaConfig(BaseModel):
+    """Конфигурация Nano Banana (Gemini Image Generation)"""
+    
+    enabled: bool = False
+    api_key: Optional[str] = None
+    model_name: str = "gemini-2.5-flash-image-preview"
+    timeout: int = 60
+
+
 class Settings(BaseSettings):
     """Настройки приложения с поддержкой JSON конфигурации"""
 
@@ -149,6 +158,7 @@ class Settings(BaseSettings):
     fashn: FashnConfig = Field(default_factory=FashnConfig)
     cloud_voice: CloudVoiceConfig = Field(default_factory=CloudVoiceConfig)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
+    nano_banana: NanoBananaConfig = Field(default_factory=NanoBananaConfig)
 
     def __init__(self, **data):
         # Загружаем JSON конфигурацию и объединяем с переданными данными

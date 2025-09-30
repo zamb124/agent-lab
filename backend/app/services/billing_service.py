@@ -29,10 +29,52 @@ class BillingService:
         """
         
         # 1. Проверяем лимиты тарифного плана
+        logger.error(f"🔥 company.tariff_plan = {company.tariff_plan} (тип: {type(company.tariff_plan)})")
+        logger.error(f"🔥 TARIFF_LIMITS.keys() = {list(TARIFF_LIMITS.keys())}")
         tariff_limits = TARIFF_LIMITS.get(company.tariff_plan, {})
-        resource_limit = tariff_limits.get(resource_name, 0)
+        logger.error(f"🔥 tariff_limits для {company.tariff_plan}: {tariff_limits}")
         
+        # Определяем тип ресурса и лимит
+        resource_limit = 0
+        
+        # Парсим формат category:resource
+        if ":" not in resource_name:
+            logger.error(f"🔥 НЕПРАВИЛЬНЫЙ ФОРМАТ resource_name: '{resource_name}' (нет ':')")
+            return False, f"Неправильный формат ресурса: {resource_name}"
+            
+        category, resource = resource_name.split(":", 1)
+        
+        if category in ["openai", "gemini", "yandex", "anthropic"]:
+            # LLM ресурсы: openai:gpt-4o, gemini:gemini-1.5-pro
+            provider_limits = tariff_limits.get(category, {})
+            if "*" in provider_limits:
+                resource_limit = provider_limits["*"]
+            else:
+                resource_limit = provider_limits.get(resource, 0)
+                
+        elif category == "platform":
+            # Платформенные ресурсы: platform:max_agents
+            platform_limits = tariff_limits.get("platform", {})
+            if "*" in platform_limits:
+                resource_limit = platform_limits["*"]
+            else:
+                resource_limit = platform_limits.get(resource, 0)
+                
+        elif category == "tool":
+            # Тулы: tool:weather_api
+            tools_limits = tariff_limits.get("tools", {})
+            if "*" in tools_limits:
+                resource_limit = tools_limits["*"]
+            else:
+                resource_limit = tools_limits.get(resource, 0)
+                
+        else:
+            logger.error(f"🔥 НЕИЗВЕСТНАЯ КАТЕГОРИЯ: '{category}'")
+            return False, f"Неизвестная категория ресурса: {category}"
+        
+        logger.error(f"🔥 ИТОГОВЫЙ resource_limit = {resource_limit}")
         if resource_limit == 0:
+            logger.error(f"🔥 БЛОКИРУЕМ: resource_limit = 0")
             return False, f"Ресурс {resource_name} недоступен на тарифе {company.tariff_plan}"
         
         # 2. Если лимит не безлимитный, проверяем использование
@@ -81,13 +123,20 @@ class BillingService:
         # Сохраняем запись с составным ключом для эффективного поиска
         # Формат: usage:{company_id}:{resource_name}:{usage_id}
         usage_key = f"usage:{company.company_id}:{resource_name}:{usage_record.usage_id}"
+        
+        logger.info(f"💾 Сохраняем запись использования: ключ={usage_key}, стоимость={cost}₽")
+        
         await self.storage.set(usage_key, usage_record.model_dump_json(), force_global=True)
         
         # Обновляем потраченную сумму компании
+        old_spent = company.current_month_spent
         company.current_month_spent += cost
+        
+        logger.info(f"💰 Обновляем баланс компании {company.company_id}: {old_spent}₽ → {company.current_month_spent}₽")
+        
         await self.storage.set(f"company:{company.company_id}", company.model_dump_json(), force_global=True)
         
-        logger.info(f"Записано использование {resource_name} для компании {company.company_id}: {cost}₽")
+        logger.info(f"✅ Записано использование {resource_name} для компании {company.company_id}: {cost}₽")
     
     async def _get_monthly_usage(self, company_id: str, resource_name: str) -> int:
         """Получает количество использований ресурса компанией за месяц"""
@@ -118,7 +167,7 @@ class BillingService:
         """Получает стоимость ресурса из конфигурации"""
         
         # Для LLM - получаем из конфигурации
-        if "_" in resource_name and any(provider in resource_name for provider in ["openai", "yandex", "anthropic", "ollama"]):
+        if "_" in resource_name and any(provider in resource_name for provider in ["openai", "yandex", "anthropic", "ollama", "gemini"]):
             return await self._get_llm_cost(resource_name)
         
         # Стандартные стоимости для инструментов (потом из ToolReference)

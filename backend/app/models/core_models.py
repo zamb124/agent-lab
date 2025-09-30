@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from datetime import datetime, timezone, timedelta
+from ..core.config import settings
 
 from .context_models import Context
 
@@ -674,6 +675,11 @@ class FileRecord(BaseModel):
         title="Теги",
         description="Теги для категоризации",
     )
+    is_public: bool = Field(
+        default=False,
+        title="Публичный",
+        description="Доступен ли файл без авторизации",
+    )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         title="Создан",
@@ -698,8 +704,11 @@ class FileRecord(BaseModel):
         if not self.file_id:
             return None
 
-        # Возвращаем ссылку на наш API endpoint для скачивания
-        return f"/api/v1/files/download/{self.file_id}"
+        from ..core.context import get_context
+        context = get_context()
+        subdomain = context.active_company.subdomain
+        base_url = f"http://{subdomain}.{settings.server.domain}:{settings.server.port}"
+        return f"{base_url}/api/v1/files/download/{self.file_id}"
 
     @property
     def direct_s3_url(self) -> Optional[str]:

@@ -9,6 +9,12 @@ from .cloud_voice_client import (
     get_default_cloud_voice_client,
     close_default_cloud_voice_client,
 )
+from .nano_banana_client import (
+    NanoBananaClient,
+    NanoBananaClientFactory,
+    get_default_nano_banana_client,
+    close_default_nano_banana_client,
+)
 
 __all__ = [
     "S3Client",
@@ -19,4 +25,8 @@ __all__ = [
     "CloudVoiceClientFactory",
     "get_default_cloud_voice_client",
     "close_default_cloud_voice_client",
+    "NanoBananaClient",
+    "NanoBananaClientFactory",
+    "get_default_nano_banana_client",
+    "close_default_nano_banana_client",
 ]
