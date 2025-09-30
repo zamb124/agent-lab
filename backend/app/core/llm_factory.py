@@ -78,7 +78,7 @@ def get_llm(
         else:
             raise ValueError(f"Неподдерживаемый провайдер LLM: {provider_name}")
         
-        logger.error(f"🔥 Возвращаем LLM: {type(llm)} для {provider_name}:{final_model}")
+        logger.debug(f"🔥 Возвращаем LLM: {type(llm)} для {provider_name}:{final_model}")
         return llm
 
     except Exception as e:

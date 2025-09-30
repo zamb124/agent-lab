@@ -109,10 +109,81 @@ class ChatManager {
     }
 
     // Обновление заголовка чата
-    updateChatHeader() {
+    async updateChatHeader() {
         const title = document.getElementById('chat-widget-title');
-        if (title) {
-            title.textContent = this.currentAgent ? `Чат с ${this.currentAgent}` : 'Чат с агентом';
+        if (!title) return;
+
+        if (!this.currentAgent) {
+            title.textContent = 'Чат с агентом';
+            this.updateInfoIcon(null); // Скрываем иконку когда нет агента
+            return;
+        }
+
+        // Пытаемся получить метаданные флоу
+        try {
+            const flowInfo = await this.getFlowInfo(this.currentAgent);
+            if (flowInfo && flowInfo.name) {
+                title.textContent = `Чат с ${flowInfo.name}`;
+                // Обновляем иконку с описанием
+                this.updateInfoIcon(flowInfo.description);
+            } else {
+                // Fallback - показываем красивое имя из пути
+                const prettyName = this.extractPrettyName(this.currentAgent);
+                title.textContent = `Чат с ${prettyName}`;
+                this.updateInfoIcon(null);
+            }
+        } catch (error) {
+            console.warn('Не удалось получить метаданные флоу:', error);
+            // Fallback - показываем красивое имя из пути
+            const prettyName = this.extractPrettyName(this.currentAgent);
+            title.textContent = `Чат с ${prettyName}`;
+            this.updateInfoIcon(null);
+        }
+    }
+
+    // Получение информации о флоу
+    async getFlowInfo(flowId) {
+        try {
+            const response = await fetch(`/api/v1/flows/${encodeURIComponent(flowId)}/info`);
+            if (response.ok) {
+                return await response.json();
+            }
+        } catch (error) {
+            console.warn('Ошибка получения информации о флоу:', error);
+        }
+        return null;
+    }
+
+    // Извлечение красивого имени из пути флоу
+    extractPrettyName(agentPath) {
+        if (!agentPath) return 'Агент';
+        
+        // Извлекаем последнюю часть пути и делаем её читаемой
+        const parts = agentPath.split('.');
+        const lastPart = parts[parts.length - 1];
+        
+        // Убираем _config и делаем CamelCase читаемым
+        let name = lastPart.replace(/_config$/, '').replace(/_/g, ' ');
+        
+        // Преобразуем snake_case в Title Case
+        name = name.split(' ')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+            
+        return name;
+    }
+
+    // Обновление иконки с информацией о флоу
+    updateInfoIcon(description) {
+        const infoBtn = document.getElementById('chat-widget-info');
+        if (!infoBtn) return;
+
+        if (description && description.trim()) {
+            infoBtn.style.display = 'inline-block';
+            infoBtn.title = description;
+        } else {
+            infoBtn.style.display = 'none';
+            infoBtn.title = '';
         }
     }
 
@@ -139,8 +210,8 @@ class ChatManager {
             `;
             
             // Добавляем обработчик клика
-            tab.addEventListener('click', () => {
-                this.switchToAgent(agentId);
+            tab.addEventListener('click', async () => {
+                await this.switchToAgent(agentId);
             });
             
             container.appendChild(tab);
@@ -150,7 +221,7 @@ class ChatManager {
     }
 
     // Переключение на другого агента
-    switchToAgent(agent_id) {
+    async switchToAgent(agent_id) {
         if (agent_id === this.currentAgent) {
             return; // Уже активный агент
         }
@@ -165,7 +236,7 @@ class ChatManager {
         this.currentSession = this.getOrCreateSessionForAgent(agent_id);
 
         // Обновляем UI
-        this.updateChatHeader();
+        await this.updateChatHeader();
         this.updateAgentsPanel();
 
         console.log(`✅ Переключились на агента ${agent_id}, сессия: ${this.currentSession}`);
@@ -180,6 +251,68 @@ class ChatManager {
         panel.style.display = isVisible ? 'none' : 'block';
         
         console.log(`🔄 Панель агентов ${isVisible ? 'скрыта' : 'показана'}`);
+    }
+
+    // Показать информацию о флоу
+    showFlowInfo() {
+        const infoBtn = document.getElementById('chat-widget-info');
+        if (!infoBtn || !infoBtn.title) return;
+
+        // Создаем простое модальное окно с описанием
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        `;
+
+        const content = document.createElement('div');
+        content.style.cssText = `
+            background: var(--chat-bg, #ffffff);
+            color: var(--chat-input-text, #000000);
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 400px;
+            max-height: 300px;
+            overflow-y: auto;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        `;
+
+        content.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h4 style="margin: 0; color: var(--chat-input-text, #000000);">Информация о флоу</h4>
+                <button id="close-info-modal" style="background: none; border: none; font-size: 20px; cursor: pointer; color: var(--chat-input-text, #000000);">&times;</button>
+            </div>
+            <p style="margin: 0; line-height: 1.5; color: var(--chat-input-text, #000000);">${infoBtn.title}</p>
+        `;
+
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+
+        // Обработчики закрытия
+        const closeBtn = content.querySelector('#close-info-modal');
+        const closeModal = () => document.body.removeChild(modal);
+        
+        closeBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+
+        // Закрытие по Escape
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                closeModal();
+                document.removeEventListener('keydown', handleEscape);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
     }
 
     // Инициализация чата
@@ -227,6 +360,7 @@ class ChatManager {
         const minimize = document.getElementById('chat-widget-minimize');
         const close = document.getElementById('chat-widget-close');
         const agentsBtn = document.getElementById('chat-widget-agents');
+        const infoBtn = document.getElementById('chat-widget-info');
         const commandsBtn = document.getElementById('chat-widget-commands');
         const attachBtn = document.getElementById('chat-widget-attach');
         const sendBtn = document.getElementById('chat-widget-send');
@@ -238,6 +372,7 @@ class ChatManager {
         minimize?.addEventListener('click', () => this.minimizeChat());
         close?.addEventListener('click', () => this.closeChat());
         agentsBtn?.addEventListener('click', () => this.toggleAgentsPanel());
+        infoBtn?.addEventListener('click', () => this.showFlowInfo());
         
         // Переподключение при клике на индикатор соединения
         const connectionStatus = document.getElementById('chat-connection-status');
@@ -297,7 +432,7 @@ class ChatManager {
     }
 
     // Открыть чат с агентом
-    open(options = {}) {
+    async open(options = {}) {
         console.log('🔵 Открытие чата:', options);
         
         const {
@@ -319,7 +454,7 @@ class ChatManager {
         this.currentSession = session_id || this.getOrCreateSessionForAgent(agent_id);
 
         // Обновляем заголовок и панель агентов
-        this.updateChatHeader();
+        await this.updateChatHeader();
         this.updateAgentsPanel();
 
         // Показываем чат
@@ -425,8 +560,12 @@ class ChatManager {
             const messagesContainer = document.getElementById('chat-widget-messages');
             if (messagesContainer) {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                // Принудительно обновляем стили для корректного отображения
+                messagesContainer.style.display = 'none';
+                messagesContainer.offsetHeight; // Trigger reflow
+                messagesContainer.style.display = '';
             }
-        }, 100);
+        }, 150);
     }
 
     // Переключить меню команд

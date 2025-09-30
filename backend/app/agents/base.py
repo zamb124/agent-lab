@@ -45,9 +45,9 @@ class BaseAgent(ABC):
         ЕДИНООБРАЗНО собирает инструменты ТОЛЬКО из БД по ссылкам в config.tools.
         Игнорирует tools из кода для единообразия.
         """
-        logger.error(f"🔥 ВЫЗВАН get_tools для агента {self.config.agent_id}")
-        logger.error(f"🔥 config.tools = {self.config.tools}")
-        logger.error(f"🔥 len(config.tools) = {len(self.config.tools or [])}")
+        logger.debug(f"🔥 ВЫЗВАН get_tools для агента {self.config.agent_id}")
+        logger.debug(f"🔥 config.tools = {self.config.tools}")
+        logger.debug(f"🔥 len(config.tools) = {len(self.config.tools or [])}")
         
         if not self.config.tools:
             logger.error(f"❌ Нет tools в config для агента {self.config.agent_id}")

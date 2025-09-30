@@ -157,7 +157,13 @@ class ToolFactory:
         billing_name = tool_ref.billing_name or tool_ref.tool_id
         
         # Получаем оригинальную функцию
-        original_func = tool.func if hasattr(tool, 'func') else tool._func
+        if hasattr(tool, 'coroutine') and tool.coroutine:
+            # Асинхронная функция в StructuredTool
+            original_func = tool.coroutine
+        elif hasattr(tool, 'func'):
+            original_func = tool.func
+        else:
+            original_func = tool._func
         
         @functools.wraps(original_func)
         async def billing_wrapper(*args, **kwargs):
@@ -178,7 +184,9 @@ class ToolFactory:
             return tool
         
         # Заменяем функцию в инструменте
-        if hasattr(tool, 'func'):
+        if hasattr(tool, 'coroutine') and tool.coroutine:
+            tool.coroutine = wrapper
+        elif hasattr(tool, 'func'):
             tool.func = wrapper
         else:
             tool._func = wrapper
@@ -194,7 +202,7 @@ class ToolFactory:
         """Обрабатывает биллинг для инструмента"""
         
         logger.info(f"🔥 ВЫЗВАН _handle_tool_billing для {tool_ref.tool_id}")
-        logger.error(f"🔥 tool_ref.billing_name = {tool_ref.billing_name}, cost = {tool_ref.cost}")
+        logger.debug(f"🔥 tool_ref.billing_name = {tool_ref.billing_name}, cost = {tool_ref.cost}")
         
         context = get_context()
         
@@ -207,7 +215,7 @@ class ToolFactory:
         billing_name = f"tool:{tool_ref.billing_name or tool_ref.tool_id}"
         
         # Проверяем можно ли использовать ресурс
-        logger.error(f"🔥 Проверяем доступ к ресурсу: {billing_name} для тарифа {company.tariff_plan}")
+        logger.debug(f"🔥 Проверяем доступ к ресурсу: {billing_name} для тарифа {company.tariff_plan}")
         can_use, reason = await billing_service.can_use_resource(user, company, billing_name)
         if not can_use:
             raise Exception(f"Доступ запрещен: {reason}")

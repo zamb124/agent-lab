@@ -55,7 +55,7 @@ class PrettyJSONFormatter(logging.Formatter):
                     json_str = json_match.group(0)
                     try:
                         json_obj = eval(json_str)  # Осторожно! Только для логов
-                        pretty_json = json.dumps(json_obj, indent=4, ensure_ascii=False)
+                        pretty_json = json.dumps(json_obj, indent=2, ensure_ascii=False)
                         msg = msg.replace(json_str, f"\n{pretty_json}")
                     except Exception:
                         pass

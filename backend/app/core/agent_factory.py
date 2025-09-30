@@ -32,23 +32,23 @@ class AgentFactory:
         Returns:
             Экземпляр агента
         """
-        logger.error(f"🔥 ВЫЗВАН AgentFactory.get_agent для {agent_id}")
+        logger.debug(f"🔥 ВЫЗВАН AgentFactory.get_agent для {agent_id}")
         
         # Загружаем конфигурацию из БД
-        logger.error(f"🔍 Ищем конфигурацию агента в БД: {agent_id}")
+        logger.debug(f"🔍 Ищем конфигурацию агента в БД: {agent_id}")
         config = await self.storage.get_agent_config(agent_id)
-        logger.error(f"🔍 Результат поиска config: {config is not None}")
+        logger.debug(f"🔍 Результат поиска config: {config is not None}")
         
         if not config:
             logger.error(f"❌ Агент {agent_id} не найден в БД")
             raise ValueError(f"Агент {agent_id} не найден в БД")
             
-        logger.error(f"✅ Конфигурация агента {agent_id} загружена из БД")
+        logger.debug(f"✅ Конфигурация агента {agent_id} загружена из БД")
 
         # Создаем экземпляр агента заново
-        logger.error(f"🔥 Вызываем _create_agent_instance для {agent_id}")
+        logger.debug(f"🔥 Вызываем _create_agent_instance для {agent_id}")
         agent = await self._create_agent_instance(config)
-        logger.error(f"✅ _create_agent_instance завершен для {agent_id}")
+        logger.debug(f"✅ _create_agent_instance завершен для {agent_id}")
 
         logger.debug(f"Агент {agent_id} создан из БД")
         return agent
@@ -63,8 +63,8 @@ class AgentFactory:
         Returns:
             Экземпляр агента
         """
-        logger.error(f"🔥 ВЫЗВАН _create_agent_instance для {config.agent_id}")
-        logger.error(f"🔥 config.function_class = {config.function_class}")
+        logger.debug(f"🔥 ВЫЗВАН _create_agent_instance для {config.agent_id}")
+        logger.debug(f"🔥 config.function_class = {config.function_class}")
         
         if config.function_class:
             # Агент определен в коде, импортируем класс
@@ -122,7 +122,7 @@ class AgentFactory:
 
     async def _create_tool_from_reference(self, tool_ref):
         """Создает tool из ToolReference"""
-        logger.error(f"🔥 СОЗДАЕМ ТУЛ: {tool_ref.tool_id}, cost={tool_ref.cost}, billing_name={tool_ref.billing_name}")
+        logger.debug(f"🔥 СОЗДАЕМ ТУЛ: {tool_ref.tool_id}, cost={tool_ref.cost}, billing_name={tool_ref.billing_name}")
 
         # Проверяем ссылку на tool в БД
         if tool_ref.tool_id.startswith("tool:"):
@@ -145,10 +145,10 @@ class AgentFactory:
             # Сначала проверяем есть ли тул в БД с метаданными биллинга
             db_tool_data = await self.storage.get(f"tool:{tool_ref.tool_id}")
             if db_tool_data:
-                logger.error(f"🔥 Найден тул в БД: {tool_ref.tool_id}")
+                logger.debug(f"🔥 Найден тул в БД: {tool_ref.tool_id}")
                 import json
                 db_tool_ref = ToolReference.model_validate(json.loads(db_tool_data))
-                logger.error(f"🔥 БД тул cost={db_tool_ref.cost}, billing_name={db_tool_ref.billing_name}")
+                logger.debug(f"🔥 БД тул cost={db_tool_ref.cost}, billing_name={db_tool_ref.billing_name}")
                 
                 # Импортируем функцию из кода
                 if db_tool_ref.function_path:
@@ -159,16 +159,21 @@ class AgentFactory:
                     raise ValueError(f"Не удалось определить путь к функции: {db_tool_ref.tool_id}")
                 
                 # Принудительно перезагружаем модуль
-                logger.error(f"🔥 Импортируем модуль: {module_path}")
+                logger.debug(f"🔥 Импортируем модуль: {module_path}")
                 module = importlib.import_module(module_path)
-                logger.error(f"🔥 Модуль загружен: {module}")
+                logger.debug(f"🔥 Модуль загружен: {module}")
                 importlib.reload(module)  # Перезагружаем для получения свежего кода
-                logger.error(f"🔥 Модуль перезагружен")
+                logger.debug(f"🔥 Модуль перезагружен")
                 tool_function = getattr(module, func_name)
-                logger.error(f"🔥 Функция получена: {tool_function}")
-                logger.error(f"🔥 Тип функции: {type(tool_function)}")
-                logger.error(f"🔥 Загружена функция {func_name}: async={asyncio.iscoroutinefunction(tool_function)}")
-                logger.error(f"🔥 Исходный код функции: {tool_function.__code__.co_flags}")
+                logger.debug(f"🔥 Функция получена: {tool_function}")
+                logger.debug(f"🔥 Тип функции: {type(tool_function)}")
+                
+                # Проверяем тип функции перед обращением к __code__
+                if hasattr(tool_function, '__code__'):
+                    logger.debug(f"🔥 Загружена функция {func_name}: async={asyncio.iscoroutinefunction(tool_function)}")
+                    logger.debug(f"🔥 Исходный код функции: {tool_function.__code__.co_flags}")
+                else:
+                    logger.debug(f"🔥 Загружена функция {func_name}: это StructuredTool или другой объект без __code__")
                 
                 # Оборачиваем в биллинг если есть стоимость
                 if db_tool_ref.cost > 0 or db_tool_ref.free_for_plans:

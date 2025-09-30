@@ -29,17 +29,17 @@ class BillingService:
         """
         
         # 1. Проверяем лимиты тарифного плана
-        logger.error(f"🔥 company.tariff_plan = {company.tariff_plan} (тип: {type(company.tariff_plan)})")
-        logger.error(f"🔥 TARIFF_LIMITS.keys() = {list(TARIFF_LIMITS.keys())}")
+        logger.debug(f"🔥 company.tariff_plan = {company.tariff_plan} (тип: {type(company.tariff_plan)})")
+        logger.debug(f"🔥 TARIFF_LIMITS.keys() = {list(TARIFF_LIMITS.keys())}")
         tariff_limits = TARIFF_LIMITS.get(company.tariff_plan, {})
-        logger.error(f"🔥 tariff_limits для {company.tariff_plan}: {tariff_limits}")
+        logger.debug(f"🔥 tariff_limits для {company.tariff_plan}: {tariff_limits}")
         
         # Определяем тип ресурса и лимит
         resource_limit = 0
         
         # Парсим формат category:resource
         if ":" not in resource_name:
-            logger.error(f"🔥 НЕПРАВИЛЬНЫЙ ФОРМАТ resource_name: '{resource_name}' (нет ':')")
+            logger.debug(f"🔥 НЕПРАВИЛЬНЫЙ ФОРМАТ resource_name: '{resource_name}' (нет ':')")
             return False, f"Неправильный формат ресурса: {resource_name}"
             
         category, resource = resource_name.split(":", 1)
@@ -69,12 +69,12 @@ class BillingService:
                 resource_limit = tools_limits.get(resource, 0)
                 
         else:
-            logger.error(f"🔥 НЕИЗВЕСТНАЯ КАТЕГОРИЯ: '{category}'")
+            logger.debug(f"🔥 НЕИЗВЕСТНАЯ КАТЕГОРИЯ: '{category}'")
             return False, f"Неизвестная категория ресурса: {category}"
         
-        logger.error(f"🔥 ИТОГОВЫЙ resource_limit = {resource_limit}")
+        logger.debug(f"🔥 ИТОГОВЫЙ resource_limit = {resource_limit}")
         if resource_limit == 0:
-            logger.error(f"🔥 БЛОКИРУЕМ: resource_limit = 0")
+            logger.debug(f"🔥 БЛОКИРУЕМ: resource_limit = 0")
             return False, f"Ресурс {resource_name} недоступен на тарифе {company.tariff_plan}"
         
         # 2. Если лимит не безлимитный, проверяем использование

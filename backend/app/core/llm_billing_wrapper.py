@@ -45,7 +45,7 @@ class ChatOpenAIWithBilling(ChatOpenAI):
     
     async def ainvoke(self, input_data, config=None, **kwargs):
         """Асинхронный вызов с биллингом"""
-        logger.error(f"🔥 ВЫЗВАН ChatOpenAIWithBilling.ainvoke для {self._billing_provider}:{self._billing_model}")
+        logger.debug(f"🔥 ВЫЗВАН ChatOpenAIWithBilling.ainvoke для {self._billing_provider}:{self._billing_model}")
         
         context = get_context()
         if not context or not context.user or not context.active_company:
