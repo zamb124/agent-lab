@@ -97,71 +97,65 @@
 }
 ```
 
-## Дополнительные сервисы
+## Telegram боты
 
-### Telegram боты
+### 🤖 Создание бота
+**Где создать**: Напишите @BotFather в Telegram  
+**Что делать**:
+1. Отправьте `/newbot` боту @BotFather
+2. Придумайте имя и username бота
+3. Получите токен вида `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`
+4. В `conf.json`:
 ```json
 "telegram": {
   "enabled": true,
   "bots": {
-    "имя_бота": "токен-телеграм-бота"
+    "мой_бот": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
   }
 }
 ```
 
-### S3 хранилище
-Поддерживаются: AWS S3, Yandex Cloud, VK Cloud, MinIO
+## Хранилище файлов (S3)
 
+### 📁 Зачем нужно?
+Для загрузки и обработки файлов пользователями (картинки, документы и т.д.)
+
+### ☁️ Yandex Cloud (рекомендуется для РФ)
+**Где настроить**: https://console.cloud.yandex.ru/  
+**Что делать**:
+1. Создайте аккаунт Yandex Cloud
+2. Создайте Object Storage bucket
+3. Получите ключи доступа
+4. В `conf.json`:
 ```json
 "s3": {
   "enabled": true,
-  "default_bucket": "имя-бакета",
+  "default_bucket": "имя-вашего-бакета",
   "buckets": {
-    "ваш-бакет": {
-      "provider": "yandex|aws|vkcloud|minio",
-      "access_key_id": "ваш-access-key",
-      "secret_access_key": "ваш-secret-key",
-      "region_name": "регион",
-      "endpoint_url": "https://endpoint-url",
+    "имя-вашего-бакета": {
+      "provider": "yandex",
+      "access_key_id": "ваш-access-key-id",
+      "secret_access_key": "ваш-secret-access-key",
+      "region_name": "ru-central1",
+      "endpoint_url": "https://storage.yandexcloud.net",
       "enabled": true
     }
   }
 }
 ```
 
-### Yandex OAuth
-```json
-"auth": {
-  "providers": {
-    "yandex": {
-      "client_id": "ваш-yandex-oauth-client-id",
-      "client_secret": "ваш-yandex-oauth-client-secret",
-      "enabled": true
-    }
-  }
-}
-```
+### 🌍 AWS S3 (для международных проектов)
+Аналогично, но с настройками AWS
 
-### Голосовые сервисы (Cloud Voice)
-```json
-"cloud_voice": {
-  "enabled": true,
-  "secret_key": "ваш-секретный-ключ",
-  "client_id": "ваш-client-id"
-}
-```
+## Что можно не настраивать (пока не нужно)
 
-### FASHN API
-```json
-"fashn": {
-  "enabled": true,
-  "api_key": "ваш-fashn-api-ключ"
-}
-```
+- **Yandex OAuth** - только если нужна авторизация через Yandex
+- **Cloud Voice** - только для голосовых функций  
+- **FASHN API** - только для виртуальной примерки одежды
+- **База данных** - Docker сам настроит PostgreSQL
 
-## Примечания
+## ❗ Важно
 
-- Для разработки можно использовать `mock` провайдер LLM (включен по умолчанию)
-- Все внешние сервисы по умолчанию отключены (`enabled: false`)
-- Включайте только те сервисы, которые планируете использовать
-- Не коммитьте файл `conf.json` с реальными ключами в репозиторий
+- Файл `conf.json` НЕ попадает в git (он в .gitignore)
+- Никогда не публикуйте API ключи в открытом коде
+- Для продакшена смените `secret_key` в секции `auth`
