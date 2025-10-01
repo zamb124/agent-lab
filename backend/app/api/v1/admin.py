@@ -103,10 +103,11 @@ async def parse_product_url(url: str):
         # Парсим HTML
         soup = BeautifulSoup(html, "html.parser")
 
-        # Извлекаем изображение товара
-        image_url = None
+        # Извлекаем все изображения товара
+        image_urls = []
+        main_image_url = None
 
-        # Ищем изображение товара с приоритетом на правильные селекторы
+        # Ищем все изображения товара с приоритетом на правильные селекторы
         image_selectors = [
             ".product-content-cover-list-item.active",  # Активное изображение товара
             ".product-content-cover-list-item",  # Любое изображение товара
@@ -120,6 +121,8 @@ async def parse_product_url(url: str):
             logger.info(f"Селектор '{selector}' нашел {len(elements)} элементов")
 
             for i, element in enumerate(elements):
+                found_url = None
+                
                 # Если это элемент с background-image в style
                 if element.get("style"):
                     style = element.get("style")
@@ -129,46 +132,34 @@ async def parse_product_url(url: str):
                         found_url = url_match.group(1)
                         logger.info(f"Найден URL в style: {found_url}")
 
-                        # Проверяем, что это не логотип или SEO изображение
-                        if (
-                            "storage.yandexcloud.net" in found_url
-                            and "logo" not in found_url.lower()
-                            and "seo" not in found_url.lower()
-                            and found_url.endswith((".jpg", ".jpeg", ".png", ".webp"))
-                        ):
-                            image_url = found_url
-                            logger.info(f"✅ Принят URL: {found_url}")
-                            break
-                        else:
-                            logger.info(
-                                f"❌ Отклонен URL: {found_url} (не подходит под критерии)"
-                            )
-
                 # Если это img элемент с src
-                if element.name == "img" and element.get("src"):
-                    src = element.get("src")
-                    logger.info(f"Найден img src: {src}")
+                elif element.name == "img" and element.get("src"):
+                    found_url = element.get("src")
+                    logger.info(f"Найден img src: {found_url}")
 
-                    # Проверяем, что это изображение товара, а не логотип
-                    if (
-                        "storage.yandexcloud.net" in src
-                        and "logo" not in src.lower()
-                        and "seo" not in src.lower()
-                        and src.endswith((".jpg", ".jpeg", ".png", ".webp"))
-                    ):
-                        image_url = src
-                        logger.info(f"✅ Принят img src: {src}")
-                        break
-                    else:
-                        logger.info(
-                            f"❌ Отклонен img src: {src} (не подходит под критерии)"
-                        )
+                # Проверяем и добавляем URL если подходит
+                if found_url and _is_valid_product_image(found_url):
+                    if found_url not in image_urls:  # Избегаем дубликатов
+                        image_urls.append(found_url)
+                        logger.info(f"✅ Добавлен URL: {found_url}")
+                        
+                        # Первое найденное изображение считаем основным
+                        if main_image_url is None:
+                            main_image_url = found_url
+                elif found_url:
+                    logger.info(f"❌ Отклонен URL: {found_url} (не подходит под критерии)")
 
-            if image_url:
-                break
+        # Вспомогательная функция для проверки валидности изображения
+        def _is_valid_product_image(url):
+            return (
+                "storage.yandexcloud.net" in url
+                and "logo" not in url.lower()
+                and "seo" not in url.lower()
+                and url.endswith((".jpg", ".jpeg", ".png", ".webp"))
+            )
 
-        # Если ничего не найдено, попробуем более общий поиск
-        if not image_url:
+        # Если основные селекторы не дали результатов, попробуем более общий поиск
+        if not image_urls:
             logger.info("Основные селекторы не сработали, пробуем общий поиск...")
 
             # Ищем все элементы с background-image
@@ -196,17 +187,19 @@ async def parse_product_url(url: str):
                         and "logo" not in found_url.lower()
                         and "seo" not in found_url.lower()
                         and found_url.endswith((".jpg", ".jpeg", ".png", ".webp"))
+                        and found_url not in image_urls
                     ):
-                        image_url = found_url
+                        image_urls.append(found_url)
+                        if main_image_url is None:
+                            main_image_url = found_url
                         logger.info(f"✅ Принят URL при общем поиске: {found_url}")
-                        break
 
-            # Если все еще ничего не найдено, ищем img теги
-            if not image_url:
+            # Если все еще мало изображений, ищем img теги
+            if len(image_urls) < 3:  # Пытаемся найти больше изображений
                 all_imgs = soup.find_all("img")
                 logger.info(f"Найдено {len(all_imgs)} img элементов")
 
-                for i, img in enumerate(all_imgs[:10]):  # Ограничиваем до 10 для логов
+                for i, img in enumerate(all_imgs[:20]):  # Увеличиваем лимит для поиска больше изображений
                     src = img.get("src", "")
                     alt = img.get("alt", "")
                     logger.info(f"IMG {i}: src='{src}' alt='{alt[:50]}...'")
@@ -216,12 +209,15 @@ async def parse_product_url(url: str):
                         and "logo" not in src.lower()
                         and "seo" not in src.lower()
                         and src.endswith((".jpg", ".jpeg", ".png", ".webp"))
+                        and src not in image_urls
                     ):
-                        image_url = src
+                        image_urls.append(src)
+                        if main_image_url is None:
+                            main_image_url = src
                         logger.info(f"✅ Принят img src при общем поиске: {src}")
-                        break
 
-        logger.info(f"Итоговое найденное изображение: {image_url}")
+        logger.info(f"Найдено {len(image_urls)} изображений товара: {image_urls}")
+        logger.info(f"Основное изображение: {main_image_url}")
 
         # Извлекаем размеры
         dimensions = {}
@@ -318,12 +314,13 @@ async def parse_product_url(url: str):
             "status": "success",
             "title": title,
             "product_id": product_id,
-            "image_url": image_url,
+            "image_url": main_image_url,  # Основное изображение для обратной совместимости
+            "image_urls": image_urls,     # Все найденные изображения
             "dimensions": dimensions,
             "original_url": url,
         }
 
-        logger.info(f"Товар успешно распарсен: {title}, изображение: {bool(image_url)}")
+        logger.info(f"Товар успешно распарсен: {title}, изображений: {len(image_urls)}")
         return result
 
     except httpx.HTTPError as e:

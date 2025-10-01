@@ -41,6 +41,10 @@ async def generate_images(
         num_images = max(1, min(num_images, 4))
         
         logger.info(f"🎨 Генерируем {num_images} изображений: {prompt[:50]}...")
+        if reference_file_ids:
+            logger.info(f"📎 Передаем {len(reference_file_ids)} референсных файлов в nano_banana:")
+            for i, file_id in enumerate(reference_file_ids):
+                logger.info(f"  [{i}] {file_id}")
         
         generated_file_ids = await client.generate_images(
             prompt=prompt,

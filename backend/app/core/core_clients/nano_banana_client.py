@@ -78,16 +78,24 @@ class NanoBananaClient:
             # Добавляем референсные изображения если есть
             if reference_file_ids:
                 logger.info(f"📎 Используем {len(reference_file_ids)} референсных файлов")
-                reference_data = await self._get_file_records(reference_file_ids)
+                logger.info(f"📎 Порядок file_ids в nano_banana_client:")
+                for i, file_id in enumerate(reference_file_ids):
+                    logger.info(f"   [{i}] {file_id}")
                 
-                for file_data in reference_data:
+                reference_data = await self._get_file_records(reference_file_ids)
+                logger.info(f"📎 Получено {len(reference_data)} файлов данных")
+                
+                for i, file_data in enumerate(reference_data):
+                    logger.info(f"📎 Добавляем изображение [{i}] в content_parts (размер: {len(file_data)} байт)")
                     # Добавляем изображение в контент
                     content_parts.append({
                         "mime_type": "image/png",  # Предполагаем PNG, можно улучшить определение типа
                         "data": file_data
                     })
+                
+                logger.info(f"📎 Итого в content_parts: {len(content_parts)} элементов (1 промпт + {len(reference_data)} изображений)")
             
-            logger.info(f"🎨 Генерируем {num_images} изображений с промптом: {prompt[:100]}...")
+            logger.info(f"🎨 Генерируем {num_images} изображений с промптом: {prompt}")
             
             generated_file_ids = []
             
@@ -95,36 +103,45 @@ class NanoBananaClient:
                 response = model.generate_content(
                     content_parts,
                     generation_config=genai.GenerationConfig(
-                        temperature=0.7,
+                        temperature=0.1,
                     )
                 )
                 
                 if response.candidates and len(response.candidates) > 0:
                     candidate = response.candidates[0]
                     if hasattr(candidate, 'content') and candidate.content.parts:
+                        # Ищем только первое изображение в ответе
+                        image_found = False
                         for part in candidate.content.parts:
-                            if hasattr(part, 'inline_data'):
-                                image_data = part.inline_data.data
+                            if hasattr(part, 'inline_data') and not image_found:
+                                # Проверяем, что это действительно изображение
                                 mime_type = part.inline_data.mime_type
-                                
-                                from ..file_processor import get_default_file_processor
-                                file_processor = await get_default_file_processor()
-                                file_name = f"generated_image_{uuid.uuid4().hex[:8]}.png"
-                                
-                                file_record = await file_processor.process_file_from_bytes(
-                                    data=image_data,
-                                    original_name=file_name,
-                                    content_type=mime_type,
-                                    metadata={
-                                        "generated_by": "nano_banana",
-                                        "prompt": prompt.encode('utf-8').decode('ascii', 'ignore'),
-                                    },
-                                    tags=["generated", "nano_banana"],
-                                    public=True,
-                                )
-                                
-                                generated_file_ids.append(file_record.file_id)
-                                logger.info(f"✅ Сгенерировано изображение: {file_record.file_id}")
+                                if mime_type and mime_type.startswith('image/'):
+                                    image_data = part.inline_data.data
+                                    
+                                    from ..file_processor import get_default_file_processor
+                                    file_processor = await get_default_file_processor()
+                                    file_name = f"generated_image_{uuid.uuid4().hex[:8]}.png"
+                                    
+                                    file_record = await file_processor.process_file_from_bytes(
+                                        data=image_data,
+                                        original_name=file_name,
+                                        content_type=mime_type,
+                                        metadata={
+                                            "generated_by": "nano_banana",
+                                            "prompt": prompt.encode('utf-8').decode('ascii', 'ignore'),
+                                        },
+                                        tags=["generated", "nano_banana"],
+                                        public=True,
+                                    )
+                                    
+                                    generated_file_ids.append(file_record.file_id)
+                                    logger.info(f"✅ Сгенерировано изображение: {file_record.file_id}")
+                                    image_found = True  # Обрабатываем только первое изображение
+                                else:
+                                    logger.debug(f"Пропускаем часть с mime_type: {mime_type}")
+                            elif hasattr(part, 'text'):
+                                logger.debug(f"Пропускаем текстовую часть: {part.text[:100]}...")
             
             return generated_file_ids
             

@@ -2,20 +2,23 @@
 API эндпоинты для FASHN виртуальной примерки.
 """
 
+import asyncio
 import io
 import re
 import logging
 import httpx
 import json
+from datetime import datetime
 from typing import Optional, List
+from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from PIL import Image
 
 from ...core.file_processor import FileProcessor, get_default_file_processor
 from ...tools.fashn_tools import virtual_try_on
-from ...core.context import get_context
-from ...core.storage import Storage
+from ...tools.nano_banana_tools import generate_images
 from ...core.context import get_context
 from ...core.storage import Storage
 logger = logging.getLogger(__name__)
@@ -28,6 +31,7 @@ class TryOnRequest(BaseModel):
 
     model_image_url: str = Field(..., description="URL изображения модели")
     product_image_url: str = Field(..., description="URL изображения продукта")
+    product_image_urls: Optional[List[str]] = Field(None, description="Дополнительные URL изображений товара")
     product_url: Optional[str] = Field(None, description="Исходный URL товара с сайта")
     model_height_cm: float = Field(..., description="Рост модели в см", ge=100, le=250)
     product_width_cm: float = Field(
@@ -55,6 +59,10 @@ class TryOnRequest(BaseModel):
         description="Количество дополнительных вариаций модели (0-3)",
         ge=0,
         le=3,
+    )
+    engine: str = Field(
+        default="nano_banana", 
+        description="Движок для виртуальной примерки: 'fashn' или 'nano_banana'"
     )
 
 
@@ -129,6 +137,159 @@ async def download_image(url: str) -> bytes:
         )
 
 
+async def process_nano_banana_try_on(request: TryOnRequest, model_record, product_record):
+    """
+    Обрабатывает виртуальную примерку через nano_banana
+    """
+    try:
+        # Получаем file_id из storage key
+        model_file_id = model_record.key.split(":")[-1] if ":" in model_record.key else model_record.file_id
+        product_file_id = product_record.key.split(":")[-1] if ":" in product_record.key else product_record.file_id
+        
+        reference_file_ids = [model_file_id, product_file_id]
+        
+        # Если есть дополнительные изображения товара, добавляем их
+        additional_product_records = []
+        if request.product_image_urls:
+            logger.info(f"Обрабатываем {len(request.product_image_urls)} дополнительных изображений товара параллельно")
+            
+            async def process_additional_image(url, index):
+                """Обрабатывает одно дополнительное изображение"""
+                try:
+                    # Скачиваем дополнительное изображение
+                    additional_bytes = await download_image(url)
+                    
+                    # Создаем отдельный FileProcessor для каждого изображения
+                    file_processor = FileProcessor()
+                    try:
+                        # Загружаем в S3
+                        additional_record = await file_processor.process_file_from_bytes(
+                            data=additional_bytes,
+                            original_name=f"additional_product_{index}.png",
+                            content_type="image/png",
+                            uploaded_by="fashn_api",
+                            public=True,
+                        )
+                        
+                        additional_file_id = additional_record.key.split(":")[-1] if ":" in additional_record.key else additional_record.file_id
+                        logger.info(f"Дополнительное изображение {index+1} загружено: {additional_record.url}")
+                        
+                        return additional_record, additional_file_id
+                        
+                    finally:
+                        await file_processor.close()
+                        
+                except Exception as e:
+                    logger.warning(f"Не удалось загрузить дополнительное изображение {index+1}: {e}")
+                    return None, None
+            
+            # Запускаем загрузку всех дополнительных изображений параллельно
+            tasks = [
+                process_additional_image(url, i) 
+                for i, url in enumerate(request.product_image_urls[:3])  # Ограничиваем до 3 дополнительных
+            ]
+            
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Обрабатываем результаты
+            for result in results:
+                if isinstance(result, Exception):
+                    logger.warning(f"Ошибка при параллельной загрузке изображения: {result}")
+                    continue
+                    
+                additional_record, additional_file_id = result
+                if additional_record and additional_file_id:
+                    additional_product_records.append(additional_record)
+                    reference_file_ids.append(additional_file_id)
+        
+        # Создаем промпт без переносов строк для избежания ошибки HTTP заголовков
+        images_info = f"У тебя есть {len(reference_file_ids)} изображений. АНАЛИЗИРУЙ ИХ ПО ПОРЯДКУ: Изображение №1 (первое) = МОДЕЛЬ - человек, которого НЕ МЕНЯЙ! Используй ТОЧНО его! "
+        
+        if len(reference_file_ids) > 2:  # Больше чем модель + основное изображение товара
+            for i in range(2, len(reference_file_ids) + 1):
+                images_info += f"Изображение №{i} = ТОВАР ({request.item_kind}) - ракурс {i-1}, изучи детали. "
+        else:
+            images_info += f"Изображение №2 (второе) = ТОВАР ({request.item_kind}) для добавления на модель. "
+        
+        # Определяем размеры товара
+        width_info = f"ширина {request.product_width_cm} см"
+        height_info = f"высота {request.product_height_cm} см" if request.product_height_cm > 0 else "высота пропорциональная"
+        
+        prompt = f"СТРОГО ЗАПРЕЩЕНО СОЗДАВАТЬ НОВЫХ ЛЮДЕЙ! ЗАДАЧА: Взять СУЩЕСТВУЮЩЕГО человека с первого изображения и добавить на него товар. {images_info} АБСОЛЮТНЫЕ ТРЕБОВАНИЯ: ПЕРВОЕ изображение содержит БАЗОВОГО ЧЕЛОВЕКА - это основа, НЕ МЕНЯЙ ЕГО ВООБЩЕ! Используй ТОЧНО ЭТУ МОДЕЛЬ как есть - ту же позу, то же тело, тот же фон, ту же одежду. ЗАПРЕЩЕНО: создавать нового человека, менять лицо, менять позу, менять фон, менять тело модели. РАЗРЕШЕНО: только добавить товар с других изображений на СУЩЕСТВУЮЩУЮ модель. ПОШАГОВО: 1. Возьми ТОЧНУЮ копию человека с изображения №1. 2. НЕ МЕНЯЙ ничего в этом человеке. 3. Добавь товар ({request.item_kind}) с изображений №2+ в позиции {request.placement}. 4. Товар должен выглядеть точно как на исходных изображениях. КРИТИЧНО: Результат должен быть ТОТ ЖЕ человек с изображения №1 + товар с изображений №2+. НЕ создавай нового человека, НЕ меняй существующего человека, НЕ улучшай фото - только добавь товар! Размеры: модель {request.model_height_cm} см, товар {width_info} и {height_info}. ФИНАЛЬНЫЙ РЕЗУЛЬТАТ: ТОЧНО тот же человек с первого изображения + товар с других изображений, без изменения модели."
+        
+        # Логируем детали для отладки
+        logger.info(f"=== ДЕТАЛЬНАЯ ОТЛАДКА ПОРЯДКА ИЗОБРАЖЕНИЙ ===")
+        logger.info(f"Исходные данные:")
+        logger.info(f"  model_file_id (должен быть [0]): {model_file_id}")
+        logger.info(f"  product_file_id (должен быть [1]): {product_file_id}")
+        
+        logger.info(f"Итоговый массив reference_file_ids:")
+        for i, file_id in enumerate(reference_file_ids):
+            role = "МОДЕЛЬ (человек)" if i == 0 else f"ТОВАР {i}"
+            logger.info(f"  [{i}] {role}: {file_id}")
+        
+        logger.info(f"Общее количество изображений: {len(reference_file_ids)}")
+        logger.info(f"Промпт (первые 300 символов): {prompt[:300]}...")
+        
+        # КРИТИЧЕСКАЯ ПРОВЕРКА: убедимся что модель действительно первая
+        if len(reference_file_ids) > 0 and reference_file_ids[0] != model_file_id:
+            logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА: Модель НЕ на первом месте!")
+            logger.error(f"   Ожидалось: {model_file_id}")
+            logger.error(f"   Получили: {reference_file_ids[0]}")
+            raise HTTPException(status_code=500, detail="Ошибка порядка изображений: модель не на первом месте")
+        
+        # Генерируем изображения
+        num_images = max(1, request.variations + 1)
+        result_text = await generate_images.ainvoke({
+            "prompt": prompt,
+            "reference_file_ids": reference_file_ids,
+            "num_images": num_images
+        })
+        
+        logger.info(f"Результат generate_images: {result_text}")
+        
+        if result_text.startswith("❌"):
+            raise HTTPException(status_code=500, detail=result_text)
+        
+        # Парсим результат для извлечения URL-ов
+        # Используем метод из FileProcessor для извлечения информации о файлах
+        file_info_list = FileProcessor.extract_file_info_from_message(result_text)
+        
+        logger.info(f"Извлеченная информация о файлах: {file_info_list}")
+        
+        if file_info_list:
+            file_urls = [file_info["url"] for file_info in file_info_list]
+            logger.info(f"Найденные URL-ы файлов: {file_urls}")
+        else:
+            # Попробуем найти URL-ы напрямую как fallback
+            logger.warning(f"Не найдены файлы через FileProcessor в результате: {result_text}")
+            
+            url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+'
+            urls = re.findall(url_pattern, result_text)
+            
+            if urls:
+                file_urls = urls
+                logger.info(f"Найдены URL-ы напрямую: {file_urls}")
+            else:
+                raise HTTPException(status_code=500, detail=f"Не удалось получить результаты генерации. Ответ: {result_text}")
+        
+        # Формируем ответ в том же формате что и FASHN
+        job_ids = [f"nano_banana_{i}" for i in range(len(file_urls))]
+        
+        return TryOnResponse(
+            status="ok",
+            job_ids=job_ids,
+            output_urls=file_urls,
+            model_urls=[model_record.direct_s3_url or model_record.url] * len(file_urls),
+            product_scaled_url=product_record.direct_s3_url or product_record.url,
+            message=f"Виртуальная примерка через nano_banana завершена! Создано {len(file_urls)} изображений"
+        )
+        
+    except Exception as e:
+        logger.error(f"Ошибка nano_banana виртуальной примерки: {e}")
+        raise HTTPException(status_code=500, detail=f"Ошибка генерации: {str(e)}")
+
+
 @router.post("/try-on", response_model=TryOnResponse)
 async def virtual_try_on_api(request: TryOnRequest):
     """
@@ -183,10 +344,14 @@ async def virtual_try_on_api(request: TryOnRequest):
             f"Продукт загружен в S3: {product_record.url}, file_id: {product_record.file_id}"
         )
 
-        # Теперь работаем как агент - вызываем upload_image_for_try_on.ainvoke()
-        # Но файлы уже загружены, поэтому этот шаг можно пропустить
-        # Сразу вызываем virtual_try_on.ainvoke() с file_id
+        # Выбираем движок для виртуальной примерки
+        if request.engine == "nano_banana":
+            logger.info("Используем nano_banana для виртуальной примерки")
+            return await process_nano_banana_try_on(request, model_record, product_record)
 
+        # Используем FASHN (по умолчанию)
+        logger.info("Используем FASHN для виртуальной примерки")
+        
         # Используем правильные ключи для storage (s3:provider:file_id)
         model_storage_key = model_record.key  # s3:vkcloud:file_id
         product_storage_key = product_record.key  # s3:vkcloud:file_id
@@ -291,12 +456,14 @@ async def get_fashn_help():
         "parameters": {
             "model_image_url": "URL изображения модели (обязательно)",
             "product_image_url": "URL изображения продукта (обязательно)",
+            "product_image_urls": "Дополнительные URL изображений товара (опционально, до 3 штук)",
             "model_height_cm": "Рост модели в см (100-250)",
             "product_width_cm": "Ширина продукта в см (1-200)",
             "product_height_cm": "Высота продукта в см (0-200, 0 = сохранить пропорции)",
             "item_kind": "Тип продукта: 'bag' или 'garment'",
             "placement": "Размещение для сумок: 'left_shoulder', 'right_shoulder', 'left_hand', 'right_hand', 'center'",
             "variations": "Количество дополнительных вариаций модели (0-3)",
+            "engine": "Движок виртуальной примерки: 'fashn' (по умолчанию) или 'nano_banana'",
         },
         "examples": {
             "bag_try_on": {
@@ -320,6 +487,25 @@ async def get_fashn_help():
                 "product_width_cm": 30,
                 "item_kind": "bag",
                 "variations": 2,
+            },
+            "nano_banana_try_on": {
+                "model_image_url": "https://example.com/model.jpg",
+                "product_image_url": "https://example.com/dress.png",
+                "model_height_cm": 170,
+                "item_kind": "garment",
+                "engine": "nano_banana",
+            },
+            "multiple_images_try_on": {
+                "model_image_url": "https://example.com/model.jpg",
+                "product_image_url": "https://example.com/bag_front.png",
+                "product_image_urls": [
+                    "https://example.com/bag_side.png",
+                    "https://example.com/bag_back.png"
+                ],
+                "model_height_cm": 170,
+                "product_width_cm": 25,
+                "item_kind": "bag",
+                "engine": "nano_banana",
             },
         },
     }
@@ -426,10 +612,6 @@ async def get_history_panel():
     """
     Возвращает HTML панель с историей примерок для HTMX
     """
-    from fastapi.responses import HTMLResponse
-    from ...core.context import get_context
-    from ...core.storage import Storage
-    import json
     
     # Получаем пользователя из контекста
     context = get_context()
@@ -497,7 +679,6 @@ async def get_history_panel():
         for record in try_on_records:
             # Форматируем дату
             try:
-                from datetime import datetime
                 created_date = datetime.fromisoformat(record['created_at'].replace('Z', '+00:00'))
                 formatted_date = created_date.strftime('%d.%m.%Y %H:%M')
             except:
@@ -512,7 +693,6 @@ async def get_history_panel():
             if record.get('product_url'):
                 try:
                     # Вызываем функцию парсинга напрямую, без HTTP запроса
-                    from urllib.parse import urlparse
                     from . import admin  # Импортируем модуль admin для доступа к функции парсинга
                     
                     # Вызываем функцию парсинга напрямую

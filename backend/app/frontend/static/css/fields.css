@@ -1,5 +1,58 @@
 /* Agents Lab - Стили для полей форм */
 
+/* Кнопка информации о поле */
+.field-info-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 4px;
+    margin-left: 4px;
+    border-radius: 3px;
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.field-info-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--accent-primary);
+}
+
+/* Tooltip для описаний полей */
+.field-info-btn[data-toggle="tooltip"] {
+    position: relative;
+}
+
+.field-info-btn[data-toggle="tooltip"]:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-quaternary);
+    color: var(--text-primary);
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    font-size: 12px;
+    white-space: nowrap;
+    max-width: 300px;
+    white-space: normal;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    border: 1px solid var(--border-color);
+}
+
+.field-info-btn[data-toggle="tooltip"]:hover::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(1px);
+    border: 4px solid transparent;
+    border-top-color: var(--border-color);
+    z-index: 1001;
+}
+
 /* Базовые стили полей */
 .field {
     margin-bottom: 1.5rem;

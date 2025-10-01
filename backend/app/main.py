@@ -28,6 +28,7 @@ from app.frontend.api import websocket as frontend_websocket
 from app.frontend.main.api import pages as main_pages
 from app.frontend.chat.api import router as chat_router
 from app.frontend.chat.api import websocket as chat_websocket
+from app.frontend.builder.api import router as builder_router
 from app.middleware.auth import AuthMiddleware
 from app.services.cleanup_service import CleanupService
 
@@ -227,6 +228,7 @@ app.include_router(chat_router.router, prefix="/frontend/chat", tags=["chat"])
 app.include_router(
     chat_websocket.router, prefix="/frontend/chat", tags=["chat-websocket"]
 )
+app.include_router(builder_router.router, prefix="/frontend", tags=["builder"])
 
 # Статические файлы
 static_dir = Path(__file__).parent / "frontend" / "static"
