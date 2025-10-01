@@ -191,6 +191,13 @@ class FashnApp {
                 selectButtonAction = 'void(0)'; // Отключаем клик
             }
 
+            // Индикатор множественных изображений
+            const multipleImagesIndicator = (product.imageUrls && product.imageUrls.length > 1) ? 
+                `<div class="multiple-images-indicator">
+                    <i class="bi bi-images"></i>
+                    <span>${product.imageUrls.length}</span>
+                </div>` : '';
+
             return `
                 <div class="product-card ${isLoading ? 'loading' : ''} ${isError ? 'error' : ''}" data-category="${product.category}">
                     <div class="product-image-container">
@@ -200,6 +207,7 @@ class FashnApp {
                                 <i class="bi bi-heart"></i>
                             </button>
                         ` : ''}
+                        ${multipleImagesIndicator}
                     </div>
                     <div class="product-info">
                         <div class="product-brand">${product.brand}</div>
@@ -286,6 +294,7 @@ class FashnApp {
                 color: 'Unknown',
                 image: data.image_url || '/static/img/empty.png',
                 imageUrl: data.image_url || '/static/img/empty.png',
+                imageUrls: data.image_urls || [], // Все изображения товара
                 dimensions: {
                     length: data.dimensions?.length || 30,
                     height: data.dimensions?.height || 20,
@@ -529,8 +538,19 @@ class FashnApp {
                 product_height_cm: this.selectedProduct.dimensions.height || 0,
                 item_kind: document.getElementById('itemKind').value,
                 placement: document.getElementById('placement').value,
-                variations: 0
+                variations: 0,
+                engine: "nano_banana" // Используем nano_banana по умолчанию для лучшего качества
             };
+
+            // Добавляем дополнительные изображения товара если они есть
+            if (this.selectedProduct.imageUrls && this.selectedProduct.imageUrls.length > 1) {
+                // Исключаем основное изображение из дополнительных
+                const additionalImages = this.selectedProduct.imageUrls.filter(url => url !== this.selectedProduct.imageUrl);
+                if (additionalImages.length > 0) {
+                    requestData.product_image_urls = additionalImages.slice(0, 3); // Максимум 3 дополнительных
+                    console.log(`Отправляем ${additionalImages.length} дополнительных изображений товара`);
+                }
+            }
 
             // Вызываем API виртуальной примерки
             const response = await fetch('/api/v1/fashn/try-on', {

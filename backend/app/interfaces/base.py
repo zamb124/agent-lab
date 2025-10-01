@@ -139,25 +139,36 @@ class BaseInterface(ABC):
             logger.info(f"🔍 Текущий статус сессии: {session_config.status}")
 
             if session_config.status == SessionStatus.PROCESSING:
-                # Сессия уже обрабатывается - отправляем сообщение о занятости
-                logger.info(
-                    f"⏳ Сессия {message.session_id} уже в статусе PROCESSING - блокируем"
-                )
-                await self.send_busy_message(message.session_id, flow_id)
-                return None  # Не создаем задачу
+                # Ищем pending задачу для этой сессии
+                pending_task = await storage.find_pending_task(message.session_id, flow_id)
+                
+                if pending_task:
+                    # Приклеиваем сообщение к существующей pending задаче
+                    logger.info(f"🔄 Найдена pending задача {pending_task.task_id}, приклеиваем сообщение")
+                    
+                    old_message = pending_task.input_data.get("message", "")
+                    new_message = f"{old_message} | {message.content}"
+                    pending_task.input_data["message"] = new_message
+                    pending_task.input_data["message_count"] = pending_task.input_data.get("message_count", 1) + 1
+                    
+                    await storage.set_task_config(pending_task)
+                    logger.info(f"✅ Приклеили сообщение к задаче {pending_task.task_id}")
+                    return pending_task.task_id
+                else:
+                    # Нет pending задачи - создаем новую
+                    logger.info(f"🆕 Нет pending задачи, создаем новую для {message.session_id}")
             elif session_config.status == SessionStatus.WAITING_INPUT:
                 # Сессия ждет ответ на interrupt - это нормально, продолжаем
                 logger.info(
                     f"🔄 Сессия {message.session_id} в статусе WAITING_INPUT - принимаем ответ"
                 )
 
-            # Устанавливаем статус PROCESSING
-            session_config.status = SessionStatus.PROCESSING
+            # Обновляем только last_activity, статус не меняем если уже PROCESSING
+            if session_config.status != SessionStatus.PROCESSING:
+                session_config.status = SessionStatus.PROCESSING
+                logger.info(f"🔄 Сессия {message.session_id} переведена в статус PROCESSING")
             session_config.last_activity = datetime.now(timezone.utc)
             await storage.set(session_key, session_config.model_dump_json())
-            logger.info(
-                f"🔄 Сессия {message.session_id} переведена в статус PROCESSING"
-            )
         else:
             # Создаем новую сессию в БД
             logger.info(f"🆕 Создаем новую сессию в БД: {message.session_id}")

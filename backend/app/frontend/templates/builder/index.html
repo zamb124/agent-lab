@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block title %}Agent Builder{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', path='builder/css/builder.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="builder-container" id="builderContainer">
+    <!-- Боковая панель -->
+    <aside class="builder-sidebar" id="builderSidebar">
+        <div class="sidebar-header">
+            <h2>Builder</h2>
+            <button class="sidebar-toggle" id="sidebarToggle">
+                <i class="icon-chevron-left"></i>
+            </button>
+        </div>
+        
+        <div class="sidebar-tabs">
+            <button class="tab-button active" data-tab="flows">Flows</button>
+            <button class="tab-button" data-tab="agents">Agents</button>
+            <button class="tab-button" data-tab="tools">Tools</button>
+        </div>
+        
+        <div class="sidebar-search">
+            <input type="text" id="sidebarSearch" placeholder="Поиск..." class="search-input">
+        </div>
+        
+        <div class="sidebar-content">
+            <!-- Flows Tab -->
+            <div class="tab-content active" id="flowsTab">
+                <div class="tab-actions">
+                    <button class="btn btn-primary btn-sm" id="createFlowBtn">
+                        <i class="icon-plus"></i> Новый Flow
+                    </button>
+                </div>
+                <div class="items-list" id="flowsList">
+                    <!-- Flows будут загружены через HTMX -->
+                </div>
+            </div>
+            
+            <!-- Agents Tab -->
+            <div class="tab-content" id="agentsTab">
+                <div class="tab-actions">
+                    <button class="btn btn-primary btn-sm" id="createAgentBtn">
+                        <i class="icon-plus"></i> Новый Agent
+                    </button>
+                </div>
+                <div class="items-list" id="agentsList">
+                    <!-- Agents будут загружены через HTMX -->
+                </div>
+            </div>
+            
+            <!-- Tools Tab -->
+            <div class="tab-content" id="toolsTab">
+                <div class="items-list" id="toolsList">
+                    <!-- Tools будут загружены через HTMX -->
+                </div>
+            </div>
+        </div>
+    </aside>
+    
+    <!-- Основной канвас -->
+    <main class="builder-canvas" id="builderCanvas">
+        <div class="canvas-toolbar">
+            <div class="toolbar-left">
+                <button class="btn btn-secondary btn-sm" id="zoomInBtn">
+                    <i class="icon-zoom-in"></i>
+                </button>
+                <button class="btn btn-secondary btn-sm" id="zoomOutBtn">
+                    <i class="icon-zoom-out"></i>
+                </button>
+                <button class="btn btn-secondary btn-sm" id="fitToScreenBtn">
+                    <i class="icon-maximize"></i>
+                </button>
+            </div>
+            
+            <div class="toolbar-center">
+                <span class="current-flow-name" id="currentFlowName">Выберите или создайте Flow</span>
+            </div>
+            
+            <div class="toolbar-right">
+                <button class="btn btn-secondary btn-sm" id="themeToggleBtn" title="Переключить тему">
+                    <i class="icon-theme"></i>
+                </button>
+                <button class="btn btn-secondary btn-sm" id="clearCanvasBtn" title="Очистить канвас">
+                    <i class="icon-clear"></i>
+                </button>
+                <button class="btn btn-success btn-sm" id="saveFlowBtn" disabled>
+                    <i class="icon-save"></i> Сохранить
+                </button>
+                <button class="btn btn-primary btn-sm" id="runFlowBtn" disabled>
+                    <i class="icon-play"></i> Запустить
+                </button>
+            </div>
+        </div>
+        
+        <div class="canvas-container" id="canvasContainer">
+            <svg class="canvas-svg" id="canvasSvg">
+                <!-- Сетка -->
+                <defs>
+                    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                        <path d="M 20 0 L 0 0 0 20" fill="none" stroke="var(--border-color)" stroke-width="0.5" opacity="0.3"/>
+                    </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#grid)" />
+                
+                <!-- Группа для связей -->
+                <g class="edges-group" id="edgesGroup"></g>
+                
+                <!-- Группа для нод -->
+                <g class="nodes-group" id="nodesGroup"></g>
+            </svg>
+            
+            <!-- Overlay для HTML нод -->
+            <div class="canvas-overlay" id="canvasOverlay"></div>
+            
+            <!-- Индикатор зума -->
+            <div class="zoom-level">100%</div>
+        </div>
+    </main>
+</div>
+
+<!-- Модальные окна -->
+<div id="modalContainer"></div>
+
+<!-- Контекстное меню -->
+<div class="context-menu" id="contextMenu" style="display: none;">
+    <div class="context-menu-item" data-action="edit">
+        <i class="icon-edit"></i> Редактировать
+    </div>
+    <div class="context-menu-item" data-action="duplicate">
+        <i class="icon-copy"></i> Дублировать
+    </div>
+    <div class="context-menu-item" data-action="delete">
+        <i class="icon-trash"></i> Удалить
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', path='builder/js/builder.js') }}"></script>
+<script>
+    // Инициализация Builder после загрузки HTMX
+    function initBuilder() {
+        if (typeof htmx === 'undefined') {
+            // HTMX еще не загружен, ждем
+            setTimeout(initBuilder, 100);
+            return;
+        }
+        
+        window.builder = new Builder({
+            flowId: {{ flow_id | tojson if flow_id else 'null' }}
+        });
+        window.builder.init();
+    }
+    
+    document.addEventListener('DOMContentLoaded', initBuilder);
+</script>
+{% endblock %}

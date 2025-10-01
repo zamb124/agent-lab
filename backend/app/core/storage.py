@@ -210,13 +210,7 @@ class Storage:
         """Получает конфигурацию агента"""
         key = f"agent:{agent_id}"
         data = await self.get(key)
-        if data:
-            try:
-                return AgentConfig.model_validate_json(data)
-            except Exception as e:
-                logger.error(f"Ошибка парсинга конфигурации агента {agent_id}: {e}")
-                return None
-        return None
+        return AgentConfig.model_validate_json(data)
 
     async def set_agent_config(self, config: AgentConfig) -> bool:
         """Сохраняет конфигурацию агента"""
@@ -415,6 +409,29 @@ class Storage:
                 .where(StorageModel.value["session_id"].astext == session_id)
                 .where(StorageModel.value["flow_id"].astext == flow_id)
                 .limit(1)  # Берем только одну - самую свежую
+            )
+
+            row = result.fetchone()
+            if row:
+                task_data = row[1]
+                return TaskConfig(**task_data)
+
+            return None
+
+    async def find_pending_task(
+        self, session_id: str, flow_id: str
+    ) -> Optional[TaskConfig]:
+        """
+        Находит pending задачу для указанной сессии и флоу.
+        """
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(StorageModel.key, StorageModel.value)
+                .where(StorageModel.key.like("%task:%"))
+                .where(StorageModel.value["status"].astext == "pending")
+                .where(StorageModel.value["session_id"].astext == session_id)
+                .where(StorageModel.value["flow_id"].astext == flow_id)
+                .limit(1)
             )
 
             row = result.fetchone()

@@ -39,6 +39,26 @@ class AuthMiddleware(BaseHTTPMiddleware):
             or request.url.path.startswith("/favicon.ico")
         ):
             return await call_next(request)
+            
+        # Для скачивания файлов - создаем минимальный контекст с компанией из поддомена
+        if request.url.path.startswith("/api/v1/files/download/"):
+            try:
+                # Определяем компанию по Host
+                requested_company = await self._get_company_from_host(request)
+                
+                # Создаем минимальный анонимный контекст с этой компанией
+                context = await self._create_anonymous_context(request, requested_company)
+                set_context(context)
+                request.state.context = context
+                request.state.user = context.user
+                
+                logger.info(f"📂 Контекст для скачивания файла: компания {requested_company.company_id}")
+                
+            except Exception as e:
+                logger.error(f"❌ Не удалось создать контекст для скачивания файла: {e}")
+                raise HTTPException(status_code=500, detail="Ошибка определения компании")
+            
+            return await call_next(request)
 
         try:
             # Создаем контекст на основе типа запроса

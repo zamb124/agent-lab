@@ -4,6 +4,7 @@
 
 import logging
 import importlib
+import asyncio
 import json
 from langchain_core.tools import tool
 
@@ -31,13 +32,23 @@ class AgentFactory:
         Returns:
             Экземпляр агента
         """
+        logger.debug(f"🔥 ВЫЗВАН AgentFactory.get_agent для {agent_id}")
+        
         # Загружаем конфигурацию из БД
+        logger.debug(f"🔍 Ищем конфигурацию агента в БД: {agent_id}")
         config = await self.storage.get_agent_config(agent_id)
+        logger.debug(f"🔍 Результат поиска config: {config is not None}")
+        
         if not config:
+            logger.error(f"❌ Агент {agent_id} не найден в БД")
             raise ValueError(f"Агент {agent_id} не найден в БД")
+            
+        logger.debug(f"✅ Конфигурация агента {agent_id} загружена из БД")
 
         # Создаем экземпляр агента заново
+        logger.debug(f"🔥 Вызываем _create_agent_instance для {agent_id}")
         agent = await self._create_agent_instance(config)
+        logger.debug(f"✅ _create_agent_instance завершен для {agent_id}")
 
         logger.debug(f"Агент {agent_id} создан из БД")
         return agent
@@ -52,30 +63,26 @@ class AgentFactory:
         Returns:
             Экземпляр агента
         """
+        logger.debug(f"🔥 ВЫЗВАН _create_agent_instance для {config.agent_id}")
+        logger.debug(f"🔥 config.function_class = {config.function_class}")
+        
         if config.function_class:
             # Агент определен в коде, импортируем класс
-            try:
-                module_path, class_name = config.function_class.rsplit(".", 1)
-                module = importlib.import_module(module_path)
-                agent_class = getattr(module, class_name)
+            module_path, class_name = config.function_class.rsplit(".", 1)
+            module = importlib.import_module(module_path)
+            agent_class = getattr(module, class_name)
 
-                if not issubclass(agent_class, BaseAgent):
-                    raise ValueError(
-                        f"Класс {config.function_class} не наследуется от BaseAgent"
-                    )
-
-                agent = agent_class(config)
-
-                # ВАЖНО: Загружаем tools из БД даже для агентов из кода
-                await self._load_tools_from_db(agent, config)
-
-                return agent
-
-            except Exception as e:
-                logger.error(
-                    f"Ошибка импорта класса агента {config.function_class}: {e}"
+            if not issubclass(agent_class, BaseAgent):
+                raise ValueError(
+                    f"Класс {config.function_class} не наследуется от BaseAgent"
                 )
-                raise
+
+            agent = agent_class(config)
+
+            # ВАЖНО: Загружаем tools из БД даже для агентов из кода
+            await self._load_tools_from_db(agent, config)
+
+            return agent
         else:
             # Агент создан через UI, используем базовый класс
             agent = BaseAgent(config)
@@ -115,6 +122,7 @@ class AgentFactory:
 
     async def _create_tool_from_reference(self, tool_ref):
         """Создает tool из ToolReference"""
+        logger.debug(f"🔥 СОЗДАЕМ ТУЛ: {tool_ref.tool_id}, cost={tool_ref.cost}, billing_name={tool_ref.billing_name}")
 
         # Проверяем ссылку на tool в БД
         if tool_ref.tool_id.startswith("tool:"):
@@ -134,17 +142,54 @@ class AgentFactory:
             return await tool_factory._create_agent_tool(tool_ref)
 
         if tool_ref.code_mode == CodeMode.CODE_REFERENCE:
-            # Импортируем tool из кода
+            # Сначала проверяем есть ли тул в БД с метаданными биллинга
+            db_tool_data = await self.storage.get(f"tool:{tool_ref.tool_id}")
+            if db_tool_data:
+                logger.debug(f"🔥 Найден тул в БД: {tool_ref.tool_id}")
+                import json
+                db_tool_ref = ToolReference.model_validate(json.loads(db_tool_data))
+                logger.debug(f"🔥 БД тул cost={db_tool_ref.cost}, billing_name={db_tool_ref.billing_name}")
+                
+                # Импортируем функцию из кода
+                if db_tool_ref.function_path:
+                    module_path, func_name = db_tool_ref.function_path.rsplit(".", 1)
+                elif "." in db_tool_ref.tool_id:
+                    module_path, func_name = db_tool_ref.tool_id.rsplit(".", 1)
+                else:
+                    raise ValueError(f"Не удалось определить путь к функции: {db_tool_ref.tool_id}")
+                
+                # Принудительно перезагружаем модуль
+                logger.debug(f"🔥 Импортируем модуль: {module_path}")
+                module = importlib.import_module(module_path)
+                logger.debug(f"🔥 Модуль загружен: {module}")
+                importlib.reload(module)  # Перезагружаем для получения свежего кода
+                logger.debug(f"🔥 Модуль перезагружен")
+                tool_function = getattr(module, func_name)
+                logger.debug(f"🔥 Функция получена: {tool_function}")
+                logger.debug(f"🔥 Тип функции: {type(tool_function)}")
+                
+                # Проверяем тип функции перед обращением к __code__
+                if hasattr(tool_function, '__code__'):
+                    logger.debug(f"🔥 Загружена функция {func_name}: async={asyncio.iscoroutinefunction(tool_function)}")
+                    logger.debug(f"🔥 Исходный код функции: {tool_function.__code__.co_flags}")
+                else:
+                    logger.debug(f"🔥 Загружена функция {func_name}: это StructuredTool или другой объект без __code__")
+                
+                # Оборачиваем в биллинг если есть стоимость
+                if db_tool_ref.cost > 0 or db_tool_ref.free_for_plans:
+                    tool_factory = ToolFactory()
+                    return tool_factory._wrap_tool_with_billing(tool_function, db_tool_ref)
+                else:
+                    return tool_function
+            
+            # Фолбек на старую логику если тула нет в БД
             if tool_ref.function_path:
                 if "." in tool_ref.function_path:
                     module_path, func_name = tool_ref.function_path.rsplit(".", 1)
                     module = importlib.import_module(module_path)
                     return getattr(module, func_name)
                 else:
-                    # Простое имя функции без модуля
-                    raise ValueError(
-                        f"function_path должен содержать модуль: {tool_ref.function_path}"
-                    )
+                    raise ValueError(f"function_path должен содержать модуль: {tool_ref.function_path}")
             else:
                 # Fallback на tool_id
                 if "." in tool_ref.tool_id:
@@ -152,10 +197,7 @@ class AgentFactory:
                     module = importlib.import_module(module_path)
                     return getattr(module, func_name)
                 else:
-                    # Простой tool_id без модуля - это ошибка конфигурации
-                    raise ValueError(
-                        f"tool_id должен содержать полный путь к функции: {tool_ref.tool_id}"
-                    )
+                    raise ValueError(f"tool_id должен содержать полный путь к функции: {tool_ref.tool_id}")
 
         elif tool_ref.code_mode == CodeMode.INLINE_CODE:
             # Создаем tool из inline кода

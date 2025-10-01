@@ -456,10 +456,14 @@ class AudioProcessor:
         """
         audios = []
         
-        # Простой паттерн для ID аудиофайла (работает для всех случаев)
-        pattern = r"\[AUDIO\]([a-zA-Z0-9_]+)\[/AUDIO\]"
+        # Паттерн для полного формата: [AUDIO]...ID: audio_id...[/AUDIO]
+        full_pattern = r"\[AUDIO\].*?ID:\s*([a-zA-Z0-9_]+).*?\[/AUDIO\]"
         
-        for match in re.finditer(pattern, message):
+        # Паттерн для упрощенного формата: [AUDIO]audio_id[/AUDIO]
+        simple_pattern = r"\[AUDIO\]([a-zA-Z0-9_]+)\[/AUDIO\]"
+        
+        # Сначала ищем полный формат
+        for match in re.finditer(full_pattern, message, re.DOTALL):
             audio_id = match.group(1).strip()
             audio_info = {
                 "name": f"audio_{audio_id[:8]}.ogg",
@@ -469,6 +473,19 @@ class AudioProcessor:
                 "size": "unknown",
             }
             audios.append(audio_info)
+        
+        # Если не нашли полный формат, ищем упрощенный
+        if not audios:
+            for match in re.finditer(simple_pattern, message):
+                audio_id = match.group(1).strip()
+                audio_info = {
+                    "name": f"audio_{audio_id[:8]}.ogg",
+                    "audio_id": audio_id,
+                    "url": f"/api/v1/files/download/audio/{audio_id}",
+                    "content_type": "audio/ogg; codecs=opus",
+                    "size": "unknown",
+                }
+                audios.append(audio_info)
 
         return audios
 

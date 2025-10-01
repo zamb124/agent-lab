@@ -1,0 +1,128 @@
+/* Builder - главный файл стилей */
+@import url('../../css/variables.css');
+@import url('../../css/base.css');
+@import url('./canvas.css');
+@import url('./sidebar.css');
+@import url('./components.css');
+
+/* Основной контейнер Builder */
+.builder-container {
+    display: flex;
+    height: 100vh;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    overflow: hidden;
+}
+
+/* Общие стили для кнопок */
+.btn-icon {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.btn-icon:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+/* Иконки */
+.icon-plus::before { content: "➕"; }
+.icon-edit::before { content: "✏️"; }
+.icon-trash::before { content: "🗑️"; }
+.icon-save::before { content: "💾"; }
+.icon-play::before { content: "▶️"; }
+.icon-zoom-in::before { content: "🔍"; }
+.icon-zoom-out::before { content: "🔍"; }
+.icon-maximize::before { content: "⛶"; }
+.icon-chevron-left::before { content: "◀"; }
+.icon-chevron-right::before { content: "▶"; }
+.icon-flow::before { content: "🔄"; }
+.icon-brain::before { content: "🧠"; }
+.icon-network::before { content: "🕸️"; }
+.icon-tool::before { content: "🔧"; }
+.icon-code::before { content: "💻"; }
+.icon-circle::before { content: "⚪"; }
+.icon-user::before { content: "👤"; }
+.icon-calendar::before { content: "📅"; }
+.icon-type::before { content: "🏷️"; }
+.icon-tools::before { content: "🛠️"; }
+.icon-category::before { content: "📂"; }
+.icon-params::before { content: "⚙️"; }
+.icon-copy::before { content: "📋"; }
+.icon-message::before { content: "💬"; }
+.icon-theme::before { content: "🌓"; }
+.icon-clear::before { content: "🗑️"; }
+
+/* Контекстное меню */
+.context-menu {
+    position: fixed;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+    min-width: 150px;
+}
+
+.context-menu-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s ease;
+}
+
+.context-menu-item:hover {
+    background: var(--bg-tertiary);
+}
+
+.context-menu-item:first-child {
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.context-menu-item:last-child {
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+/* Анимации */
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideIn {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+}
+
+.fade-in {
+    animation: fadeIn 0.2s ease;
+}
+
+.slide-in {
+    animation: slideIn 0.3s ease;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .builder-sidebar {
+        position: absolute;
+        z-index: 100;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+    }
+    
+    .builder-sidebar.open {
+        transform: translateX(0);
+    }
+    
+    .builder-canvas {
+        width: 100%;
+    }
+}

@@ -3,3 +3,5 @@
 artifacts/*
 .env
 .venv
+/backend/app/custom_flows/fashn_buyer/add_token.py
+

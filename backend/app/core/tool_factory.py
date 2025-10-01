@@ -157,7 +157,13 @@ class ToolFactory:
         billing_name = tool_ref.billing_name or tool_ref.tool_id
         
         # Получаем оригинальную функцию
-        original_func = tool.func if hasattr(tool, 'func') else tool._func
+        if hasattr(tool, 'coroutine') and tool.coroutine:
+            # Асинхронная функция в StructuredTool
+            original_func = tool.coroutine
+        elif hasattr(tool, 'func'):
+            original_func = tool.func
+        else:
+            original_func = tool._func
         
         @functools.wraps(original_func)
         async def billing_wrapper(*args, **kwargs):
@@ -168,27 +174,19 @@ class ToolFactory:
                 kwargs
             )
         
-        @functools.wraps(original_func) 
-        def sync_billing_wrapper(*args, **kwargs):
-            # Для синхронных функций
-            try:
-                loop = asyncio.get_event_loop()
-                return loop.run_until_complete(self._handle_tool_billing(
-                    original_func, tool_ref, args, kwargs, sync=True
-                ))
-            except RuntimeError:
-                # Если нет event loop, выполняем без биллинга
-                logger.warning("Нет event loop для биллинга, выполняем без учета")
-                return original_func(*args, **kwargs)
-        
-        # Выбираем нужную обертку
+        # Проверяем, асинхронная ли функция
         if asyncio.iscoroutinefunction(original_func):
+            # Асинхронная функция - используем асинхронный биллинг
             wrapper = billing_wrapper
         else:
-            wrapper = sync_billing_wrapper
+            # Синхронная функция - пока что без биллинга (legacy)
+            logger.warning(f"⚠️ Тул {tool_ref.tool_id} синхронный - биллинг отключен. Сделайте функцию асинхронной!")
+            return tool
         
         # Заменяем функцию в инструменте
-        if hasattr(tool, 'func'):
+        if hasattr(tool, 'coroutine') and tool.coroutine:
+            tool.coroutine = wrapper
+        elif hasattr(tool, 'func'):
             tool.func = wrapper
         else:
             tool._func = wrapper
@@ -200,24 +198,24 @@ class ToolFactory:
         
         return tool
     
-    async def _handle_tool_billing(self, func, tool_ref: ToolReference, args, kwargs, sync=False):
+    async def _handle_tool_billing(self, func, tool_ref: ToolReference, args, kwargs):
         """Обрабатывает биллинг для инструмента"""
+        
+        logger.info(f"🔥 ВЫЗВАН _handle_tool_billing для {tool_ref.tool_id}")
+        logger.debug(f"🔥 tool_ref.billing_name = {tool_ref.billing_name}, cost = {tool_ref.cost}")
         
         context = get_context()
         
-        # Если нет контекста - выполняем без биллинга
         if not context or not context.user or not context.active_company:
-            if sync:
-                return func(*args, **kwargs)
-            else:
-                return await func(*args, **kwargs)
+            raise Exception("Нет контекста для биллинга тула")
         
         billing_service = BillingService()
         user = context.user
         company = context.active_company
-        billing_name = tool_ref.billing_name or tool_ref.tool_id
+        billing_name = f"tool:{tool_ref.billing_name or tool_ref.tool_id}"
         
         # Проверяем можно ли использовать ресурс
+        logger.debug(f"🔥 Проверяем доступ к ресурсу: {billing_name} для тарифа {company.tariff_plan}")
         can_use, reason = await billing_service.can_use_resource(user, company, billing_name)
         if not can_use:
             raise Exception(f"Доступ запрещен: {reason}")
@@ -225,30 +223,21 @@ class ToolFactory:
         # Проверяем бесплатные планы
         actual_cost = 0.0 if company.tariff_plan in tool_ref.free_for_plans else tool_ref.cost
         
-        # Выполняем функцию
-        try:
-            if sync:
-                result = func(*args, **kwargs)
-            else:
-                result = await func(*args, **kwargs)
-            
-            # Записываем использование
-            if actual_cost > 0 or tool_ref.tariff_limits:
-                await billing_service.record_usage(
-                    user=user,
-                    company=company,
-                    resource_name=billing_name,
-                    cost=actual_cost,
-                    usage_type=UsageType.TOOL_CALL,
-                    metadata={
-                        "tool_id": tool_ref.tool_id,
-                        "args_count": len(args),
-                        "kwargs_keys": list(kwargs.keys())
-                    }
-                )
-            
-            return result
-            
-        except Exception as e:
-            # Если функция упала, не списываем деньги
-            raise e
+        # Выполняем асинхронную функцию
+        result = await func(*args, **kwargs)
+        
+        # Записываем использование всегда для отслеживания
+        await billing_service.record_usage(
+            user=user,
+            company=company,
+            resource_name=billing_name,
+            cost=actual_cost,
+            usage_type=UsageType.TOOL_CALL,
+            metadata={
+                "tool_id": tool_ref.tool_id,
+                "args_count": len(args),
+                "kwargs_keys": list(kwargs.keys())
+            }
+        )
+        
+        return result
