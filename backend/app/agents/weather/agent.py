@@ -7,6 +7,7 @@ from app.tools.standard import ask_user
 from app.tools.weather_tools import suggest_travel, get_weather
 from app.tools.file_tools import read_file
 from app.tools.voice_tools import synthesize_speech
+from app.tools.nano_banana_tools import generate_images
 
 
 class TravelInfoAgent(BaseAgent):
@@ -15,7 +16,7 @@ class TravelInfoAgent(BaseAgent):
     name = "travel_info_agent"
     description = "Определяет куда пользователь хочет поехать в путешествие"
 
-    llm_config = {"provider": "openai", "model": "gpt-4", "temperature": 0.3}
+    llm_config = {"provider": "gemini", "model": "gemini-2.0-flash-exp", "temperature": 0.3}
 
     prompt = """
 Ты специалист по определению направлений путешествий.
@@ -41,7 +42,11 @@ class WeatherAgent(BaseAgent):
         "Помогает с выбором места для путешествий и получением информации о погоде"
     )
 
-    llm_config = {"provider": "openai", "model": "gpt-4", "temperature": 0.7}
+    llm_config = {
+        "provider": "openai", 
+        "model": "gpt-4o", 
+        "temperature": 0.3
+    }
 
     prompt = """
 Ты помощник по путешествиям и погоде с поддержкой аудио. 
@@ -66,6 +71,7 @@ class WeatherAgent(BaseAgent):
 - Если в сообщении есть блоки [AUDIO]...[/AUDIO], это означает что пользователь отправил аудио
 - Если передан файл ОБЯЗАТЕЛЬНО используй инструмент read_file для чтения файла
 - Если передано аудио, распознанный текст уже включен в сообщение в блоке [AUDIO]
+- Если хочешь дать юзеру файлы ТО обязательно отдавай полный url 
 
 Используй инструменты для получения информации.
 Будь дружелюбным и полезным.
@@ -78,4 +84,6 @@ class WeatherAgent(BaseAgent):
         read_file,
         synthesize_speech,  # Для ответа голосом
         "agent:app.agents.weather.agent.TravelInfoAgent",  # Ссылка на субагента
+        generate_images,
+
     ]

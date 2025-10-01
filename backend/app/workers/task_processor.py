@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from app.core.config import settings
 from app.core.storage import Storage
-from app.core.agent_factory import AgentFactory
+from app.core.container import get_container
 from app.models import TaskStatus, SessionConfig, SessionStatus
 from app.core.context import set_context, clear_context
 from app.db.database import create_tables
@@ -27,7 +27,8 @@ class TaskProcessor:
 
     def __init__(self):
         self.storage = Storage()
-        self.agent_factory = AgentFactory()
+        container = get_container()
+        self.agent_factory = container.get_agent_factory()
         self.running = False
 
     async def start(self):
@@ -96,9 +97,11 @@ class TaskProcessor:
                 raise ValueError(f"Flow {task.flow_id} не найден в БД")
 
             # Получаем entry point агента напрямую
+            logger.info(f"🔥 Получаем агента: {flow_config.entry_point_agent}")
             entry_agent = await self.agent_factory.get_agent(
                 flow_config.entry_point_agent
             )
+            logger.info(f"✅ Агент получен: {type(entry_agent)}")
 
             # Подготавливаем конфигурацию для выполнения
             # Используем session_id как thread_id для сохранения диалога между запросами
@@ -254,13 +257,34 @@ class TaskProcessor:
             await self._send_result_via_interface(task, str(interrupt.value))
 
         except Exception as e:
+            # Проверяем тип ошибки для пользовательского сообщения
+            error_message = str(e)
+            user_message = None
+            
+            if "запрещен" in error_message and ("лимит" in error_message or "бюджет" in error_message):
+                # Ошибка биллинга - отправляем понятное сообщение пользователю
+                user_message = "Прошу прощения, сейчас в сервисе технические проблемы связанные с биллингом. Попробуйте позже или обратитесь к администратору."
+            elif "недоступен на тарифе" in error_message:
+                # Ошибка тарифного плана
+                user_message = "Данная функция недоступна на вашем тарифном плане. Обратитесь к администратору для обновления тарифа."
+            
+            # Если есть сообщение для пользователя - отправляем его
+            if user_message:
+                try:
+                    await self._send_error_message_to_user(task, user_message)
+                except Exception as send_error:
+                    logger.error(f"❌ Не удалось отправить сообщение об ошибке: {send_error}")
+            
             # Сохраняем ошибку
             task.status = TaskStatus.FAILED
-            task.error_message = str(e)
+            task.error_message = error_message
             task.completed_at = datetime.now(timezone.utc)
 
             await self.storage.set_task_config(task)
             logger.error(f"❌ {task.task_id} ошибка: {e}")
+            logger.error(f"❌ {task.task_id} тип ошибки: {type(e)}")
+            import traceback
+            logger.error(f"❌ {task.task_id} traceback: {traceback.format_exc()}")
 
             # Возвращаем сессию в статус ACTIVE даже при ошибке
             await self._set_session_active(task.session_id, task.context.platform)
@@ -300,6 +324,31 @@ class TaskProcessor:
             logger.info(f"🔄 Сессия {session_id} переведена в WAITING_INPUT")
         else:
             logger.warning(f"Сессия {session_id} не найдена для перевода в WAITING_INPUT")
+
+    async def _send_error_message_to_user(self, task, error_message: str):
+        """Отправляет сообщение об ошибке пользователю"""
+        # Создаем интерфейс для платформы
+        factory = InterfaceFactory()
+        metadata = task.input_data.get("metadata", {})
+
+        interface = await factory.create_interface(task.platform, metadata)
+
+        if interface is None:
+            logger.warning(f"Не удалось создать интерфейс для отправки ошибки на платформу {task.platform}")
+            return
+
+        # Создаем сообщение об ошибке
+        error_response = Message(
+            user_id=task.user_id,
+            flow_id=task.flow_id,
+            session_id=task.session_id,
+            content=error_message,
+            platform=task.platform,
+            metadata=metadata,
+        )
+
+        await interface.send_message(error_response)
+        logger.info(f"📤 Отправлено сообщение об ошибке пользователю: {error_message[:50]}...")
 
     async def _send_result_via_interface(self, task, result):
         """Отправляет результат через соответствующий интерфейс платформы"""

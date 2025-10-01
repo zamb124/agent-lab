@@ -40,7 +40,7 @@ class APP {
             
             // Создаем глобальный API для чата
             this.chat = {
-                open: (options) => this.chatManager.open(options),
+                open: async (options) => await this.chatManager.open(options),
                 close: () => this.chatManager.closeChat(),
                 send: (message) => this.chatManager.sendUserMessage(message)
             };

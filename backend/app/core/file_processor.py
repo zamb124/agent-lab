@@ -118,6 +118,7 @@ class FileProcessor:
             uploaded_by=uploaded_by,
             metadata=metadata or {},
             tags=tags or [],
+            is_public=public,
         )
 
         # Сохраняем запись в БД
@@ -226,7 +227,7 @@ class FileProcessor:
             if data:
                 return FileRecord(**json.loads(data))
         else:
-            # Поиск по всем провайдерам (может быть медленно)
+            # Поиск по всем провайдерам
             for bucket_name, bucket_config in settings.s3.buckets.items():
                 if bucket_config.enabled:
                     key = f"s3:{bucket_config.provider}:{file_id}"

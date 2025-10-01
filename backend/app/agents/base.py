@@ -45,8 +45,14 @@ class BaseAgent(ABC):
         ЕДИНООБРАЗНО собирает инструменты ТОЛЬКО из БД по ссылкам в config.tools.
         Игнорирует tools из кода для единообразия.
         """
+        logger.debug(f"🔥 ВЫЗВАН get_tools для агента {self.config.agent_id}")
+        logger.debug(f"🔥 config.tools = {self.config.tools}")
+        logger.debug(f"🔥 len(config.tools) = {len(self.config.tools or [])}")
+        
         if not self.config.tools:
-            logger.info(f"🔧 Нет tools в config для агента {self.config.agent_id}")
+            logger.error(f"❌ Нет tools в config для агента {self.config.agent_id}")
+            logger.error(f"❌ config.tools = {self.config.tools}")
+            logger.error(f"❌ Агент не мигрирован или tools не настроены в БД")
             return []
 
         logger.info(
@@ -80,9 +86,7 @@ class BaseAgent(ABC):
         """
         Главный метод. Читает self.config и собирает граф заново каждый раз.
         """
-        logger.debug(
-            f"Компиляция графа для агента: {self.config.agent_id} (тип: {self.config.type})"
-        )
+        logger.info(f"🔥 ВЫЗВАН compile_graph для агента: {self.config.agent_id} (тип: {self.config.type})")
 
         if self.config.type == AgentType.STATEGRAPH:
             return await self._compile_stategraph()
@@ -93,6 +97,8 @@ class BaseAgent(ABC):
 
     async def _compile_react_graph(self) -> Runnable:
         """Собирает стандартный ReAct-граф"""
+        logger.info(f"🔥 ВЫЗВАН _compile_react_graph для агента: {self.config.agent_id}")
+        
         if not self.config.prompt:
             raise ValueError(f"ReAct агент {self.config.agent_id} требует prompt")
 
@@ -104,7 +110,6 @@ class BaseAgent(ABC):
                 llm_kwargs["temperature"] = self.config.llm_config.temperature
             if self.config.llm_config.max_tokens is not None:
                 llm_kwargs["max_tokens"] = self.config.llm_config.max_tokens
-
 
             llm = get_llm(
                 provider=self.config.llm_config.provider,
@@ -151,9 +156,7 @@ class BaseAgent(ABC):
         run_config = config or {}
 
         # Используем кэшированный граф или компилируем новый
-        if self._compiled_graph is None:
-            self._compiled_graph = await self.compile_graph()
-        graph = self._compiled_graph
+        graph = await self.compile_graph()
 
         # Добавляем thread_id только если не передан
         if "configurable" not in run_config:

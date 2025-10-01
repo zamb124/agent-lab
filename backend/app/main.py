@@ -28,6 +28,7 @@ from app.frontend.api import websocket as frontend_websocket
 from app.frontend.main.api import pages as main_pages
 from app.frontend.chat.api import router as chat_router
 from app.frontend.chat.api import websocket as chat_websocket
+from app.frontend.builder.api import router as builder_router
 from app.middleware.auth import AuthMiddleware
 from app.services.cleanup_service import CleanupService
 
@@ -55,7 +56,7 @@ class PrettyJSONFormatter(logging.Formatter):
                     json_str = json_match.group(0)
                     try:
                         json_obj = eval(json_str)  # Осторожно! Только для логов
-                        pretty_json = json.dumps(json_obj, indent=4, ensure_ascii=False)
+                        pretty_json = json.dumps(json_obj, indent=2, ensure_ascii=False)
                         msg = msg.replace(json_str, f"\n{pretty_json}")
                     except Exception:
                         pass
@@ -227,6 +228,7 @@ app.include_router(chat_router.router, prefix="/frontend/chat", tags=["chat"])
 app.include_router(
     chat_websocket.router, prefix="/frontend/chat", tags=["chat-websocket"]
 )
+app.include_router(builder_router.router, prefix="/frontend", tags=["builder"])
 
 # Статические файлы
 static_dir = Path(__file__).parent / "frontend" / "static"

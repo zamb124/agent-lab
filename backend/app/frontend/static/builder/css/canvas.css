@@ -1,0 +1,544 @@
+/* Канвас Builder */
+
+.builder-canvas {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-primary);
+    position: relative;
+}
+
+/* Панель инструментов канваса */
+.canvas-toolbar {
+    height: 50px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 16px;
+}
+
+.toolbar-left,
+.toolbar-right {
+    display: flex;
+    gap: 8px;
+}
+
+.toolbar-center {
+    flex: 1;
+    text-align: center;
+}
+
+.current-flow-name {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+/* Контейнер канваса */
+.canvas-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    cursor: grab;
+}
+
+.canvas-container.panning {
+    cursor: grabbing;
+}
+
+/* SVG канвас */
+.canvas-svg {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: all;
+}
+
+/* SVG группы */
+.edges-group {
+    pointer-events: all;
+}
+
+.nodes-group {
+    pointer-events: none;
+}
+
+/* Overlay для HTML элементов */
+.canvas-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    transform-origin: 0 0;
+}
+
+/* Ноды на канвасе */
+.canvas-node {
+    position: absolute;
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    cursor: pointer;
+    pointer-events: all;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    min-width: 300px;
+    min-height: 80px;
+    will-change: transform;
+    width: auto;
+    max-width: none;
+    overflow: visible;
+}
+
+/* Ноды с формами */
+.canvas-node .card {
+    background: transparent;
+    border: none;
+    margin: 0;
+    height: 100%;
+}
+
+.canvas-node .card-header {
+    padding: 8px 12px;
+    background: var(--bg-quaternary);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Скрываем ненужные элементы в формах на канвасе */
+.canvas-node .card-header .btn-group {
+    display: none;
+}
+
+.canvas-node .card-body .d-flex.gap-3.justify-content-end {
+    display: none;
+}
+
+.canvas-node .card-body .mt-4 {
+    margin-top: 0 !important;
+}
+
+.canvas-node .card-body {
+    padding: 12px;
+    max-height: 500px;
+    overflow-y: auto;
+    min-width: 350px;
+    width: max-content;
+    position: relative;
+}
+
+/* Индикатор прокрутки для выделенных карточек */
+.canvas-node.selected .card-body {
+    scrollbar-width: thin;
+    scrollbar-color: var(--accent-primary) var(--bg-tertiary);
+}
+
+.canvas-node.selected .card-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.canvas-node.selected .card-body::-webkit-scrollbar-track {
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+}
+
+.canvas-node.selected .card-body::-webkit-scrollbar-thumb {
+    background: var(--accent-primary);
+    border-radius: 3px;
+}
+
+.canvas-node.selected .card-body::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-primary-hover);
+}
+
+/* Адаптация форм для канваса */
+.canvas-node .form-control {
+    font-size: 13px;
+    padding: 6px 10px;
+}
+
+.canvas-node .field {
+    margin-bottom: 12px;
+}
+
+.canvas-node .field-label {
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.canvas-node .btn {
+    font-size: 12px;
+    padding: 4px 8px;
+}
+
+/* Загрузчик для нод */
+.node-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px;
+    color: var(--text-secondary);
+    height: 100%;
+}
+
+/* Ошибка загрузки ноды */
+.node-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px;
+    color: var(--accent-danger);
+    height: 100%;
+    text-align: center;
+}
+
+.node-error small {
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+/* Тул ноды */
+.tool-node-content {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.tool-info {
+    padding: 8px 12px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tool-category {
+    display: flex;
+    gap: 4px;
+}
+
+.tool-cost {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--accent-warning);
+}
+
+.tool-params {
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+.canvas-node:hover {
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-lg);
+}
+
+.canvas-node.selected {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px var(--accent-primary-alpha);
+}
+
+.canvas-node.dragging {
+    z-index: 100;
+    box-shadow: var(--shadow-xl);
+    transition: none;
+    cursor: grabbing;
+}
+
+/* Типы нод */
+.agent-node {
+    border-color: #3b82f6;
+}
+
+.tool-node {
+    border-color: #10b981;
+}
+
+.flow-node {
+    border-color: #8b5cf6;
+}
+
+.function-node {
+    border-color: #f59e0b;
+}
+
+/* Заголовок ноды */
+.node-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.node-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+}
+
+.node-title {
+    flex: 1;
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.2;
+}
+
+.node-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.canvas-node:hover .node-actions {
+    opacity: 1;
+}
+
+/* Описание ноды */
+.node-description {
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.3;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Порты ноды */
+.node-ports {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+
+.input-ports {
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.output-ports {
+    position: absolute;
+    right: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.port {
+    position: relative;
+    pointer-events: all;
+    cursor: crosshair;
+}
+
+.port-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.port:hover .port-dot {
+    border-color: var(--accent-primary);
+    background: var(--accent-primary);
+    transform: scale(1.2);
+}
+
+.port.connecting .port-dot {
+    border-color: var(--accent-primary);
+    background: var(--accent-primary);
+    box-shadow: 0 0 0 4px var(--accent-primary-alpha);
+}
+
+/* Статус ноды */
+.node-status {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 8px;
+    height: 8px;
+}
+
+.status-indicator {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: var(--text-secondary);
+    transition: all 0.2s ease;
+}
+
+.node-status[data-status="running"] .status-indicator {
+    background: #f59e0b;
+    animation: pulse 1s infinite;
+}
+
+.node-status[data-status="success"] .status-indicator {
+    background: #10b981;
+}
+
+.node-status[data-status="error"] .status-indicator {
+    background: #ef4444;
+}
+
+/* Связи между нодами */
+.edge {
+    fill: none;
+    stroke: var(--border-color);
+    stroke-width: 2;
+    transition: stroke 0.2s ease, stroke-width 0.2s ease;
+    cursor: pointer;
+}
+
+.canvas-container.dragging-node .edge {
+    transition: none;
+}
+
+.edge:hover {
+    stroke: var(--accent-primary);
+    stroke-width: 3;
+}
+
+.edge.selected {
+    stroke: var(--accent-primary);
+    stroke-width: 3;
+}
+
+/* Типы связей */
+.edge[data-type="tool_connection"] {
+    stroke: var(--accent-success);
+    stroke-dasharray: 5,3;
+}
+
+.edge[data-type="agent_connection"] {
+    stroke: var(--accent-secondary);
+    stroke-width: 3;
+}
+
+.edge[data-type="flow_connection"] {
+    stroke: var(--accent-primary);
+    stroke-width: 4;
+}
+
+.edge-label {
+    font-size: 12px;
+    fill: var(--text-secondary);
+    text-anchor: middle;
+    pointer-events: none;
+}
+
+/* Временная связь при создании */
+.temp-edge {
+    stroke: var(--accent-primary);
+    stroke-width: 2;
+    stroke-dasharray: 5,5;
+    animation: dash 1s linear infinite;
+}
+
+/* Анимации */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+@keyframes dash {
+    to { stroke-dashoffset: -10; }
+}
+
+/* Зум и панорамирование */
+.canvas-zoom-controls {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 4px;
+}
+
+.zoom-level {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 4px 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+/* Drag & Drop */
+.drop-zone {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--accent-primary-alpha);
+    border: 2px dashed var(--accent-primary);
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--accent-primary);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.drop-zone.active {
+    opacity: 1;
+}
+
+/* Выделение области */
+.selection-box {
+    position: absolute;
+    border: 1px dashed var(--accent-primary);
+    background: var(--accent-primary-alpha);
+    pointer-events: none;
+    z-index: 50;
+}
+
+/* Drag ghost */
+.drag-ghost {
+    box-shadow: var(--shadow-xl);
+    border: 2px solid var(--accent-primary);
+    transform: rotate(5deg) scale(0.9);
+    transition: none;
+}
+
+.drop-zone-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-size: 18px;
+    font-weight: 500;
+}

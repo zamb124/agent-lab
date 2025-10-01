@@ -22,13 +22,6 @@ async def download_file(file_id: str):
     Скачивание файла через платформу с проверкой доступа
     """
     try:
-        # Получаем текущего пользователя из контекста
-        context = get_context()
-        if not context:
-            raise HTTPException(status_code=401, detail="Нет контекста пользователя")
-
-        current_user = context.user
-
         # Получаем информацию о файле
         file_processor = await get_default_file_processor()
         file_record = await file_processor.get_file_record(file_id)
@@ -36,14 +29,24 @@ async def download_file(file_id: str):
         if not file_record:
             raise HTTPException(status_code=404, detail="Файл не найден")
 
-        # Проверяем права доступа (пока простая проверка)
-        # TODO: Добавить более сложную логику проверки прав
-        if file_record.uploaded_by and file_record.uploaded_by != current_user.user_id:
-            # Разрешаем доступ к файлам загруженным в чате
-            if not file_record.metadata.get(
-                "web_upload"
-            ) and not file_record.metadata.get("telegram_upload"):
-                raise HTTPException(status_code=403, detail="Нет доступа к файлу")
+        # Проверяем является ли файл публичным
+        is_public_file = file_record.is_public
+
+        if not is_public_file:
+            # Для приватных файлов требуем авторизацию
+            context = get_context()
+            if not context:
+                raise HTTPException(status_code=401, detail="Нет контекста пользователя")
+
+            current_user = context.user
+
+            # Проверяем права доступа
+            if file_record.uploaded_by and file_record.uploaded_by != current_user.user_id:
+                # Разрешаем доступ к файлам загруженным в чате
+                if not file_record.metadata.get(
+                    "web_upload"
+                ) and not file_record.metadata.get("telegram_upload"):
+                    raise HTTPException(status_code=403, detail="Нет доступа к файлу")
 
         # Получаем прямую ссылку на S3 для стриминга
         s3_url = file_record.direct_s3_url

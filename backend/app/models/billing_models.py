@@ -51,66 +51,114 @@ class UsageRecord(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-# Глобальные тарифные лимиты (можно вынести в конфиг)
+# Глобальные тарифные лимиты по провайдерам
 TARIFF_LIMITS = {
     TariffPlan.FREE: {
-        # LLM лимиты (по запросам)
-        "openai_gpt_4": 0,              # FREE не может использовать GPT-4
-        "openai_gpt_3_5_turbo": 100,    # 100 запросов в месяц
-        "yandex_yandexgpt_latest": 50,  # 50 запросов к YandexGPT
-        "anthropic_claude_3_sonnet": 0, # Claude недоступен на FREE
+        # OpenAI
+        "openai": {
+            "gpt-4": 0,              # Недоступно
+            "gpt-4o": 0,             # Недоступно  
+            "gpt-3.5-turbo": 100,    # 100 запросов в месяц
+        },
+        # Gemini
+        "gemini": {
+            "gemini-2.0-flash-exp": 20,      # 20 запросов
+            "gemini-2.5-pro": 0,             # Недоступно
+            "gemini-1.5-flash": 50,          # 50 запросов
+            "gemini-1.5-pro": 0,             # Недоступно
+        },
+        # Yandex
+        "yandex": {
+            "yandexgpt/latest": 50,          # 50 запросов
+        },
+        # Anthropic
+        "anthropic": {
+            "claude-3-sonnet": 0,            # Недоступно
+        },
         
         # Инструменты
-        "weather_api": 50,       # 50 запросов к погоде
-        "travel_suggest": 20,    # 20 предложений путешествий
-        "calculator": -1,        # -1 = без лимитов
+        "tools": {
+            "weather_api": 50,
+            "travel_suggest": 20,
+            "calculator": -1,
+            "nano_banana_generation": 5,
+            "fashn_buyer_agent": -1,
+        },
         
         # Ресурсы платформы
-        "max_agents": 3,         # максимум 3 агента
-        "max_flows": 2,          # максимум 2 флоу
+        "platform": {
+            "max_agents": 3,
+            "max_flows": 2,
+        }
     },
     TariffPlan.BASIC: {
-        # LLM лимиты
-        "openai_gpt_4": 10,             # 10 запросов GPT-4 в месяц
-        "openai_gpt_3_5_turbo": 1000,   # 1000 запросов GPT-3.5
-        "yandex_yandexgpt_latest": 500, # 500 запросов к YandexGPT
-        "anthropic_claude_3_sonnet": 50, # 50 запросов к Claude
-        
-        # Инструменты
-        "weather_api": 500,      
-        "travel_suggest": 200,
-        "calculator": -1,
-        
-        # Ресурсы платформы
-        "max_agents": 10,
-        "max_flows": 5,
+        "openai": {
+            "gpt-4": 10,
+            "gpt-4o": 5,
+            "gpt-3.5-turbo": 1000,
+        },
+        "gemini": {
+            "gemini-2.0-flash-exp": 200,
+            "gemini-2.5-pro": 50,
+            "gemini-1.5-flash": 500,
+            "gemini-1.5-pro": 100,
+        },
+        "yandex": {
+            "yandexgpt/latest": 500,
+        },
+        "anthropic": {
+            "claude-3-sonnet": 50,
+        },
+        "tools": {
+            "weather_api": 500,
+            "travel_suggest": 200,
+            "calculator": -1,
+            "nano_banana_generation": 50,
+            "fashn_buyer_agent": -1,
+        },
+        "platform": {
+            "max_agents": 10,
+            "max_flows": 5,
+        }
     },
     TariffPlan.PREMIUM: {
-        # LLM лимиты
-        "openai_gpt_4": 100,
-        "openai_gpt_3_5_turbo": 10000,
-        "yandex_yandexgpt_latest": 5000,
-        "anthropic_claude_3_sonnet": 500,
-        
-        # Инструменты
-        "weather_api": -1,       # без лимитов
-        "travel_suggest": -1,
-        "calculator": -1,
-        
-        # Ресурсы платформы
-        "max_agents": 50,
-        "max_flows": 20,
+        "openai": {
+            "gpt-4": 100,
+            "gpt-4o": -1,            # Без лимитов для premium
+            "gpt-4o-mini": -1,       # Без лимитов для premium
+            "gpt-3.5-turbo": -1,
+        },
+        "gemini": {
+            "gemini-2.0-flash-exp": -1,
+            "gemini-2.5-pro": -1,
+            "gemini-1.5-flash": -1,
+            "gemini-1.5-pro": -1,
+        },
+        "yandex": {
+            "yandexgpt/latest": -1,
+        },
+        "anthropic": {
+            "claude-3-sonnet": -1,
+        },
+        "tools": {
+            "weather_api": -1,
+            "travel_suggest": -1,
+            "calculator": -1,
+            "nano_banana_generation": -1,
+            "fashn_buyer_agent": -1,
+        },
+        "platform": {
+            "max_agents": 50,
+            "max_flows": 20,
+        }
     },
     TariffPlan.ENTERPRISE: {
         # Все без лимитов
-        "openai_gpt_4": -1,
-        "openai_gpt_3_5_turbo": -1,
-        "yandex_yandexgpt_latest": -1,
-        "anthropic_claude_3_sonnet": -1,
-        "weather_api": -1,
-        "travel_suggest": -1,
-        "calculator": -1,
-        "max_agents": -1,
-        "max_flows": -1,
+        "openai": {"*": -1},
+        "gemini": {"*": -1},
+        "yandex": {"*": -1},
+        "anthropic": {"*": -1},
+        "tools": {"*": -1},
+        "platform": {"*": -1},
     }
 }

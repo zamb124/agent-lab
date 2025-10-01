@@ -7,7 +7,7 @@ import random
 
 
 @tool(cost=0.002, billing_name="travel_suggest")
-def suggest_travel(preferences: str = "") -> str:
+async def suggest_travel(preferences: str = "") -> str:
     """
     Предложить место для путешествия.
 
@@ -32,7 +32,7 @@ def suggest_travel(preferences: str = "") -> str:
 
 
 @tool(cost=0.001, billing_name="weather_api")
-def get_weather(city: str) -> str:
+async def get_weather(city: str) -> str:
     """
     Получить погоду в городе.
 

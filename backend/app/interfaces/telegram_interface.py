@@ -4,7 +4,10 @@ Telegram Interface - простой адаптер для Telegram Bot API.
 """
 
 import logging
+import asyncio
+import re
 from typing import Dict, Any, Optional, List
+from datetime import datetime
 import httpx
 import json
 from app.interfaces.base import BaseInterface, Message
@@ -36,10 +39,21 @@ class TelegramInterface(BaseInterface):
             tg_message = raw_data["message"]
             user_id = str(tg_message["from"]["id"])
             chat_id = str(tg_message["chat"]["id"])
-            text = tg_message.get("text", "")
+            text = tg_message.get("text", "") or tg_message.get("caption", "")
 
             # Обрабатываем файлы если есть
             files_data = await self._extract_files_from_message(tg_message)
+
+            # Проверяем на media_group_id для группировки фотографий
+            media_group_id = tg_message.get("media_group_id")
+            logger.info(f"🔍 DEBUG: media_group_id={media_group_id}, files_data={len(files_data) if files_data else 0}")
+            
+            if media_group_id and files_data:
+                # Это часть группы медиафайлов - накапливаем
+                logger.info(f"🎯 Обнаружена медиа-группа {media_group_id}, перенаправляем в группировку")
+                return await self._handle_media_group(
+                    media_group_id, tg_message, user_id, chat_id, text, files_data, flow_id
+                )
 
             # Если нет текста и нет файлов - пропускаем
             if not text and not files_data:
@@ -144,10 +158,13 @@ class TelegramInterface(BaseInterface):
 
     async def _send_text_message(self, chat_id: str, text: str):
         """Отправляет текстовое сообщение"""
+        # Конвертируем Markdown в HTML
+        html_text = self._convert_markdown_to_html(text)
+        
         url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
         payload = {
             "chat_id": chat_id,
-            "text": text,
+            "text": html_text,
             "parse_mode": "HTML",
         }
 
@@ -530,3 +547,158 @@ class TelegramInterface(BaseInterface):
         else:
             logger.error(f"❌ Не найден токен в БД: {token_key}")
             return None
+
+    async def _handle_media_group(
+        self, media_group_id: str, tg_message: Dict[str, Any], 
+        user_id: str, chat_id: str, text: str, files_data: List[Dict], flow_id: str
+    ) -> Optional[Message]:
+        """Обрабатывает группу медиафайлов с задержкой для накопления"""
+        
+        storage = Storage()
+        media_group_key = f"media_group:{media_group_id}"
+        
+        # Получаем существующую группу или создаем новую
+        existing_group_data = await storage.get(media_group_key)
+        if existing_group_data:
+            group_data = json.loads(existing_group_data)
+        else:
+            group_data = {
+                "messages": [],
+                "user_id": user_id,
+                "chat_id": chat_id,
+                "flow_id": flow_id,
+                "created_at": datetime.now().isoformat()
+            }
+        
+        # Добавляем текущее сообщение
+        group_data["messages"].append({
+            "tg_message": tg_message,
+            "text": text,
+            "files_data": files_data,
+            "added_at": datetime.now().isoformat()
+        })
+        
+        # Сохраняем в Storage с TTL 10 секунд
+        await storage.set(media_group_key, json.dumps(group_data), ttl=10)
+        
+        logger.info(f"🔄 Добавлено сообщение в медиа-группу {media_group_id}, всего: {len(group_data['messages'])}")
+        
+        # Запускаем асинхронную обработку с задержкой
+        asyncio.create_task(self._process_media_group_after_delay(media_group_id))
+        
+        # Возвращаем None - сообщение будет обработано позже
+        return None
+    
+    async def _process_media_group_after_delay(self, media_group_id: str):
+        """Обрабатывает накопленную медиа-группу после задержки"""
+        await asyncio.sleep(2.0)  # Ждем 2 секунды
+        
+        storage = Storage()
+        media_group_key = f"media_group:{media_group_id}"
+        processing_key = f"media_group_processing:{media_group_id}"
+        
+        # Проверяем что группа еще не обрабатывается
+        already_processing = await storage.get(processing_key)
+        if already_processing:
+            logger.info(f"⏭️ Медиа-группа {media_group_id} уже обрабатывается, пропускаем")
+            return
+            
+        # Устанавливаем флаг обработки
+        await storage.set(processing_key, json.dumps({"status": "processing", "timestamp": datetime.now().isoformat()}), ttl=30)
+        
+        # Получаем группу из Storage
+        group_data_json = await storage.get(media_group_key)
+        if not group_data_json:
+            logger.warning(f"⚠️ Медиа-группа {media_group_id} не найдена в Storage")
+            await storage.delete(processing_key)
+            return
+            
+        group_data = json.loads(group_data_json)
+        messages = group_data["messages"]
+        user_id = group_data["user_id"]
+        chat_id = group_data["chat_id"]
+        flow_id = group_data["flow_id"]
+        
+        # Удаляем группу из Storage
+        await storage.delete(media_group_key)
+        await storage.delete(processing_key)
+        
+        logger.info(f"📸 Обрабатываем медиа-группу {media_group_id} с {len(messages)} файлами")
+        
+        # Объединяем все файлы и текст
+        all_files_data = []
+        all_text_parts = []
+        
+        for i, msg_data in enumerate(messages):
+            logger.info(f"🔍 Сообщение {i+1}: text='{msg_data.get('text', '')}', files={len(msg_data.get('files_data', []))}")
+            if msg_data["files_data"]:
+                all_files_data.extend(msg_data["files_data"])
+            if msg_data["text"]:
+                all_text_parts.append(msg_data["text"])
+        
+        logger.info(f"🔍 Итого: текстов={len(all_text_parts)}, файлов={len(all_files_data)}")
+        logger.info(f"🔍 Тексты: {all_text_parts}")
+        
+        # Получаем сессию
+        session_id = await self.get_or_create_session(
+            user_id=chat_id,
+            flow_id=flow_id,
+            metadata={"chat_id": chat_id, "bot_username": self.username},
+        )
+        
+        # Обрабатываем все файлы
+        processed_files = []
+        if all_files_data:
+            file_messages = await self.process_files(all_files_data, user_id)
+            processed_files = file_messages
+            
+        # Формируем итоговый текст
+        combined_text = " ".join(all_text_parts) if all_text_parts else ""
+        if processed_files:
+            files_text = "\n\n".join(processed_files)
+            if combined_text:
+                combined_text = f"{combined_text}\n\n{files_text}"
+            else:
+                combined_text = files_text
+        
+        # Создаем объединенное сообщение
+        combined_message = Message(
+            user_id=user_id,
+            session_id=session_id,
+            flow_id=flow_id,
+            content=combined_text,
+            platform="telegram",
+            metadata={
+                "chat_id": chat_id,
+                "message_id": messages[0]["tg_message"]["message_id"],  # ID первого сообщения
+                "bot_username": self.username,
+                "media_group_id": media_group_id,
+                "files_count": len(all_files_data)
+            },
+            files=processed_files,
+        )
+        
+        # Создаем задачу через BaseInterface
+        task_id = await self.create_task(combined_message, flow_id)
+        if task_id:
+            logger.info(f"📋 Создана задача {task_id} для медиа-группы {media_group_id} с {len(all_files_data)} файлами")
+        else:
+            logger.warning(f"⏳ Задача не создана для медиа-группы {media_group_id}")
+        
+        return combined_message
+
+    def _convert_markdown_to_html(self, text: str) -> str:
+        """Конвертирует простой Markdown в HTML для Telegram"""
+        # Заменяем [текст](url) на <a href="url">текст</a>
+        text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', text)
+        
+        # Заменяем **жирный** на <b>жирный</b>
+        text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+        
+        # Заменяем *курсив* на <i>курсив</i> (только одиночные звездочки)
+        text = re.sub(r'(?<!\*)\*(?!\*)([^*]+)\*(?!\*)', r'<i>\1</i>', text)
+        
+        # Заменяем _подчеркнутый_ на <u>подчеркнутый</u>
+        text = re.sub(r'_(.*?)_', r'<u>\1</u>', text)
+        
+        return text

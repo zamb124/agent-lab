@@ -71,16 +71,14 @@ def get_llm(
             llm = _create_yandex_llm(provider_config, final_model)
         elif provider_name == "ollama":
             llm = _create_ollama_llm(provider_config, final_model)
+        elif provider_name == "gemini":
+            llm = _create_gemini_llm(provider_config, final_model, **kwargs)
         elif provider_name == "mock":
             llm = _create_mock_llm(provider_config, final_model)
         else:
             raise ValueError(f"Неподдерживаемый провайдер LLM: {provider_name}")
         
-        # Оборачиваем в биллинг (кроме mock)
-        if provider_name != "mock":
-            from .llm_billing_wrapper import LLMBillingWrapper
-            llm = LLMBillingWrapper(llm, provider_name, final_model)
-        
+        logger.debug(f"🔥 Возвращаем LLM: {type(llm)} для {provider_name}:{final_model}")
         return llm
 
     except Exception as e:
@@ -106,12 +104,13 @@ def _create_openai_llm(
             # Используем openai_api_key вместо api_key для совместимости с LangChain
             kwargs["openai_api_key"] = provider_config.api_key
         if provider_config.base_url:
-            kwargs["base_url"] = provider_config.base_url
+            kwargs["openai_api_base"] = provider_config.base_url
 
         # Добавляем специфичные настройки модели из глобальной конфигурации
-        model_config = provider_config.models.get(model, {})
-        if "max_tokens" in model_config:
-            kwargs["max_tokens"] = model_config["max_tokens"]
+        if hasattr(provider_config.models, 'get'):
+            model_config = provider_config.models.get(model, {})
+            if "max_tokens" in model_config:
+                kwargs["max_tokens"] = model_config["max_tokens"]
 
         # Переопределяем параметрами от агента (но НЕ api_key и base_url!)
         for key, value in agent_kwargs.items():
@@ -121,7 +120,8 @@ def _create_openai_llm(
             ]:  # Эти параметры ВСЕГДА из глобальной конфигурации
                 kwargs[key] = value
 
-        return ChatOpenAI(**kwargs)
+        from .llm_billing_wrapper import ChatOpenAIWithBilling
+        return ChatOpenAIWithBilling(provider="openai", **kwargs)
 
     except ImportError:
         raise ImportError(
@@ -174,15 +174,16 @@ def _create_ollama_llm(provider_config: LLMProviderConfig, model: str) -> BaseLL
         kwargs = {
             "model": model,
             "temperature": provider_config.default_temperature,
-            "base_url": provider_config.base_url,
+            "openai_api_base": provider_config.base_url,
         }
 
         # Добавляем специфичные настройки модели
-        model_config = provider_config.models.get(model, {})
-        if "max_tokens" in model_config:
-            kwargs["num_predict"] = model_config[
-                "max_tokens"
-            ]  # Ollama использует num_predict
+        if hasattr(provider_config.models, 'get'):
+            model_config = provider_config.models.get(model, {})
+            if "max_tokens" in model_config:
+                kwargs["num_predict"] = model_config[
+                    "max_tokens"
+                ]  # Ollama использует num_predict
 
         return Ollama(**kwargs)
 
@@ -290,6 +291,38 @@ def _create_mock_llm(provider_config: LLMProviderConfig, model: str) -> BaseLLM:
     _global_mock_llm = mock_instance
 
     return mock_instance
+
+
+def _create_gemini_llm(
+    provider_config: LLMProviderConfig, model: str, **agent_kwargs
+) -> BaseLLM:
+    """Создает Gemini LLM через нативный Google SDK"""
+    try:
+        from app.llms.gemini_chat import GeminiChatModel
+        
+        kwargs = {
+            "model_name": model,
+            "api_key": provider_config.api_key,
+            "temperature": provider_config.default_temperature,
+        }
+
+        # Добавляем специфичные настройки модели
+        if hasattr(provider_config.models, 'get'):
+            model_config = provider_config.models.get(model, {})
+            if "max_tokens" in model_config:
+                kwargs["max_tokens"] = model_config["max_tokens"]
+
+        # Переопределяем параметрами от агента
+        for key, value in agent_kwargs.items():
+            if key not in ["api_key"]:
+                kwargs[key] = value
+
+        return GeminiChatModel(**kwargs)
+
+    except ImportError:
+        raise ImportError(
+            "Для использования Gemini установите: pip install google-generativeai"
+        )
 
 
 def get_global_mock_llm():

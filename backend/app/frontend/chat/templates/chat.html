@@ -55,9 +55,9 @@
     document.addEventListener('DOMContentLoaded', () => {
         // Привязываем события к агентам
         document.querySelectorAll('.agent-item').forEach(item => {
-            item.addEventListener('click', () => {
+            item.addEventListener('click', async () => {
                 const agentId = item.dataset.agentId;
-                window.app.chat.open({agent_id: agentId});
+                await window.app.chat.open({agent_id: agentId});
             });
         });
     });

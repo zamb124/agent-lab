@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 
 import app.agents
 import app.flows
+import app.custom_flows
 
 from app.core.storage import Storage
 from app.models import (
@@ -89,14 +90,24 @@ class Migrator:
         # Устанавливаем контекст системной компании для миграции
         await self._set_system_context()
 
-        # Сканируем папку tools
-        tools_package = "app.tools"
-        tool_functions = await self._find_tool_functions(tools_package)
+        # Список пакетов для сканирования
+        packages_to_scan = ["app.tools"]
+        
+        # Добавляем custom_flows для поиска кастомных инструментов
+        packages_to_scan.append("app.custom_flows")
 
-        logger.info(f"Найдено {len(tool_functions)} tool функций для миграции")
+        all_tool_functions = []
+        
+        # Сканируем все пакеты
+        for package_name in packages_to_scan:
+            tool_functions = await self._find_tool_functions(package_name)
+            all_tool_functions.extend(tool_functions)
+            logger.info(f"Найдено {len(tool_functions)} tool функций в {package_name}")
+
+        logger.info(f"Всего найдено {len(all_tool_functions)} tool функций для миграции")
 
         migrated_count = 0
-        for tool_obj, module_name in tool_functions:
+        for tool_obj, module_name in all_tool_functions:
             logger.info(f"Мигрируем tool: {tool_obj.name} из {module_name}")
             tool_ref = await self._create_tool_reference_from_function(
                 tool_obj, module_name
@@ -121,14 +132,10 @@ class Migrator:
 
         migrated_count = 0
         for agent_class in agent_classes:
-            try:
-                config = await self._create_agent_config_from_class(agent_class)
-                await self.storage.set_agent_config(config)
-                logger.info(f"Агент {config.agent_id} успешно мигрирован в системную компанию")
-                migrated_count += 1
-            except Exception as e:
-                logger.error(f"Ошибка миграции агента {agent_class.__name__}: {e}")
-                continue
+            config = await self._create_agent_config_from_class(agent_class)
+            await self.storage.set_agent_config(config)
+            logger.info(f"Агент {config.agent_id} успешно мигрирован в системную компанию")
+            migrated_count += 1
 
         logger.info(f"Мигрировано агентов: {migrated_count}")
 
@@ -144,20 +151,16 @@ class Migrator:
 
         migrated_count = 0
         for config in flow_configs:
-            try:
-                # Обновляем метаданные
-                config.source = "migration"
-                now = datetime.now(timezone.utc)
-                config.updated_at = now
-                if not config.created_at:
-                    config.created_at = now
+            # Обновляем метаданные
+            config.source = "migration"
+            now = datetime.now(timezone.utc)
+            config.updated_at = now
+            if not config.created_at:
+                config.created_at = now
 
-                await self.storage.set_flow_config(config)
-                logger.info(f"Флоу {config.flow_id} успешно мигрирован в системную компанию")
-                migrated_count += 1
-            except Exception as e:
-                logger.error(f"Ошибка миграции флоу {config.flow_id}: {e}")
-                continue
+            await self.storage.set_flow_config(config)
+            logger.info(f"Флоу {config.flow_id} успешно мигрирован в системную компанию")
+            migrated_count += 1
 
         logger.info(f"Мигрировано флоу: {migrated_count}")
 
@@ -199,56 +202,39 @@ class Migrator:
         modules_to_scan = []
 
         # 1. Сканируем app.agents
-        try:
-            modules_to_scan.append(app.agents)
-        except ImportError:
-            logger.warning("Модуль app.agents не найден")
+        modules_to_scan.append(app.agents)
 
         # 2. Сканируем app.flows (для StateGraph агентов)
-        try:
-            modules_to_scan.append(app.flows)
-        except ImportError:
-            logger.warning("Модуль app.flows не найден")
+        modules_to_scan.append(app.flows)
+
+        # 3. Сканируем app.custom_flows (для кастомных агентов)
+        modules_to_scan.append(app.custom_flows)
 
         # Обходим все найденные модули
         for base_module in modules_to_scan:
-            try:
-                # Рекурсивно обходим все подмодули
-                for importer, modname, ispkg in pkgutil.walk_packages(
-                    base_module.__path__, base_module.__name__ + "."
-                ):
-                    try:
-                        module = importlib.import_module(modname)
+            # Рекурсивно обходим все подмодули
+            for importer, modname, ispkg in pkgutil.walk_packages(
+                base_module.__path__, base_module.__name__ + "."
+            ):
+                module = importlib.import_module(modname)
 
-                        # Ищем классы-наследники BaseAgent
-                        for name, obj in inspect.getmembers(module, inspect.isclass):
-                            if (
-                                issubclass(obj, BaseAgent)
-                                and obj != BaseAgent
-                                and obj.__module__ == modname
-                            ):
-                                agent_classes.append(obj)
-                                logger.info(f"✅ Найден класс агента: {modname}.{name}")
-                            elif issubclass(obj, BaseAgent):
-                                logger.debug(
-                                    f"🔍 Пропущен класс BaseAgent: {modname}.{name}"
-                                )
-                            elif obj.__module__ != modname:
-                                logger.debug(
-                                    f"🔍 Пропущен класс из другого модуля: {modname}.{name} (модуль: {obj.__module__})"
-                                )
-
-                    except Exception as e:
-                        logger.warning(
-                            f"Не удалось импортировать модуль {modname}: {e}"
+                # Ищем классы-наследники BaseAgent
+                for name, obj in inspect.getmembers(module, inspect.isclass):
+                    if (
+                        issubclass(obj, BaseAgent)
+                        and obj != BaseAgent
+                        and obj.__module__ == modname
+                    ):
+                        agent_classes.append(obj)
+                        logger.info(f"✅ Найден класс агента: {modname}.{name}")
+                    elif issubclass(obj, BaseAgent):
+                        logger.debug(
+                            f"🔍 Пропущен класс BaseAgent: {modname}.{name}"
                         )
-                        continue
-
-            except Exception as e:
-                logger.warning(
-                    f"Ошибка сканирования модуля {base_module.__name__}: {e}"
-                )
-                continue
+                    elif obj.__module__ != modname:
+                        logger.debug(
+                            f"🔍 Пропущен класс из другого модуля: {modname}.{name} (модуль: {obj.__module__})"
+                        )
 
         return agent_classes
 
@@ -256,45 +242,45 @@ class Migrator:
         """Находит все FlowConfig объекты в коде"""
         flow_configs = []
 
-        try:
-            # Импортируем модуль flows
+        # Список модулей для сканирования
+        modules_to_scan = []
+        
+        # 1. Сканируем app.flows
+        modules_to_scan.append(app.flows)
 
+        # 2. Сканируем app.custom_flows
+        modules_to_scan.append(app.custom_flows)
+
+        # Обходим все модули
+        for base_module in modules_to_scan:
             # Рекурсивно обходим все подмодули
             for importer, modname, ispkg in pkgutil.walk_packages(
-                app.flows.__path__, app.flows.__name__ + "."
+                base_module.__path__, base_module.__name__ + "."
             ):
-                try:
-                    module = importlib.import_module(modname)
+                module = importlib.import_module(modname)
 
-                    # Ищем объекты типа FlowConfig
-                    for name, obj in inspect.getmembers(module):
-                        if isinstance(obj, FlowConfig):
-                            # Создаем новый FlowConfig с правильным flow_id (путь к переменной)
-                            new_flow_id = f"{modname}.{name}"
-                            
-                            # Создаем новый объект с обновленным flow_id
-                            new_config = FlowConfig(
-                                flow_id=new_flow_id,
-                                name=obj.name,
-                                description=obj.description,
-                                entry_point_agent=obj.entry_point_agent,
-                                platforms=obj.platforms,
-                                timeout=obj.timeout,
-                                max_retries=obj.max_retries,
-                                source=obj.source,
-                                created_at=obj.created_at,
-                                updated_at=obj.updated_at
-                            )
-                            
-                            flow_configs.append(new_config)
-                            logger.debug(f"Найден FlowConfig: {modname}.{name} -> {new_flow_id}")
-
-                except Exception as e:
-                    logger.warning(f"Не удалось импортировать модуль {modname}: {e}")
-                    continue
-
-        except ImportError:
-            logger.warning("Модуль app.flows не найден")
+                # Ищем объекты типа FlowConfig
+                for name, obj in inspect.getmembers(module):
+                    if isinstance(obj, FlowConfig):
+                        # Создаем новый FlowConfig с правильным flow_id (путь к переменной)
+                        new_flow_id = f"{modname}.{name}"
+                        
+                        # Создаем новый объект с обновленным flow_id
+                        new_config = FlowConfig(
+                            flow_id=new_flow_id,
+                            name=obj.name,
+                            description=obj.description,
+                            entry_point_agent=obj.entry_point_agent,
+                            platforms=obj.platforms,
+                            timeout=obj.timeout,
+                            max_retries=obj.max_retries,
+                            source=obj.source,
+                            created_at=obj.created_at,
+                            updated_at=obj.updated_at
+                        )
+                        
+                        flow_configs.append(new_config)
+                        logger.info(f"✅ Найден FlowConfig: {modname}.{name} -> {new_flow_id}")
 
         return flow_configs
 
@@ -706,35 +692,23 @@ class Migrator:
             return False
 
     async def _find_tool_functions(self, package_name: str):
-        """Находит все @tool функции в пакете"""
+        """Находит все @tool функции в пакете (рекурсивно)"""
         tool_functions = []
 
         logger.info(f"🔧 Сканируем пакет: {package_name}")
 
         package = importlib.import_module(package_name)
-        package_path = Path(package.__file__).parent
-
-        logger.info(f"🔧 Путь к пакету: {package_path}")
-
-        # Сканируем все .py файлы в пакете
-        py_files = list(package_path.glob("*.py"))
-        logger.info(f"🔧 Найдено {len(py_files)} .py файлов")
-
-        for py_file in py_files:
-            logger.info(f"🔧 Проверяем файл: {py_file.name}")
-
-            if py_file.name.startswith("__"):
-                logger.info(f"🔧 Пропускаем {py_file.name} (служебный)")
-                continue
-
-            module_name = f"{package_name}.{py_file.stem}"
-            logger.info(f"🔧 Загружаем модуль: {module_name}")
-
-            module = importlib.import_module(module_name)
+        
+        # Используем pkgutil для рекурсивного обхода всех подмодулей
+        for importer, modname, ispkg in pkgutil.walk_packages(
+            package.__path__, package.__name__ + "."
+        ):
+            logger.info(f"🔧 Загружаем модуль: {modname}")
+            module = importlib.import_module(modname)
 
             # Ищем StructuredTool объекты (результат @tool декоратора)
             all_members = inspect.getmembers(module)
-            logger.info(f"🔧 Найдено {len(all_members)} объектов в {module_name}")
+            logger.info(f"🔧 Найдено {len(all_members)} объектов в {modname}")
 
             for name, obj in all_members:
                 # Пропускаем служебные объекты
@@ -762,7 +736,7 @@ class Migrator:
                     logger.info(
                         f"🔧 ✅ Найден @tool ({tool_type}): {name} (tool.name={obj.name})"
                     )
-                    tool_functions.append((obj, module_name))
+                    tool_functions.append((obj, modname))
                 else:
                     logger.info(f"🔧 ❌ НЕ @tool: {name}")
 

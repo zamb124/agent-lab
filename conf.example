@@ -1,0 +1,222 @@
+{
+  "server": {
+    "env": "local",
+    "port": 8001,
+    "debug": true,
+    "domain": "localhost"
+  },
+  "auth": {
+    "enabled": true,
+    "secret_key": "your-secret-key-here",
+    "session_timeout": 7200,
+    "providers": {
+      "yandex": {
+        "client_id": "your-yandex-oauth-client-id",
+        "client_secret": "your-yandex-oauth-client-secret",
+        "auth_url": "https://oauth.yandex.ru/authorize",
+        "token_url": "https://oauth.yandex.ru/token",
+        "userinfo_url": "https://login.yandex.ru/info",
+        "scope": "login:email login:avatar",
+        "enabled": true
+      }
+    }
+  },
+  "database": {
+    "url": "postgresql+asyncpg://username:password@host:port/database_name",
+    "checkpointer_url": "postgresql://username:password@host:port/database_name"
+  },
+  "llm": {
+    "default_provider": "mock",
+    "providers": {
+      "openai": {
+        "api_key": "sk-your-openai-api-key-here",
+        "base_url": "https://api.openai.com/v1",
+        "default_model": "gpt-4",
+        "default_temperature": 0.2,
+        "timeout": 30,
+        "max_retries": 3,
+        "enabled": false,
+        "models": {
+          "gpt-4": {
+            "max_tokens": 4000,
+            "cost_per_token": 0.00003
+          },
+          "gpt-4o": {
+            "max_tokens": 4000,
+            "cost_per_token": 0.000015
+          },
+          "gpt-3.5-turbo": {
+            "max_tokens": 4000,
+            "cost_per_token": 0.000002
+          }
+        }
+      },
+      "anthropic": {
+        "api_key": "your-anthropic-api-key-here",
+        "base_url": "https://api.anthropic.com",
+        "default_model": "claude-3-sonnet-20240229",
+        "default_temperature": 0.2,
+        "timeout": 30,
+        "max_retries": 3,
+        "enabled": false,
+        "models": {
+          "claude-3-sonnet-20240229": {
+            "max_tokens": 4000,
+            "cost_per_token": 0.000015
+          }
+        }
+      },
+      "yandex": {
+        "api_key": "your-yandex-gpt-api-key-here",
+        "base_url": "https://llm.api.cloud.yandex.net",
+        "default_model": "yandexgpt/latest",
+        "default_temperature": 0.2,
+        "timeout": 30,
+        "max_retries": 3,
+        "enabled": false,
+        "models": {
+          "yandexgpt/latest": {
+            "max_tokens": 8000,
+            "cost_per_token": 0.000001
+          }
+        }
+      },
+      "ollama": {
+        "api_key": null,
+        "base_url": "http://localhost:11434",
+        "default_model": "llama2",
+        "default_temperature": 0.2,
+        "timeout": 60,
+        "max_retries": 2,
+        "enabled": false,
+        "models": {
+          "llama2": {
+            "max_tokens": 4000,
+            "cost_per_token": 0.0
+          },
+          "codellama": {
+            "max_tokens": 4000,
+            "cost_per_token": 0.0
+          }
+        }
+      },
+      "gemini": {
+        "api_key": "your-gemini-api-key-here",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "default_model": "gemini-2.0-flash-exp",
+        "default_temperature": 0.2,
+        "timeout": 30,
+        "max_retries": 3,
+        "enabled": false,
+        "models": {
+          "gemini-2.0-flash-exp": {
+            "max_tokens": 8192,
+            "cost_per_token": 0.0001
+          },
+          "gemini-2.5-pro": {
+            "max_tokens": 2000000,
+            "cost_per_token": 0.0002
+          },
+          "gemini-1.5-flash": {
+            "max_tokens": 1000000,
+            "cost_per_token": 0.000015
+          },
+          "gemini-1.5-pro": {
+            "max_tokens": 2000000,
+            "cost_per_token": 0.00015
+          },
+          "gemini-2.5-flash-image-preview": {
+            "max_tokens": 8192,
+            "cost_per_token": 0.0001
+          }
+        }
+      },
+      "mock": {
+        "api_key": null,
+        "base_url": null,
+        "default_model": "mock-gpt",
+        "default_temperature": 0.2,
+        "timeout": 30,
+        "max_retries": 3,
+        "enabled": true,
+        "models": {
+          "mock-gpt": {
+            "max_tokens": 4000,
+            "cost_per_token": 0.0
+          }
+        }
+      }
+    }
+  },
+  "worker": {
+    "max_workers": 6,
+    "task_poll_interval": 3
+  },
+  "s3": {
+    "enabled": false,
+    "default_bucket": "your-default-bucket-name",
+    "buckets": {
+      "yandex-bucket": {
+        "provider": "yandex",
+        "access_key_id": "your-yandex-access-key-id",
+        "secret_access_key": "your-yandex-secret-access-key",
+        "region_name": "ru-central1",
+        "endpoint_url": "https://storage.yandexcloud.net",
+        "enabled": false
+      },
+      "aws-bucket": {
+        "provider": "aws",
+        "access_key_id": "your-aws-access-key-id",
+        "secret_access_key": "your-aws-secret-access-key",
+        "region_name": "us-west-2",
+        "endpoint_url": null,
+        "enabled": false
+      },
+      "minio-local": {
+        "provider": "minio",
+        "access_key_id": "minioadmin",
+        "secret_access_key": "minioadmin",
+        "region_name": "us-east-1",
+        "endpoint_url": "http://localhost:9000",
+        "enabled": false
+      },
+      "vkcloud-bucket": {
+        "provider": "vkcloud",
+        "access_key_id": "your-vkcloud-access-key-id",
+        "secret_access_key": "your-vkcloud-secret-access-key",
+        "region_name": "ru-msk",
+        "endpoint_url": "https://hb.ru-msk.vkcloud-storage.ru",
+        "enabled": false
+      }
+    }
+  },
+  "fashn": {
+    "enabled": false,
+    "api_key": "your-fashn-api-key-here",
+    "base_url": "https://api.fashn.ai/v1",
+    "timeout": 60,
+    "poll_interval": 5.0,
+    "poll_timeout": 180
+  },
+  "cloud_voice": {
+    "enabled": false,
+    "secret_key": "your-cloud-voice-secret-key",
+    "client_id": "your-cloud-voice-client-id",
+    "auth_url": "https://mcs.mail.ru/auth/oauth/v1/token",
+    "asr_url": "https://voice.mcs.mail.ru/asr",
+    "tts_url": "https://voice.mcs.mail.ru/tts",
+    "timeout": 30
+  },
+  "telegram": {
+    "enabled": false,
+    "bots": {
+      "your_bot_name": "your-telegram-bot-token-here"
+    }
+  },
+  "nano_banana": {
+    "enabled": false,
+    "api_key": "your-nano-banana-api-key-here",
+    "model_name": "gemini-2.5-flash-image-preview",
+    "timeout": 60
+  }
+}

@@ -164,9 +164,9 @@
 
 <script>
 // Функция для открытия чата с погодным агентом
-function openWeatherChat() {
+async function openWeatherChat() {
     if (window.app && window.app.chat) {
-        window.app.chat.open({
+        await window.app.chat.open({
             agent_id: "app.flows.weather_flow.weather_flow_config",
             initial_message: "/clear"  // Сначала очищаем контекст
         });
@@ -177,9 +177,9 @@ function openWeatherChat() {
 }
 
 // Функция для открытия чата с калькулятором
-function openCalculatorChat() {
+async function openCalculatorChat() {
     if (window.app && window.app.chat) {
-        window.app.chat.open({
+        await window.app.chat.open({
             agent_id: "app.flows.smart_flow.smart_flow_config",
             initial_message: "Привет! Помоги мне с вычислениями"
         });
@@ -190,9 +190,9 @@ function openCalculatorChat() {
 }
 
 // Функция для открытия чата с объяснителем  
-function openExplainerChat() {
+async function openExplainerChat() {
     if (window.app && window.app.chat) {
-        window.app.chat.open({
+        await window.app.chat.open({
             agent_id: "app.flows.test_flow.test_flow_config",
             initial_message: "Привет! Объясни мне что-нибудь"
         });
