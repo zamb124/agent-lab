@@ -417,8 +417,8 @@ class Builder {
     async showFlowEditor(flow = null) {
         try {
             const url = flow 
-                ? `/frontend/builder/flows/${flow.flow_id}/edit`
-                : '/frontend/builder/flows/new';
+                ? `/frontend/models/flow/${flow.flow_id}?view=form`
+                : '/frontend/models/flow/new?view=form';
                 
             const response = await fetch(url);
             if (!response.ok) {
@@ -427,8 +427,21 @@ class Builder {
             
             const html = await response.text();
             
+            // Добавляем затемнение фона и кнопку закрытия поверх формы
+            const modalHtml = `
+                <div class="modal show" style="display: flex !important;">
+                    <div class="modal-backdrop show"></div>
+                    <div class="modal-form-wrapper">
+                        <button type="button" class="modal-close-btn" data-bs-dismiss="modal">
+                            <i class="bi bi-x"></i>
+                        </button>
+                        ${html}
+                    </div>
+                </div>
+            `;
+            
             // Показываем модальное окно
-            this.showModal(html);
+            this.showModal(modalHtml);
             
         } catch (error) {
             console.error('Ошибка показа редактора флоу:', error);
@@ -648,22 +661,54 @@ class Builder {
         
         modalContainer.innerHTML = html;
         
+        // Настраиваем форму для работы в модальном окне
+        const form = modalContainer.querySelector('form');
+        if (form) {
+            // Убираем target и добавляем обработчик успешного сохранения
+            form.removeAttribute('hx-target');
+            form.setAttribute('hx-swap', 'none');
+            
+            // Обработчик успешного сохранения
+            form.addEventListener('htmx:afterRequest', (event) => {
+                if (event.detail.successful) {
+                    this.showNotification('Изменения сохранены', 'success');
+                    // Перезагружаем список в сайдбаре
+                    if (this.sidebar) {
+                        this.sidebar.loadFlows();
+                    }
+                }
+            });
+        }
+        
+        // Инициализируем HTMX для модального окна
+        if (typeof htmx !== 'undefined') {
+            htmx.process(modalContainer);
+        }
+        
         const modal = modalContainer.querySelector('.modal');
         if (modal) {
             modal.classList.add('show');
             
             // Обработчик закрытия
-            const closeBtn = modal.querySelector('.btn-close, [data-bs-dismiss="modal"]');
+            const closeBtn = modal.querySelector('.btn-close, .modal-close-btn, [data-bs-dismiss="modal"]');
             if (closeBtn) {
                 closeBtn.onclick = () => this.hideModal();
             }
             
-            // Закрытие по клику вне модального окна
-            modal.onclick = (e) => {
-                if (e.target === modal) {
+            // Закрытие по клику на backdrop
+            const backdrop = modal.querySelector('.modal-backdrop');
+            if (backdrop) {
+                backdrop.onclick = () => this.hideModal();
+            }
+            
+            // Закрытие по Escape
+            const escapeHandler = (e) => {
+                if (e.key === 'Escape') {
                     this.hideModal();
+                    document.removeEventListener('keydown', escapeHandler);
                 }
             };
+            document.addEventListener('keydown', escapeHandler);
         }
     }
     

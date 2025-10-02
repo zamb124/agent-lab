@@ -269,9 +269,12 @@ async def update_model(
             # Если BaseModel поле и строка - парсим JSON
             try:
                 if isinstance(field_value, str):
-                    # Пустая строка для datetime полей = None
-                    if field_value == "" and annotation in [datetime, Optional[datetime]]:
-                        existing_model_data[field_name] = None
+                    # Пустая строка = None для Optional полей
+                    if field_value == "":
+                        # Для datetime, int, float полей пустая строка = None
+                        if annotation in [datetime, Optional[datetime], int, Optional[int], float, Optional[float]]:
+                            existing_model_data[field_name] = None
+                            continue
                     # Пустая строка или JSON для dict
                     elif field_value == "{}" or (get_origin(annotation) is dict or annotation is dict):
                         if field_value:

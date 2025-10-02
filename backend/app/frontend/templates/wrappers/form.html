@@ -18,41 +18,36 @@
                     <small class="text-muted">{{ model_type.title() if model_type else 'Редактирование' }}</small>
                 </div>
             </div>
-            <div class="btn-group">
-                <button class="btn btn-secondary btn-sm active">
-                    <i class="bi bi-pencil"></i>
-                    Форма
-                </button>
-                <button class="btn btn-ghost btn-sm" 
-                        hx-get="/frontend/models/{{ model_type }}?view=table" 
-                        hx-target="#content"
-                        hx-push-url="true"
-                        hx-indicator="#content-loading">
-                    <i class="bi bi-table"></i>
-                    Таблица
-                </button>
-            </div>
+        
         </div>
     </div>
     <div class="card-body">
-        <form hx-ext="json-enc" 
-              hx-post="/frontend/models/{{ model_type }}" 
-              hx-target="#content"
-              hx-indicator="#content-loading">
+        <div id="form-fields">
             {{ fields_html|safe }}
-            
-            <div class="d-flex gap-3 justify-content-end mt-4">
-                <button type="button" class="btn btn-secondary" 
-                        hx-get="/frontend/models/{{ model_type }}?view=table" 
-                        hx-target="#content">
-                    <i class="bi bi-x"></i>
-                    Отмена
-                </button>
-                <button type="submit" class="btn btn-primary">
-                    <i class="bi bi-check"></i>
-                    Сохранить
-                </button>
-            </div>
-        </form>
+        </div>
+        
+        <!-- Пустой контейнер для HTMX ответа -->
+        <div id="save-response" style="display: none;"></div>
+        
+        <div class="d-flex gap-3 justify-content-end mt-4">
+            <button type="button" class="btn btn-secondary" onclick="window.builder?.hideModal()">
+                <i class="bi bi-x"></i>
+                Отмена
+            </button>
+            <button type="button" class="btn btn-primary"
+                    hx-ext="json-enc"
+                    {% if model_id and model_id != 'new' %}
+                    hx-put="/frontend/models/{{ model_type }}/{{ model_id }}"
+                    {% else %}
+                    hx-post="/frontend/models/{{ model_type }}"
+                    {% endif %}
+                    hx-include="#form-fields"
+                    hx-target="#save-response"
+                    hx-swap="innerHTML"
+                    hx-on::after-request="if(event.detail.successful) { alert('✅ Сохранено!'); window.builder?.sidebar?.loadFlows(); }">
+                <i class="bi bi-check"></i>
+                Сохранить
+            </button>
+        </div>
     </div>
 </div>

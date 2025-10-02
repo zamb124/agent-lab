@@ -497,6 +497,11 @@ class BuilderSidebar {
                         <i class="bi bi-wrench"></i>
                     </div>
                     <div class="card-title">${tool.name}</div>
+                    <div class="card-actions">
+                        <button class="btn-icon" data-action="edit" title="Редактировать">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                    </div>
                 </div>
                 
                 ${tool.description ? `<div class="card-description">${tool.description}</div>` : ''}
@@ -599,8 +604,49 @@ class BuilderSidebar {
      */
     setupToolHandlers(container) {
         container.querySelectorAll('.tool-card').forEach(card => {
-            // Drag & Drop будет обрабатываться в BuilderDragDrop
+            // Кнопка редактирования
+            const editBtn = card.querySelector('[data-action="edit"]');
+            if (editBtn) {
+                editBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const toolId = card.dataset.toolId;
+                    this.editTool(toolId);
+                });
+            }
         });
+    }
+    
+    /**
+     * Редактирование инструмента
+     */
+    async editTool(toolId) {
+        try {
+            const response = await fetch(`/frontend/models/tool/${toolId}?view=form`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const html = await response.text();
+            
+            // Оборачиваем в модальное окно
+            const modalHtml = `
+                <div class="modal show" style="display: flex !important;">
+                    <div class="modal-backdrop show"></div>
+                    <div class="modal-form-wrapper">
+                        <button type="button" class="modal-close-btn" data-bs-dismiss="modal">
+                            <i class="bi bi-x"></i>
+                        </button>
+                        ${html}
+                    </div>
+                </div>
+            `;
+            
+            this.builder.showModal(modalHtml);
+            
+        } catch (error) {
+            console.error('Ошибка показа редактора инструмента:', error);
+            this.builder.showNotification('Ошибка показа редактора: ' + error.message, 'error');
+        }
     }
     
     /**
@@ -840,9 +886,34 @@ class BuilderSidebar {
     /**
      * Редактирование агента
      */
-    editAgent(agentId) {
-        console.log('Редактирование агента:', agentId);
-        // TODO: Реализовать редактирование агента
+    async editAgent(agentId) {
+        try {
+            const response = await fetch(`/frontend/models/agent/${agentId}?view=form`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const html = await response.text();
+            
+            // Оборачиваем в модальное окно
+            const modalHtml = `
+                <div class="modal show" style="display: flex !important;">
+                    <div class="modal-backdrop show"></div>
+                    <div class="modal-form-wrapper">
+                        <button type="button" class="modal-close-btn" data-bs-dismiss="modal">
+                            <i class="bi bi-x"></i>
+                        </button>
+                        ${html}
+                    </div>
+                </div>
+            `;
+            
+            this.builder.showModal(modalHtml);
+            
+        } catch (error) {
+            console.error('Ошибка показа редактора агента:', error);
+            this.builder.showNotification('Ошибка показа редактора: ' + error.message, 'error');
+        }
     }
     
     /**
