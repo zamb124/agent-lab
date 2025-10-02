@@ -593,19 +593,34 @@ class BuilderCanvas {
                 </div>
             `;
         } else if (nodeType === 'agent_node') {
-            // Agent: оба порта (может принимать и отдавать)
-            portsHTML = `
-                <div class="input-ports">
-                    <div class="port input-port" data-port-type="input" data-port-id="input">
-                        <div class="port-dot"></div>
+            // Проверяем тип агента из данных ноды
+            const node = this.nodes.get(element.dataset.nodeId);
+            const agentType = node?.data?.params?.type;
+            
+            if (agentType === 'stategraph') {
+                // StateGraph: только входной порт (законченный граф)
+                portsHTML = `
+                    <div class="input-ports">
+                        <div class="port input-port" data-port-type="input" data-port-id="input">
+                            <div class="port-dot"></div>
+                        </div>
                     </div>
-                </div>
-                <div class="output-ports">
-                    <div class="port output-port" data-port-type="output" data-port-id="output">
-                        <div class="port-dot"></div>
+                `;
+            } else {
+                // ReAct Agent: оба порта (может принимать и отдавать)
+                portsHTML = `
+                    <div class="input-ports">
+                        <div class="port input-port" data-port-type="input" data-port-id="input">
+                            <div class="port-dot"></div>
+                        </div>
                     </div>
-                </div>
-            `;
+                    <div class="output-ports">
+                        <div class="port output-port" data-port-type="output" data-port-id="output">
+                            <div class="port-dot"></div>
+                        </div>
+                    </div>
+                `;
+            }
         }
         
         portsContainer.innerHTML = portsHTML;
@@ -1297,16 +1312,38 @@ class BuilderCanvas {
     }
     
     /**
-     * Удаление ноды
+     * Получение дочерних нод (зависимых элементов)
      */
-    removeNode(nodeId) {
+    getChildNodes(nodeId) {
+        const children = [];
+        this.edges.forEach(edge => {
+            if (edge.data.source === nodeId) {
+                children.push(edge.data.target);
+            }
+        });
+        return children;
+    }
+    
+    /**
+     * Удаление ноды с каскадным удалением зависимых элементов
+     */
+    removeNode(nodeId, cascadeDelete = true) {
         const node = this.nodes.get(nodeId);
         if (!node) return;
+        
+        // Если каскадное удаление включено, удаляем все зависимые элементы справа
+        if (cascadeDelete) {
+            const childNodes = this.getChildNodes(nodeId);
+            childNodes.forEach(childId => {
+                // Рекурсивно удаляем дочерние ноды
+                this.removeNode(childId, true);
+            });
+        }
         
         // Удаляем все связи с этой нодой
         const edgesToRemove = [];
         this.edges.forEach(edge => {
-            if (edge.source === nodeId || edge.target === nodeId) {
+            if (edge.data.source === nodeId || edge.data.target === nodeId) {
                 edgesToRemove.push(edge.id);
             }
         });

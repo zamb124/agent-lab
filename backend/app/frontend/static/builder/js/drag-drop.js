@@ -535,6 +535,8 @@ class BuilderDragDrop {
             // Если у флоу есть entry_point_agent, начинаем рекурсивное разворачивание
             if (fullFlowData.entry_point_agent) {
                 const layoutManager = new FlowLayoutManager();
+                layoutManager.setBuilder(this.builder);
+                console.log('🔧 FlowLayoutManager создан с builder:', !!this.builder, 'canvas:', !!this.builder?.canvas);
                 
                 // Проверяем, есть ли сохраненные позиции на канвасе
                 let shouldUseSavedPositions = false;
@@ -765,8 +767,8 @@ class BuilderDragDrop {
                 ui: {
                     x: finalPosition.x,
                     y: finalPosition.y,
-                    width: 180,
-                    height: 80
+                    width: 450,  // Увеличили до реального размера с формой
+                    height: 600  // Увеличили до реального размера с формой
                 }
             };
             
@@ -809,6 +811,8 @@ class BuilderDragDrop {
             // Разворачиваем тулы и субагенты
             if (agentData.tools && agentData.tools.length > 0) {
                 const layoutManager = new FlowLayoutManager();
+                layoutManager.setBuilder(this.builder);
+                console.log('🔧 FlowLayoutManager создан с builder:', !!this.builder, 'canvas:', !!this.builder?.canvas);
                 
                 for (let i = 0; i < agentData.tools.length; i++) {
                     const toolRef = agentData.tools[i];
@@ -870,34 +874,123 @@ class FlowLayoutManager {
     }
     
     /**
+     * Установить ссылку на builder для доступа к canvas
+     */
+    setBuilder(builder) {
+        this.builder = builder;
+    }
+    
+    /**
+     * Проверка пересечения с существующими нодами
+     */
+    checkCollision(x, y, width = 380, height = 600) { // Увеличили высоту до реальной
+        if (!this.builder || !this.builder.canvas || !this.builder.canvas.nodes) {
+            console.warn('⚠️ checkCollision: нет доступа к canvas');
+            return false;
+        }
+        
+        const canvas = this.builder.canvas;
+        
+        const margin = 30; // Увеличили минимальный отступ
+        console.log(`🔍 Проверяем пересечение для (${x}, ${y}) размер ${width}x${height} с ${canvas.nodes.size} нодами`);
+        
+        for (const node of canvas.nodes.values()) {
+            const nodeWidth = node.width || 380;
+            const nodeHeight = node.height || 600; // Используем реальную высоту карточек
+            
+            // Проверяем пересечение прямоугольников с учетом margin
+            const collision = x < node.x + nodeWidth + margin &&
+                             x + width + margin > node.x &&
+                             y < node.y + nodeHeight + margin &&
+                             y + height + margin > node.y;
+            
+            if (collision) {
+                console.log(`❌ Пересечение с нодой (${node.x}, ${node.y}) размер ${nodeWidth}x${nodeHeight}`);
+                return true; // Есть пересечение
+            }
+        }
+        
+        return false; // Нет пересечений
+    }
+    
+    /**
+     * Найти свободную позицию рядом с предложенной
+     */
+    findFreePosition(initialX, initialY, elementType) {
+        // Если нет доступа к canvas, возвращаем исходную позицию
+        if (!this.builder || !this.builder.canvas) {
+            console.warn('FlowLayoutManager: нет доступа к canvas, пропускаем проверку пересечений');
+            return { x: initialX, y: initialY };
+        }
+        
+        let x = initialX;
+        let y = initialY;
+        const stepY = 250; // Увеличили шаг по вертикали (размер карточки + отступ)
+        const stepX = 450; // Шаг по горизонтали
+        const maxAttempts = 30; // Увеличили попытки
+        
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            if (!this.checkCollision(x, y)) {
+                if (attempt > 0) {
+                    console.log(`✅ Найдена свободная позиция: (${x}, ${y}) после ${attempt} попыток`);
+                }
+                return { x, y };
+            }
+            
+            // Сначала пробуем вниз (3 попытки)
+            if (attempt < 3) {
+                y += stepY;
+            }
+            // Потом правее и снова вниз
+            else if (attempt % 4 === 0) {
+                x += stepX;
+                y = initialY;
+            } else {
+                y += stepY;
+            }
+        }
+        
+        console.warn('⚠️ Не нашли свободное место за 30 попыток, используем исходную позицию');
+        return { x: initialX, y: initialY };
+    }
+    
+    /**
      * Получить следующую позицию для элемента
      */
     getNextPosition(parentPosition, elementType, depth, index = 0) {
+        let proposedPosition;
+        
         switch (elementType) {
             case 'agent':
-                return {
+                proposedPosition = {
                     x: parentPosition.x + this.config.horizontalSpacing,
                     y: parentPosition.y + (index * this.config.verticalSpacing)
                 };
+                break;
                 
             case 'tool':
-                return {
+                proposedPosition = {
                     x: parentPosition.x + this.config.toolOffset,
                     y: parentPosition.y + this.config.verticalSpacing + (index * this.config.toolSpacing)
                 };
+                break;
                 
             case 'flow':
-                return {
+                proposedPosition = {
                     x: parentPosition.x + this.config.horizontalSpacing,
                     y: parentPosition.y
                 };
+                break;
                 
             default:
-                return {
+                proposedPosition = {
                     x: parentPosition.x + this.config.horizontalSpacing,
                     y: parentPosition.y + (index * this.config.verticalSpacing)
                 };
         }
+        
+        // Проверяем на пересечения и ищем свободную позицию
+        return this.findFreePosition(proposedPosition.x, proposedPosition.y, elementType);
     }
     
     /**

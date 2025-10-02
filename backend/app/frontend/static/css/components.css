@@ -10,7 +10,7 @@
     border: 1px solid transparent;
     border-radius: var(--radius-md);
     font-weight: 500;
-    font-size: 0.875rem;
+    font-size: 0.9375rem; /* Увеличили с 0.875rem (14px → 15px) */
     line-height: 1.25rem;
     cursor: pointer;
     transition: all var(--transition-fast);
@@ -26,12 +26,12 @@
 
 .btn-sm {
     padding: 0.375rem 0.75rem;
-    font-size: 0.75rem;
+    font-size: 0.8125rem; /* Увеличили с 0.75rem (12px → 13px) */
 }
 
 .btn-lg {
     padding: 0.75rem 1.5rem;
-    font-size: 1rem;
+    font-size: 1.0625rem; /* Увеличили с 1rem (16px → 17px) */
 }
 
 .btn-primary {
