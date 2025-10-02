@@ -191,6 +191,9 @@ class BuilderCanvas {
         if (node.data.type === 'agent_node' || node.data.type === 'flow_node') {
             element.style.width = '380px';
             element.style.minHeight = `${node.height}px`;
+        } else if (node.data.type === 'tool_node') {
+            element.style.width = `${node.width}px`;
+            element.style.minHeight = 'auto'; /* Тулы подстраиваются под контент */
         } else {
             element.style.width = `${node.width}px`;
             element.style.minHeight = `${node.height}px`;

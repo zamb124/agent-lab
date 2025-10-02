@@ -92,11 +92,11 @@
     pointer-events: all;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
     min-width: 300px;
-    min-height: 80px;
+    min-height: auto; /* Убрали фиксированную высоту */
     will-change: transform;
     width: auto;
     max-width: none;
-    overflow: visible;
+    overflow: visible; /* Порты могут выходить за края */
     z-index: 10;
 }
 
@@ -174,15 +174,35 @@
 }
 
 .canvas-node .card-body .d-flex.gap-3.justify-content-end {
-    display: none;
+    display: none !important;
 }
 
-.canvas-node .card-body .mt-4 {
-    margin-top: 0 !important;
+.canvas-node #save-response {
+    display: none !important; /* Скрываем placeholder для HTMX */
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.canvas-node .card-body .d-flex.gap-3.justify-content-end.mt-4 {
+    display: none !important; /* Скрываем div с кнопками на канвасе */
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Специально для tool карточек - убираем все отступы после последнего поля */
+.canvas-node.tool-node .card-body {
+    padding-bottom: 0 !important;
+}
+
+.canvas-node.tool-node .card-body > *:last-child {
+    margin-bottom: 0 !important;
 }
 
 .canvas-node .card-body {
     padding: 12px;
+    padding-bottom: 12px !important; /* Равномерный padding */
     max-height: 500px;
     overflow-y: auto;
     width: 100%;
