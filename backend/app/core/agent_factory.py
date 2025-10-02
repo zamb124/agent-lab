@@ -141,15 +141,22 @@ class AgentFactory:
             tool_factory = ToolFactory()
             return await tool_factory._create_agent_tool(tool_ref)
 
-        if tool_ref.code_mode == CodeMode.CODE_REFERENCE:
-            # Сначала проверяем есть ли тул в БД с метаданными биллинга
-            db_tool_data = await self.storage.get(f"tool:{tool_ref.tool_id}")
-            if db_tool_data:
-                logger.debug(f"🔥 Найден тул в БД: {tool_ref.tool_id}")
-                import json
-                db_tool_ref = ToolReference.model_validate(json.loads(db_tool_data))
-                logger.debug(f"🔥 БД тул cost={db_tool_ref.cost}, billing_name={db_tool_ref.billing_name}")
-                
+        # Сначала проверяем есть ли тул в БД с метаданными биллинга
+        db_tool_data = await self.storage.get(f"tool:{tool_ref.tool_id}")
+        if db_tool_data:
+            logger.debug(f"🔥 Найден тул в БД: {tool_ref.tool_id}")
+            db_tool_ref = ToolReference.model_validate(json.loads(db_tool_data))
+            logger.debug(f"🔥 БД тул code_mode={db_tool_ref.code_mode}, cost={db_tool_ref.cost}, billing_name={db_tool_ref.billing_name}")
+            
+            # Проверяем code_mode из БД
+            if db_tool_ref.code_mode == CodeMode.INLINE_CODE:
+                # Для INLINE_CODE инструментов используем ToolFactory
+                logger.debug(f"🔥 Используем ToolFactory для INLINE_CODE инструмента")
+                tool_factory = ToolFactory()
+                return await tool_factory._create_single_tool(db_tool_ref)
+            
+            # Для CODE_REFERENCE продолжаем как раньше
+            if db_tool_ref.code_mode == CodeMode.CODE_REFERENCE:
                 # Импортируем функцию из кода
                 if db_tool_ref.function_path:
                     module_path, func_name = db_tool_ref.function_path.rsplit(".", 1)

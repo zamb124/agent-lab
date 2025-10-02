@@ -3,7 +3,6 @@
 @import url('../../css/base.css');
 @import url('./canvas.css');
 @import url('./sidebar.css');
-@import url('./components.css');
 
 /* Основной контейнер Builder */
 .builder-container {
@@ -31,32 +30,100 @@
 }
 
 /* Иконки */
-.icon-plus::before { content: "➕"; }
-.icon-edit::before { content: "✏️"; }
-.icon-trash::before { content: "🗑️"; }
-.icon-save::before { content: "💾"; }
-.icon-play::before { content: "▶️"; }
-.icon-zoom-in::before { content: "🔍"; }
-.icon-zoom-out::before { content: "🔍"; }
-.icon-maximize::before { content: "⛶"; }
-.icon-chevron-left::before { content: "◀"; }
-.icon-chevron-right::before { content: "▶"; }
-.icon-flow::before { content: "🔄"; }
-.icon-brain::before { content: "🧠"; }
-.icon-network::before { content: "🕸️"; }
-.icon-tool::before { content: "🔧"; }
-.icon-code::before { content: "💻"; }
-.icon-circle::before { content: "⚪"; }
-.icon-user::before { content: "👤"; }
-.icon-calendar::before { content: "📅"; }
-.icon-type::before { content: "🏷️"; }
-.icon-tools::before { content: "🛠️"; }
-.icon-category::before { content: "📂"; }
-.icon-params::before { content: "⚙️"; }
-.icon-copy::before { content: "📋"; }
-.icon-message::before { content: "💬"; }
-.icon-theme::before { content: "🌓"; }
-.icon-clear::before { content: "🗑️"; }
+[class*="icon-"]::before {
+    font-style: normal !important;
+    font-weight: normal !important;
+    transform: none !important;
+    display: inline-block;
+    text-align: center;
+}
+
+/* Убедимся что иконки в заголовках карточек тоже не наклонены */
+.card-header [class*="icon-"]::before,
+.table-icon [class*="icon-"]::before {
+    font-style: normal !important;
+    font-weight: normal !important;
+    transform: none !important;
+}
+
+/* Убираем кастомные иконки - будем использовать Bootstrap Icons напрямую */
+
+/* Уведомления Builder */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    box-shadow: var(--shadow-lg);
+    z-index: 1100;
+    min-width: 300px;
+    max-width: 400px;
+    transform: translateX(400px);
+    opacity: 0;
+    transition: all 0.3s ease;
+}
+
+.notification.show {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+.notification-success {
+    border-left: 4px solid #10b981;
+}
+
+.notification-error {
+    border-left: 4px solid #ef4444;
+}
+
+.notification-warning {
+    border-left: 4px solid #f59e0b;
+}
+
+.notification-info {
+    border-left: 4px solid #6366f1;
+}
+
+.notification-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.notification-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.notification-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.notification-close:hover {
+    color: var(--text-primary);
+}
+
+.notification-body {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.4;
+}
 
 /* Контекстное меню */
 .context-menu {

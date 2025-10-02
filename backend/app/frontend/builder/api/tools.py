@@ -3,11 +3,13 @@ API для работы с тулами в Builder.
 """
 
 from fastapi import APIRouter, HTTPException, Depends
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import inspect
 import json
+import uuid
 
 from app.tools import ALL_TOOLS
+from app.models import ToolReference, CodeMode
 from app.core.storage import Storage
 from app.core.container import get_container
 
@@ -38,49 +40,60 @@ async def list_tools(storage: Storage = Depends(get_storage)) -> List[Dict[str, 
             print(f"Неожиданный формат ключа тула: {key}")
             continue
         
-        try:
-            # Получаем данные тула из БД (используем полный ключ)
-            tool_data_json = await storage.get(key)
-            if tool_data_json:
-                # Парсим JSON, который уже возвращается методом get
-                if isinstance(tool_data_json, str):
-                    tool_data = json.loads(tool_data_json)
-                else:
-                    tool_data = tool_data_json
-                
-                tool_info = {
-                    "id": tool_id,
-                    "name": tool_data.get("tool_id", tool_id).split(".")[-1],  # Берем имя функции
-                    "description": tool_data.get("description", ""),
-                    "type": "tool",
-                    "category": _get_tool_category_from_path(tool_id),
-                    "parameters": tool_data.get("params", {}),
-                    "cost": tool_data.get("cost", 0.0),
-                    "source_path": tool_id
-                }
-                tools_data.append(tool_info)
-                
-        except Exception as e:
-            print(f"Ошибка обработки тула {tool_id}: {e}")
-            continue
-    
-    # Также добавляем тулы из кода (для совместимости)
-    for tool in ALL_TOOLS:
-        # Проверяем, что тул еще не добавлен из БД
-        if not any(t["name"] == tool.name for t in tools_data):
+
+        # Получаем данные тула из БД (используем полный ключ)
+        tool_data_json = await storage.get(key)
+        if tool_data_json:
+            # Парсим JSON, который уже возвращается методом get
+            if isinstance(tool_data_json, str):
+                tool_data = json.loads(tool_data_json)
+            else:
+                tool_data = tool_data_json
+            
             tool_info = {
-                "id": tool.name,
-                "name": tool.name,
-                "description": tool.description,
+                "id": tool_id,
+                "name": tool_data.get("tool_id", tool_id).split(".")[-1],  # Берем имя функции
+                "description": tool_data.get("description", ""),
                 "type": "tool",
-                "category": _get_tool_category(tool),
-                "parameters": _get_tool_parameters(tool),
-                "cost": 0.0,
-                "source_path": f"code.{tool.name}"
+                "category": _get_tool_category_from_path(tool_id),
+                "parameters": tool_data.get("params", {}),
+                "cost": tool_data.get("cost", 0.0),
+                "source_path": tool_id
             }
             tools_data.append(tool_info)
     
+    # Инструменты теперь фильтруются по компаниям - убрали глобальные инструменты из кода
+    
     return tools_data
+
+
+@router.post("/", response_model=ToolReference)
+async def create_tool(
+    name: str = "Новый инструмент",
+    description: Optional[str] = None,
+    category: str = "general",
+    storage: Storage = Depends(get_storage)
+) -> ToolReference:
+    """Создать новый инструмент и сразу сохранить в БД"""
+    tool_id = f"tool_{uuid.uuid4().hex[:8]}"
+    
+    tool_ref = ToolReference(
+        tool_id=tool_id,
+        params={},
+        code_mode=CodeMode.INLINE_CODE,
+        function_path=None,
+        inline_code="# Ваш код инструмента здесь\nasync def main():\n    return 'Результат'",
+        description=description or "",
+        cost=0.0,
+        billing_name=None,
+        free_for_plans=[],
+        source="canvas_created"
+    )
+    
+    # Сразу сохраняем в БД
+    await storage.set(f"tool:{tool_id}", tool_ref.model_dump_json())
+    
+    return tool_ref
 
 
 @router.get("/{tool_id:path}")
@@ -121,37 +134,11 @@ async def get_tool(tool_id: str, storage: Storage = Depends(get_storage)) -> Dic
     except Exception as e:
         print(f"Ошибка получения тула из БД {tool_id}: {e}")
     
-    # Если не найден в БД, ищем в коде
-    tool = _find_tool_by_id(tool_id)
-    if tool:
-        return {
-            "id": tool.name,
-            "name": tool.name,
-            "description": tool.description,
-            "type": "tool",
-            "category": _get_tool_category(tool),
-            "parameters": _get_tool_parameters(tool),
-            "cost": 0.0,
-            "source_path": f"code.{tool.name}"
-        }
-    
+    # Инструмент не найден в текущей компании
     raise HTTPException(status_code=404, detail="Tool not found")
 
 
-def _find_tool_by_id(tool_id: str):
-    """Найти тул по ID"""
-    for tool in ALL_TOOLS:
-        if tool.name == tool_id:
-            return tool
-    return None
-
-
-def _get_tool_category(tool) -> str:
-    """Определить категорию тула по модулю"""
-    if hasattr(tool, 'func') and hasattr(tool.func, '__module__'):
-        module = tool.func.__module__
-        return _get_category_from_module_path(module)
-    return "other"
+# Вспомогательные функции для работы с инструментами из БД
 
 
 def _get_tool_category_from_path(tool_path: str) -> str:

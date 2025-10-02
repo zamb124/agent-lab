@@ -25,16 +25,14 @@
         
         <div class="sidebar-search">
             <input type="text" id="sidebarSearch" placeholder="Поиск..." class="search-input">
+            <button class="search-add-btn" id="searchAddBtn" title="Создать новый элемент">
+                <i class="bi bi-plus"></i>
+            </button>
         </div>
         
         <div class="sidebar-content">
             <!-- Flows Tab -->
             <div class="tab-content active" id="flowsTab">
-                <div class="tab-actions">
-                    <button class="btn btn-primary btn-sm" id="createFlowBtn">
-                        <i class="icon-plus"></i> Новый Flow
-                    </button>
-                </div>
                 <div class="items-list" id="flowsList">
                     <!-- Flows будут загружены через HTMX -->
                 </div>
@@ -42,11 +40,6 @@
             
             <!-- Agents Tab -->
             <div class="tab-content" id="agentsTab">
-                <div class="tab-actions">
-                    <button class="btn btn-primary btn-sm" id="createAgentBtn">
-                        <i class="icon-plus"></i> Новый Agent
-                    </button>
-                </div>
                 <div class="items-list" id="agentsList">
                     <!-- Agents будут загружены через HTMX -->
                 </div>
@@ -66,13 +59,13 @@
         <div class="canvas-toolbar">
             <div class="toolbar-left">
                 <button class="btn btn-secondary btn-sm" id="zoomInBtn">
-                    <i class="icon-zoom-in"></i>
+                    <i class="bi bi-zoom-in"></i>
                 </button>
                 <button class="btn btn-secondary btn-sm" id="zoomOutBtn">
-                    <i class="icon-zoom-out"></i>
+                    <i class="bi bi-zoom-out"></i>
                 </button>
                 <button class="btn btn-secondary btn-sm" id="fitToScreenBtn">
-                    <i class="icon-maximize"></i>
+                    <i class="bi bi-fullscreen"></i>
                 </button>
             </div>
             
@@ -82,16 +75,16 @@
             
             <div class="toolbar-right">
                 <button class="btn btn-secondary btn-sm" id="themeToggleBtn" title="Переключить тему">
-                    <i class="icon-theme"></i>
+                    <i class="bi bi-moon-stars"></i>
                 </button>
                 <button class="btn btn-secondary btn-sm" id="clearCanvasBtn" title="Очистить канвас">
-                    <i class="icon-clear"></i>
+                    <i class="bi bi-trash"></i>
                 </button>
                 <button class="btn btn-success btn-sm" id="saveFlowBtn" disabled>
-                    <i class="icon-save"></i> Сохранить
+                    <i class="bi bi-cloud-upload"></i> Сохранить
                 </button>
                 <button class="btn btn-primary btn-sm" id="runFlowBtn" disabled>
-                    <i class="icon-play"></i> Запустить
+                    <i class="bi bi-play-fill"></i> Запустить
                 </button>
             </div>
         </div>
@@ -128,13 +121,13 @@
 <!-- Контекстное меню -->
 <div class="context-menu" id="contextMenu" style="display: none;">
     <div class="context-menu-item" data-action="edit">
-        <i class="icon-edit"></i> Редактировать
+        <i class="bi bi-pencil"></i> Редактировать
     </div>
     <div class="context-menu-item" data-action="duplicate">
-        <i class="icon-copy"></i> Дублировать
+        <i class="bi bi-clipboard"></i> Дублировать
     </div>
     <div class="context-menu-item" data-action="delete">
-        <i class="icon-trash"></i> Удалить
+        <i class="bi bi-trash"></i> Удалить
     </div>
 </div>
 {% endblock %}

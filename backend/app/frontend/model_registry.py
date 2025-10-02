@@ -11,6 +11,7 @@ from app.models import (
     TaskConfig,
     LLMConfig,
     GraphDefinition,
+    ToolReference,
 )
 from app.identity.models import User
 
@@ -50,6 +51,7 @@ def register_all_models():
     ModelRegistry.register(TaskConfig)
     ModelRegistry.register(LLMConfig)
     ModelRegistry.register(GraphDefinition)
+    ModelRegistry.register(ToolReference)
     ModelRegistry.register(User)
 
 

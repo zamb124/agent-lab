@@ -400,18 +400,18 @@ class BuilderSidebar {
             <div class="item-card flow-card" data-flow-id="${flow.flow_id}" draggable="true">
                 <div class="card-header">
                     <div class="card-icon">
-                        <i class="icon-flow"></i>
+                        <i class="bi bi-diagram-3"></i>
                     </div>
                     <div class="card-title">${flow.name}</div>
                     <div class="card-actions">
                         <button class="btn-icon" data-action="run" title="Запустить чат">
-                            <i class="icon-play"></i>
+                            <i class="bi bi-play-fill"></i>
                         </button>
                         <button class="btn-icon" data-action="edit" title="Редактировать">
-                            <i class="icon-edit"></i>
+                            <i class="bi bi-pencil"></i>
                         </button>
                         <button class="btn-icon" data-action="delete" title="Удалить">
-                            <i class="icon-trash"></i>
+                            <i class="bi bi-trash"></i>
                         </button>
                     </div>
                 </div>
@@ -420,11 +420,11 @@ class BuilderSidebar {
                 
                 <div class="card-meta">
                     <span class="meta-item">
-                        <i class="icon-user"></i>
+                        <i class="bi bi-person"></i>
                         ${flow.entry_point_agent || "Не настроен"}
                     </span>
                     <span class="meta-item">
-                        <i class="icon-calendar"></i>
+                        <i class="bi bi-calendar"></i>
                         ${createdAt}
                     </span>
                 </div>
@@ -440,22 +440,22 @@ class BuilderSidebar {
      * Рендеринг карточки агента
      */
     renderAgentCard(agent) {
-        const iconClass = agent.type === 'react' ? 'brain' : 'network';
+        const iconClass = agent.type === 'react' ? 'bi-robot' : 'bi-share';
         const toolsCount = agent.tools ? agent.tools.length : 0;
         
         return `
             <div class="item-card agent-card" data-agent-id="${agent.agent_id}" draggable="true">
                 <div class="card-header">
                     <div class="card-icon">
-                        <i class="icon-${iconClass}"></i>
+                        <i class="bi ${iconClass}"></i>
                     </div>
                     <div class="card-title">${agent.name}</div>
                     <div class="card-actions">
                         <button class="btn-icon" data-action="edit" title="Редактировать">
-                            <i class="icon-edit"></i>
+                            <i class="bi bi-pencil"></i>
                         </button>
                         <button class="btn-icon" data-action="delete" title="Удалить">
-                            <i class="icon-trash"></i>
+                            <i class="bi bi-trash"></i>
                         </button>
                     </div>
                 </div>
@@ -464,11 +464,11 @@ class BuilderSidebar {
                 
                 <div class="card-meta">
                     <span class="meta-item">
-                        <i class="icon-type"></i>
+                        <i class="bi bi-tag"></i>
                         ${agent.type.toUpperCase()}
                     </span>
                     <span class="meta-item">
-                        <i class="icon-tools"></i>
+                        <i class="bi bi-tools"></i>
                         ${toolsCount} tools
                     </span>
                 </div>
@@ -494,7 +494,7 @@ class BuilderSidebar {
             <div class="item-card tool-card" data-tool-id="${tool.id}" draggable="true">
                 <div class="card-header">
                     <div class="card-icon">
-                        <i class="icon-tool"></i>
+                        <i class="bi bi-wrench"></i>
                     </div>
                     <div class="card-title">${tool.name}</div>
                 </div>
@@ -503,11 +503,11 @@ class BuilderSidebar {
                 
                 <div class="card-meta">
                     <span class="meta-item">
-                        <i class="icon-category"></i>
+                        <i class="bi bi-folder"></i>
                         ${tool.category}
                     </span>
                     <span class="meta-item">
-                        <i class="icon-params"></i>
+                        <i class="bi bi-gear"></i>
                         ${requiredParams} params
                     </span>
                 </div>

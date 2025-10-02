@@ -6,9 +6,11 @@ import ast
 import json
 import uuid
 import logging
+import inspect
+from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
-from typing import Dict, Any, get_origin, get_args, Union
+from typing import Dict, Any, get_origin, get_args, Union, Optional
 from pydantic import BaseModel
 from app.core.storage import Storage
 from app.frontend.wrappers import ModelListWrapper
@@ -267,8 +269,25 @@ async def update_model(
             # Если BaseModel поле и строка - парсим JSON
             try:
                 if isinstance(field_value, str):
+                    # Пустая строка для datetime полей = None
+                    if field_value == "" and annotation in [datetime, Optional[datetime]]:
+                        existing_model_data[field_name] = None
+                    # Пустая строка или JSON для dict
+                    elif field_value == "{}" or (get_origin(annotation) is dict or annotation is dict):
+                        if field_value:
+                            parsed_value = json.loads(field_value)
+                            existing_model_data[field_name] = parsed_value
+                        else:
+                            existing_model_data[field_name] = {}
+                    # Пустая строка или JSON для list
+                    elif field_value == "[]" or (get_origin(annotation) is list or annotation is list):
+                        if field_value:
+                            parsed_value = json.loads(field_value)
+                            existing_model_data[field_name] = parsed_value
+                        else:
+                            existing_model_data[field_name] = []
                     # Проверяем, является ли это BaseModel
-                    if issubclass(annotation, BaseModel):
+                    elif inspect.isclass(annotation) and issubclass(annotation, BaseModel):
                         parsed_value = json.loads(field_value)
                         existing_model_data[field_name] = parsed_value
                     # Проверяем, является ли это List[BaseModel]

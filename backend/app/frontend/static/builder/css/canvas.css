@@ -55,15 +55,18 @@
     top: 0;
     left: 0;
     pointer-events: all;
+    z-index: 1;
 }
 
 /* SVG группы */
 .edges-group {
     pointer-events: all;
+    z-index: 1;
 }
 
 .nodes-group {
     pointer-events: none;
+    z-index: 2;
 }
 
 /* Overlay для HTML элементов */
@@ -75,6 +78,7 @@
     height: 100%;
     pointer-events: none;
     transform-origin: 0 0;
+    z-index: 5;
 }
 
 /* Ноды на канвасе */
@@ -93,6 +97,16 @@
     width: auto;
     max-width: none;
     overflow: visible;
+    z-index: 10;
+}
+
+/* Для tooltip нужен еще больший z-index */
+.canvas-node .field-info-btn[data-toggle="tooltip"]:hover::after {
+    z-index: 99999 !important;
+}
+
+.canvas-node .field-info-btn[data-toggle="tooltip"]:hover::before {
+    z-index: 100000 !important;
 }
 
 /* Ноды с формами */
@@ -108,6 +122,50 @@
     background: var(--bg-quaternary);
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     border-bottom: 1px solid var(--border-color);
+}
+
+/* Цветные заголовки для разных типов нод */
+.canvas-node .agent-header,
+.agent-card .card-header {
+    background: var(--accent-primary) !important; /* Синий для агентов */
+    color: white !important;
+}
+
+.canvas-node .flow-header,
+.flow-card .card-header {
+    background: var(--accent-secondary) !important; /* Фиолетовый для флоу */
+    color: white !important;
+}
+
+.canvas-node .tool-header,
+.tool-card .card-header {
+    background: var(--accent-warning) !important; /* Оранжевый для инструментов */
+    color: white !important;
+}
+
+/* Белый цвет для иконок и текста в цветных заголовках */
+.agent-header .table-icon,
+.flow-header .table-icon,
+.tool-header .table-icon,
+.agent-header i,
+.flow-header i,
+.tool-header i {
+    color: white !important;
+}
+
+.agent-header h5,
+.flow-header h5,
+.tool-header h5,
+.agent-header .card-title,
+.flow-header .card-title,
+.tool-header .card-title {
+    color: white !important;
+}
+
+.agent-header small,
+.flow-header small,
+.tool-header small {
+    color: rgba(255, 255, 255, 0.8) !important;
 }
 
 /* Скрываем ненужные элементы в формах на канвасе */
@@ -127,8 +185,7 @@
     padding: 12px;
     max-height: 500px;
     overflow-y: auto;
-    min-width: 350px;
-    width: max-content;
+    width: 100%;
     position: relative;
 }
 
@@ -355,21 +412,43 @@
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: var(--bg-secondary);
-    border: 2px solid var(--border-color);
+    background: #6366f1; /* Яркий синий цвет по умолчанию */
+    border: 2px solid #ffffff;
     transition: all 0.2s ease;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.3); /* Легкое свечение */
+}
+
+/* Разные цвета для входных и выходных портов */
+.input-port .port-dot {
+    background: #10b981; /* Зеленый для входных */
+    border-color: #ffffff;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3);
+}
+
+.output-port .port-dot {
+    background: #f59e0b; /* Оранжевый для выходных */
+    border-color: #ffffff;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.3);
 }
 
 .port:hover .port-dot {
-    border-color: var(--accent-primary);
-    background: var(--accent-primary);
-    transform: scale(1.2);
+    transform: scale(1.3);
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.5);
+}
+
+.input-port:hover .port-dot {
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.5);
+}
+
+.output-port:hover .port-dot {
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.5);
 }
 
 .port.connecting .port-dot {
-    border-color: var(--accent-primary);
-    background: var(--accent-primary);
-    box-shadow: 0 0 0 4px var(--accent-primary-alpha);
+    background: #ef4444; /* Красный при подключении */
+    border-color: #ffffff;
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.4);
+    animation: pulse 1s infinite;
 }
 
 /* Статус ноды */
@@ -405,10 +484,11 @@
 /* Связи между нодами */
 .edge {
     fill: none;
-    stroke: var(--border-color);
+    stroke: var(--text-secondary);
     stroke-width: 2;
     transition: stroke 0.2s ease, stroke-width 0.2s ease;
     cursor: pointer;
+    opacity: 0.8;
 }
 
 .canvas-container.dragging-node .edge {

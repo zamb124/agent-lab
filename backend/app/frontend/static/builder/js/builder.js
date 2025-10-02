@@ -132,9 +132,9 @@ class Builder {
         // Кнопки тулбара
         const saveBtn = document.getElementById('saveFlowBtn');
         const runBtn = document.getElementById('runFlowBtn');
-        const createFlowBtn = document.getElementById('createFlowBtn');
         const themeToggleBtn = document.getElementById('themeToggleBtn');
         const clearCanvasBtn = document.getElementById('clearCanvasBtn');
+        const searchAddBtn = document.getElementById('searchAddBtn');
         
         if (saveBtn) {
             saveBtn.addEventListener('click', () => this.saveCurrentFlow());
@@ -144,8 +144,8 @@ class Builder {
             runBtn.addEventListener('click', () => this.runCurrentFlow());
         }
         
-        if (createFlowBtn) {
-            createFlowBtn.addEventListener('click', () => this.createNewFlow());
+        if (searchAddBtn) {
+            searchAddBtn.addEventListener('click', () => this.handleCreateNew());
         }
         
         if (themeToggleBtn) {
@@ -261,6 +261,145 @@ class Builder {
     /**
      * Создание нового флоу
      */
+    async handleCreateNew() {
+        const activeTab = document.querySelector('.tab-button.active');
+        if (!activeTab) return;
+        
+        const tabType = activeTab.dataset.tab;
+        
+        switch (tabType) {
+            case 'flows':
+                await this.createEmptyFlowOnCanvas();
+                break;
+            case 'agents':
+                await this.createEmptyAgentOnCanvas();
+                break;
+            case 'tools':
+                await this.createEmptyToolOnCanvas();
+                break;
+            default:
+                console.warn('Неизвестный тип вкладки:', tabType);
+        }
+    }
+    
+    async createEmptyFlowOnCanvas() {
+        try {
+            // Проверяем что на канвасе нет флоу
+            const hasFlow = Array.from(this.canvas.nodes.values())
+                .some(node => node.data.type === 'flow_node');
+            
+            if (hasFlow) {
+                this.showNotification('На канвасе уже есть Flow', 'warning');
+                return;
+            }
+            
+            // Получаем пустую модель Flow
+            const response = await fetch('/frontend/builder/flows/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({})
+            });
+            
+            if (!response.ok) throw new Error('Ошибка создания Flow');
+            
+            const flowData = await response.json();
+            
+            // Добавляем на канвас в центре
+            const centerPos = this.canvas.getCenterPosition();
+            await this.canvas.addNode({
+                id: `flow_${flowData.flow_id}_${Date.now()}`,
+                type: 'flow_node',
+                params: {
+                    name: flowData.name,
+                    flow_id: flowData.flow_id,
+                    description: flowData.description,
+                    entry_point_agent: flowData.entry_point_agent,
+                    isEntryPoint: true
+                },
+                ui: { x: centerPos.x, y: centerPos.y, width: 380, height: 200 }
+            });
+            
+            // Устанавливаем как текущий флоу
+            this.currentFlow = { flow_id: flowData.flow_id, name: flowData.name };
+            this.updateFlowInfo();
+            this.enableFlowActions();
+            
+            this.showNotification('Flow добавлен на канвас', 'success');
+            
+        } catch (error) {
+            console.error('Ошибка создания Flow на канвасе:', error);
+            this.showNotification('Ошибка создания Flow: ' + error.message, 'error');
+        }
+    }
+    
+    async createEmptyAgentOnCanvas() {
+        try {
+            // Получаем пустую модель Agent
+            const response = await fetch('/frontend/builder/agents/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({})
+            });
+            
+            if (!response.ok) throw new Error('Ошибка создания Agent');
+            
+            const agentData = await response.json();
+            
+            // Добавляем на канвас в центре
+            const centerPos = this.canvas.getCenterPosition();
+            await this.canvas.addNode({
+                id: `agent_${agentData.agent_id}_${Date.now()}`,
+                type: 'agent_node',
+                params: {
+                    name: agentData.name,
+                    agent_id: agentData.agent_id,
+                    description: agentData.description
+                },
+                ui: { x: centerPos.x, y: centerPos.y, width: 380, height: 200 }
+            });
+            
+            this.showNotification('Agent добавлен на канвас', 'success');
+            
+        } catch (error) {
+            console.error('Ошибка создания Agent на канвасе:', error);
+            this.showNotification('Ошибка создания Agent: ' + error.message, 'error');
+        }
+    }
+    
+    async createEmptyToolOnCanvas() {
+        try {
+            // Получаем пустую модель Tool
+            const response = await fetch('/frontend/builder/tools/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({})
+            });
+            
+            if (!response.ok) throw new Error('Ошибка создания Tool');
+            
+            const toolData = await response.json();
+            
+            // Добавляем на канвас в центре
+            const centerPos = this.canvas.getCenterPosition();
+            await this.canvas.addNode({
+                id: `tool_${toolData.tool_id}_${Date.now()}`,
+                type: 'tool_node',
+                params: {
+                    name: toolData.name || "Новый инструмент",
+                    tool_id: toolData.tool_id,
+                    description: toolData.description
+                },
+                ui: { x: centerPos.x, y: centerPos.y, width: 380, height: 200 }
+            });
+            
+            this.showNotification('Tool добавлен на канвас', 'success');
+            
+        } catch (error) {
+            console.error('Ошибка создания Tool на канвасе:', error);
+            this.showNotification('Ошибка создания Tool: ' + error.message, 'error');
+        }
+    }
+    
     async createNewFlow() {
         try {
             // Показываем модальное окно создания флоу
@@ -548,6 +687,8 @@ class Builder {
      * Показать уведомление
      */
     showNotification(message, type = 'info', duration = 3000) {
+        console.log(`🔔 Показываем уведомление: ${message} (${type})`);
+        
         const notification = document.createElement('div');
         notification.className = `notification notification-${type}`;
         
@@ -562,7 +703,10 @@ class Builder {
         document.body.appendChild(notification);
         
         // Показываем уведомление
-        setTimeout(() => notification.classList.add('show'), 100);
+        setTimeout(() => {
+            notification.classList.add('show');
+            console.log('✅ Уведомление показано');
+        }, 100);
         
         // Обработчик закрытия
         const closeBtn = notification.querySelector('.notification-close');

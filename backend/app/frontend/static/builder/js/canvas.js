@@ -39,7 +39,7 @@ class BuilderCanvas {
             gridSize: 20,
             minZoom: 0.1,
             maxZoom: 3,
-            zoomStep: 0.1
+            zoomStep: 0.02  // Очень плавное масштабирование (2% за скролл)
         };
         
         // Throttling для обновления связей
@@ -187,23 +187,18 @@ class BuilderCanvas {
         element.dataset.nodeId = node.id;
         element.dataset.nodeType = node.data.type;
         element.style.transform = `translate3d(${node.x}px, ${node.y}px, 0)`;
-        // Для форм делаем ноды шире
+        // Для форм делаем ноды компактными но достаточно широкими
         if (node.data.type === 'agent_node' || node.data.type === 'flow_node') {
-            element.style.width = 'auto';
-            element.style.minWidth = '400px';
-            element.style.maxWidth = '600px';
+            element.style.width = '380px';
             element.style.minHeight = `${node.height}px`;
         } else {
             element.style.width = `${node.width}px`;
             element.style.minHeight = `${node.height}px`;
         }
         
-        // Для нод агентов и флоу загружаем форму через HTMX
-        if (node.data.type === 'agent_node' || node.data.type === 'flow_node') {
+        // Для нод агентов, флоу и инструментов загружаем полную форму через HTMX
+        if (node.data.type === 'agent_node' || node.data.type === 'flow_node' || node.data.type === 'tool_node') {
             await this.createEditableNodeElement(element, node);
-        } else if (node.data.type === 'tool_node') {
-            // Для тулов пытаемся загрузить форму, если есть данные в БД
-            await this.createToolNodeElement(element, node);
         } else {
             // Для остальных нод используем простой вид
             await this.createSimpleNodeElement(element, node);
@@ -216,8 +211,18 @@ class BuilderCanvas {
      * Создание редактируемой ноды с формой
      */
     async createEditableNodeElement(element, node) {
-        const modelType = node.data.type === 'agent_node' ? 'agent' : 'flow';
-        const modelId = node.data.params?.agent_id || node.data.params?.flow_id;
+        let modelType, modelId;
+        
+        if (node.data.type === 'agent_node') {
+            modelType = 'agent';
+            modelId = node.data.params?.agent_id;
+        } else if (node.data.type === 'flow_node') {
+            modelType = 'flow';
+            modelId = node.data.params?.flow_id;
+        } else if (node.data.type === 'tool_node') {
+            modelType = 'tool';
+            modelId = node.data.params?.tool_id;
+        }
         
         if (!modelId) {
             await this.createSimpleNodeElement(element, node);
@@ -383,7 +388,11 @@ class BuilderCanvas {
         try {
             console.log('🔄 Загружаем форму для ноды:', modelType, modelId);
             
-            const response = await fetch(`/frontend/models/${modelType}/${modelId}?view=form`);
+            const url = `/frontend/models/${modelType}/${modelId}?view=form`;
+            
+            console.log('📡 URL для загрузки формы:', url);
+            
+            const response = await fetch(url);
             
             console.log('📡 Ответ сервера:', response.status, response.statusText);
             
@@ -556,25 +565,50 @@ class BuilderCanvas {
         // Проверяем, что порты еще не добавлены
         if (element.querySelector('.node-ports')) return;
         
+        const nodeType = element.dataset.nodeType;
+        
         // Создаем контейнер портов
         const portsContainer = document.createElement('div');
         portsContainer.className = 'node-ports';
         
-        portsContainer.innerHTML = `
-            <!-- Входные порты -->
-            <div class="input-ports">
-                <div class="port input-port" data-port-type="input" data-port-id="input">
-                    <div class="port-dot"></div>
+        let portsHTML = '';
+        
+        // Определяем какие порты нужны для каждого типа
+        if (nodeType === 'flow_node') {
+            // Flow: только выходной порт (entry point)
+            portsHTML = `
+                <div class="output-ports">
+                    <div class="port output-port" data-port-type="output" data-port-id="output">
+                        <div class="port-dot"></div>
+                    </div>
                 </div>
-            </div>
-            
-            <!-- Выходные порты -->
-            <div class="output-ports">
-                <div class="port output-port" data-port-type="output" data-port-id="output">
-                    <div class="port-dot"></div>
+            `;
+        } else if (nodeType === 'tool_node') {
+            // Tool: только входной порт
+            portsHTML = `
+                <div class="input-ports">
+                    <div class="port input-port" data-port-type="input" data-port-id="input">
+                        <div class="port-dot"></div>
+                    </div>
                 </div>
-            </div>
-        `;
+            `;
+        } else if (nodeType === 'agent_node') {
+            // Agent: оба порта (может принимать и отдавать)
+            portsHTML = `
+                <div class="input-ports">
+                    <div class="port input-port" data-port-type="input" data-port-id="input">
+                        <div class="port-dot"></div>
+                    </div>
+                </div>
+                <div class="output-ports">
+                    <div class="port output-port" data-port-type="output" data-port-id="output">
+                        <div class="port-dot"></div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        portsContainer.innerHTML = portsHTML;
         
         // Добавляем порты к ноде
         element.appendChild(portsContainer);
@@ -589,6 +623,20 @@ class BuilderCanvas {
                 }
             });
         });
+    }
+    
+    /**
+     * Получение центральной позиции канваса
+     */
+    getCenterPosition() {
+        const canvasContainer = this.element.querySelector('#canvasContainer');
+        const rect = canvasContainer.getBoundingClientRect();
+        
+        // Центр видимой области с учетом трансформации
+        const centerX = (rect.width / 2 - this.panX) / this.zoom;
+        const centerY = (rect.height / 2 - this.panY) / this.zoom;
+        
+        return { x: centerX, y: centerY };
     }
     
     /**
@@ -684,7 +732,10 @@ class BuilderCanvas {
         const sourceNode = this.nodes.get(edge.source);
         const targetNode = this.nodes.get(edge.target);
         
-        if (!sourceNode || !targetNode) return;
+        if (!sourceNode || !targetNode) {
+            console.warn('Не найдены ноды для связи:', edge.source, edge.target);
+            return;
+        }
         
         // Вычисляем точки подключения
         const sourcePoint = this.getNodeConnectionPoint(sourceNode, 'output');
@@ -694,6 +745,9 @@ class BuilderCanvas {
         const path = this.createBezierPath(sourcePoint, targetPoint);
         
         edge.element.setAttribute('d', path);
+        
+        // Отладка
+        console.log('🔗 Обновлена связь:', edge.id, 'path:', path);
     }
     
     /**
@@ -786,7 +840,18 @@ class BuilderCanvas {
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         
-        const delta = e.deltaY > 0 ? -this.config.zoomStep : this.config.zoomStep;
+        // Адаптивный шаг масштабирования в зависимости от скорости прокрутки
+        const scrollSpeed = Math.abs(e.deltaY);
+        let adaptiveStep = this.config.zoomStep;
+        
+        // Если прокручивают быстро - увеличиваем шаг, если медленно - уменьшаем
+        if (scrollSpeed > 100) {
+            adaptiveStep = this.config.zoomStep * 2; // Быстрая прокрутка (4%)
+        } else if (scrollSpeed < 30) {
+            adaptiveStep = this.config.zoomStep * 0.5; // Очень медленная прокрутка (1%)
+        }
+        
+        const delta = e.deltaY > 0 ? -adaptiveStep : adaptiveStep;
         const newZoom = Math.max(this.config.minZoom, Math.min(this.config.maxZoom, this.zoom + delta));
         
         if (newZoom !== this.zoom) {
@@ -890,6 +955,17 @@ class BuilderCanvas {
      * Обработка нажатия на ноду
      */
     handleNodeMouseDown(e, node) {
+        // Игнорируем drag если клик по элементам форм
+        const formElements = ['input', 'textarea', 'select', 'button'];
+        if (formElements.includes(e.target.tagName.toLowerCase())) {
+            return;
+        }
+        
+        // Игнорируем drag если клик по элементам с классами форм
+        if (e.target.closest('input, textarea, select, button, .field-input, .form-control')) {
+            return;
+        }
+        
         e.stopPropagation();
         
         this.isDragging = true;
@@ -1090,13 +1166,73 @@ class BuilderCanvas {
             const sourceNodeId = this.connectionStart.node.id;
             
             if (targetNodeId !== sourceNodeId) {
-                // Создаем связь
-                this.createConnection(sourceNodeId, targetNodeId);
+                // Валидируем подключение
+                if (this.validateConnection(sourceNodeId, targetNodeId)) {
+                    this.createConnection(sourceNodeId, targetNodeId);
+                } else {
+                    // Показываем ошибку валидации
+                    this.builder.showNotification('Недопустимое подключение', 'error');
+                }
             }
         }
         
         // Очищаем временные элементы
         this.cleanupConnection();
+    }
+    
+    /**
+     * Валидация подключения между нодами
+     */
+    validateConnection(sourceId, targetId) {
+        const sourceNode = this.nodes.get(sourceId);
+        const targetNode = this.nodes.get(targetId);
+        
+        if (!sourceNode || !targetNode) return false;
+        
+        const sourceType = sourceNode.data.type;
+        const targetType = targetNode.data.type;
+        
+        // Правила подключений:
+        // Flow -> Agent (только)
+        // Agent -> Tool или Agent
+        // Tool -> ничего (нет выходного порта)
+        
+        if (sourceType === 'flow_node') {
+            // Flow может подключаться только к Agent
+            if (targetType !== 'agent_node') {
+                console.warn(`Flow не может подключаться к ${targetType}`);
+                return false;
+            }
+            
+            // У Flow может быть только одно подключение (entry point)
+            const existingConnections = Array.from(this.edges.values())
+                .filter(edge => edge.data.source === sourceId);
+            
+            if (existingConnections.length > 0) {
+                console.warn('У Flow уже есть подключение (entry point)');
+                this.builder.showNotification('У Flow может быть только один entry point', 'warning');
+                return false;
+            }
+            
+            return true;
+        }
+        
+        if (sourceType === 'agent_node') {
+            // Agent может подключаться к Tool или другому Agent
+            if (targetType !== 'tool_node' && targetType !== 'agent_node') {
+                console.warn(`Agent не может подключаться к ${targetType}`);
+                return false;
+            }
+            return true;
+        }
+        
+        if (sourceType === 'tool_node') {
+            // Tool не может ни к чему подключаться (нет выходного порта)
+            console.warn('Tool не может быть источником подключения');
+            return false;
+        }
+        
+        return false;
     }
     
     /**

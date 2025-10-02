@@ -429,6 +429,67 @@ class ChatManager {
                 }
             }
         });
+        
+        // Добавляем возможность перетаскивания чата
+        this.makeChatDraggable();
+    }
+    
+    makeChatDraggable() {
+        const widget = document.getElementById('chat-widget');
+        const header = document.querySelector('.chat-widget-header');
+        
+        if (!widget || !header) return;
+        
+        let isDragging = false;
+        let currentX;
+        let currentY;
+        let initialX;
+        let initialY;
+        
+        header.addEventListener('mousedown', (e) => {
+            // Игнорируем клики по кнопкам
+            if (e.target.closest('button')) return;
+            
+            // Не перетаскиваем в полноэкранном режиме
+            if (widget.classList.contains('fullscreen')) return;
+            
+            isDragging = true;
+            
+            // Получаем текущую позицию виджета
+            const rect = widget.getBoundingClientRect();
+            initialX = e.clientX - rect.left;
+            initialY = e.clientY - rect.top;
+            
+            widget.style.transition = 'none';
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            
+            e.preventDefault();
+            
+            currentX = e.clientX - initialX;
+            currentY = e.clientY - initialY;
+            
+            // Ограничиваем перемещение в пределах экрана
+            const maxX = window.innerWidth - widget.offsetWidth;
+            const maxY = window.innerHeight - widget.offsetHeight;
+            
+            currentX = Math.max(0, Math.min(currentX, maxX));
+            currentY = Math.max(0, Math.min(currentY, maxY));
+            
+            widget.style.left = currentX + 'px';
+            widget.style.top = currentY + 'px';
+            widget.style.right = 'auto';
+            widget.style.bottom = 'auto';
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                widget.style.transition = '';
+            }
+        });
     }
 
     // Открыть чат с агентом
@@ -535,6 +596,11 @@ class ChatManager {
         if (isFullscreen) {
             // Выходим из полноэкранного режима
             widget.classList.remove('fullscreen');
+            // Восстанавливаем позиционирование после перетаскивания
+            widget.style.left = '';
+            widget.style.top = '';
+            widget.style.right = '20px';
+            widget.style.bottom = '80px';
             if (fullscreenIcon) {
                 fullscreenIcon.className = 'bi bi-arrows-fullscreen';
             }
@@ -546,6 +612,11 @@ class ChatManager {
             // Входим в полноэкранный режим
             widget.classList.add('fullscreen');
             widget.classList.remove('minimized'); // Убираем минимизацию если была
+            // Сбрасываем позиционирование для полноэкранного режима
+            widget.style.left = '0';
+            widget.style.top = '0';
+            widget.style.right = '0';
+            widget.style.bottom = '0';
             if (fullscreenIcon) {
                 fullscreenIcon.className = 'bi bi-fullscreen-exit';
             }

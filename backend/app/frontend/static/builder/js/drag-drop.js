@@ -535,13 +535,22 @@ class BuilderDragDrop {
             // Если у флоу есть entry_point_agent, начинаем рекурсивное разворачивание
             if (fullFlowData.entry_point_agent) {
                 const layoutManager = new FlowLayoutManager();
+                
+                // Проверяем, есть ли сохраненные позиции на канвасе
+                let shouldUseSavedPositions = false;
+                if (fullFlowData.canvas_data && fullFlowData.canvas_data.nodes) {
+                    shouldUseSavedPositions = true;
+                    console.log('Найдены сохраненные позиции элементов, используем их вместо автоматического размещения');
+                }
+                
                 await this.expandAgentRecursively(
                     fullFlowData.entry_point_agent,
                     layoutManager.getNextPosition(position, 'agent', 0),
                     flowNode.id,
                     new Set(), // Для предотвращения циклических зависимостей
                     layoutManager,
-                    0 // Уровень глубины
+                    0, // Уровень глубины
+                    shouldUseSavedPositions ? fullFlowData.canvas_data : null // Передаем сохраненные данные
                 );
             }
             
@@ -582,7 +591,7 @@ class BuilderDragDrop {
     /**
      * Рекурсивное разворачивание агента и его зависимостей
      */
-    async expandAgentRecursively(agentId, position, parentNodeId, visitedAgents, layoutManager, depth) {
+    async expandAgentRecursively(agentId, position, parentNodeId, visitedAgents, layoutManager, depth, savedCanvasData = null) {
         // Предотвращаем циклические зависимости
         if (visitedAgents.has(agentId)) {
             console.warn(`Циклическая зависимость обнаружена для агента: ${agentId}`);
@@ -601,6 +610,18 @@ class BuilderDragDrop {
             
             const agentData = await agentResponse.json();
             
+            // Проверяем сохраненные позиции для этого агента
+            let finalPosition = position;
+            if (savedCanvasData && savedCanvasData.nodes) {
+                const savedNode = savedCanvasData.nodes.find(node => 
+                    node.type === 'agent_node' && node.params.agent_id === agentId
+                );
+                if (savedNode && savedNode.ui) {
+                    finalPosition = { x: savedNode.ui.x, y: savedNode.ui.y };
+                    console.log(`Используем сохраненную позицию для агента ${agentId}: (${finalPosition.x}, ${finalPosition.y})`);
+                }
+            }
+            
             // Создаем ноду агента
             const agentNodeData = {
                 id: `agent_${agentId}_${Date.now()}`,
@@ -611,8 +632,8 @@ class BuilderDragDrop {
                     description: agentData.description
                 },
                 ui: {
-                    x: position.x,
-                    y: position.y,
+                    x: finalPosition.x,
+                    y: finalPosition.y,
                     width: 200,
                     height: 100
                 }
@@ -636,7 +657,18 @@ class BuilderDragDrop {
             if (agentData.tools && agentData.tools.length > 0) {
                 for (let i = 0; i < agentData.tools.length; i++) {
                     const toolRef = agentData.tools[i];
-                    const toolPosition = layoutManager.getNextPosition(position, 'tool', depth + 1, i);
+                    let toolPosition = layoutManager.getNextPosition(finalPosition, 'tool', depth + 1, i);
+                    
+                    // Проверяем сохраненные позиции для этого инструмента
+                    if (savedCanvasData && savedCanvasData.nodes) {
+                        const savedToolNode = savedCanvasData.nodes.find(node => 
+                            node.type === 'tool_node' && node.params.tool_id === toolRef.tool_id
+                        );
+                        if (savedToolNode && savedToolNode.ui) {
+                            toolPosition = { x: savedToolNode.ui.x, y: savedToolNode.ui.y };
+                            console.log(`Используем сохраненную позицию для инструмента ${toolRef.tool_id}: (${toolPosition.x}, ${toolPosition.y})`);
+                        }
+                    }
                     
                     // Проверяем, это тул или агент
                     if (toolRef.tool_id.startsWith('agent:')) {
@@ -648,14 +680,16 @@ class BuilderDragDrop {
                             agentNode.id,
                             new Set(visitedAgents),
                             layoutManager,
-                            depth + 1
+                            depth + 1,
+                            savedCanvasData // Передаем сохраненные данные для субагентов
                         );
                     } else {
                         // Это тул
                         await this.expandToolRecursively(
                             toolRef.tool_id,
                             toolPosition,
-                            agentNode.id
+                            agentNode.id,
+                            savedCanvasData // Передаем сохраненные данные для инструментов
                         );
                     }
                 }
@@ -673,7 +707,8 @@ class BuilderDragDrop {
                             agentNode.id,
                             new Set(visitedAgents), // Создаем новый Set для каждой ветки
                             layoutManager,
-                            depth + 1
+                            depth + 1,
+                            savedCanvasData // Передаем сохраненные данные дальше
                         );
                         childIndex++;
                     }
@@ -691,7 +726,7 @@ class BuilderDragDrop {
     /**
      * Разворачивание тула
      */
-    async expandToolRecursively(toolId, position, parentNodeId) {
+    async expandToolRecursively(toolId, position, parentNodeId, savedCanvasData = null) {
         try {
             // Кодируем toolId для URL (заменяем точки на слеши для корректного роутинга)
             const encodedToolId = encodeURIComponent(toolId);
@@ -705,6 +740,18 @@ class BuilderDragDrop {
             
             const toolData = await toolResponse.json();
             
+            // Проверяем сохраненные позиции для этого инструмента
+            let finalPosition = position;
+            if (savedCanvasData && savedCanvasData.nodes) {
+                const savedNode = savedCanvasData.nodes.find(node => 
+                    node.type === 'tool_node' && node.params.tool_id === toolId
+                );
+                if (savedNode && savedNode.ui) {
+                    finalPosition = { x: savedNode.ui.x, y: savedNode.ui.y };
+                    console.log(`Используем сохраненную позицию для инструмента ${toolId}: (${finalPosition.x}, ${finalPosition.y})`);
+                }
+            }
+            
             // Создаем ноду тула
             const toolNodeData = {
                 id: `tool_${toolId}_${Date.now()}`,
@@ -716,8 +763,8 @@ class BuilderDragDrop {
                     category: toolData.category
                 },
                 ui: {
-                    x: position.x,
-                    y: position.y,
+                    x: finalPosition.x,
+                    y: finalPosition.y,
                     width: 180,
                     height: 80
                 }
@@ -815,10 +862,10 @@ class BuilderDragDrop {
 class FlowLayoutManager {
     constructor() {
         this.config = {
-            horizontalSpacing: 300,  // Расстояние между уровнями по горизонтали
-            verticalSpacing: 150,    // Расстояние между элементами по вертикали
-            toolOffset: 200,        // Смещение для тулов
-            toolSpacing: 180        // Расстояние между тулами
+            horizontalSpacing: 450,  // Расстояние между уровнями по горизонтали
+            verticalSpacing: 220,    // Расстояние между элементами по вертикали
+            toolOffset: 350,        // Смещение для тулов
+            toolSpacing: 200        // Расстояние между тулами
         };
     }
     

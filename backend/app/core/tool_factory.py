@@ -11,7 +11,7 @@ from typing import List, Any
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
-from app.models import ToolReference
+from app.models import ToolReference, CodeMode
 from app.core.flow_factory import FlowFactory
 from app.core.container import get_container
 from app.core.context import get_context
@@ -62,6 +62,8 @@ class ToolFactory:
             tool = await self._create_agent_tool(ref)
         elif "flows" in tool_id:
             tool = await self._create_flow_tool(ref)
+        elif ref.code_mode == CodeMode.INLINE_CODE:
+            tool = await self._create_inline_code_tool(ref)
         else:
             tool = await self._create_function_tool(ref)
         
@@ -70,6 +72,53 @@ class ToolFactory:
             tool = self._wrap_tool_with_billing(tool, ref)
         
         return tool
+
+    async def _create_inline_code_tool(self, ref: ToolReference) -> Any:
+        """Создает инструмент из inline кода"""
+        if not ref.inline_code:
+            raise ValueError(f"INLINE_CODE инструмент {ref.tool_id} не содержит inline_code")
+        
+        try:
+            logger.debug(f"🔥 Создаем INLINE_CODE инструмент: {ref.tool_id}")
+            logger.debug(f"🔥 Inline код: {ref.inline_code[:100]}...")
+            
+            # Создаем namespace для выполнения кода
+            namespace = {'asyncio': asyncio}
+            
+            # Выполняем inline код
+            exec(ref.inline_code, namespace)
+            
+            # Ищем функцию main или первую async функцию
+            tool_function = namespace.get('main')
+            if not tool_function:
+                # Ищем первую async функцию
+                for name, obj in namespace.items():
+                    if name.startswith('_'):
+                        continue
+                    if asyncio.iscoroutinefunction(obj) or callable(obj):
+                        tool_function = obj
+                        logger.debug(f"🔥 Найдена функция: {name}")
+                        break
+            
+            if not tool_function:
+                # Если функция не найдена, создаем простую заглушку
+                logger.warning(f"⚠️ Функция не найдена в inline коде, создаем заглушку")
+                async def stub_function(*args, **kwargs):
+                    return "Результат"
+                tool_function = stub_function
+            
+            # Создаем StructuredTool из функции
+            logger.debug(f"🔥 Создаем StructuredTool из функции")
+            return StructuredTool.from_function(
+                coroutine=tool_function if asyncio.iscoroutinefunction(tool_function) else None,
+                func=tool_function if not asyncio.iscoroutinefunction(tool_function) else None,
+                name=ref.tool_id,
+                description=ref.description or "Кастомный инструмент"
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания INLINE_CODE инструмента {ref.tool_id}: {e}")
+            raise
 
     async def _create_function_tool(self, ref: ToolReference) -> Any:
         """Создает инструмент из обычной функции или класса"""

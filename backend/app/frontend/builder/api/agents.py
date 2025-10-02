@@ -47,26 +47,28 @@ async def get_agent(agent_id: str, storage: Storage = Depends(get_storage)) -> A
 
 @router.post("/", response_model=AgentConfig)
 async def create_agent(
-    name: str,
+    name: str = "Новый Agent",
     description: Optional[str] = None,
     agent_type: AgentType = AgentType.REACT,
     prompt: Optional[str] = None,
     storage: Storage = Depends(get_storage)
 ) -> AgentConfig:
-    """Создать нового агента"""
-    agent_id = str(uuid.uuid4())
+    """Создать нового агента и сразу сохранить в БД"""
+    agent_id = f"agent_{uuid.uuid4().hex[:8]}"
     
     agent_config = AgentConfig(
         agent_id=agent_id,
         name=name,
-        description=description,
+        description=description or "",
         type=agent_type,
-        prompt=prompt,
+        prompt=prompt or "Вы полезный ассистент.",
         code_mode=CodeMode.INLINE_CODE,
-        source="builder"
+        source="canvas_created"
     )
     
+    # Сразу сохраняем в БД
     await storage.set_agent_config(agent_config)
+    
     return agent_config
 
 

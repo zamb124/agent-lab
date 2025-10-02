@@ -29,17 +29,19 @@
     bottom: 100%;
     left: 50%;
     transform: translateX(-50%);
-    background: var(--bg-quaternary);
+    background: var(--bg-secondary);
     color: var(--text-primary);
     padding: 8px 12px;
     border-radius: var(--radius-md);
     font-size: 12px;
-    white-space: nowrap;
-    max-width: 300px;
     white-space: normal;
-    box-shadow: var(--shadow-lg);
-    z-index: 1000;
+    max-width: 250px;
+    line-height: 1.4;
+    box-shadow: var(--shadow-xl);
+    z-index: 9999;
     border: 1px solid var(--border-color);
+    opacity: 1;
+    pointer-events: none;
 }
 
 .field-info-btn[data-toggle="tooltip"]:hover::before {
@@ -48,9 +50,10 @@
     bottom: 100%;
     left: 50%;
     transform: translateX(-50%) translateY(1px);
-    border: 4px solid transparent;
-    border-top-color: var(--border-color);
-    z-index: 1001;
+    border: 5px solid transparent;
+    border-top-color: var(--bg-secondary);
+    z-index: 10000;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.1));
 }
 
 /* Базовые стили полей */

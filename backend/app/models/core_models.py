@@ -146,6 +146,24 @@ class GraphEdge(BaseModel):
     )
 
 
+class BuilderEntity(BaseModel):
+    """Базовая модель для всех сущностей Builder"""
+    
+    # Метаданные - общие для всех сущностей
+    source: str = Field(
+        default="manual",
+        title="Источник",
+        description="Источник создания (manual, migration, canvas_created)",
+        readonly=True,
+    )
+    created_at: Optional[datetime] = Field(
+        default=None, title="Создан", description="Дата создания", readonly=True
+    )
+    updated_at: Optional[datetime] = Field(
+        default=None, title="Обновлен", description="Дата обновления", readonly=True
+    )
+
+
 class GraphDefinition(BaseModel):
     """Определение графа"""
 
@@ -163,8 +181,11 @@ class GraphDefinition(BaseModel):
     )
 
 
-class ToolReference(BaseModel):
+class ToolReference(BuilderEntity):
     """Ссылка на инструмент"""
+
+    class Config:
+        storage_prefix = "tool"
 
     tool_id: str = Field(
         title="ID инструмента",
@@ -274,7 +295,7 @@ class LLMConfig(BaseModel):
     )
 
 
-class AgentConfig(BaseModel):
+class AgentConfig(BuilderEntity):
     """Конфигурация агента"""
 
     class Config:
@@ -360,22 +381,8 @@ class AgentConfig(BaseModel):
         placeholder="global или agent1,agent2",
     )
 
-    # Метаданные
-    source: str = Field(
-        default="manual",
-        title="Источник",
-        description="Источник создания агента",
-        readonly=True,
-    )
-    created_at: Optional[datetime] = Field(
-        default=None, title="Создан", description="Дата создания", readonly=True
-    )
-    updated_at: Optional[datetime] = Field(
-        default=None, title="Обновлен", description="Дата обновления", readonly=True
-    )
 
-
-class FlowConfig(BaseModel):
+class FlowConfig(BuilderEntity):
     """Конфигурация флоу - простая административная сущность"""
 
     class Config:
@@ -423,18 +430,12 @@ class FlowConfig(BaseModel):
         ge=0,
     )
 
-    # Метаданные
-    source: str = Field(
-        default="manual",
-        title="Источник",
-        description="Источник создания флоу",
-        readonly=True,
-    )
-    created_at: Optional[datetime] = Field(
-        default=None, title="Создан", description="Дата создания", readonly=True
-    )
-    updated_at: Optional[datetime] = Field(
-        default=None, title="Обновлен", description="Дата обновления", readonly=True
+    # Данные канваса Builder
+    canvas_data: Optional[Dict[str, Any]] = Field(
+        default=None,
+        title="Данные канваса",
+        description="Позиции элементов и связи на канвасе Builder",
+        exclude_from_form=True,  # Не показываем в форме редактирования
     )
 
 

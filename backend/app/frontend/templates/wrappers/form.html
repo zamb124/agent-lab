@@ -1,13 +1,21 @@
-<div class="card">
-    <div class="card-header">
+<div class="card {{ model_type }}-card">
+    <div class="card-header {{ model_type }}-header">
         <div class="d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-3">
                 <div class="table-icon">
-                    <i class="bi bi-pencil"></i>
+                    {% if model_type == 'agent' %}
+                        <i class="bi bi-robot"></i>
+                    {% elif model_type == 'flow' %}
+                        <i class="bi bi-diagram-3"></i>
+                    {% elif model_type == 'tool' %}
+                        <i class="bi bi-wrench"></i>
+                    {% else %}
+                        <i class="bi bi-pencil"></i>
+                    {% endif %}
                 </div>
                 <div>
-                    <h5 class="mb-0 font-semibold">{{ model_type.title() if model_type else 'Форма' }}</h5>
-                    <small class="text-muted">Редактирование</small>
+                    <h5 class="mb-0 font-semibold">{{ model_instance.name if model_instance and hasattr(model_instance, 'name') else (model_type.title() if model_type else 'Форма') }}</h5>
+                    <small class="text-muted">{{ model_type.title() if model_type else 'Редактирование' }}</small>
                 </div>
             </div>
             <div class="btn-group">
