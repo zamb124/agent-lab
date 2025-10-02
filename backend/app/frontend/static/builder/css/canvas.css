@@ -85,7 +85,7 @@
 .canvas-node {
     position: absolute;
     background: var(--bg-secondary);
-    border: 2px solid var(--border-color);
+    border: 2px solid var(--border-color) !important; /* Всегда нейтральная рамка */
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-md);
     cursor: pointer;
@@ -314,22 +314,7 @@
     cursor: grabbing;
 }
 
-/* Типы нод */
-.agent-node {
-    border-color: #3b82f6;
-}
-
-.tool-node {
-    border-color: #10b981;
-}
-
-.flow-node {
-    border-color: #8b5cf6;
-}
-
-.function-node {
-    border-color: #f59e0b;
-}
+/* Типы нод - стили удалены, используется общий стиль .canvas-node */
 
 /* Заголовок ноды */
 .node-header {

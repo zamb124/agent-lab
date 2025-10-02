@@ -183,6 +183,19 @@
     overflow: hidden; /* Для красивых скругленных углов */
 }
 
+/* Цветные рамки ТОЛЬКО для карточек в сайдбаре */
+.builder-sidebar .agent-card {
+    border: 2px solid var(--accent-primary) !important; /* Синяя рамка */
+}
+
+.builder-sidebar .flow-card {
+    border: 2px solid var(--accent-secondary) !important; /* Фиолетовая рамка */
+}
+
+.builder-sidebar .tool-card {
+    border: 2px solid var(--accent-warning) !important; /* Оранжевая рамка */
+}
+
 /* Карточки с формами */
 .flow-form-card,
 .agent-form-card {
@@ -234,7 +247,9 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 8px;
+    margin-bottom: 0;
+    padding: 12px;
+    border-radius: calc(var(--radius-md) - 2px) calc(var(--radius-md) - 2px) 0 0; /* Учитываем 2px рамку */
 }
 
 .card-icon {
