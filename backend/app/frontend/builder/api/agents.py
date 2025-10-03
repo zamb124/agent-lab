@@ -83,6 +83,9 @@ async def update_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     
+    # Создаем обновленные данные с валидацией через модель
+    agent_dict = agent.model_dump()
+    
     # Обновляем только разрешенные поля
     allowed_fields = {
         "name", "description", "type", "prompt", "code_mode", 
@@ -90,10 +93,13 @@ async def update_agent(
     }
     for field, value in updates.items():
         if field in allowed_fields:
-            setattr(agent, field, value)
+            agent_dict[field] = value
     
-    await storage.set_agent_config(agent)
-    return agent
+    # Валидируем через модель - валидаторы автоматически преобразуют типы
+    validated_agent = AgentConfig(**agent_dict)
+    
+    await storage.set_agent_config(validated_agent)
+    return validated_agent
 
 
 @router.delete("/{agent_id}")
