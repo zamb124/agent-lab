@@ -23,12 +23,16 @@ from app.db.database import create_tables, close_db
 from app.core.migrator import Migrator
 from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads
 from app.frontend.api import models as frontend_models
-from app.frontend.api import pages as frontend_pages
-from app.frontend.api import websocket as frontend_websocket
-from app.frontend.main.api import pages as main_pages
-from app.frontend.chat.api import router as chat_router
-from app.frontend.chat.api import websocket as chat_websocket
-from app.frontend.builder.api import router as builder_router
+from app.frontend.api import flows as frontend_flows
+from app.frontend.api import agents as frontend_agents
+from app.frontend.api import tools as frontend_tools
+from app.frontend.pages import auth as auth_pages
+from app.frontend.pages import dashboard as dashboard_pages
+from app.frontend.pages import public as public_pages
+from app.frontend.modules.chat import router as chat_module
+from app.frontend.modules.builder import router as builder_module
+from app.frontend.websockets import notifications as websocket_notifications
+from app.frontend.websockets import chat as websocket_chat
 from app.middleware.auth import AuthMiddleware
 from app.services.cleanup_service import CleanupService
 
@@ -211,6 +215,8 @@ app.add_middleware(
 )
 
 # Подключение роутеров
+
+# API v1
 app.include_router(webhooks.router, prefix="/api/v1", tags=["webhooks"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(telegram.router, prefix="/api/v1", tags=["telegram"])
@@ -220,25 +226,35 @@ app.include_router(flows.router, prefix="/api/v1/flows", tags=["flows"])
 app.include_router(fashn.router, prefix="/api/v1/fashn", tags=["fashn"])
 app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
 app.include_router(leads.router, prefix="/api/v1", tags=["leads"])
-app.include_router(frontend_models.router, tags=["frontend"])
-app.include_router(frontend_pages.router, tags=["frontend-pages"])
-app.include_router(frontend_websocket.router, tags=["frontend-websocket"])
-app.include_router(main_pages.router, tags=["main-pages"])
-app.include_router(chat_router.router, prefix="/frontend/chat", tags=["chat"])
-app.include_router(
-    chat_websocket.router, prefix="/frontend/chat", tags=["chat-websocket"]
-)
-app.include_router(builder_router.router, prefix="/frontend", tags=["builder"])
+
+# Frontend API (JSON CRUD)
+app.include_router(frontend_models.router, tags=["frontend-models"])
+app.include_router(frontend_flows.router, prefix="/frontend/builder", tags=["frontend-flows"])
+app.include_router(frontend_agents.router, prefix="/frontend/builder", tags=["frontend-agents"])
+app.include_router(frontend_tools.router, prefix="/frontend/builder", tags=["frontend-tools"])
+
+# Frontend Pages (HTML)
+app.include_router(public_pages.router, tags=["public-pages"])
+app.include_router(auth_pages.router, tags=["auth-pages"])
+app.include_router(dashboard_pages.router, tags=["dashboard-pages"])
+
+# Frontend Modules
+app.include_router(chat_module.router, tags=["chat-module"])
+app.include_router(builder_module.router, tags=["builder-module"])
+
+# WebSockets
+app.include_router(websocket_notifications.router, tags=["websocket-notifications"])
+app.include_router(websocket_chat.router, prefix="/frontend/chat", tags=["websocket-chat"])
 
 # Статические файлы
-static_dir = Path(__file__).parent / "frontend" / "static"
+static_dir = Path(__file__).parent / "frontend" / "shared" / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
 @app.get("/")
 async def root(request: Request):
     """Корневой эндпоинт - главная страница"""
-    from app.frontend.main.api.pages import landing_page
+    from app.frontend.pages.public import landing_page
     return await landing_page(request)
 
 
