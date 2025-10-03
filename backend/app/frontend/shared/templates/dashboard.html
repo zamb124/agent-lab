@@ -164,43 +164,6 @@
 </div>
 
 <script>
-// Функция для открытия чата с погодным агентом
-async function openWeatherChat() {
-    if (window.app && window.app.chat) {
-        await window.app.chat.open({
-            agent_id: "app.flows.weather_flow.weather_flow_config",
-            initial_message: "/clear"  // Сначала очищаем контекст
-        });
-    } else {
-        console.error('Чат не инициализирован');
-        alert('Чат временно недоступен');
-    }
-}
-
-// Функция для открытия чата с калькулятором
-async function openCalculatorChat() {
-    if (window.app && window.app.chat) {
-        await window.app.chat.open({
-            agent_id: "app.flows.smart_flow.smart_flow_config",
-            initial_message: "Привет! Помоги мне с вычислениями"
-        });
-    } else {
-        console.error('Чат не инициализирован');
-        alert('Чат временно недоступен');
-    }
-}
-
-// Функция для открытия чата с объяснителем  
-async function openExplainerChat() {
-    if (window.app && window.app.chat) {
-        await window.app.chat.open({
-            agent_id: "app.flows.test_flow.test_flow_config",
-            initial_message: "Привет! Объясни мне что-нибудь"
-        });
-    } else {
-        console.error('Чат не инициализирован');
-        alert('Чат временно недоступен');
-    }
-}
+// Dashboard scripts
 </script>
 {% endblock %}
