@@ -114,12 +114,16 @@ class ChatWebSocketManager:
                         if len(parts) >= 2:
                             try:
                                 key_timestamp = float(parts[-1])
+                                age = current_time - key_timestamp
                                 # Обрабатываем только свежие уведомления (за последние 60 секунд)
-                                if current_time - key_timestamp <= 60:
+                                if age <= 60:
                                     notifications_to_process.append(
                                         (key, key_timestamp)
                                     )
+                                else:
+                                    logger.debug(f"⏭️ Пропускаем старое уведомление (age={age:.1f}s)")
                             except ValueError:
+                                logger.debug(f"⚠️ Не удалось распарсить timestamp из ключа")
                                 continue
 
                 # Сортируем по timestamp (старые сначала)

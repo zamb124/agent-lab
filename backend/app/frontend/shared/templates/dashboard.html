@@ -77,6 +77,22 @@
                     </a>
                 </div>
             </nav>
+            
+            <!-- Админ-панель (только для system admin) -->
+            {% if is_system_admin() %}
+            <div class="sidebar-section">
+                <div class="sidebar-section-title">Администрирование</div>
+                <nav class="sidebar-nav">
+                    <div class="sidebar-nav-item">
+                        <a href="/frontend/admin/companies" 
+                           class="sidebar-nav-link">
+                            <i class="bi bi-building"></i>
+                            <span class="sidebar-nav-text">Управление компаниями</span>
+                        </a>
+                    </div>
+                </nav>
+            </div>
+            {% endif %}
         </div>
         
         <div class="sidebar-footer">

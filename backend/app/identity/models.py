@@ -225,10 +225,16 @@ class Company(BaseModel):
         title="Тарифный план",
         description="Тарифный план компании (free, basic, premium, enterprise)"
     )
+    balance: float = Field(
+        default=0.0,
+        title="Баланс",
+        description="Баланс компании в RUB (реальные деньги на счету)",
+        ge=0.0
+    )
     monthly_budget: float = Field(
         default=0.0,
-        title="Месячный бюджет",
-        description="Месячный бюджет компании в RUB (0 = без лимитов)",
+        title="Месячный лимит",
+        description="Месячное самоограничение в RUB (0 = без самоограничения)",
         ge=0.0
     )
     current_month_spent: float = Field(

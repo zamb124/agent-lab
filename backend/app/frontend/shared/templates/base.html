@@ -1,10 +1,18 @@
 <!DOCTYPE html>
-<html lang="ru" data-theme="dark">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>{% block title %}Agents Lab{% endblock %}</title>
+    
+    <!-- Применяем тему ДО загрузки страницы для избежания мигания -->
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        })();
+    </script>
     
     <!-- Preconnect для быстрой загрузки шрифтов -->
     <link rel="preconnect" href="https://fonts.googleapis.com">

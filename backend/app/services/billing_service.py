@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any
 from ..core.storage import Storage
 from ..core.context import get_context
 from ..identity.models import User, Company
-from ..models.billing_models import UsageRecord, UsageType, TariffPlan, TARIFF_LIMITS
+from ..models.billing_models import UsageRecord, UsageType, TariffPlan, TARIFF_PRICES
 
 logger = logging.getLogger(__name__)
 
@@ -28,70 +28,21 @@ class BillingService:
         Возвращает (можно_ли, причина_если_нельзя)
         """
         
-        # 1. Проверяем лимиты тарифного плана
-        logger.debug(f"🔥 company.tariff_plan = {company.tariff_plan} (тип: {type(company.tariff_plan)})")
-        logger.debug(f"🔥 TARIFF_LIMITS.keys() = {list(TARIFF_LIMITS.keys())}")
-        tariff_limits = TARIFF_LIMITS.get(company.tariff_plan, {})
-        logger.debug(f"🔥 tariff_limits для {company.tariff_plan}: {tariff_limits}")
+        # 1. Получаем стоимость ресурса с учетом тарифа компании
+        resource_cost = await self.get_resource_cost_for_company(company, resource_name)
         
-        # Определяем тип ресурса и лимит
-        resource_limit = 0
-        
-        # Парсим формат category:resource
-        if ":" not in resource_name:
-            logger.debug(f"🔥 НЕПРАВИЛЬНЫЙ ФОРМАТ resource_name: '{resource_name}' (нет ':')")
-            return False, f"Неправильный формат ресурса: {resource_name}"
+        # 2. Проверяем баланс компании (если ресурс платный)
+        if resource_cost > 0:
+            if company.balance <= 0:
+                return False, f"На балансе компании недостаточно средств. Пополните баланс."
             
-        category, resource = resource_name.split(":", 1)
+            if company.balance < resource_cost:
+                return False, f"Недостаточно средств на балансе: {company.balance:.2f}₽, требуется: {resource_cost:.2f}₽"
         
-        if category in ["openai", "gemini", "yandex", "anthropic"]:
-            # LLM ресурсы: openai:gpt-4o, gemini:gemini-1.5-pro
-            provider_limits = tariff_limits.get(category, {})
-            if "*" in provider_limits:
-                resource_limit = provider_limits["*"]
-            else:
-                resource_limit = provider_limits.get(resource, 0)
-                
-        elif category == "platform":
-            # Платформенные ресурсы: platform:max_agents
-            platform_limits = tariff_limits.get("platform", {})
-            if "*" in platform_limits:
-                resource_limit = platform_limits["*"]
-            else:
-                resource_limit = platform_limits.get(resource, 0)
-                
-        elif category == "tool":
-            # Тулы: tool:weather_api
-            tools_limits = tariff_limits.get("tools", {})
-            if "*" in tools_limits:
-                resource_limit = tools_limits["*"]
-            else:
-                resource_limit = tools_limits.get(resource, 0)
-                
-        else:
-            logger.debug(f"🔥 НЕИЗВЕСТНАЯ КАТЕГОРИЯ: '{category}'")
-            return False, f"Неизвестная категория ресурса: {category}"
-        
-        logger.debug(f"🔥 ИТОГОВЫЙ resource_limit = {resource_limit}")
-        if resource_limit == 0:
-            logger.debug(f"🔥 БЛОКИРУЕМ: resource_limit = 0")
-            return False, f"Ресурс {resource_name} недоступен на тарифе {company.tariff_plan}"
-        
-        # 2. Если лимит не безлимитный, проверяем использование
-        if resource_limit > 0:
-            current_usage = await self._get_monthly_usage(company.company_id, resource_name)
-            if current_usage >= resource_limit:
-                return False, f"Превышен месячный лимит для {resource_name}: {current_usage}/{resource_limit}"
-        
-        # 3. Проверяем бюджет компании
-        # ВАЖНО: Если бюджет не установлен (0 или None), запрещаем использование
-        if not company.monthly_budget or company.monthly_budget <= 0:
-            return False, f"У компании не установлен месячный бюджет. Обратитесь к администратору."
-        
-        # Проверяем не превышен ли бюджет
-        resource_cost = await self._get_resource_cost(resource_name)
-        if company.current_month_spent + resource_cost > company.monthly_budget:
-            return False, f"Превышен месячный бюджет компании: {company.current_month_spent + resource_cost:.2f}₽/{company.monthly_budget}₽"
+        # 3. Проверяем месячный лимит расходов (если установлен)
+        if company.monthly_budget > 0 and resource_cost > 0:
+            if company.current_month_spent + resource_cost > company.monthly_budget:
+                return False, f"Превышен месячный лимит расходов: {company.current_month_spent + resource_cost:.2f}₽/{company.monthly_budget}₽"
         
         return True, ""
     
@@ -131,11 +82,16 @@ class BillingService:
         
         await self.storage.set(usage_key, usage_record.model_dump_json(), force_global=True)
         
-        # Обновляем потраченную сумму компании
+        # Обновляем баланс и потраченную сумму компании
+        old_balance = company.balance
         old_spent = company.current_month_spent
+        
+        company.balance -= cost
         company.current_month_spent += cost
         
-        logger.info(f"💰 Обновляем баланс компании {company.company_id}: {old_spent}₽ → {company.current_month_spent}₽")
+        logger.info(f"💰 Обновляем компанию {company.company_id}:")
+        logger.info(f"   Баланс: {old_balance:.2f}₽ → {company.balance:.2f}₽")
+        logger.info(f"   Потрачено в месяце: {old_spent:.2f}₽ → {company.current_month_spent:.2f}₽")
         
         await self.storage.set(f"company:{company.company_id}", company.model_dump_json(), force_global=True)
         
@@ -166,21 +122,92 @@ class BillingService:
         
         return count
     
-    async def _get_resource_cost(self, resource_name: str) -> float:
-        """Получает стоимость ресурса из конфигурации"""
+    async def get_resource_cost_for_company(self, company: Company, resource_name: str) -> float:
+        """Получает стоимость ресурса с учетом тарифа компании"""
         
-        # Для LLM - получаем из конфигурации
-        if "_" in resource_name and any(provider in resource_name for provider in ["openai", "yandex", "anthropic", "ollama", "gemini"]):
-            return await self._get_llm_cost(resource_name)
+        # Получаем базовую цену
+        base_cost = await self._get_base_resource_cost(resource_name)
         
-        # Стандартные стоимости для инструментов (потом из ToolReference)
-        default_costs = {
-            "weather_api": 0.1,
-            "travel_suggest": 0.2,
-            "calculator": 0.0,
-        }
+        # Если базовая цена 0 - ресурс бесплатный
+        if base_cost == 0:
+            return 0.0
         
-        return default_costs.get(resource_name, 0.0)
+        # Применяем тарифный множитель
+        tariff_prices = TARIFF_PRICES.get(company.tariff_plan, {})
+        
+        # Парсим формат category:resource
+        if ":" not in resource_name:
+            return base_cost
+        
+        category, resource = resource_name.split(":", 1)
+        
+        # Получаем множитель для категории
+        # Нормализуем категорию: tool -> tools для совместимости
+        tariff_category = category
+        if category == "tool":
+            tariff_category = "tools"
+        
+        category_prices = tariff_prices.get(tariff_category, {})
+        
+        # Проверяем есть ли специфичная цена для ресурса
+        if resource in category_prices:
+            multiplier = category_prices[resource]
+        elif "*" in category_prices:
+            multiplier = category_prices["*"]
+        else:
+            multiplier = 1.0  # Базовая цена
+        
+        final_cost = base_cost * multiplier
+        logger.debug(f"💰 Цена для {resource_name}: базовая={base_cost}₽, множитель={multiplier}, итого={final_cost}₽")
+        
+        return final_cost
+    
+    async def _get_base_resource_cost(self, resource_name: str) -> float:
+        """Получает базовую стоимость ресурса"""
+        
+        # Парсим формат category:resource
+        if ":" not in resource_name:
+            return 0.0
+        
+        category, resource = resource_name.split(":", 1)
+        
+        # Для LLM - получаем из конфигурации или устанавливаем базовую
+        if category in ["openai", "gemini", "yandex", "anthropic"]:
+            # Базовые цены для LLM (можно переопределить в конфиге)
+            llm_base_prices = {
+                "openai": {
+                    "gpt-4": 1.0,
+                    "gpt-4o": 0.8,
+                    "gpt-3.5-turbo": 0.1,
+                },
+                "gemini": {
+                    "gemini-2.0-flash-exp": 0.2,
+                    "gemini-2.5-pro": 0.5,
+                    "gemini-1.5-flash": 0.15,
+                    "gemini-1.5-pro": 0.4,
+                },
+                "yandex": {
+                    "yandexgpt/latest": 0.3,
+                },
+                "anthropic": {
+                    "claude-3-sonnet": 0.7,
+                }
+            }
+            provider_prices = llm_base_prices.get(category, {})
+            return provider_prices.get(resource, 0.5)  # 0.5 по умолчанию
+        
+        # Для инструментов
+        elif category == "tool":
+            tool_base_prices = {
+                "weather_api": 0.1,
+                "travel_suggest": 0.2,
+                "calculator": 0.0,
+                "nano_banana_generation": 0.5,
+                "fashn_buyer_agent": 0.0,
+            }
+            return tool_base_prices.get(resource, 0.05)  # 0.05 по умолчанию
+        
+        return 0.0
     
     async def _get_llm_cost(self, llm_resource_name: str) -> float:
         """Получает стоимость LLM из конфигурации"""

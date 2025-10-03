@@ -138,6 +138,12 @@ backend/app/frontend/
 │   │   └── templates/
 │   │       └── billing.html           # Страница биллинга
 │   │
+│   ├── admin/                         # Администрирование (system admin)
+│   │   ├── __init__.py
+│   │   ├── router.py                  # /frontend/admin/*
+│   │   └── templates/
+│   │       └── admin_companies.html   # Управление компаниями
+│   │
 │   └── landing/                       # Landing page
 │       ├── __init__.py
 │       └── templates/
@@ -227,6 +233,12 @@ backend/app/frontend/
         │   └── js/
         │       └── chat.js            # (дубликат в js/)
         │
+        ├── billing/                   # Модульные файлы Billing
+        │   ├── css/
+        │   │   └── billing.css        # Стили биллинга
+        │   └── js/
+        │       └── billing.js         # Функционал биллинга
+        │
         └── landing/                   # Модульные файлы Landing
             └── css/
                 └── landing.css        # Стили landing page
@@ -282,10 +294,35 @@ backend/app/frontend/
 - Автоматически находит все `templates/` директории в `shared/` и `modules/*/`
 - Создает единый `Jinja2Templates` с правильными приоритетами
 - Используется всеми роутерами через `get_templates()`
+- **Добавляет глобальные функции в Jinja2 environment** для доступа к контексту
 
 **Приоритет загрузки:**
 1. `shared/templates/` (общие шаблоны)
 2. `modules/*/templates/` (модульные шаблоны)
+
+**Глобальные функции в шаблонах:**
+
+Автоматически доступны во всех Jinja2 шаблонах без явной передачи:
+
+- `current_user()` - получить текущего пользователя из контекста
+- `current_company()` - получить текущую активную компанию
+- `user_roles()` - получить роли пользователя в активной компании (список)
+- `user_has_role('admin')` - проверить наличие роли в активной компании
+- `user_has_role('admin', 'system')` - проверить наличие роли в конкретной компании
+- `is_system_admin()` - проверить что пользователь admin в компании system
+
+**Пример использования:**
+```jinja
+{% if is_system_admin() %}
+  <div>Админ-панель для системных администраторов</div>
+{% endif %}
+
+{% if user_has_role('admin') %}
+  <button>Редактировать</button>
+{% endif %}
+
+<div>Ваши роли: {{ user_roles() }}</div>
+```
 
 #### `core/websocket_manager.py`
 **Менеджер WebSocket соединений** (legacy, можно удалить)
@@ -392,6 +429,16 @@ backend/app/frontend/
 - `GET /frontend/billing/` - главная страница биллинга
 - `GET /frontend/billing/api/stats` - API для получения статистики
 - `POST /frontend/billing/api/payment` - инициализация платежа (заглушка)
+
+#### `modules/admin/router.py`
+**Роутер для администрирования (только для system админов)**
+
+- `GET /frontend/admin/companies` - управление компаниями
+- `POST /frontend/admin/api/companies/{company_id}/budget` - обновить бюджет компании
+- `POST /frontend/admin/api/companies/{company_id}/tariff` - изменить тариф компании
+- `POST /frontend/admin/api/companies/{company_id}/reset-billing` - сбросить месячный биллинг
+
+**Доступ:** Только пользователи с ролью `admin` в компании `system`
 
 #### `modules/landing/`
 **Модуль landing page**
@@ -649,6 +696,39 @@ app.include_router(my_module.router, tags=["my-module"])
 
 ---
 
+## 🔐 Система прав доступа
+
+### Роли в компаниях vs Глобальные группы
+
+**ВАЖНО:** В проекте используются **роли в компаниях** (`user.companies[company_id]`), а НЕ глобальные группы (`user.groups`).
+
+#### Роли в компаниях (используются):
+```python
+user.companies = {
+    "system": ["admin", "user"],
+    "ssd": ["admin", "user"],
+    "mycompany": ["user"]
+}
+```
+
+**Где проверяются:**
+- Контроль видимости полей в формах (`field_extensions.py`)
+- Доступ к административным функциям
+- Права на редактирование данных компании
+
+**Функции в шаблонах:**
+- `user_roles()` - роли в активной компании
+- `user_has_role('admin')` - проверка роли
+
+#### Глобальные группы (legacy, НЕ используются):
+```python
+user.groups = ["user"]  # Только для обратной совместимости
+```
+
+Поле `groups` оставлено в модели User для совместимости, но **все проверки прав** происходят через **роли в компаниях**.
+
+---
+
 ## 🔗 Связанные документы
 
 - [CONFIG_README.md](/CONFIG_README.md) - конфигурация приложения
@@ -658,4 +738,4 @@ app.include_router(my_module.router, tags=["my-module"])
 
 **Автор:** Viktor Shved  
 **Дата:** 2025-10-03  
-**Версия:** 2.0 (после реорганизации)
+**Версия:** 2.1 (добавлены модули billing и admin)

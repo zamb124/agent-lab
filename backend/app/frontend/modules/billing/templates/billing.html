@@ -52,12 +52,16 @@
                         <div class="tariff-stat-value">{{ company.name }}</div>
                     </div>
                     <div class="tariff-stat">
-                        <div class="tariff-stat-label">Месячный бюджет</div>
+                        <div class="tariff-stat-label">Баланс</div>
+                        <div class="tariff-stat-value">{{ "%.2f"|format(company.balance) }} ₽</div>
+                    </div>
+                    <div class="tariff-stat">
+                        <div class="tariff-stat-label">Месячный лимит</div>
                         <div class="tariff-stat-value">
                             {% if company.monthly_budget > 0 %}
                                 {{ "%.2f"|format(company.monthly_budget) }} ₽
                             {% else %}
-                                Не установлен
+                                Без лимита
                             {% endif %}
                         </div>
                     </div>
