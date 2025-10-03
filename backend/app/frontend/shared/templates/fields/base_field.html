@@ -1,0 +1,40 @@
+{% block field %}
+<div class="field field-{{ field_name }} {% block field_type_class %}{% endblock %} {{ css_class }}">
+  {% block field_label %}
+    {% if title %}
+      <label for="{{ field_name }}" class="field-label">
+        {{ title }}
+        {% if field_config.required and not readonly %}
+          <span class="required">*</span>
+        {% endif %}
+      </label>
+    {% endif %}
+  {% endblock %}
+
+  {% block field_description %}
+    {% if description %}
+      <small class="field-description text-muted">{{ description }}</small>
+    {% endif %}
+  {% endblock %}
+
+  {% block field_input %}
+    <!-- Переопределяется в дочерних шаблонах -->
+  {% endblock %}
+
+  {% block field_help %}
+    {% if help_text %}
+      <small class="field-help text-muted">{{ help_text }}</small>
+    {% endif %}
+  {% endblock %}
+
+  {% block field_errors %}
+    {% if field_config and field_config.errors %}
+      <div class="field-errors">
+        {% for error in field_config.errors %}
+          <small class="text-danger">{{ error }}</small>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endblock %}
+</div>
+{% endblock %}

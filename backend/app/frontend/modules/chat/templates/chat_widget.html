@@ -1,0 +1,93 @@
+<!-- Виджет чата для встраивания в другие страницы -->
+<div id="chat-widget" class="chat-widget" style="display: none;">
+    <div class="chat-widget-header bg-primary text-light p-2 d-flex justify-content-between align-items-center">
+        <span id="chat-widget-title">Чат с агентом</span>
+        <div>
+            <button id="chat-widget-minimize" class="btn btn-sm btn-ghost text-light">
+                <i class="bi bi-dash"></i>
+            </button>
+            <button id="chat-widget-close" class="btn btn-sm btn-ghost text-light">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+    </div>
+    
+    <div id="chat-widget-body" class="chat-widget-body">
+        <!-- Сообщения -->
+        <div id="chat-widget-messages" class="chat-messages p-2 overflow-auto bg-light">
+            <!-- Сообщения будут добавляться динамически -->
+        </div>
+        
+        <!-- Поле ввода -->
+        <div class="chat-input-container p-2 bg-white border-top">
+            <div class="input-group input-group-sm">
+                <input type="text" id="chat-widget-input" class="form-control" placeholder="Введите сообщение...">
+                <button id="chat-widget-send" class="btn btn-primary">
+                    <i class="bi bi-send"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Кнопка для открытия чата -->
+<button id="chat-widget-toggle" class="chat-widget-toggle btn btn-primary rounded-circle">
+    <i class="bi bi-chat-dots"></i>
+</button>
+
+<style>
+.chat-widget {
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    width: 350px;
+    height: 500px;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 8px;
+    background: white;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1040;
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-widget-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-messages {
+    flex: 1;
+    max-height: 400px;
+}
+
+.chat-widget-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    z-index: 1041;
+}
+
+.chat-widget.minimized .chat-widget-body {
+    display: none;
+}
+
+.chat-widget.minimized {
+    height: auto;
+}
+
+@media (max-width: 768px) {
+    .chat-widget {
+        width: calc(100vw - 20px);
+        height: calc(100vh - 100px);
+        bottom: 70px;
+        right: 10px;
+        left: 10px;
+    }
+}
+</style>
+
+<!-- Виджет управляется через window.app.chat API -->

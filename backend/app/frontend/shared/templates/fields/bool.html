@@ -1,0 +1,30 @@
+{% extends "fields/base_field.html" %}
+
+{% block field_type_class %}field-bool{% endblock %}
+
+{% block field_input %}
+  <div class="form-check">
+    {% if readonly %}
+      <input type="checkbox" 
+             id="{{ field_name }}" 
+             name="{{ field_name }}" 
+             {% if value %}checked{% endif %} 
+             disabled 
+             class="form-check-input"
+             {% for attr, val in widget_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}>
+    {% else %}
+      <input type="checkbox" 
+             id="{{ field_name }}" 
+             name="{{ field_name }}" 
+             {% if value %}checked{% endif %} 
+             class="form-check-input"
+             {% for attr, val in widget_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}>
+    {% endif %}
+    <label class="form-check-label" for="{{ field_name }}">
+      {{ title }}
+    </label>
+  </div>
+{% endblock %}
+
+{# Переопределяем label блок, так как для checkbox label идет после input #}
+{% block field_label %}{% endblock %}
