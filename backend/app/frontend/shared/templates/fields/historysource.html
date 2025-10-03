@@ -1,0 +1,73 @@
+{% if view_mode == "table" %}
+  <td class="field-cell">
+    {% if readonly %}
+      {% if value %}
+        {% if value is string %}
+          <span class="badge badge-primary">{{ value }}</span>
+        {% else %}
+          <span class="badge badge-secondary">{{ value|length }} агентов</span>
+        {% endif %}
+      {% else %}
+        <span class="text-muted">-</span>
+      {% endif %}
+    {% else %}
+      <div class="field-input-wrapper d-flex align-items-center gap-2">
+        <div id="loading-{{ field_name }}-{{ model_id }}" class="field-loading-indicator htmx-indicator"></div>
+        <input type="text" 
+               class="form-control form-control-sm transition-fast flex-grow-1" 
+               value="{{ value if value else '' }}"
+               name="{{ field_name }}"
+               {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+               hx-put="/frontend/models/{{ model_type }}/{{ model_id }}?view={{ view_mode }}"
+               hx-ext="json-enc"
+               hx-trigger="blur"
+               hx-target="closest tr"
+               hx-swap="outerHTML"
+               hx-indicator="#loading-{{ field_name }}-{{ model_id }}">
+      </div>
+    {% endif %}
+  </td>
+{% else %}
+  <div class="field field-history-source">
+    <label for="{{ field_name }}" class="field-label {% if required %}required{% endif %}">
+      {{ title }}
+    </label>
+    {% if description %}
+      <div class="field-description">{{ description }}</div>
+    {% endif %}
+    
+    <div class="field-input-wrapper">
+      {% if readonly %}
+        {% if value %}
+          {% if value is string %}
+            <span class="badge badge-primary">{{ value }}</span>
+          {% else %}
+            <div class="history-agents">
+              {% for agent in value %}
+                <span class="badge badge-secondary">{{ agent }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% else %}
+          <span class="text-muted">Не указано</span>
+        {% endif %}
+      {% else %}
+        <input type="text" 
+               id="{{ field_name }}" 
+               name="{{ field_name }}" 
+               value="{{ value if value else '' }}" 
+               class="form-control transition-fast"
+               {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+               {% if required %}required{% endif %}
+               {% for attr, val in widget_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}>
+        <div class="field-help">
+          <small>Введите "global" для глобальной истории или список агентов через запятую</small>
+        </div>
+      {% endif %}
+    </div>
+    
+    {% if help_text %}
+      <div class="field-help">{{ help_text }}</div>
+    {% endif %}
+  </div>
+{% endif %}

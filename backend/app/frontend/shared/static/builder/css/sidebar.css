@@ -1,0 +1,429 @@
+/* Боковая панель Builder */
+
+.builder-sidebar {
+    width: 320px;
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    transition: width 0.3s ease;
+}
+
+.builder-sidebar.collapsed {
+    width: 60px;
+}
+
+/* Заголовок сайдбара */
+.sidebar-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.sidebar-header h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.sidebar-toggle {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.sidebar-toggle:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+/* Табы */
+.sidebar-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tab-button {
+    flex: 1;
+    padding: 12px 8px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.tab-button:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+}
+
+.tab-button.active {
+    color: var(--accent-primary);
+    background: var(--bg-tertiary);
+}
+
+.tab-button.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--accent-primary);
+}
+
+/* Поиск */
+.sidebar-search {
+    padding: 16px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.search-input {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px var(--accent-primary-alpha);
+}
+
+.search-input::placeholder {
+    color: var(--text-secondary);
+}
+
+.search-add-btn {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.search-add-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--text-secondary);
+    transform: translateY(-1px);
+}
+
+/* Контент сайдбара */
+.sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    position: relative;
+}
+
+/* Табы контента */
+.tab-content {
+    display: none;
+    height: 100%;
+}
+
+.tab-content.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Действия в табах */
+.tab-actions {
+    padding: 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tab-actions .btn {
+    width: 100%;
+    justify-content: center;
+    gap: 8px;
+}
+
+/* Список элементов */
+.items-list {
+    flex: 1;
+    padding: 8px;
+    overflow-y: auto;
+}
+
+/* Карточки элементов */
+.item-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0; /* Убираем padding для цветных шапочек */
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden; /* Для красивых скругленных углов */
+}
+
+/* Цветные рамки ТОЛЬКО для карточек в сайдбаре */
+.builder-sidebar .agent-card {
+    border: 2px solid var(--accent-primary) !important; /* Синяя рамка */
+}
+
+.builder-sidebar .flow-card {
+    border: 2px solid var(--accent-secondary) !important; /* Фиолетовая рамка */
+}
+
+.builder-sidebar .tool-card {
+    border: 2px solid var(--accent-warning) !important; /* Оранжевая рамка */
+}
+
+/* Карточки с формами */
+.flow-form-card,
+.agent-form-card {
+    cursor: default;
+    padding: 0;
+}
+
+.flow-form-card .card,
+.agent-form-card .card {
+    background: transparent;
+    border: none;
+    margin: 0;
+}
+
+.flow-form-card .card-body,
+.agent-form-card .card-body {
+    padding: 12px;
+}
+
+.flow-form-card .card-header,
+.agent-form-card .card-header {
+    padding: 8px 12px;
+    background: var(--bg-quaternary);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+/* Загрузчик для карточек */
+.loading-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px;
+    color: var(--text-secondary);
+}
+
+.item-card:hover {
+    border-color: var(--accent-primary);
+    box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+.item-card.dragging {
+    opacity: 0.5;
+    transform: rotate(5deg);
+}
+
+/* Заголовок карточки */
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 0;
+    padding: 12px;
+    border-radius: calc(var(--radius-md) - 2px) calc(var(--radius-md) - 2px) 0 0; /* Учитываем 2px рамку */
+}
+
+.card-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+}
+
+.card-title {
+    flex: 1;
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 1.2;
+}
+
+.card-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.item-card:hover .card-actions {
+    opacity: 1;
+}
+
+/* Описание карточки */
+.card-description {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.3;
+    margin-bottom: 8px;
+    padding: 0 12px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Метаданные карточки */
+.card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 0 12px 8px 12px;
+}
+
+.meta-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+/* Платформы */
+.card-platforms {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 0 12px 8px 12px;
+}
+
+.platform-badge {
+    background: var(--accent-primary-alpha);
+    color: var(--accent-primary);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    font-weight: 500;
+}
+
+/* Теги */
+.card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 0 12px 8px 12px;
+}
+
+.tag {
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    font-size: 10px;
+    font-weight: 500;
+}
+
+.tag-react {
+    background: #3b82f6;
+    color: white;
+}
+
+.tag-stategraph {
+    background: #8b5cf6;
+    color: white;
+}
+
+.tag-inline {
+    background: #10b981;
+    color: white;
+}
+
+.tag-reference {
+    background: #f59e0b;
+    color: white;
+}
+
+.tag-calculator {
+    background: #ef4444;
+    color: white;
+}
+
+.tag-weather {
+    background: #06b6d4;
+    color: white;
+}
+
+.tag-files {
+    background: #84cc16;
+    color: white;
+}
+
+.tag-fashn {
+    background: #ec4899;
+    color: white;
+}
+
+.tag-image_generation {
+    background: #f97316;
+    color: white;
+}
+
+.tag-voice {
+    background: #6366f1;
+    color: white;
+}
+
+.tag-standard {
+    background: #6b7280;
+    color: white;
+}
+
+.tag-other {
+    background: var(--text-secondary);
+    color: white;
+}
+
+/* Collapsed состояние */
+.builder-sidebar.collapsed .sidebar-header h2,
+.builder-sidebar.collapsed .sidebar-tabs,
+.builder-sidebar.collapsed .sidebar-search,
+.builder-sidebar.collapsed .tab-actions,
+.builder-sidebar.collapsed .card-title,
+.builder-sidebar.collapsed .card-description,
+.builder-sidebar.collapsed .card-meta,
+.builder-sidebar.collapsed .card-platforms,
+.builder-sidebar.collapsed .card-tags {
+    display: none;
+}
+
+.builder-sidebar.collapsed .item-card {
+    padding: 8px;
+    text-align: center;
+}
+
+.builder-sidebar.collapsed .card-header {
+    justify-content: center;
+    margin-bottom: 0;
+}
+
+.builder-sidebar.collapsed .card-icon {
+    font-size: 20px;
+}

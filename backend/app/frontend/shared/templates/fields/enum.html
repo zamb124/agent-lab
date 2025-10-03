@@ -1,0 +1,22 @@
+{% if view_mode == "table" %}
+  <td class="field-cell">
+    <span class="badge badge-primary">{{ value.value if value else '-' }}</span>
+  </td>
+{% else %}
+  <div class="field field-enum">
+    <label for="{{ field_name }}" class="field-label {% if required %}required{% endif %}">
+      {{ title }}
+    </label>
+    {% if description %}
+      <div class="field-description">{{ description }}</div>
+    {% endif %}
+    
+    <div class="field-input-wrapper">
+      <span class="badge badge-primary">{{ value.value if value else 'Не указано' }}</span>
+    </div>
+    
+    {% if help_text %}
+      <div class="field-help">{{ help_text }}</div>
+    {% endif %}
+  </div>
+{% endif %}
