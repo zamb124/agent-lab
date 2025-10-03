@@ -86,7 +86,13 @@ class BillingService:
         old_balance = company.balance
         old_spent = company.current_month_spent
         
-        company.balance -= cost
+        # Проверяем что баланс не уйдет в минус
+        new_balance = company.balance - cost
+        if new_balance < 0:
+            new_balance = 0
+            logger.warning(f"⚠️ Баланс компании {company.company_id} был бы отрицательным, устанавливаем 0")
+        
+        company.balance = new_balance
         company.current_month_spent += cost
         
         logger.info(f"💰 Обновляем компанию {company.company_id}:")
