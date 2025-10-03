@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from app.frontend.core.template_loader import get_templates
 from app.core.context import get_context
 from app.services.billing_service import BillingService
-from app.models.billing_models import TariffPlan, TARIFF_LIMITS
+from app.models.billing_models import TariffPlan, TARIFF_PRICES
 
 router = APIRouter(prefix="/frontend/billing", tags=["billing-pages"])
 templates = get_templates()
@@ -35,8 +35,8 @@ async def billing_index(request: Request):
     # Получаем статистику использования
     stats = await billing_service.get_company_usage_stats(company.company_id)
     
-    # Получаем лимиты тарифного плана
-    tariff_limits = TARIFF_LIMITS.get(company.tariff_plan, {})
+    # Получаем цены тарифного плана
+    tariff_prices = TARIFF_PRICES.get(company.tariff_plan, {})
     
     # Вычисляем процент использования бюджета
     budget_percent = 0
@@ -50,7 +50,7 @@ async def billing_index(request: Request):
             "user": user,
             "company": company,
             "stats": stats,
-            "tariff_limits": tariff_limits,
+            "tariff_prices": tariff_prices,
             "budget_percent": budget_percent,
             "tariff_plans": TariffPlan,
         }

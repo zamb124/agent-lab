@@ -196,6 +196,21 @@
     font-size: 0.875rem;
 }
 
+.sidebar-section {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-primary);
+}
+
+.sidebar-section-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 0.5rem 1rem;
+    letter-spacing: 0.05em;
+}
+
 .sidebar-footer {
     padding: 1rem;
     border-top: 1px solid var(--border-primary);

@@ -152,7 +152,6 @@ class WebInterface(BaseInterface):
         Сохраняет сообщение как уведомление в БД для многоинстансной архитектуры.
         WebSocket polling на нужном инстансе подхватит и отправит клиенту.
         """
-        # Формируем уведомление для сохранения в БД
         is_user_message = message.metadata.get("is_user_message", False)
 
         if is_user_message:

@@ -12,7 +12,7 @@
 .canvas-toolbar {
     height: 50px;
     background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border-primary);
+    border-bottom: 1px solid var(--border-color);
     display: flex;
     align-items: center;
     padding: 0 16px;
@@ -23,14 +23,6 @@
 .toolbar-right {
     display: flex;
     gap: 8px;
-    align-items: center;
-}
-
-.toolbar-divider {
-    width: 1px;
-    height: 24px;
-    background: var(--border-primary);
-    margin: 0 8px;
 }
 
 .toolbar-center {

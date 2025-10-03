@@ -7,8 +7,11 @@
 """
 
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Any
 from fastapi.templating import Jinja2Templates
+from starlette.requests import Request
+from starlette.responses import Response
+from app.core.context import get_context
 
 
 class TemplateLoader:
@@ -32,7 +35,70 @@ class TemplateLoader:
         
         template_dirs = self._discover_template_dirs(frontend_dir)
         
-        return Jinja2Templates(directory=[str(d) for d in template_dirs])
+        templates = Jinja2Templates(directory=[str(d) for d in template_dirs])
+        
+        # Добавляем глобальные переменные для доступа к контексту
+        def get_current_user():
+            context = get_context()
+            return context.user if context else None
+        
+        def get_current_company():
+            context = get_context()
+            return context.active_company if context else None
+        
+        def user_roles():
+            """Получить роли пользователя в активной компании"""
+            context = get_context()
+            if not context or not context.user or not context.active_company:
+                return ["user"]
+            
+            company_id = context.active_company.company_id
+            if company_id in context.user.companies:
+                return context.user.companies[company_id]
+            
+            return ["user"]
+        
+        def user_has_role(role_name: str, company_id: str = None):
+            """Проверить что у пользователя есть роль в компании"""
+            context = get_context()
+            if not context or not context.user:
+                return False
+            
+            # Если компания не указана - используем активную
+            target_company = company_id
+            if not target_company and context.active_company:
+                target_company = context.active_company.company_id
+            
+            if not target_company:
+                return False
+            
+            # Проверяем роли в компании
+            if target_company in context.user.companies:
+                return role_name in context.user.companies[target_company]
+            
+            return False
+        
+        def is_system_admin():
+            context = get_context()
+            if not context or not context.user:
+                return False
+            user = context.user
+            
+            # Проверяем что у пользователя есть роль admin в компании system
+            if "system" in user.companies:
+                system_roles = user.companies["system"]
+                if "admin" in system_roles:
+                    return True
+            
+            return False
+        
+        templates.env.globals['current_user'] = get_current_user
+        templates.env.globals['current_company'] = get_current_company
+        templates.env.globals['user_roles'] = user_roles
+        templates.env.globals['user_has_role'] = user_has_role
+        templates.env.globals['is_system_admin'] = is_system_admin
+        
+        return templates
     
     def _discover_template_dirs(self, frontend_dir: Path) -> List[Path]:
         """Автоматически находит все директории с шаблонами"""

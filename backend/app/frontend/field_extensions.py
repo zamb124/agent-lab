@@ -563,11 +563,19 @@ class FrontendMixin:
         return visible_fields
 
     def _get_current_user_groups(self) -> List[str]:
-        """Получить группы текущего пользователя из контекста"""
+        """Получить роли текущего пользователя в активной компании"""
         context = get_context()
-        if context and context.user and hasattr(context.user, "groups"):
-            return context.user.groups
-        return ["user"]  # По умолчанию группа user
+        if not context or not context.user or not context.active_company:
+            return ["user"]
+        
+        user = context.user
+        company_id = context.active_company.company_id
+        
+        # Получаем роли пользователя в текущей компании
+        if company_id in user.companies:
+            return user.companies[company_id]
+        
+        return ["user"]
 
     def _get_model_class(self, model_type: str):
         """Получить класс модели по типу из registry"""

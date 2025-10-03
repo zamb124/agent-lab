@@ -373,8 +373,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         # Обновляем активную компанию у пользователя если нужно (только если не allow_no_company)
         if not allow_no_company and user.active_company_id != requested_company.company_id:
+            logger.info(f"🔄 Смена активной компании: {user.active_company_id} → {requested_company.company_id}")
             user.active_company_id = requested_company.company_id
             await self._update_user_active_company(user)
+            logger.info(f"✅ Активная компания обновлена для пользователя {user.user_id}")
 
         # Для страниц с allow_no_company используем активную компанию пользователя или None
         active_company = None
