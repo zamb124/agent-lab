@@ -1,363 +1,661 @@
-# Agents Lab Frontend
+# 🎨 Frontend Architecture - Agents Lab
 
-Современный фронтенд на базе HTMX с темной темой в стиле Langflow. Основан на концепции **Backend-Driven Frontend** где Pydantic модели автоматически генерируют HTML через рекурсивный рендеринг.
+> **Модульный фронтенд на базе HTMX с Backend-Driven подходом**
 
-## 🏗️ Архитектура
+Основан на концепции автогенерации HTML из Pydantic моделей через рекурсивный рендеринг.
 
-### Backend-Driven Frontend
-- **Pydantic модели** автоматически создают HTML шаблоны
-- **Рекурсивный рендеринг** - модели рендерят вложенные модели и поля
-- **Monkey Patching** - расширяем `BaseModel` и `Field` для фронтенда
-- **Динамические шаблоны** - по типу поля (`int.html`, `list_str.html`)
+---
 
-### Принцип рекурсивности
+## 📋 Содержание
 
-```python
-# Модель рендерит себя
-flow_model.render(view_mode="table")
-  ├── Рендерит каждое поле
-  │   ├── str поле → templates/fields/str.html
-  │   ├── List[str] поле → templates/fields/list_str.html
-  │   └── BaseModel поле → РЕКУРСИВНО вызывает render()
-  └── Использует шаблон модели или wrapper
+- [Архитектура](#-архитектура)
+- [Структура директорий](#-структура-директорий)
+- [Детальное описание файлов](#-детальное-описание-файлов)
+- [Принципы работы](#-принципы-работы)
+- [Добавление нового модуля](#-добавление-нового-модуля)
+
+---
+
+## 🏗 Архитектура
+
+### Ключевые принципы:
+
+1. **Backend-Driven Frontend** - Pydantic модели автоматически генерируют HTML
+2. **Модульность** - каждый крупный модуль (chat, builder, landing) изолирован
+3. **Разделение ответственности** - API (JSON) отдельно от Pages (HTML) отдельно от WebSockets
+4. **Единая точка входа** - `core/template_loader.py` для всех шаблонов
+5. **HTMX-first** - минимум JavaScript, максимум HTMX
+
+### Схема работы:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     FastAPI Application                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   API        │  │   PAGES      │  │  WEBSOCKETS  │      │
+│  │  (JSON)      │  │   (HTML)     │  │   (WS)       │      │
+│  │              │  │              │  │              │      │
+│  │ /frontend/   │  │ /frontend/   │  │ /ws/         │      │
+│  │  builder/    │  │  auth        │  │ /frontend/   │      │
+│  │  flows/      │  │  dashboard   │  │  chat/ws/    │      │
+│  │  agents/     │  │              │  │              │      │
+│  │  tools/      │  │              │  │              │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│                                                               │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │              CORE (Infrastructure)                    │   │
+│  │  - template_loader.py (единый Jinja2Templates)       │   │
+│  │  - websocket_manager.py (менеджер соединений)        │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                                                               │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │                    MODULES                            │   │
+│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐     │   │
+│  │  │  Builder   │  │   Chat     │  │  Landing   │     │   │
+│  │  │  router.py │  │  router.py │  │ templates/ │     │   │
+│  │  │ templates/ │  │ templates/ │  │            │     │   │
+│  │  └────────────┘  └────────────┘  └────────────┘     │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                                                               │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │                    SHARED                             │   │
+│  │  templates/  - общие шаблоны (base.html, fields/)    │   │
+│  │  static/     - CSS, JS, изображения                  │   │
+│  │    ├── css/ - общие стили                            │   │
+│  │    ├── js/  - общие скрипты                          │   │
+│  │    ├── builder/ - модульные CSS/JS builder           │   │
+│  │    ├── chat/    - модульные CSS/JS chat              │   │
+│  │    └── landing/ - модульные CSS/JS landing           │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                                                               │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## 📁 Структура файлов
+---
+
+## 📁 Структура директорий
 
 ```
-frontend/
-├── README.md                 # Эта документация
-├── field_extensions.py       # 🔥 ЯДРО: Monkey patch + рекурсивный рендеринг
-├── environment.py            # Настройка Jinja2
-├── model_registry.py         # Реестр моделей по storage_prefix
-├── wrappers.py              # ModelListWrapper для списков
+backend/app/frontend/
+├── 📄 Корневые файлы (ядро системы)
+│   ├── __init__.py                    # Инициализация пакета
+│   ├── field_extensions.py            # ⭐ ЯДРО: Monkey patch для BaseModel/Field
+│   ├── environment.py                 # Jinja2 для backend рендеринга
+│   ├── model_registry.py              # Реестр моделей по storage_prefix
+│   └── wrappers.py                    # ModelListWrapper для списков
 │
-├── api/                     # 🌐 Frontend API
-│   ├── models.py            # API для CRUD операций (JSON)
-│   ├── pages.py             # HTML страницы (auth, dashboard)
-│   └── websocket.py         # WebSocket менеджер для уведомлений
+├── 🔧 CORE/ (инфраструктура)
+│   ├── __init__.py
+│   ├── template_loader.py             # ✅ Единый Jinja2Templates для всех
+│   └── websocket_manager.py           # Менеджер WebSocket соединений
 │
-├── chat/                    # 💬 Чат система
-│   ├── api/
-│   │   ├── router.py        # Роутер чата (REST endpoints)
-│   │   └── websocket.py     # WebSocket для чата
-│   └── templates/
-│       ├── chat.html        # Полная страница чата
-│       ├── chat_widget.html # Виджет чата для встраивания
-│       └── chat_widget_inline.html # Инлайн виджет
+├── 🔌 API/ (JSON CRUD endpoints)
+│   ├── __init__.py
+│   ├── models.py                      # CRUD операции для моделей
+│   ├── flows.py                       # API для flows (GET/POST/PUT/DELETE)
+│   ├── agents.py                      # API для agents
+│   └── tools.py                       # API для tools
 │
-├── examples/                # 📸 Скриншоты примеров интерфейса
-│   └── [8 PNG файлов]       # Демонстрация возможностей
+├── 📄 PAGES/ (HTML страницы)
+│   ├── __init__.py
+│   ├── public.py                      # Landing page (/)
+│   ├── auth.py                        # Авторизация, выбор/создание компании
+│   └── dashboard.py                   # Dashboard, модели, FASHN
 │
-├── templates/               # 🎨 HTML шаблоны
-│   ├── base.html            # Базовый шаблон
-│   ├── auth.html            # Страница авторизации
-│   ├── dashboard.html       # Главная страница
-│   ├── fashn.html           # Страница FASHN примерки
-│   ├── index.html           # Индексная страница
+├── 🔗 WEBSOCKETS/ (WebSocket endpoints)
+│   ├── __init__.py
+│   ├── notifications.py               # Уведомления о моделях
+│   └── chat.py                        # Чат с агентами
+│
+├── 🧩 MODULES/ (изолированные модули)
+│   ├── __init__.py
 │   │
-│   ├── fields/              # 🎯 Шаблоны полей по типам
-│   │   ├── base_field.html  # Базовый шаблон поля
-│   │   ├── str.html         # string поля
-│   │   ├── int.html         # integer поля
-│   │   ├── float.html       # float поля
-│   │   ├── bool.html        # boolean поля
-│   │   ├── datetime.html    # datetime поля
-│   │   ├── enum.html        # enum поля
-│   │   ├── list_str.html    # List[str] поля
-│   │   ├── list.html        # Общие списки
-│   │   ├── dict_str_any.html # Dict[str, Any] поля
-│   │   ├── dict_str_str.html # Dict[str, str] поля
-│   │   ├── dict.html        # Общие словари
-│   │   ├── basemodel.html   # Вложенные модели
-│   │   ├── historysource.html # Специальные типы
-│   │   └── list_dict_str_any.html # Сложные типы
+│   ├── builder/                       # Builder для flows
+│   │   ├── __init__.py
+│   │   ├── router.py                  # /frontend/builder/*
+│   │   └── templates/
+│   │       ├── builder.html           # Главная страница
+│   │       ├── components/            # Переиспользуемые компоненты
+│   │       │   ├── flow_card.html
+│   │       │   ├── agent_card.html
+│   │       │   └── node.html
+│   │       └── modals/
+│   │           └── flow_editor.html
 │   │
-│   ├── modals/              # 🔲 Модальные окна
-│   │   ├── modal.html       # Базовый модал
-│   │   ├── inline_edit.html # Инлайн редактирование
-│   │   └── success.html     # Уведомления об успехе
+│   ├── chat/                          # Чат система
+│   │   ├── __init__.py
+│   │   ├── router.py                  # /frontend/chat/*
+│   │   └── templates/
+│   │       ├── chat.html              # Полная страница чата
+│   │       ├── chat_widget.html       # Виджет для встраивания
+│   │       └── chat_widget_inline.html # Инлайн виджет
 │   │
-│   ├── wrappers/            # 📦 Обертки для разных режимов
-│   │   ├── table.html       # Таблица
-│   │   ├── table_row.html   # Строка таблицы
-│   │   ├── form.html        # Форма
-│   │   └── compact.html     # Компактный вид
+│   ├── billing/                       # Биллинг и тарификация
+│   │   ├── __init__.py
+│   │   ├── router.py                  # /frontend/billing/*
+│   │   └── templates/
+│   │       └── billing.html           # Страница биллинга
 │   │
-│   └── models/              # 🏗️ Кастомные шаблоны моделей
-│       └── ModelListWrapper.html # Таблица со списком
+│   └── landing/                       # Landing page
+│       ├── __init__.py
+│       └── templates/
+│           ├── base_landing.html      # Базовый layout для landing
+│           └── landing.html           # Контент landing page
 │
-└── static/                  # 📦 Статические ресурсы
-    ├── css/                 # 🎨 Модульная система стилей
-    │   ├── style.css        # Главный файл (импорты)
-    │   ├── variables.css    # CSS переменные (темы)
-    │   ├── base.css         # Базовые стили + утилиты
-    │   ├── components.css   # Компоненты (кнопки, карточки, таблицы)
-    │   ├── layout.css       # Лейаут (сайдбар, хедер, контент)
-    │   ├── fields.css       # Стили для полей форм
-    │   └── fashn.css        # Стили для FASHN примерки
+└── 🌐 SHARED/ (общие ресурсы)
     │
-    └── js/                  # ⚡ JavaScript модули
-        ├── app.js           # 🚀 Главный класс приложения
-        ├── chat.js          # 💬 Чат функциональность
-        ├── fashn.js         # 👗 FASHN виртуальная примерка
-        ├── htmx-manager.js  # 🔄 Менеджер HTMX
-        ├── layout-manager.js # 📐 Менеджер лейаута
-        └── theme-manager.js # 🎨 Менеджер тем
+    ├── templates/                     # Общие шаблоны
+    │   ├── base.html                  # Базовый layout для всех страниц
+    │   ├── auth.html                  # Страница авторизации
+    │   ├── dashboard.html             # Dashboard layout
+    │   ├── index.html                 # Индексная страница
+    │   ├── fashn.html                 # FASHN виртуальная примерка
+    │   ├── create_company.html        # Создание компании
+    │   ├── select_company.html        # Выбор компании
+    │   │
+    │   ├── fields/                    # ⭐ Шаблоны для рекурсивного рендеринга
+    │   │   ├── base_field.html        # Базовый шаблон поля
+    │   │   ├── str.html               # String поле
+    │   │   ├── int.html               # Integer поле
+    │   │   ├── float.html             # Float поле
+    │   │   ├── bool.html              # Boolean поле
+    │   │   ├── datetime.html          # DateTime поле
+    │   │   ├── enum.html              # Enum поле
+    │   │   ├── list.html              # List поле
+    │   │   ├── list_str.html          # List[str]
+    │   │   ├── list_dict_str_any.html # List[Dict[str, Any]]
+    │   │   ├── list_toolreference.html # List[ToolReference]
+    │   │   ├── dict.html              # Dict поле
+    │   │   ├── dict_str_any.html      # Dict[str, Any]
+    │   │   ├── dict_str_str.html      # Dict[str, str]
+    │   │   ├── basemodel.html         # Вложенные модели
+    │   │   └── historysource.html     # Специальные типы
+    │   │
+    │   ├── modals/                    # Модальные окна
+    │   │   ├── modal.html             # Базовый модал
+    │   │   ├── inline_edit.html       # Инлайн редактирование
+    │   │   └── success.html           # Уведомления об успехе
+    │   │
+    │   ├── models/                    # Кастомные шаблоны моделей
+    │   │   ├── ModelListWrapper.html  # Список моделей
+    │   │   └── ModelListWrapper_table.html # Таблица моделей
+    │   │
+    │   └── wrappers/                  # Обертки для разных режимов
+    │       ├── table.html             # Таблица
+    │       ├── table_row.html         # Строка таблицы
+    │       ├── form.html              # Форма
+    │       └── compact.html           # Компактный вид
+    │
+    └── static/                        # Статические файлы (mount на /static)
+        │
+        ├── css/                       # Общие стили
+        │   ├── style.css              # Главный файл (импортирует все)
+        │   ├── variables.css          # CSS переменные (темы)
+        │   ├── base.css               # Базовые стили + утилиты
+        │   ├── components.css         # Компоненты (кнопки, карточки)
+        │   ├── layout.css             # Лейаут (сайдбар, хедер)
+        │   ├── fields.css             # Стили для полей форм
+        │   └── fashn.css              # Стили для FASHN примерки
+        │
+        ├── js/                        # Общие JavaScript модули
+        │   ├── app.js                 # ⭐ Главный класс APP
+        │   ├── chat.js                # Чат функциональность
+        │   ├── fashn.js               # FASHN виртуальная примерка
+        │   ├── htmx-manager.js        # Менеджер HTMX
+        │   ├── layout-manager.js      # Менеджер лейаута
+        │   └── theme-manager.js       # Менеджер тем
+        │
+        ├── img/                       # Изображения
+        │   ├── empty.png
+        │   ├── fashn_back.jpg
+        │   └── main.png
+        │
+        ├── builder/                   # Модульные файлы Builder
+        │   ├── css/
+        │   │   ├── builder.css        # Главные стили builder
+        │   │   ├── canvas.css         # Стили канваса
+        │   │   └── sidebar.css        # Стили сайдбара
+        │   └── js/
+        │       ├── builder.js         # Главный класс Builder
+        │       ├── canvas.js          # Работа с канвасом
+        │       ├── drag-drop.js       # Drag & Drop
+        │       └── sidebar.js         # Сайдбар Builder
+        │
+        ├── chat/                      # Модульные файлы Chat
+        │   └── js/
+        │       └── chat.js            # (дубликат в js/)
+        │
+        └── landing/                   # Модульные файлы Landing
+            └── css/
+                └── landing.css        # Стили landing page
 ```
 
-## 🔥 Ключевые файлы
+---
 
-### `field_extensions.py` - ЯДРО СИСТЕМЫ
+## 📝 Детальное описание файлов
+
+### 🔧 Корневые файлы (Ядро системы)
+
+#### `field_extensions.py` ⭐ ЯДРО
+**Monkey patch для Pydantic моделей и полей**
+
+- Добавляет метод `.render()` к `BaseModel` - рекурсивный рендеринг модели в HTML
+- Добавляет метод `.render()` к `Field` - рендеринг поля по его типу
+- Динамически определяет шаблон по типу: `List[str]` → `fields/list_str.html`
+- Поддерживает режимы отображения: `form`, `table`, `compact`
+- Обрабатывает группы пользователей для условной видимости полей
+
+**Ключевые функции:**
+- `get_template_name_from_type()` - определяет имя шаблона по аннотации типа
+- `FrontendFieldInfo` - расширенная информация о поле (readonly, hidden, groups)
+
+#### `environment.py`
+**Настройка Jinja2 для backend рендеринга**
+
+- Создает Jinja2 Environment для `shared/templates/`
+- Используется в `api/models.py` для рендеринга field шаблонов
+- Функция `render_template()` - рендерит шаблон с контекстом
+- Функция `template_exists()` - проверяет существование шаблона
+
+#### `model_registry.py`
+**Реестр моделей по storage_prefix**
+
+- Автоматически регистрирует все модели с `Config.storage_prefix`
+- Позволяет получить класс модели по префиксу: `ModelRegistry.get_model_class("flow")`
+- Используется в `api/models.py` для CRUD операций
+
+#### `wrappers.py`
+**ModelListWrapper для списков моделей**
+
+- Обертка для списка моделей с поддержкой разных режимов отображения
+- Использует кастомные шаблоны: `models/ModelListWrapper_table.html`
+
+---
+
+### 🔧 CORE/ (Инфраструктура)
+
+#### `core/template_loader.py` ✅
+**Единый загрузчик шаблонов для всех модулей**
+
+- Автоматически находит все `templates/` директории в `shared/` и `modules/*/`
+- Создает единый `Jinja2Templates` с правильными приоритетами
+- Используется всеми роутерами через `get_templates()`
+
+**Приоритет загрузки:**
+1. `shared/templates/` (общие шаблоны)
+2. `modules/*/templates/` (модульные шаблоны)
+
+#### `core/websocket_manager.py`
+**Менеджер WebSocket соединений** (legacy, можно удалить)
+
+---
+
+### 🔌 API/ (JSON CRUD endpoints)
+
+#### `api/models.py`
+**CRUD операции для Pydantic моделей**
+
+**Endpoints:**
+- `GET /frontend/models/{model_type}?view=table` - список моделей
+- `GET /frontend/models/{model_type}/{model_id}` - конкретная модель
+- `POST /frontend/models/{model_type}` - создание модели
+- `PUT /frontend/models/{model_type}/{model_id}` - обновление
+- `DELETE /frontend/models/{model_type}/{model_id}` - удаление
+
+**Особенности:**
+- Автоматически определяет класс модели через `ModelRegistry`
+- Использует `model.render(view_mode=...)` для генерации HTML
+- Отправляет уведомления через `notify_model_updated()`
+
+#### `api/flows.py`
+**API для работы с flows**
+
+**Endpoints:**
+- `GET /frontend/builder/flows/` - список flows
+- `GET /frontend/builder/flows/{flow_id}` - конкретный flow
+- `POST /frontend/builder/flows/` - создание flow
+- `PUT /frontend/builder/flows/{flow_id}` - обновление
+- `DELETE /frontend/builder/flows/{flow_id}` - удаление
+
+#### `api/agents.py`
+**API для работы с agents**
+
+Аналогично `flows.py`, но для agents.
+
+#### `api/tools.py`
+**API для работы с tools**
+
+Аналогично `flows.py`, но для tools.
+
+---
+
+### 📄 PAGES/ (HTML страницы)
+
+#### `pages/public.py`
+**Публичные страницы**
+
+- `GET /` - landing page
+
+#### `pages/auth.py`
+**Авторизация и управление компаниями**
+
+- `GET /frontend/auth` - страница авторизации
+- `GET /frontend/select-company` - выбор компании
+- `GET /frontend/create-company` - создание компании
+
+#### `pages/dashboard.py`
+**Dashboard и страницы моделей**
+
+- `GET /frontend/` - главная страница (редирект)
+- `GET /frontend/dashboard` - dashboard
+- `GET /frontend/models/{model_type}` - страница модели
+- `GET /frontend/fashn` - FASHN виртуальная примерка
+
+---
+
+### 🔗 WEBSOCKETS/ (WebSocket endpoints)
+
+#### `websockets/notifications.py`
+**WebSocket для уведомлений о моделях**
+
+- `WS /ws/notifications` - глобальные уведомления
+- Функция `notify_model_updated()` - отправляет уведомление всем клиентам
+
+#### `websockets/chat.py`
+**WebSocket для чата с агентами**
+
+- `WS /frontend/chat/ws/chat?session_id=...` - чат с агентом
+- Polling уведомлений для каждой сессии
+- Обработка сообщений пользователя
+
+---
+
+### 🧩 MODULES/ (Изолированные модули)
+
+#### `modules/builder/router.py`
+**Роутер для Builder страниц**
+
+- `GET /frontend/builder/` - главная страница builder
+- `GET /frontend/builder/flow/{flow_id}` - редактирование flow
+
+#### `modules/chat/router.py`
+**Роутер для Chat страниц**
+
+- `GET /frontend/chat/` - главная страница чата
+- `GET /frontend/chat/widget` - виджет чата
+
+#### `modules/billing/router.py`
+**Роутер для страниц биллинга и тарификации**
+
+- `GET /frontend/billing/` - главная страница биллинга
+- `GET /frontend/billing/api/stats` - API для получения статистики
+- `POST /frontend/billing/api/payment` - инициализация платежа (заглушка)
+
+#### `modules/landing/`
+**Модуль landing page**
+
+Только templates, без роутера (использует `pages/public.py`).
+
+---
+
+### 🌐 SHARED/ (Общие ресурсы)
+
+#### Templates
+
+**Базовые layouts:**
+- `base.html` - базовый layout с темной темой, HTMX, навигацией
+- `base_landing.html` - базовый layout для landing page
+
+**Страницы:**
+- `auth.html` - форма авторизации
+- `dashboard.html` - layout dashboard с сайдбаром
+- `index.html` - индексная страница
+- `fashn.html` - FASHN виртуальная примерка
+- `create_company.html` - создание компании
+- `select_company.html` - выбор компании
+
+**Fields/** ⭐ Рекурсивный рендеринг
+- Каждый файл - шаблон для конкретного типа поля
+- `base_field.html` - базовый fallback
+- Поддержка всех Python типов + Pydantic специальных типов
+
+**Modals/**
+- `modal.html` - базовая структура модального окна
+- `inline_edit.html` - инлайн редактирование вложенных моделей
+- `success.html` - уведомления об успехе
+
+**Models/**
+- Кастомные шаблоны для конкретных моделей
+- `ModelListWrapper.html` - список моделей (cards режим)
+- `ModelListWrapper_table.html` - список моделей (table режим)
+
+**Wrappers/**
+- `table.html` - обертка для таблицы
+- `table_row.html` - строка таблицы с inline edit
+- `form.html` - обертка для формы
+- `compact.html` - компактный вид
+
+#### Static
+
+**CSS:**
+- `style.css` - главный файл, импортирует все модули
+- `variables.css` - CSS переменные (цвета, размеры, тени)
+- `base.css` - reset + базовые стили + утилиты
+- `components.css` - переиспользуемые компоненты (кнопки, карточки)
+- `layout.css` - структура страницы (сайдбар, хедер)
+- `fields.css` - стили для полей форм
+- `fashn.css` - стили для FASHN примерки
+
+**JS:**
+- `app.js` - главный класс APP (инициализация, auth, HTMX, UI)
+- `chat.js` - чат (WebSocket, отправка/получение сообщений)
+- `fashn.js` - FASHN (загрузка изображений, предпросмотр)
+- `htmx-manager.js` - расширенное управление HTMX
+- `layout-manager.js` - управление лейаутом (сайдбар, адаптивность)
+- `theme-manager.js` - переключение светлой/темной темы
+
+**Builder:** (модульные CSS/JS)
+- `builder.css` - главные стили
+- `canvas.css` - стили канваса (сетка, ноды, связи)
+- `sidebar.css` - стили сайдбара
+- `builder.js` - главный класс Builder
+- `canvas.js` - работа с канвасом (zoom, pan, drag)
+- `drag-drop.js` - drag & drop flows/agents/tools
+- `sidebar.js` - сайдбар (загрузка, поиск, фильтрация)
+
+**Landing:** (модульные CSS)
+- `landing.css` - стили landing page
+
+**Chat:** (модульные JS)
+- `chat.js` - дубликат в `js/` (для импорта из `app.js`)
+
+---
+
+## 🔄 Принципы работы
+
+### 1. Рекурсивный рендеринг
+
 ```python
-# Monkey patch для BaseModel
-def render(self, view_mode="form", **kwargs):
-    # Рекурсивно рендерит все поля
-    # Определяет шаблон по типу
-    # Передает контекст дальше
+# Модель
+class FlowConfig(BaseModel):
+    flow_id: str
+    name: str
+    agents: List[AgentConfig]
 
-# Monkey patch для Field  
-def render(self, field_name, value, annotation, **kwargs):
-    # Динамически находит шаблон по типу
-    # list_str.html для List[str]
-    # int.html для int
+# Вызов
+flow.render(view_mode="form")
+
+# Что происходит:
+# 1. field_extensions.py добавляет метод .render() к BaseModel
+# 2. Итерация по всем полям модели
+# 3. Для каждого поля вызывается field.render()
+# 4. Поле определяет свой шаблон: str → fields/str.html
+# 5. Если поле - BaseModel → рекурсивно вызывается .render()
+# 6. Результат - HTML вся модель с вложенными моделями
 ```
 
-### Рекурсивный поток рендеринга
-1. **Модель** вызывает `render(view_mode="table")`
-2. **Итерируется** по всем полям модели
-3. **Каждое поле** рендерится через свой шаблон
-4. **Вложенные модели** рекурсивно вызывают `render()`
-5. **Результат** собирается в финальный HTML
+### 2. Динамическое определение шаблонов
 
-## 🎨 CSS Архитектура
-
-### Модульная система (по БЭМ принципам)
-- `variables.css` - CSS переменные для тем
-- `base.css` - Сброс стилей + утилиты
-- `components.css` - Переиспользуемые компоненты  
-- `layout.css` - Структура страницы
-- `fields.css` - Специфичные стили полей
-
-### Темная тема Langflow
-```css
-:root {
-    --bg-primary: #0f0f23;      /* Основной фон */
-    --accent-primary: #6366f1;   /* Акцентный цвет */
-    --text-primary: #ffffff;     /* Основной текст */
-    --radius-lg: 12px;          /* Закругления */
-}
+```python
+# Типы → Шаблоны
+str              → fields/str.html
+int              → fields/int.html
+List[str]        → fields/list_str.html
+Dict[str, Any]   → fields/dict_str_any.html
+Optional[int]    → fields/int.html (Optional игнорируется)
+BaseModel        → fields/basemodel.html (рекурсивно)
 ```
 
-## 🚀 JavaScript архитектура
+### 3. Единый template loader
 
-### Модульная система JavaScript
-Фронтенд разделен на специализированные модули для лучшей организации кода:
+```python
+from app.frontend.core.template_loader import get_templates
 
-#### Главный класс APP (`static/js/app.js`)
-```javascript
-class APP {
-    setupAuth()     // Авторизация + HTMX headers
-    setupHTMX()     // Настройки HTMX
-    setupUI()       // UI взаимодействия
-    toggleTheme()   // Переключение темы
-    showNotification() // Система уведомлений
-}
+templates = get_templates()
+return templates.TemplateResponse("builder.html", {"request": request})
 ```
 
-#### Специализированные модули:
-- **`chat.js`** - Чат функциональность, WebSocket соединения, обработка сообщений
-- **`fashn.js`** - FASHN виртуальная примерка, загрузка изображений, предпросмотр
-- **`htmx-manager.js`** - Расширенное управление HTMX запросами и ответами
-- **`layout-manager.js`** - Управление лейаутом, сайдбар, адаптивность
-- **`theme-manager.js`** - Система тем, переключение светлой/темной темы
+**Порядок поиска:**
+1. `shared/templates/builder.html`
+2. `modules/builder/templates/builder.html`
+3. `modules/chat/templates/builder.html`
+4. И так далее по всем модулям
 
-## 🔄 HTMX Интеграция
+### 4. Модульная организация static
 
-### Принципы работы
-- **JSON-only** общение через `hx-ext="json-enc"`
-- **Минимум JavaScript** - все через HTMX атрибуты
-- **Плавные анимации** через CSS transitions
-- **Автоматическая авторизация** через headers
-
-### Примеры HTMX
 ```html
-<!-- Загрузка таблицы -->
-<a hx-get="/frontend/models/flow?view=table" 
-   hx-target="#content">Потоки</a>
+<!-- В shared/templates/base.html -->
+<link rel="stylesheet" href="/static/css/style.css">
+<script src="/static/js/app.js"></script>
 
-<!-- Inline редактирование -->
-<input hx-put="/frontend/models/flow/123?view=table"
-       hx-ext="json-enc"
-       hx-trigger="blur"
-       hx-target="closest tr">
+<!-- В modules/builder/templates/builder.html -->
+<link rel="stylesheet" href="{{ url_for('static', path='builder/css/builder.css') }}">
+<script src="/static/builder/js/builder.js"></script>
+
+<!-- В modules/landing/templates/base_landing.html -->
+<link rel="stylesheet" href="/static/landing/css/landing.css">
 ```
 
-## 🎯 Динамическое определение шаблонов
-
-### Логика в `get_template_name_from_type()`
+**Все статические файлы доступны через один mount:**
 ```python
-List[str] → "list_str"
-Dict[str, Any] → "dict_str_any"  
-Optional[int] → "int" (Optional игнорируется)
-BaseModel → использует wrapper или модель
+app.mount("/static", StaticFiles(directory="frontend/shared/static"), name="static")
 ```
 
-### Поиск шаблонов
-1. `templates/fields/{type}.html` - специфичный шаблон
-2. `templates/fields/base_field.html` - fallback
-3. Для моделей: `templates/models/{ModelName}.html`
-4. Для списков: `templates/wrappers/{view_mode}.html`
+---
 
-## 🔧 Режимы отображения (view_mode)
+## ➕ Добавление нового модуля
 
-- **`form`** - Форма редактирования
-- **`table`** - Строка в таблице (inline edit)
-- **`cards`** - Карточки (будущее)
+### 1. Создать структуру
 
-## ⚙️ Конфигурация полей
+```bash
+mkdir -p modules/my_module/templates
+touch modules/my_module/__init__.py
+touch modules/my_module/router.py
+```
 
-### Frontend-специфичные атрибуты Field
+### 2. Создать роутер
+
 ```python
-Field(
-    title="Название",
-    description="Описание поля", 
-    readonly=True,                    # Только чтение
-    hidden=True,                      # Скрыто
-    groups={'admin': {'required': True}}, # Правила по группам
-    placeholder="Введите значение",
-    help_text="Подсказка",
-    css_class="custom-field",
-    widget_attrs={"data-custom": "value"}
-)
+# modules/my_module/router.py
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse
+from app.frontend.core.template_loader import get_templates
+
+router = APIRouter(prefix="/frontend/my_module", tags=["my-module"])
+templates = get_templates()
+
+@router.get("/", response_class=HTMLResponse)
+async def my_module_index(request: Request):
+    return templates.TemplateResponse("my_module.html", {"request": request})
 ```
 
-## 🔍 Группы пользователей
+### 3. Создать шаблон
 
-### Контекстная фильтрация
+```html
+<!-- modules/my_module/templates/my_module.html -->
+{% extends "base.html" %}
+
+{% block title %}My Module{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/my_module/css/my_module.css">
+{% endblock %}
+
+{% block content %}
+<div>My Module Content</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/my_module/js/my_module.js"></script>
+{% endblock %}
+```
+
+### 4. Создать static файлы
+
+```bash
+mkdir -p shared/static/my_module/css
+mkdir -p shared/static/my_module/js
+touch shared/static/my_module/css/my_module.css
+touch shared/static/my_module/js/my_module.js
+```
+
+### 5. Подключить в main.py
+
 ```python
-# В модели автоматически
-user_groups = self._get_current_user_groups()
-if not self.is_field_visible_for_group(field_name, user_groups):
-    continue  # Скрываем поле
+from app.frontend.modules.my_module import router as my_module
+
+app.include_router(my_module.router, tags=["my-module"])
 ```
 
-## 📋 API Endpoints
+### 6. Готово! 🎉
 
-### Models API (`/frontend/models/`)
-- `GET /{model_type}?view=table` - Список моделей
-- `GET /{model_type}/{model_id}` - Конкретная модель  
-- `POST /{model_type}` - Создание модели
-- `PUT /{model_type}/{model_id}` - Обновление модели
-- `DELETE /{model_type}/{model_id}` - Удаление модели
+Модуль автоматически:
+- Загружает свои templates через `core/template_loader.py`
+- Получает доступ к статике через `/static/my_module/`
+- Изолирован от других модулей
 
-### Pages API (`/frontend/`)
-- `GET /` - Главная страница (редирект)
-- `GET /auth` - Страница авторизации
-- `GET /dashboard` - Панель управления
-- `GET /fashn` - Страница FASHN виртуальной примерки
+---
 
-### Chat API (`/frontend/chat/`)
-- `GET /` - Полная страница чата
-- `GET /widget` - Виджет чата для встраивания
+## 🎯 Ключевые особенности
 
-### WebSocket Endpoints
-- `WS /frontend/ws/{session_id}` - WebSocket для уведомлений
-- `WS /frontend/chat/ws/{session_id}` - WebSocket для чата
+### ✅ Что делать НУЖНО:
 
-## 🛠️ Разработка
+1. **Использовать единый template loader** - `get_templates()`
+2. **Именовать шаблоны уникально** - `builder.html`, не `index.html`
+3. **Размещать модульные CSS/JS в `shared/static/module_name/`**
+4. **Использовать рекурсивный рендеринг** - `model.render(view_mode="form")`
+5. **Добавлять новые типы полей в `shared/templates/fields/`**
 
-### Добавление нового типа поля
-1. Создать `templates/fields/{type}.html`
-2. Добавить CSS в `fields.css` если нужно
-3. Тип автоматически определится по аннотации
+### ❌ Что делать НЕ НУЖНО:
 
-### Добавление новой модели
-1. Добавить `Config.storage_prefix` в модель
-2. Зарегистрировать в `ModelRegistry`
-3. Опционально создать `templates/models/{ModelName}.html`
+1. **Создавать свой Jinja2Templates** - используйте `get_templates()`
+2. **Создавать `index.html` в модулях** - конфликт имен с `shared/templates/index.html`
+3. **Mount отдельные static директории** - используйте общую структуру
+4. **Хардкодить типы в templates** - используйте динамическое определение
+5. **Дублировать CSS/JS** - выносите общее в `shared/static/css|js/`
 
-### Добавление нового JavaScript модуля
-1. Создать файл в `static/js/{module}.js`
-2. Подключить в базовом шаблоне `templates/base.html`
-3. Инициализировать в главном классе `APP`
+---
 
-### Добавление новой страницы
-1. Создать шаблон в `templates/{page}.html`
-2. Добавить роутер в `api/pages.py`
-3. Добавить ссылку в навигацию
+## 📊 Статистика
 
-### Кастомизация стилей
-1. Переменные в `variables.css`
-2. Компоненты в `components.css`  
-3. Специфичные стили в соответствующие файлы
-4. Новые модули CSS создавать отдельными файлами
+- **Всего файлов:** ~90
+- **Python файлы:** 16
+- **HTML templates:** 42
+- **CSS файлы:** 11
+- **JS файлы:** 13
+- **Изображения:** 3
 
-## 🎨 Дизайн система
+---
 
-### Цвета
-- **Primary**: `#6366f1` (индиго)
-- **Success**: `#10b981` (зеленый)
-- **Danger**: `#ef4444` (красный)
-- **Warning**: `#f59e0b` (желтый)
+## 🔗 Связанные документы
 
-### Закругления
-- **SM**: 6px - мелкие элементы
-- **MD**: 8px - кнопки, поля
-- **LG**: 12px - карточки
-- **XL**: 16px - большие элементы
+- [CONFIG_README.md](/CONFIG_README.md) - конфигурация приложения
+- [BILLING_README.md](/BILLING_README.md) - биллинг система
 
-### Тени
-- **SM**: Легкая тень для карточек
-- **MD**: Средняя тень для hover
-- **LG**: Глубокая тень для модалок
-- **XL**: Максимальная тень для выпадающих меню
+---
 
-## 💬 Чат система
-
-### Архитектура чата
-- **Изолированный модуль** - отдельные роутеры, шаблоны, WebSocket
-- **Встраиваемые виджеты** - можно интегрировать в любую страницу
-- **Реальное время** - WebSocket соединения для мгновенных сообщений
-- **Адаптивный дизайн** - работает на всех устройствах
-
-### Компоненты чата
-- `chat.html` - Полноценная страница чата
-- `chat_widget.html` - Виджет для встраивания
-- `chat_widget_inline.html` - Инлайн виджет
-- `chat.js` - JavaScript функциональность
-- `chat/api/websocket.py` - WebSocket сервер
-
-## 👗 FASHN интеграция
-
-### Виртуальная примерка
-- **Страница FASHN** - `/frontend/fashn` для интерактивной примерки
-- **Загрузка изображений** - drag & drop интерфейс
-- **Предпросмотр** - мгновенный просмотр результатов
-- **Настройки примерки** - размеры, позиционирование, масштаб
-
-### FASHN компоненты
-- `fashn.html` - Страница виртуальной примерки
-- `fashn.js` - JavaScript функциональность
-- `fashn.css` - Специализированные стили
-
-## 🔌 WebSocket система
-
-### WebSocket менеджер
-- **Управление соединениями** - подключение/отключение по session_id
-- **Уведомления** - система push-уведомлений
-- **Чат сообщения** - реальное время общения
-- **Автоматическое переподключение** - надежность соединений
-
-## 🚨 Важные принципы
-
-1. **НЕ хардкодить типы** - все динамически
-2. **Рекурсивность везде** - модели рендерят модели
-3. **Monkey patch только в field_extensions.py**
-4. **CSS переменные** для всех цветов/размеров
-5. **Минимум JavaScript** - максимум HTMX
-6. **JSON-only** общение с сервером
-7. **Группы пользователей** учитывать везде
-8. **view_mode** передавать в каждый рендер
-9. **Модульность JavaScript** - отдельные файлы для функциональности
-10. **WebSocket изоляция** - отдельные соединения для разных целей
+**Автор:** Viktor Shved  
+**Дата:** 2025-10-03  
+**Версия:** 2.0 (после реорганизации)

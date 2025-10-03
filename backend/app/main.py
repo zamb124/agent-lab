@@ -30,6 +30,7 @@ from app.frontend.pages import dashboard as dashboard_pages
 from app.frontend.pages import public as public_pages
 from app.frontend.modules.chat import router as chat_module
 from app.frontend.modules.builder import router as builder_module
+from app.frontend.modules.billing.router import router as billing_module
 from app.frontend.websockets import notifications as websocket_notifications
 from app.frontend.websockets import chat as websocket_chat
 from app.middleware.auth import AuthMiddleware
@@ -246,6 +247,7 @@ app.include_router(dashboard_pages.router, tags=["dashboard-pages"])
 # Frontend Modules
 app.include_router(chat_module.router, tags=["chat-module"])
 app.include_router(builder_module.router, tags=["builder-module"])
+app.include_router(billing_module, tags=["billing-module"])
 
 # WebSockets
 app.include_router(websocket_notifications.router, tags=["websocket-notifications"])
