@@ -257,6 +257,14 @@ async def update_model(
         # Если поле BaseModel и пришла строка - парсим
         if field_name in ModelClass.model_fields:
             field_info = ModelClass.model_fields[field_name]
+            
+            # Запрещаем изменение frozen полей
+            if field_info.frozen:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Поле '{field_name}' является неизменяемым (frozen) и не может быть обновлено"
+                )
+                
             annotation = field_info.annotation
 
             # Убираем Optional

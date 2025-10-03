@@ -26,7 +26,6 @@ class Storage:
     - task:task_id
     - session:session_id
     """
-
     def __init__(self):
         # Используем dependency injection для БД сессий
         self.session_factory = None

@@ -3,12 +3,13 @@ Pydantic модели для конфигурации агентов и флоу
 Это источник правды для Storage, Migrator и FlowFactory.
 """
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from datetime import datetime, timezone, timedelta
 import json
 from ..core.config import settings
+from ..fields import Field
 
 from .context_models import Context
 
@@ -201,8 +202,10 @@ class ToolReference(BuilderEntity):
         storage_prefix = "tool"
 
     tool_id: str = Field(
+        frozen=True,
         title="ID инструмента",
         description="ID инструмента (путь к функции, ID агента, MCP tool)",
+        pattern=r"^[a-zA-Z0-9_.-]+$",
     )
     params: Dict[str, Any] = Field(
         default_factory=dict,
