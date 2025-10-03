@@ -91,10 +91,17 @@ class TaskProcessor:
             task.started_at = datetime.now(timezone.utc)
             await self.storage.set_task_config(task)
 
+            # Проверяем контекст
+            from app.core.context import get_context
+            current_context = get_context()
+            company_id = current_context.active_company.company_id if current_context and current_context.active_company else 'НЕТ'
+            logger.info(f"🔍 Worker context: company={company_id}")
+            logger.info(f"🔍 Ищем flow: {task.flow_id}, ключ будет: company:{company_id}:flow:{task.flow_id}")
+            
             # Получаем flow config и entry agent
             flow_config = await self.storage.get_flow_config(task.flow_id)
             if not flow_config:
-                raise ValueError(f"Flow {task.flow_id} не найден в БД")
+                raise ValueError(f"Flow {task.flow_id} не найден в БД (контекст: company={company_id})")
 
             # Получаем entry point агента напрямую
             logger.info(f"🔥 Получаем агента: {flow_config.entry_point_agent}")
