@@ -10,11 +10,12 @@ from app.core.config import settings
 from app.core.storage import Storage
 from app.core.container import get_container
 from app.models import TaskStatus, SessionConfig, SessionStatus
-from app.core.context import set_context, clear_context
+from app.core.context import set_context, clear_context, get_context
 from app.db.database import create_tables
 from app.core.checkpointer import init_checkpointer
 from app.interfaces.factory import InterfaceFactory
 from app.interfaces.base import Message
+from app.exceptions import TariffError, BillingError
 from langgraph.errors import GraphInterrupt
 from langchain_core.messages import HumanMessage
 from langgraph.types import Command
@@ -93,7 +94,6 @@ class TaskProcessor:
             await self.storage.set_task_config(task)
 
             # Проверяем контекст
-            from app.core.context import get_context
             current_context = get_context()
             company_id = current_context.active_company.company_id if current_context and current_context.active_company else 'НЕТ'
             logger.info(f"🔍 Worker context: company={company_id}")
@@ -161,7 +161,6 @@ class TaskProcessor:
 
             except Exception as e:
                 # Проверяем billing ошибки - пробрасываем их дальше
-                from app.exceptions import TariffError, BillingError
                 if isinstance(e, (TariffError, BillingError)):
                     logger.info(f"🔴 Billing/Tariff ошибка при получении состояния графа, пробрасываем дальше")
                     raise
@@ -271,8 +270,6 @@ class TaskProcessor:
             await self._send_result_via_interface(task, str(interrupt.value))
 
         except Exception as e:
-            from app.exceptions import TariffError, BillingError
-            
             # Определяем сообщение для пользователя на основе типа ошибки
             error_message = str(e)
             user_message = None

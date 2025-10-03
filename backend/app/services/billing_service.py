@@ -84,11 +84,14 @@ class BillingService:
                 return False, f"Превышен месячный лимит для {resource_name}: {current_usage}/{resource_limit}"
         
         # 3. Проверяем бюджет компании
-        if company.monthly_budget > 0:
-            # Нужно получить стоимость ресурса - пока заглушка
-            resource_cost = await self._get_resource_cost(resource_name)
-            if company.current_month_spent + resource_cost > company.monthly_budget:
-                return False, f"Превышен месячный бюджет компании: {company.current_month_spent + resource_cost:.2f}₽/{company.monthly_budget}₽"
+        # ВАЖНО: Если бюджет не установлен (0 или None), запрещаем использование
+        if not company.monthly_budget or company.monthly_budget <= 0:
+            return False, f"У компании не установлен месячный бюджет. Обратитесь к администратору."
+        
+        # Проверяем не превышен ли бюджет
+        resource_cost = await self._get_resource_cost(resource_name)
+        if company.current_month_spent + resource_cost > company.monthly_budget:
+            return False, f"Превышен месячный бюджет компании: {company.current_month_spent + resource_cost:.2f}₽/{company.monthly_budget}₽"
         
         return True, ""
     

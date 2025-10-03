@@ -13,6 +13,7 @@ from ..core.context import get_context
 from ..services.billing_service import BillingService
 from ..models.billing_models import UsageType
 from ..core.config import get_settings
+from ..exceptions import TariffError, BillingError
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +58,6 @@ class ChatOpenAIWithBilling(ChatOpenAI):
         # Проверяем можно ли использовать эту LLM
         can_use, reason = await self._billing_service.can_use_resource(user, company, self._billing_name)
         if not can_use:
-            from app.exceptions import TariffError, BillingError
-            
             # Определяем тип ошибки
             if "недоступен на тарифе" in reason:
                 raise TariffError(f"Доступ к {self._billing_provider}:{self._billing_model} запрещен: {reason}")
