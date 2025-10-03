@@ -206,7 +206,6 @@ class TestModelWithFields:
         assert "test_field" in all_configs
         assert all_configs["test_field"]["placeholder"] == "Введите значение"
 
-    @pytest.mark.skip(reason="Dict с BaseModel не сериализуется в JSON - известное ограничение")
     def test_model_with_nested_models(self):
         """Тест модели с вложенными моделями"""
         
