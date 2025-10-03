@@ -149,7 +149,7 @@ async def lifespan(app: FastAPI):
         await migrator.run_full_migration()
 
         # Запуск воркера задач для локальной разработки
-        if settings.server.env == "local":
+        if settings.server.env == "local1":
             logger.info("⚙️ Запуск воркера задач для локальной разработки...")
             task_processor = TaskProcessor()
             asyncio.create_task(task_processor.start())

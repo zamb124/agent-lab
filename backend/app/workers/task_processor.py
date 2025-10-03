@@ -76,6 +76,7 @@ class TaskProcessor:
         )
 
         # Устанавливаем контекст для воркера
+        logger.info(f"🔍 task.context ПЕРЕД set_context: company={task.context.active_company.company_id if task.context.active_company else 'НЕТ'}")
         set_context(task.context)
 
         # Получаем интерфейс для платформы и отправляем уведомление о начале печати
@@ -159,6 +160,12 @@ class TaskProcessor:
                     result = await entry_agent.ainvoke(initial_state, config=config)
 
             except Exception as e:
+                # Проверяем billing ошибки - пробрасываем их дальше
+                from app.exceptions import TariffError, BillingError
+                if isinstance(e, (TariffError, BillingError)):
+                    logger.info(f"🔴 Billing/Tariff ошибка при получении состояния графа, пробрасываем дальше")
+                    raise
+                
                 # Если не удалось получить состояние, выполняем как новый запрос
                 logger.warning(
                     f"⚠️ Не удалось получить состояние графа: {e}, выполняем как новый запрос"
@@ -264,18 +271,20 @@ class TaskProcessor:
             await self._send_result_via_interface(task, str(interrupt.value))
 
         except Exception as e:
-            # Проверяем тип ошибки для пользовательского сообщения
+            from app.exceptions import TariffError, BillingError
+            
+            # Определяем сообщение для пользователя на основе типа ошибки
             error_message = str(e)
             user_message = None
             
-            if "запрещен" in error_message and ("лимит" in error_message or "бюджет" in error_message):
-                # Ошибка биллинга - отправляем понятное сообщение пользователю
-                user_message = "Прошу прощения, сейчас в сервисе технические проблемы связанные с биллингом. Попробуйте позже или обратитесь к администратору."
-            elif "недоступен на тарифе" in error_message:
-                # Ошибка тарифного плана
+            if isinstance(e, TariffError):
                 user_message = "Данная функция недоступна на вашем тарифном плане. Обратитесь к администратору для обновления тарифа."
+                logger.info(f"🎯 TariffError: отправляем сообщение пользователю")
+            elif isinstance(e, BillingError):
+                user_message = "Прошу прощения, сейчас в сервисе технические проблемы связанные с биллингом. Попробуйте позже или обратитесь к администратору."
+                logger.info(f"🎯 BillingError: отправляем сообщение пользователю")
             
-            # Если есть сообщение для пользователя - отправляем его
+            # Отправляем сообщение пользователю если есть
             if user_message:
                 try:
                     await self._send_error_message_to_user(task, user_message)
@@ -334,15 +343,20 @@ class TaskProcessor:
 
     async def _send_error_message_to_user(self, task, error_message: str):
         """Отправляет сообщение об ошибке пользователю"""
+        logger.info(f"🔔 Пытаемся отправить ошибку пользователю: {error_message[:100]}")
+        
         # Создаем интерфейс для платформы
         factory = InterfaceFactory()
         metadata = task.input_data.get("metadata", {})
 
+        logger.info(f"🔍 Создаем интерфейс для platform={task.platform}, metadata={metadata}")
         interface = await factory.create_interface(task.platform, metadata)
 
         if interface is None:
-            logger.warning(f"Не удалось создать интерфейс для отправки ошибки на платформу {task.platform}")
+            logger.error(f"❌ Не удалось создать интерфейс для отправки ошибки на платформу {task.platform}")
             return
+
+        logger.info(f"✅ Интерфейс создан: {type(interface).__name__}")
 
         # Создаем сообщение об ошибке
         error_response = Message(
@@ -354,8 +368,9 @@ class TaskProcessor:
             metadata=metadata,
         )
 
+        logger.info(f"📤 Отправляем сообщение через интерфейс...")
         await interface.send_message(error_response)
-        logger.info(f"📤 Отправлено сообщение об ошибке пользователю: {error_message[:50]}...")
+        logger.info(f"✅ Отправлено сообщение об ошибке пользователю: {error_message[:50]}...")
 
     async def _send_result_via_interface(self, task, result):
         """Отправляет результат через соответствующий интерфейс платформы"""
