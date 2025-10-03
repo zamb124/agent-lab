@@ -268,10 +268,10 @@ class BaseAgent(ABC):
 
         return StructuredTool.from_function(
             func=agent_func,
-            name=name or self.config.name,
+            name=name or self.config.agent_id,
             description=description
             or self.config.description
             or f"Агент {self.config.name}",
             args_schema=AgentInput,
-            coroutine=agent_func,  # Используем coroutine для async функций
+            coroutine=agent_func,
         )

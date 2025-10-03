@@ -204,6 +204,23 @@
     border-style: dashed;
 }
 
+/* Readonly input - убираем рамку при фокусе, но оставляем серый фон */
+input.field-readonly,
+textarea.field-readonly,
+select.field-readonly {
+    background-color: var(--bg-secondary) !important;
+    cursor: default;
+}
+
+input.field-readonly:focus,
+textarea.field-readonly:focus,
+select.field-readonly:focus {
+    outline: none !important;
+    box-shadow: none !important;
+    border-color: var(--border-primary) !important;
+    background-color: var(--bg-secondary) !important;
+}
+
 .field-readonly .field-label::after {
     content: ' (только чтение)';
     font-weight: 400;

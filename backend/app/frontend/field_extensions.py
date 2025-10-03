@@ -9,7 +9,6 @@ import pydantic
 
 from app.frontend.environment import render_template, template_exists
 from app.core.context import get_context
-from app.frontend.model_registry import ModelRegistry
 
 
 def get_template_name_from_type(annotation: Any, value: Any = None) -> str:
@@ -145,16 +144,18 @@ class FrontendFieldInfo(FieldInfo):
         }
 
         # Объединяем с существующим json_schema_extra
+        # ВАЖНО: Сначала наши дефолты, потом существующий extra (чтобы не перезаписывать readonly от Field)
         if json_schema_extra:
             if callable(json_schema_extra):
                 # Если это функция, создаем wrapper
                 def combined_extra():
                     base_extra = json_schema_extra()
-                    return {**base_extra, **frontend_extra}
+                    return {**frontend_extra, **base_extra}
 
                 final_json_schema_extra = combined_extra
             elif isinstance(json_schema_extra, dict):
-                final_json_schema_extra = {**json_schema_extra, **frontend_extra}
+                # Сначала frontend_extra, потом json_schema_extra (приоритет у json_schema_extra)
+                final_json_schema_extra = {**frontend_extra, **json_schema_extra}
             else:
                 final_json_schema_extra = frontend_extra
         else:
@@ -244,12 +245,15 @@ class FrontendFieldInfo(FieldInfo):
         view_mode = kwargs.get("view_mode", "form")
 
         # Подготавливаем контекст для шаблона
+        # Просто берем readonly из json_schema_extra (наш Field уже установил его)
+        is_readonly = json_extra.get("readonly", False)
+        
         context = {
             "field_name": field_name,
             "value": value,
             "title": self.title or field_name.replace("_", " ").title(),
             "description": self.description,
-            "readonly": json_extra.get("readonly", False),
+            "readonly": is_readonly,
             "hidden": json_extra.get("hidden", False),
             "placeholder": json_extra.get("placeholder"),
             "help_text": json_extra.get("help_text"),
@@ -398,16 +402,7 @@ def Field(
     )
 
 
-# Monkey patch для замены стандартного pydantic.Field
-_original_pydantic_field = pydantic.Field
-pydantic.Field = Field
-
-# Также заменяем в самом модуле pydantic.fields
-import pydantic.fields
-pydantic.fields.Field = Field
-
-
-# Также патчим BaseModel для добавления методов работы с фронтендом
+# Патчим BaseModel для добавления методов работы с фронтендом
 class FrontendMixin:
     """Миксин для добавления фронтенд функциональности к BaseModel"""
 
@@ -576,6 +571,7 @@ class FrontendMixin:
 
     def _get_model_class(self, model_type: str):
         """Получить класс модели по типу из registry"""
+        from app.frontend.model_registry import ModelRegistry
         return ModelRegistry.get_model_class(model_type)
 
     def _render_fields(
@@ -647,6 +643,10 @@ class FrontendMixin:
                 )
                 if field_html:
                     fields_html.append(field_html)
+            else:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"⚠️ Поле {field_name} не имеет метода render! Тип: {type(field_info)}")
 
         # 3. Создаем контекст
         context = {

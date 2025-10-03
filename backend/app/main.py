@@ -2,9 +2,6 @@
 Главная точка входа FastAPI приложения.
 """
 
-# КРИТИЧНО: Monkey patches ДОЛЖНЫ быть применены ДО импорта моделей!
-import app.frontend.field_extensions
-
 import logging
 import asyncio
 import json
