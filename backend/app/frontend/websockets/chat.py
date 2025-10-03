@@ -177,23 +177,34 @@ async def websocket_chat(websocket: WebSocket, session_id: str = None):
             await websocket.close(code=4001, reason="Invalid session")
             return
 
-        # Получаем системную компанию для WebSocket
-
-        
+        # Получаем активную компанию пользователя
         storage = Storage()
-        company_data = await storage.get("company:system", force_global=True)
-        if not company_data:
-            await websocket.close(code=4003, reason="System company not found")
-            return
-        system_company = Company.model_validate_json(company_data)
         
-        # Создаем контекст с настоящим пользователем
+        if not user.active_company_id:
+            await websocket.close(code=4003, reason="User has no active company")
+            return
+            
+        company_data = await storage.get(f"company:{user.active_company_id}", force_global=True)
+        if not company_data:
+            await websocket.close(code=4003, reason=f"Company {user.active_company_id} not found")
+            return
+        
+        active_company = Company.model_validate_json(company_data)
+        
+        # Получаем все компании пользователя
+        user_companies = []
+        for company_id in user.companies.keys():
+            comp_data = await storage.get(f"company:{company_id}", force_global=True)
+            if comp_data:
+                user_companies.append(Company.model_validate_json(comp_data))
+        
+        # Создаем контекст с правильной компанией
         context = Context(
             user=user,
             session_id=auth_session_id,
             platform="web",
-            active_company=system_company,
-            user_companies=[system_company],
+            active_company=active_company,
+            user_companies=user_companies,
             metadata={"websocket": True, "authenticated": True},
         )
         set_context(context)

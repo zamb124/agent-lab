@@ -57,7 +57,13 @@ class ChatOpenAIWithBilling(ChatOpenAI):
         # Проверяем можно ли использовать эту LLM
         can_use, reason = await self._billing_service.can_use_resource(user, company, self._billing_name)
         if not can_use:
-            raise Exception(f"Доступ к {self._billing_provider}:{self._billing_model} запрещен: {reason}")
+            from app.exceptions import TariffError, BillingError
+            
+            # Определяем тип ошибки
+            if "недоступен на тарифе" in reason:
+                raise TariffError(f"Доступ к {self._billing_provider}:{self._billing_model} запрещен: {reason}")
+            else:
+                raise BillingError(f"Доступ к {self._billing_provider}:{self._billing_model} запрещен: {reason}")
         
         # Выполняем запрос
         result = await super().ainvoke(input_data, config, **kwargs)

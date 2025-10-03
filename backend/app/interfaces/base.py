@@ -192,13 +192,17 @@ class BaseInterface(ABC):
         if not context:
             raise ValueError("Нет глобального контекста - проверьте AuthMiddleware")
 
+        # Логируем компанию при создании задачи
+        company_id = context.active_company.company_id if context.active_company else 'НЕТ'
+        logger.info(f"🔍 Создаем задачу в контексте: company={company_id}, user={context.user.user_id if context.user else 'НЕТ'}")
+
         # Обогащаем контекст session_id если его нет
         context.session_id = message.session_id or context.session_id
 
         task_config = TaskConfig(
             task_id=task_id,
             flow_id=flow_id,
-            context=context,  # ← Используем Context вместо отдельных полей
+            context=context,
             status=TaskStatus.PENDING,
             input_data={"message": message.content, "metadata": message.metadata or {}},
             created_at=datetime.now(timezone.utc),
