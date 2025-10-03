@@ -14,8 +14,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.core.config import settings
 from app.core.checkpointer import init_checkpointer, close_checkpointer
@@ -200,6 +202,12 @@ app = FastAPI(
     version="0.1.0",
     debug=settings.server.debug,
     lifespan=lifespan,
+)
+
+# Proxy headers middleware (для правильной работы за nginx)
+app.add_middleware(
+    ProxyHeadersMiddleware,
+    trusted_hosts=["*"] if settings.server.debug else [settings.server.domain, f"*.{settings.server.domain}"]
 )
 
 # Auth middleware (заглушка)

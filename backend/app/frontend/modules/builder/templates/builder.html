@@ -3,7 +3,7 @@
 {% block title %}Agent Builder{% endblock %}
 
 {% block head %}
-<link rel="stylesheet" href="{{ url_for('static', path='builder/css/builder.css') }}">
+<link rel="stylesheet" href="/static/builder/css/builder.css">
 {% endblock %}
 
 {% block content %}
@@ -133,7 +133,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', path='builder/js/builder.js') }}"></script>
+<script src="/static/builder/js/builder.js"></script>
 <script>
     // Инициализация Builder после загрузки HTMX
     function initBuilder() {
