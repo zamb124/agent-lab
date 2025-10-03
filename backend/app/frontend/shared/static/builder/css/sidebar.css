@@ -3,7 +3,7 @@
 .builder-sidebar {
     width: 320px;
     background: var(--bg-secondary);
-    border-right: 1px solid var(--border-color);
+    border-right: 1px solid var(--border-primary);
     display: flex;
     flex-direction: column;
     transition: width 0.3s ease;
@@ -16,7 +16,7 @@
 /* Заголовок сайдбара */
 .sidebar-header {
     padding: 16px;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-primary);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -29,24 +29,44 @@
 }
 
 .sidebar-toggle {
-    background: none;
-    border: none;
+    background: transparent;
+    border: 1px solid var(--border-primary);
     color: var(--text-secondary);
     cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
+    padding: 8px;
+    border-radius: var(--radius-md);
     transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    min-height: 32px;
+    font-size: 16px;
+    line-height: 1;
 }
 
 .sidebar-toggle:hover {
-    background: var(--bg-tertiary);
+    background: var(--bg-hover);
     color: var(--text-primary);
+    border-color: var(--accent-primary);
+}
+
+.sidebar-toggle svg {
+    fill: currentColor;
+    display: block;
+    pointer-events: none;
+}
+
+.sidebar-toggle i {
+    font-size: 20px;
+    line-height: 1;
+    display: block;
 }
 
 /* Табы */
 .sidebar-tabs {
     display: flex;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-primary);
 }
 
 .tab-button {
@@ -84,7 +104,7 @@
 /* Поиск */
 .sidebar-search {
     padding: 16px;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-primary);
     display: flex;
     gap: 8px;
     align-items: center;
@@ -94,7 +114,7 @@
     flex: 1;
     padding: 8px 12px;
     background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border-primary);
     border-radius: var(--radius-md);
     color: var(--text-primary);
     font-size: 14px;
@@ -113,7 +133,7 @@
 .search-add-btn {
     width: 36px;
     height: 36px;
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border-primary);
     border-radius: var(--radius-md);
     background: var(--bg-secondary);
     color: var(--text-secondary);
@@ -154,7 +174,7 @@
 /* Действия в табах */
 .tab-actions {
     padding: 16px;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-primary);
 }
 
 .tab-actions .btn {
@@ -173,7 +193,7 @@
 /* Карточки элементов */
 .item-card {
     background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border-primary);
     border-radius: var(--radius-md);
     padding: 0; /* Убираем padding для цветных шапочек */
     margin-bottom: 8px;
@@ -414,16 +434,33 @@
     display: none;
 }
 
+.builder-sidebar.collapsed .sidebar-header {
+    padding: 12px;
+    justify-content: center;
+}
+
+.builder-sidebar.collapsed .sidebar-content {
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.builder-sidebar.collapsed .items-list {
+    padding: 8px 4px;
+}
+
 .builder-sidebar.collapsed .item-card {
-    padding: 8px;
+    padding: 12px 4px;
     text-align: center;
+    margin-bottom: 8px;
 }
 
 .builder-sidebar.collapsed .card-header {
     justify-content: center;
     margin-bottom: 0;
+    padding: 0;
 }
 
 .builder-sidebar.collapsed .card-icon {
-    font-size: 20px;
+    font-size: 24px;
+    margin: 0;
 }
