@@ -16,7 +16,7 @@ from app.core.storage import Storage
 from app.frontend.wrappers import ModelListWrapper
 from app.frontend.model_registry import ModelRegistry
 from app.frontend.environment import render_template
-from .websocket import notify_model_updated
+from app.frontend.websockets.notifications import notify_model_updated
 
 # ПРИНУДИТЕЛЬНЫЙ импорт field_extensions для применения monkey patches
 import app.frontend.field_extensions

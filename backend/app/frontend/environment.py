@@ -6,16 +6,12 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 
-# Определяем путь к шаблонам
+# Определяем путь к шаблонам (новая структура)
 current_dir = Path(__file__).parent
-templates_dir = current_dir / "templates"
+templates_dir = current_dir / "shared" / "templates"
 
-# Создаем директории шаблонов если их нет
-templates_dir.mkdir(exist_ok=True)
-fields_dir = templates_dir / "fields"
-fields_dir.mkdir(exist_ok=True)
-wrappers_dir = templates_dir / "wrappers"
-wrappers_dir.mkdir(exist_ok=True)
+# Директории уже должны существовать в новой структуре
+# Не создаем их автоматически
 
 # Создаем Jinja2 окружение
 jinja_env = Environment(
