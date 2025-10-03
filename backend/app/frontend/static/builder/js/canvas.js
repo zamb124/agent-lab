@@ -526,15 +526,15 @@ class BuilderCanvas {
      * Настройка автосохранения для полей формы
      */
     setupAutoSave(element, modelType, modelId) {
-        const form = element.querySelector('form');
-        if (!form) return;
-        
-        // Убираем стандартные HTMX атрибуты формы
-        form.removeAttribute('hx-post');
-        form.removeAttribute('hx-target');
+        // Ищем контейнер с полями (теперь это не form, а div#form-fields)
+        const formFields = element.querySelector('#form-fields');
+        if (!formFields) {
+            console.warn('Не найден #form-fields для автосохранения');
+            return;
+        }
         
         // Добавляем автосохранение для всех полей
-        const inputs = form.querySelectorAll('input, textarea, select');
+        const inputs = formFields.querySelectorAll('input, textarea, select');
         
         inputs.forEach(input => {
             // Убираем существующие HTMX атрибуты если есть
@@ -557,7 +557,7 @@ class BuilderCanvas {
         
         // Инициализируем HTMX для обновленных элементов
         if (typeof htmx !== 'undefined') {
-            htmx.process(form);
+            htmx.process(formFields);
         }
     }
     

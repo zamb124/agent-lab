@@ -207,53 +207,49 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def _create_telegram_context(self, request: Request, requested_company: Company) -> Context:
         """Создает контекст для Telegram запросов"""
-        try:
-            body = await request.body()
-            data = json.loads(body)
+        body = await request.body()
+        data = json.loads(body)
 
-            # Извлекаем данные Telegram пользователя
-            tg_user = data.get("message", {}).get("from", {})
-            telegram_user_id = str(tg_user.get("id", "unknown"))
-            username = tg_user.get("username", "")
-            first_name = tg_user.get("first_name", "")
-            last_name = tg_user.get("last_name", "")
+        # Извлекаем данные Telegram пользователя
+        tg_user = data.get("message", {}).get("from", {})
+        telegram_user_id = str(tg_user.get("id", "unknown"))
+        username = tg_user.get("username", "")
+        first_name = tg_user.get("first_name", "")
+        last_name = tg_user.get("last_name", "")
 
-            # Формируем полное имя
-            full_name = (
-                f"{first_name} {last_name}".strip()
-                or username
-                or f"User_{telegram_user_id}"
-            )
+        # Формируем полное имя
+        full_name = (
+            f"{first_name} {last_name}".strip()
+            or username
+            or f"User_{telegram_user_id}"
+        )
 
-            # Создаем реального Telegram пользователя
-            user = User(
-                user_id=f"telegram_{telegram_user_id}",
-                provider=AuthProvider.YANDEX,  # Placeholder
-                provider_user_id=telegram_user_id,
-                email="",  # У Telegram нет email
-                name=full_name,
-                status=UserStatus.ACTIVE,
-                groups=["user"],
-                companies={requested_company.company_id: ["user"]},
-                active_company_id=requested_company.company_id,
-            )
+        # Создаем реального Telegram пользователя
+        user = User(
+            user_id=f"telegram_{telegram_user_id}",
+            provider=AuthProvider.YANDEX,  # Placeholder
+            provider_user_id=telegram_user_id,
+            email="",  # У Telegram нет email
+            name=full_name,
+            status=UserStatus.ACTIVE,
+            groups=["user"],
+            companies={requested_company.company_id: ["user"]},
+            active_company_id=requested_company.company_id,
+        )
 
-            return Context(
-                user=user,
-                platform="telegram",
-                active_company=requested_company,
-                user_companies=[requested_company],
-                metadata={
-                    "telegram_user_id": telegram_user_id,
-                    "username": username,
-                    "first_name": first_name,
-                    "last_name": last_name,
-                },
-            )
+        return Context(
+            user=user,
+            platform="telegram",
+            active_company=requested_company,
+            user_companies=[requested_company],
+            metadata={
+                "telegram_user_id": telegram_user_id,
+                "username": username,
+                "first_name": first_name,
+                "last_name": last_name,
+            },
+        )
 
-        except Exception as e:
-            logger.warning(f"Ошибка парсинга Telegram запроса: {e}")
-            return await self._create_anonymous_context(request, requested_company)
 
     async def _create_api_context(self, request: Request, requested_company: Company) -> Context:
         """Создает контекст для API запросов"""

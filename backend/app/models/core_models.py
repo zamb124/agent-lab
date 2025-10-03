@@ -3,10 +3,11 @@ Pydantic модели для конфигурации агентов и флоу
 Это источник правды для Storage, Migrator и FlowFactory.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from datetime import datetime, timezone, timedelta
+import json
 from ..core.config import settings
 
 from .context_models import Context
@@ -147,7 +148,9 @@ class GraphEdge(BaseModel):
 
 
 class BuilderEntity(BaseModel):
-    """Базовая модель для всех сущностей Builder"""
+    """Базовая модель для всех сущностей Builder с автоматическим преобразованием типов"""
+    
+    model_config = {"str_strip_whitespace": True}
     
     # Метаданные - общие для всех сущностей
     source: str = Field(
@@ -162,6 +165,16 @@ class BuilderEntity(BaseModel):
     updated_at: Optional[datetime] = Field(
         default=None, title="Обновлен", description="Дата обновления", readonly=True
     )
+    
+    @staticmethod
+    def parse_json_string(v: Any) -> Any:
+        """Преобразует JSON строку в dict/list"""
+        if isinstance(v, str) and v.strip():
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return v
+        return v if v else None
 
 
 class GraphDefinition(BaseModel):
@@ -437,6 +450,33 @@ class FlowConfig(BuilderEntity):
         description="Позиции элементов и связи на канвасе Builder",
         exclude_from_form=True,  # Не показываем в форме редактирования
     )
+    
+    @field_validator('platforms', 'canvas_data', mode='before')
+    @classmethod
+    def parse_json_fields(cls, v):
+        """Автоматически парсит JSON строки в dict"""
+        if isinstance(v, str) and v.strip():
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return v
+        return v if v else ({"api": {}} if v is None else v)
+    
+    @field_validator('timeout', mode='before')
+    @classmethod
+    def parse_timeout(cls, v):
+        """Преобразует пустую строку в None для timeout"""
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v
+    
+    @field_validator('max_retries', mode='before')
+    @classmethod
+    def parse_max_retries(cls, v):
+        """Преобразует пустую строку в 0 для max_retries"""
+        if isinstance(v, str) and v.strip() == "":
+            return 0
+        return v
 
 
 class TaskStatus(str, Enum):

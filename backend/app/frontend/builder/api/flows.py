@@ -81,14 +81,20 @@ async def update_flow(
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
     
+    # Создаем обновленные данные с валидацией через модель
+    flow_dict = flow.model_dump()
+    
     # Обновляем только разрешенные поля
     allowed_fields = {"name", "description", "entry_point_agent", "platforms", "timeout", "max_retries", "canvas_data"}
     for field, value in updates.items():
         if field in allowed_fields:
-            setattr(flow, field, value)
+            flow_dict[field] = value
     
-    await storage.set_flow_config(flow)
-    return flow
+    # Валидируем через модель - валидаторы автоматически преобразуют типы
+    validated_flow = FlowConfig(**flow_dict)
+    
+    await storage.set_flow_config(validated_flow)
+    return validated_flow
 
 
 @router.delete("/{flow_id}")
