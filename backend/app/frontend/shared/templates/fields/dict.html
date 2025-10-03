@@ -13,13 +13,13 @@
   
   {% block field_input %}
     {% if readonly %}
-      <textarea class="form-control" readonly rows="3">{{ value|tojson(indent=2) if value else '{}' }}</textarea>
+      <textarea class="form-control" readonly rows="3">{% if value %}{{ value|string }}{% else %}{}{% endif %}</textarea>
     {% else %}
       <textarea class="form-control" 
                 id="{{ field_name }}" 
                 name="{{ field_name }}" 
                 rows="3"
-                {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}>{{ value|tojson(indent=2) if value else '{}' }}</textarea>
+                {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}>{% if value %}{{ value|string }}{% else %}{}{% endif %}</textarea>
       <small class="text-muted">Формат: JSON</small>
     {% endif %}
   {% endblock %}

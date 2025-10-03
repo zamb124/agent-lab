@@ -343,7 +343,8 @@ class TestLLMConfiguration:
         # Тест дефолтного провайдера (mock)
         llm = get_llm()
         assert llm is not None
-        assert type(llm).__name__ == "MockLLM"
+        # Теперь LLM оборачивается в ChatOpenAIWithBilling
+        assert type(llm).__name__ in ["MockLLM", "ChatOpenAIWithBilling"]
         
         # Тест конкретного провайдера и модели
         llm2 = get_llm("mock", "custom-model")

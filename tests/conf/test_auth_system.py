@@ -4,7 +4,7 @@
 import pytest
 import json
 import uuid
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from backend.app.identity.models import (
     AuthProvider, User, AuthSession, ProviderUserInfo, 
@@ -150,13 +150,17 @@ class TestYandexProvider:
         provider = YandexProvider(config)
         
         # Мокаем HTTP ответ от Yandex
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json = AsyncMock(return_value={
-            "access_token": "test_access_token",
-            "refresh_token": "test_refresh_token",
-            "token_type": "bearer"
-        })
+        
+        # json() должен возвращать обычный dict, не awaitable
+        def mock_json():
+            return {
+                "access_token": "test_access_token",
+                "refresh_token": "test_refresh_token",
+                "token_type": "bearer"
+            }
+        mock_response.json = mock_json
         
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.post.return_value = mock_response
@@ -185,16 +189,20 @@ class TestYandexProvider:
         provider = YandexProvider(config)
         
         # Мокаем ответ от Yandex API
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json = AsyncMock(return_value={
-            "id": "12345",
-            "default_email": "test@yandex.ru",
-            "display_name": "Тест Пользователь",
-            "first_name": "Тест",
-            "last_name": "Пользователь",
-            "default_avatar_id": "avatar123"
-        })
+        
+        # json() должен возвращать обычный dict, не awaitable
+        def mock_json():
+            return {
+                "id": "12345",
+                "default_email": "test@yandex.ru",
+                "display_name": "Тест Пользователь",
+                "first_name": "Тест",
+                "last_name": "Пользователь",
+                "default_avatar_id": "avatar123"
+            }
+        mock_response.json = mock_json
         
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.get.return_value = mock_response
@@ -437,12 +445,9 @@ class TestAuthService:
             name="Тест Пользователь"
         )
         
-        auth_service.storage.get.side_effect = [
-            # Первый вызов - получение сессии
-            test_session.model_dump_json(),
-            # Второй вызов - получение пользователя
-            test_user.model_dump_json()
-        ]
+        # Мокаем _get_session и _get_user напрямую
+        auth_service._get_session = AsyncMock(return_value=test_session)
+        auth_service._get_user = AsyncMock(return_value=test_user)
         
         # Тестируем получение пользователя
         user = await auth_service.get_user_by_session("test_session")
