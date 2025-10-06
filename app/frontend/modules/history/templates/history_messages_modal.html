@@ -320,6 +320,11 @@
                                     <i class="bi bi-gear-fill" style="font-size: 1.2rem; color: var(--text-muted);"></i>
                                     <span class="small fw-bold">Система</span>
                                 {% endif %}
+                                {% if message.source_node %}
+                                    <span class="badge" style="background: var(--accent-info); color: white; font-size: 0.7rem; margin-left: 0.5rem;">
+                                        <i class="bi bi-diagram-3"></i> {{ message.source_node }}
+                                    </span>
+                                {% endif %}
                                 <span class="message-time ms-auto">
                                     {{ message.timestamp.strftime('%H:%M:%S') if message.timestamp else '' }}
                                 </span>

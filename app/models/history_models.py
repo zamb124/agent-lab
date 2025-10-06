@@ -61,6 +61,11 @@ class MessageItem(BaseModel):
         title="Вызовы инструментов",
         description="Список вызовов инструментов в этом сообщении"
     )
+    source_node: Optional[str] = Field(
+        default=None,
+        title="Node источник",
+        description="Название node/агента, создавшего это сообщение"
+    )
     metadata: Dict[str, Any] = Field(
         default_factory=dict,
         title="Метаданные",
@@ -99,6 +104,11 @@ class CheckpointInfo(BaseModel):
         default=0,
         title="Шаг",
         description="Номер шага в графе"
+    )
+    source_node: Optional[str] = Field(
+        default=None,
+        title="Node источник",
+        description="Название node/агента, создавшего checkpoint"
     )
     timestamp: Optional[datetime] = Field(
         default=None,
