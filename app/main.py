@@ -33,6 +33,7 @@ from app.frontend.modules.builder import router as builder_module
 from app.frontend.modules.billing.router import router as billing_module
 from app.frontend.modules.admin.router import router as admin_module
 from app.frontend.modules.history.router import router as history_module
+from app.frontend.modules.bots.router import router as bots_module
 from app.frontend.websockets import notifications as websocket_notifications
 from app.frontend.websockets import chat as websocket_chat
 from app.middleware.auth import AuthMiddleware
@@ -253,6 +254,7 @@ app.include_router(builder_module.router, tags=["builder-module"])
 app.include_router(billing_module, tags=["billing-module"])
 app.include_router(admin_module, tags=["admin-module"])
 app.include_router(history_module, tags=["history-module"])
+app.include_router(bots_module, tags=["bots-module"])
 
 # WebSockets
 app.include_router(websocket_notifications.router, tags=["websocket-notifications"])

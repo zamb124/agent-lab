@@ -23,7 +23,13 @@
         <div class="sidebar-content">
             <nav class="sidebar-nav">
                 <div class="sidebar-nav-item">
-                    <a href="#" class="sidebar-nav-link">
+                    <a href="/frontend/bots/" 
+                       hx-get="/frontend/bots/" 
+                       hx-target="#content"
+                       hx-push-url="true"
+                       hx-indicator="#content-loading"
+                       onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
+                       class="sidebar-nav-link">
                         <i class="bi bi-people-fill"></i>
                         <span class="sidebar-nav-text">Боты</span>
                     </a>
