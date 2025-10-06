@@ -1,65 +1,103 @@
 <div class="bot-details-header">
-    <h2>
-        <i class="bi bi-robot"></i>
-        {{ bot.name }}
-    </h2>
-    <div class="header-actions">
-        <button class="btn btn-primary btn-sm" onclick="openBotChat('{{ bot.flow_id }}', '{{ bot.name }}')">
-            <i class="bi bi-chat-dots"></i>
-            Открыть чат
-        </button>
-        <button class="btn-close-details" onclick="closeBotModal()" title="Закрыть">
-            <i class="bi bi-x-lg"></i>
-        </button>
+    <div class="header-top-row">
+        <div class="header-left">
+            <h2>
+                <i class="bi bi-robot"></i>
+                {{ bot.name }}
+            </h2>
+        </div>
+        <div class="header-right">
+            <button class="btn btn-outline btn-sm" onclick="openBotChat('{{ bot.flow_id }}', '{{ bot.name }}')">
+                <i class="bi bi-chat-dots"></i>
+                Тестировать
+            </button>
+            <button class="btn-icon" onclick="toggleBotModalFullscreen()" title="На весь экран">
+                <i class="bi bi-fullscreen"></i>
+            </button>
+            <button class="btn-icon" onclick="closeBotModal()" title="Закрыть">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+    </div>
+    
+    <div class="header-controls-row">
+        <div class="control-group">
+            <label class="control-label">Flow ID</label>
+            <div class="control-value">
+                <code>{{ bot.flow_id }}</code>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label class="control-label">Агент</label>
+            <div class="control-value">
+                <code>{{ bot.entry_point }}</code>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label class="control-label">Платформы</label>
+            <div class="control-value platforms-list">
+                {% for platform in bot.platforms.keys() %}
+                <span class="platform-badge platform-{{ platform }}">
+                    {% if platform == 'telegram' %}
+                        <i class="bi bi-telegram"></i>
+                    {% elif platform == 'api' %}
+                        <i class="bi bi-code-slash"></i>
+                    {% elif platform == 'web' %}
+                        <i class="bi bi-globe"></i>
+                    {% endif %}
+                    {{ platform }}
+                </span>
+                {% endfor %}
+            </div>
+        </div>
     </div>
 </div>
 
 <div class="bot-details-content">
     <div class="bot-settings-section-full">
         <div class="settings-tabs">
-            <button class="settings-tab active" data-tab="general">
-                <i class="bi bi-gear"></i>
-                Общие
+            <button class="settings-tab active" data-tab="main">
+                <i class="bi bi-star"></i>
+                Основное
             </button>
             <button class="settings-tab" data-tab="platforms">
                 <i class="bi bi-globe"></i>
                 Платформы
             </button>
-            <button class="settings-tab" data-tab="prompt">
-                <i class="bi bi-chat-text"></i>
-                Промпт
+            <button class="settings-tab" data-tab="advanced">
+                <i class="bi bi-gear"></i>
+                Дополнительно
             </button>
         </div>
         
         <div class="settings-content">
-            <div class="settings-panel active" data-panel="general">
-                <h4>Общие настройки</h4>
-                
-                <div class="form-group">
-                    <label>Название бота</label>
-                    <input type="text" class="form-control" value="{{ bot.name }}" id="bot-name">
-                </div>
-                
-                <div class="form-group">
-                    <label>Описание</label>
-                    <textarea class="form-control" rows="3" id="bot-description">{{ bot.description }}</textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label>Агент точки входа</label>
-                    <input type="text" class="form-control" value="{{ bot.entry_point }}" id="bot-entry-point" readonly>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Таймаут (сек)</label>
-                        <input type="number" class="form-control" value="{{ bot.timeout or '' }}" id="bot-timeout">
+            <div class="settings-panel active" data-panel="main">
+                <div class="main-settings-header">
+                    <div class="form-row-main">
+                        <div class="form-group">
+                            <label>Название бота</label>
+                            <input type="text" class="form-control" value="{{ bot.name }}" id="bot-name">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Таймаут (сек)</label>
+                            <input type="number" class="form-control" value="{{ bot.timeout or '' }}" id="bot-timeout" placeholder="По умолчанию">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Максимум повторов</label>
+                            <input type="number" class="form-control" value="{{ bot.max_retries }}" id="bot-max-retries">
+                        </div>
                     </div>
-                    
-                    <div class="form-group">
-                        <label>Максимум повторов</label>
-                        <input type="number" class="form-control" value="{{ bot.max_retries }}" id="bot-max-retries">
-                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Промпт агента</label>
+                    <div id="bot-prompt-editor-container" 
+                         data-prompt="{{ bot.prompt }}"
+                         data-flow-id="{{ bot.flow_id }}"></div>
                 </div>
             </div>
             
@@ -121,17 +159,19 @@
                 </button>
             </div>
             
-            <div class="settings-panel" data-panel="prompt">
-                <h4>Системный промпт</h4>
+            <div class="settings-panel" data-panel="advanced">
+                <h4>Дополнительные настройки</h4>
                 
                 <div class="form-group">
-                    <label>Промпт агента</label>
-                    <textarea class="form-control code-editor" 
-                              rows="15" 
-                              id="bot-prompt"
-                              placeholder="Введите системный промпт для агента...">{{ bot.prompt }}</textarea>
+                    <label>Описание</label>
+                    <textarea class="form-control" rows="3" id="bot-description">{{ bot.description }}</textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Агент точки входа</label>
+                    <input type="text" class="form-control" value="{{ bot.entry_point }}" id="bot-entry-point" readonly>
                     <small class="form-text">
-                        Изменения будут сохранены в конфигурацию агента "{{ bot.entry_point }}"
+                        Системный агент, который обрабатывает запросы к боту
                     </small>
                 </div>
             </div>

@@ -62,7 +62,7 @@
 
 /* Светлая тема (для переключения в будущем) */
 [data-theme="light"] {
-    --bg-primary: #ffffff;
+    --bg-primary: #f5f5f7;
     --bg-secondary: #f8fafc;
     --bg-tertiary: #f1f5f9;
     --bg-card: #ffffff;

@@ -25,6 +25,7 @@ from app.frontend.api import models as frontend_models
 from app.frontend.api import flows as frontend_flows
 from app.frontend.api import agents as frontend_agents
 from app.frontend.api import tools as frontend_tools
+from app.frontend.api import variables as frontend_variables
 from app.frontend.pages import auth as auth_pages
 from app.frontend.pages import dashboard as dashboard_pages
 from app.frontend.pages import public as public_pages
@@ -242,6 +243,7 @@ app.include_router(frontend_models.router, tags=["frontend-models"])
 app.include_router(frontend_flows.router, prefix="/frontend/builder", tags=["frontend-flows"])
 app.include_router(frontend_agents.router, prefix="/frontend/builder", tags=["frontend-agents"])
 app.include_router(frontend_tools.router, prefix="/frontend/builder", tags=["frontend-tools"])
+app.include_router(frontend_variables.router, prefix="/frontend/api", tags=["frontend-variables"])
 
 # Frontend Pages (HTML)
 app.include_router(public_pages.router, tags=["public-pages"])
