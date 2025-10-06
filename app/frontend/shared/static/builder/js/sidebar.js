@@ -863,7 +863,7 @@ class BuilderSidebar {
         }
         
         try {
-            const response = await fetch(`/frontend/builder/flows/${flowId}`, {
+            const response = await fetch(`/frontend/builder/flows/${encodeURIComponent(flowId)}`, {
                 method: 'DELETE'
             });
             

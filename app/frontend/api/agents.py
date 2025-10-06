@@ -36,7 +36,7 @@ async def list_agents(storage: Storage = Depends(get_storage)) -> List[AgentConf
     return agents
 
 
-@router.get("/{agent_id}", response_model=AgentConfig)
+@router.get("/{agent_id:path}", response_model=AgentConfig)
 async def get_agent(agent_id: str, storage: Storage = Depends(get_storage)) -> AgentConfig:
     """Получить агента по ID"""
     agent = await storage.get_agent_config(agent_id)
@@ -72,7 +72,7 @@ async def create_agent(
     return agent_config
 
 
-@router.put("/{agent_id}", response_model=AgentConfig)
+@router.put("/{agent_id:path}", response_model=AgentConfig)
 async def update_agent(
     agent_id: str,
     updates: Dict[str, Any],
@@ -102,7 +102,7 @@ async def update_agent(
     return validated_agent
 
 
-@router.delete("/{agent_id}")
+@router.delete("/{agent_id:path}")
 async def delete_agent(agent_id: str, storage: Storage = Depends(get_storage)):
     """Удалить агента"""
     agent = await storage.get_agent_config(agent_id)
@@ -113,7 +113,7 @@ async def delete_agent(agent_id: str, storage: Storage = Depends(get_storage)):
     return {"message": "Agent deleted successfully"}
 
 
-@router.get("/{agent_id}/graph")
+@router.get("/{agent_id:path}/graph")
 async def get_agent_graph(agent_id: str, storage: Storage = Depends(get_storage)) -> Dict[str, Any]:
     """Получить граф агента"""
     agent = await storage.get_agent_config(agent_id)
@@ -142,7 +142,7 @@ async def get_agent_graph(agent_id: str, storage: Storage = Depends(get_storage)
     }
 
 
-@router.put("/{agent_id}/graph")
+@router.put("/{agent_id:path}/graph")
 async def update_agent_graph(
     agent_id: str,
     graph_data: Dict[str, Any],

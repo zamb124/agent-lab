@@ -16,7 +16,7 @@ async def builder_index(request: Request):
     return templates.TemplateResponse("builder.html", {"request": request})
 
 
-@router.get("/flow/{flow_id}", response_class=HTMLResponse)
+@router.get("/flow/{flow_id:path}", response_class=HTMLResponse)
 async def builder_flow(request: Request, flow_id: str):
     """Страница редактирования конкретного флоу"""
     return templates.TemplateResponse(

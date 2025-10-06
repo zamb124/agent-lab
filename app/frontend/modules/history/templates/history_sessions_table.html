@@ -39,7 +39,16 @@
                             {% endif %}
                         </td>
                         <td>
-                            <small>{{ session.flow_name or session.flow_id or 'Не указан' }}</small>
+                            {% if session.flow_id %}
+                                <a href="/frontend/builder/flow/{{ session.flow_id }}" 
+                                   class="text-decoration-none" 
+                                   title="Открыть в Builder">
+                                    <small>{{ session.flow_name or session.flow_id }}</small>
+                                    <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.75rem;"></i>
+                                </a>
+                            {% else %}
+                                <small class="text-muted">Не указан</small>
+                            {% endif %}
                         </td>
                         <td>
                             <small class="text-muted">{{ session.user_id }}</small>
