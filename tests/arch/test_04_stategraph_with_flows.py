@@ -15,7 +15,7 @@ sys.path.insert(0, str(backend_path))
 
 from app.core.storage import Storage
 from app.core.flow_factory import FlowFactory
-from app.core.models import (
+from app.models import (
     AgentConfig, AgentType, CodeMode, FlowConfig,
     GraphDefinition, GraphNode, GraphEdge, NodeType, ConditionType
 )

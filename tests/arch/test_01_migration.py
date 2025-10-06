@@ -15,7 +15,7 @@ sys.path.insert(0, str(backend_path))
 
 from app.core.migrator import Migrator
 from app.core.storage import Storage
-from app.core.models import AgentType
+from app.models import AgentType
 
 
 async def _test_flows_migration_from_code():

@@ -14,9 +14,9 @@ WORKDIR /app
 
 # Копируем файлы проекта (context = .)
 COPY pyproject.toml ./
-COPY backend/app/ ./app/
-COPY backend/run.py ./
-COPY backend/run_worker.py ./
+COPY app/ ./app/
+COPY run.py ./
+COPY run_worker.py ./
 COPY conf.json ./
 
 # Устанавливаем зависимости

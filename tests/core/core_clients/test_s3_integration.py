@@ -8,9 +8,9 @@ import tempfile
 import uuid
 from pathlib import Path
 
-from backend.app.core.core_clients.s3_client import S3ClientFactory, get_default_s3_client
-from backend.app.core.models import FileRecord, FileStatus
-from backend.app.core.storage import Storage
+from app.core.core_clients.s3_client import S3ClientFactory, get_default_s3_client
+from app.models import FileRecord, FileStatus
+from app.core.storage import Storage
 
 
 def skip_if_s3_fails(test_func):
@@ -468,7 +468,7 @@ class TestS3Configuration:
     
     def test_s3_config_structure(self):
         """Тест структуры S3 конфигурации"""
-        from backend.app.core.config import settings
+        from app.core.config import settings
         
         assert hasattr(settings, 's3')
         assert settings.s3.enabled == True

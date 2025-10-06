@@ -6,14 +6,14 @@ import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from backend.app.identity.models import (
+from app.identity.models import (
     AuthProvider, User, AuthSession, ProviderUserInfo, 
     AuthRequest, AuthResult, UserStatus
 )
-from backend.app.identity.base_provider import BaseAuthProvider
-from backend.app.identity.providers.yandex import YandexProvider
-from backend.app.identity.auth_service import AuthService
-from backend.app.core.config import AuthProviderConfig
+from app.identity.base_provider import BaseAuthProvider
+from app.identity.providers.yandex import YandexProvider
+from app.identity.auth_service import AuthService
+from app.core.config import AuthProviderConfig
 
 
 class TestAuthModels:
@@ -223,7 +223,7 @@ class TestAuthService:
     async def test_auth_service_initialization_with_config(self):
         """Тест инициализации AuthService"""
         # Создаем тестовую конфигурацию
-        from backend.app.core.config import Settings, AuthConfig, AuthProviderConfig
+        from app.core.config import Settings, AuthConfig, AuthProviderConfig
         
         test_auth_config = AuthConfig(
             enabled=True,
@@ -244,7 +244,7 @@ class TestAuthService:
         
         # Создаем AuthService с тестовой конфигурацией
         # Мокаем settings
-        with patch('backend.app.identity.auth_service.settings') as mock_settings:
+        with patch('app.identity.auth_service.settings') as mock_settings:
             mock_settings.auth = test_auth_config
             
             auth_service = AuthService()
@@ -260,7 +260,7 @@ class TestAuthService:
     async def test_start_auth_flow(self):
         """Тест начала процесса авторизации"""
         # Создаем тестовый AuthService
-        from backend.app.core.config import AuthConfig, AuthProviderConfig
+        from app.core.config import AuthConfig, AuthProviderConfig
         
         test_auth_config = AuthConfig(
             enabled=True,
@@ -277,7 +277,7 @@ class TestAuthService:
             }
         )
         
-        with patch('backend.app.identity.auth_service.settings') as mock_settings:
+        with patch('app.identity.auth_service.settings') as mock_settings:
             mock_settings.auth = test_auth_config
             
             auth_service = AuthService()
@@ -303,7 +303,7 @@ class TestAuthService:
     
     async def test_complete_auth_flow_success(self):
         """Тест успешного завершения авторизации"""
-        from backend.app.core.config import AuthConfig, AuthProviderConfig
+        from app.core.config import AuthConfig, AuthProviderConfig
         
         test_auth_config = AuthConfig(
             enabled=True,
@@ -321,7 +321,7 @@ class TestAuthService:
             }
         )
         
-        with patch('backend.app.identity.auth_service.settings') as mock_settings:
+        with patch('app.identity.auth_service.settings') as mock_settings:
             mock_settings.auth = test_auth_config
             
             auth_service = AuthService()
@@ -380,7 +380,7 @@ class TestAuthService:
     
     async def test_complete_auth_invalid_state(self):
         """Тест завершения авторизации с недействительным state"""
-        from backend.app.core.config import AuthConfig, AuthProviderConfig
+        from app.core.config import AuthConfig, AuthProviderConfig
         
         test_auth_config = AuthConfig(
             enabled=True,
@@ -397,7 +397,7 @@ class TestAuthService:
             }
         )
         
-        with patch('backend.app.identity.auth_service.settings') as mock_settings:
+        with patch('app.identity.auth_service.settings') as mock_settings:
             mock_settings.auth = test_auth_config
             
             auth_service = AuthService()
