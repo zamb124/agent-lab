@@ -266,9 +266,11 @@ class BaseAgent(ABC):
                     logger.error(f"❌ {error_msg}")
                     return error_msg
 
+        tool_name = name or self.config.agent_id.replace(".", "_")
+        
         return StructuredTool.from_function(
             func=agent_func,
-            name=name or self.config.agent_id,
+            name=tool_name,
             description=description
             or self.config.description
             or f"Агент {self.config.name}",

@@ -387,6 +387,46 @@ class Migrator:
 
         return None
 
+    def _determine_node_type(self, node_func) -> NodeType:
+        """
+        Определяет тип ноды по её содержимому.
+        
+        Args:
+            node_func: Функция или объект, прикрепленный к ноде
+            
+        Returns:
+            NodeType: Тип ноды
+        """
+        # Проверяем является ли это обычной функцией
+        if inspect.isfunction(node_func) or inspect.iscoroutinefunction(node_func):
+            return NodeType.FUNCTION_NODE
+        
+        # Проверяем является ли это методом (bound method)
+        if inspect.ismethod(node_func):
+            # Если это метод агента (класс наследует BaseAgent)
+            if hasattr(node_func, '__self__'):
+                obj = node_func.__self__
+                if isinstance(obj, BaseAgent):
+                    return NodeType.AGENT_NODE
+            # Иначе это обычный метод-функция
+            return NodeType.FUNCTION_NODE
+        
+        # Проверяем является ли это StructuredTool или инструментом
+        if hasattr(node_func, 'name') and hasattr(node_func, 'func'):
+            return NodeType.TOOL_NODE
+        
+        # Проверяем является ли это callable объектом (может быть агент)
+        if callable(node_func):
+            # Если у объекта есть характерные атрибуты агента
+            if hasattr(node_func, 'config') or isinstance(node_func, BaseAgent):
+                return NodeType.AGENT_NODE
+            # Иначе это какой-то callable - считаем функцией
+            return NodeType.FUNCTION_NODE
+        
+        # По умолчанию считаем функцией
+        logger.warning(f"⚠️ Не удалось точно определить тип ноды {type(node_func)}, используем FUNCTION_NODE")
+        return NodeType.FUNCTION_NODE
+
     async def _extract_stategraph_definition(self, stategraph):
         """Извлекает GraphDefinition из StateGraph (до компиляции)"""
 
@@ -396,14 +436,57 @@ class Migrator:
         logger.info(f"🔍 Анализируем StateGraph с {len(stategraph.nodes)} нодами")
 
         # Извлекаем ноды
-        for node_id in stategraph.nodes.keys():
-            # Определяем тип ноды по названию
-            if "function" in node_id or node_id.endswith("_function"):
-                node_type = NodeType.FUNCTION_NODE
-            else:
-                node_type = NodeType.AGENT_NODE
+        for node_id, node_spec in stategraph.nodes.items():
+            # Извлекаем функцию из StateNodeSpec
+            # В LangGraph 0.2.x ноды обернуты в StateNodeSpec с RunnableCallable внутри
+            node_func = node_spec
+            
+            # Извлекаем runnable из StateNodeSpec
+            if hasattr(node_spec, 'runnable'):
+                runnable = node_spec.runnable
+                # Извлекаем функцию из RunnableCallable
+                if hasattr(runnable, 'afunc') and runnable.afunc:
+                    # Для async функций
+                    node_func = runnable.afunc
+                elif hasattr(runnable, 'func') and runnable.func:
+                    # Для sync функций
+                    node_func = runnable.func
+                else:
+                    # Если не нашли func/afunc, используем сам runnable
+                    node_func = runnable
+            elif hasattr(node_spec, '__wrapped__'):
+                # Если есть обертка (старые версии LangGraph)
+                node_func = node_spec.__wrapped__
+            elif hasattr(node_spec, 'func'):
+                # Альтернативный способ (старые версии)
+                node_func = node_spec.func
+            
+            # Определяем тип ноды по её содержимому
+            node_type = self._determine_node_type(node_func)
+            
+            # Извлекаем параметры в зависимости от типа
+            function_path = None
+            function_class = None
+            
+            if node_type == NodeType.FUNCTION_NODE:
+                # Для функций сохраняем путь к функции
+                if hasattr(node_func, '__module__') and hasattr(node_func, '__name__'):
+                    function_path = f"{node_func.__module__}.{node_func.__name__}"
+            elif node_type == NodeType.AGENT_NODE:
+                # Для агентов сохраняем класс агента
+                if hasattr(node_func, '__self__'):
+                    agent_class = node_func.__self__.__class__
+                    function_class = f"{agent_class.__module__}.{agent_class.__name__}"
 
-            nodes.append(GraphNode(id=node_id, type=node_type, params={}))
+            nodes.append(
+                GraphNode(
+                    id=node_id,
+                    type=node_type,
+                    function_path=function_path,
+                    function_class=function_class,
+                    params={}
+                )
+            )
 
         # Извлекаем обычные ребра
         for source, target in stategraph.edges:
@@ -415,42 +498,32 @@ class Migrator:
 
             edges.append(GraphEdge(source=source, target=target))
 
-        # Анализируем conditional edges через compiled graph
-        if hasattr(stategraph, "compile"):
-            try:
-                compiled = stategraph.compile()
-                # Ищем conditional edges по каналам
-                conditional_sources = set()
-                conditional_targets = {}
-
-                for channel_name in compiled.channels.keys():
-                    if channel_name.startswith("branch:to:"):
-                        target = channel_name.replace("branch:to:", "")
-                        if target in stategraph.nodes:
-                            conditional_sources.add("router")  # Определяем источник
-                            if "router" not in conditional_targets:
-                                conditional_targets["router"] = []
-                            conditional_targets["router"].append(target)
-
-                # Добавляем conditional edges
-                for source, targets in conditional_targets.items():
-                    for target in targets:
-                        # Определяем функцию условия по источнику
-                        condition_function = (
-                            f"{source}_condition"  # router → router_condition
-                        )
-
+        # Извлекаем conditional edges напрямую из графа
+        if hasattr(stategraph, '_conditional_edges'):
+            for source, conditional_info in stategraph._conditional_edges.items():
+                # conditional_info содержит path_map с условиями
+                if hasattr(conditional_info, 'path_map') and conditional_info.path_map:
+                    # path_map это словарь {значение_условия: целевая_нода}
+                    for target_node in set(conditional_info.path_map.values()):
+                        # Преобразуем служебные названия
+                        source_name = "START" if source == "__start__" else source
+                        target_name = "END" if target_node == "__end__" else target_node
+                        
+                        # Пытаемся извлечь путь к функции условия
+                        condition_path = None
+                        if hasattr(conditional_info, 'condition'):
+                            cond_func = conditional_info.condition
+                            if hasattr(cond_func, '__module__') and hasattr(cond_func, '__name__'):
+                                condition_path = f"{cond_func.__module__}.{cond_func.__name__}"
+                        
                         edges.append(
                             GraphEdge(
-                                source=source,
-                                target=target,
-                                condition=f"app.flows.smart_flow.{condition_function}",  # Путь к функции
+                                source=source_name,
+                                target=target_name,
+                                condition=condition_path,
                                 condition_type=ConditionType.ROUTER,
                             )
                         )
-
-            except Exception as e:
-                logger.warning(f"Не удалось проанализировать conditional edges: {e}")
 
         return GraphDefinition(nodes=nodes, edges=edges, entry_point="START")
 
