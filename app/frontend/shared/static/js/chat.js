@@ -1031,8 +1031,8 @@ class ChatManager {
 
         switch (message.type) {
             case 'USER_MESSAGE':
-                // Пользовательское сообщение от бекенда
-                this.addUserMessage(message.content);
+                // Пользовательское сообщение от бекенда (передаем весь объект)
+                this.addUserMessage(message.content, message.timestamp, message.message_id);
                 break;
             case 'AGENT_MESSAGE':
                 // Принудительно скрываем индикатор печати при получении сообщения агента
@@ -1124,12 +1124,13 @@ class ChatManager {
     }
 
     // Добавление сообщения пользователя в UI
-    addUserMessage(message) {
+    addUserMessage(message, timestamp = null, messageId = null) {
         const messageObj = {
             type: MESSAGE_TYPES.TEXT,
             content: message,
             sender: 'user',
-            timestamp: new Date()
+            timestamp: timestamp ? new Date(timestamp) : new Date(),
+            message_id: messageId || `user_${Date.now()}`
         };
         
         this.addMessageToUI(messageObj);
@@ -1145,6 +1146,7 @@ class ChatManager {
             content: data.content,
             sender: 'agent',
             timestamp: new Date(data.timestamp),
+            message_id: data.message_id || `agent_${Date.now()}`,
             attachments: data.attachments || [],
             buttons: data.buttons || [],
             form: data.form || null
@@ -1158,7 +1160,22 @@ class ChatManager {
         const messagesContainer = document.getElementById('chat-widget-messages');
         if (!messagesContainer) return;
 
+        // Проверяем дубликаты по message_id
+        if (messageObj.message_id) {
+            const existingMessage = messagesContainer.querySelector(`[data-message-id="${messageObj.message_id}"]`);
+            if (existingMessage) {
+                console.log(`⚠️ Сообщение ${messageObj.message_id} уже отображено, пропускаем`);
+                return;
+            }
+        }
+
         const messageElement = this.messageRenderer.renderMessage(messageObj);
+        
+        // Добавляем data-message-id для дедупликации
+        if (messageObj.message_id) {
+            messageElement.setAttribute('data-message-id', messageObj.message_id);
+        }
+        
         messagesContainer.appendChild(messageElement);
 
         // Плавно прокручиваем вниз
