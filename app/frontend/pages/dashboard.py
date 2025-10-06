@@ -1,5 +1,5 @@
 """
-Главная страница dashboard и страницы моделей
+Главная страница dashboard
 """
 
 from fastapi import APIRouter, Request
@@ -20,18 +20,6 @@ async def index(request: Request):
 async def dashboard(request: Request):
     """Панель управления"""
     return templates.TemplateResponse("dashboard.html", {"request": request})
-
-
-@router.get("/models/{model_type}", response_class=HTMLResponse)
-async def model_page(request: Request, model_type: str, view: str = "table"):
-    """Страница модели - показывает dashboard с предзагруженным контентом"""
-    return templates.TemplateResponse(
-        "dashboard.html",
-        {
-            "request": request,
-            "preload_url": f"/frontend/models/{model_type}?view={view}",
-        },
-    )
 
 
 @router.get("/fashn", response_class=HTMLResponse)

@@ -227,14 +227,20 @@
     .chat-input-wrapper {
         display: flex;
         align-items: center;
-        gap: 0; /* Без зазора между элементами */
+        gap: 0;
         width: 100%;
+        border-radius: var(--radius-sm, 6px);
+        transition: all var(--transition-fast, 0.15s ease);
+    }
+    
+    .chat-input-wrapper:focus-within {
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
     }
     
     .chat-commands-btn {
         flex-shrink: 0;
         border: 1px solid var(--chat-input-border);
-        border-radius: var(--radius-sm, 6px) 0 0 0;
+        border-radius: var(--radius-sm, 6px) 0 0 var(--radius-sm, 6px);
         border-right: none;
         background: var(--chat-input-bg);
         color: var(--chat-input-text);
@@ -277,7 +283,7 @@
     .chat-input {
         flex: 1;
         border: 1px solid var(--chat-input-border);
-        border-radius: 0; /* Убираем скругления - теперь в середине */
+        border-radius: 0;
         border-right: none;
         border-left: none;
         padding: 8px 12px;
@@ -285,12 +291,11 @@
         outline: none;
         background: var(--chat-input-bg);
         color: var(--chat-input-text);
-        min-width: 0; /* Позволяет сжиматься */
+        min-width: 0;
     }
     
     .chat-input:focus {
-        border-color: var(--chat-user-msg-bg);
-        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+        outline: none;
     }
     
     .chat-input::placeholder {

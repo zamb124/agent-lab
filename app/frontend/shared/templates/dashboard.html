@@ -188,7 +188,8 @@
                 </div>
             </div>
             
-            <div id="content" class="content-area">
+            <div id="content" class="content-area"
+                 {% if preload_url %}hx-get="{{ preload_url }}" hx-trigger="load" hx-indicator="#content-loading"{% endif %}>
                 {% if not preload_url %}<div class="empty-state animate-fade-in-up">
                     <div class="empty-state-icon">
                         <i class="bi bi-house display-4"></i>

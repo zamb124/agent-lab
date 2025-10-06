@@ -32,13 +32,10 @@ async def billing_index(request: Request):
     
     billing_service = BillingService()
     
-    # Получаем статистику использования
     stats = await billing_service.get_company_usage_stats(company.company_id)
     
-    # Получаем цены тарифного плана
     tariff_prices = TARIFF_PRICES.get(company.tariff_plan, {})
     
-    # Вычисляем процент использования бюджета
     budget_percent = 0
     if company.monthly_budget > 0:
         budget_percent = min(100, (company.current_month_spent / company.monthly_budget) * 100)
