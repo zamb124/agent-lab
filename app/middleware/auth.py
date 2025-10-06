@@ -408,6 +408,5 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def _update_user_active_company(self, user: User):
         """Обновляет активную компанию пользователя в БД"""
-        # Находим основной ключ пользователя
-        user_key = f"user:{user.provider.value}:{user.provider_user_id}"
+        user_key = f"user:{user.user_id}"
         await self.storage.set(user_key, user.model_dump_json(), force_global=True)

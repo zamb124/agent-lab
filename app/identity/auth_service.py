@@ -137,12 +137,12 @@ class AuthService:
             user = await self._get_or_create_user(auth_request.provider, user_info)
 
             # Создаем сессию
-            session = await self._create_session(user, access_token, refresh_token)
+            session = await self._create_session(user, auth_request.provider, access_token, refresh_token)
 
             # Очищаем временный state
             await self._cleanup_auth_state(auth_request.state)
 
-            logger.info(f"✅ Авторизация завершена для пользователя {user.email}")
+            logger.info(f"✅ Авторизация завершена для пользователя {user_info.email}")
 
             return AuthResult(success=True, user=user, session=session)
 
@@ -204,81 +204,138 @@ class AuthService:
         self, provider: AuthProvider, user_info: ProviderUserInfo
     ) -> User:
         """Находит существующего пользователя или создает нового"""
-        # Ищем пользователя по провайдеру и provider_user_id
-        user_key = f"user:{provider.value}:{user_info.provider_user_id}"
-        user_data = await self.storage.get(user_key, force_global=True)
+        user_id = await self._find_user_by_provider_id(user_info.provider_user_id)
 
-        if user_data:
-            # Пользователь существует, обновляем информацию
-
-            user_dict = json.loads(user_data)
+        if user_id:
+            user = await self._get_user(user_id)
             
-            # Обратная совместимость - добавляем поля компаний если их нет
-            if "companies" not in user_dict:
-                user_dict["companies"] = {}
-            if "active_company_id" not in user_dict:
-                user_dict["active_company_id"] = ""
+            if not user:
+                logger.error(f"Пользователь {user_id} найден по индексу, но не существует")
+                raise Exception(f"Пользователь {user_id} не найден")
             
-            user = User(**user_dict)
-
-            # Обновляем данные пользователя
-            user.name = user_info.name
-            user.email = user_info.email
-            user.avatar_url = user_info.avatar_url
-            user.metadata = user_info.raw_data
             user.updated_at = datetime.now(timezone.utc)
-
-            await self.storage.set(user_key, user.model_dump_json(), force_global=True)
-            logger.info(f"🔄 Обновлен пользователь {user.email}")
-
+            await self.storage.set(f"user:{user.user_id}", user.model_dump_json(), force_global=True)
+            
+            await self._update_provider_data(user.user_id, provider, user_info)
+            
+            logger.info(f"🔄 Обновлен пользователь {user_info.email}")
             return user
         else:
-            # Создаем нового пользователя
             user_id = f"user_{uuid.uuid4().hex[:12]}"
 
             user = User(
                 user_id=user_id,
-                provider=provider,
-                provider_user_id=user_info.provider_user_id,
-                email=user_info.email,
                 name=user_info.name,
                 avatar_url=user_info.avatar_url,
-                metadata=user_info.raw_data,
                 companies={},
                 active_company_id="",
             )
 
-            await self.storage.set(user_key, user.model_dump_json(), force_global=True)
+            await self.storage.set(f"user:{user_id}", user.model_dump_json(), force_global=True)
+            await self._add_user_provider(user_id, provider, user_info)
 
-            logger.info(f"👤 Создан новый пользователь {user.email}")
+            logger.info(f"👤 Создан новый пользователь {user_info.email}")
             return user
+    
+    async def _find_user_by_provider_id(self, provider_user_id: str) -> Optional[str]:
+        """Находит user_id по provider_user_id через индекс JSONB"""
+        from app.db.database import AsyncSessionLocal
+        from sqlalchemy import text
+        
+        async with AsyncSessionLocal() as session:
+            query = text("""
+                SELECT substring(key from 16) as user_id
+                FROM users
+                WHERE key LIKE 'user_providers:%'
+                AND value ? :provider_user_id
+                LIMIT 1
+            """)
+            result = await session.execute(query, {"provider_user_id": provider_user_id})
+            row = result.first()
+            return row[0] if row else None
+    
+    async def _add_user_provider(self, user_id: str, provider: AuthProvider, user_info: ProviderUserInfo):
+        """Добавляет провайдера в список провайдеров пользователя"""
+        providers_key = f"user_providers:{user_id}"
+        providers_data = await self.storage.get(providers_key, force_global=True)
+        
+        if providers_data:
+            providers = json.loads(providers_data)
+        else:
+            providers = {}
+        
+        providers[user_info.provider_user_id] = {
+            "provider_name": provider.value,
+            "email": user_info.email,
+            "metadata": user_info.raw_data
+        }
+        
+        await self.storage.set(providers_key, json.dumps(providers), force_global=True)
+    
+    async def _update_provider_data(self, user_id: str, provider: AuthProvider, user_info: ProviderUserInfo):
+        """Обновляет данные провайдера"""
+        await self._add_user_provider(user_id, provider, user_info)
+    
+    async def link_provider(self, user_id: str, provider: AuthProvider, user_info: ProviderUserInfo) -> bool:
+        """
+        Связывает нового провайдера с существующим пользователем.
+        Полезно когда пользователь хочет добавить Google после входа через Yandex.
+        
+        Returns:
+            True если провайдер успешно связан
+        """
+        user = await self._get_user(user_id)
+        if not user:
+            return False
+        
+        existing_user_id = await self._find_user_by_provider_id(user_info.provider_user_id)
+        if existing_user_id:
+            logger.warning(f"Провайдер {provider}:{user_info.provider_user_id} уже используется другим пользователем")
+            return False
+        
+        await self._add_user_provider(user.user_id, provider, user_info)
+        
+        logger.info(f"🔗 Связан провайдер {provider} с пользователем {user_info.email}")
+        return True
 
     async def _get_user(self, user_id: str) -> Optional[User]:
-        """Получает пользователя по ID через поиск по провайдеру"""
-        # Ищем пользователя по паттерну user:*:*
-        keys = await self.storage.list_by_prefix("user:", 1000, force_global=True)
+        """Получает пользователя по ID - прямое чтение O(1)"""
+        user_key = f"user:{user_id}"
+        user_data = await self.storage.get(user_key, force_global=True)
         
-        for key in keys:
-            user_data = await self.storage.get(key, force_global=True)
-            if user_data:
-                user_dict = json.loads(user_data)
-                if user_dict.get("user_id") == user_id:
-                    # Обратная совместимость - добавляем поля компаний если их нет
-                    if "companies" not in user_dict:
-                        user_dict["companies"] = {}
-                    if "active_company_id" not in user_dict:
-                        user_dict["active_company_id"] = ""
-                        
-                    return User(**user_dict)
+        if not user_data:
+            return None
+        
+        user_dict = json.loads(user_data)
+        
+        if "companies" not in user_dict:
+            user_dict["companies"] = {}
+        if "active_company_id" not in user_dict:
+            user_dict["active_company_id"] = ""
+        
+        return User(**user_dict)
+    
+    async def get_user_provider_info(self, user_id: str, provider: AuthProvider) -> Optional[dict]:
+        """Получает информацию о провайдере пользователя"""
+        providers_key = f"user_providers:{user_id}"
+        providers_data = await self.storage.get(providers_key, force_global=True)
+        
+        if not providers_data:
+            return None
+        
+        providers = json.loads(providers_data)
+        for provider_user_id, info in providers.items():
+            if info.get("provider_name") == provider.value:
+                return info
+        
         return None
 
     async def _create_session(
-        self, user: User, access_token: str, refresh_token: Optional[str]
+        self, user: User, provider: AuthProvider, access_token: str, refresh_token: Optional[str]
     ) -> AuthSession:
         """Создает новую сессию для пользователя"""
         session_id = f"session_{uuid.uuid4().hex[:16]}"
 
-        # Вычисляем время истечения (по умолчанию из конфигурации)
         expires_at = (
             datetime.now(timezone.utc)
             + timedelta(seconds=settings.auth.session_timeout)
@@ -287,17 +344,16 @@ class AuthService:
         session = AuthSession(
             session_id=session_id,
             user_id=user.user_id,
-            provider=user.provider,
+            provider=provider,
             access_token=access_token,
             refresh_token=refresh_token,
             expires_at=expires_at,
         )
 
-        # Сохраняем сессию
         session_key = f"auth_session:{session_id}"
         await self.storage.set(session_key, session.model_dump_json())
 
-        logger.info(f"🎫 Создана сессия {session_id} для пользователя {user.email}")
+        logger.info(f"🎫 Создана сессия {session_id} для пользователя {user.user_id}")
         return session
 
     async def _get_session(self, session_id: str) -> Optional[AuthSession]:
