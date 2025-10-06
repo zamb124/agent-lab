@@ -153,3 +153,45 @@ def get_templates() -> Jinja2Templates:
     loader = TemplateLoader()
     return loader.templates
 
+
+def render_template(template_name: str, **context) -> str:
+    """
+    Рендерить шаблон напрямую в HTML строку.
+    
+    Args:
+        template_name: Имя шаблона
+        **context: Контекст для рендеринга
+        
+    Returns:
+        HTML строка
+        
+    Raises:
+        FileNotFoundError: Если шаблон не найден
+    """
+    templates = get_templates()
+    
+    try:
+        template = templates.env.get_template(template_name)
+        return template.render(**context)
+    except Exception as e:
+        raise FileNotFoundError(f"Template not found: {template_name} (Error: {e})")
+
+
+def template_exists(template_name: str) -> bool:
+    """
+    Проверить существование шаблона.
+    
+    Args:
+        template_name: Имя шаблона
+        
+    Returns:
+        True если шаблон существует, False иначе
+    """
+    templates = get_templates()
+    
+    try:
+        templates.env.get_template(template_name)
+        return True
+    except Exception:
+        return False
+

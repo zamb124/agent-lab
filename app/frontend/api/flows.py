@@ -5,11 +5,11 @@ API для работы с флоу в Builder.
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional, Dict, Any
 import uuid
-import json
 
-from app.models import FlowConfig, AgentConfig, ToolReference, AgentType, CodeMode
+from app.models import FlowConfig
 from app.core.storage import Storage
 from app.core.container import get_container
+from app.frontend.services.canvas_service import CanvasService
 
 router = APIRouter(prefix="/flows", tags=["builder-flows"])
 
@@ -18,6 +18,11 @@ async def get_storage() -> Storage:
     """Получить Storage из контейнера"""
     container = get_container()
     return container.get_storage()
+
+
+async def get_canvas_service(storage: Storage = Depends(get_storage)) -> CanvasService:
+    """Получить Canvas Service"""
+    return CanvasService(storage)
 
 
 @router.get("/", response_model=List[FlowConfig])
@@ -91,30 +96,14 @@ async def get_flow_canvas(flow_id: str, storage: Storage = Depends(get_storage))
 async def update_flow_canvas(
     flow_id: str,
     canvas_data: Dict[str, Any],
-    storage: Storage = Depends(get_storage)
+    canvas_service: CanvasService = Depends(get_canvas_service)
 ):
     """Обновить данные канваса для флоу"""
-    flow = await storage.get_flow_config(flow_id)
-    if not flow:
-        raise HTTPException(status_code=404, detail="Flow not found")
-    
-    print(f"Сохраняем данные канваса для флоу {flow_id}")
-    print(f"Количество нод: {len(canvas_data.get('nodes', []))}")
-    print(f"Количество связей: {len(canvas_data.get('edges', []))}")
-    
-    # Обновляем entry_point_agent для Flow на основе связей
-    await update_flow_entry_point(flow, canvas_data, storage)
-    
-    # Сохраняем данные канваса прямо в FlowConfig
-    flow.canvas_data = canvas_data
-    await storage.set_flow_config(flow)
-    
-    print(f"✅ Данные канваса сохранены в FlowConfig")
-    
-    # Обновляем агентов на основе связей на канвасе
-    await update_agents_from_canvas(canvas_data, storage)
-    
-    return {"message": "Canvas updated successfully"}
+    try:
+        await canvas_service.save_canvas_data(flow_id, canvas_data)
+        return {"message": "Canvas updated successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/{flow_id:path}", response_model=FlowConfig)
@@ -162,112 +151,3 @@ async def delete_flow(flow_id: str, storage: Storage = Depends(get_storage)):
     
     await storage.delete_flow_config(flow_id)
     return {"message": "Flow deleted successfully"}
-
-
-async def update_flow_entry_point(flow: FlowConfig, canvas_data: Dict[str, Any], storage: Storage):
-    """Обновляет entry_point_agent для Flow на основе связей на канвасе"""
-    
-    # Находим ноду Flow на канвасе
-    flow_node = None
-    for node in canvas_data.get("nodes", []):
-        if node.get("type") == "flow_node" and node.get("params", {}).get("flow_id") == flow.flow_id:
-            flow_node = node
-            break
-    
-    if not flow_node:
-        return
-    
-    # Находим связь от Flow к Agent
-    for edge in canvas_data.get("edges", []):
-        if edge.get("source") == flow_node.get("id"):
-            # Находим целевую ноду
-            target_node_id = edge.get("target")
-            for node in canvas_data.get("nodes", []):
-                if node.get("id") == target_node_id and node.get("type") == "agent_node":
-                    # Обновляем entry_point_agent
-                    agent_id = node.get("params", {}).get("agent_id")
-                    if agent_id:
-                        flow.entry_point_agent = agent_id
-                        print(f"✅ Обновлен entry_point_agent для Flow {flow.flow_id}: {agent_id}")
-                        return
-
-
-async def update_agents_from_canvas(canvas_data: Dict[str, Any], storage: Storage):
-    """Обновляет агентов в БД на основе связей на канвасе"""
-    
-    # Группируем связи по источникам (агентам)
-    agent_connections = {}
-    
-    for edge in canvas_data.get("edges", []):
-        source_id = edge.get("source")
-        target_id = edge.get("target")
-        
-        if not source_id or not target_id:
-            continue
-        
-        # Находим ноды источника и цели
-        source_node = None
-        target_node = None
-        
-        for node in canvas_data.get("nodes", []):
-            if node.get("id") == source_id:
-                source_node = node
-            elif node.get("id") == target_id:
-                target_node = node
-        
-        if not source_node or not target_node:
-            continue
-        
-        # Если источник - агент, добавляем цель в его tools
-        if source_node.get("type") == "agent_node":
-            agent_id = source_node.get("params", {}).get("agent_id")
-            if agent_id:
-                if agent_id not in agent_connections:
-                    agent_connections[agent_id] = []
-                
-                # Определяем тип цели
-                if target_node.get("type") == "tool_node":
-                    tool_id = target_node.get("params", {}).get("tool_id")
-                    if tool_id:
-                        agent_connections[agent_id].append({
-                            "type": "tool",
-                            "id": tool_id
-                        })
-                elif target_node.get("type") == "agent_node":
-                    sub_agent_id = target_node.get("params", {}).get("agent_id")
-                    if sub_agent_id:
-                        agent_connections[agent_id].append({
-                            "type": "agent",
-                            "id": sub_agent_id
-                        })
-    
-    # Обновляем каждого агента
-    for agent_id, connections in agent_connections.items():
-        try:
-            agent = await storage.get_agent_config(agent_id)
-            if agent:
-                # Создаем новый список tools на основе связей
-                new_tools = []
-                
-                for connection in connections:
-                    if connection["type"] == "tool":
-                        tool_ref = ToolReference(
-                            tool_id=connection["id"],
-                            params={}
-                        )
-                        new_tools.append(tool_ref)
-                    elif connection["type"] == "agent":
-                        # Агенты добавляются как tools с префиксом agent:
-                        agent_tool_ref = ToolReference(
-                            tool_id=f"agent:{connection['id']}",
-                            params={}
-                        )
-                        new_tools.append(agent_tool_ref)
-                
-                # Обновляем tools агента
-                agent.tools = new_tools
-                await storage.set_agent_config(agent)
-                
-        except Exception as e:
-            print(f"Ошибка обновления агента {agent_id}: {e}")
-            continue
