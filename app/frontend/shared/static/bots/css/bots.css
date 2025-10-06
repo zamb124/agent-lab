@@ -41,7 +41,7 @@
 .bot-card {
     background: var(--bg-card);
     border: 1px solid var(--border-primary);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-xl);
     padding: 1.5rem;
     transition: all var(--transition-normal);
     cursor: pointer;
