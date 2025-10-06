@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 import pydantic
 
-from app.frontend.environment import render_template, template_exists
+from app.frontend.core.template_loader import render_template, template_exists
 from app.core.context import get_context
 
 

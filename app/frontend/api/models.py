@@ -15,10 +15,9 @@ from pydantic import BaseModel
 from app.core.storage import Storage
 from app.frontend.wrappers import ModelListWrapper
 from app.frontend.model_registry import ModelRegistry
-from app.frontend.environment import render_template
+from app.frontend.core.template_loader import render_template, get_templates
 from app.frontend.websockets.notifications import notify_model_updated
 from app.frontend.core.utils import is_htmx_request
-from app.frontend.core.template_loader import get_templates
 
 # ПРИНУДИТЕЛЬНЫЙ импорт field_extensions для применения monkey patches
 import app.frontend.field_extensions

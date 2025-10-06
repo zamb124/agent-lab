@@ -3,7 +3,6 @@ WebSocket для чата с агентами
 """
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import Dict
 import json
 import logging
 import asyncio
@@ -14,80 +13,22 @@ from app.core.context import get_context, set_context, clear_context
 from app.models import Context
 from app.identity.auth_service import AuthService
 from app.identity.models import Company
+from app.frontend.core.websocket_manager import websocket_manager
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-class ChatWebSocketManager:
-    """Менеджер WebSocket соединений для чата с polling уведомлений"""
-
-    def __init__(self):
-        self.connections: Dict[str, WebSocket] = {}
-        self.polling_tasks: Dict[str, asyncio.Task] = {}
-
-    async def connect(self, websocket: WebSocket, session_id: str):
-        """Подключить WebSocket и запустить polling уведомлений"""
-        await websocket.accept()
-        self.connections[session_id] = websocket
-
-        # Запускаем polling уведомлений для этой сессии
-        polling_task = asyncio.create_task(self._poll_notifications(session_id))
-        self.polling_tasks[session_id] = polling_task
-
-        logger.info(f"Chat WebSocket подключен: {session_id}")
-
-    def disconnect(self, session_id: str):
-        """Отключить WebSocket и остановить polling"""
-        if session_id in self.connections:
-            del self.connections[session_id]
-
-        # Останавливаем polling задачу
-        if session_id in self.polling_tasks:
-            self.polling_tasks[session_id].cancel()
-            del self.polling_tasks[session_id]
-
-        logger.info(f"Chat WebSocket отключен: {session_id}")
-
-    async def send_to_session(self, session_id: str, message: dict):
-        """Отправить сообщение в сессию"""
-        if session_id in self.connections:
-            websocket = self.connections[session_id]
-            await websocket.send_text(json.dumps(message))
-            logger.info(f"Сообщение отправлено в чат {session_id}: {message['type']}")
-
-    async def switch_session_polling(self, old_session_id: str, new_session_id: str):
-        """Переключает polling с одной сессии на другую"""
-        if old_session_id in self.connections:
-            websocket = self.connections[old_session_id]
-
-            # Удаляем старое соединение
-            del self.connections[old_session_id]
-
-            # Добавляем под новым ID
-            self.connections[new_session_id] = websocket
-
-            # Останавливаем старый polling task
-            if old_session_id in self.polling_tasks:
-                self.polling_tasks[old_session_id].cancel()
-                del self.polling_tasks[old_session_id]
-
-            # Запускаем polling для новой сессии
-            self.polling_tasks[new_session_id] = asyncio.create_task(
-                self._poll_notifications(new_session_id)
-            )
-
-            logger.info(f"🔄 Polling переключен: {old_session_id} → {new_session_id}")
-
-    async def _poll_notifications(self, session_id: str):
-        """Polling уведомлений из БД для конкретной сессии"""
-
-        storage = Storage()
-        processed_notifications = set()
-
-        logger.info(f"🔄 Начинаем polling уведомлений для сессии {session_id}")
-
-        while session_id in self.connections:
+async def _poll_notifications(session_id: str):
+    """Polling уведомлений из БД для конкретной сессии"""
+    
+    storage = Storage()
+    processed_notifications = set()
+    
+    logger.info(f"🔄 Начинаем polling уведомлений для сессии {session_id}")
+    
+    while session_id in websocket_manager.connections["chat"]:
             try:
                 # Ищем уведомления для всех web сессий пользователя
                 context = get_context()
@@ -135,7 +76,7 @@ class ChatWebSocketManager:
                     if notification_data:
                         logger.info(f"📨 Найдено уведомление: {key}")
                         notification = json.loads(notification_data)
-                        await self.send_to_session(session_id, notification)
+                        await websocket_manager.send_to_session(session_id, notification, "chat")
                         processed_notifications.add(key)
 
                         # Удаляем обработанное уведомление
@@ -151,10 +92,6 @@ class ChatWebSocketManager:
 
             # Ждем перед следующей проверкой
             await asyncio.sleep(2)
-
-
-# Глобальный менеджер
-chat_ws_manager = ChatWebSocketManager()
 
 
 @router.websocket("/ws/chat")
@@ -219,7 +156,14 @@ async def websocket_chat(websocket: WebSocket, session_id: str = None):
             f"🔗 WebSocket чат подключен для пользователя {user.user_id}, session_id: {chat_session_id}"
         )
 
-        await chat_ws_manager.connect(websocket, chat_session_id)
+        await websocket_manager.connect(websocket, chat_session_id, "chat")
+        
+        # Запускаем polling уведомлений
+        websocket_manager.start_polling(
+            chat_session_id, 
+            _poll_notifications(chat_session_id),
+            "chat"
+        )
 
         # Основной цикл WebSocket
         while True:
@@ -230,10 +174,10 @@ async def websocket_chat(websocket: WebSocket, session_id: str = None):
             await handle_chat_message(message, chat_session_id)
 
     except WebSocketDisconnect:
-        chat_ws_manager.disconnect(chat_session_id)
+        websocket_manager.disconnect(chat_session_id, "chat")
     except Exception as e:
         logger.error(f"WebSocket ошибка для чата {chat_session_id}: {e}")
-        chat_ws_manager.disconnect(chat_session_id)
+        websocket_manager.disconnect(chat_session_id, "chat")
     finally:
         # Очищаем контекст после отключения
         clear_context()
@@ -257,7 +201,7 @@ async def handle_chat_message(message: dict, session_id: str):
         await process_interrupt_response(message["data"], session_id)
     elif message_type == "PING":
         # Ping/pong для поддержания соединения
-        await chat_ws_manager.send_to_session(session_id, {"type": "PONG"})
+        await websocket_manager.send_to_session(session_id, {"type": "PONG"}, "chat")
 
 
 async def process_user_message(
