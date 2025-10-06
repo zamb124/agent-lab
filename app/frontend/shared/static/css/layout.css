@@ -22,6 +22,7 @@
     height: 100vh;
     z-index: var(--z-sidebar);
     transition: width var(--transition-normal), transform var(--transition-normal);
+    border-bottom-right-radius: var(--radius-2xl);
 }
 
 /* Свернутый сайдбар */
@@ -219,6 +220,7 @@
     padding: 1rem;
     border-top: 1px solid var(--border-primary);
     background: var(--bg-secondary);
+    border-bottom-right-radius: var(--radius-2xl);
 }
 
 .sidebar-footer-link {
@@ -261,6 +263,7 @@
     position: sticky;
     top: 0;
     z-index: 100;
+    border-bottom-right-radius: var(--radius-2xl);
 }
 
 .header-left {
@@ -407,6 +410,7 @@
     
     .main-content {
         margin-left: 0;
+        width: 100%;
     }
     
     .mobile-menu-toggle {
