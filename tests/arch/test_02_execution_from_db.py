@@ -20,8 +20,13 @@ from langchain_core.messages import HumanMessage
 async def test_weather_flow_execution():
     """Тест выполнения weather_flow из БД"""
     
+    # Миграция
+    from app.core.migrator import Migrator
+    migrator = Migrator()
+    await migrator.run_full_migration()
+    
     flow_factory = FlowFactory()
-    weather_flow = await flow_factory.get_flow("weather_flow")
+    weather_flow = await flow_factory.get_flow("app.flows.weather_flow.weather_flow_config")
     
     # Тест погодного запроса
     import uuid
@@ -42,6 +47,11 @@ async def test_weather_flow_execution():
 @pytest.mark.asyncio
 async def test_smart_flow_math_execution():
     """Тест математического запроса в smart_flow из БД"""
+    
+    # Миграция
+    from app.core.migrator import Migrator
+    migrator = Migrator()
+    await migrator.run_full_migration()
 
     # Настраиваем мок для математических вычислений
     from app.core.llm_factory import get_global_mock_llm, get_llm
@@ -63,7 +73,7 @@ async def test_smart_flow_math_execution():
     checkpointer = await get_checkpointer()
     
     flow_factory = FlowFactory()
-    smart_flow = await flow_factory.get_flow("smart_flow")
+    smart_flow = await flow_factory.get_flow("app.flows.smart_flow.smart_flow_config")
     
     # Тест математического запроса с чистым thread_id
     import uuid
@@ -99,8 +109,13 @@ async def test_smart_flow_math_execution():
 async def test_smart_flow_weather_execution():
     """Тест погодного запроса в smart_flow из БД"""
     
+    # Миграция
+    from app.core.migrator import Migrator
+    migrator = Migrator()
+    await migrator.run_full_migration()
+    
     flow_factory = FlowFactory()
-    smart_flow = await flow_factory.get_flow("smart_flow")
+    smart_flow = await flow_factory.get_flow("app.flows.smart_flow.smart_flow_config")
     
     # Тест погодного запроса
     import uuid
@@ -122,6 +137,11 @@ async def test_smart_flow_weather_execution():
 @pytest.mark.asyncio
 async def test_flow_isolation():
     """Тест изоляции флоу - разные thread_id не должны влиять друг на друга"""
+    
+    # Миграция
+    from app.core.migrator import Migrator
+    migrator = Migrator()
+    await migrator.run_full_migration()
 
     # Настраиваем мок для простых вычислений
     from app.core.llm_factory import get_global_mock_llm, get_llm
@@ -139,7 +159,7 @@ async def test_flow_isolation():
         })
 
     flow_factory = FlowFactory()
-    smart_flow = await flow_factory.get_flow("smart_flow")
+    smart_flow = await flow_factory.get_flow("app.flows.smart_flow.smart_flow_config")
     
     # Параллельные запросы с разными thread_id
     tasks = [

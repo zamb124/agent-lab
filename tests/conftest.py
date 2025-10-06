@@ -153,6 +153,8 @@ _weather_module.WeatherAgent.llm_config = {"provider": "mock", "model": "mock-gp
 _weather_module.TravelInfoAgent.llm_config = {"provider": "mock", "model": "mock-gpt-4", "temperature": 0.3}
 
 
+
+
 # ==================== MOCK SERVER ДЛЯ ТЕСТИРОВАНИЯ ====================
 
 
