@@ -28,9 +28,9 @@ async def _test_flows_migration_from_code():
     storage = Storage()
     
     # 2. ПРОВЕРКА WEATHER_FLOW
-    weather_flow = await storage.get_flow_config("weather_flow")
+    weather_flow = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
     assert weather_flow is not None, "weather_flow не найден в БД"
-    assert weather_flow.flow_id == "weather_flow"
+    assert weather_flow.flow_id == "app.flows.weather_flow.weather_flow_config"
     assert weather_flow.name == "Weather Flow"
     assert weather_flow.entry_point_agent == "app.agents.weather.agent.WeatherAgent"
     
@@ -41,9 +41,9 @@ async def _test_flows_migration_from_code():
     assert weather_agent.function_class == "app.agents.weather.agent.WeatherAgent"
     
     # 3. ПРОВЕРКА SMART_FLOW  
-    smart_flow = await storage.get_flow_config("smart_flow")
+    smart_flow = await storage.get_flow_config("app.flows.smart_flow.smart_flow_config")
     assert smart_flow is not None, "smart_flow не найден в БД"
-    assert smart_flow.flow_id == "smart_flow"
+    assert smart_flow.flow_id == "app.flows.smart_flow.smart_flow_config"
     assert smart_flow.name == "Smart Flow"
     assert smart_flow.entry_point_agent == "app.flows.smart_flow.SmartFlowAgent"
     
