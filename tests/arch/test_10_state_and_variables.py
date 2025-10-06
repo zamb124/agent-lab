@@ -138,7 +138,8 @@ async def start_node(state):
         "user_id": "test_user_123",
     }
     
-    config = {"configurable": {"thread_id": "test_thread_1"}}
+    import uuid
+    config = {"configurable": {"thread_id": f"test_thread_1_{uuid.uuid4().hex[:8]}"}}
     result = await agent.ainvoke(input_data, config=config)
     
     # Проверяем результат
@@ -430,7 +431,8 @@ async def tool_node(state):
     agent = await agent_factory.get_agent("test_agent_with_tool")
     
     # Первый вызов
-    thread_id = "test_thread_tool"
+    import uuid as uuid2
+    thread_id = f"test_thread_tool_{uuid2.uuid4().hex[:8]}"
     config = {"configurable": {"thread_id": thread_id}}
     
     input_data_1 = {
@@ -522,7 +524,8 @@ async def session_node(state):
     agent = await agent_factory.get_agent("test_session_tools_agent")
     
     # Вызываем агента
-    thread_id = "test_thread_session"
+    import uuid as uuid3
+    thread_id = f"test_thread_session_{uuid3.uuid4().hex[:8]}"
     config = {"configurable": {"thread_id": thread_id}}
     
     input_data = {
