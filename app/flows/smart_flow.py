@@ -122,11 +122,15 @@ class SmartFlowAgent(BaseAgent):
         self.graph.add_edge("weather", "explainer")
         self.graph.add_edge("explainer", END)
 
-        # Компилируем
-        self.compiled_graph = self.graph.compile()
+        self.compiled_graph = None
 
     async def ainvoke(self, input_data, config=None):
         """Стандартный LangGraph ainvoke"""
+        if self.compiled_graph is None:
+            from app.core.checkpointer import get_checkpointer
+            checkpointer = await get_checkpointer()
+            self.compiled_graph = self.graph.compile(checkpointer=checkpointer)
+        
         return await self.compiled_graph.ainvoke(input_data, config)
 
 

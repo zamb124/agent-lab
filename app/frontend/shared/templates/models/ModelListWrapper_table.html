@@ -1,3 +1,15 @@
+{% set titles = {
+    'agent': 'Агенты',
+    'flow': 'Потоки', 
+    'task': 'Задачи',
+    'user': 'Пользователи'
+} %}
+
+<h1 class="header-title" id="page-title" hx-swap-oob="true">
+    <i class="bi bi-{{ 'robot' if model_type == 'agent' else 'diagram-3' if model_type == 'flow' else 'list-task' if model_type == 'task' else 'person-badge' }}"></i>
+    {{ titles.get(model_type, model_type.title()) }}
+</h1>
+
 <div class="card animate-fade-in-up">
     <div class="card-header">
         <div class="d-flex justify-content-between align-items-center">

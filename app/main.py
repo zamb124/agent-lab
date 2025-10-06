@@ -20,7 +20,7 @@ from app.core.config import settings
 from app.core.checkpointer import init_checkpointer, close_checkpointer
 from app.db.database import create_tables, close_db
 from app.core.migrator import Migrator
-from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads
+from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads, history
 from app.frontend.api import models as frontend_models
 from app.frontend.api import flows as frontend_flows
 from app.frontend.api import agents as frontend_agents
@@ -32,6 +32,7 @@ from app.frontend.modules.chat import router as chat_module
 from app.frontend.modules.builder import router as builder_module
 from app.frontend.modules.billing.router import router as billing_module
 from app.frontend.modules.admin.router import router as admin_module
+from app.frontend.modules.history.router import router as history_module
 from app.frontend.websockets import notifications as websocket_notifications
 from app.frontend.websockets import chat as websocket_chat
 from app.middleware.auth import AuthMiddleware
@@ -233,6 +234,7 @@ app.include_router(flows.router, prefix="/api/v1/flows", tags=["flows"])
 app.include_router(fashn.router, prefix="/api/v1/fashn", tags=["fashn"])
 app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
 app.include_router(leads.router, prefix="/api/v1", tags=["leads"])
+app.include_router(history.router, tags=["history"])
 
 # Frontend API (JSON CRUD)
 app.include_router(frontend_models.router, tags=["frontend-models"])
@@ -250,6 +252,7 @@ app.include_router(chat_module.router, tags=["chat-module"])
 app.include_router(builder_module.router, tags=["builder-module"])
 app.include_router(billing_module, tags=["billing-module"])
 app.include_router(admin_module, tags=["admin-module"])
+app.include_router(history_module, tags=["history-module"])
 
 # WebSockets
 app.include_router(websocket_notifications.router, tags=["websocket-notifications"])
