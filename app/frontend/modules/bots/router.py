@@ -69,10 +69,14 @@ async def bot_details(request: Request, bot_id: str):
         )
     
     agent_prompt = ""
+    agent_local_variables = {}
     if flow_config.entry_point_agent:
         agent_config = await storage.get_agent_config(flow_config.entry_point_agent)
-        if agent_config and agent_config.prompt:
-            agent_prompt = agent_config.prompt
+        if agent_config:
+            if agent_config.prompt:
+                agent_prompt = agent_config.prompt
+            if hasattr(agent_config, 'local_variables'):
+                agent_local_variables = agent_config.local_variables or {}
     
     bot_info = {
         "flow_id": flow_config.flow_id,
@@ -83,6 +87,8 @@ async def bot_details(request: Request, bot_id: str):
         "timeout": flow_config.timeout,
         "max_retries": flow_config.max_retries,
         "prompt": agent_prompt,
+        "flow_variables": getattr(flow_config, 'variables', {}) or {},
+        "local_variables": agent_local_variables,
     }
     
     return templates.TemplateResponse(

@@ -7,6 +7,7 @@
     
     let currentBotModal = null;
     let currentBotChat = null;
+    let promptEditor = null;
 
     window.openBotChat = function(botId, botName) {
         if (window.app && window.app.chat) {
@@ -130,6 +131,40 @@
         }, 100);
     }
 
+    window.toggleBotModalFullscreen = async function() {
+        const modalContent = document.querySelector('.bot-modal-content');
+        const btn = document.querySelector('.btn-fullscreen i');
+        
+        if (!modalContent) return;
+        
+        try {
+            if (!document.fullscreenElement) {
+                // Входим в fullscreen
+                await modalContent.requestFullscreen();
+                if (btn) btn.className = 'bi bi-fullscreen-exit';
+            } else {
+                // Выходим из fullscreen
+                await document.exitFullscreen();
+                if (btn) btn.className = 'bi bi-fullscreen';
+            }
+        } catch (err) {
+            console.error('Ошибка fullscreen:', err);
+            showNotification('Не удалось переключить полноэкранный режим', 'warning');
+        }
+    };
+    
+    // Обработчик изменения fullscreen состояния
+    document.addEventListener('fullscreenchange', () => {
+        const btn = document.querySelector('.btn-fullscreen i');
+        if (btn) {
+            if (document.fullscreenElement) {
+                btn.className = 'bi bi-fullscreen-exit';
+            } else {
+                btn.className = 'bi bi-fullscreen';
+            }
+        }
+    });
+
     window.closeBotModal = function() {
         const modal = document.getElementById('bot-expanded-modal');
         const listView = document.getElementById('bots-list-view');
@@ -137,10 +172,16 @@
         modal.style.display = 'none';
         if (listView) listView.style.display = 'block';
         
+        // Уничтожаем prompt editor
+        if (promptEditor) {
+            promptEditor.destroy();
+            promptEditor = null;
+        }
+        
         currentBotModal = null;
         currentBotChat = null;
     };
-
+    
     function initBotSettings() {
         const tabs = document.querySelectorAll('.settings-tab');
         const panels = document.querySelectorAll('.settings-panel');
@@ -156,9 +197,52 @@
                 const panel = document.querySelector(`[data-panel="${targetPanel}"]`);
                 if (panel) {
                     panel.classList.add('active');
+                    
+                    // Инициализируем Prompt Editor при переключении на вкладку "Основное"
+                    if (targetPanel === 'main' && !promptEditor) {
+                        initPromptEditor();
+                    }
                 }
             });
         });
+        
+        // Инициализируем prompt editor сразу для активной вкладки "Основное"
+        const activePanel = document.querySelector('.settings-panel.active');
+        if (activePanel && activePanel.dataset.panel === 'main') {
+            initPromptEditor();
+        }
+    }
+    
+    function initPromptEditor() {
+        const container = document.getElementById('bot-prompt-editor-container');
+        if (!container) {
+            console.error('Контейнер для prompt editor не найден');
+            return;
+        }
+        
+        // Получаем данные из DOM
+        const botCard = document.querySelector('.bot-details-content');
+        const flowId = currentBotModal;
+        const promptData = container.dataset.prompt || '';
+        
+        // Создаем редактор через app
+        if (window.app && window.app.createPromptEditor) {
+            promptEditor = window.app.createPromptEditor(container, {
+                initialValue: promptData,
+                flowId: flowId,
+                placeholder: 'Введите системный промпт для агента...\n\nИспользуйте {переменные} для подстановки значений.',
+                onChange: (value) => {
+                    console.log('Промпт изменен');
+                },
+                onVariablesChange: (type, variables) => {
+                    console.log(`Переменные ${type} изменены:`, variables);
+                }
+            });
+            
+            console.log('✅ Prompt Editor инициализирован для bot:', flowId);
+        } else {
+            console.error('app.createPromptEditor недоступен');
+        }
     }
 
     window.saveBotSettings = async function(botId) {
@@ -175,7 +259,8 @@
             flowData.platforms.telegram = { token: telegramToken.value };
         }
         
-        const promptValue = document.getElementById('bot-prompt')?.value;
+        // Получаем значение из Prompt Editor
+        const promptValue = promptEditor ? promptEditor.getValue() : null;
         
         try {
             const flowResponse = await fetch(`/api/v1/flows/${botId}`, {

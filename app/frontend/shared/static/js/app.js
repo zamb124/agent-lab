@@ -45,7 +45,13 @@ class APP {
                 send: (message) => this.chatManager.sendUserMessage(message)
             };
             
-            // Создаем глобальный доступ к layoutManager
+            // Загружаем PromptEditor
+            if (typeof PromptEditor !== 'undefined') {
+                this.PromptEditor = PromptEditor;
+                console.log('✅ PromptEditor загружен');
+            }
+            
+            // Создаем глобальный доступ к app
             window.app = this;
             
         } catch (error) {
@@ -57,6 +63,8 @@ class APP {
     
     setupFallbackManagers() {
         // Простые fallback методы если модули не загрузились
+        console.log('⚠️ Используем fallback менеджеры');
+        
         this.themeManager = {
             toggleTheme: () => {
                 const html = document.documentElement;
@@ -89,8 +97,25 @@ class APP {
             send: (message) => console.log('Chat fallback: send', message)
         };
         
+        // PromptEditor fallback
+        if (typeof PromptEditor !== 'undefined') {
+            this.PromptEditor = PromptEditor;
+        }
+        
         // Устанавливаем глобальный доступ
         window.app = this;
+    }
+    
+    /**
+     * Создать prompt editor
+     */
+    createPromptEditor(containerElement, options = {}) {
+        if (!this.PromptEditor) {
+            console.error('PromptEditor не загружен');
+            return null;
+        }
+        
+        return new this.PromptEditor(containerElement, options);
     }
     
     setupAuth() {
