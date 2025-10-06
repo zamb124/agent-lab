@@ -6,7 +6,7 @@ from typing import List, Dict, Optional, Union
 from datetime import datetime, date
 from enum import Enum
 from pydantic import BaseModel
-from backend.app.frontend.field_extensions import get_template_name_from_type, Field
+from app.frontend.field_extensions import get_template_name_from_type, Field
 
 
 class SampleEnum(Enum):

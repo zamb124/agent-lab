@@ -1,5 +1,10 @@
 Agent Lab - LangGraph Platform
-Философия: Database-First. Конфигурация в базе данных является единственным источником правды для работающей системы. Код определяет только поведение (логику), но не структуру или состав потоков и агентов.
+
+Платформа для создания и управления ИИ-агентами на базе LangGraph.
+
+**Философия**: Database-First — конфигурация в базе данных является единственным источником правды. Код определяет только поведение, но не структуру.
+
+**Документация**: [docs/](docs/) | [Архитектура](docs/architecture.md) | [API](docs/api.md) | [Биллинг](docs/billing.md)
 
 ## Быстрый старт
 
@@ -7,7 +12,7 @@ Agent Lab - LangGraph Platform
    ```bash
    cp conf.example conf.json
    ```
-   Отредактируйте `conf.json` под ваши нужды. Подробные инструкции в [CONFIG_README.md](CONFIG_README.md)
+   Отредактируйте `conf.json` под ваши нужды. Подробнее: [docs/configuration.md](docs/configuration.md)
 
 2. **Запуск системы**
    ```bash
@@ -18,7 +23,7 @@ Agent Lab - LangGraph Platform
    docker-compose up -d
    
    # Или локально
-   uv run python backend/run.py
+   uv run python run.py
    ```
 
 ## Актуальная Файловая Структура Проекта
@@ -44,13 +49,24 @@ Agent Lab - LangGraph Platform
 │   ├── nginx.conf
 │   └── README.md
 │
-├── backend/
-│   ├── debug_task.py      # Скрипт отладки задач
-│   ├── Dockerfile         # Docker образ для бэкенда
-│   ├── run.py            # Простой скрипт запуска сервера
-│   ├── run_worker.py     # Скрипт запуска воркера
-│   │
-│   └── app/
+├── Dockerfile            # Docker образ
+├── run.py               # Скрипт запуска сервера
+├── run_worker.py        # Скрипт запуска воркера
+├── debug_task.py        # Скрипт отладки задач
+├── cleanup_non_company_data.py  # Скрипт очистки данных
+│
+├── docs/                # Документация
+│   ├── README.md        # Навигация по документам
+│   ├── architecture.md  # Архитектура платформы
+│   ├── api.md          # API Reference
+│   ├── billing.md      # Система биллинга
+│   ├── configuration.md # Настройка конфигурации
+│   ├── frontend.md     # Веб-интерфейс
+│   ├── clients.md      # Клиенты сервисов
+│   ├── deployment.md   # Развертывание
+│   └── integrations/   # Документация интеграций
+│
+├── app/
 │       ├── __init__.py
 │       │
 │       ├── api/                  # HTTP API Layer
@@ -437,10 +453,10 @@ pytest-asyncio>=0.21.0
 uv sync
 
 # Запуск сервера
-uv run python backend/run.py
+uv run python run.py
 
 # Запуск воркера
-uv run python backend/run_worker.py
+uv run python run_worker.py
 
 # Запуск тестов
 uv run pytest

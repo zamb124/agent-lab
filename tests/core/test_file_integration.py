@@ -5,9 +5,9 @@ import pytest
 import asyncio
 import uuid
 
-from backend.app.core.file_processor import FileProcessor
-from backend.app.interfaces.telegram_interface import TelegramInterface
-from backend.app.core.models import FileRecord, FileStatus
+from app.core.file_processor import FileProcessor
+from app.interfaces.telegram_interface import TelegramInterface
+from app.models import FileRecord, FileStatus
 
 
 @pytest.mark.asyncio

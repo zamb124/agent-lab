@@ -7,7 +7,7 @@ import tempfile
 import pytest
 from pathlib import Path
 
-from backend.app.core.config_utils import (
+from app.core.config_utils import (
     load_json_config, 
     merge_configs, 
     get_nested_value, 
@@ -142,13 +142,13 @@ class TestSettingsIntegration:
         
         try:
             # Мокаем функцию get_config_paths чтобы использовать наш временный файл
-            from backend.app.core import config_utils
+            from app.core import config_utils
             original_get_config_paths = config_utils.get_config_paths
             config_utils.get_config_paths = lambda: [Path(temp_path)]
             
             # Перезагружаем модуль настроек
             import importlib
-            from backend.app.core import config
+            from app.core import config
             importlib.reload(config)
             
             settings = config.settings
@@ -167,7 +167,7 @@ class TestSettingsIntegration:
     def test_env_override_json(self):
         """Тест переопределения JSON конфигурации переменными окружения"""
         # Тестируем функции напрямую без перезагрузки модулей
-        from backend.app.core.config_utils import get_env_or_config
+        from app.core.config_utils import get_env_or_config
         
         # Создаем тестовую JSON конфигурацию
         test_json_config = {"server": {"port": 8000, "debug": False}}
@@ -217,12 +217,12 @@ class TestAuthConfiguration:
         
         try:
             # Мокаем функцию get_config_paths
-            from backend.app.core import config_utils
+            from app.core import config_utils
             original_get_config_paths = config_utils.get_config_paths
             config_utils.get_config_paths = lambda: [Path(temp_path)]
             
             # Создаем новый экземпляр Settings
-            from backend.app.core.config import Settings
+            from app.core.config import Settings
             test_settings = Settings()
             
             # Проверяем что Yandex провайдер загружен
@@ -249,7 +249,7 @@ class TestAuthConfiguration:
     def test_auth_service_initialization(self):
         """Тест инициализации сервиса авторизации"""
         # Тестируем что JSON конфигурация содержит auth провайдеры
-        from backend.app.core.config_utils import load_merged_config
+        from app.core.config_utils import load_merged_config
         
         json_config = load_merged_config()
         assert "auth" in json_config
@@ -261,8 +261,8 @@ class TestAuthConfiguration:
         assert yandex_json["client_id"] == "16c6d45b72114d2bbcabe3f81875c23d"
         
         # Тестируем создание провайдера напрямую
-        from backend.app.core.config import AuthProviderConfig
-        from backend.app.identity.providers.yandex import YandexProvider
+        from app.core.config import AuthProviderConfig
+        from app.identity.providers.yandex import YandexProvider
         
         provider_config = AuthProviderConfig(**yandex_json)
         yandex_provider = YandexProvider(provider_config)
@@ -301,12 +301,12 @@ class TestLLMConfiguration:
         
         try:
             # Мокаем конфигурацию
-            from backend.app.core import config_utils
+            from app.core import config_utils
             original_get_config_paths = config_utils.get_config_paths
             config_utils.get_config_paths = lambda: [Path(temp_path)]
             
             # Создаем новый Settings
-            from backend.app.core.config import Settings
+            from app.core.config import Settings
             test_settings = Settings()
             
             # Проверяем что провайдеры загружены
@@ -338,7 +338,7 @@ class TestLLMConfiguration:
     
     def test_llm_factory_with_new_config(self):
         """Тест LLM factory с новой конфигурацией"""
-        from backend.app.core.llm_factory import get_llm
+        from app.core.llm_factory import get_llm
         
         # Тест дефолтного провайдера (mock)
         llm = get_llm()
@@ -361,8 +361,8 @@ class TestAuthFlow:
     
     async def test_auth_url_generation(self):
         """Тест генерации URL авторизации"""
-        from backend.app.identity.auth_service import auth_service
-        from backend.app.identity.models import AuthProvider
+        from app.identity.auth_service import auth_service
+        from app.identity.models import AuthProvider
         
         providers = auth_service.get_available_providers()
         if AuthProvider.YANDEX in providers:
@@ -380,8 +380,8 @@ class TestAuthFlow:
     
     async def test_auth_state_management(self):
         """Тест управления состоянием авторизации"""
-        from backend.app.identity.auth_service import auth_service
-        from backend.app.identity.models import AuthProvider
+        from app.identity.auth_service import auth_service
+        from app.identity.models import AuthProvider
         
         # Создаем состояние
         await auth_service._save_auth_state(
@@ -409,7 +409,7 @@ class TestConfigStructure:
     
     def test_config_sections_exist(self):
         """Тест наличия всех секций конфигурации"""
-        from backend.app.core.config import settings
+        from app.core.config import settings
         
         # Проверяем основные секции
         assert hasattr(settings, 'auth')
@@ -420,7 +420,7 @@ class TestConfigStructure:
     
     def test_auth_config_structure(self):
         """Тест структуры конфигурации авторизации"""
-        from backend.app.core.config import settings
+        from app.core.config import settings
         
         auth_config = settings.auth
         assert hasattr(auth_config, 'enabled')
@@ -442,7 +442,7 @@ class TestConfigStructure:
     
     def test_llm_config_structure(self):
         """Тест структуры конфигурации LLM"""
-        from backend.app.core.config import settings
+        from app.core.config import settings
         
         llm_config = settings.llm
         assert hasattr(llm_config, 'default_provider')
@@ -464,7 +464,7 @@ class TestConfigStructure:
     def test_server_config_values(self):
         """Тест значений конфигурации сервера"""
         # Проверяем что конфигурация загружается из conf.json
-        from backend.app.core.config_utils import load_merged_config
+        from app.core.config_utils import load_merged_config
         
         json_config = load_merged_config()
         
@@ -477,7 +477,7 @@ class TestConfigStructure:
         
         # Проверяем что Settings правильно применяет JSON
         # Используем данные из JSON а не глобальный settings который может быть переопределен
-        from backend.app.core.config import Settings
+        from app.core.config import Settings
         fresh_settings = Settings()
         
         # Проверяем основные поля (могут быть переопределены env переменными в тестах)
@@ -487,7 +487,7 @@ class TestConfigStructure:
     
     def test_database_config_values(self):
         """Тест значений конфигурации БД"""
-        from backend.app.core.config import settings
+        from app.core.config import settings
         
         db_config = settings.database
         assert "postgresql+asyncpg://" in db_config.url

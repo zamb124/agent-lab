@@ -9,8 +9,8 @@ import uuid
 import httpx
 from unittest.mock import patch, AsyncMock
 
-from backend.app.core.storage import Storage
-from backend.app.core.models import FileRecord, FileStatus
+from app.core.storage import Storage
+from app.models import FileRecord, FileStatus
 
 
 @pytest.mark.asyncio
@@ -242,7 +242,7 @@ class TestTelegramFileIntegration:
     
     async def test_file_message_format_for_agent(self):
         """Тест форматирования сообщения с файлом для агента"""
-        from backend.app.core.file_processor import FileProcessor
+        from app.core.file_processor import FileProcessor
         
         # Создаем тестовую запись о файле
         file_record = FileRecord(
@@ -307,7 +307,7 @@ class TestTelegramFileIntegration:
             status=FileStatus.UPLOADED
         )
         
-        from backend.app.core.file_processor import FileProcessor
+        from app.core.file_processor import FileProcessor
         processor = FileProcessor()
         file_message = processor.format_file_message(file_record)
         
@@ -419,7 +419,7 @@ class TestTelegramFileIntegration:
             mock_client.return_value.__aenter__.return_value.post = mock_request_handler
             
             # Тестируем прямой вызов telegram_interface
-            from backend.app.interfaces.telegram_interface import TelegramInterface
+            from app.interfaces.telegram_interface import TelegramInterface
             
             # Создаем интерфейс с тестовым токеном
             interface = TelegramInterface("test_token", {"username": "agents_lab_bot"})

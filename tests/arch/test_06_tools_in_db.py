@@ -19,7 +19,7 @@ from app.core.storage import Storage
 from app.core.migrator import Migrator
 from app.core.agent_factory import AgentFactory
 from app.core.flow_factory import FlowFactory
-from app.core.models import (
+from app.models import (
     AgentConfig, AgentType, CodeMode, FlowConfig,
     ToolReference, LLMConfig
 )
@@ -124,7 +124,7 @@ async def test_code_agent_with_db_tool():
     
     # Настраиваем мок для магических заклинаний
     from app.core.llm_factory import get_global_mock_llm, get_llm
-    from app.core.models import LLMConfig
+    from app.models import LLMConfig
     
     get_llm("mock", "mock-gpt-4")
     
@@ -224,7 +224,7 @@ async def test_code_reference_tool():
     
     # Настраиваем мок для вычислений
     from app.core.llm_factory import get_global_mock_llm, get_llm
-    from app.core.models import LLMConfig
+    from app.models import LLMConfig
     
     get_llm("mock", "mock-gpt-4")
     
@@ -296,7 +296,7 @@ async def test_db_agent_with_code_tool():
     
     # Настраиваем мок для вычислений
     from app.core.llm_factory import get_global_mock_llm, get_llm
-    from app.core.models import LLMConfig
+    from app.models import LLMConfig
     
     get_llm("mock", "mock-gpt-4")
     

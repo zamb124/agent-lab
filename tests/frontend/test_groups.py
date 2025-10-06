@@ -4,7 +4,7 @@
 import pytest
 from typing import List, Dict, Optional
 from pydantic import BaseModel
-from backend.app.frontend.field_extensions import Field
+from app.frontend.field_extensions import Field
 
 
 class TestGroupsFunctionality:
