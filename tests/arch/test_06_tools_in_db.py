@@ -122,6 +122,11 @@ async def test_code_agent_with_db_tool(save_test_company):
     Тест 2: Агент в коде использует tool из БД через ссылку
     """
     
+    # Мигрируем агенты из кода
+    from app.core.migrator import Migrator
+    migrator = Migrator()
+    await migrator.run_full_migration()
+    
     # Настраиваем мок для магических заклинаний
     from app.core.llm_factory import get_global_mock_llm, get_llm
     from app.models import LLMConfig
@@ -140,10 +145,7 @@ async def test_code_agent_with_db_tool(save_test_company):
     storage = Storage()
     
     magic_tool_code = '''
-from langchain_core.tools import tool
-
-@tool
-def magic_function(spell: str) -> str:
+def main(spell: str) -> str:
     """
     Выполняет магическое заклинание.
     

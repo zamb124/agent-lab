@@ -26,10 +26,8 @@ from app.core.agent_factory import AgentFactory
 logger = logging.getLogger(__name__)
 
 
-class GraphState(Dict[str, Any]):
-    """Базовое состояние графа"""
-
-    messages: List[BaseMessage]
+# Используем обычный Dict для state - это позволяет добавлять произвольные ключи
+GraphState = Dict[str, Any]
 
 
 class GraphBuilder:

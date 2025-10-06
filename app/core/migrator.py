@@ -498,32 +498,41 @@ class Migrator:
 
             edges.append(GraphEdge(source=source, target=target))
 
-        # Извлекаем conditional edges напрямую из графа
-        if hasattr(stategraph, '_conditional_edges'):
-            for source, conditional_info in stategraph._conditional_edges.items():
-                # conditional_info содержит path_map с условиями
-                if hasattr(conditional_info, 'path_map') and conditional_info.path_map:
-                    # path_map это словарь {значение_условия: целевая_нода}
-                    for target_node in set(conditional_info.path_map.values()):
-                        # Преобразуем служебные названия
-                        source_name = "START" if source == "__start__" else source
-                        target_name = "END" if target_node == "__end__" else target_node
+        # Извлекаем conditional edges из branches
+        if hasattr(stategraph, 'branches') and stategraph.branches:
+            for source, branches_dict in stategraph.branches.items():
+                source_name = "START" if source == "__start__" else source
+                
+                # branches_dict это dict {condition_func_name: BranchSpec}
+                for cond_name, branch_spec in branches_dict.items():
+                    # Извлекаем путь к функции условия
+                    condition_path = None
+                    if hasattr(branch_spec, 'path'):
+                        cond_runnable = branch_spec.path
+                        # Извлекаем функцию из RunnableCallable
+                        cond_func = None
+                        if hasattr(cond_runnable, 'afunc') and cond_runnable.afunc:
+                            cond_func = cond_runnable.afunc
+                        elif hasattr(cond_runnable, 'func') and cond_runnable.func:
+                            cond_func = cond_runnable.func
                         
-                        # Пытаемся извлечь путь к функции условия
-                        condition_path = None
-                        if hasattr(conditional_info, 'condition'):
-                            cond_func = conditional_info.condition
-                            if hasattr(cond_func, '__module__') and hasattr(cond_func, '__name__'):
-                                condition_path = f"{cond_func.__module__}.{cond_func.__name__}"
-                        
-                        edges.append(
-                            GraphEdge(
-                                source=source_name,
-                                target=target_name,
-                                condition=condition_path,
-                                condition_type=ConditionType.ROUTER,
+                        if cond_func and hasattr(cond_func, '__module__') and hasattr(cond_func, '__name__'):
+                            condition_path = f"{cond_func.__module__}.{cond_func.__name__}"
+                    
+                    # Извлекаем целевые ноды из ends
+                    if hasattr(branch_spec, 'ends') and branch_spec.ends:
+                        # ends это dict {значение: target_node}
+                        for target in set(branch_spec.ends.values()):
+                            target_name = "END" if target == "__end__" else target
+                            
+                            edges.append(
+                                GraphEdge(
+                                    source=source_name,
+                                    target=target_name,
+                                    condition=condition_path,
+                                    condition_type=ConditionType.ROUTER,
+                                )
                             )
-                        )
 
         return GraphDefinition(nodes=nodes, edges=edges, entry_point="START")
 
