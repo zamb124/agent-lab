@@ -40,7 +40,7 @@ from app.middleware.auth import AuthMiddleware
 from app.services.cleanup_service import CleanupService
 
 # Условные импорты для локального окружения
-if settings.server.env == "local":
+if settings.server.env == "local1":
     from app.workers.task_processor import TaskProcessor
     from app.services.telegram_poller import telegram_poller
 
@@ -153,7 +153,7 @@ async def lifespan(app: FastAPI):
         await migrator.run_full_migration()
 
         # Запуск воркера задач для локальной разработки
-        if settings.server.env == "local":
+        if settings.server.env == "local1":
             logger.info("⚙️ Запуск воркера задач для локальной разработки...")
             task_processor = TaskProcessor()
             asyncio.create_task(task_processor.start())
@@ -182,7 +182,7 @@ async def lifespan(app: FastAPI):
         logger.info("🔄 Закрытие ресурсов...")
 
         # Останавливаем сервисы если запущены
-        if settings.server.env == "local":
+        if settings.server.env == "local1":
             try:
                 await telegram_poller.stop()
                 logger.info("🛑 Telegram polling остановлен")

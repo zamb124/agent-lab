@@ -10,6 +10,7 @@ from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, System
 
 from app.core.storage import Storage
 from app.flows.flow import Flow
+from app.identity.models import User
 from app.models.history_models import (
     MessageItem,
     MessageRole,
@@ -254,13 +255,19 @@ class FlowFactory:
             user_name = None
             if session.user_id:
                 try:
-                    from app.identity.models import User
-                    user_json = await self.storage.get(f"user:{session.user_id}")
+                    
+                    user_key = f"user:{session.user_id}"
+                    logger.info(f"🔍 Загружаем пользователя по ключу: {user_key}")
+                    user_json = await self.storage.get(user_key, force_global=True)
+                    logger.info(f"🔍 Результат загрузки: {bool(user_json)}, длина: {len(user_json) if user_json else 0}")
                     if user_json:
                         user = User.model_validate_json(user_json)
                         user_name = user.name
-                except Exception:
-                    pass
+                        logger.info(f"✅ Загружено имя пользователя {session.user_id}: {user_name}")
+                    else:
+                        logger.warning(f"⚠️ Пользователь {session.user_id} не найден в БД")
+                except Exception as e:
+                    logger.error(f"❌ Ошибка загрузки пользователя {session.user_id}: {e}")
             
             session_item = SessionListItem(
                 session_id=session.session_id,

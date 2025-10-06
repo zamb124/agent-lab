@@ -36,18 +36,28 @@ class TaskProcessor:
         """Запуск воркера"""
         logger.info("🔄 Запуск воркера задач...")
 
-        # Инициализация
+        logger.info("📊 Создание таблиц БД...")
         await create_tables()
+        logger.info("✅ Таблицы БД созданы")
+        
+        logger.info("🔄 Инициализация checkpointer...")
         await init_checkpointer()
+        logger.info("✅ Checkpointer инициализирован")
 
         self.running = True
+        logger.info(f"✅ Воркер готов к работе (интервал опроса: {settings.worker.task_poll_interval}сек)")
+        logger.info(f"🔍 Начинаем цикл обработки задач...")
 
+        iteration = 0
         while self.running:
             try:
+                iteration += 1
+                logger.info(f"🔄 Итерация #{iteration}")
                 await self._process_pending_tasks()
+                logger.info(f"✅ Итерация #{iteration} завершена, ожидание {settings.worker.task_poll_interval}сек")
                 await asyncio.sleep(settings.worker.task_poll_interval)
             except Exception as e:
-                logger.error(f"❌ Ошибка в воркере: {e}")
+                logger.error(f"❌ Ошибка в воркере (итерация #{iteration}): {e}", exc_info=True)
                 await asyncio.sleep(settings.worker.task_poll_interval)
 
     async def stop(self):
@@ -60,6 +70,7 @@ class TaskProcessor:
         tasks = await self.storage.get_pending_tasks(limit=settings.worker.max_workers)
 
         if not tasks:
+            logger.debug("📋 Нет задач для обработки")
             return
 
         logger.info(f"📋 Найдено {len(tasks)} задач для обработки")

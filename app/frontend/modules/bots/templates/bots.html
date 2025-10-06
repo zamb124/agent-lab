@@ -1,0 +1,37 @@
+<link rel="stylesheet" href="/static/bots/css/bots.css">
+
+<h1 class="header-title" id="page-title" hx-swap-oob="true">
+    <i class="bi bi-people-fill me-2"></i>
+    Боты
+</h1>
+
+<div class="header-right" hx-swap-oob="true">
+    <button class="btn btn-primary btn-sm" onclick="createBot()">
+        <i class="bi bi-plus-circle"></i>
+        Создать бота
+    </button>
+    <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="Переключить тему">
+        <i class="bi bi-sun"></i>
+    </button>
+</div>
+
+<div class="bots-container" style="position: relative;">
+
+    <div class="bots-content" 
+         id="bots-list-view"
+         hx-get="/frontend/bots/list" 
+         hx-trigger="load" 
+         hx-indicator="#bots-loading">
+        <div id="bots-loading" class="loading-indicator htmx-indicator">
+            <div class="spinner"></div>
+            <span>Загрузка ботов...</span>
+        </div>
+    </div>
+
+    <div id="bot-expanded-modal" class="bot-modal" style="display: none;">
+        <div class="bot-modal-content" id="modal-bot-details">
+        </div>
+    </div>
+</div>
+
+<script src="/static/bots/js/bots.js"></script>
