@@ -109,10 +109,11 @@ class ToolFactory:
             
             # Создаем StructuredTool из функции
             logger.debug(f"🔥 Создаем StructuredTool из функции")
+            tool_name = ref.tool_id.replace(".", "_")
             return StructuredTool.from_function(
                 coroutine=tool_function if asyncio.iscoroutinefunction(tool_function) else None,
                 func=tool_function if not asyncio.iscoroutinefunction(tool_function) else None,
-                name=ref.tool_id,
+                name=tool_name,
                 description=ref.description or "Кастомный инструмент"
             )
             
@@ -182,9 +183,10 @@ class ToolFactory:
                 except Exception as e:
                     return f"Ошибка выполнения флоу: {str(e)}"
 
+            flow_name = f"flow_{ref.tool_id.split('.')[-1].replace('.', '_')}"
             return StructuredTool.from_function(
                 func=flow_func,
-                name=f"flow_{ref.tool_id.split('.')[-1]}",
+                name=flow_name,
                 description=f"Флоу {ref.tool_id}",
                 args_schema=FlowInput,
             )
