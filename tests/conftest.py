@@ -2,6 +2,7 @@
 Простая конфигурация для pytest.
 """
 import pytest
+import pytest_asyncio
 import asyncio
 import os
 import sys
@@ -10,11 +11,8 @@ from pathlib import Path
 from typing import Callable, Dict, Any, Optional
 from unittest.mock import MagicMock
 
-# Добавляем backend в путь
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
-
 # Загружаем .env файл для тестов
-env_file = Path(__file__).parent.parent / "backend" / ".env"
+env_file = Path(__file__).parent.parent / ".env"
 if env_file.exists():
     from dotenv import load_dotenv
     load_dotenv(env_file)
@@ -79,6 +77,80 @@ async def client():
     import httpx
     async with httpx.AsyncClient(base_url="http://localhost:8000") as client:
         yield client
+
+
+@pytest.fixture(scope="function", autouse=True)
+def test_context():
+    """Фикстура для создания тестового контекста с компанией и балансом"""
+    from app.core.context import set_context, clear_context
+    from app.identity.models import User, Company
+    from app.models.context_models import Context
+    
+    test_company = Company(
+        company_id="test_company",
+        subdomain="test",
+        name="Test Company",
+        tariff_plan="enterprise",
+        balance=100000.0,
+        monthly_budget=50000.0,
+        current_month_spent=0.0,
+        status="active"
+    )
+    
+    test_user = User(
+        user_id="test_user",
+        provider="yandex",
+        provider_user_id="test_123",
+        email="test@example.com",
+        name="Test User",
+        status="active",
+        groups=["user"],
+        companies={"test_company": ["admin"]},
+        active_company_id="test_company"
+    )
+    
+    context = Context(
+        user=test_user,
+        session_id="test_session",
+        platform="api",
+        active_company=test_company,
+        user_companies=[test_company],
+        metadata={}
+    )
+    
+    set_context(context)
+    yield context
+    clear_context()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def save_test_company():
+    """Сохраняет тестовую компанию в БД"""
+    from app.core.storage import Storage
+    from app.identity.models import Company
+    
+    storage = Storage()
+    test_company = Company(
+        company_id="test_company",
+        subdomain="test",
+        name="Test Company",
+        tariff_plan="enterprise",
+        balance=100000.0,
+        monthly_budget=50000.0,
+        current_month_spent=0.0,
+        status="active"
+    )
+    
+    await storage.set(f"company:{test_company.company_id}", test_company.model_dump_json(), force_global=True)
+    await storage.set(f"subdomain:{test_company.subdomain}", f'"{test_company.company_id}"', force_global=True)
+    
+    yield test_company
+
+
+# Переопределяем LLM конфиги агентов на mock для всех тестов (один раз при импорте)
+import app.agents.weather.agent as _weather_module
+_weather_module.WeatherAgent.llm_config = {"provider": "mock", "model": "mock-gpt-4", "temperature": 0.3}
+_weather_module.TravelInfoAgent.llm_config = {"provider": "mock", "model": "mock-gpt-4", "temperature": 0.3}
 
 
 # ==================== MOCK SERVER ДЛЯ ТЕСТИРОВАНИЯ ====================

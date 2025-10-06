@@ -205,7 +205,7 @@ class ToolReference(BuilderEntity):
         frozen=True,
         title="ID инструмента",
         description="ID инструмента (путь к функции, ID агента, MCP tool)",
-        pattern=r"^[a-zA-Z0-9_.-]+$",
+        pattern=r"^[a-zA-Z0-9_.:/-]+$",
     )
     params: Dict[str, Any] = Field(
         default_factory=dict,

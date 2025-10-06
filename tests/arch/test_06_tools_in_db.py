@@ -26,7 +26,7 @@ from app.models import (
 from langchain_core.messages import HumanMessage
 
 @pytest.mark.asyncio
-async def test_migrate_and_add_inline_tool():
+async def test_migrate_and_add_inline_tool(save_test_company):
     """
     Тест 1: Мигрируем WeatherAgent в БД и добавляем inline tool "покажи сахару"
     """
@@ -117,7 +117,7 @@ def show_sugar(request: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_code_agent_with_db_tool():
+async def test_code_agent_with_db_tool(save_test_company):
     """
     Тест 2: Агент в коде использует tool из БД через ссылку
     """
@@ -174,7 +174,7 @@ def magic_function(spell: str) -> str:
         prompt="Ты волшебник. Используй magic_function для выполнения заклинаний.",
         tools=[
             ToolReference(
-                tool_id="tool:db_magic_tool",  # Ссылка на tool в БД
+                tool_id="db_magic_tool",
                 code_mode=CodeMode.CODE_REFERENCE,
                 function_path="db_magic_tool",
                 description="Ссылка на магический tool из БД"
@@ -217,7 +217,7 @@ def magic_function(spell: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_code_reference_tool():
+async def test_code_reference_tool(save_test_company):
     """
     Тест 3: Tool из кода (CODE_REFERENCE режим)
     """
@@ -289,7 +289,7 @@ async def test_code_reference_tool():
 
 
 @pytest.mark.asyncio
-async def test_db_agent_with_code_tool():
+async def test_db_agent_with_code_tool(save_test_company):
     """
     Тест 4: Агент в БД использует tool из кода (мигрированный в БД)
     """
@@ -311,7 +311,7 @@ async def test_db_agent_with_code_tool():
     
     # 1. Сначала мигрируем tools из кода в БД
     migrator = Migrator()
-    await migrator._migrate_tools()  # Мигрируем только tools
+    await migrator._migrate_tools()
     
     # 2. Создаем агента в БД который ссылается на мигрированный tool
     storage = Storage()
@@ -331,7 +331,7 @@ async def test_db_agent_with_code_tool():
                 description="Калькулятор из мигрированного кода"
             )
         ],
-        llm_config=None,  # Используем дефолтную конфигурацию
+        llm_config=LLMConfig(provider="mock", model="mock-gpt-4"),
         source="test"
     )
     
