@@ -28,6 +28,11 @@ from langchain_core.messages import HumanMessage
 async def test_create_hybrid_stategraph():
     """Создание гибридного StateGraph агента"""
     
+    # Мигрируем агенты из кода которые будут использоваться
+    from app.core.migrator import Migrator
+    migrator = Migrator()
+    await migrator.run_full_migration()
+    
     storage = Storage()
         
         # 1. СОЗДАЕМ ГИБРИДНЫЙ ГРАФ
@@ -207,6 +212,16 @@ async def finalizer_function(state):
 async def test_execute_hybrid_simple_math():
     """Создание и выполнение гибридного агента - простая математика (inline код)"""
     
+    # Настраиваем мок LLM
+    from app.core.llm_factory import get_global_mock_llm, get_llm
+    get_llm("mock", "mock-gpt-4")
+    mock_llm = get_global_mock_llm()
+    if mock_llm:
+        mock_llm.set_responses({
+            "посчитай": "Использую calculate",
+            "5 + 7": "Результат: 12",
+        })
+    
     # СОЗДАЕМ агента в этом же тесте для изоляции
     await test_create_hybrid_stategraph()
     
@@ -232,6 +247,16 @@ async def test_execute_hybrid_simple_math():
 async def test_execute_hybrid_complex_math():
     """Создание и выполнение гибридного агента - сложная математика (ссылка на агента)"""
     
+    # Настраиваем мок LLM
+    from app.core.llm_factory import get_global_mock_llm, get_llm
+    get_llm("mock", "mock-gpt-4")
+    mock_llm = get_global_mock_llm()
+    if mock_llm:
+        mock_llm.set_responses({
+            "вычисли": "Использую calculate для вычисления",
+            "сложное": "Результат: 70",
+        })
+    
     # СОЗДАЕМ агента в этом же тесте для изоляции
     await test_create_hybrid_stategraph()
     
@@ -256,6 +281,16 @@ async def test_execute_hybrid_complex_math():
 @pytest.mark.asyncio
 async def test_execute_hybrid_weather():
     """Создание и выполнение гибридного агента - погода (ссылка на функцию)"""
+    
+    # Настраиваем мок LLM
+    from app.core.llm_factory import get_global_mock_llm, get_llm
+    get_llm("mock", "mock-gpt-4")
+    mock_llm = get_global_mock_llm()
+    if mock_llm:
+        mock_llm.set_responses({
+            "погода": "Использую get_weather",
+            "новосибирск": "Погода в Новосибирске: солнечно",
+        })
     
     # СОЗДАЕМ агента в этом же тесте для изоляции
     await test_create_hybrid_stategraph()
