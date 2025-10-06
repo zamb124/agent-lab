@@ -138,7 +138,7 @@ async def auth_callback(
         samesite="lax",
     )
 
-    logger.info(f"✅ Успешная авторизация пользователя {result.user.email}")
+    logger.info(f"✅ Успешная авторизация пользователя {result.user.user_id}")
     return response
 
 
@@ -156,13 +156,22 @@ async def get_current_user(session_id: str = None):
     user = await auth_service.get_user_by_session(session_id)
     if not user:
         raise HTTPException(status_code=401, detail="Сессия недействительна")
+    
+    session = await auth_service._get_session(session_id)
+    provider_value = session.provider.value if session else None
+    
+    email = None
+    if session:
+        provider_info = await auth_service.get_user_provider_info(user.user_id, session.provider)
+        if provider_info:
+            email = provider_info.get("email")
 
     return {
         "user_id": user.user_id,
-        "email": user.email,
+        "email": email,
         "name": user.name,
         "avatar_url": user.avatar_url,
-        "provider": user.provider.value,
+        "provider": provider_value,
         "status": user.status.value,
     }
 

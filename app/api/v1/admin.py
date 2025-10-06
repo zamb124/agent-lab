@@ -440,12 +440,11 @@ async def create_my_company(request: Request):
     logger.info(f"🐛 DEBUG: subdomain:{subdomain} -> {company_id}, saved: {subdomain_saved}")
     
     # Обновляем глобального пользователя - добавляем компанию
-    user_key = f"user:{user.provider.value}:{user.provider_user_id}"
-    user.companies[company_id] = ["admin", "user"]  # Добавляем компанию с ролями
-    user.active_company_id = company_id  # Делаем активной
+    user_key = f"user:{user.user_id}"
+    user.companies[company_id] = ["admin", "user"]
+    user.active_company_id = company_id
     user.updated_at = datetime.now(timezone.utc)
     
-    # Сохраняем обновленного глобального пользователя
     await storage.set(user_key, user.model_dump_json(), force_global=True)
     logger.info(f"🐛 DEBUG: Обновлен глобальный пользователь - добавлена компания {company_id}")
     

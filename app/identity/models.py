@@ -23,7 +23,10 @@ class AuthProvider(str, Enum):
 
 
 class User(BaseModel):
-    """Модель пользователя"""
+    """
+    Основная модель пользователя (хранится в user:user_id).
+    Содержит только общие данные, без привязки к провайдерам.
+    """
 
     class Config:
         storage_prefix = "user"
@@ -33,21 +36,10 @@ class User(BaseModel):
         description="Уникальный ID пользователя в системе",
         readonly=True,
     )
-    provider: AuthProvider = Field(
-        title="Провайдер",
-        description="Провайдер авторизации",
-    )
-    provider_user_id: str = Field(
-        title="ID у провайдера",
-        description="ID пользователя у провайдера",
-        readonly=True,
-    )
-    email: str = Field(
-        title="Email",
-        description="Электронная почта пользователя",
-    )
     name: str = Field(
-        title="Имя", description="Имя пользователя", placeholder="Иван Иванов"
+        title="Имя", 
+        description="Имя пользователя", 
+        placeholder="Иван Иванов"
     )
     avatar_url: Optional[str] = Field(
         default=None,
@@ -77,12 +69,6 @@ class User(BaseModel):
         title="Активная компания",
         description="ID текущей активной компании",
         groups={"admin": {"readonly": False}, "user": {"readonly": True}},
-    )
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        title="Метаданные",
-        description="Дополнительные данные от провайдера",
-        groups={"admin": {"hidden": False}, "user": {"hidden": True}},
     )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

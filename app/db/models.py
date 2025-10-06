@@ -1,6 +1,6 @@
 """
 Модели базы данных SQLAlchemy.
-Одна таблица для key-value storage всех сущностей.
+Таблицы для key-value storage с маршрутизацией.
 """
 
 from datetime import datetime, timezone
@@ -13,7 +13,7 @@ Base = declarative_base()
 
 class Storage(Base):
     """
-    Единственная таблица для key-value хранения всех сущностей.
+    Основная таблица для key-value хранения сущностей.
 
     Ключи имеют префиксы:
     - agent:agent_id
@@ -25,7 +25,7 @@ class Storage(Base):
     __tablename__ = "storage"
 
     key = Column(String, primary_key=True, index=True)
-    value = Column(JSONB, nullable=False)  # JSON данные
+    value = Column(JSONB, nullable=False)
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -34,22 +34,64 @@ class Storage(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
-    expired_at = Column(DateTime(timezone=True), nullable=True)  # TTL поле
+    expired_at = Column(DateTime(timezone=True), nullable=True)
 
-    # Индексы для быстрого поиска по префиксам и уникальность ключа
     __table_args__ = (
-        UniqueConstraint("key", name="uq_storage_key"),  # Явное ограничение уникальности
+        UniqueConstraint("key", name="uq_storage_key"),
         Index("ix_storage_key_prefix", "key"),
         Index("ix_storage_updated_at", "updated_at"),
-        Index("ix_storage_expired_at", "expired_at"),  # Для TTL очистки
-        # Составные индексы для оптимизации запросов по ключу + временным полям
+        Index("ix_storage_expired_at", "expired_at"),
         Index("ix_storage_key_created_at", "key", "created_at"),
         Index("ix_storage_key_updated_at", "key", "updated_at"),
         Index("ix_storage_key_expired_at", "key", "expired_at"),
-        # Индексы на конкретные JSON поля для быстрого поиска задач
         Index("ix_storage_task_status", (text("(value->>'status')")), postgresql_where=text("key LIKE 'task:%'")),
         Index("ix_storage_task_session_flow", (text("(value->>'session_id')")), (text("(value->>'flow_id')")), postgresql_where=text("key LIKE 'task:%'")),
     )
 
     def __repr__(self):
         return f"<Storage(key='{self.key}', updated_at='{self.updated_at}')>"
+
+
+class Users(Base):
+    """
+    Таблица для хранения пользователей и аутентификации.
+
+    Ключи имеют префиксы:
+    - user:user_id (основная запись пользователя - source of truth)
+    - user_providers:user_id (объект: {provider_user_id: {provider_name, email, metadata}})
+    - auth_session:session_id (сессии аутентификации)
+    - auth_state:state (временные состояния OAuth)
+    """
+
+    __tablename__ = "users"
+
+    key = Column(String, primary_key=True, index=True)
+    value = Column(JSONB, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    expired_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("key", name="uq_users_key"),
+        Index("ix_users_key_prefix", "key"),
+        Index("ix_users_updated_at", "updated_at"),
+        Index("ix_users_expired_at", "expired_at"),
+        Index("ix_users_key_created_at", "key", "created_at"),
+        Index("ix_users_key_updated_at", "key", "updated_at"),
+        Index("ix_users_key_expired_at", "key", "expired_at"),
+        Index(
+            "ix_users_providers_jsonb",
+            text("value jsonb_path_ops"),
+            postgresql_using="gin",
+            postgresql_where=text("key LIKE 'user_providers:%'")
+        ),
+    )
+
+    def __repr__(self):
+        return f"<Users(key='{self.key}', updated_at='{self.updated_at}')>"

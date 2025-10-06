@@ -1,66 +1,117 @@
 """
 Storage - простой key-value storage для всех сущностей платформы.
-Одна таблица, три метода: get, set, delete.
+Поддержка маршрутизации по таблицам на основе префикса ключа и компании.
 """
 
 import logging
 import json
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, Table, MetaData, text
 from sqlalchemy.dialects.postgresql import insert
 
 from app.models import AgentConfig, FlowConfig, TaskConfig, SessionConfig, SessionStatus
 from app.db.database import AsyncSessionLocal
-from app.db.models import Storage as StorageModel
+from app.db.models import Storage as StorageModel, Users as UsersModel
+from app.core.context import get_context
 
 logger = logging.getLogger(__name__)
+
+TABLE_ROUTING = {
+    "user:": {"table": "users", "company_specific": False},
+    "user_providers:": {"table": "users", "company_specific": False},
+    "auth_session:": {"table": "users", "company_specific": False},
+    "auth_state:": {"table": "users", "company_specific": False},
+    
+    "_default": {"table": "storage", "company_specific": False}
+}
 
 
 class Storage:
     """
-    Простой key-value storage.
-    Все сущности хранятся в одной таблице с ключами типа:
-    - agent:agent_id
-    - flow:flow_id
-    - task:task_id
-    - session:session_id
+    Key-value storage с поддержкой маршрутизации по таблицам.
+    Поддерживает глобальные таблицы и таблицы специфичные для компаний.
     """
     def __init__(self):
-        # Используем dependency injection для БД сессий
         self.session_factory = None
-
-    def _get_company_key(self, key: str, force_global: bool = False) -> str:
-        """Добавляет префикс компании к ключу если нужно"""
-        if force_global:
-            return key
+        self._table_cache = {}
+        self._metadata = MetaData()
+    
+    def _get_table_name(self, key: str, company_id: Optional[str] = None) -> str:
+        """
+        Определяет имя таблицы на основе префикса ключа и компании.
+        
+        Args:
+            key: Ключ (например, "user:yandex:123" или "task:abc")
+            company_id: ID компании (если есть)
             
-        # Глобальные ключи (НЕ добавляем префикс)
+        Returns:
+            Имя таблицы (например, "users", "storage", "acme_tasks")
+        """
+        for prefix, config in TABLE_ROUTING.items():
+            if prefix == "_default":
+                continue
+            if key.startswith(prefix):
+                table_name = config["table"]
+                if config["company_specific"] and company_id:
+                    return f"{company_id}_{table_name}"
+                return table_name
+        
+        default_config = TABLE_ROUTING["_default"]
+        table_name = default_config["table"]
+        if default_config["company_specific"] and company_id:
+            return f"{company_id}_{table_name}"
+        return table_name
+    
+    def _get_table_model(self, table_name: str):
+        """
+        Возвращает SQLAlchemy модель таблицы.
+        """
+        if table_name in self._table_cache:
+            return self._table_cache[table_name]
+        
+        if table_name == "storage":
+            self._table_cache[table_name] = StorageModel
+            return StorageModel
+        
+        if table_name == "users":
+            self._table_cache[table_name] = UsersModel
+            return UsersModel
+        
+        table = Table(
+            table_name,
+            self._metadata,
+            *StorageModel.__table__.columns,
+            extend_existing=True,
+            autoload_with=None
+        )
+        self._table_cache[table_name] = table
+        return table
+
+    def _get_company_key(self, key: str, force_global: bool = False) -> tuple[str, Optional[str]]:
+        """
+        Добавляет префикс компании к ключу если нужно.
+        
+        Returns:
+            Кортеж (final_key, company_id)
+        """
+        if force_global:
+            return key, None
+            
         global_prefixes = [
             'company:', 'subdomain:', 
             'auth_session:', 'auth_state:'
         ]
         
-        # ВАЖНО: 'user:' убран из глобальных префиксов!
-        # Теперь пользователи будут храниться с префиксом компании
-        # Исключение: системные операции должны использовать force_global=True
-        
         if any(key.startswith(prefix) for prefix in global_prefixes):
-            return key
+            return key, None
         
-        # Получаем контекст для определения активной компании
-        try:
-            from ..core.context import get_context
-            context = get_context()
-            
-            if context and context.active_company:
-                company_id = context.active_company.company_id
-                return f"company:{company_id}:{key}"
-        except:
-            # Если контекст недоступен - возвращаем оригинальный ключ
-            pass
+        context = get_context()
+        if context and context.active_company:
+            company_id = context.active_company.company_id
+            return f"company:{company_id}:{key}", company_id
         
-        return key
+        return key, None
 
     # === Базовые методы key-value storage ===
 
@@ -76,23 +127,35 @@ class Storage:
         Returns:
             JSON строка или None, если не найдено
         """
-        final_key = self._get_company_key(key, force_global)
+        final_key, company_id = self._get_company_key(key, force_global)
+        table_name = self._get_table_name(key, company_id)
         
         if db_session:
-            return await self._get_with_session(final_key, db_session)
+            return await self._get_with_session(final_key, table_name, db_session)
 
         session_factory = self.session_factory or AsyncSessionLocal
         async with session_factory() as session:
-            return await self._get_with_session(final_key, session)
+            return await self._get_with_session(final_key, table_name, session)
 
-    async def _get_with_session(self, key: str, session) -> Optional[str]:
+    async def _get_with_session(self, key: str, table_name: str, session) -> Optional[str]:
         """Получает значение с использованием переданной сессии"""
-        result = await session.execute(
-            select(StorageModel.value).where(StorageModel.key == key)
-        )
+        table_model = self._get_table_model(table_name)
+        
+        if table_name == "storage":
+            result = await session.execute(
+                select(StorageModel.value).where(StorageModel.key == key)
+            )
+        elif table_name == "users":
+            result = await session.execute(
+                select(UsersModel.value).where(UsersModel.key == key)
+            )
+        else:
+            query = text(f"SELECT value FROM {table_name} WHERE key = :key")
+            result = await session.execute(query, {"key": key})
+        
         row = result.first()
         if row:
-            return json.dumps(row.value) if row.value is not None else None
+            return json.dumps(row.value if hasattr(row, 'value') else row[0]) if row else None
         return None
 
     async def set(
@@ -111,44 +174,39 @@ class Storage:
         Returns:
             True, если сохранение успешно
         """
-        final_key = self._get_company_key(key, force_global)
+        final_key, company_id = self._get_company_key(key, force_global)
+        table_name = self._get_table_name(key, company_id)
         
         if db_session:
-            return await self._set_with_session(final_key, value, ttl, db_session)
+            return await self._set_with_session(final_key, value, ttl, table_name, db_session)
 
         session_factory = self.session_factory or AsyncSessionLocal
         async with session_factory() as session:
-            result = await self._set_with_session(final_key, value, ttl, session)
+            result = await self._set_with_session(final_key, value, ttl, table_name, session)
             await session.commit()
             return result
 
     async def _set_with_session(
-        self, key: str, value: str, ttl: Optional[int], session
+        self, key: str, value: str, ttl: Optional[int], table_name: str, session
     ) -> bool:
         """Сохраняет значение с использованием переданной сессии"""
-        try:
-            # Парсим JSON для сохранения как JSONB
-            json_value = json.loads(value)
+        json_value = json.loads(value)
 
-            # Вычисляем expired_at
-            expired_at = None
-            if ttl is not None:
-                expired_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
+        expired_at = None
+        if ttl is not None:
+            expired_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
+        else:
+            permanent_prefixes = [
+                'company:', 'subdomain:', 'user:', 
+                'auth_session:', 'auth_state:', 'token:'
+            ]
+            
+            if any(key.startswith(prefix) for prefix in permanent_prefixes):
+                expired_at = None
             else:
-                # Критически важные записи НЕ должны иметь TTL
-                permanent_prefixes = [
-                    'company:', 'subdomain:', 'user:', 
-                    'auth_session:', 'auth_state:', 'token:'
-                ]
-                
-                if any(key.startswith(prefix) for prefix in permanent_prefixes):
-                    # Постоянные записи без TTL
-                    expired_at = None
-                else:
-                    # Дефолтный TTL = 5 дней для временных данных
-                    expired_at = datetime.now(timezone.utc) + timedelta(days=5)
+                expired_at = datetime.now(timezone.utc) + timedelta(days=5)
 
-            # Используем UPSERT (INSERT ... ON CONFLICT)
+        if table_name == "storage":
             stmt = insert(StorageModel).values(
                 key=key, value=json_value, expired_at=expired_at
             )
@@ -160,48 +218,82 @@ class Storage:
                     expired_at=stmt.excluded.expired_at,
                 ),
             )
-
             await session.execute(stmt)
-            logger.debug(f"Сохранено: {key}")
-            return True
+        elif table_name == "users":
+            stmt = insert(UsersModel).values(
+                key=key, value=json_value, expired_at=expired_at
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["key"],
+                set_=dict(
+                    value=stmt.excluded.value,
+                    updated_at=stmt.excluded.updated_at,
+                    expired_at=stmt.excluded.expired_at,
+                ),
+            )
+            await session.execute(stmt)
+        else:
+            query = text(f"""
+                INSERT INTO {table_name} (key, value, expired_at, created_at, updated_at)
+                VALUES (:key, :value, :expired_at, :created_at, :updated_at)
+                ON CONFLICT (key) DO UPDATE SET
+                    value = EXCLUDED.value,
+                    updated_at = EXCLUDED.updated_at,
+                    expired_at = EXCLUDED.expired_at
+            """)
+            now = datetime.now(timezone.utc)
+            await session.execute(query, {
+                "key": key,
+                "value": json.dumps(json_value),
+                "expired_at": expired_at,
+                "created_at": now,
+                "updated_at": now
+            })
 
-        except Exception as e:
-            logger.error(f"Ошибка сохранения {key}: {e}")
-            return False
+        logger.debug(f"Сохранено: {key} в таблицу {table_name}")
+        return True
 
-    async def delete(self, key: str, db_session=None) -> bool:
+    async def delete(self, key: str, db_session=None, force_global: bool = False) -> bool:
         """
         Удаляет значение по ключу.
 
         Args:
             key: Ключ для удаления
             db_session: Сессия БД (если не передана, создается новая)
+            force_global: Принудительно использовать глобальный ключ без префикса компании
 
         Returns:
             True, если удаление успешно
         """
+        final_key, company_id = self._get_company_key(key, force_global)
+        table_name = self._get_table_name(key, company_id)
+        
         if db_session:
-            return await self._delete_with_session(key, db_session)
+            return await self._delete_with_session(final_key, table_name, db_session)
 
         async with AsyncSessionLocal() as session:
-            result = await self._delete_with_session(key, session)
+            result = await self._delete_with_session(final_key, table_name, session)
             await session.commit()
             return result
 
-    async def _delete_with_session(self, key: str, session) -> bool:
+    async def _delete_with_session(self, key: str, table_name: str, session) -> bool:
         """Удаляет значение с использованием переданной сессии"""
-        try:
+        if table_name == "storage":
             result = await session.execute(
                 delete(StorageModel).where(StorageModel.key == key)
             )
-            deleted = result.rowcount > 0
-            if deleted:
-                logger.debug(f"Удалено: {key}")
-            return deleted
-
-        except Exception as e:
-            logger.error(f"Ошибка удаления {key}: {e}")
-            return False
+        elif table_name == "users":
+            result = await session.execute(
+                delete(UsersModel).where(UsersModel.key == key)
+            )
+        else:
+            query = text(f"DELETE FROM {table_name} WHERE key = :key")
+            result = await session.execute(query, {"key": key})
+        
+        deleted = result.rowcount > 0
+        if deleted:
+            logger.debug(f"Удалено: {key} из таблицы {table_name}")
+        return deleted
 
     # === Вспомогательные методы для удобства работы с типизированными объектами ===
 
@@ -356,16 +448,28 @@ class Storage:
         Returns:
             Список ключей
         """
-        # Применяем логику компании к префиксу
-        final_prefix = self._get_company_key(prefix, force_global)
+        final_prefix, company_id = self._get_company_key(prefix, force_global)
+        table_name = self._get_table_name(prefix, company_id)
         
         async with AsyncSessionLocal() as session:
-            result = await session.execute(
-                select(StorageModel.key)
-                .where(StorageModel.key.like(f"{final_prefix}%"))
-                .limit(limit)
-            )
-            return [row.key for row in result]
+            if table_name == "storage":
+                result = await session.execute(
+                    select(StorageModel.key)
+                    .where(StorageModel.key.like(f"{final_prefix}%"))
+                    .limit(limit)
+                )
+                return [row.key for row in result]
+            elif table_name == "users":
+                result = await session.execute(
+                    select(UsersModel.key)
+                    .where(UsersModel.key.like(f"{final_prefix}%"))
+                    .limit(limit)
+                )
+                return [row.key for row in result]
+            else:
+                query = text(f"SELECT key FROM {table_name} WHERE key LIKE :prefix LIMIT :limit")
+                result = await session.execute(query, {"prefix": f"{final_prefix}%", "limit": limit})
+                return [row[0] for row in result]
 
     async def get_pending_tasks(self, limit: int = 10) -> List[TaskConfig]:
         """
