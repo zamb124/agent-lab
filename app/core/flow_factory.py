@@ -232,12 +232,24 @@ class FlowFactory:
                 except Exception:
                     pass
             
+            user_name = None
+            if session.user_id:
+                try:
+                    from app.identity.models import User
+                    user_json = await self.storage.get(f"user:{session.user_id}")
+                    if user_json:
+                        user = User.model_validate_json(user_json)
+                        user_name = user.name
+                except Exception:
+                    pass
+            
             session_item = SessionListItem(
                 session_id=session.session_id,
                 flow_id=session.flow_id,
                 flow_name=flow_name,
                 platform=session.platform,
                 user_id=session.user_id,
+                user_name=user_name,
                 status=session.status.value,
                 message_count=message_count,
                 created_at=session.created_at,

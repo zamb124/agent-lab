@@ -38,6 +38,10 @@
     display: none !important;
 }
 
+.app-container .sidebar.collapsed .sidebar-section-title {
+    display: none !important;
+}
+
 .app-container .sidebar.collapsed .sidebar-brand {
     justify-content: center !important;
 }

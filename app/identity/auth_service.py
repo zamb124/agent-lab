@@ -226,7 +226,6 @@ class AuthService:
             user = User(
                 user_id=user_id,
                 name=user_info.name,
-                avatar_url=user_info.avatar_url,
                 companies={},
                 active_company_id="",
             )
@@ -267,6 +266,7 @@ class AuthService:
         providers[user_info.provider_user_id] = {
             "provider_name": provider.value,
             "email": user_info.email,
+            "avatar_url": user_info.avatar_url,
             "metadata": user_info.raw_data
         }
         

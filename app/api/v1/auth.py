@@ -161,16 +161,18 @@ async def get_current_user(session_id: str = None):
     provider_value = session.provider.value if session else None
     
     email = None
+    avatar_url = None
     if session:
         provider_info = await auth_service.get_user_provider_info(user.user_id, session.provider)
         if provider_info:
             email = provider_info.get("email")
+            avatar_url = provider_info.get("avatar_url")
 
     return {
         "user_id": user.user_id,
         "email": email,
         "name": user.name,
-        "avatar_url": user.avatar_url,
+        "avatar_url": avatar_url,
         "provider": provider_value,
         "status": user.status.value,
     }

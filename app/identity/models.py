@@ -41,11 +41,6 @@ class User(BaseModel):
         description="Имя пользователя", 
         placeholder="Иван Иванов"
     )
-    avatar_url: Optional[str] = Field(
-        default=None,
-        title="URL аватара",
-        description="URL изображения аватара",
-    )
     status: UserStatus = Field(
         default=UserStatus.ACTIVE,
         title="Статус",
