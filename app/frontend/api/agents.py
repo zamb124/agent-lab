@@ -2,25 +2,18 @@
 API для работы с агентами в Builder.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from typing import List, Optional, Dict, Any
 import uuid
 
 from app.models import AgentConfig, AgentType, CodeMode
-from app.core.storage import Storage
-from app.core.container import get_container
+from app.frontend.dependencies import StorageDep
 
 router = APIRouter(prefix="/agents", tags=["builder-agents"])
 
 
-async def get_storage() -> Storage:
-    """Получить Storage из контейнера"""
-    container = get_container()
-    return container.get_storage()
-
-
 @router.get("/", response_model=List[AgentConfig])
-async def list_agents(storage: Storage = Depends(get_storage)) -> List[AgentConfig]:
+async def list_agents(storage: StorageDep) -> List[AgentConfig]:
     """Получить список всех агентов"""
     # Получаем все ключи с префиксом "agent:"
     agent_keys = await storage.list_by_prefix("agent:")
@@ -37,7 +30,7 @@ async def list_agents(storage: Storage = Depends(get_storage)) -> List[AgentConf
 
 
 @router.get("/{agent_id:path}", response_model=AgentConfig)
-async def get_agent(agent_id: str, storage: Storage = Depends(get_storage)) -> AgentConfig:
+async def get_agent(agent_id: str, storage: StorageDep) -> AgentConfig:
     """Получить агента по ID"""
     agent = await storage.get_agent_config(agent_id)
     if not agent:
@@ -51,7 +44,7 @@ async def create_agent(
     description: Optional[str] = None,
     agent_type: AgentType = AgentType.REACT,
     prompt: Optional[str] = None,
-    storage: Storage = Depends(get_storage)
+    storage: StorageDep = None
 ) -> AgentConfig:
     """Создать нового агента и сразу сохранить в БД"""
     agent_id = f"agent_{uuid.uuid4().hex[:8]}"
@@ -76,7 +69,7 @@ async def create_agent(
 async def update_agent(
     agent_id: str,
     updates: Dict[str, Any],
-    storage: Storage = Depends(get_storage)
+    storage: StorageDep
 ) -> AgentConfig:
     """Обновить агента"""
     agent = await storage.get_agent_config(agent_id)
@@ -103,7 +96,7 @@ async def update_agent(
 
 
 @router.delete("/{agent_id:path}")
-async def delete_agent(agent_id: str, storage: Storage = Depends(get_storage)):
+async def delete_agent(agent_id: str, storage: StorageDep):
     """Удалить агента"""
     agent = await storage.get_agent_config(agent_id)
     if not agent:
@@ -114,7 +107,7 @@ async def delete_agent(agent_id: str, storage: Storage = Depends(get_storage)):
 
 
 @router.get("/{agent_id:path}/graph")
-async def get_agent_graph(agent_id: str, storage: Storage = Depends(get_storage)) -> Dict[str, Any]:
+async def get_agent_graph(agent_id: str, storage: StorageDep) -> Dict[str, Any]:
     """Получить граф агента"""
     agent = await storage.get_agent_config(agent_id)
     if not agent:
@@ -146,7 +139,7 @@ async def get_agent_graph(agent_id: str, storage: Storage = Depends(get_storage)
 async def update_agent_graph(
     agent_id: str,
     graph_data: Dict[str, Any],
-    storage: Storage = Depends(get_storage)
+    storage: StorageDep
 ):
     """Обновить граф агента"""
     agent = await storage.get_agent_config(agent_id)

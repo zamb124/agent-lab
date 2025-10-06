@@ -2,31 +2,18 @@
 API для работы с флоу в Builder.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from typing import List, Optional, Dict, Any
 import uuid
 
 from app.models import FlowConfig
-from app.core.storage import Storage
-from app.core.container import get_container
-from app.frontend.services.canvas_service import CanvasService
+from app.frontend.dependencies import StorageDep, CanvasServiceDep
 
 router = APIRouter(prefix="/flows", tags=["builder-flows"])
 
 
-async def get_storage() -> Storage:
-    """Получить Storage из контейнера"""
-    container = get_container()
-    return container.get_storage()
-
-
-async def get_canvas_service(storage: Storage = Depends(get_storage)) -> CanvasService:
-    """Получить Canvas Service"""
-    return CanvasService(storage)
-
-
 @router.get("/", response_model=List[FlowConfig])
-async def list_flows(storage: Storage = Depends(get_storage)) -> List[FlowConfig]:
+async def list_flows(storage: StorageDep) -> List[FlowConfig]:
     """Получить список всех флоу"""
     # Получаем все ключи с префиксом "flow:"
     flow_keys = await storage.list_by_prefix("flow:")
@@ -47,7 +34,7 @@ async def create_flow(
     name: str = "Новый Flow",
     description: Optional[str] = None,
     entry_point_agent: Optional[str] = None,
-    storage: Storage = Depends(get_storage)
+    storage: StorageDep = None
 ) -> FlowConfig:
     """Создать новый флоу и сразу сохранить в БД"""
     flow_id = f"flow_{uuid.uuid4().hex[:8]}"
@@ -67,7 +54,7 @@ async def create_flow(
 
 
 @router.get("/{flow_id:path}/canvas")
-async def get_flow_canvas(flow_id: str, storage: Storage = Depends(get_storage)) -> Dict[str, Any]:
+async def get_flow_canvas(flow_id: str, storage: StorageDep) -> Dict[str, Any]:
     """Получить данные канваса для флоу"""
     flow = await storage.get_flow_config(flow_id)
     if not flow:
@@ -96,7 +83,7 @@ async def get_flow_canvas(flow_id: str, storage: Storage = Depends(get_storage))
 async def update_flow_canvas(
     flow_id: str,
     canvas_data: Dict[str, Any],
-    canvas_service: CanvasService = Depends(get_canvas_service)
+    canvas_service: CanvasServiceDep
 ):
     """Обновить данные канваса для флоу"""
     try:
@@ -107,7 +94,7 @@ async def update_flow_canvas(
 
 
 @router.get("/{flow_id:path}", response_model=FlowConfig)
-async def get_flow(flow_id: str, storage: Storage = Depends(get_storage)) -> FlowConfig:
+async def get_flow(flow_id: str, storage: StorageDep) -> FlowConfig:
     """Получить флоу по ID"""
     flow = await storage.get_flow_config(flow_id)
     if not flow:
@@ -119,7 +106,7 @@ async def get_flow(flow_id: str, storage: Storage = Depends(get_storage)) -> Flo
 async def update_flow(
     flow_id: str,
     updates: Dict[str, Any],
-    storage: Storage = Depends(get_storage)
+    storage: StorageDep
 ) -> FlowConfig:
     """Обновить флоу"""
     flow = await storage.get_flow_config(flow_id)
@@ -143,7 +130,7 @@ async def update_flow(
 
 
 @router.delete("/{flow_id:path}")
-async def delete_flow(flow_id: str, storage: Storage = Depends(get_storage)):
+async def delete_flow(flow_id: str, storage: StorageDep):
     """Удалить флоу"""
     flow = await storage.get_flow_config(flow_id)
     if not flow:

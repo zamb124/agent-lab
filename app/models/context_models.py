@@ -4,9 +4,12 @@
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 
 from app.identity.models import User, Company
+
+if TYPE_CHECKING:
+    from app.core.state import State
 
 
 class Context(BaseModel):
@@ -40,3 +43,23 @@ class Context(BaseModel):
         title="Метаданные",
         description="Дополнительные метаданные контекста",
     )
+    
+    flow_variables: Dict[str, Any] = Field(
+        default_factory=dict,
+        title="Переменные flow",
+        description="Переменные доступные во flow и агентах",
+    )
+    company_variables: Dict[str, Any] = Field(
+        default_factory=dict,
+        title="Переменные компании",
+        description="Переменные компании для использования в промптах",
+    )
+    
+    state: Optional[Dict[str, Any]] = Field(
+        default=None,
+        title="State агента",
+        description="Ссылка на текущий state агента (доступен в тулах)",
+    )
+    
+    class Config:
+        arbitrary_types_allowed = True

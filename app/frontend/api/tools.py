@@ -2,7 +2,7 @@
 API для работы с тулами в Builder.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Any, Optional
 import inspect
 import json
@@ -10,20 +10,13 @@ import uuid
 
 from app.tools import ALL_TOOLS
 from app.models import ToolReference, CodeMode
-from app.core.storage import Storage
-from app.core.container import get_container
+from app.frontend.dependencies import StorageDep
 
 router = APIRouter(prefix="/tools", tags=["builder-tools"])
 
 
-async def get_storage() -> Storage:
-    """Получить Storage из контейнера"""
-    container = get_container()
-    return container.get_storage()
-
-
 @router.get("/")
-async def list_tools(storage: Storage = Depends(get_storage)) -> List[Dict[str, Any]]:
+async def list_tools(storage: StorageDep) -> List[Dict[str, Any]]:
     """Получить список всех доступных тулов"""
     tools_data = []
     
@@ -72,7 +65,7 @@ async def create_tool(
     name: str = "Новый инструмент",
     description: Optional[str] = None,
     category: str = "general",
-    storage: Storage = Depends(get_storage)
+    storage: StorageDep = None
 ) -> ToolReference:
     """Создать новый инструмент и сразу сохранить в БД"""
     tool_id = f"tool_{uuid.uuid4().hex[:8]}"
@@ -97,7 +90,7 @@ async def create_tool(
 
 
 @router.get("/{tool_id:path}")
-async def get_tool(tool_id: str, storage: Storage = Depends(get_storage)) -> Dict[str, Any]:
+async def get_tool(tool_id: str, storage: StorageDep) -> Dict[str, Any]:
     """Получить информацию о конкретном туле"""
     
     # Сначала пытаемся найти в БД по полному пути

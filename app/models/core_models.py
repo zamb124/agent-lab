@@ -366,7 +366,7 @@ class AgentConfig(BuilderEntity):
     prompt: Optional[str] = Field(
         default=None,
         title="Промпт",
-        description="Системный промпт для ReAct агента",
+        description="Системный промпт для ReAct агента (используйте {variable} для подстановки)",
         widget_attrs={"rows": 8},
     )
 
@@ -395,6 +395,14 @@ class AgentConfig(BuilderEntity):
         title="История от",
         description="Источник истории диалогов (global, список агентов или None)",
         placeholder="global или agent1,agent2",
+    )
+    
+    # Локальные переменные агента
+    local_variables: Dict[str, Any] = Field(
+        default_factory=dict,
+        title="Локальные переменные",
+        description="Переменные доступные только в этом агенте (перекрывают переменные flow)",
+        widget_attrs={"rows": 4, "placeholder": '{"max_attempts": 3, "greeting": "Привет!"}'}
     )
 
 
@@ -445,16 +453,24 @@ class FlowConfig(BuilderEntity):
         description="Максимальное количество повторов при ошибке",
         ge=0,
     )
+    
+    # Переменные флоу
+    variables: Dict[str, Any] = Field(
+        default_factory=dict,
+        title="Переменные",
+        description="Переменные доступные во всех агентах флоу (используйте {variable} в промптах)",
+        widget_attrs={"rows": 6, "placeholder": '{"bot_name": "Помощник", "timeout_minutes": 30}'}
+    )
 
     # Данные канваса Builder
     canvas_data: Optional[Dict[str, Any]] = Field(
         default=None,
         title="Данные канваса",
         description="Позиции элементов и связи на канвасе Builder",
-        exclude_from_form=True,  # Не показываем в форме редактирования
+        exclude_from_form=True,
     )
     
-    @field_validator('platforms', 'canvas_data', mode='before')
+    @field_validator('platforms', 'canvas_data', 'variables', mode='before')
     @classmethod
     def parse_json_fields(cls, v):
         """Автоматически парсит JSON строки в dict"""

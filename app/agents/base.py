@@ -16,9 +16,10 @@ from app.models import AgentConfig, AgentType
 from app.core.llm_factory import get_llm
 from app.core.checkpointer import get_checkpointer
 from app.core.container import get_container
+from app.core.state import State, get_default_state
+from app.core.variables import VariableResolver, set_state_in_context
 from langgraph.errors import GraphInterrupt
 from langchain_core.messages import HumanMessage
-# Избегаем циклических импортов - импортируем внутри функций
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,6 @@ class BaseAgent(ABC):
 
         # Получаем LLM на основе конфигурации агента
         if self.config.llm_config:
-            # Передаем все параметры из llm_config агента (кроме секретных)
             llm_kwargs = {}
             if self.config.llm_config.temperature is not None:
                 llm_kwargs["temperature"] = self.config.llm_config.temperature
@@ -116,13 +116,25 @@ class BaseAgent(ABC):
                 **llm_kwargs,
             )
         else:
-            llm = get_llm()  # Используем дефолтные настройки
+            llm = get_llm()
         tools = await self.get_tools()
 
-        # Создаем ReAct агента с checkpointer для поддержки interrupt/resume
+        # Рендерим промпт с подстановкой переменных
+        local_vars = self.config.local_variables if hasattr(self.config, 'local_variables') else {}
+        rendered_prompt = VariableResolver.render_template(
+            self.config.prompt,
+            local_vars=local_vars
+        )
+        logger.info(f"📝 Промпт отрендерен с переменными для {self.config.agent_id}")
+
+        # Создаем ReAct агента с State и checkpointer
         checkpointer = await get_checkpointer()
         graph = create_react_agent(
-            model=llm, tools=tools, prompt=self.config.prompt, checkpointer=checkpointer
+            model=llm,
+            tools=tools,
+            prompt=rendered_prompt,
+            checkpointer=checkpointer,
+            state_schema=State
         )
 
         logger.info(f"ReAct граф создан для агента {self.config.agent_id}")
@@ -154,6 +166,27 @@ class BaseAgent(ABC):
         """
         run_config = config or {}
 
+        # Инициализируем state если это первый вызов
+        if "store" not in input_data:
+            input_data["store"] = {}
+        
+        if "remaining_steps" not in input_data:
+            input_data["remaining_steps"] = 25
+        
+        if "task_id" not in input_data:
+            input_data["task_id"] = run_config.get("task_id", "")
+        
+        if "session_id" not in input_data:
+            input_data["session_id"] = run_config.get("session_id", "")
+        
+        if "user_id" not in input_data:
+            from app.core.context import get_context
+            context = get_context()
+            input_data["user_id"] = context.user.user_id if context and context.user else ""
+
+        # Устанавливаем state в контекст для доступа из тулов
+        set_state_in_context(input_data)
+
         # Используем кэшированный граф или компилируем новый
         graph = await self.compile_graph()
 
@@ -164,20 +197,16 @@ class BaseAgent(ABC):
             "thread_id" not in run_config["configurable"]
             or run_config["configurable"]["thread_id"] is None
         ):
-            # Если thread_id = None (агент внутри flow) - НЕ создаем thread_id
             if run_config["configurable"].get("thread_id") is None:
-                # Удаляем thread_id полностью - пусть граф управляет state
                 if "thread_id" in run_config["configurable"]:
                     del run_config["configurable"]["thread_id"]
-                print(f"🔍 {self.config.agent_id} работает БЕЗ thread_id (внутри flow)")
+                logger.debug(f"🔍 {self.config.agent_id} работает БЕЗ thread_id (внутри flow)")
             else:
-                # Создаем дефолтный thread_id только для standalone агентов
                 run_config["configurable"]["thread_id"] = (
                     f"agent_{self.config.agent_id}"
                 )
 
         try:
-            # Безопасное извлечение последнего сообщения
             messages = input_data.get("messages", [])
             if messages:
                 last_msg = messages[-1]
@@ -194,16 +223,21 @@ class BaseAgent(ABC):
                 logger.info(
                     f"🎯 АГЕНТ {self.config.name} ← Вход: {str(input_data)[:50]}..."
                 )
+            
             result = await graph.ainvoke(input_data, config=run_config)
+            
+            # Обновляем state в контексте после выполнения
+            if isinstance(result, dict):
+                set_state_in_context(result)
+            
             logger.info(f"✅ АГЕНТ {self.config.name} → Завершен")
             return result
         except Exception as e:
-            # GraphInterrupt должен пробрасываться дальше для корректной обработки
             if isinstance(e, GraphInterrupt):
                 logger.info(
                     f"🟢 Агент {self.config.agent_id} запросил ввод пользователя, пробрасываем GraphInterrupt дальше"
                 )
-                raise e  # Пробрасываем прерывание дальше
+                raise e
             else:
                 logger.error(f"❌ Ошибка выполнения агента {self.config.agent_id}: {e}")
                 raise
