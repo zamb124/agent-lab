@@ -107,6 +107,13 @@ class TaskProcessor:
                 company_id = current_context.active_company.company_id if current_context and current_context.active_company else 'НЕТ'
                 raise ValueError(f"Flow {task.flow_id} не найден в БД (контекст: company={company_id})")
 
+            # Устанавливаем переменные flow в контекст
+            current_context = get_context()
+            if current_context:
+                if hasattr(flow_config, 'variables') and flow_config.variables:
+                    current_context.flow_variables = flow_config.variables
+                    logger.info(f"📝 Переменные flow установлены в контекст: {list(flow_config.variables.keys())}")
+
             entry_agent = await self.agent_factory.get_agent(flow_config.entry_point_agent)
 
             config = {"configurable": {"thread_id": task.session_id}}

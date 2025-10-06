@@ -22,12 +22,9 @@ from app.models import (
 from app.core.tool_factory import ToolFactory
 from app.core.checkpointer import get_checkpointer
 from app.core.agent_factory import AgentFactory
+from app.core.state import State
 
 logger = logging.getLogger(__name__)
-
-
-# Используем обычный Dict для state - это позволяет добавлять произвольные ключи
-GraphState = Dict[str, Any]
 
 
 class GraphBuilder:
@@ -53,8 +50,8 @@ class GraphBuilder:
             f"Строим граф с {len(graph_def.nodes)} нодами и {len(graph_def.edges)} ребрами"
         )
 
-        # Создаем StateGraph
-        graph = StateGraph(GraphState)
+        # Создаем StateGraph с единым State
+        graph = StateGraph(State)
 
         # Добавляем ноды
         for node in graph_def.nodes:
@@ -185,7 +182,7 @@ class GraphBuilder:
         agent_factory = AgentFactory()
         agent = await agent_factory.get_agent(agent_id)
 
-        async def agent_node(state: GraphState) -> GraphState:
+        async def agent_node(state: State) -> State:
             """Функция ноды агента"""
             try:
                 result = await agent.ainvoke(state)
@@ -195,7 +192,9 @@ class GraphBuilder:
                 return state
             except Exception as e:
                 logger.error(f"Ошибка в ноде агента {node.id}: {e}")
-                state["error"] = str(e)
+                if "store" not in state:
+                    state["store"] = {}
+                state["store"]["error"] = str(e)
                 return state
 
         return agent_node
@@ -216,7 +215,7 @@ class GraphBuilder:
 
         tool = tools[0]
 
-        async def tool_node(state: GraphState) -> GraphState:
+        async def tool_node(state: State) -> State:
             """Функция ноды инструмента"""
             try:
                 # Извлекаем входные данные из состояния
@@ -237,7 +236,9 @@ class GraphBuilder:
                 return state
             except Exception as e:
                 logger.error(f"Ошибка в ноде инструмента {node.id}: {e}")
-                state["error"] = str(e)
+                if "store" not in state:
+                    state["store"] = {}
+                state["store"]["error"] = str(e)
                 return state
 
         return tool_node
@@ -267,7 +268,7 @@ class GraphBuilder:
             module = importlib.import_module(module_path)
             func = getattr(module, func_name)
 
-        async def function_node(state: GraphState) -> GraphState:
+        async def function_node(state: State) -> State:
             """Функция ноды функции"""
             try:
                 # Передаем состояние в функцию
@@ -286,7 +287,9 @@ class GraphBuilder:
                 return state
             except Exception as e:
                 logger.error(f"Ошибка в ноде функции {node.id}: {e}")
-                state["error"] = str(e)
+                if "store" not in state:
+                    state["store"] = {}
+                state["store"]["error"] = str(e)
                 return state
 
         return function_node
@@ -334,7 +337,7 @@ class GraphBuilder:
         """Создает ноду сообщения"""
         message = node.params.get("message", "")
 
-        async def message_node(state: GraphState) -> GraphState:
+        async def message_node(state: State) -> State:
             """Функция ноды сообщения"""
             # Добавляем сообщение в историю
             if "messages" not in state:
@@ -348,7 +351,7 @@ class GraphBuilder:
     def _create_condition_function(self, condition: str):
         """Создает функцию условия для условных ребер"""
 
-        def condition_func(state: GraphState) -> str:
+        def condition_func(state: State) -> str:
             """Функция условия"""
             try:
                 # Простая оценка условия (в продакшене нужна более безопасная реализация)
