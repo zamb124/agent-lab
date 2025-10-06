@@ -127,7 +127,7 @@ def subtract_tool(a: int, b: int) -> str:
                     description="Вычитание чисел"
                 )
             ],
-            llm_config=None,  # Используем дефолтную конфигурацию
+            llm_config=LLMConfig(provider="mock", model="mock-gpt-4"),
             source="manual"
         )
         
@@ -154,7 +154,7 @@ def subtract_tool(a: int, b: int) -> str:
     return True
 
 @pytest.mark.asyncio
-async def test_execute_db_react_agent():
+async def test_execute_db_react_agent(save_test_company):
     """Создание и выполнение ReAct агента из БД"""
     
     from app.core.llm_factory import get_global_mock_llm, get_llm
@@ -210,7 +210,7 @@ async def test_execute_db_react_agent():
     print(f"✅ Flow выполнение ReAct агента: {final_message[:100]}...")
 
 @pytest.mark.asyncio
-async def test_react_agent_tools():
+async def test_react_agent_tools(save_test_company):
     """Создание и тест что ReAct агент правильно использует инструменты"""
     
     from app.core.llm_factory import get_global_mock_llm, get_llm

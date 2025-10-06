@@ -320,6 +320,7 @@ class Migrator:
                 llm_config = LLMConfig(**raw_llm_config)
             elif isinstance(raw_llm_config, LLMConfig):
                 llm_config = raw_llm_config
+        
 
         # Создаем конфигурацию
         config = AgentConfig(

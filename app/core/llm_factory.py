@@ -75,6 +75,8 @@ def get_llm(
             llm = _create_gemini_llm(provider_config, final_model, **kwargs)
         elif provider_name == "mock":
             llm = _create_mock_llm(provider_config, final_model)
+            logger.debug(f"🔥 Возвращаем MOCK LLM без биллинга: {type(llm)}")
+            return llm
         else:
             raise ValueError(f"Неподдерживаемый провайдер LLM: {provider_name}")
         
