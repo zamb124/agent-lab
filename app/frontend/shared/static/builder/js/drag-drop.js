@@ -519,18 +519,26 @@ class BuilderDragDrop {
             
             const flowNode = await this.builder.canvas.addNode(flowNodeData);
             
-            // Устанавливаем текущий флоу в Builder
-            this.builder.currentFlow = { flow_id: flowData.id, name: flowData.name };
-            this.builder.updateFlowInfo();
-            this.builder.enableFlowActions();
-            
-            // Получаем данные флоу с сервера
-            const flowResponse = await fetch(`/frontend/builder/flows/${flowData.id}`);
-            if (!flowResponse.ok) {
-                throw new Error(`Не удалось загрузить флоу: ${flowResponse.statusText}`);
+            // Устанавливаем текущий флоу в Builder, если еще не установлен
+            if (!this.builder.currentFlow || this.builder.currentFlow.flow_id !== flowData.id) {
+                this.builder.currentFlow = { flow_id: flowData.id, name: flowData.name };
+                this.builder.updateFlowInfo();
+                this.builder.enableFlowActions();
             }
             
-            const fullFlowData = await flowResponse.json();
+            // Получаем данные флоу с сервера, если еще не загружены
+            let fullFlowData;
+            if (this.builder.currentFlow && this.builder.currentFlow.flow_id === flowData.id && this.builder.currentFlow.entry_point_agent !== undefined) {
+                // Используем уже загруженные данные
+                fullFlowData = this.builder.currentFlow;
+                console.log('📦 Используем уже загруженные данные флоу');
+            } else {
+                const flowResponse = await fetch(`/frontend/builder/flows/${encodeURIComponent(flowData.id)}`);
+                if (!flowResponse.ok) {
+                    throw new Error(`Не удалось загрузить флоу: ${flowResponse.statusText}`);
+                }
+                fullFlowData = await flowResponse.json();
+            }
             
             // Если у флоу есть entry_point_agent, начинаем рекурсивное разворачивание
             if (fullFlowData.entry_point_agent) {

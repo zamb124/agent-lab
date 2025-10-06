@@ -186,7 +186,7 @@ class Builder {
     async loadFlow(flowId) {
         try {
             // Загружаем данные флоу
-            const response = await fetch(`/frontend/builder/flows/${flowId}`);
+            const response = await fetch(`/frontend/builder/flows/${encodeURIComponent(flowId)}`);
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
@@ -194,10 +194,22 @@ class Builder {
             this.currentFlow = await response.json();
             
             // Загружаем данные канваса
-            const canvasResponse = await fetch(`/frontend/builder/flows/${flowId}/canvas`);
+            const canvasResponse = await fetch(`/frontend/builder/flows/${encodeURIComponent(flowId)}/canvas`);
             if (canvasResponse.ok) {
                 const canvasData = await canvasResponse.json();
                 await this.canvas.loadGraph(canvasData);
+                
+                // Если канвас пустой, автоматически добавляем флоу
+                if (!canvasData.nodes || canvasData.nodes.length === 0) {
+                    console.log('📦 Канвас пустой, автоматически добавляем флоу');
+                    await this.dragDrop.createFlowWithExpansion(
+                        { 
+                            id: this.currentFlow.flow_id, 
+                            name: this.currentFlow.name 
+                        }, 
+                        this.canvas.getCenterPosition()
+                    );
+                }
             }
             
             // Обновляем UI
@@ -226,7 +238,7 @@ class Builder {
             const canvasData = this.canvas.getGraphData();
             
             // Сохраняем канвас
-            const response = await fetch(`/frontend/builder/flows/${this.currentFlow.flow_id}/canvas`, {
+            const response = await fetch(`/frontend/builder/flows/${encodeURIComponent(this.currentFlow.flow_id)}/canvas`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -417,7 +429,7 @@ class Builder {
     async showFlowEditor(flow = null) {
         try {
             const url = flow 
-                ? `/frontend/models/flow/${flow.flow_id}?view=form`
+                ? `/frontend/models/flow/${encodeURIComponent(flow.flow_id)}?view=form`
                 : '/frontend/models/flow/new?view=form';
                 
             const response = await fetch(url);

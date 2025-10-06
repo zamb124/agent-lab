@@ -37,15 +37,6 @@ async def list_flows(storage: Storage = Depends(get_storage)) -> List[FlowConfig
     return flows
 
 
-@router.get("/{flow_id}", response_model=FlowConfig)
-async def get_flow(flow_id: str, storage: Storage = Depends(get_storage)) -> FlowConfig:
-    """Получить флоу по ID"""
-    flow = await storage.get_flow_config(flow_id)
-    if not flow:
-        raise HTTPException(status_code=404, detail="Flow not found")
-    return flow
-
-
 @router.post("/", response_model=FlowConfig)
 async def create_flow(
     name: str = "Новый Flow",
@@ -70,45 +61,7 @@ async def create_flow(
     return flow_config
 
 
-@router.put("/{flow_id}", response_model=FlowConfig)
-async def update_flow(
-    flow_id: str,
-    updates: Dict[str, Any],
-    storage: Storage = Depends(get_storage)
-) -> FlowConfig:
-    """Обновить флоу"""
-    flow = await storage.get_flow_config(flow_id)
-    if not flow:
-        raise HTTPException(status_code=404, detail="Flow not found")
-    
-    # Создаем обновленные данные с валидацией через модель
-    flow_dict = flow.model_dump()
-    
-    # Обновляем только разрешенные поля
-    allowed_fields = {"name", "description", "entry_point_agent", "platforms", "timeout", "max_retries", "canvas_data"}
-    for field, value in updates.items():
-        if field in allowed_fields:
-            flow_dict[field] = value
-    
-    # Валидируем через модель - валидаторы автоматически преобразуют типы
-    validated_flow = FlowConfig(**flow_dict)
-    
-    await storage.set_flow_config(validated_flow)
-    return validated_flow
-
-
-@router.delete("/{flow_id}")
-async def delete_flow(flow_id: str, storage: Storage = Depends(get_storage)):
-    """Удалить флоу"""
-    flow = await storage.get_flow_config(flow_id)
-    if not flow:
-        raise HTTPException(status_code=404, detail="Flow not found")
-    
-    await storage.delete_flow_config(flow_id)
-    return {"message": "Flow deleted successfully"}
-
-
-@router.get("/{flow_id}/canvas")
+@router.get("/{flow_id:path}/canvas")
 async def get_flow_canvas(flow_id: str, storage: Storage = Depends(get_storage)) -> Dict[str, Any]:
     """Получить данные канваса для флоу"""
     flow = await storage.get_flow_config(flow_id)
@@ -134,7 +87,7 @@ async def get_flow_canvas(flow_id: str, storage: Storage = Depends(get_storage))
     }
 
 
-@router.put("/{flow_id}/canvas")
+@router.put("/{flow_id:path}/canvas")
 async def update_flow_canvas(
     flow_id: str,
     canvas_data: Dict[str, Any],
@@ -162,6 +115,53 @@ async def update_flow_canvas(
     await update_agents_from_canvas(canvas_data, storage)
     
     return {"message": "Canvas updated successfully"}
+
+
+@router.get("/{flow_id:path}", response_model=FlowConfig)
+async def get_flow(flow_id: str, storage: Storage = Depends(get_storage)) -> FlowConfig:
+    """Получить флоу по ID"""
+    flow = await storage.get_flow_config(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return flow
+
+
+@router.put("/{flow_id:path}", response_model=FlowConfig)
+async def update_flow(
+    flow_id: str,
+    updates: Dict[str, Any],
+    storage: Storage = Depends(get_storage)
+) -> FlowConfig:
+    """Обновить флоу"""
+    flow = await storage.get_flow_config(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    
+    # Создаем обновленные данные с валидацией через модель
+    flow_dict = flow.model_dump()
+    
+    # Обновляем только разрешенные поля
+    allowed_fields = {"name", "description", "entry_point_agent", "platforms", "timeout", "max_retries", "canvas_data"}
+    for field, value in updates.items():
+        if field in allowed_fields:
+            flow_dict[field] = value
+    
+    # Валидируем через модель - валидаторы автоматически преобразуют типы
+    validated_flow = FlowConfig(**flow_dict)
+    
+    await storage.set_flow_config(validated_flow)
+    return validated_flow
+
+
+@router.delete("/{flow_id:path}")
+async def delete_flow(flow_id: str, storage: Storage = Depends(get_storage)):
+    """Удалить флоу"""
+    flow = await storage.get_flow_config(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    
+    await storage.delete_flow_config(flow_id)
+    return {"message": "Flow deleted successfully"}
 
 
 async def update_flow_entry_point(flow: FlowConfig, canvas_data: Dict[str, Any], storage: Storage):

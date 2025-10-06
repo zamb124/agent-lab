@@ -240,7 +240,17 @@
                                 Сценарий
                             </div>
                             <div class="info-value flow-name">
-                                {{ history.flow_name or history.flow_id or 'Не указан' }}
+                                {% if history.flow_id %}
+                                    <a href="/frontend/builder/flow/{{ history.flow_id }}" 
+                                       target="_blank"
+                                       class="text-decoration-none" 
+                                       title="Открыть в Builder">
+                                        {{ history.flow_name or history.flow_id }}
+                                        <i class="bi bi-box-arrow-up-right ms-1"></i>
+                                    </a>
+                                {% else %}
+                                    Не указан
+                                {% endif %}
                             </div>
                         </div>
                         
