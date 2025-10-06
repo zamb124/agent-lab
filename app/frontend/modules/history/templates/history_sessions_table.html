@@ -51,7 +51,9 @@
                             {% endif %}
                         </td>
                         <td>
-                            <small class="text-muted">{{ session.user_id }}</small>
+                            <small class="text-muted" title="{{ session.user_id }}">
+                                {{ session.user_name or session.user_id }}
+                            </small>
                         </td>
                         <td>
                             {% if session.status == 'active' %}

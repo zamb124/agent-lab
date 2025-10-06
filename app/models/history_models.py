@@ -197,6 +197,11 @@ class SessionListItem(BaseModel):
         title="Пользователь",
         description="Идентификатор пользователя"
     )
+    user_name: Optional[str] = Field(
+        default=None,
+        title="Имя пользователя",
+        description="Имя пользователя"
+    )
     status: str = Field(
         title="Статус",
         description="Статус сессии"
