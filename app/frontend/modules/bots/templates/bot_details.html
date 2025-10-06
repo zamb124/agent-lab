@@ -1,0 +1,151 @@
+<div class="bot-details-header">
+    <h2>
+        <i class="bi bi-robot"></i>
+        {{ bot.name }}
+    </h2>
+    <div class="header-actions">
+        <button class="btn btn-primary btn-sm" onclick="openBotChat('{{ bot.flow_id }}', '{{ bot.name }}')">
+            <i class="bi bi-chat-dots"></i>
+            Открыть чат
+        </button>
+        <button class="btn-close-details" onclick="closeBotModal()" title="Закрыть">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+</div>
+
+<div class="bot-details-content">
+    <div class="bot-settings-section-full">
+        <div class="settings-tabs">
+            <button class="settings-tab active" data-tab="general">
+                <i class="bi bi-gear"></i>
+                Общие
+            </button>
+            <button class="settings-tab" data-tab="platforms">
+                <i class="bi bi-globe"></i>
+                Платформы
+            </button>
+            <button class="settings-tab" data-tab="prompt">
+                <i class="bi bi-chat-text"></i>
+                Промпт
+            </button>
+        </div>
+        
+        <div class="settings-content">
+            <div class="settings-panel active" data-panel="general">
+                <h4>Общие настройки</h4>
+                
+                <div class="form-group">
+                    <label>Название бота</label>
+                    <input type="text" class="form-control" value="{{ bot.name }}" id="bot-name">
+                </div>
+                
+                <div class="form-group">
+                    <label>Описание</label>
+                    <textarea class="form-control" rows="3" id="bot-description">{{ bot.description }}</textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Агент точки входа</label>
+                    <input type="text" class="form-control" value="{{ bot.entry_point }}" id="bot-entry-point" readonly>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Таймаут (сек)</label>
+                        <input type="number" class="form-control" value="{{ bot.timeout or '' }}" id="bot-timeout">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Максимум повторов</label>
+                        <input type="number" class="form-control" value="{{ bot.max_retries }}" id="bot-max-retries">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="settings-panel" data-panel="platforms">
+                <h4>Настройки платформ</h4>
+                
+                {% for platform, config in bot.platforms.items() %}
+                <div class="platform-settings">
+                    <div class="platform-header">
+                        <h5>
+                            {% if platform == 'telegram' %}
+                                <i class="bi bi-telegram"></i> Telegram
+                            {% elif platform == 'api' %}
+                                <i class="bi bi-code-slash"></i> API
+                            {% elif platform == 'web' %}
+                                <i class="bi bi-globe"></i> Web
+                            {% else %}
+                                <i class="bi bi-gear"></i> {{ platform }}
+                            {% endif %}
+                        </h5>
+                        <label class="switch">
+                            <input type="checkbox" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    
+                    {% if platform == 'telegram' %}
+                    <div class="form-group">
+                        <label>Токен бота</label>
+                        <input type="password" 
+                               class="form-control" 
+                               placeholder="Введите токен Telegram бота"
+                               id="telegram-token-{{ bot.flow_id }}"
+                               value="{{ config.get('token', '') }}">
+                        <small class="form-text">Получите токен у @BotFather</small>
+                    </div>
+                    
+                    {% if config.get('username') %}
+                    <div class="form-group">
+                        <label>Username</label>
+                        <div class="input-group">
+                            <span class="input-group-text">@</span>
+                            <input type="text" class="form-control" value="{{ config.username }}" readonly>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% elif platform == 'api' %}
+                    <div class="api-info">
+                        <p>API endpoint для этого бота:</p>
+                        <code>POST /api/v1/flows/{{ bot.flow_id }}/message</code>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                
+                <button class="btn btn-outline-primary btn-sm" onclick="addPlatform('{{ bot.flow_id }}')">
+                    <i class="bi bi-plus-circle"></i>
+                    Добавить платформу
+                </button>
+            </div>
+            
+            <div class="settings-panel" data-panel="prompt">
+                <h4>Системный промпт</h4>
+                
+                <div class="form-group">
+                    <label>Промпт агента</label>
+                    <textarea class="form-control code-editor" 
+                              rows="15" 
+                              id="bot-prompt"
+                              placeholder="Введите системный промпт для агента...">{{ bot.prompt }}</textarea>
+                    <small class="form-text">
+                        Изменения будут сохранены в конфигурацию агента "{{ bot.entry_point }}"
+                    </small>
+                </div>
+            </div>
+            
+            <div class="settings-actions">
+                <button class="btn btn-secondary" onclick="closeBotModal()">
+                    <i class="bi bi-x"></i>
+                    Отмена
+                </button>
+                <button class="btn btn-primary" onclick="saveBotSettings('{{ bot.flow_id }}')">
+                    <i class="bi bi-save"></i>
+                    Сохранить изменения
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
