@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AI Stylist - Виртуальная примерка</title>
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    
+    <!-- FASHN Styles -->
+    <link rel="stylesheet" href="/static/css/fashn.css">
+</head>
+<body>
+    <!-- Header Section -->
+    <section class="hero-section">
+        <div class="hero-content">
+            <div class="ai-badge">
+                <i class="bi bi-stars"></i>
+                AI-Powered Fashion Styling
+            </div>
+            
+            <h1 class="hero-title">AI Stylist</h1>
+            <p class="hero-subtitle">
+                Upload your photo, choose from our curated bag collection, and let<br>
+                AI create stunning styled images of you with your perfect match.
+            </p>
+            
+            <!-- Upload Section -->
+            <div class="upload-section">
+                <div class="upload-card" id="photoContainer">
+                    <div id="uploadZone" class="upload-zone">
+                        <div class="upload-icon">
+                            <i class="bi bi-cloud-upload"></i>
+                        </div>
+                        <h3 class="upload-title">Start Your Styling Journey</h3>
+                        <p class="upload-subtitle">Upload a clear photo of yourself to begin the AI styling experience</p>
+                        <button class="upload-button" type="button">
+                            <i class="bi bi-cloud-upload"></i>
+                            Upload Your Photo
+                        </button>
+                        <p class="upload-formats">Supported formats: JPG, PNG, WEBP • Max size: 10MB</p>
+                    </div>
+                    
+                    <div id="photoPreview" class="photo-preview-section" style="display: none;">
+                        <img id="photoImage" class="uploaded-photo" alt="Your photo">
+                        <button id="removePhoto" class="remove-btn">
+                            <i class="bi bi-x"></i>
+                        </button>
+                        <div class="photo-actions">
+                            <button id="generateBtn" class="generate-btn" disabled>
+                                <i class="bi bi-magic"></i>
+                                Generate Styled Images
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <input type="file" id="photoInput" accept="image/*" style="display: none;">
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section - moved here to be closer to generate button -->
+        <div class="results-section" id="resultsSection" style="display: none;">
+            <div class="results-header">
+                <h2>Your Styled Images</h2>
+                <p>Here are your AI-generated styled photos</p>
+            </div>
+            <div class="results-grid" id="resultsGrid">
+                <!-- Results will appear here -->
+            </div>
+        </div>
+    </section>
+
+    <!-- Process Steps -->
+    <section class="process-section">
+        <div class="process-container">
+            <div class="process-step">
+                <div class="step-number">1</div>
+                <h3>Upload Photo</h3>
+                <p>Simple one-click photo upload</p>
+            </div>
+            <div class="process-step">
+                <div class="step-number">2</div>
+                <h3>Choose Style</h3>
+                <p>Browse curated luxury bags</p>
+            </div>
+            <div class="process-step">
+                <div class="step-number">3</div>
+                <h3>AI Magic</h3>
+                <p>Generate styled images instantly</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Collection Section -->
+    <section class="collection-section">
+        <div class="collection-header">
+            <h2 class="collection-title">Curated Collection</h2>
+            <p class="collection-subtitle">
+                Discover luxury handbags from the world's finest designers. Each<br>
+                piece carefully selected for style and sophistication.
+            </p>
+        </div>
+
+        <!-- Add Product URL -->
+        <div class="add-product-section">
+            <div class="add-product-form">
+                <input type="url" id="productUrl" placeholder="Paste product URL..." class="product-url-input">
+                <button type="button" id="addProductBtn" class="add-product-btn">
+                    <i class="bi bi-plus-circle"></i>
+                    Add Product
+                </button>
+            </div>
+        </div>
+
+        <!-- Filter Tabs -->
+        <div class="filter-tabs">
+            <button class="filter-tab active" data-filter="all">All</button>
+            <button class="filter-tab" data-filter="tote">Tote</button>
+            <button class="filter-tab" data-filter="crossbody">Crossbody</button>
+            <button class="filter-tab" data-filter="satchel">Satchel</button>
+            <button class="filter-tab" data-filter="clutch">Clutch</button>
+            <button class="filter-tab" data-filter="briefcase">Briefcase</button>
+            <button class="filter-tab" data-filter="hobo">Hobo</button>
+        </div>
+
+        <!-- Products Grid -->
+        <div class="products-grid" id="productsGrid">
+            <!-- Products will be loaded dynamically -->
+        </div>
+    </section>
+
+
+    <!-- Hidden Form Fields -->
+    <input type="hidden" id="itemKind" value="bag">
+    <input type="hidden" id="placement" value="left_shoulder">
+    <input type="hidden" id="height" value="170">
+    <input type="hidden" id="selectedProduct" value="">
+
+    <!-- Fullscreen Viewer -->
+    <div class="fullscreen-overlay" id="fullscreenOverlay">
+        <button class="fullscreen-close" id="fullscreenClose">
+            <i class="bi bi-x"></i>
+        </button>
+        <img class="fullscreen-image" id="fullscreenImage" alt="Результат примерки">
+    </div>
+
+    <!-- History Panel -->
+    <div class="history-panel" id="historyPanel">
+        <!-- History content will be loaded here via HTMX -->
+    </div>
+
+    <!-- History Button - Fixed in top right corner -->
+    <button class="history-btn-fixed" 
+            hx-get="/api/v1/fashn/history-panel" 
+            hx-target="#historyPanel" 
+            hx-swap="innerHTML">
+        <i class="bi bi-clock-history"></i>
+        History
+    </button>
+
+    <!-- Error/Success Messages -->
+    <div class="message-container">
+        <div class="error-message" id="errorMessage"></div>
+        <div class="success-message" id="successMessage"></div>
+    </div>
+
+    <script src="/static/js/fashn.js"></script>
+</body>
+</html>
