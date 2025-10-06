@@ -188,6 +188,7 @@ class WebInterface(BaseInterface):
                         "agent_name": message.metadata.get("agent_id", "Agent"),
                         "session_id": message.session_id,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "message_id": f"agent_{datetime.now(timezone.utc).timestamp()}",
                         "attachments": message.metadata.get("attachments", []),
                         "buttons": message.metadata.get("buttons", []),
                         "form": message.metadata.get("form"),
