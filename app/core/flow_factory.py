@@ -99,6 +99,13 @@ class FlowFactory:
                 checkpoint_ns = checkpoint_config.get("configurable", {}).get("checkpoint_ns", "")
                 
                 step = checkpoint_metadata.get("step", checkpoint_count)
+                raw_source_node = checkpoint_metadata.get("source")
+                
+                # Фильтруем служебные названия LangGraph
+                source_node = None
+                if raw_source_node and raw_source_node not in ["__start__", "__end__", "loop"]:
+                    source_node = raw_source_node
+                
                 timestamp_str = checkpoint_metadata.get("ts")
                 timestamp = None
                 if timestamp_str:
@@ -110,7 +117,7 @@ class FlowFactory:
                     checkpoint_messages = []
                     
                     for msg in messages_in_checkpoint:
-                        message_item = self._parse_message(msg, timestamp)
+                        message_item = self._parse_message(msg, timestamp, source_node)
                         if message_item:
                             checkpoint_messages.append(message_item)
                     
@@ -120,6 +127,7 @@ class FlowFactory:
                             thread_id=session_id,
                             checkpoint_ns=checkpoint_ns,
                             step=step,
+                            source_node=source_node,
                             timestamp=timestamp,
                             messages=checkpoint_messages,
                             metadata=checkpoint_metadata
@@ -127,13 +135,24 @@ class FlowFactory:
                         all_checkpoints.append(checkpoint_info)
             
             if latest_checkpoint:
+                latest_metadata = latest_checkpoint.metadata or {}
+                raw_latest_source = latest_metadata.get("source")
+                
+                # Фильтруем служебные названия LangGraph
+                latest_source_node = None
+                if raw_latest_source and raw_latest_source not in ["__start__", "__end__", "loop"]:
+                    latest_source_node = raw_latest_source
+                
                 channel_values = latest_checkpoint.checkpoint.get("channel_values", {})
                 messages_in_checkpoint = channel_values.get("messages", [])
                 
                 for msg in messages_in_checkpoint:
-                    message_item = self._parse_message(msg, None)
+                    message_item = self._parse_message(msg, None, latest_source_node)
                     if message_item:
                         all_messages.append(message_item)
+            
+            # Дедупликация сообщений по содержимому
+            all_messages = self._deduplicate_messages(all_messages)
         
             created_at = all_messages[0].timestamp if all_messages else None
             last_activity = all_messages[-1].timestamp if all_messages else None
@@ -282,13 +301,14 @@ class FlowFactory:
             filters=filters
         )
 
-    def _parse_message(self, msg: Any, default_timestamp: Optional[datetime] = None) -> Optional[MessageItem]:
+    def _parse_message(self, msg: Any, default_timestamp: Optional[datetime] = None, source_node: Optional[str] = None) -> Optional[MessageItem]:
         """
         Парсит сообщение из LangGraph в MessageItem.
         
         Args:
             msg: Сообщение из LangGraph (HumanMessage, AIMessage, ToolMessage, etc)
             default_timestamp: Время по умолчанию если не указано в сообщении
+            source_node: Название node/агента, создавшего сообщение (применяется только к AI/Tool сообщениям)
             
         Returns:
             MessageItem или None если сообщение не удалось распарсить
@@ -298,6 +318,7 @@ class FlowFactory:
                 role=MessageRole.USER,
                 content=msg.content or "",
                 timestamp=default_timestamp or datetime.now(timezone.utc),
+                source_node=None,
                 metadata=msg.additional_kwargs or {}
             )
         
@@ -318,6 +339,7 @@ class FlowFactory:
                 content=msg.content or "",
                 timestamp=default_timestamp or datetime.now(timezone.utc),
                 tool_calls=tool_calls,
+                source_node=source_node,
                 metadata=msg.additional_kwargs or {}
             )
         
@@ -326,6 +348,7 @@ class FlowFactory:
                 role=MessageRole.TOOL,
                 content=msg.content or "",
                 timestamp=default_timestamp or datetime.now(timezone.utc),
+                source_node=source_node,
                 metadata={
                     "tool_call_id": msg.tool_call_id if hasattr(msg, 'tool_call_id') else None,
                     **(msg.additional_kwargs or {})
@@ -337,6 +360,7 @@ class FlowFactory:
                 role=MessageRole.SYSTEM,
                 content=msg.content or "",
                 timestamp=default_timestamp or datetime.now(timezone.utc),
+                source_node=source_node,
                 metadata=msg.additional_kwargs or {}
             )
         
@@ -346,6 +370,7 @@ class FlowFactory:
                 role=MessageRole.SYSTEM,
                 content=str(msg),
                 timestamp=default_timestamp or datetime.now(timezone.utc),
+                source_node=source_node,
                 metadata={"original_type": str(type(msg))}
             )
 

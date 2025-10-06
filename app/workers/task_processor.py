@@ -247,13 +247,20 @@ class TaskProcessor:
         await self._set_session_active(task.session_id, task.context.platform)
     
     async def _set_session_active(self, session_id: str, platform: str):
-        """Возвращает сессию в статус ACTIVE"""
-        # Используем простой формат ключа: session:{session_id}
+        """Возвращает сессию в статус ACTIVE (если она не закрыта)"""
         session_key = f"session:{session_id}"
         session_data = await self.storage.get(session_key)
 
         if session_data:
             session_config = SessionConfig.model_validate_json(session_data)
+            
+            # Не активируем сессии в финальных статусах
+            if session_config.status in [SessionStatus.EXPIRED, SessionStatus.INACTIVE]:
+                logger.info(
+                    f"⚠️ Сессия {session_id} в финальном статусе {session_config.status.value}, не активируем"
+                )
+                return
+            
             session_config.status = SessionStatus.ACTIVE
             session_config.last_activity = datetime.now(timezone.utc)
             await self.storage.set(session_key, session_config.model_dump_json())
