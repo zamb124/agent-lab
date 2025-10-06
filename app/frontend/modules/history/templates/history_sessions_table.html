@@ -1,0 +1,124 @@
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Сессии ({{ total }})</h5>
+        <span class="badge bg-primary">Показано: {{ sessions|length }}</span>
+    </div>
+    <div class="card-body p-0">
+        {% if sessions %}
+        <div class="table-responsive" style="overflow-x: auto;">
+            <table class="table table-hover mb-0" style="min-width: 900px;">
+                <thead>
+                    <tr>
+                        <th style="width: 15%">Платформа</th>
+                        <th style="width: 25%">Flow</th>
+                        <th style="width: 15%">Пользователь</th>
+                        <th style="width: 10%">Статус</th>
+                        <th style="width: 10%" class="text-center">Сообщений</th>
+                        <th style="width: 15%">Создано</th>
+                        <th style="width: 10%" class="text-center">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for session in sessions %}
+                    <tr>
+                        <td>
+                            {% if session.platform == 'web' %}
+                                <span class="badge bg-info">
+                                    <i class="bi bi-globe"></i>&nbsp;Web
+                                </span>
+                            {% elif session.platform == 'telegram' %}
+                                <span class="badge bg-primary">
+                                    <i class="bi bi-telegram"></i>&nbsp;Telegram
+                                </span>
+                            {% elif session.platform == 'api' %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-code-slash"></i>&nbsp;API
+                                </span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ session.platform }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small>{{ session.flow_name or session.flow_id or 'Не указан' }}</small>
+                        </td>
+                        <td>
+                            <small class="text-muted">{{ session.user_id }}</small>
+                        </td>
+                        <td>
+                            {% if session.status == 'active' %}
+                                <span class="badge bg-success">Active</span>
+                            {% elif session.status == 'inactive' %}
+                                <span class="badge bg-secondary">Inactive</span>
+                            {% elif session.status == 'processing' %}
+                                <span class="badge bg-warning">Processing</span>
+                            {% elif session.status == 'waiting_input' %}
+                                <span class="badge bg-info">Waiting</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ session.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-primary">{{ session.message_count }}</span>
+                        </td>
+                        <td>
+                            <small class="text-muted">
+                                {{ session.created_at.strftime('%Y-%m-%d %H:%M') if session.created_at else '-' }}
+                            </small>
+                        </td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-outline-primary" 
+                                    hx-get="/frontend/history/sessions/{{ session.session_id }}/messages"
+                                    hx-target="#modal-container"
+                                    hx-swap="innerHTML"
+                                    data-tooltip="Просмотреть историю">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        {% if total > limit %}
+        <div class="card-footer">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    Показано {{ offset + 1 }}-{{ (offset + sessions|length) }} из {{ total }}
+                </div>
+                <div class="btn-group" role="group">
+                    {% if offset > 0 %}
+                    <button class="btn btn-outline-secondary btn-sm"
+                            hx-get="/frontend/history/sessions?offset={{ offset - limit }}&limit={{ limit }}"
+                            hx-target="#sessions-table"
+                            hx-include="#history-filters">
+                        <i class="bi bi-chevron-left"></i> Назад
+                    </button>
+                    {% endif %}
+                    
+                    {% if offset + limit < total %}
+                    <button class="btn btn-outline-secondary btn-sm"
+                            hx-get="/frontend/history/sessions?offset={{ offset + limit }}&limit={{ limit }}"
+                            hx-target="#sessions-table"
+                            hx-include="#history-filters">
+                        Вперед <i class="bi bi-chevron-right"></i>
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% else %}
+        <div class="empty-state py-5">
+            <div class="empty-state-icon">
+                <i class="bi bi-inbox display-4 text-muted"></i>
+            </div>
+            <div class="empty-state-title">Нет сессий</div>
+            <div class="empty-state-description">
+                Попробуйте изменить фильтры или создать новую сессию
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>

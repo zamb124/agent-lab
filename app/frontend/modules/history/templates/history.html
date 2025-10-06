@@ -1,0 +1,107 @@
+<h1 class="header-title" id="page-title" hx-swap-oob="true">
+    <i class="bi bi-clock-history me-2"></i>
+    История
+</h1>
+
+<div class="container-fluid py-4">
+    <style>
+        #history-filters .form-control,
+        #history-filters .form-select {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            color: var(--text-primary);
+            border-radius: var(--radius-sm);
+            height: 31px;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+        
+        #history-filters .form-control:focus,
+        #history-filters .form-select:focus {
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+            background: var(--bg-card);
+        }
+        
+        #history-filters .btn-sm {
+            height: 31px;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+    </style>
+
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <form id="history-filters" 
+                  hx-get="/frontend/history/sessions" 
+                  hx-target="#sessions-table"
+                  hx-trigger="submit, change from:select"
+                  hx-indicator="#loading-indicator"
+                  class="d-flex flex-wrap align-items-center gap-2">
+                
+                <select class="form-select form-select-sm" id="filter-platform" name="platform" style="width: 140px;">
+                    <option value="">Платформа</option>
+                    <option value="web">Web</option>
+                    <option value="telegram">Telegram</option>
+                    <option value="api">API</option>
+                </select>
+                
+                <input type="text" class="form-control form-control-sm" id="filter-flow" name="flow_id" placeholder="Flow" style="width: 150px;">
+                
+                <select class="form-select form-select-sm" id="filter-status" name="status" style="width: 120px;">
+                    <option value="">Статус</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="processing">Processing</option>
+                    <option value="waiting_input">Waiting</option>
+                </select>
+                
+                <input type="datetime-local" class="form-control form-control-sm" id="filter-date-from" name="date_from" style="width: 160px;">
+                
+                <input type="datetime-local" class="form-control form-control-sm" id="filter-date-to" name="date_to" style="width: 160px;">
+                
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="bi bi-funnel"></i>
+                    Применить
+                </button>
+                
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="
+                    document.getElementById('history-filters').reset();
+                    htmx.trigger('#history-filters', 'submit');
+                ">
+                    <i class="bi bi-x-circle"></i>
+                    Сбросить
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div style="position: relative; min-height: 400px; margin-top: 1.5rem;">
+        <div id="loading-indicator" class="htmx-indicator">
+            <div class="loading-overlay">
+                <div style="text-align: center;">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="sessions-table" 
+             hx-get="/frontend/history/sessions" 
+             hx-trigger="load"
+             hx-indicator="#loading-indicator">
+        </div>
+    </div>
+</div>
+
+<script>
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'modal-container') {
+        const modalOverlay = document.querySelector('#modal-container .modal-overlay');
+        if (modalOverlay) {
+            document.body.style.overflow = 'hidden';
+        }
+    }
+});
+</script>

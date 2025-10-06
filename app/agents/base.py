@@ -50,9 +50,8 @@ class BaseAgent(ABC):
         logger.debug(f"🔥 len(config.tools) = {len(self.config.tools or [])}")
         
         if not self.config.tools:
-            logger.error(f"❌ Нет tools в config для агента {self.config.agent_id}")
-            logger.error(f"❌ config.tools = {self.config.tools}")
-            logger.error(f"❌ Агент не мигрирован или tools не настроены в БД")
+            logger.warning(f"⚠️ Нет tools в config для агента {self.config.agent_id}")
+            logger.debug(f"config.tools = {self.config.tools}")
             return []
 
         logger.info(

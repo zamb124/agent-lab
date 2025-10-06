@@ -27,6 +27,15 @@ from .core_models import (
     AudioStatus,
     AudioRecord,
 )
+from .history_models import (
+    MessageRole,
+    ToolCallInfo,
+    MessageItem,
+    CheckpointInfo,
+    MessageHistoryResponse,
+    SessionListItem,
+    SessionListResponse,
+)
 
 __all__ = [
     "Context",
@@ -50,4 +59,11 @@ __all__ = [
     "FileRecord",
     "AudioStatus",
     "AudioRecord",
+    "MessageRole",
+    "ToolCallInfo",
+    "MessageItem",
+    "CheckpointInfo",
+    "MessageHistoryResponse",
+    "SessionListItem",
+    "SessionListResponse",
 ]

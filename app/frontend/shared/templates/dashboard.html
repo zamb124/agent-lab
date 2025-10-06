@@ -23,66 +23,97 @@
         <div class="sidebar-content">
             <nav class="sidebar-nav">
                 <div class="sidebar-nav-item">
-                    <a href="/frontend/models/agent?view=table" 
-                       hx-get="/frontend/models/agent?view=table" 
+                    <a href="#" class="sidebar-nav-link">
+                        <i class="bi bi-people-fill"></i>
+                        <span class="sidebar-nav-text">Боты</span>
+                    </a>
+                </div>
+                <div class="sidebar-nav-item">
+                    <a href="#" class="sidebar-nav-link">
+                        <i class="bi bi-chat-left-dots"></i>
+                        <span class="sidebar-nav-text">Чаты</span>
+                    </a>
+                </div>
+                <div class="sidebar-nav-item">
+                    <a href="#" class="sidebar-nav-link">
+                        <i class="bi bi-shop"></i>
+                        <span class="sidebar-nav-text">Магазин</span>
+                    </a>
+                </div>
+                <div class="sidebar-nav-item">
+                    <a href="/frontend/history/" 
+                       hx-get="/frontend/history/" 
                        hx-target="#content"
                        hx-push-url="true"
                        hx-indicator="#content-loading"
                        onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
                        class="sidebar-nav-link">
-                        <i class="bi bi-robot"></i>
-                        <span class="sidebar-nav-text">Агенты</span>
+                        <i class="bi bi-clock-history"></i>
+                        <span class="sidebar-nav-text">История</span>
                     </a>
                 </div>
                 <div class="sidebar-nav-item">
-                    <a href="/frontend/models/flow?view=table" 
-                       hx-get="/frontend/models/flow?view=table" 
-                       hx-target="#content"
-                       hx-push-url="true"
-                       hx-indicator="#content-loading"
-                       onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
-                       class="sidebar-nav-link">
-                        <i class="bi bi-diagram-3"></i>
-                        <span class="sidebar-nav-text">Потоки</span>
-                    </a>
-                </div>
-                <div class="sidebar-nav-item">
-                    <a href="/frontend/models/task?view=table" 
-                       hx-get="/frontend/models/task?view=table" 
-                       hx-target="#content"
-                       hx-push-url="true"
-                       hx-indicator="#content-loading"
-                       onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
-                       class="sidebar-nav-link">
-                        <i class="bi bi-list-task"></i>
-                        <span class="sidebar-nav-text">Задачи</span>
-                    </a>
-                </div>
-                <div class="sidebar-nav-item">
-                    <a href="/frontend/models/user?view=table" 
-                       hx-get="/frontend/models/user?view=table" 
-                       hx-target="#content"
-                       hx-push-url="true"
-                       hx-indicator="#content-loading"
-                       class="sidebar-nav-link">
-                        <i class="bi bi-users"></i>
-                        <span class="sidebar-nav-text">Пользователи</span>
-                    </a>
-                </div>
-                <div class="sidebar-nav-item">
-                    <a href="/frontend/builder/" 
-                       class="sidebar-nav-link">
+                    <a href="/frontend/builder/" class="sidebar-nav-link">
                         <i class="bi bi-palette"></i>
                         <span class="sidebar-nav-text">Agent Builder</span>
                     </a>
                 </div>
             </nav>
             
-            <!-- Админ-панель (только для system admin) -->
-            {% if is_system_admin() %}
+            {% if user_has_role('admin') %}
             <div class="sidebar-section">
                 <div class="sidebar-section-title">Администрирование</div>
                 <nav class="sidebar-nav">
+                    <div class="sidebar-nav-item">
+                        <a href="/frontend/models/agent?view=table" 
+                           hx-get="/frontend/models/agent?view=table" 
+                           hx-target="#content"
+                           hx-push-url="true"
+                           hx-indicator="#content-loading"
+                           onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
+                           class="sidebar-nav-link">
+                            <i class="bi bi-robot"></i>
+                            <span class="sidebar-nav-text">Агенты</span>
+                        </a>
+                    </div>
+                    <div class="sidebar-nav-item">
+                        <a href="/frontend/models/flow?view=table" 
+                           hx-get="/frontend/models/flow?view=table" 
+                           hx-target="#content"
+                           hx-push-url="true"
+                           hx-indicator="#content-loading"
+                           onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
+                           class="sidebar-nav-link">
+                            <i class="bi bi-diagram-3"></i>
+                            <span class="sidebar-nav-text">Потоки</span>
+                        </a>
+                    </div>
+                    <div class="sidebar-nav-item">
+                        <a href="/frontend/models/task?view=table" 
+                           hx-get="/frontend/models/task?view=table" 
+                           hx-target="#content"
+                           hx-push-url="true"
+                           hx-indicator="#content-loading"
+                           onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
+                           class="sidebar-nav-link">
+                            <i class="bi bi-list-task"></i>
+                            <span class="sidebar-nav-text">Задачи</span>
+                        </a>
+                    </div>
+                    <div class="sidebar-nav-item">
+                        <a href="/frontend/models/user?view=table" 
+                           hx-get="/frontend/models/user?view=table" 
+                           hx-target="#content"
+                           hx-push-url="true"
+                           hx-indicator="#content-loading"
+                           onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
+                           class="sidebar-nav-link">
+                            <i class="bi bi-person-badge"></i>
+                            <span class="sidebar-nav-text">Пользователи</span>
+                        </a>
+                    </div>
+                    
+                    {% if is_system_admin() %}
                     <div class="sidebar-nav-item">
                         <a href="/frontend/admin/companies" 
                            class="sidebar-nav-link">
@@ -90,6 +121,7 @@
                             <span class="sidebar-nav-text">Управление компаниями</span>
                         </a>
                     </div>
+                    {% endif %}
                 </nav>
             </div>
             {% endif %}
@@ -128,7 +160,7 @@
                 <button class="btn btn-ghost btn-sm d-none d-md-block" onclick="window.app.layoutManager.toggleSidebar()" data-tooltip="Свернуть меню">
                     <i class="bi bi-chevron-left"></i>
                 </button>
-                <h1 class="header-title">Панель управления</h1>
+                <h1 class="header-title" id="page-title">Панель управления</h1>
             </div>
             <div class="header-right">
                 <button class="btn btn-primary btn-sm">
@@ -150,7 +182,7 @@
                 </div>
             </div>
             
-            <div id="content">
+            <div id="content" class="content-area">
                 {% if not preload_url %}<div class="empty-state animate-fade-in-up">
                     <div class="empty-state-icon">
                         <i class="bi bi-house display-4"></i>
@@ -179,7 +211,63 @@
     </div>
 </div>
 
+<style>
+.content-area {
+    opacity: 1;
+    transition: opacity 0.3s ease-in-out;
+}
+
+.content-area.htmx-swapping {
+    opacity: 0;
+}
+
+.content-area > * {
+    animation: fadeInUp 0.4s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.content-loading-indicator {
+    transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+}
+
+.content-loading-indicator .spinner-border {
+    animation: spin 0.75s linear infinite;
+}
+
+.content-loading-indicator .loading-text {
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 500;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+</style>
+
 <script>
-// Dashboard scripts
+document.body.addEventListener('htmx:beforeSwap', function(event) {
+    if (event.detail.target.id === 'content') {
+        event.detail.target.classList.add('htmx-swapping');
+    }
+});
+
+document.body.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'content') {
+        setTimeout(() => {
+            event.detail.target.classList.remove('htmx-swapping');
+        }, 50);
+    }
+});
 </script>
 {% endblock %}

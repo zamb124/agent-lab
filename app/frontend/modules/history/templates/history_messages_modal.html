@@ -1,0 +1,361 @@
+<style>
+.modal-overlay {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: rgba(0, 0, 0, 0.7) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 9999 !important;
+    padding: 20px !important;
+    margin: 0 !important;
+}
+
+.modal-content {
+    background: var(--bg-card);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-lg);
+    max-width: 1200px;
+    width: 100%;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--shadow-xl);
+    overflow: hidden;
+}
+
+.modal-header {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-primary);
+    padding: 1.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.modal-body {
+    background: var(--bg-primary);
+    padding: 0;
+    overflow: hidden;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.history-info {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
+    border-bottom: 1px solid var(--border-primary);
+    padding: 1.5rem;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.info-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.info-value {
+    font-size: 1rem;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.info-value.flow-name {
+    color: var(--accent-primary);
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.info-value code {
+    background: var(--bg-tertiary);
+    color: var(--accent-info);
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-family: 'Monaco', 'Consolas', monospace;
+}
+
+.session-id-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.copy-btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.copy-btn:hover {
+    opacity: 1;
+}
+
+.messages-timeline {
+    padding: 1.5rem;
+    max-height: 65vh;
+    overflow-y: auto;
+}
+
+.message-bubble {
+    margin-bottom: 1.5rem;
+    animation: fadeIn 0.3s ease;
+}
+
+.message-bubble.user {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.message-bubble.assistant,
+.message-bubble.tool,
+.message-bubble.system {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.message-content-wrapper {
+    max-width: 75%;
+    position: relative;
+}
+
+.message-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.message-body {
+    padding: 1rem;
+    border-radius: 12px;
+    position: relative;
+}
+
+.user .message-body {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.assistant .message-body {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    color: var(--text-primary);
+}
+
+.tool .message-body {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--accent-info);
+    border-left: 3px solid var(--accent-info);
+    color: var(--text-primary);
+}
+
+.system .message-body {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-secondary);
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.tool-call-box {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: rgba(255, 193, 7, 0.1);
+    border-left: 3px solid var(--accent-warning);
+    border-radius: 6px;
+}
+
+.tool-call-box .tool-name {
+    color: var(--accent-warning);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.tool-call-box code {
+    background: var(--bg-tertiary);
+    color: var(--accent-info);
+    padding: 0.5rem;
+    border-radius: 4px;
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    overflow-x: auto;
+}
+
+.message-time {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+</style>
+
+<div class="modal-overlay" onclick="this.remove(); document.body.style.overflow = '';">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h5 class="mb-0">
+                <i class="bi bi-chat-dots me-2"></i>
+                История диалога
+            </h5>
+            <button class="btn btn-ghost btn-sm" onclick="this.closest('.modal-overlay').remove(); document.body.style.overflow = '';">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+            
+            <div class="modal-body">
+                <div class="history-info">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="bi bi-diagram-3"></i>
+                                Сценарий
+                            </div>
+                            <div class="info-value flow-name">
+                                {{ history.flow_name or history.flow_id or 'Не указан' }}
+                            </div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="bi bi-hash"></i>
+                                ID сессии
+                            </div>
+                            <div class="session-id-wrapper">
+                                <code>{{ history.session_id[:12] }}...</code>
+                                <button class="btn btn-ghost copy-btn" 
+                                        onclick="navigator.clipboard.writeText('{{ history.session_id }}'); this.innerHTML='<i class=\'bi bi-check\'></i>'; setTimeout(() => this.innerHTML='<i class=\'bi bi-clipboard\'></i>', 1500);"
+                                        title="Копировать полный ID">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="bi bi-chat-left-text"></i>
+                                Сообщений
+                            </div>
+                            <div class="info-value">
+                                {{ history.total_messages }}
+                            </div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="bi bi-bookmark-check"></i>
+                                Контрольных точек
+                            </div>
+                            <div class="info-value">
+                                {{ history.total_checkpoints }}
+                            </div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="bi bi-clock-history"></i>
+                                Создано
+                            </div>
+                            <div class="info-value">
+                                {{ history.created_at.strftime('%d.%m.%Y %H:%M') if history.created_at else 'N/A' }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if history.messages %}
+                <div class="messages-timeline">
+                    {% for message in history.messages %}
+                    <div class="message-bubble {{ message.role.value }}">
+                        <div class="message-content-wrapper">
+                            <div class="message-header">
+                                {% if message.role.value == 'user' %}
+                                    <i class="bi bi-person-circle" style="font-size: 1.2rem; color: var(--accent-primary);"></i>
+                                    <span class="small fw-bold">Пользователь</span>
+                                {% elif message.role.value == 'assistant' %}
+                                    <i class="bi bi-robot" style="font-size: 1.2rem; color: var(--accent-success);"></i>
+                                    <span class="small fw-bold">Ассистент</span>
+                                {% elif message.role.value == 'tool' %}
+                                    <i class="bi bi-tools" style="font-size: 1.2rem; color: var(--accent-info);"></i>
+                                    <span class="small fw-bold">Инструмент</span>
+                                {% elif message.role.value == 'system' %}
+                                    <i class="bi bi-gear-fill" style="font-size: 1.2rem; color: var(--text-muted);"></i>
+                                    <span class="small fw-bold">Система</span>
+                                {% endif %}
+                                <span class="message-time ms-auto">
+                                    {{ message.timestamp.strftime('%H:%M:%S') if message.timestamp else '' }}
+                                </span>
+                            </div>
+                            
+                            <div class="message-body">
+                                {% if message.content %}
+                                <div style="white-space: pre-wrap; word-wrap: break-word;">{{ message.content }}</div>
+                                {% endif %}
+                                
+                                {% if message.tool_calls %}
+                                <div class="tool-call-box">
+                                    <div class="d-flex align-items-center gap-2 mb-2">
+                                        <i class="bi bi-wrench"></i>
+                                        <span class="tool-name">Вызовы инструментов</span>
+                                    </div>
+                                    {% for tool_call in message.tool_calls %}
+                                    <div class="mb-2">
+                                        <div class="fw-bold small mb-1">
+                                            <i class="bi bi-arrow-right-circle"></i>
+                                            {{ tool_call.tool_name }}
+                                        </div>
+                                        <code>{{ tool_call.arguments | tojson(indent=2) }}</code>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                                
+                                {% if message.metadata and message.metadata.get('tool_call_id') %}
+                                <div class="mt-2 small text-muted">
+                                    <i class="bi bi-link-45deg"></i>
+                                    <code style="background: transparent; padding: 0;">{{ message.metadata.tool_call_id }}</code>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox display-4 text-muted"></i>
+                    <p class="text-muted mt-3">Нет сообщений в этой сессии</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
