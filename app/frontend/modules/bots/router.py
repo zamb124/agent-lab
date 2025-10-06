@@ -5,6 +5,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from app.frontend.core.template_loader import get_templates
+from app.frontend.core.utils import render_with_dashboard
 from app.core.storage import Storage
 from app.models import FlowConfig
 
@@ -15,7 +16,12 @@ templates = get_templates()
 @router.get("/", response_class=HTMLResponse)
 async def bots_page(request: Request):
     """Главная страница управления ботами"""
-    return templates.TemplateResponse("bots.html", {"request": request})
+    return await render_with_dashboard(
+        request=request,
+        content_template="bots.html",
+        context={"request": request},
+        content_url="/frontend/bots/",
+    )
 
 
 @router.get("/list", response_class=HTMLResponse)

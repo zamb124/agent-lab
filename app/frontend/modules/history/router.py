@@ -8,6 +8,7 @@ from typing import Optional
 from datetime import datetime
 
 from app.frontend.core.template_loader import get_templates
+from app.frontend.core.utils import render_with_dashboard
 from app.core.flow_factory import FlowFactory
 
 router = APIRouter(prefix="/frontend/history", tags=["history"])
@@ -17,7 +18,12 @@ templates = get_templates()
 @router.get("/", response_class=HTMLResponse)
 async def history_page(request: Request):
     """Главная страница истории"""
-    return templates.TemplateResponse("history.html", {"request": request})
+    return await render_with_dashboard(
+        request=request,
+        content_template="history.html",
+        context={"request": request},
+        content_url="/frontend/history/",
+    )
 
 
 @router.get("/sessions", response_class=HTMLResponse)

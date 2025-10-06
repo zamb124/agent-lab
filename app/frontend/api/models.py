@@ -8,7 +8,7 @@ import uuid
 import logging
 import inspect
 from datetime import datetime
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from typing import Dict, Any, get_origin, get_args, Union, Optional
 from pydantic import BaseModel
@@ -17,6 +17,8 @@ from app.frontend.wrappers import ModelListWrapper
 from app.frontend.model_registry import ModelRegistry
 from app.frontend.environment import render_template
 from app.frontend.websockets.notifications import notify_model_updated
+from app.frontend.core.utils import is_htmx_request
+from app.frontend.core.template_loader import get_templates
 
 # ПРИНУДИТЕЛЬНЫЙ импорт field_extensions для применения monkey patches
 import app.frontend.field_extensions
@@ -24,6 +26,7 @@ import app.frontend.field_extensions
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/frontend/models", tags=["frontend"])
+templates = get_templates()
 
 
 @router.post("/show-inline-modal")
@@ -93,8 +96,20 @@ async def show_inline_modal(request_data: Dict[str, Any]) -> HTMLResponse:
 
 
 @router.get("/{model_type}")
-async def get_models(model_type: str, view: str = "table") -> HTMLResponse:
+async def get_models(request: Request, model_type: str, view: str = "table") -> HTMLResponse:
     """Получить список моделей в указанном виде"""
+    
+    # При прямом переходе (не HTMX) возвращаем dashboard с preload_url
+    if not is_htmx_request(request):
+        return templates.TemplateResponse(
+            "dashboard.html",
+            {
+                "request": request,
+                "preload_url": f"/frontend/models/{model_type}?view={view}",
+            }
+        )
+    
+    # При HTMX запросе возвращаем фрагмент
     storage = Storage()
 
     # Получаем все модели данного типа (Storage автоматически добавит префикс компании)
