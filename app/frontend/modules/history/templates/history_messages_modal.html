@@ -330,36 +330,36 @@
                                 </span>
                             </div>
                             
+                            {% if message.content %}
                             <div class="message-body">
-                                {% if message.content %}
                                 <div style="white-space: pre-wrap; word-wrap: break-word;">{{ message.content }}</div>
-                                {% endif %}
-                                
-                                {% if message.tool_calls %}
-                                <div class="tool-call-box">
-                                    <div class="d-flex align-items-center gap-2 mb-2">
-                                        <i class="bi bi-wrench"></i>
-                                        <span class="tool-name">Вызовы инструментов</span>
-                                    </div>
-                                    {% for tool_call in message.tool_calls %}
-                                    <div class="mb-2">
-                                        <div class="fw-bold small mb-1">
-                                            <i class="bi bi-arrow-right-circle"></i>
-                                            {{ tool_call.tool_name }}
-                                        </div>
-                                        <pre style="background: var(--bg-tertiary); color: var(--accent-info); padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem; font-size: 0.85rem; overflow-x: auto; margin-bottom: 0;">{{ tool_call.arguments | safe }}</pre>
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                                {% endif %}
-                                
-                                {% if message.metadata and message.metadata.get('tool_call_id') %}
-                                <div class="mt-2 small text-muted">
-                                    <i class="bi bi-link-45deg"></i>
-                                    <code style="background: transparent; padding: 0;">{{ message.metadata.tool_call_id }}</code>
-                                </div>
-                                {% endif %}
                             </div>
+                            {% endif %}
+                            
+                            {% if message.tool_calls %}
+                            <div class="tool-call-box" style="margin-top: 0.5rem;">
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <i class="bi bi-wrench"></i>
+                                    <span class="tool-name">Вызовы инструментов</span>
+                                </div>
+                                {% for tool_call in message.tool_calls %}
+                                <div class="mb-2">
+                                    <div class="fw-bold small mb-1">
+                                        <i class="bi bi-arrow-right-circle"></i>
+                                        {{ tool_call.tool_name }}
+                                    </div>
+                                    <pre style="background: var(--bg-tertiary); color: var(--accent-info); padding: 0.5rem; border-radius: 4px; font-size: 0.85rem; overflow-x: auto; margin-bottom: 0;">{{ tool_call.arguments | safe }}</pre>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            
+                            {% if message.metadata and message.metadata.get('tool_call_id') %}
+                            <div class="mt-2 small text-muted">
+                                <i class="bi bi-link-45deg"></i>
+                                <code style="background: transparent; padding: 0;">{{ message.metadata.tool_call_id }}</code>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                     {% endfor %}
