@@ -296,9 +296,11 @@ class FileProcessor:
 
         return (
             f"[FILE]\n"
-            f"📎 Файл: {file_record.original_name} "
-            f"(ID: {file_record.file_id}, URL: {file_record.url}, "
-            f"тип: {file_record.content_type}, размер: {size_str})\n"
+            f"📎 Файл: {file_record.original_name}\n"
+            f"ID: {file_record.file_id}\n"
+            f"Скачать: {file_record.url}\n"
+            f"Тип: {file_record.content_type}\n"
+            f"Размер: {size_str}\n"
             f"[/FILE]"
         )
 

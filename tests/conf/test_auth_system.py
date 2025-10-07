@@ -23,19 +23,15 @@ class TestAuthModels:
         """Тест модели пользователя"""
         user = User(
             user_id="test_user_123",
-            provider=AuthProvider.YANDEX,
-            provider_user_id="yandex_123",
-            email="test@yandex.ru",
-            name="Тест Пользователь",
-            avatar_url="https://example.com/avatar.jpg"
+            name="Тест Пользователь"
         )
         
         assert user.user_id == "test_user_123"
-        assert user.provider == AuthProvider.YANDEX
-        assert user.email == "test@yandex.ru"
-        assert user.status == UserStatus.ACTIVE  # Дефолт
+        assert user.name == "Тест Пользователь"
+        assert user.status == UserStatus.ACTIVE
         assert user.created_at is not None
         assert user.updated_at is not None
+        assert user.groups == ["user"]
     
     def test_auth_session_model(self):
         """Тест модели сессии авторизации"""
@@ -373,9 +369,9 @@ class TestAuthService:
             # Проверяем результат
             assert result.success == True
             assert result.user is not None
-            assert result.user.email == "test@yandex.ru"
-            assert result.user.provider == AuthProvider.YANDEX
+            assert result.user.name == "Тест Пользователь"
             assert result.session is not None
+            assert result.session.provider == AuthProvider.YANDEX
             assert result.session.access_token == "access_token"
     
     async def test_complete_auth_invalid_state(self):
@@ -439,9 +435,6 @@ class TestAuthService:
         # Мокаем данные пользователя
         test_user = User(
             user_id="test_user",
-            provider=AuthProvider.YANDEX,
-            provider_user_id="yandex_123",
-            email="test@yandex.ru",
             name="Тест Пользователь"
         )
         
@@ -454,7 +447,7 @@ class TestAuthService:
         
         assert user is not None
         assert user.user_id == "test_user"
-        assert user.email == "test@yandex.ru"
+        assert user.name == "Тест Пользователь"
     
     async def test_logout(self):
         """Тест завершения сессии"""
