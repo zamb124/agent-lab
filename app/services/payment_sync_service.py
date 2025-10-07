@@ -31,7 +31,7 @@ class PaymentSyncService:
             Статистика синхронизации
         """
         
-        logger.info(f"Начало синхронизации pending транзакций для компании {company_id}")
+        logger.debug(f"Проверка pending транзакций для компании {company_id}")
         
         # Получаем все pending транзакции компании
         all_transactions = await self.payment_service.get_company_transactions(
@@ -46,7 +46,6 @@ class PaymentSyncService:
         ]
         
         if not pending_transactions:
-            logger.info(f"Нет pending транзакций для компании {company_id}")
             return {
                 "total_pending": 0,
                 "checked": 0,
@@ -54,7 +53,7 @@ class PaymentSyncService:
                 "updated": 0
             }
         
-        logger.info(f"Найдено {len(pending_transactions)} pending транзакций")
+        logger.info(f"Компания {company_id}: найдено {len(pending_transactions)} pending транзакций для синхронизации")
         
         stats = {
             "total_pending": len(pending_transactions),
@@ -177,21 +176,32 @@ class PaymentSyncService:
             try:
                 company_id = company_key.split(":")[1]
                 
+                # Пропускаем системные/служебные ключи
+                if company_id in ["main", "default", "template"]:
+                    continue
+                
                 stats = await self.sync_pending_transactions(company_id)
                 
                 total_stats["companies_checked"] += 1
-                total_stats["total_pending"] += stats["total_pending"]
-                total_stats["total_found"] += stats["found"]
-                total_stats["total_updated"] += stats["updated"]
+                
+                # Логируем только если есть pending транзакции
+                if stats["total_pending"] > 0:
+                    total_stats["total_pending"] += stats["total_pending"]
+                    total_stats["total_found"] += stats["found"]
+                    total_stats["total_updated"] += stats["updated"]
                 
             except Exception as e:
-                logger.error(f"Ошибка синхронизации компании {company_key}: {e}")
+                logger.debug(f"Пропуск записи {company_key}: {e}")
                 total_stats["errors"] += 1
         
-        logger.info(
-            f"Глобальная синхронизация завершена: "
-            f"компаний={total_stats['companies_checked']}, "
-            f"обновлено={total_stats['total_updated']}"
-        )
+        if total_stats["total_updated"] > 0 or total_stats["total_pending"] > 0:
+            logger.info(
+                f"Глобальная синхронизация завершена: "
+                f"компаний={total_stats['companies_checked']}, "
+                f"pending={total_stats['total_pending']}, "
+                f"обновлено={total_stats['total_updated']}"
+            )
+        else:
+            logger.debug(f"Синхронизация: проверено {total_stats['companies_checked']} компаний, pending транзакций нет")
         
         return total_stats
