@@ -4,6 +4,7 @@ Nano Banana клиент для генерации изображений чер
 
 import logging
 import uuid
+import os
 from typing import List, Optional
 import google.generativeai as genai
 
@@ -30,7 +31,28 @@ class NanoBananaClient:
         self.timeout = timeout
         self._storage = Storage()
         
+        self._setup_proxy()
+        
         genai.configure(api_key=self.api_key)
+    
+    def _setup_proxy(self):
+        """Настраивает прокси через переменные окружения"""
+        if settings.proxy.enabled:
+            http_proxy = settings.proxy.get_proxy_url("http")
+            https_proxy = settings.proxy.get_proxy_url("https")
+            
+            if http_proxy:
+                os.environ["HTTP_PROXY"] = http_proxy
+                logger.info(f"Использую HTTP прокси для Gemini API: {http_proxy.split('@')[1] if '@' in http_proxy else http_proxy}")
+            
+            if https_proxy:
+                os.environ["HTTPS_PROXY"] = https_proxy
+                logger.info(f"Использую HTTPS прокси для Gemini API: {https_proxy.split('@')[1] if '@' in https_proxy else https_proxy}")
+        else:
+            if "HTTP_PROXY" in os.environ:
+                del os.environ["HTTP_PROXY"]
+            if "HTTPS_PROXY" in os.environ:
+                del os.environ["HTTPS_PROXY"]
         
     async def _get_file_records(self, file_ids: List[str]) -> List[bytes]:
         """Получает данные файлов по их ID"""
