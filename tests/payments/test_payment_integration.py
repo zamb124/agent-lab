@@ -137,14 +137,9 @@ async def test_full_payment_flow_with_db(
     assert result["amount"] == 1500.0
     
     # 2. Проверяем что транзакция записалась в БД
-    saved_transaction_data = await real_storage.get(
-        f"transaction:{transaction_id}",
-        force_global=True
-    )
+    saved_transaction = await payment_service.get_transaction(transaction_id)
     
-    assert saved_transaction_data is not None, "Транзакция должна быть сохранена в БД"
-    
-    saved_transaction = Transaction.model_validate_json(saved_transaction_data)
+    assert saved_transaction is not None, "Транзакция должна быть сохранена в БД"
     assert saved_transaction.transaction_id == transaction_id
     assert saved_transaction.company_id == test_company_id
     assert saved_transaction.user_id == test_user_id
@@ -191,12 +186,8 @@ async def test_full_payment_flow_with_db(
     )
     
     # 5. Проверяем что транзакция обновилась в БД
-    updated_transaction_data = await real_storage.get(
-        f"transaction:{transaction_id}",
-        force_global=True
-    )
-    
-    updated_transaction = Transaction.model_validate_json(updated_transaction_data)
+    updated_transaction = await payment_service.get_transaction(transaction_id)
+    assert updated_transaction is not None
     assert updated_transaction.status == PaymentStatus.SUCCESS, "Статус должен быть SUCCESS"
     assert updated_transaction.external_payment_id == unique_op_id, "External ID должен быть записан"
     assert updated_transaction.completed_at is not None, "Время завершения должно быть заполнено"
@@ -212,9 +203,14 @@ async def test_full_payment_flow_with_db(
     notification_keys = await real_storage.list_by_prefix("payment_notification:", force_global=True)
     assert len(notification_keys) >= 1, "Уведомление должно быть сохранено"
     
-    # Cleanup транзакции
+    # Cleanup транзакции и уведомлений
     try:
-        await real_storage.delete(f"transaction:{transaction_id}")
+        # Удаляем по новому формату ключа
+        payment_keys = await real_storage.list_by_prefix("payment:", force_global=True)
+        for key in payment_keys:
+            if transaction_id in key:
+                await real_storage.delete(key)
+        
         for key in notification_keys:
             await real_storage.delete(key)
     except:
@@ -301,7 +297,11 @@ async def test_duplicate_webhook_protection(
     
     # Cleanup
     try:
-        await real_storage.delete(f"transaction:{transaction_id}")
+        payment_keys = await real_storage.list_by_prefix("payment:", force_global=True)
+        for key in payment_keys:
+            if transaction_id in key:
+                await real_storage.delete(key)
+        
         notification_keys = await real_storage.list_by_prefix("payment_notification:", force_global=True)
         for key in notification_keys:
             await real_storage.delete(key)
@@ -338,14 +338,9 @@ async def test_company_transactions_persistence(
     
     # Проверяем что все транзакции сохранились в БД
     for transaction_id in created_transactions:
-        saved_data = await real_storage.get(
-            f"transaction:{transaction_id}",
-            force_global=True
-        )
+        saved_transaction = await payment_service.get_transaction(transaction_id)
         
-        assert saved_data is not None, f"Транзакция {transaction_id} должна быть в БД"
-        
-        saved_transaction = Transaction.model_validate_json(saved_data)
+        assert saved_transaction is not None, f"Транзакция {transaction_id} должна быть в БД"
         assert saved_transaction.company_id == test_company_id
         assert saved_transaction.user_id == test_user_id
         assert saved_transaction.status == PaymentStatus.PENDING
@@ -368,11 +363,14 @@ async def test_company_transactions_persistence(
         assert our_transactions[i].created_at >= our_transactions[i + 1].created_at
     
     # Cleanup
-    for transaction_id in created_transactions:
-        try:
-            await real_storage.delete(f"transaction:{transaction_id}")
-        except:
-            pass
+    try:
+        payment_keys = await real_storage.list_by_prefix("payment:", force_global=True)
+        for key in payment_keys:
+            for txn_id in created_transactions:
+                if txn_id in key:
+                    await real_storage.delete(key)
+    except:
+        pass
 
 
 @pytest.mark.asyncio
@@ -400,8 +398,8 @@ async def test_webhook_updates_transaction_in_db(
     transaction_id = result["transaction_id"]
     
     # Проверяем изначальное состояние в БД
-    initial_data = await real_storage.get(f"transaction:{transaction_id}", force_global=True)
-    initial_transaction = Transaction.model_validate_json(initial_data)
+    initial_transaction = await payment_service.get_transaction(transaction_id)
+    assert initial_transaction is not None
     
     assert initial_transaction.status == PaymentStatus.PENDING
     assert initial_transaction.external_payment_id is None
@@ -440,8 +438,8 @@ async def test_webhook_updates_transaction_in_db(
     )
     
     # Проверяем что транзакция обновилась в БД
-    updated_data = await real_storage.get(f"transaction:{transaction_id}", force_global=True)
-    updated_transaction = Transaction.model_validate_json(updated_data)
+    updated_transaction = await payment_service.get_transaction(transaction_id)
+    assert updated_transaction is not None
     
     assert updated_transaction.status == PaymentStatus.SUCCESS, "Статус должен стать SUCCESS"
     assert updated_transaction.external_payment_id == unique_op_id, "External ID должен записаться"
@@ -455,7 +453,11 @@ async def test_webhook_updates_transaction_in_db(
     
     # Cleanup
     try:
-        await real_storage.delete(f"transaction:{transaction_id}")
+        payment_keys = await real_storage.list_by_prefix("payment:", force_global=True)
+        for key in payment_keys:
+            if transaction_id in key:
+                await real_storage.delete(key)
+        
         notification_keys = await real_storage.list_by_prefix("payment_notification:", force_global=True)
         for key in notification_keys:
             await real_storage.delete(key)
@@ -488,10 +490,10 @@ async def test_invalid_webhook_does_not_affect_db(
     transaction_id = result["transaction_id"]
     
     # Запоминаем изначальное состояние
-    initial_transaction_data = await real_storage.get(f"transaction:{transaction_id}", force_global=True)
-    initial_company_data = await real_storage.get(f"company:{test_company_id}", force_global=True)
+    initial_transaction = await payment_service.get_transaction(transaction_id)
+    assert initial_transaction is not None
     
-    initial_transaction = Transaction.model_validate_json(initial_transaction_data)
+    initial_company_data = await real_storage.get(f"company:{test_company_id}", force_global=True)
     initial_company = Company.model_validate_json(initial_company_data)
     
     # Webhook с неверной подписью
@@ -516,8 +518,8 @@ async def test_invalid_webhook_does_not_affect_db(
     # В реальном API он вернет 401, но в тестах проверим что ничего не изменилось
     
     # Проверяем что транзакция НЕ изменилась в БД
-    unchanged_transaction_data = await real_storage.get(f"transaction:{transaction_id}", force_global=True)
-    unchanged_transaction = Transaction.model_validate_json(unchanged_transaction_data)
+    unchanged_transaction = await payment_service.get_transaction(transaction_id)
+    assert unchanged_transaction is not None
     
     assert unchanged_transaction.status == initial_transaction.status
     assert unchanged_transaction.external_payment_id == initial_transaction.external_payment_id
