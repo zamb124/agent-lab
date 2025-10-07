@@ -117,6 +117,7 @@ async def download_image(url: str) -> bytes:
             # Проверяем, что это действительно изображение
             content_type = response.headers.get("content-type", "").lower()
             if not content_type.startswith("image/"):
+                logger.error(f"URL не содержит изображение: {url}, Content-Type: {content_type}")
                 raise HTTPException(
                     status_code=400,
                     detail=f"URL не содержит изображение. Content-Type: {content_type}",
@@ -127,17 +128,20 @@ async def download_image(url: str) -> bytes:
             # Дополнительная проверка - пытаемся открыть как изображение
             try:
                 Image.open(io.BytesIO(content)).verify()
-            except Exception:
+            except Exception as e:
+                logger.error(f"Контент не является валидным изображением: {e}")
                 raise HTTPException(
                     status_code=400,
                     detail="Скачанный контент не является валидным изображением",
                 )
 
+            logger.info(f"Изображение успешно скачано: {len(content)} байт")
             return content
 
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Ошибка при скачивании изображения с {url}: {e}")
         raise HTTPException(
             status_code=400, detail=f"Не удалось скачать изображение с {url}: {str(e)}"
         )
