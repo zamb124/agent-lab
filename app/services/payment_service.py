@@ -21,7 +21,7 @@ from ..models.payment_models import (
     PaymentProviderType
 )
 from ..identity.models import Company, User
-
+from ..models.payment_models import Transaction, PaymentProviderType
 logger = logging.getLogger(__name__)
 
 
@@ -51,7 +51,7 @@ class PaymentService:
             Словарь с transaction_id и payment_url
         """
         
-        transaction_id = f"txn_{uuid.uuid4().hex[:16]}"
+        transaction_id = f"{company.company_id}:txn_{uuid.uuid4().hex[:16]}"
         
         logger.info(
             f"Создание платежа: компания={company.company_id}, "
@@ -177,10 +177,48 @@ class PaymentService:
         transaction = await self.get_transaction(verification_result.transaction_id)
         
         if not transaction:
-            logger.error(
-                f"❌ Транзакция {verification_result.transaction_id} не найдена"
-            )
-            raise ValueError(f"Transaction {verification_result.transaction_id} not found")
+            # Попытка извлечь company_id из label (формат: company_id:txn_xxx)
+            label_parts = verification_result.transaction_id.split(":", 1)
+            
+            if len(label_parts) == 2:
+                company_id_from_label = label_parts[0]
+                logger.warning(
+                    f"⚠️ Транзакция {verification_result.transaction_id} не найдена в БД, "
+                    f"но можем определить компанию из label: {company_id_from_label}"
+                )
+                
+                # Создаем транзакцию на лету (восстановление)
+                
+                
+                # Определяем тип провайдера
+                provider_type_map = {
+                    "yoomoney_main": PaymentProviderType.YOOMONEY,
+                    "yukassa_main": PaymentProviderType.YUKASSA
+                }
+                provider_type = provider_type_map.get(provider_name, PaymentProviderType.YOOMONEY)
+                
+                transaction = Transaction(
+                    transaction_id=verification_result.transaction_id,
+                    company_id=company_id_from_label,
+                    user_id="system_recovery",  # Неизвестен - помечаем как восстановление
+                    amount=verification_result.amount,
+                    status=PaymentStatus.SUCCESS,
+                    payment_provider=provider_type,
+                    external_payment_id=verification_result.external_payment_id,
+                    completed_at=datetime.now(timezone.utc),
+                    metadata={"recovered": True, "reason": "webhook_without_transaction"}
+                )
+                
+                await self._save_transaction(transaction)
+                
+                logger.info(
+                    f"✅ Транзакция восстановлена из webhook: {transaction.transaction_id}"
+                )
+            else:
+                logger.error(
+                    f"❌ Транзакция {verification_result.transaction_id} не найдена и не может быть восстановлена"
+                )
+                raise ValueError(f"Transaction {verification_result.transaction_id} not found")
         
         if transaction.status != PaymentStatus.PENDING:
             logger.warning(
