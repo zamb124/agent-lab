@@ -98,12 +98,13 @@ class YooMoneyProvider(BasePaymentProvider):
         amount = webhook_data.get("withdraw_amount") or webhook_data.get("amount")
         currency = webhook_data.get("currency", "643")
         datetime_str = webhook_data.get("datetime")
-        sender = webhook_data.get("sender")
+        sender = webhook_data.get("sender", "")  # Для card-incoming может быть пустым
         codepro = webhook_data.get("codepro", "false")
         label = webhook_data.get("label")
         received_hash = webhook_data.get("sha1_hash")
         
-        if not all([notification_type, operation_id, amount, datetime_str, sender, label, received_hash]):
+        # Для card-incoming sender пустой - это нормально
+        if not all([notification_type, operation_id, amount, datetime_str, label, received_hash]):
             logger.error("Отсутствуют обязательные поля в webhook")
             return WebhookVerificationResult(
                 is_valid=False,
