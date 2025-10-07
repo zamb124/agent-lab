@@ -1,0 +1,1279 @@
+{
+  "meta": {
+    "language": "ru",
+    "version": "1.0.0",
+    "last_updated": "2025-10-07T13:12:43.928301",
+    "completeness": 100.0,
+    "total_keys": 592,
+    "translated_keys": 592
+  },
+  "common": {
+    "app_name": "Agents Lab",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "delete": "Удалить",
+    "edit": "Редактировать",
+    "create": "Создать",
+    "loading": "Загрузка...",
+    "error": "Ошибка",
+    "success": "Успешно",
+    "warning": "Внимание",
+    "info": "Информация",
+    "confirm": "Подтвердить",
+    "close": "Закрыть",
+    "search": "Поиск",
+    "filter": "Фильтр",
+    "sort": "Сортировка",
+    "export": "Экспорт",
+    "import": "Импорт",
+    "refresh": "Обновить",
+    "back": "Назад",
+    "next": "Далее"
+  },
+  "dashboard": {
+    "title": "Панель управления",
+    "welcome_message": "Добро пожаловать, {user_name}!",
+    "navigation": {
+      "bots": "Боты",
+      "chats": "Чаты",
+      "store": "Магазин",
+      "history": "История",
+      "builder": "Agent Builder",
+      "admin": "Администрирование",
+      "billing": "Тарифы и оплата",
+      "agents": "Агенты",
+      "flows": "Потоки",
+      "tasks": "Задачи",
+      "users": "Пользователи",
+      "company_management": "Управление компаниями"
+    },
+    "header": {
+      "theme_toggle": "Переключить тему",
+      "language_toggle": "Выбрать язык",
+      "logout": "Выйти",
+      "collapse_menu": "Свернуть меню"
+    },
+    "footer": {
+      "user": "Пользователь",
+      "online": "Онлайн"
+    },
+    "empty_state": {
+      "welcome_title": "Добро пожаловать в Agents Lab",
+      "welcome_description": "Выберите раздел из меню слева для начала работы с агентами и потоками",
+      "view_flows": "Просмотреть потоки",
+      "view_agents": "Просмотреть агентов"
+    }
+  },
+  "landing": {
+    "header": {
+      "builder": "Agent Builder",
+      "login": "Войти",
+      "dashboard": "Дашборд"
+    },
+    "hero": {
+      "title_main": "Ваш бизнес. Под управлением агентов.",
+      "title_accent": "Поддержка Искусственного Интеллекта.",
+      "subtitle": "Agents Lab — это собственная платформа, которая позволяет компаниям внедрять агентную автоматизацию + ИИ-ассистентов в процессы, коммуникации и управление.",
+      "start_button": "Начать работу",
+      "learn_more": "Узнать больше",
+      "floating_tags": {
+        "ai": "AI",
+        "automation": "Автоматизация",
+        "rag": "RAG",
+        "search": "Поиск информации",
+        "support": "Поддержка",
+        "efficiency": "Эффективность",
+        "growth": "Рост",
+        "integrations": "Интеграции"
+      }
+    },
+    "about": {
+      "title": "Что такое Agents Lab",
+      "subtitle": "Мы помогаем не просто автоматизировать рутинные задачи, но трансформировать бизнес-операции, выводя их на новый уровень эффективности."
+    },
+    "features": {
+      "autonomous_agents": {
+        "title": "Автономные агенты",
+        "description": "Агенты, которые действуют вместо человека, принимают решения, обучаются и взаимодействуют между собой."
+      },
+      "multi_agent": {
+        "title": "Мультиагентные системы",
+        "description": "Несколько агентов работают совместно: фронт-офис, служба поддержки, отдел продаж, аналитика, логистика."
+      },
+      "low_code": {
+        "title": "Low-code / No-code",
+        "description": "Бизнес-команды могут быстро формировать решения без узкой разработки."
+      },
+      "integrations": {
+        "title": "Гибкие интеграции",
+        "description": "Интеграции с системами, мессенджерами, базами данных и внутренним ПО предприятия."
+      },
+      "security": {
+        "title": "Безопасность",
+        "description": "Развёртывание в облаке или on-premise, контроль данных, соответствие требованиям регуляторов."
+      },
+      "scalability": {
+        "title": "Масштабируемость",
+        "description": "От одного агента до целой сети агентов, взаимодействующих между собой."
+      }
+    },
+    "benefits": {
+      "title": "Наши сильные стороны",
+      "speed": {
+        "title": "Скорость внедрения",
+        "description": "MVP или прототип агента уже через несколько дней; старт без огромных бюджетов."
+      },
+      "control_security": {
+        "title": "Контроль и безопасность",
+        "description": "Шифрование данных, строгие политики доступа, возможность развёртывания в вашей инфраструктуре."
+      },
+      "scalability": {
+        "title": "Масштабируемость",
+        "description": "От одного агента до целой сети агентов, взаимодействующих между собой."
+      },
+      "manageability": {
+        "title": "Управляемость",
+        "description": "Мониторинг, аналитика, отчетность, оптимизация рабочих процессов."
+      }
+    },
+    "audience": {
+      "title": "Для кого мы",
+      "subtitle": "Agents Lab будет особенно полезна:",
+      "cost_reduction": "Компаниям, которые хотят снизить операционные расходы и ошибки при ручной работе",
+      "repetitive_tasks": "Бизнесу, где есть повторяющиеся процессы, коммуникации с клиентами, или задачи, требующие быстрого реагирования",
+      "no_dev_team": "Тем, кто хочет ввести ИИ-агентов, но не имеет большой команды разработчиков",
+      "security_control": "Тем, кто ценит безопасность и контроль над данными, и которым важно соответствие стандартам и регуляциям"
+    },
+    "cta": {
+      "title": "Готовы начать?",
+      "subtitle": "Узнайте, как Agents Lab может помочь именно вашему бизнесу",
+      "login_button": "Войти в платформу",
+      "contact_button": "Связаться с нами"
+    },
+    "contact_modal": {
+      "title": "Начать работу с Agents Lab",
+      "message_label": "Сообщение *",
+      "message_placeholder": "Расскажите о ваших задачах и целях...",
+      "email_label": "Email *",
+      "email_placeholder": "your@email.com",
+      "phone_label": "Телефон",
+      "phone_placeholder": "+7 (999) 123-45-67",
+      "cancel_button": "Отмена",
+      "send_button": "Отправить",
+      "notification_success_title": "Сообщение отправлено",
+      "notification_success_message": "Мы свяжемся с вами в ближайшее время",
+      "notification_error_title": "Ошибка отправки",
+      "notification_error_message_default": "Попробуйте еще раз или свяжитесь с нами напрямую",
+      "notification_error_message_email_invalid": "Пожалуйста, введите корректный email адрес",
+      "sending": "Отправка..."
+    },
+    "footer": {
+      "copyright": "© 2025 Agents Lab. Лаборатория Агентов."
+    }
+  },
+  "builder": {
+    "title": "Agent Builder",
+    "toolbar": {
+      "back_to_dashboard": "Вернуться в Dashboard",
+      "zoom_in": "Приблизить",
+      "zoom_out": "Отдалить",
+      "fit_to_screen": "Подогнать под экран",
+      "select_or_create_flow": "Выберите или создайте Flow",
+      "save": "Сохранить",
+      "run": "Запустить",
+      "clear_canvas": "Очистить канвас"
+    },
+    "sidebar": {
+      "collapse": "Свернуть панель",
+      "flows_tab": "Flows",
+      "agents_tab": "Agents",
+      "tools_tab": "Tools",
+      "search_placeholder": "Поиск...",
+      "create_new_element": "Создать новый элемент"
+    },
+    "context_menu": {
+      "edit": "Редактировать",
+      "duplicate": "Дублировать",
+      "delete": "Удалить"
+    }
+  },
+  "bots": {
+    "title": "Боты",
+    "create_bot": "Создать бота",
+    "loading": "Загрузка ботов...",
+    "configure": "Настроить",
+    "chat": "Чат",
+    "platforms": "Платформы:",
+    "agent": "Агент:",
+    "no_description": "Описание отсутствует",
+    "empty_state": {
+      "title": "У вас пока нет ботов",
+      "description": "Создайте своего первого бота, чтобы начать работу"
+    }
+  },
+  "languages": {
+    "ru": "Русский",
+    "en": "English"
+  },
+  "models": {
+    "common": {
+      "records": "записей",
+      "table_view": "Таблица",
+      "cards_view": "Карточки",
+      "no_data": "Нет данных",
+      "no_data_description": "Записи отсутствуют. Создайте первую запись.",
+      "duplicate": "Дублировать",
+      "show_details": "Показать детали",
+      "model": "Модель"
+    },
+    "agent": {
+      "title_plural": "Агенты",
+      "fields": {
+        "agent_id": {
+          "title": "ID агента"
+        },
+        "name": {
+          "title": "Название"
+        },
+        "description": {
+          "title": "Описание"
+        },
+        "type": {
+          "title": "Тип агента"
+        },
+        "created_at": {
+          "title": "Создан"
+        },
+        "updated_at": {
+          "title": "Обновлен"
+        }
+      }
+    },
+    "flow": {
+      "title_plural": "Потоки"
+    },
+    "task": {
+      "title_plural": "Задачи"
+    },
+    "user": {
+      "title_plural": "Пользователи"
+    },
+    "toolcallinfo": {
+      "fields": {
+        "tool_name": {
+          "title": "Название инструмента",
+          "description": "Имя вызванного инструмента"
+        },
+        "tool_id": {
+          "title": "ID вызова",
+          "description": "Уникальный идентификатор вызова инструмента"
+        },
+        "arguments": {
+          "title": "Аргументы",
+          "description": "Аргументы переданные в инструмент"
+        },
+        "result": {
+          "title": "Результат",
+          "description": "Результат выполнения инструмента"
+        }
+      }
+    },
+    "messageitem": {
+      "fields": {
+        "role": {
+          "title": "Роль",
+          "description": "Роль отправителя сообщения"
+        },
+        "content": {
+          "title": "Содержимое",
+          "description": "Текст сообщения"
+        },
+        "timestamp": {
+          "title": "Время",
+          "description": "Время отправки сообщения"
+        },
+        "tool_calls": {
+          "title": "Вызовы инструментов",
+          "description": "Список вызовов инструментов в этом сообщении"
+        },
+        "source_node": {
+          "title": "Node источник",
+          "description": "Название node/агента, создавшего это сообщение"
+        },
+        "metadata": {
+          "title": "Метаданные",
+          "description": "Дополнительные метаданные сообщения"
+        }
+      }
+    },
+    "checkpointinfo": {
+      "fields": {
+        "checkpoint_id": {
+          "title": "ID checkpoint",
+          "description": "Уникальный идентификатор checkpoint"
+        },
+        "thread_id": {
+          "title": "Thread ID",
+          "description": "ID треда (session_id)"
+        },
+        "checkpoint_ns": {
+          "title": "Namespace",
+          "description": "Namespace checkpoint"
+        },
+        "step": {
+          "title": "Шаг",
+          "description": "Номер шага в графе"
+        },
+        "source_node": {
+          "title": "Node источник",
+          "description": "Название node/агента, создавшего checkpoint"
+        },
+        "timestamp": {
+          "title": "Время",
+          "description": "Время создания checkpoint"
+        },
+        "messages": {
+          "title": "Сообщения",
+          "description": "Сообщения в этом checkpoint"
+        },
+        "metadata": {
+          "title": "Метаданные",
+          "description": "Метаданные checkpoint"
+        }
+      }
+    },
+    "messagehistoryresponse": {
+      "fields": {
+        "session_id": {
+          "title": "ID сессии",
+          "description": "Идентификатор сессии"
+        },
+        "thread_id": {
+          "title": "Thread ID",
+          "description": "ID треда для LangGraph"
+        },
+        "flow_id": {
+          "title": "Flow ID",
+          "description": "Идентификатор потока"
+        },
+        "flow_name": {
+          "title": "Название Flow",
+          "description": "Человекочитаемое название потока"
+        },
+        "messages": {
+          "title": "Сообщения",
+          "description": "Список всех сообщений в хронологическом порядке"
+        },
+        "checkpoints": {
+          "title": "Checkpoints",
+          "description": "Список всех checkpoint'ов (для детального анализа)"
+        },
+        "total_messages": {
+          "title": "Всего сообщений",
+          "description": "Общее количество сообщений"
+        },
+        "total_checkpoints": {
+          "title": "Всего checkpoints",
+          "description": "Общее количество checkpoint'ов"
+        },
+        "created_at": {
+          "title": "Создано",
+          "description": "Время первого сообщения"
+        },
+        "last_activity": {
+          "title": "Последняя активность",
+          "description": "Время последнего сообщения"
+        }
+      }
+    },
+    "sessionlistitem": {
+      "fields": {
+        "session_id": {
+          "title": "ID сессии",
+          "description": "Идентификатор сессии"
+        },
+        "flow_id": {
+          "title": "Flow",
+          "description": "Идентификатор потока"
+        },
+        "flow_name": {
+          "title": "Название Flow",
+          "description": "Человекочитаемое название потока"
+        },
+        "platform": {
+          "title": "Платформа",
+          "description": "Платформа (web/telegram/api)"
+        },
+        "user_id": {
+          "title": "Пользователь",
+          "description": "Идентификатор пользователя"
+        },
+        "user_name": {
+          "title": "Имя пользователя",
+          "description": "Имя пользователя"
+        },
+        "status": {
+          "title": "Статус",
+          "description": "Статус сессии"
+        },
+        "message_count": {
+          "title": "Сообщений",
+          "description": "Количество сообщений в сессии"
+        },
+        "created_at": {
+          "title": "Создано",
+          "description": "Время создания сессии"
+        },
+        "last_activity": {
+          "title": "Последняя активность",
+          "description": "Время последней активности"
+        },
+        "metadata": {
+          "title": "Метаданные",
+          "description": "Дополнительные метаданные"
+        }
+      }
+    },
+    "sessionlistresponse": {
+      "fields": {
+        "sessions": {
+          "title": "Сессии",
+          "description": "Список сессий"
+        },
+        "total": {
+          "title": "Всего",
+          "description": "Общее количество сессий"
+        },
+        "limit": {
+          "title": "Лимит",
+          "description": "Максимальное количество результатов"
+        },
+        "offset": {
+          "title": "Смещение",
+          "description": "Смещение для пагинации"
+        },
+        "filters": {
+          "title": "Фильтры",
+          "description": "Примененные фильтры"
+        }
+      }
+    },
+    "context": {
+      "fields": {
+        "user": {
+          "title": "Пользователь",
+          "description": "Пользователь выполняющий запрос"
+        },
+        "session_id": {
+          "title": "ID сессии",
+          "description": "Идентификатор сессии"
+        },
+        "platform": {
+          "title": "Платформа",
+          "description": "Платформа откуда поступил запрос"
+        },
+        "active_company": {
+          "title": "Активная компания",
+          "description": "Текущая активная компания пользователя"
+        },
+        "user_companies": {
+          "title": "Компании пользователя",
+          "description": "Все доступные компании пользователя"
+        },
+        "metadata": {
+          "title": "Метаданные",
+          "description": "Дополнительные метаданные контекста"
+        },
+        "language": {
+          "title": "Язык пользователя",
+          "description": "Предпочитаемый язык интерфейса пользователя"
+        },
+        "flow_variables": {
+          "title": "Переменные flow",
+          "description": "Переменные доступные во flow и агентах"
+        },
+        "company_variables": {
+          "title": "Переменные компании",
+          "description": "Переменные компании для использования в промптах"
+        },
+        "state": {
+          "title": "State агента",
+          "description": "Ссылка на текущий state агента (доступен в тулах)"
+        }
+      }
+    },
+    "tryonparameters": {
+      "fields": {
+        "model_height_cm": {
+          "description": "Рост модели в см"
+        },
+        "product_width_cm": {
+          "description": "Ширина продукта в см"
+        },
+        "product_height_cm": {
+          "description": "Высота продукта в см"
+        },
+        "item_kind": {
+          "description": "Тип продукта"
+        },
+        "placement": {
+          "description": "Размещение"
+        },
+        "offset_x_pct": {
+          "description": "Смещение по X в %"
+        },
+        "offset_y_pct": {
+          "description": "Смещение по Y в %"
+        },
+        "visible_top_pct": {
+          "description": "Верхний срез фигуры"
+        },
+        "visible_bottom_pct": {
+          "description": "Нижний срез фигуры"
+        },
+        "scale_bias": {
+          "description": "Множитель размера"
+        },
+        "variations": {
+          "description": "Количество вариаций"
+        }
+      }
+    },
+    "tryonrecord": {
+      "fields": {
+        "id": {
+          "description": "Уникальный ID примерки"
+        },
+        "user_id": {
+          "description": "ID пользователя"
+        },
+        "created_at": {
+          "description": "Время создания в ISO формате"
+        },
+        "model_file_id": {
+          "description": "ID файла фото пользователя"
+        },
+        "model_url": {
+          "description": "URL фото пользователя"
+        },
+        "product_file_id": {
+          "description": "ID файла изображения товара"
+        },
+        "product_image_url": {
+          "description": "URL изображения товара"
+        },
+        "product_url": {
+          "description": "Исходный URL товара с сайта"
+        },
+        "result_urls": {
+          "description": "URLs результатов примерки"
+        },
+        "parameters": {
+          "description": "Параметры примерки"
+        },
+        "metadata": {
+          "description": "Дополнительные данные"
+        }
+      }
+    },
+    "tryonhistoryresponse": {
+      "fields": {
+        "try_ons": {
+          "description": "Список примерок"
+        },
+        "total": {
+          "description": "Общее количество примерок"
+        },
+        "page": {
+          "description": "Номер страницы"
+        },
+        "limit": {
+          "description": "Количество на странице"
+        }
+      }
+    },
+    "translationkey": {
+      "fields": {
+        "key": {
+          "description": "Уникальный ключ перевода (например: models.user.fields.name)"
+        },
+        "context": {
+          "description": "Контекст использования ключа"
+        },
+        "source_file": {
+          "description": "Исходный файл где найден ключ"
+        },
+        "default_value": {
+          "description": "Значение по умолчанию (обычно на русском)"
+        },
+        "category": {
+          "description": "Категория ключа (models, common, errors, etc)"
+        }
+      }
+    },
+    "translation": {
+      "fields": {
+        "language": {
+          "description": "Язык перевода"
+        },
+        "key": {
+          "description": "Ключ перевода"
+        },
+        "value": {
+          "description": "Переведенное значение"
+        },
+        "last_updated": {
+          "description": "Время последнего обновления"
+        },
+        "is_auto_generated": {
+          "description": "Сгенерировано автоматически или переведено вручную"
+        }
+      }
+    },
+    "translationset": {
+      "fields": {
+        "key": {
+          "description": "Ключ перевода"
+        },
+        "translations": {
+          "description": "Переводы на разные языки"
+        },
+        "context": {
+          "description": "Контекст использования"
+        }
+      }
+    },
+    "translationfile": {
+      "fields": {
+        "language": {
+          "description": "Язык файла"
+        },
+        "version": {
+          "description": "Версия файла переводов"
+        },
+        "last_updated": {
+          "description": "Время последнего обновления"
+        },
+        "completeness": {
+          "description": "Процент завершенности переводов (0-100)"
+        },
+        "total_keys": {
+          "description": "Общее количество ключей"
+        },
+        "translated_keys": {
+          "description": "Количество переведенных ключей"
+        }
+      }
+    },
+    "translationstats": {
+      "fields": {
+        "total_languages": {
+          "description": "Общее количество языков"
+        },
+        "total_keys": {
+          "description": "Общее количество ключей"
+        },
+        "languages_stats": {
+          "description": "Статистика по языкам"
+        }
+      }
+    },
+    "i18nconfig": {
+      "fields": {
+        "default_language": {
+          "description": "Язык по умолчанию"
+        },
+        "fallback_language": {
+          "description": "Резервный язык"
+        },
+        "auto_generate_missing": {
+          "description": "Автоматически генерировать отсутствующие ключи"
+        },
+        "auto_generate_on_startup": {
+          "description": "Генерировать переводы при запуске приложения"
+        },
+        "scan_directories": {
+          "description": "Директории для сканирования ключей"
+        },
+        "translations_directory": {
+          "description": "Директория с файлами переводов"
+        }
+      }
+    },
+    "graphnode": {
+      "fields": {
+        "id": {
+          "title": "ID ноды",
+          "description": "Уникальный идентификатор ноды в графе"
+        },
+        "type": {
+          "title": "Тип ноды",
+          "description": "Тип ноды в графе"
+        },
+        "params": {
+          "title": "Параметры",
+          "description": "Параметры ноды"
+        },
+        "code_mode": {
+          "title": "Режим кода",
+          "description": "Режим хранения кода ноды"
+        },
+        "function_class": {
+          "title": "Класс функции",
+          "description": "Путь к классу агента",
+          "placeholder": "app.agents.calculator.CalculatorAgent"
+        },
+        "function_path": {
+          "title": "Путь к функции",
+          "description": "Путь к функции",
+          "placeholder": "app.tools.calc_tools.add_numbers"
+        },
+        "inline_code": {
+          "title": "Инлайн код",
+          "description": "Python код ноды"
+        },
+        "prompt": {
+          "title": "Промпт",
+          "description": "Промпт для ReAct нод"
+        },
+        "input_mapping": {
+          "title": "Маппинг входных данных",
+          "description": "Как брать данные из state"
+        },
+        "output_mapping": {
+          "title": "Маппинг выходных данных",
+          "description": "Как сохранять результат в state"
+        }
+      }
+    },
+    "graphedge": {
+      "fields": {
+        "source": {
+          "title": "Источник",
+          "description": "ID исходной ноды"
+        },
+        "target": {
+          "title": "Цель",
+          "description": "ID целевой ноды"
+        },
+        "condition": {
+          "title": "Условие",
+          "description": "Условие или выражение для перехода"
+        },
+        "condition_type": {
+          "title": "Тип условия",
+          "description": "Тип условия для перехода"
+        }
+      }
+    },
+    "builderentity": {
+      "fields": {
+        "source": {
+          "title": "Источник",
+          "description": "Источник создания (manual, migration, canvas_created)"
+        },
+        "created_at": {
+          "title": "Создан",
+          "description": "Дата создания"
+        },
+        "updated_at": {
+          "title": "Обновлен",
+          "description": "Дата обновления"
+        }
+      }
+    },
+    "graphdefinition": {
+      "fields": {
+        "nodes": {
+          "title": "Ноды",
+          "description": "Список нод в графе"
+        },
+        "edges": {
+          "title": "Ребра",
+          "description": "Список ребер в графе"
+        },
+        "entry_point": {
+          "title": "Точка входа",
+          "description": "ID ноды, с которой начинается выполнение графа"
+        }
+      }
+    },
+    "llmconfig": {
+      "fields": {
+        "provider": {
+          "title": "Провайдер",
+          "description": "Провайдер LLM (openai, anthropic, yandex, etc.)"
+        },
+        "model": {
+          "title": "Модель",
+          "description": "Название модели",
+          "placeholder": "gpt-4, claude-3-sonnet, yandexgpt"
+        },
+        "temperature": {
+          "title": "Температура",
+          "description": "Температура для генерации (0.0-1.0)"
+        },
+        "max_tokens": {
+          "title": "Максимум токенов",
+          "description": "Максимальное количество токенов в ответе"
+        },
+        "api_key": {
+          "title": "API ключ",
+          "description": "API ключ для провайдера"
+        },
+        "base_url": {
+          "title": "Базовый URL",
+          "description": "Базовый URL для API",
+          "placeholder": "https://api.openai.com/v1"
+        },
+        "additional_params": {
+          "title": "Дополнительные параметры",
+          "description": "Дополнительные параметры для LLM"
+        }
+      }
+    },
+    "taskconfig": {
+      "fields": {
+        "task_id": {
+          "title": "ID задачи",
+          "description": "Уникальный идентификатор задачи"
+        },
+        "flow_id": {
+          "title": "ID флоу",
+          "description": "Идентификатор флоу для задачи"
+        },
+        "context": {
+          "title": "Контекст",
+          "description": "Контекст выполнения задачи"
+        },
+        "status": {
+          "title": "Статус",
+          "description": "Статус выполнения задачи"
+        },
+        "input_data": {
+          "title": "Входные данные",
+          "description": "Входные данные для задачи"
+        },
+        "output_data": {
+          "title": "Выходные данные",
+          "description": "Результат выполнения задачи"
+        },
+        "error_message": {
+          "title": "Сообщение об ошибке",
+          "description": "Сообщение об ошибке при выполнении"
+        },
+        "created_at": {
+          "title": "Создано",
+          "description": "Время создания задачи"
+        },
+        "started_at": {
+          "title": "Запущено",
+          "description": "Время начала выполнения"
+        },
+        "completed_at": {
+          "title": "Завершено",
+          "description": "Время завершения выполнения"
+        }
+      }
+    },
+    "sessionconfig": {
+      "fields": {
+        "session_id": {
+          "title": "ID сессии",
+          "description": "Уникальный идентификатор сессии"
+        },
+        "platform": {
+          "title": "Платформа",
+          "description": "Платформа (telegram, api, web)"
+        },
+        "user_id": {
+          "title": "ID пользователя",
+          "description": "Идентификатор пользователя"
+        },
+        "flow_id": {
+          "title": "ID флоу",
+          "description": "Идентификатор флоу"
+        },
+        "status": {
+          "title": "Статус",
+          "description": "Статус сессии"
+        },
+        "metadata": {
+          "title": "Метаданные",
+          "description": "Дополнительные метаданные сессии"
+        },
+        "created_at": {
+          "title": "Создано",
+          "description": "Время создания сессии"
+        },
+        "last_activity": {
+          "title": "Последняя активность",
+          "description": "Время последней активности"
+        }
+      }
+    },
+    "cloudvoicetokenconfig": {
+      "fields": {
+        "client_id": {
+          "title": "Client ID",
+          "description": "Идентификатор клиента Cloud Voice API"
+        },
+        "access_token": {
+          "title": "Access Token",
+          "description": "Токен доступа к API"
+        },
+        "refresh_token": {
+          "title": "Refresh Token",
+          "description": "Токен для обновления access_token"
+        },
+        "expires_at": {
+          "title": "Время истечения",
+          "description": "Время когда истекает access_token"
+        },
+        "created_at": {
+          "title": "Время создания",
+          "description": "Время создания токена"
+        },
+        "updated_at": {
+          "title": "Время обновления",
+          "description": "Время последнего обновления токена"
+        }
+      }
+    },
+    "filerecord": {
+      "fields": {
+        "file_id": {
+          "title": "ID файла",
+          "description": "Уникальный ID файла в системе"
+        },
+        "provider": {
+          "title": "Провайдер",
+          "description": "Провайдер S3 (aws, yandex, minio, etc.)"
+        },
+        "original_name": {
+          "title": "Оригинальное имя",
+          "description": "Оригинальное имя файла"
+        },
+        "s3_key": {
+          "title": "Ключ S3",
+          "description": "Ключ файла в S3"
+        },
+        "s3_bucket": {
+          "title": "Bucket S3",
+          "description": "Bucket в S3"
+        },
+        "s3_endpoint": {
+          "title": "Endpoint S3",
+          "description": "Endpoint URL провайдера"
+        },
+        "content_type": {
+          "title": "Тип содержимого",
+          "description": "MIME тип файла"
+        },
+        "file_size": {
+          "title": "Размер файла",
+          "description": "Размер файла в байтах"
+        },
+        "checksum": {
+          "title": "Контрольная сумма",
+          "description": "MD5 или другая контрольная сумма"
+        },
+        "status": {
+          "title": "Статус",
+          "description": "Статус файла"
+        },
+        "uploaded_by": {
+          "title": "Загрузил",
+          "description": "ID пользователя который загрузил"
+        },
+        "metadata": {
+          "title": "Метаданные",
+          "description": "Дополнительные метаданные файла"
+        },
+        "tags": {
+          "title": "Теги",
+          "description": "Теги для категоризации"
+        },
+        "is_public": {
+          "title": "Публичный",
+          "description": "Доступен ли файл без авторизации"
+        },
+        "created_at": {
+          "title": "Создан",
+          "description": "Время создания файла"
+        },
+        "updated_at": {
+          "title": "Обновлен",
+          "description": "Время обновления файла"
+        }
+      }
+    },
+    "audiorecord": {
+      "fields": {
+        "audio_id": {
+          "title": "ID аудио",
+          "description": "Уникальный ID аудиофайла в системе"
+        },
+        "provider": {
+          "title": "Провайдер",
+          "description": "Провайдер S3 (aws, yandex, minio, etc.)"
+        },
+        "original_name": {
+          "title": "Оригинальное имя",
+          "description": "Оригинальное имя аудиофайла"
+        },
+        "s3_key": {
+          "title": "Ключ S3",
+          "description": "Ключ аудиофайла в S3"
+        },
+        "s3_bucket": {
+          "title": "Bucket S3",
+          "description": "Bucket в S3"
+        },
+        "s3_endpoint": {
+          "title": "Endpoint S3",
+          "description": "Endpoint URL провайдера"
+        },
+        "content_type": {
+          "title": "Тип содержимого",
+          "description": "MIME тип аудиофайла"
+        },
+        "file_size": {
+          "title": "Размер файла",
+          "description": "Размер аудиофайла в байтах"
+        },
+        "duration": {
+          "title": "Длительность",
+          "description": "Длительность аудио в секундах"
+        },
+        "checksum": {
+          "title": "Контрольная сумма",
+          "description": "MD5 или другая контрольная сумма"
+        },
+        "status": {
+          "title": "Статус",
+          "description": "Статус аудиофайла"
+        },
+        "uploaded_by": {
+          "title": "Загрузил",
+          "description": "ID пользователя который загрузил"
+        },
+        "recognition_text": {
+          "title": "Распознанный текст",
+          "description": "Результат распознавания речи"
+        },
+        "recognition_confidence": {
+          "title": "Уверенность распознавания",
+          "description": "Уверенность распознавания от 0.0 до 1.0"
+        },
+        "recognition_qid": {
+          "title": "QID Cloud Voice",
+          "description": "ID запроса к Cloud Voice API"
+        },
+        "metadata": {
+          "title": "Метаданные",
+          "description": "Дополнительные метаданные аудиофайла"
+        },
+        "tags": {
+          "title": "Теги",
+          "description": "Теги для категоризации"
+        },
+        "created_at": {
+          "title": "Создан",
+          "description": "Время создания аудиозаписи"
+        },
+        "updated_at": {
+          "title": "Обновлен",
+          "description": "Время обновления аудиозаписи"
+        }
+      }
+    },
+    "usagerecord": {
+      "fields": {
+        "usage_id": {
+          "title": "ID записи"
+        },
+        "user_id": {
+          "title": "ID пользователя"
+        },
+        "company_id": {
+          "title": "ID компании"
+        },
+        "session_id": {
+          "title": "ID сессии"
+        },
+        "usage_type": {
+          "title": "Тип использования"
+        },
+        "resource_name": {
+          "title": "Название ресурса"
+        },
+        "cost": {
+          "title": "Стоимость в RUB"
+        },
+        "quantity": {
+          "title": "Количество"
+        },
+        "metadata": {
+          "title": "Дополнительные данные"
+        }
+      }
+    },
+    "modellistwrapper": {
+      "fields": {
+        "models": {
+          "title": "Модели",
+          "description": "Список моделей для отображения"
+        },
+        "count": {
+          "title": "Количество"
+        },
+        "model_type": {
+          "title": "Тип модели"
+        }
+      }
+    }
+  },
+  "billing": {
+    "title": "Тарифы и оплата",
+    "current_plan": {
+      "title": "Текущий тариф",
+      "company": "Компания",
+      "balance": "Баланс",
+      "monthly_limit": "Месячный лимит",
+      "no_limit": "Без лимита"
+    },
+    "tariff_plans": {
+      "free": {
+        "name": "Бесплатный"
+      },
+      "basic": {
+        "name": "Базовый"
+      },
+      "premium": {
+        "name": "Премиум"
+      },
+      "enterprise": {
+        "name": "Корпоративный"
+      }
+    },
+    "budget_usage": {
+      "title": "Использование бюджета",
+      "add_funds": "Пополнить баланс",
+      "spent_this_month": "Потрачено в текущем месяце",
+      "used": "использовано",
+      "billing_period": "Расчетный период"
+    },
+    "usage_stats": {
+      "title": "Статистика использования",
+      "total_calls": "Всего вызовов",
+      "total_cost": "Общая стоимость"
+    },
+    "resources": {
+      "title": "Детализация по ресурсам",
+      "resource": "Ресурс",
+      "calls": "Вызовов",
+      "cost": "Стоимость",
+      "no_data": "Данные по использованию ресурсов пока отсутствуют"
+    },
+    "users": {
+      "title": "Детализация по пользователям",
+      "user": "Пользователь",
+      "calls": "Вызовов",
+      "cost": "Стоимость",
+      "no_data": "Данные по пользователям пока отсутствуют"
+    },
+    "payment_modal": {
+      "title": "Пополнение баланса",
+      "coming_soon": "Функция оплаты будет доступна в следующих версиях.",
+      "integrations_info": "В будущем здесь будет интеграция с платежными системами (Stripe, ЮKassa и другими).",
+      "card_payment": "Оплата банковской картой",
+      "secure_transaction": "Безопасная транзакция",
+      "auto_receipt": "Автоматическая выдача чека"
+    }
+  },
+  "admin": {
+    "companies": {
+      "title": "Управление компаниями",
+      "table": {
+        "company_id": "Компания",
+        "name": "Название",
+        "subdomain": "Поддомен",
+        "status": "Статус",
+        "tariff_plan": "Тариф",
+        "monthly_budget": "Лимит (мес.)",
+        "current_month_spent": "Потрачено",
+        "created_at": "Создана",
+        "actions": "Действия",
+        "balance": "Баланс",
+        "no_limit": "Без лимита",
+        "edit_balance": "Баланс",
+        "edit_limit": "Лимит",
+        "edit_tariff": "Тариф"
+      },
+      "modal": {
+        "edit_balance_title": "Пополнить баланс",
+        "current_balance": "Текущий баланс",
+        "new_balance": "Сумма пополнения (₽)",
+        "update_button": "Пополнить",
+        "edit_limit_title": "Установить месячный лимит",
+        "new_limit": "Месячный лимит (₽)",
+        "no_limit_placeholder": "0 = без лимита",
+        "no_limit_help": "0 = без самоограничения",
+        "edit_tariff_title": "Изменить тариф",
+        "tariff_plan": "Тарифный план"
+      },
+      "errors": {
+        "amount_required": "Введите сумму пополнения больше 0",
+        "error_prefix": "Ошибка: ",
+        "balance_error": "Ошибка при пополнении: ",
+        "save_error": "Ошибка при сохранении: "
+      },
+      "success": {
+        "tariff_updated": "Тариф успешно изменен"
+      }
+    }
+  },
+  "validation": {
+    "required": "Поле обязательно для заполнения",
+    "email_invalid": "Некорректный email адрес",
+    "min_length": "Минимальная длина {min_length} символов",
+    "max_length": "Максимальная длина {max_length} символов",
+    "numeric": "Поле должно содержать только цифры",
+    "positive": "Значение должно быть положительным"
+  },
+  "errors": {
+    "network": "Ошибка сети. Проверьте соединение",
+    "server": "Ошибка сервера. Попробуйте позже",
+    "validation": "Ошибка валидации данных",
+    "permission": "Недостаточно прав доступа",
+    "not_found": "Запрошенный ресурс не найден",
+    "timeout": "Превышено время ожидания"
+  },
+  "": {
+    "modal-overlay": ".modal-overlay",
+    "notification": ".notification"
+  },
+  "{{ bot": {
+    "flow_id }}": "{{ bot.flow_id }}"
+  },
+  "username": "username",
+  "message": "message",
+  "email": "email",
+  "phone": "phone",
+  "div": "div",
+  "Введите сумму пополнения больше 0": "Введите сумму пополнения больше 0",
+  "Тариф успешно изменен": "Тариф успешно изменен",
+  "{{ history": {
+    "session_id }}": "{{ history.session_id }}"
+  },
+  "tool_call_id": "tool_call_id",
+  "description": "description",
+  ";": ";",
+  "auth": {
+    "title": "Авторизация",
+    "subtitle": "Платформа для агентов",
+    "choose_provider": "Выберите способ входа в систему",
+    "footer_text": "Безопасная авторизация через OAuth 2.0"
+  }
+}

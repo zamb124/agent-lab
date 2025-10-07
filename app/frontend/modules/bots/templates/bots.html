@@ -2,13 +2,13 @@
 
 <h1 class="header-title" id="page-title" hx-swap-oob="true">
     <i class="bi bi-people-fill me-2"></i>
-    Боты
+    <span data-i18n="bots.title">Боты</span>
 </h1>
 
 <div class="header-right" hx-swap-oob="true">
     <button class="btn btn-primary btn-sm" onclick="createBot()">
         <i class="bi bi-plus-circle"></i>
-        Создать бота
+        <span data-i18n="bots.create_bot">Создать бота</span>
     </button>
     <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="Переключить тему">
         <i class="bi bi-sun"></i>
@@ -24,7 +24,7 @@
          hx-indicator="#bots-loading">
         <div id="bots-loading" class="loading-indicator htmx-indicator">
             <div class="spinner"></div>
-            <span>Загрузка ботов...</span>
+            <span data-i18n="bots.loading">Загрузка ботов...</span>
         </div>
     </div>
 
