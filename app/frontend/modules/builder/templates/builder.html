@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Agent Builder{% endblock %}
+{% block title %}{{ t('builder.title') }} - {{ t('common.app_name') }}{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="/static/builder/css/builder.css">
@@ -11,21 +11,21 @@
     <!-- Боковая панель -->
     <aside class="builder-sidebar" id="builderSidebar">
         <div class="sidebar-header">
-            <h2>Builder</h2>
-            <button class="sidebar-toggle" id="sidebarToggle" title="Свернуть панель">
+            <h2>{{ t('builder.title') }}</h2>
+            <button class="sidebar-toggle" id="sidebarToggle" title="{{ t('builder.sidebar.collapse') }}">
                 ◀
             </button>
         </div>
         
         <div class="sidebar-tabs">
-            <button class="tab-button active" data-tab="flows">Flows</button>
-            <button class="tab-button" data-tab="agents">Agents</button>
-            <button class="tab-button" data-tab="tools">Tools</button>
+            <button class="tab-button active" data-tab="flows">{{ t('builder.sidebar.flows_tab') }}</button>
+            <button class="tab-button" data-tab="agents">{{ t('builder.sidebar.agents_tab') }}</button>
+            <button class="tab-button" data-tab="tools">{{ t('builder.sidebar.tools_tab') }}</button>
         </div>
         
         <div class="sidebar-search">
-            <input type="text" id="sidebarSearch" placeholder="Поиск..." class="search-input">
-            <button class="search-add-btn" id="searchAddBtn" title="Создать новый элемент">
+            <input type="text" id="sidebarSearch" placeholder="{{ t('builder.sidebar.search_placeholder') }}" class="search-input">
+            <button class="search-add-btn" id="searchAddBtn" title="{{ t('builder.sidebar.create_new_element') }}">
                 <i class="bi bi-plus"></i>
             </button>
         </div>
@@ -58,24 +58,24 @@
     <main class="builder-canvas" id="builderCanvas">
         <div class="canvas-toolbar">
             <div class="toolbar-left">
-                <a href="/frontend/dashboard" class="btn btn-ghost btn-sm" title="Вернуться в Dashboard">
+                <a href="/frontend/dashboard" class="btn btn-ghost btn-sm" title="{{ t('builder.toolbar.back_to_dashboard') }}">
                     <i class="bi bi-arrow-left"></i>
-                    Назад
+                    {{ t('common.back') }}
                 </a>
                 <div class="toolbar-divider"></div>
-                <button class="btn btn-secondary btn-sm" id="zoomInBtn">
+                <button class="btn btn-secondary btn-sm" id="zoomInBtn" title="{{ t('builder.toolbar.zoom_in') }}">
                     <i class="bi bi-zoom-in"></i>
                 </button>
-                <button class="btn btn-secondary btn-sm" id="zoomOutBtn">
+                <button class="btn btn-secondary btn-sm" id="zoomOutBtn" title="{{ t('builder.toolbar.zoom_out') }}">
                     <i class="bi bi-zoom-out"></i>
                 </button>
-                <button class="btn btn-secondary btn-sm" id="fitToScreenBtn">
+                <button class="btn btn-secondary btn-sm" id="fitToScreenBtn" title="{{ t('builder.toolbar.fit_to_screen') }}">
                     <i class="bi bi-fullscreen"></i>
                 </button>
             </div>
             
             <div class="toolbar-center">
-                <span class="current-flow-name" id="currentFlowName">Выберите или создайте Flow</span>
+                <span class="current-flow-name" id="currentFlowName">{{ t('builder.toolbar.select_or_create_flow') }}</span>
             </div>
             
             <div class="toolbar-right">
@@ -93,10 +93,6 @@
                         <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('en');">
                             <i class="bi bi-check" style="visibility: hidden" id="lang-en"></i> 
                             {{ t('languages.en') }}
-                        </a></li>
-                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('es');">
-                            <i class="bi bi-check" style="visibility: hidden" id="lang-es"></i> 
-                            {{ t('languages.es') }}
                         </a></li>
                     </ul>
                 </div>
@@ -148,13 +144,13 @@
 <!-- Контекстное меню -->
 <div class="context-menu" id="contextMenu" style="display: none;">
     <div class="context-menu-item" data-action="edit">
-        <i class="bi bi-pencil"></i> Редактировать
+        <i class="bi bi-pencil"></i> {{ t('builder.context_menu.edit') }}
     </div>
     <div class="context-menu-item" data-action="duplicate">
-        <i class="bi bi-clipboard"></i> Дублировать
+        <i class="bi bi-clipboard"></i> {{ t('builder.context_menu.duplicate') }}
     </div>
     <div class="context-menu-item" data-action="delete">
-        <i class="bi bi-trash"></i> Удалить
+        <i class="bi bi-trash"></i> {{ t('builder.context_menu.delete') }}
     </div>
 </div>
 {% endblock %}

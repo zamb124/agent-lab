@@ -17,10 +17,17 @@
                         <i class="bi bi-diagram-3"></i>
                         {{ t('landing.header.builder') }}
                     </a>
-                    <a href="/frontend/auth" class="btn btn-outline-primary">
-                        <i class="bi bi-box-arrow-in-right"></i>
-                        {{ t('landing.header.login') }}
-                    </a>
+                    {% if is_authenticated %}
+                        <a href="/frontend/dashboard" class="btn btn-outline-primary">
+                            <i class="bi bi-speedometer2"></i>
+                            {{ t('landing.header.dashboard') }}
+                        </a>
+                    {% else %}
+                        <a href="/frontend/auth" class="btn btn-outline-primary">
+                            <i class="bi bi-box-arrow-in-right"></i>
+                            {{ t('landing.header.login') }}
+                        </a>
+                    {% endif %}
                     
                     <!-- Dropdown для выбора языка - в самом правом углу -->
                     <div class="dropdown">
@@ -36,10 +43,6 @@
                         <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setLandingLanguage('en');">
                             <i class="bi bi-check" style="visibility: hidden" id="lang-en"></i> 
                             {{ t('languages.en') }}
-                        </a></li>
-                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setLandingLanguage('es');">
-                            <i class="bi bi-check" style="visibility: hidden" id="lang-es"></i> 
-                            {{ t('languages.es') }}
                         </a></li>
                         </ul>
                     </div>
@@ -77,35 +80,35 @@
                         <div class="visual-overlay">
                             <div class="floating-card card-1">
                                 <i class="bi bi-cpu"></i>
-                                <span>AI</span>
+                                <span>{{ t('landing.hero.floating_tags.ai') }}</span>
                             </div>
                             <div class="floating-card card-2">
                                 <i class="bi bi-gear"></i>
-                                <span>Автоматизация</span>
+                                <span>{{ t('landing.hero.floating_tags.automation') }}</span>
                             </div>
                             <div class="floating-card card-3">
                                 <i class="bi bi-database"></i>
-                                <span>RAG</span>
+                                <span>{{ t('landing.hero.floating_tags.rag') }}</span>
                             </div>
                             <div class="floating-card card-4">
                                 <i class="bi bi-search"></i>
-                                <span>Поиск информации</span>
+                                <span>{{ t('landing.hero.floating_tags.search') }}</span>
                             </div>
                             <div class="floating-card card-5">
                                 <i class="bi bi-headset"></i>
-                                <span>Поддержка</span>
+                                <span>{{ t('landing.hero.floating_tags.support') }}</span>
                             </div>
                             <div class="floating-card card-6">
                                 <i class="bi bi-graph-up"></i>
-                                <span>Эффективность</span>
+                                <span>{{ t('landing.hero.floating_tags.efficiency') }}</span>
                             </div>
                             <div class="floating-card card-7">
                                 <i class="bi bi-arrow-up-circle"></i>
-                                <span>Рост</span>
+                                <span>{{ t('landing.hero.floating_tags.growth') }}</span>
                             </div>
                             <div class="floating-card card-8">
                                 <i class="bi bi-puzzle"></i>
-                                <span>Интеграции</span>
+                                <span>{{ t('landing.hero.floating_tags.integrations') }}</span>
                             </div>
                         </div>
                     </div>
@@ -199,33 +202,33 @@
                 <div class="benefit-item">
                     <div class="benefit-header">
                         <i class="bi bi-lightning"></i>
-                        <h3>Скорость внедрения</h3>
+                        <h3>{{ t('landing.benefits.speed.title') }}</h3>
                     </div>
-                    <p>MVP или прототип агента уже через несколько дней; старт без огромных бюджетов.</p>
+                    <p>{{ t('landing.benefits.speed.description') }}</p>
                 </div>
                 
                 <div class="benefit-item">
                     <div class="benefit-header">
                         <i class="bi bi-shield-lock"></i>
-                        <h3>Контроль и безопасность</h3>
+                        <h3>{{ t('landing.benefits.control_security.title') }}</h3>
                     </div>
-                    <p>Шифрование данных, строгие политики доступа, возможность развёртывания в вашей инфраструктуре.</p>
+                    <p>{{ t('landing.benefits.control_security.description') }}</p>
                 </div>
                 
                 <div class="benefit-item">
                     <div class="benefit-header">
                         <i class="bi bi-arrows-expand"></i>
-                        <h3>Масштабируемость</h3>
+                        <h3>{{ t('landing.benefits.scalability.title') }}</h3>
                     </div>
-                    <p>От одного агента до целой сети агентов, взаимодействующих между собой.</p>
+                    <p>{{ t('landing.benefits.scalability.description') }}</p>
                 </div>
                 
                 <div class="benefit-item">
                     <div class="benefit-header">
                         <i class="bi bi-gear"></i>
-                        <h3>Управляемость</h3>
+                        <h3>{{ t('landing.benefits.manageability.title') }}</h3>
                     </div>
-                    <p>Мониторинг, аналитика, отчетность, оптимизация рабочих процессов.</p>
+                    <p>{{ t('landing.benefits.manageability.description') }}</p>
                 </div>
             </div>
         </div>
@@ -235,27 +238,27 @@
     <section class="audience-section">
         <div class="container">
             <div class="section-header">
-                <h2 class="section-title">Для кого мы</h2>
-                <p class="section-subtitle">Agents Lab будет особенно полезна:</p>
+                <h2 class="section-title">{{ t('landing.audience.title') }}</h2>
+                <p class="section-subtitle">{{ t('landing.audience.subtitle') }}</p>
             </div>
             
             <div class="audience-list">
                  <div class="audience-item">
                     <i class="bi bi-graph-down"></i>
-                    <p>Компаниям, которые хотят снизить операционные расходы и ошибки при ручной работе</p>
+                    <p>{{ t('landing.audience.cost_reduction') }}</p>
                 </div>
                 <div class="audience-item">
                     <i class="bi bi-building"></i>
-                    <p>Бизнесу, где есть повторяющиеся процессы, коммуникации с клиентами, или задачи, требующие быстрого реагирования</p>
+                    <p>{{ t('landing.audience.repetitive_tasks') }}</p>
                 </div>
                 <div class="audience-item">
                     <i class="bi bi-code"></i>
-                    <p>Тем, кто хочет ввести ИИ-агентов, но не имеет большой команды разработчиков</p>
+                    <p>{{ t('landing.audience.no_dev_team') }}</p>
                 </div>
                 
                 <div class="audience-item">
                     <i class="bi bi-shield"></i>
-                    <p>Тем, кто ценит безопасность и контроль над данными, и которым важно соответствие стандартам и регуляциям</p>
+                    <p>{{ t('landing.audience.security_control') }}</p>
                 </div>
             </div>
         </div>
@@ -270,10 +273,17 @@
                     {{ t('landing.cta.subtitle') }}
                 </p>
                     <div class="cta-actions">
-                        <a href="/frontend/auth" class="btn btn-primary btn-lg">
-                            <i class="bi bi-rocket"></i>
-                            {{ t('landing.cta.login_button') }}
-                        </a>
+                        {% if is_authenticated %}
+                            <a href="/frontend/dashboard" class="btn btn-primary btn-lg">
+                                <i class="bi bi-speedometer2"></i>
+                                {{ t('landing.header.dashboard') }}
+                            </a>
+                        {% else %}
+                            <a href="/frontend/auth" class="btn btn-primary btn-lg">
+                                <i class="bi bi-rocket"></i>
+                                {{ t('landing.cta.login_button') }}
+                            </a>
+                        {% endif %}
                         <button class="btn btn-outline-primary btn-lg" onclick="openContactModal()">
                             <i class="bi bi-envelope"></i>
                             {{ t('landing.cta.contact_button') }}
@@ -292,7 +302,7 @@
                     <span class="brand-text langflow-gradient">Agents Lab</span>
                 </div>
                 <div class="footer-text">
-                    <p>&copy; 2025 Agents Lab. Лаборатория Агентов.</p>
+                    <p>{{ t('landing.footer.copyright') }}</p>
                 </div>
             </div>
         </div>
@@ -303,7 +313,7 @@
 <div id="contactModal" class="modal-overlay" onclick="closeContactModal()">
     <div class="modal-content" onclick="event.stopPropagation()">
         <div class="modal-header">
-            <h3>Начать работу с Agents Lab</h3>
+            <h3>{{ t('landing.contact_modal.title') }}</h3>
             <button class="modal-close" onclick="closeContactModal()">
                 <i class="bi bi-x-lg"></i>
             </button>
@@ -311,25 +321,24 @@
         <div class="modal-body">
             <form id="contactForm" onsubmit="submitContactForm(event)">
                 <div class="form-group">
-                    <label for="message">Сообщение *</label>
-                    <textarea id="message" name="message" rows="3" placeholder="Расскажите о ваших задачах и целях..." required></textarea>
+                    <label for="message">{{ t('landing.contact_modal.message_label') }}</label>
+                    <textarea id="message" name="message" rows="3" placeholder="{{ t('landing.contact_modal.message_placeholder') }}" required></textarea>
                 </div>
                 <div class="form-group">
-                    <label for="email">Email *</label>
-                    <input type="email" id="email" name="email" placeholder="your@email.com" required>
+                    <label for="email">{{ t('landing.contact_modal.email_label') }}</label>
+                    <input type="email" id="email" name="email" placeholder="{{ t('landing.contact_modal.email_placeholder') }}" required>
                 </div>
                 <div class="form-group">
-                    <label for="phone">Телефон</label>
-                    <input type="tel" id="phone" name="phone" placeholder="+7 (999) 123-45-67">
+                    <label for="phone">{{ t('landing.contact_modal.phone_label') }}</label>
+                    <input type="tel" id="phone" name="phone" placeholder="{{ t('landing.contact_modal.phone_placeholder') }}">
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn btn-outline-primary" onclick="closeContactModal()">
-                        Отмена
+                        {{ t('landing.contact_modal.cancel_button') }}
                     </button>
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-send"></i>
-                        Отправить
-                    </button>
+                        {{ t('landing.contact_modal.send_button') }}</button>
                 </div>
             </form>
         </div>
@@ -369,7 +378,7 @@ async function submitContactForm(event) {
     const submitButton = event.target.querySelector('button[type="submit"]');
     const originalText = submitButton.innerHTML;
     submitButton.disabled = true;
-    submitButton.innerHTML = '<i class="bi bi-hourglass-split"></i> Отправка...';
+            submitButton.innerHTML = `<i class="bi bi-hourglass-split"></i> ${t('landing.contact_modal.sending')}`;
     
     try {
         const response = await fetch('/api/v1/lead', {
@@ -381,17 +390,17 @@ async function submitContactForm(event) {
         });
         
         if (response.ok) {
-            showNotification('Сообщение отправлено', 'Мы свяжемся с вами в ближайшее время', 'success');
+            showNotification(t('landing.contact_modal.notification_success_title'), t('landing.contact_modal.notification_success_message'), 'success');
             closeContactModal();
         } else {
             const errorData = await response.json();
-            let errorMessage = 'Попробуйте еще раз или свяжитесь с нами напрямую';
+            let errorMessage = t('landing.contact_modal.notification_error_message_default');
             
             // Обрабатываем ошибки валидации
             if (errorData.detail && Array.isArray(errorData.detail)) {
                 const emailError = errorData.detail.find(err => err.loc && err.loc.includes('email'));
                 if (emailError) {
-                    errorMessage = 'Пожалуйста, введите корректный email адрес';
+                    errorMessage = t('landing.contact_modal.notification_error_message_email_invalid');
                 }
             }
             
@@ -399,7 +408,7 @@ async function submitContactForm(event) {
         }
     } catch (error) {
         console.error('Ошибка:', error);
-        showNotification('Ошибка отправки', error.message, 'error');
+        showNotification(t('landing.contact_modal.notification_error_title'), error.message, 'error');
     } finally {
         // Восстанавливаем кнопку
         submitButton.disabled = false;

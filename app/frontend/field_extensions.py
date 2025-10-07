@@ -727,8 +727,29 @@ class FrontendMixin:
         if hasattr(self, "models") and self.models:
             headers = []
             first_model = self.models[0]
+            model_class_name = first_model.__class__.__name__.lower().replace("config", "")
+            
             for field_name, field_info in first_model.__class__.model_fields.items():
-                title = field_info.title or field_name.replace("_", " ").title()
+                # Пытаемся получить перевод для заголовка поля
+                translation_key = f"models.{model_class_name}.fields.{field_name}.title"
+                
+                # Получаем контекст для доступа к функции перевода
+                ctx = get_context()
+                if ctx:
+                    try:
+                        from app.core.translation_manager import get_translation_manager
+                        manager = get_translation_manager()
+                        translated_title = manager.t(translation_key, ctx.language)
+                        # Если перевод найден и не является ключом
+                        if translated_title != translation_key and not translated_title.startswith("[TODO:"):
+                            title = translated_title
+                        else:
+                            title = field_info.title or field_name.replace("_", " ").title()
+                    except Exception as e:
+                        title = field_info.title or field_name.replace("_", " ").title()
+                else:
+                    title = field_info.title or field_name.replace("_", " ").title()
+                
                 headers.append({"name": field_name, "title": title})
             context["headers"] = headers
 

@@ -13,5 +13,19 @@ templates = get_templates()
 @router.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request):
     """Главная страница - лендинг Agents Lab"""
-    return templates.TemplateResponse("landing.html", {"request": request})
+    # Проверяем, авторизован ли пользователь
+    context = getattr(request.state, 'context', None)
+    is_authenticated = (
+        context and 
+        context.user and 
+        context.user.user_id != "anonymous"
+    )
+    
+    return templates.TemplateResponse(
+        "landing.html", 
+        {
+            "request": request, 
+            "is_authenticated": is_authenticated
+        }
+    )
 
