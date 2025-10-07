@@ -52,6 +52,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 set_context(context)
                 request.state.context = context
                 request.state.user = context.user
+                request.state.language = context.language.value
                 
                 logger.info(f"📂 Контекст для скачивания файла: компания {requested_company.company_id}")
                 
@@ -71,6 +72,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # Также сохраняем в request.state для совместимости
             request.state.context = context
             request.state.user = context.user
+            request.state.language = context.language.value
 
             # Продолжаем обработку
             response = await call_next(request)
@@ -131,8 +133,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
             logger.info("🔐 OAuth контекст")
             return await self._create_anonymous_context(request, requested_company)
         elif path == "/":
-            logger.info("🏠 Корневой путь - пропускаем через middleware")
-            return await self._create_anonymous_context(request, requested_company)
+            logger.info("🏠 Корневой путь - проверяем авторизацию")
+            # Для главной страницы пытаемся создать frontend контекст, но без ошибки если пользователь не авторизован
+            try:
+                return await self._create_frontend_context(request, requested_company, allow_no_company=True)
+            except HTTPException:
+                # Если авторизация не удалась, создаем анонимный контекст
+                logger.info("🏠 Пользователь не авторизован, создаем анонимный контекст")
+                return await self._create_anonymous_context(request, requested_company)
         else:
             logger.warning(f"❌ Неизвестный путь: {path}")
             raise HTTPException(status_code=404, detail="Not Found")

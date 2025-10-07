@@ -5,13 +5,13 @@
       {{ fields_html|safe }}
       <td class="text-center">
           <div class="btn-group">
-              <button class="btn btn-ghost btn-sm" data-tooltip="Редактировать">
+              <button class="btn btn-ghost btn-sm" data-tooltip="{{ t('common.edit') }}">
                   <i class="bi bi-pencil"></i>
               </button>
-              <button class="btn btn-ghost btn-sm" data-tooltip="Дублировать">
+              <button class="btn btn-ghost btn-sm" data-tooltip="{{ t('models.common.duplicate') }}">
                   <i class="bi bi-copy"></i>
               </button>
-              <button class="btn btn-ghost btn-sm text-danger" data-tooltip="Удалить">
+              <button class="btn btn-ghost btn-sm text-danger" data-tooltip="{{ t('common.delete') }}">
                   <i class="bi bi-trash"></i>
               </button>
           </div>
@@ -23,13 +23,13 @@
   <div class="nested-model-summary">
     <span class="badge badge-info">
       <i class="bi bi-box"></i>
-      {{ model_type.title() if model_type else 'Модель' }}
+      {{ titles.get(model_type, model_type.title()) if model_type else t('models.common.model') }}
     </span>
     {% if model_id %}
     <button class="btn btn-ghost btn-xs" 
             hx-get="/frontend/models/{{ model_type }}/{{ model_id }}?view=modal" 
             hx-target="#modal-container"
-            data-tooltip="Показать детали">
+            data-tooltip="{{ t('models.common.show_details') }}">
         <i class="bi bi-eye"></i>
     </button>
     {% endif %}
