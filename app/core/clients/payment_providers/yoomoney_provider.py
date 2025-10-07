@@ -6,7 +6,7 @@
 import hashlib
 import logging
 from urllib.parse import urlencode
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Literal
 from pydantic import Field
 
 from .base_provider import (
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 class YooMoneyConfig(PaymentProviderConfig):
     """Конфигурация YooMoney провайдера"""
-    provider_type: str = Field(default="yoomoney", const=True)
+    provider_type: Literal["yoomoney"] = "yoomoney"
     account_number: str = Field(description="Номер кошелька YooMoney")
     notification_secret: str = Field(description="Секрет для проверки HTTP-уведомлений")
     quickpay_url: str = Field(

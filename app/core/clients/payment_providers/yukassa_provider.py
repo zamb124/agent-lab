@@ -4,7 +4,7 @@
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Literal
 from pydantic import Field
 
 from .base_provider import (
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 class YuKassaConfig(PaymentProviderConfig):
     """Конфигурация ЮKassa провайдера"""
-    provider_type: str = Field(default="yukassa", const=True)
+    provider_type: Literal["yukassa"] = "yukassa"
     shop_id: str = Field(default="", description="ID магазина в ЮKassa")
     secret_key: str = Field(default="", description="Секретный ключ")
     api_url: str = Field(
