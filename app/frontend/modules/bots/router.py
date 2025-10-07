@@ -41,7 +41,7 @@ async def bots_list(request: Request):
                 bot_info = {
                     "flow_id": flow_config.flow_id,
                     "name": flow_config.name,
-                    "description": flow_config.description or "Описание отсутствует",
+                    "description": flow_config.description if flow_config.description else '<span data-i18n="bots.no_description">Описание отсутствует</span>',
                     "platforms": list(flow_config.platforms.keys()),
                     "entry_point": flow_config.entry_point_agent,
                 }
