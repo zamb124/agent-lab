@@ -164,9 +164,9 @@ async def test_process_webhook_duplicate(payment_service):
         raw_data={}
     )
     
-    # Проверяем что webhook был сохранен, но обработка пропущена  
-    # При дубликате все равно сохраняем уведомление (1 раз)
-    payment_service.storage.set.assert_called()
+    # При дубликате сохраняем только уведомление о попытке (не обрабатываем повторно)
+    # Storage.set вызывается хотя бы раз
+    assert payment_service.storage.set.call_count >= 1
 
 
 @pytest.mark.asyncio
