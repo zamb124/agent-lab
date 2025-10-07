@@ -160,6 +160,12 @@ class PaymentService:
             processed=False
         )
         
+        # Если это тестовое уведомление - просто логируем и выходим
+        if verification_result.status == "test":
+            logger.info("✅ Тестовое уведомление обработано успешно")
+            await self._save_notification(notification)
+            return
+        
         if await self._is_notification_duplicate(verification_result.external_payment_id):
             logger.warning(
                 f"⚠️ Дубликат уведомления: external_id={verification_result.external_payment_id}"

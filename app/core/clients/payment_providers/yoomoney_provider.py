@@ -5,9 +5,11 @@
 
 import hashlib
 import logging
+import aiohttp
 from urllib.parse import urlencode
-from typing import Dict, Any, Optional, Literal
+from typing import Dict, Any, Optional, Literal, List
 from pydantic import Field
+from datetime import datetime, timedelta
 
 from .base_provider import (
     BasePaymentProvider,
@@ -29,8 +31,13 @@ class YooMoneyConfig(PaymentProviderConfig):
         default="https://yoomoney.ru/quickpay/confirm.xml",
         description="URL формы оплаты Quickpay"
     )
-    client_id: Optional[str] = Field(default=None, description="OAuth client_id приложения (для API кошелька в будущем)")
-    client_secret: Optional[str] = Field(default=None, description="OAuth client_secret приложения (для API кошелька в будущем)")
+    client_id: Optional[str] = Field(default=None, description="OAuth client_id приложения")
+    client_secret: Optional[str] = Field(default=None, description="OAuth client_secret приложения")
+    access_token: Optional[str] = Field(default=None, description="OAuth access_token для API (получается через OAuth flow)")
+    api_url: str = Field(
+        default="https://yoomoney.ru/api",
+        description="URL YooMoney API"
+    )
 
 
 class YooMoneyProvider(BasePaymentProvider):
@@ -93,9 +100,56 @@ class YooMoneyProvider(BasePaymentProvider):
         
         logger.info("Проверка YooMoney webhook")
         
+        # Проверяем тестовое уведомление
+        is_test = webhook_data.get("test_notification") == "true"
+        
+        if is_test:
+            logger.info("🧪 Получено тестовое уведомление от YooMoney")
+            # Для тестового уведомления label пустой - просто проверяем подпись
+            notification_type = webhook_data.get("notification_type")
+            operation_id = webhook_data.get("operation_id")
+            amount = webhook_data.get("amount")
+            currency = webhook_data.get("currency", "643")
+            datetime_str = webhook_data.get("datetime")
+            sender = webhook_data.get("sender", "")
+            codepro = webhook_data.get("codepro", "false")
+            label = webhook_data.get("label", "")
+            received_hash = webhook_data.get("sha1_hash")
+            
+            # Проверяем подпись
+            check_string = (
+                f"{notification_type}&{operation_id}&{amount}&{currency}&"
+                f"{datetime_str}&{sender}&{codepro}&{self.config.notification_secret}&{label}"
+            )
+            
+            calculated_hash = hashlib.sha1(check_string.encode('utf-8')).hexdigest()
+            
+            if calculated_hash == received_hash:
+                logger.info("✅ Тестовое уведомление - подпись валидна!")
+                return WebhookVerificationResult(
+                    is_valid=True,
+                    transaction_id=None,  # Тестовое - нет транзакции
+                    amount=float(amount),
+                    external_payment_id=operation_id,
+                    status="test"
+                )
+            else:
+                logger.error(f"❌ Тестовое уведомление - неверная подпись!")
+                return WebhookVerificationResult(
+                    is_valid=False,
+                    error_message="Invalid test notification signature"
+                )
+        
+        # Реальное уведомление
         notification_type = webhook_data.get("notification_type")
         operation_id = webhook_data.get("operation_id")
-        amount = webhook_data.get("withdraw_amount") or webhook_data.get("amount")
+        
+        # Для разных типов уведомлений используем разные поля суммы
+        if notification_type == "card-incoming":
+            amount = webhook_data.get("amount")  # Для card-incoming используем amount
+        else:
+            amount = webhook_data.get("withdraw_amount") or webhook_data.get("amount")  # Для p2p-incoming
+        
         currency = webhook_data.get("currency", "643")
         datetime_str = webhook_data.get("datetime")
         sender = webhook_data.get("sender", "")  # Для card-incoming может быть пустым
@@ -162,3 +216,106 @@ class YooMoneyProvider(BasePaymentProvider):
             f"operation_id={external_payment_id}"
         )
         return False
+    
+    async def get_operation_history(
+        self,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        label: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Получает историю операций через YooMoney API.
+        Требует access_token.
+        
+        Документация: https://yoomoney.ru/docs/wallet/user-account/operation-history
+        """
+        
+        if not self.config.access_token:
+            logger.error("Нет access_token для работы с API YooMoney")
+            return []
+        
+        params = {
+            "records": 100,
+            "type": "deposition"  # Только входящие
+        }
+        
+        if start_date:
+            params["from"] = start_date.isoformat()
+        
+        if end_date:
+            params["till"] = end_date.isoformat()
+        
+        if label:
+            params["label"] = label
+        
+        headers = {
+            "Authorization": f"Bearer {self.config.access_token}",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self.config.api_url}/operation-history",
+                    data=params,
+                    headers=headers
+                ) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        logger.info(f"Получено операций из YooMoney API: {len(data.get('operations', []))}")
+                        return data.get("operations", [])
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"Ошибка получения истории операций: {response.status}, {error_text}")
+                        return []
+        except Exception as e:
+            logger.error(f"Ошибка запроса к YooMoney API: {e}")
+            return []
+    
+    async def sync_pending_transactions(self, pending_transactions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Синхронизирует статусы pending транзакций с YooMoney API.
+        Ищет в истории операций по label (transaction_id).
+        
+        Args:
+            pending_transactions: Список транзакций со статусом PENDING
+            
+        Returns:
+            Список найденных операций из YooMoney
+        """
+        
+        if not self.config.access_token:
+            logger.warning("Нет access_token для синхронизации транзакций")
+            return []
+        
+        # Получаем историю за последние 7 дней
+        start_date = datetime.now() - timedelta(days=7)
+        operations = await self.get_operation_history(start_date=start_date)
+        
+        # Мапим label -> operation
+        operations_by_label = {}
+        for op in operations:
+            if op.get("label"):
+                operations_by_label[op["label"]] = op
+        
+        # Ищем наши pending транзакции
+        found_operations = []
+        for txn in pending_transactions:
+            transaction_id = txn.get("transaction_id")
+            if transaction_id in operations_by_label:
+                yoomoney_op = operations_by_label[transaction_id]
+                found_operations.append({
+                    "transaction_id": transaction_id,
+                    "operation_id": yoomoney_op.get("operation_id"),
+                    "amount": float(yoomoney_op.get("amount", 0)),
+                    "datetime": yoomoney_op.get("datetime"),
+                    "status": yoomoney_op.get("status"),  # success, in_progress
+                    "yoomoney_data": yoomoney_op
+                })
+                logger.info(
+                    f"✅ Найдена операция для транзакции {transaction_id}: "
+                    f"operation_id={yoomoney_op.get('operation_id')}, "
+                    f"amount={yoomoney_op.get('amount')}"
+                )
+        
+        return found_operations
