@@ -48,15 +48,17 @@ async def start_auth(provider_name: str, redirect_uri: str = None):
             status_code=400, detail=f"Неподдерживаемый провайдер: {provider_name}"
         )
 
-    # Формируем правильный redirect_uri если не передан
     if redirect_uri is None:
-        redirect_uri = f"https://agents-lab.ru/auth/callback/{provider_name}"
+        if settings.server.env == "local":
+            redirect_uri = f"http://{settings.server.domain}:{settings.server.port}/auth/callback/{provider_name}"
+        else:
+            redirect_uri = f"https://{settings.server.domain}/auth/callback/{provider_name}"
 
     try:
         auth_url = await auth_service.start_auth(provider, redirect_uri)
         return RedirectResponse(url=auth_url)
     except Exception as e:
-        logger.error(f"Ошибка начала авторизации {provider_name}: {e}")
+        logger.error(f"Ошибка начала авторизации {provider_name}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -94,11 +96,12 @@ async def auth_callback(
             status_code=400, detail=f"Неподдерживаемый провайдер: {provider_name}"
         )
 
-    # Формируем правильный redirect_uri если не передан
     if redirect_uri is None:
-        redirect_uri = f"https://agents-lab.ru/auth/callback/{provider_name}"
+        if settings.server.env == "local":
+            redirect_uri = f"http://{settings.server.domain}:{settings.server.port}/auth/callback/{provider_name}"
+        else:
+            redirect_uri = f"https://{settings.server.domain}/auth/callback/{provider_name}"
 
-    # Формируем запрос авторизации
     auth_request = AuthRequest(
         provider=provider, code=code, state=state, redirect_uri=redirect_uri
     )
@@ -114,13 +117,13 @@ async def auth_callback(
     response = RedirectResponse(url="/frontend/dashboard")
     # Настройки куки в зависимости от окружения
     is_production = settings.server.env == "production"
-    
+
     # Для локальной разработки НЕ устанавливаем домен - куки будут работать везде
     if settings.server.env == "local":
         domain = None
     else:
         domain = f".{settings.server.domain}"
-    
+
     response.set_cookie(
         key="session_id",
         value=result.session.session_id,

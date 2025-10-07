@@ -12,6 +12,7 @@ import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import httpx
+import asyncio
 from pydantic import BaseModel
 
 from ...core.config import settings
@@ -25,6 +26,12 @@ _client_cache: Dict[tuple, "AmoCRMClient"] = {}
 # Маппинг subdomain -> access_token
 # TODO: Перенести в настройки или базу данных для продакшена
 _subdomain_to_token: Dict[str, str] = {}
+
+# Кеш для amojo_token с временем истечения
+_amojo_token_cache: Dict[str, tuple[str, datetime]] = {}
+
+# Активные индикаторы "печатает" {chat_id: task}
+_active_typing_tasks: Dict[str, asyncio.Task] = {}
 
 
 class AmoCRMLead(BaseModel):
@@ -131,6 +138,341 @@ class AmoCRMClient:
         if self._client:
             await self._client.aclose()
             self._client = None
+
+    async def get_amojo_token(
+        self,
+        force_refresh: bool = False,
+        cache_ttl_minutes: int = 60
+    ) -> str:
+        """
+        Получает amojo_token (X-Auth-Token) для Internal API
+
+        Токен кешируется и автоматически обновляется при истечении.
+        Используется для отправки сообщений через Internal API AmoCRM.
+
+        Метод основан на подходе из:
+        - https://github.com/Sazoks/amocrm-services
+        - https://github.com/dotzero/amocrm-php/issues/99
+
+        API возвращает токен в ключе 'token' или 'amojo_token' (в зависимости от версии).
+        Реализация поддерживает оба варианта для обратной совместимости.
+
+        Args:
+            force_refresh: Принудительно обновить токен (игнорировать кеш)
+            cache_ttl_minutes: Время жизни токена в кеше (по умолчанию 60 минут)
+
+        Returns:
+            amojo_token (X-Auth-Token)
+
+        Raises:
+            httpx.HTTPStatusError: При ошибке получения токена
+
+        Example:
+            >>> token = await client.get_amojo_token()
+            >>> # Использовать token для Internal API
+        """
+        cache_key = f"{self.subdomain}_{self.access_token[:20]}"
+
+        if not force_refresh and cache_key in _amojo_token_cache:
+            cached_token, expiry_time = _amojo_token_cache[cache_key]
+            if datetime.now() < expiry_time:
+                logger.debug(f"Использован amojo_token из кеша для subdomain: {self.subdomain}")
+                return cached_token
+
+        url = f"https://{self.subdomain}.amocrm.ru/ajax/v1/chats/session"
+
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+
+        payload = {
+            "request[chats][session][action]": "create",
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                response = await client.post(url, headers=headers, data=payload)
+                response.raise_for_status()
+
+                data = response.json()
+
+                access_token = data["response"]["chats"]["session"]["access_token"]
+                refresh_token = data["response"]["chats"]["session"]["refresh_token"]
+
+
+                expiry_time = datetime.now() + timedelta(minutes=cache_ttl_minutes)
+                _amojo_token_cache[cache_key] = (access_token, expiry_time)
+
+                logger.info(f"✅ Получен новый amojo_token для subdomain: {self.subdomain}")
+                logger.debug(f"Ответ содержал ключи: {list(data.keys())}")
+                return access_token
+
+            except httpx.HTTPStatusError as e:
+                raise httpx.HTTPStatusError(
+                    f"Не удалось получить amojo_token (subdomain={self.subdomain}): "
+                    f"{e.response.status_code} - {e.response.text[:200]}",
+                    request=e.request,
+                    response=e.response,
+                ) from e
+
+    async def start_typing_indicator(
+        self,
+        chat_id: str,
+        crm_dialog_id: int,
+        max_duration: float = 5.0,
+    ) -> bool:
+        """
+        Запускает индикатор "печатает" в чате
+
+        Args:
+            chat_id: ID чата из вебхука
+            crm_dialog_id: ID диалога в CRM
+            max_duration: Максимальное время показа индикатора в секундах
+
+        Returns:
+            True если индикатор успешно запущен
+
+        Example:
+            >>> await client.start_typing_indicator(
+            ...     chat_id="8468b0a1-69ca-40db-bcf8-a97bbfd08f01",
+            ...     crm_dialog_id=111
+            ... )
+        """
+        # Отменяем предыдущий индикатор для этого чата, если есть
+        await self.stop_typing_indicator(chat_id)
+
+        # Создаем новую задачу для индикатора
+        task = asyncio.create_task(
+            self._typing_indicator_task(chat_id, crm_dialog_id, max_duration)
+        )
+        _active_typing_tasks[chat_id] = task
+
+        logger.info(f"🔵 Запущен индикатор 'печатает' для чата {chat_id}")
+        return True
+
+    async def stop_typing_indicator(self, chat_id: str) -> bool:
+        """
+        Останавливает индикатор "печатает" в чате
+
+        Args:
+            chat_id: ID чата из вебхука
+
+        Returns:
+            True если индикатор был остановлен
+
+        Example:
+            >>> await client.stop_typing_indicator("8468b0a1-69ca-40db-bcf8-a97bbfd08f01")
+        """
+        if chat_id in _active_typing_tasks:
+            task = _active_typing_tasks[chat_id]
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+            del _active_typing_tasks[chat_id]
+            logger.info(f"🔴 Остановлен индикатор 'печатает' для чата {chat_id}")
+            return True
+        return False
+
+    async def _typing_indicator_task(
+        self,
+        chat_id: str,
+        crm_dialog_id: int,
+        max_duration: float,
+    ) -> None:
+        """
+        Фоновая задача для поддержания индикатора "печатает"
+        """
+        try:
+            amojo_token = await self.get_amojo_token()
+
+            url = f"https://amojo.amocrm.ru/v2/typing"
+            params = {"stand": "v16"}
+            headers = {
+                "Accept": "*/*",
+                "Content-Type": "application/json",
+                "X-Auth-Token": amojo_token,
+                "Origin": f"https://{self.subdomain}.amocrm.ru",
+                "Referer": f"https://{self.subdomain}.amocrm.ru/",
+                "Connection": "keep-alive",
+            }
+            payload = {
+                "chats": [{"chat_id": chat_id, "dialog_id": crm_dialog_id}]
+            }
+
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(30.0, connect=10.0),
+                limits=httpx.Limits(max_keepalive_connections=10, max_connections=20)
+            ) as client:
+                # Отправляем начальный индикатор
+                response = await client.post(url, headers=headers, params=params, json=payload)
+                response.raise_for_status()
+                logger.info(f"✅ Отправлен индикатор 'печатает' в чат {chat_id}")
+
+                # Ждем максимальное время или отмену
+                try:
+                    await asyncio.wait_for(asyncio.sleep(max_duration), timeout=max_duration)
+                except asyncio.TimeoutError:
+                    pass
+
+        except asyncio.CancelledError:
+            logger.info(f"🔴 Индикатор 'печатает' отменен для чата {chat_id}")
+            raise
+        except Exception as e:
+            logger.error(f"❌ Ошибка в задаче индикатора 'печатает' для чата {chat_id}: {e}", exc_info=True)
+        finally:
+            # Удаляем задачу из активных
+            if chat_id in _active_typing_tasks:
+                del _active_typing_tasks[chat_id]
+
+    async def send_typing_indicator(
+        self,
+        chat_id: str,
+        crm_dialog_id: int,
+        duration_seconds_max: float = 5.0,
+    ) -> Dict[str, Any]:
+        """
+        Отправляет индикатор "печатает" в чат через Internal API (устаревший метод)
+
+        Используйте start_typing_indicator() для нового функционала.
+        """
+        await self.start_typing_indicator(chat_id, crm_dialog_id, duration_seconds_max)
+        return {"status": "started", "chat_id": chat_id}
+
+    async def send_message_internal(
+        self,
+        chat_id: str,
+        text: str,
+        scope_id: Optional[str] = None,
+        crm_entity_id: Optional[int] = None,
+        crm_entity_type: Optional[int] = None,
+        persona_name: Optional[str] = None,
+        persona_avatar: Optional[str] = None,
+        recipient_id: Optional[str] = None,
+        crm_dialog_id: Optional[int] = None,
+        crm_contact_id: Optional[int] = None,
+        silent: bool = False,
+        priority: str = "low",
+        with_video: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Отправляет сообщение в чат через Internal API (amojo.amocrm.ru)
+
+        Использует Internal API AmoCRM для отправки сообщений напрямую в чаты.
+        Требует amojo_token (X-Auth-Token) и scope_id (amojo_id аккаунта).
+
+        Args:
+            chat_id: ID чата из вебхука
+            text: Текст сообщения
+            scope_id: Scope ID (amojo_id аккаунта). Если не указан, получается автоматически
+            crm_entity_id: ID связанной сущности (сделки/покупателя)
+            crm_entity_type: Тип сущности (2 = lead, 12 = customer)
+            persona_name: Имя отправителя
+            persona_avatar: URL аватара отправителя
+            recipient_id: ID получателя
+            crm_dialog_id: ID диалога в CRM
+            crm_contact_id: ID контакта в CRM
+            silent: Отправить без уведомления
+            priority: Приоритет сообщения ("low", "normal", "high")
+            with_video: Включить поддержку видео в запросе
+
+        Returns:
+            Ответ от API с данными отправленного сообщения
+
+        Raises:
+            httpx.HTTPStatusError: При ошибке отправки сообщения
+
+        Example:
+            >>> result = await client.send_message_internal(
+            ...     chat_id="8468b0a1-69ca-40db-bcf8-a97bbfd08f01",
+            ...     text="Здравствуйте! Как дела?",
+            ...     crm_entity_id=29819135,
+            ...     crm_entity_type=2
+            ... )
+        """
+        amojo_token = await self.get_amojo_token()
+
+
+        account_info = await self.get_account_info(with_amojo_id=True)
+        scope_id = account_info.get("amojo_id")
+        if not scope_id:
+            raise ValueError("Не удалось получить amojo_id аккаунта. Убедитесь, что у вас есть доступ к Chat API")
+
+        stand = "v16"
+        url = f"https://amojo.amocrm.ru/v1/chats/{scope_id}/{chat_id}/messages"
+
+        params = {
+            "with_video": str(with_video).lower(),
+            "stand": stand,
+        }
+
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "X-Auth-Token": amojo_token,
+            "Origin": f"https://{self.subdomain}.amocrm.ru",
+            "Referer": f"https://{self.subdomain}.amocrm.ru/",
+        }
+
+        account_info = await self.get_account_info(with_amojo_id=True)
+        crm_account_id = account_info.get("id")
+
+
+        payload: Dict[str, Any] = {
+            "silent": silent,
+            "priority": priority,
+            "text": text,
+            "skip_link_shortener": False,
+        }
+
+        if crm_entity_id and crm_entity_type:
+            payload["crm_entity"] = {
+                "id": crm_entity_id,
+                "type": crm_entity_type,
+            }
+
+        if persona_name:
+            payload["persona_name"] = persona_name
+
+        if persona_avatar:
+            payload["persona_avatar"] = persona_avatar
+
+        if recipient_id:
+            payload["recipient_id"] = recipient_id
+
+        if crm_dialog_id:
+            payload["crm_dialog_id"] = crm_dialog_id
+
+        if crm_contact_id:
+            payload["crm_contact_id"] = crm_contact_id
+
+        if crm_account_id:
+            payload["crm_account_id"] = crm_account_id
+
+        payload["group_id"] = None
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                response = await client.post(url, headers=headers, params=params, json=payload)
+                response.raise_for_status()
+
+                result = response.json()
+                logger.info(f"✅ Сообщение отправлено в чат {chat_id} (scope_id={scope_id})")
+                return result
+
+            except httpx.HTTPStatusError as e:
+                raise httpx.HTTPStatusError(
+                    f"Не удалось отправить сообщение в чат {chat_id} через Internal API "
+                    f"(subdomain={self.subdomain}, scope_id={scope_id}): "
+                    f"{e.response.status_code} - {e.response.text[:200]}",
+                    request=e.request,
+                    response=e.response,
+                ) from e
+
 
     # ========== РАБОТА СО СДЕЛКАМИ (LEADS) ==========
 
@@ -326,7 +668,7 @@ class AmoCRMClient:
 
         params: Dict[str, Any] = {
             "limit": min(limit, 250),
-            "page": page,
+            "page": 1,
         }
 
         if query:
@@ -334,9 +676,12 @@ class AmoCRMClient:
 
         try:
             response = await client.get(f"{self.base_url}/contacts", params=params)
-            response.raise_for_status()
 
-            data = response.json()
+            response.raise_for_status()
+            if response.status_code == 204:
+                data = {}
+            else:
+                data = response.json()
             contacts = data.get("_embedded", {}).get("contacts", [])
 
             logger.info(f"Получено {len(contacts)} контактов")
@@ -787,6 +1132,168 @@ class AmoCRMClient:
                 request=e.request,
                 response=e.response,
             ) from e
+
+    async def get_lead_events_timeline(
+        self,
+        lead_id: int,
+        created_at_from: Optional[float] = None,
+        created_at_to: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Получает историю событий (timeline) сделки, включая сообщения чата
+
+        Использует внутренний Ajax API AmoCRM для получения полной истории
+        событий сделки, включая сообщения из чатов, примечания, изменения полей и т.д.
+
+        Args:
+            lead_id: ID сделки
+            created_at_from: Начальная дата фильтрации (timestamp)
+            created_at_to: Конечная дата фильтрации (timestamp)
+
+        Returns:
+            Словарь с историей событий
+
+        Raises:
+            httpx.HTTPStatusError: При ошибке получения истории
+
+        Example:
+            >>> import time
+            >>> # Получить события за последние 7 дней
+            >>> week_ago = time.time() - (7 * 24 * 60 * 60)
+            >>> timeline = await client.get_lead_events_timeline(
+            ...     lead_id=29972365,
+            ...     created_at_from=week_ago
+            ... )
+            >>> # Получить все события
+            >>> timeline = await client.get_lead_events_timeline(lead_id=29972365)
+        """
+        url = f"https://{self.subdomain}.amocrm.ru/ajax/v3/leads/{lead_id}/events_timeline"
+
+        params: Dict[str, Any] = {}
+
+        if created_at_from is not None and created_at_to is not None:
+            params["filter[created_at][gte_lte]"] = f"{created_at_from}_{created_at_to}"
+        elif created_at_from is not None:
+            params["filter[created_at][gte_lte]"] = f"{created_at_from}"
+
+        client = self._get_client()
+        headers = {
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "*/*",
+        }
+
+        try:
+            response = await client.get(url, params=params, headers=headers)
+            response.raise_for_status()
+
+            data = response.json()
+            logger.info(
+                f"Получена история событий для сделки {lead_id} "
+                f"(subdomain={self.subdomain})"
+            )
+            return data
+
+        except httpx.HTTPStatusError as e:
+            raise httpx.HTTPStatusError(
+                f"Не удалось получить историю событий сделки {lead_id} "
+                f"(subdomain={self.subdomain}): "
+                f"{e.response.status_code} - {e.response.text[:200]}",
+                request=e.request,
+                response=e.response,
+            ) from e
+
+    async def get_chat_history(
+        self,
+        chat_id: str,
+        offset: int = 0,
+        limit: int = 500,  # Увеличиваем лимит для получения всей истории
+    ) -> List[Dict[str, Any]]:
+        """
+        Получает историю чата сделки через Internal API
+
+        Использует amojo_token для авторизации и получает полную историю
+        событий сделки, включая сообщения из чатов, примечания и изменения.
+
+        Args:
+            lead_id: ID сделки
+            created_at_from: Начальная дата фильтрации (timestamp)
+            created_at_to: Конечная дата фильтрации (timestamp)
+            limit: Количество событий на страницу (по умолчанию 100)
+
+        Returns:
+            Словарь с историей событий и чатов:
+            - _embedded.items: список событий с сообщениями
+            - _embedded.contacts: связанные контакты
+            - _embedded.leads: информация о сделках
+            - _embedded.chats: данные чатов
+            - _links: ссылки на следующую страницу (пагинация)
+
+        Raises:
+            httpx.HTTPStatusError: При ошибке получения истории
+
+        Example:
+            >>> import time
+            >>> # Получить историю чата за последний час
+            >>> hour_ago = time.time() - 3600
+            >>> history = await client.get_lead_chat_history(
+            ...     lead_id=29974143,
+            ...     created_at_from=hour_ago
+            ... )
+            >>>
+            >>> # Обработать сообщения
+            >>> for item in history.get("_embedded", {}).get("items", []):
+            ...     if item["type"] in [89, 90]:  # Типы сообщений чата
+            ...         message = item["data"]["message"]
+            ...         author = item["data"]["author"]
+            ...         print(f"{author['full_name']}: {message['text']}")
+        """
+        amojo_token = await self.get_amojo_token()
+
+        # Получаем scope_id если не указан
+        # if not scope_id:
+        account_info = await self.get_account_info(with_amojo_id=True)
+        amojo_id = account_info.get("amojo_id")
+
+        url = f"https://amojo.amocrm.ru/messages/{amojo_id}/merge"
+
+        params = {
+            "stand": "v15",
+            "offset": offset,
+            "limit": limit,
+            "chat_id[]": chat_id,
+            "get_tags": "true",
+            "lang": "ru"
+        }
+
+        headers = {
+            "X-Auth-Token": amojo_token,
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                response = await client.get(url, params=params, headers=headers)
+                response.raise_for_status()
+
+                data = response.json()
+                message_list = data.get("message_list", [])
+
+                # Сортируем сообщения по времени создания (created_at)
+                message_list.sort(key=lambda x: x.get("created_at", 0))
+
+                logger.info(
+                    f"✅ Получена история чата {chat_id} "
+                    f"(amojo_id={amojo_id}, сообщений: {len(message_list)})"
+                )
+                return message_list
+
+            except httpx.HTTPStatusError as e:
+                raise httpx.HTTPStatusError(
+                    f"Не удалось получить историю чата {chat_id} "
+                    f"(amojo_id={amojo_id}): "
+                    f"{e.response.status_code} - {e.response.text[:200]}",
+                    request=e.request,
+                    response=e.response,
+                ) from e
 
     # ========== РАБОТА С ПОКУПАТЕЛЯМИ (CUSTOMERS) ==========
 
@@ -1889,9 +2396,179 @@ class AmoCRMClient:
                 response=e.response,
             ) from e
 
+    # ========== РАБОТА С SALESBOT (DIGITAL PIPELINE) ==========
+
+    async def get_salesbots(
+        self,
+        limit: int = 250,
+        page: int = 1,
+    ) -> List[Dict[str, Any]]:
+        """
+        Получает список Salesbot'ов
+
+        Args:
+            limit: Количество записей на странице (макс. 250)
+            page: Номер страницы
+
+        Returns:
+            Список ботов
+
+        Raises:
+            httpx.HTTPStatusError: При ошибке запроса
+
+        Example:
+            >>> bots = await client.get_salesbots()
+            >>> for bot in bots:
+            ...     print(f"Bot: {bot['name']}, ID: {bot['id']}")
+        """
+        client = self._get_client()
+        params = {"limit": limit, "page": page}
+
+        try:
+            response = await client.get(
+                f"{self.base_url}/api/v4/salesbot",
+                params=params,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("_embedded", {}).get("salesbots", [])
+
+        except httpx.HTTPStatusError as e:
+            raise httpx.HTTPStatusError(
+                f"Не удалось получить список Salesbot'ов (subdomain={self.subdomain}): "
+                f"{e.response.status_code} - {e.response.text[:200]}",
+                request=e.request,
+                response=e.response,
+            ) from e
+
+    async def create_salesbot(
+        self,
+        name: str,
+        script: List[Dict[str, Any]],
+        commands: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Создает нового Salesbot
+
+        Args:
+            name: Название бота
+            script: Сценарий работы бота (массив обработчиков)
+            commands: Команды для запуска бота (опционально)
+
+        Returns:
+            Данные созданного бота
+
+        Raises:
+            httpx.HTTPStatusError: При ошибке создания
+
+        Example:
+            >>> script = [
+            ...     {
+            ...         "id": 1,
+            ...         "type": "question",
+            ...         "handler": "send_message",
+            ...         "params": {
+            ...             "message": {
+            ...                 "type": "text",
+            ...                 "text": "Здравствуйте! Чем могу помочь?"
+            ...             },
+            ...             "recipient": {
+            ...                 "type": "all_contacts",
+            ...                 "way_of_communication": "over_all"
+            ...             }
+            ...         }
+            ...     }
+            ... ]
+            >>> bot = await client.create_salesbot(
+            ...     name="Бот-Помощник",
+            ...     script=script
+            ... )
+        """
+        client = self._get_client()
+
+        payload = {
+            "name": name,
+            "script": script,
+        }
+
+        if commands:
+            payload["commands"] = commands
+
+        try:
+            response = await client.post(
+                f"{self.base_url}/api/v4/salesbot",
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("_embedded", {}).get("salesbots", [{}])[0]
+
+        except httpx.HTTPStatusError as e:
+            raise httpx.HTTPStatusError(
+                f"Не удалось создать Salesbot (subdomain={self.subdomain}, name={name}): "
+                f"{e.response.status_code} - {e.response.text[:500]}",
+                request=e.request,
+                response=e.response,
+            ) from e
+
+    async def send_message_via_salesbot(
+        self,
+        text: str,
+        chat_id: Optional[str] = None,
+        bot_name: str = "AgentsLab Bot",
+        channels: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Отправляет сообщение через Salesbot
+
+        Создает временного бота для отправки одного сообщения.
+        Для production рекомендуется создать постоянного бота и использовать его ID.
+
+        Args:
+            text: Текст сообщения
+            chat_id: ID чата (опционально, для отправки в конкретный чат)
+            bot_name: Название бота
+            channels: Список ID каналов для отправки (опционально)
+
+        Returns:
+            Результат создания бота
+
+        Raises:
+            httpx.HTTPStatusError: При ошибке отправки
+
+        Example:
+            >>> result = await client.send_message_via_salesbot(
+            ...     text="Привет! Как дела?",
+            ...     channels=["64704b15-f80e-421c-a7cc-843a6c3186a7"]
+            ... )
+        """
+        script = [
+            {
+                "id": 1,
+                "type": "question",
+                "handler": "send_message",
+                "params": {
+                    "message": {
+                        "type": "text",
+                        "text": text,
+                    },
+                    "recipient": {
+                        "type": "all_contacts",
+                        "way_of_communication": "over_all",
+                    },
+                    "channels": channels or [],
+                },
+            }
+        ]
+
+        return await self.create_salesbot(
+            name=bot_name,
+            script=script,
+        )
+
     # ========== РАБОТА С ИСТОЧНИКАМИ (SOURCES) ==========
 
-    async def get_sources(self, limit: int = 50, page: int = 1) -> List[Dict[str, Any]]:
+    async def get_sources(self, limit: int = 50, page: int = 0) -> List[Dict[str, Any]]:
         """
         Получает список источников
 
@@ -1926,6 +2603,33 @@ class AmoCRMClient:
                 request=e.request,
                 response=e.response,
             ) from e
+
+    async def get_source_by_origin(self, origin: str) -> Optional[str]:
+        """
+        Находит источник по origin (например, 'telegram') и возвращает его external_id
+
+        Args:
+            origin: Тип источника (telegram, whatsapp, viber и т.д.)
+
+        Returns:
+            external_id источника или None если не найден
+        """
+        try:
+            sources = await self.get_sources(limit=250)
+
+            for source in sources:
+                origin_code = source.get("origin_code", "").lower()
+                if origin_code == origin.lower():
+                    external_id = source.get("external_id")
+                    logger.info(f"✅ Найден источник {origin}: external_id={external_id}")
+                    return external_id
+
+            logger.warning(f"⚠️  Источник с origin={origin} не найден")
+            return None
+
+        except Exception as e:
+            logger.error(f"Ошибка поиска источника по origin={origin}: {e}", exc_info=True)
+            return None
 
     # ========== РАБОТА С РОЛЯМИ (ROLES) ==========
 
@@ -2155,6 +2859,154 @@ class AmoCRMClient:
                 response=e.response,
             ) from e
 
+    async def attach_contact_to_talk(
+        self,
+        chat_id: str,
+        contact_id: int,
+    ) -> Dict[str, Any]:
+        """
+        Прикрепляет контакт к беседе по chat_id
+
+        Args:
+            chat_id: ID чата из вебхука (message[add][0][chat_id])
+            contact_id: ID контакта в AmoCRM
+
+        Returns:
+            Обновленные данные беседы
+
+        Raises:
+            httpx.HTTPStatusError: При ошибке прикрепления
+
+        Example:
+            >>> # chat_id из вебхука: "8468b0a1-69ca-40db-bcf8-a97bbfd08f01"
+            >>> await client.attach_contact_to_talk(
+            ...     chat_id="8468b0a1-69ca-40db-bcf8-a97bbfd08f01",
+            ...     contact_id=12345
+            ... )
+        """
+        client = self._get_client()
+
+        payload = [
+            {
+                "chat_id": chat_id,
+                "contact_id": contact_id,
+            }
+        ]
+
+        try:
+            response = await client.post(f"{self.base_url}/contacts/chats", json=payload)
+            response.raise_for_status()
+
+            result = response.json()
+            logger.info(f"Контакт {contact_id} прикреплен к чату {chat_id}")
+            return result
+
+        except httpx.HTTPStatusError as e:
+            raise httpx.HTTPStatusError(
+                f"Не удалось прикрепить контакт {contact_id} к чату {chat_id} (subdomain={self.subdomain}): "
+                f"{e.response.status_code} - {e.response.text[:200]}",
+                request=e.request,
+                response=e.response,
+            ) from e
+
+    async def find_contact_by_phone(
+        self,
+        phone: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Находит контакт по номеру телефона
+
+        Args:
+            phone: Номер телефона (в любом формате)
+
+        Returns:
+            Данные контакта или None если не найден
+
+        Example:
+            >>> contact = await client.find_contact_by_phone("+79991234567")
+            >>> if contact:
+            ...     print(f"Найден контакт: {contact['name']}")
+        """
+        contacts = await self.get_contacts(limit=1, query=phone)
+
+        if contacts:
+            contact = contacts[0]
+            logger.info(f"Найден контакт по телефону {phone}: {contact.get('id')}")
+            return contact
+
+        logger.info(f"Контакт с телефоном {phone} не найден")
+        return None
+
+    async def find_or_create_contact(
+        self,
+        name: str,
+        phone: Optional[str] = None,
+        email: Optional[str] = None,
+        responsible_user_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Находит контакт по телефону/email или создает новый
+
+        Args:
+            name: Имя контакта
+            phone: Номер телефона (опционально)
+            email: Email (опционально)
+            responsible_user_id: Ответственный пользователь (опционально)
+
+        Returns:
+            Данные найденного или созданного контакта
+
+        Example:
+            >>> contact = await client.find_or_create_contact(
+            ...     name="Иван Иванов",
+            ...     phone="+79991234567"
+            ... )
+            >>> print(f"ID контакта: {contact['id']}")
+        """
+        if phone:
+            existing_contact = await self.find_contact_by_phone(phone)
+            if existing_contact:
+                logger.info(f"Найден существующий контакт: {existing_contact.get('id')}")
+                return existing_contact
+
+        if email:
+            contacts = await self.get_contacts(limit=1, query=email)
+            if contacts:
+                logger.info(f"Найден существующий контакт по email: {contacts[0].get('id')}")
+                return contacts[0]
+
+        logger.info(f"Создаем новый контакт: {name}")
+
+        contact_data = {
+            "name": name,
+        }
+
+        if responsible_user_id:
+            contact_data["responsible_user_id"] = responsible_user_id
+
+        custom_fields = []
+
+        if phone:
+            custom_fields.append({
+                "field_code": "PHONE",
+                "values": [{"value": phone, "enum_code": "WORK"}]
+            })
+
+        if email:
+            custom_fields.append({
+                "field_code": "EMAIL",
+                "values": [{"value": email, "enum_code": "WORK"}]
+            })
+
+        if custom_fields:
+            contact_data["custom_fields_values"] = custom_fields
+
+        result = await self.create_contact(contact_data)
+        created_contact = result.get("_embedded", {}).get("contacts", [{}])[0]
+
+        logger.info(f"Создан новый контакт: {created_contact.get('id')}")
+        return created_contact
+
 
 def register_subdomain(subdomain: str, access_token: str) -> None:
     """
@@ -2172,6 +3024,7 @@ def get_amocrm_client(
     subdomain: Optional[str] = None,
     access_token: Optional[str] = None,
 ) -> AmoCRMClient:
+    # TODO: поддержать авторизацию по ссылке https://www.amocrm.ru/developers/content/oauth/oauth-external-integrations
     """
     Фабричная функция для создания клиента AmoCRM (singleton)
 

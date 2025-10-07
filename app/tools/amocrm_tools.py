@@ -27,7 +27,7 @@ from typing import Optional
 from datetime import datetime
 from langchain_core.tools import tool
 
-from ..clients.amo_crm_integration import get_amocrm_client, register_subdomain, get_amocrm_chat_client
+from ..clients.amo_crm_integration import get_amocrm_client, register_subdomain
 
 logger = logging.getLogger(__name__)
 
@@ -352,50 +352,6 @@ async def create_amocrm_note(subdomain: str, entity_type: str, entity_id: int, t
 
 
 @tool
-async def connect_amocrm_channel(
-    channel_id: str,
-    secret_key: str,
-    account_id: str,
-    title: str = "Мой канал",
-) -> str:
-    """
-    Подключает канал чата к аккаунту AmoCRM.
-
-    ВАЖНО: Этот метод нужно вызвать ОДИН РАЗ при первичной настройке канала!
-    После подключения канал будет виден в интерфейсе AmoCRM и можно будет
-    отправлять сообщения через него.
-
-    ВАЖНО: После успешного подключения в ответе вернётся scope_id, который
-    нужно использовать для отправки сообщений (вместо channel_id).
-
-    Args:
-        channel_id: ID канала, полученный при регистрации через техподдержку AmoCRM
-        secret_key: Секретный ключ интеграции
-        account_id: amojo_id аккаунта AmoCRM (получить через get_amocrm_account_info с with_amojo_id=True)
-        title: Название канала (будет отображаться в интерфейсе AmoCRM)
-
-    Returns:
-        JSON с результатом подключения: {"success": bool, "scope_id": str, "channel_info": {...}}
-    """
-    logger.info(f"Подключение канала '{title}' к аккаунту {account_id}")
-
-    client = get_amocrm_chat_client(channel_id=channel_id, secret_key=secret_key)
-
-    result = await client.connect_channel(account_id=account_id, title=title, hook_api_version="v2")
-
-    return json.dumps(
-        {
-            "success": True,
-            "message": f"Канал '{title}' успешно подключен к аккаунту",
-            "scope_id": result.get("scope_id"),  # ВАЖНО: Используйте это для отправки сообщений
-            "channel_info": result,
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
-
-
-@tool
 async def send_amocrm_chat_message(
     scope_id: str,
     secret_key: str,
@@ -625,7 +581,5 @@ AMOCRM_TOOLS = [
     get_amocrm_talk_info,
     close_amocrm_talk,
     # Chat API amojo (отправка сообщений в чаты Telegram/WhatsApp через HMAC)
-    connect_amocrm_channel,  # Подключение канала (один раз при настройке)
-    send_amocrm_chat_message,  # Отправка сообщения через amojo.amocrm.ru
-    update_amocrm_message_status,
+    send_amocrm_chat_message,  # Отправка сообщения через amojo.amocrm.ruloc    update_amocrm_message_status,
 ]

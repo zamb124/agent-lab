@@ -21,6 +21,7 @@ from app.core.checkpointer import init_checkpointer, close_checkpointer
 from app.db.database import create_tables, close_db
 from app.core.migrator import Migrator
 from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads, history
+from app.api.amocrm import router as amocrm_router
 from app.frontend.api import models as frontend_models
 from app.frontend.api import flows as frontend_flows
 from app.frontend.api import agents as frontend_agents
@@ -203,6 +204,9 @@ app = FastAPI(
     version="0.1.0",
     debug=settings.server.debug,
     lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
 )
 
 # Proxy headers middleware (для правильной работы за nginx)
@@ -259,6 +263,7 @@ app.include_router(bots_module, tags=["bots-module"])
 # WebSockets
 app.include_router(websocket_notifications.router, tags=["websocket-notifications"])
 app.include_router(websocket_chat.router, prefix="/frontend/chat", tags=["websocket-chat"])
+app.include_router(amocrm_router, prefix="/api/amocrm", tags=["amocrm"])
 
 # Статические файлы
 static_dir = Path(__file__).parent / "frontend" / "shared" / "static"

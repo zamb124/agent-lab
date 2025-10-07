@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any
 
 from app.interfaces.base import BaseInterface
 from app.interfaces.telegram_interface import TelegramInterface
+from app.interfaces.amocrm_interface import AmoCRMInterface
 from app.interfaces.web_interface import WebInterface
 from app.core.storage import Storage
 
@@ -22,6 +23,8 @@ class InterfaceFactory:
         """Создает интерфейс для указанной платформы"""
         if platform == "telegram":
             return await self._create_telegram_interface(config)
+        elif platform == "amocrm":
+            return await self._create_amocrm_interface(config)
         elif platform == "web":
             return WebInterface(config)
         elif platform == "api":
@@ -54,4 +57,36 @@ class InterfaceFactory:
 
         except Exception as e:
             logger.error(f"Ошибка создания Telegram интерфейса: {e}")
+            return None
+
+    async def _create_amocrm_interface(
+        self, config: Dict[str, Any]
+    ) -> Optional[AmoCRMInterface]:
+        """Создает AmoCRM интерфейс"""
+        try:
+            scope_id = config.get("scope_id")
+            subdomain = config.get("subdomain")
+
+            if not scope_id:
+                logger.error("Нет scope_id для создания AmoCRM интерфейса")
+                return None
+
+            if not subdomain:
+                logger.error("Нет subdomain для создания AmoCRM интерфейса")
+                return None
+
+            platform_config = {
+                "subdomain": subdomain,
+                "scope_id": scope_id,
+            }
+
+            # Добавляем дополнительные данные из config если есть
+            for key in ["chat_id", "contact_id", "author_name"]:
+                if key in config:
+                    platform_config[key] = config[key]
+
+            return AmoCRMInterface(scope_id, subdomain)
+
+        except Exception as e:
+            logger.error(f"Ошибка создания AmoCRM интерфейса: {e}", exc_info=True)
             return None
