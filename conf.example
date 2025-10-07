@@ -218,5 +218,12 @@
     "api_key": "your-nano-banana-api-key-here",
     "model_name": "gemini-2.5-flash-image-preview",
     "timeout": 60
+  },
+  "proxy": {
+    "enabled": false,
+    "http_proxy": "your-proxy-host:port",
+    "https_proxy": "your-proxy-host:port",
+    "username": "your-proxy-username",
+    "password": "your-proxy-password"
   }
 }
