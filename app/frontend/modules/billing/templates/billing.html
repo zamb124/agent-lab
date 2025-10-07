@@ -259,32 +259,67 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 class="modal-title">{{ t('billing.payment_modal.title') }}</h3>
+                <h3 class="modal-title">
+                    <i class="bi bi-wallet2"></i>
+                    Пополнить баланс
+                </h3>
                 <button class="modal-close" onclick="closePaymentModal()">
                     <i class="bi bi-x-lg"></i>
                 </button>
             </div>
             <div class="modal-body">
-                <p>{{ t('billing.payment_modal.coming_soon') }}</p>
-                <p>{{ t('billing.payment_modal.integrations_info') }}</p>
-                
-                <div class="payment-info">
-                    <div class="payment-info-item">
-                        <i class="bi bi-credit-card"></i>
-                        <span>{{ t('billing.payment_modal.card_payment') }}</span>
+                <form id="payment-form" onsubmit="event.preventDefault(); createPayment();">
+                    <div class="form-group">
+                        <label for="payment-amount">
+                            <i class="bi bi-currency-ruble"></i>
+                            Сумма пополнения (₽)
+                        </label>
+                        <input 
+                            type="number" 
+                            id="payment-amount" 
+                            class="form-control" 
+                            min="100" 
+                            max="1000000" 
+                            step="100" 
+                            value="1000"
+                            required
+                            placeholder="Введите сумму"
+                        >
+                        <small class="form-text">Минимум: 100₽, Максимум: 1,000,000₽</small>
                     </div>
-                    <div class="payment-info-item">
-                        <i class="bi bi-shield-check"></i>
-                        <span>{{ t('billing.payment_modal.secure_transaction') }}</span>
+                    
+                    <div class="payment-info">
+                        <div class="payment-info-item">
+                            <i class="bi bi-credit-card"></i>
+                            <span>Оплата картой через ЮMoney</span>
+                        </div>
+                        <div class="payment-info-item">
+                            <i class="bi bi-shield-check"></i>
+                            <span>Безопасная транзакция</span>
+                        </div>
+                        <div class="payment-info-item">
+                            <i class="bi bi-lightning-charge"></i>
+                            <span>Мгновенное зачисление</span>
+                        </div>
                     </div>
-                    <div class="payment-info-item">
-                        <i class="bi bi-receipt"></i>
-                        <span>{{ t('billing.payment_modal.auto_receipt') }}</span>
+                    
+                    <div class="payment-notice">
+                        <i class="bi bi-info-circle"></i>
+                        <div>
+                            <strong>Как это работает:</strong>
+                            <p>После нажатия кнопки вы будете перенаправлены на страницу ЮMoney для безопасной оплаты. После успешной оплаты средства автоматически зачислятся на баланс компании.</p>
+                        </div>
                     </div>
-                </div>
+                </form>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-ghost" onclick="closePaymentModal()">{{ t('common.close') }}</button>
+                <button class="btn btn-ghost" type="button" onclick="closePaymentModal()">
+                    Отмена
+                </button>
+                <button class="btn btn-primary" type="button" id="payment-submit-btn" onclick="createPayment()">
+                    <i class="bi bi-arrow-right-circle"></i>
+                    Перейти к оплате
+                </button>
             </div>
         </div>
     </div>

@@ -2,10 +2,10 @@
   "meta": {
     "language": "en",
     "version": "1.0.0",
-    "last_updated": "2025-10-07T13:12:43.928301",
-    "completeness": 100.0,
-    "total_keys": 592,
-    "translated_keys": 592
+    "last_updated": "2025-10-07T18:43:27.865921",
+    "completeness": 93.64341085271319,
+    "total_keys": 645,
+    "translated_keys": 604
   },
   "common": {
     "app_name": "Agents Lab",
@@ -1133,6 +1133,113 @@
         },
         "model_type": {
           "title": "Model Type"
+        }
+      }
+    },
+    "transaction": {
+      "fields": {
+        "transaction_id": {
+          "title": "[TODO: models.transaction.fields.transaction_id.title]",
+          "description": "[TODO: models.transaction.fields.transaction_id.description]"
+        },
+        "company_id": {
+          "title": "[TODO: models.transaction.fields.company_id.title]",
+          "description": "[TODO: models.transaction.fields.company_id.description]"
+        },
+        "user_id": {
+          "title": "[TODO: models.transaction.fields.user_id.title]",
+          "description": "[TODO: models.transaction.fields.user_id.description]"
+        },
+        "amount": {
+          "title": "[TODO: models.transaction.fields.amount.title]",
+          "description": "[TODO: models.transaction.fields.amount.description]"
+        },
+        "status": {
+          "title": "[TODO: models.transaction.fields.status.title]",
+          "description": "[TODO: models.transaction.fields.status.description]"
+        },
+        "payment_provider": {
+          "title": "[TODO: models.transaction.fields.payment_provider.title]",
+          "description": "[TODO: models.transaction.fields.payment_provider.description]"
+        },
+        "external_payment_id": {
+          "title": "[TODO: models.transaction.fields.external_payment_id.title]",
+          "description": "[TODO: models.transaction.fields.external_payment_id.description]"
+        },
+        "payment_url": {
+          "title": "[TODO: models.transaction.fields.payment_url.title]",
+          "description": "[TODO: models.transaction.fields.payment_url.description]"
+        },
+        "created_at": {
+          "title": "[TODO: models.transaction.fields.created_at.title]",
+          "description": "[TODO: models.transaction.fields.created_at.description]"
+        },
+        "completed_at": {
+          "title": "[TODO: models.transaction.fields.completed_at.title]",
+          "description": "[TODO: models.transaction.fields.completed_at.description]"
+        },
+        "metadata": {
+          "title": "[TODO: models.transaction.fields.metadata.title]",
+          "description": "[TODO: models.transaction.fields.metadata.description]"
+        }
+      }
+    },
+    "paymentnotification": {
+      "fields": {
+        "notification_id": {
+          "title": "[TODO: models.paymentnotification.fields.notification_id.title]",
+          "description": "[TODO: models.paymentnotification.fields.notification_id.description]"
+        },
+        "provider": {
+          "title": "[TODO: models.paymentnotification.fields.provider.title]",
+          "description": "[TODO: models.paymentnotification.fields.provider.description]"
+        },
+        "transaction_id": {
+          "title": "[TODO: models.paymentnotification.fields.transaction_id.title]",
+          "description": "[TODO: models.paymentnotification.fields.transaction_id.description]"
+        },
+        "external_payment_id": {
+          "title": "[TODO: models.paymentnotification.fields.external_payment_id.title]"
+        },
+        "raw_data": {
+          "title": "[TODO: models.paymentnotification.fields.raw_data.title]",
+          "description": "[TODO: models.paymentnotification.fields.raw_data.description]"
+        },
+        "processed": {
+          "title": "[TODO: models.paymentnotification.fields.processed.title]",
+          "description": "[TODO: models.paymentnotification.fields.processed.description]"
+        },
+        "created_at": {
+          "title": "[TODO: models.paymentnotification.fields.created_at.title]"
+        }
+      }
+    },
+    "createpaymentrequest": {
+      "fields": {
+        "amount": {
+          "description": "[TODO: models.createpaymentrequest.fields.amount.description]"
+        },
+        "provider": {
+          "description": "[TODO: models.createpaymentrequest.fields.provider.description]"
+        }
+      }
+    },
+    "createpaymentresponse": {
+      "fields": {
+        "transaction_id": {
+          "description": "[TODO: models.createpaymentresponse.fields.transaction_id.description]"
+        },
+        "payment_url": {
+          "description": "[TODO: models.createpaymentresponse.fields.payment_url.description]"
+        },
+        "provider": {
+          "description": "[TODO: models.createpaymentresponse.fields.provider.description]"
+        },
+        "status": {
+          "description": "[TODO: models.createpaymentresponse.fields.status.description]"
+        },
+        "amount": {
+          "description": "[TODO: models.createpaymentresponse.fields.amount.description]"
         }
       }
     }

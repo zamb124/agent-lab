@@ -225,5 +225,24 @@
     "https_proxy": "your-proxy-host:port",
     "username": "your-proxy-username",
     "password": "your-proxy-password"
+  },
+  "payment_providers": {
+    "default_provider": "yoomoney_main",
+    "providers": {
+      "yoomoney_main": {
+        "provider_type": "yoomoney",
+        "enabled": false,
+        "account_number": "410011234567890",
+        "notification_secret": "your-notification-secret-here",
+        "quickpay_url": "https://yoomoney.ru/quickpay/confirm.xml"
+      },
+      "yukassa_main": {
+        "provider_type": "yukassa",
+        "enabled": false,
+        "shop_id": "123456",
+        "secret_key": "live_xxxxx",
+        "api_url": "https://api.yookassa.ru/v3"
+      }
+    }
   }
 }
