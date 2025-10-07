@@ -20,7 +20,7 @@ from app.core.config import settings
 from app.core.checkpointer import init_checkpointer, close_checkpointer
 from app.db.database import create_tables, close_db
 from app.core.migrator import Migrator
-from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads, history
+from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads, history, payments
 from app.frontend.api import models as frontend_models
 from app.frontend.api import flows as frontend_flows
 from app.frontend.api import agents as frontend_agents
@@ -41,6 +41,7 @@ from app.frontend.websockets import chat as websocket_chat
 from app.middleware.auth import AuthMiddleware
 from app.services.cleanup_service import CleanupService
 from app.core.translation_manager import get_translation_manager
+from app.core.clients.payment_providers.factory import PaymentProviderFactory
 
 # Условные импорты для локального окружения
 if settings.server.env == "local1":
@@ -160,6 +161,11 @@ async def lifespan(app: FastAPI):
         translation_manager = get_translation_manager()
         await translation_manager.initialize()
         logger.info("✅ Система переводов инициализирована")
+        
+        # Инициализация платежных провайдеров
+        logger.info("💳 Инициализация платежных провайдеров...")
+        PaymentProviderFactory.initialize(settings)
+        logger.info("✅ Платежные провайдеры инициализированы")
 
         # Запуск воркера задач для локальной разработки
         if settings.server.env == "local1":
@@ -245,6 +251,7 @@ app.include_router(fashn.router, prefix="/api/v1/fashn", tags=["fashn"])
 app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
 app.include_router(leads.router, prefix="/api/v1", tags=["leads"])
 app.include_router(history.router, tags=["history"])
+app.include_router(payments.router, prefix="/api/v1", tags=["payments"])
 
 # Frontend API (JSON CRUD)
 app.include_router(frontend_models.router, tags=["frontend-models"])  # Убираем дублирующий prefix

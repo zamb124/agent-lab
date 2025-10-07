@@ -190,6 +190,16 @@ class ProxyConfig(BaseModel):
         return proxies if proxies else None
 
 
+class PaymentProvidersConfig(BaseModel):
+    """Конфигурация платежных провайдеров"""
+    
+    default_provider: Optional[str] = None
+    providers: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Платежные провайдеры (yoomoney_main, yukassa_main, etc.)"
+    )
+
+
 class Settings(BaseSettings):
     """Настройки приложения с поддержкой JSON конфигурации"""
 
@@ -205,6 +215,7 @@ class Settings(BaseSettings):
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
     nano_banana: NanoBananaConfig = Field(default_factory=NanoBananaConfig)
     proxy: ProxyConfig = Field(default_factory=ProxyConfig)
+    payment_providers: PaymentProvidersConfig = Field(default_factory=PaymentProvidersConfig)
 
     def __init__(self, **data):
         # Загружаем JSON конфигурацию и объединяем с переданными данными
@@ -214,7 +225,7 @@ class Settings(BaseSettings):
         final_data = {**json_config, **data}
 
         super().__init__(**final_data)
-
+    
     class Config:
         env_file = [
             os.path.join(os.path.dirname(__file__), "..", "..", ".env"),  # .env в корне проекта
