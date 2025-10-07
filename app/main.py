@@ -20,7 +20,7 @@ from app.core.config import settings
 from app.core.checkpointer import init_checkpointer, close_checkpointer
 from app.db.database import create_tables, close_db
 from app.core.migrator import Migrator
-from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads, history, payments
+from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads, history, payments, admin_payments
 from app.frontend.api import models as frontend_models
 from app.frontend.api import flows as frontend_flows
 from app.frontend.api import agents as frontend_agents
@@ -42,6 +42,7 @@ from app.middleware.auth import AuthMiddleware
 from app.services.cleanup_service import CleanupService
 from app.core.translation_manager import get_translation_manager
 from app.core.clients.payment_providers.factory import PaymentProviderFactory
+from app.workers.payment_sync_worker import PaymentSyncWorker
 
 # Условные импорты для локального окружения
 if settings.server.env == "local1":
@@ -166,6 +167,12 @@ async def lifespan(app: FastAPI):
         logger.info("💳 Инициализация платежных провайдеров...")
         PaymentProviderFactory.initialize(settings)
         logger.info("✅ Платежные провайдеры инициализированы")
+        
+        # Запуск синхронизации транзакций (раз в час)
+        logger.info("🔄 Запуск фоновой синхронизации транзакций...")
+        payment_sync_worker = PaymentSyncWorker(sync_interval=3600)  # Каждый час
+        asyncio.create_task(payment_sync_worker.start())
+        logger.info("✅ Payment sync worker запущен")
 
         # Запуск воркера задач для локальной разработки
         if settings.server.env == "local1":
@@ -252,6 +259,7 @@ app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
 app.include_router(leads.router, prefix="/api/v1", tags=["leads"])
 app.include_router(history.router, tags=["history"])
 app.include_router(payments.router, prefix="/api/v1", tags=["payments"])
+app.include_router(admin_payments.router, prefix="/api/v1", tags=["admin-payments"])
 
 # Frontend API (JSON CRUD)
 app.include_router(frontend_models.router, tags=["frontend-models"])  # Убираем дублирующий prefix
