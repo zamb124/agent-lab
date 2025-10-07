@@ -55,10 +55,11 @@ class PaymentSyncWorker:
     async def _sync_loop(self):
         """Цикл периодической синхронизации"""
         
+        # Первая синхронизация сразу после старта (через 30 секунд)
+        await asyncio.sleep(30)
+        
         while self.is_running:
             try:
-                await asyncio.sleep(self.sync_interval)
-                
                 logger.info("🔄 Запуск периодической синхронизации транзакций")
                 
                 stats = await self.sync_service.sync_all_companies()
@@ -73,6 +74,9 @@ class PaymentSyncWorker:
                         f"ℹ️ Синхронизация завершена: "
                         f"pending={stats['total_pending']}, но не найдено в провайдере"
                     )
+                
+                # Ждем до следующей синхронизации
+                await asyncio.sleep(self.sync_interval)
                 
             except asyncio.CancelledError:
                 break
