@@ -36,6 +36,7 @@ class State(TypedDict, total=False):
     - task_id: ID текущей задачи
     - session_id: ID текущей сессии
     - user_id: ID пользователя
+    - remaining_steps: Оставшееся количество шагов для ReAct агента (требуется для create_react_agent)
     """
     
     messages: Annotated[List, add_messages]
@@ -44,6 +45,7 @@ class State(TypedDict, total=False):
     task_id: str
     session_id: str
     user_id: str
+    remaining_steps: int
 
 
 def get_default_state() -> State:
@@ -54,4 +56,5 @@ def get_default_state() -> State:
         "task_id": "",
         "session_id": "",
         "user_id": "",
+        "remaining_steps": 25,
     }
