@@ -1343,8 +1343,8 @@ class ChatMessageRenderer {
             const linksContainer = document.createElement('div');
             linksContainer.className = 'message-download-links';
             
-            downloadLinks.forEach(link => {
-                const linkButton = this.renderDownloadButton(link);
+            downloadLinks.forEach(async (link) => {
+                const linkButton = await this.renderDownloadButton(link);
                 linksContainer.appendChild(linkButton);
             });
             
@@ -1462,20 +1462,167 @@ class ChatMessageRenderer {
         };
     }
 
-    // Рендеринг кнопки скачивания
-    renderDownloadButton(link) {
-        const button = document.createElement('a');
-        button.className = 'download-link-button';
-        button.href = link.url;
-        button.target = '_blank';
-        button.download = link.fileName;
+    // Рендеринг кнопки скачивания с превью
+    async renderDownloadButton(link) {
+        const container = document.createElement('div');
+        container.className = 'download-link-container';
         
-        button.innerHTML = `
-            <i class="bi bi-download"></i>
-            <span class="download-text">Скачать ${link.fileName}</span>
+        // Показываем индикатор загрузки
+        container.innerHTML = `
+            <div class="file-preview loading-preview">
+                <div class="spinner-border spinner-border-sm" role="status"></div>
+                <span class="ms-2">Загрузка превью...</span>
+            </div>
         `;
         
-        return button;
+        // Пытаемся определить тип файла
+        const fileType = this.detectFileType(link.fileName);
+        
+        // Если не смогли определить по расширению, пробуем загрузить и проверить MIME
+        if (fileType === 'document' && !link.fileName.includes('.')) {
+            try {
+                const mimeType = await this.fetchFileMimeType(link.url);
+                this.renderFilePreview(container, link, mimeType);
+            } catch (error) {
+                console.error('Ошибка загрузки файла:', error);
+                this.renderFilePreview(container, link, null);
+            }
+        } else {
+            // Рендерим превью по известному типу
+            this.renderFilePreview(container, link, null, fileType);
+        }
+        
+        return container;
+    }
+    
+    // Получение MIME типа файла через API
+    async fetchFileMimeType(url) {
+        try {
+            // Извлекаем file_id из URL
+            const fileId = url.split('/').pop();
+            
+            // Используем API эндпоинт для получения информации о файле
+            const infoUrl = url.replace(`/download/${fileId}`, `/info/${fileId}`);
+            const response = await fetch(infoUrl);
+            
+            if (!response.ok) {
+                console.warn('Не удалось получить информацию о файле:', response.status);
+                return null;
+            }
+            
+            const fileInfo = await response.json();
+            return fileInfo.content_type;
+        } catch (error) {
+            console.error('Ошибка получения MIME типа:', error);
+            return null;
+        }
+    }
+    
+    // Рендеринг превью на основе типа
+    renderFilePreview(container, link, mimeType = null, knownType = null) {
+        let fileType = knownType;
+        
+        // Если передан MIME тип, определяем тип файла по нему
+        if (mimeType && !knownType) {
+            if (mimeType.startsWith('image/')) fileType = 'image';
+            else if (mimeType.startsWith('video/')) fileType = 'video';
+            else if (mimeType.startsWith('audio/')) fileType = 'audio';
+            else if (mimeType.includes('pdf')) fileType = 'pdf';
+            else fileType = 'document';
+        }
+        
+        if (fileType === 'image') {
+            // Для изображений показываем превью
+            container.innerHTML = `
+                <div class="file-preview image-preview">
+                    <img src="${link.url}" alt="${link.fileName}" 
+                         style="max-width: 300px; max-height: 300px; border-radius: 8px; cursor: pointer; object-fit: contain;"
+                         onclick="window.open('${link.url}', '_blank')"
+                         onerror="this.parentElement.innerHTML='<div class=error-preview>❌ Не удалось загрузить изображение</div>'"
+                    >
+                    <div class="file-info" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+                        <span class="file-name" style="font-size: 14px; color: #666;">${link.fileName}</span>
+                        <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
+                            <i class="bi bi-download"></i> Скачать
+                        </a>
+                    </div>
+                </div>
+            `;
+        } else if (fileType === 'video') {
+            // Для видео показываем video player
+            container.innerHTML = `
+                <div class="file-preview video-preview">
+                    <video controls style="max-width: 400px; border-radius: 8px;">
+                        <source src="${link.url}" type="${mimeType || 'video/mp4'}">
+                        Ваш браузер не поддерживает видео.
+                    </video>
+                    <div class="file-info" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+                        <span class="file-name" style="font-size: 14px; color: #666;">${link.fileName}</span>
+                        <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
+                            <i class="bi bi-download"></i> Скачать
+                        </a>
+                    </div>
+                </div>
+            `;
+        } else if (fileType === 'audio') {
+            // Для аудио показываем audio player
+            container.innerHTML = `
+                <div class="file-preview audio-preview">
+                    <audio controls style="width: 300px;">
+                        <source src="${link.url}" type="${mimeType || 'audio/mpeg'}">
+                        Ваш браузер не поддерживает аудио.
+                    </audio>
+                    <div class="file-info" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+                        <span class="file-name" style="font-size: 14px; color: #666;">${link.fileName}</span>
+                        <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
+                            <i class="bi bi-download"></i> Скачать
+                        </a>
+                    </div>
+                </div>
+            `;
+        } else {
+            // Для остальных файлов показываем иконку и кнопку
+            const icon = this.getFileIcon(link.fileName);
+            container.innerHTML = `
+                <div class="file-preview document-preview" style="display: flex; align-items: center; padding: 12px; border: 1px solid #ddd; border-radius: 8px; background: #f8f9fa;">
+                    <div class="file-icon" style="font-size: 32px; margin-right: 12px;">${icon}</div>
+                    <div class="file-info" style="flex-grow: 1;">
+                        <div class="file-name" style="font-size: 14px; font-weight: 500;">${link.fileName}</div>
+                        ${mimeType ? `<div class="file-type" style="font-size: 12px; color: #666;">${mimeType}</div>` : ''}
+                    </div>
+                    <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
+                        <i class="bi bi-download"></i>
+                    </a>
+                </div>
+            `;
+        }
+    }
+    
+    // Определение типа файла
+    detectFileType(fileName) {
+        const ext = fileName.split('.').pop().toLowerCase();
+        
+        // Изображения
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
+            return 'image';
+        }
+        
+        // Видео
+        if (['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext)) {
+            return 'video';
+        }
+        
+        // Аудио
+        if (['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext)) {
+            return 'audio';
+        }
+        
+        // PDF
+        if (ext === 'pdf') {
+            return 'pdf';
+        }
+        
+        return 'document';
     }
 
     renderAttachments(attachments) {
