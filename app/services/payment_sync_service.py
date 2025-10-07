@@ -4,6 +4,7 @@
 """
 
 import logging
+import json
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Any
 
@@ -161,8 +162,19 @@ class PaymentSyncService:
         
         logger.info("Начало глобальной синхронизации транзакций")
         
-        # Получаем все компании
-        company_keys = await self.storage.list_by_prefix("company:", force_global=True)
+        # Получаем все subdomain записи - они есть только у валидных компаний
+        subdomain_keys = await self.storage.list_by_prefix("subdomain:", force_global=True)
+        
+        # Получаем company_id из каждого subdomain
+        company_ids = []
+        for subdomain_key in subdomain_keys:
+            company_id_json = await self.storage.get(subdomain_key, force_global=True)
+            if company_id_json:
+                
+                company_id = json.loads(company_id_json)
+                company_ids.append(company_id)
+        
+        logger.info(f"Найдено компаний для синхронизации: {len(company_ids)}")
         
         total_stats = {
             "companies_checked": 0,
@@ -172,9 +184,8 @@ class PaymentSyncService:
             "errors": 0
         }
         
-        for company_key in company_keys:
+        for company_id in company_ids:
             try:
-                company_id = company_key.split(":")[1]
                 
                 # Пропускаем системные/служебные ключи
                 if company_id in ["main", "default", "template"]:
@@ -191,7 +202,7 @@ class PaymentSyncService:
                     total_stats["total_updated"] += stats["updated"]
                 
             except Exception as e:
-                logger.debug(f"Пропуск записи {company_key}: {e}")
+                logger.debug(f"Ошибка синхронизации компании {company_id}: {e}")
                 total_stats["errors"] += 1
         
         if total_stats["total_updated"] > 0 or total_stats["total_pending"] > 0:
