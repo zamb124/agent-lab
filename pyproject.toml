@@ -31,6 +31,8 @@ dependencies = [
     "boto3>=1.28.0",
     # Image Processing
     "Pillow>=10.0.0",
+    # Audio Processing
+    "pydub>=0.25.1",
     # Templating
     "jinja2>=3.1.2",
     # HTML Parsing

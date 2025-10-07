@@ -23,6 +23,127 @@ const ATTACHMENT_TYPES = {
     FILE: 'file'
 };
 
+/**
+ * Класс для записи голоса через браузер в формате OGG/Opus
+ */
+class VoiceRecorder {
+    constructor() {
+        this.recorder = null;
+        this.stream = null;
+        this.isRecording = false;
+    }
+
+    async startRecording() {
+        try {
+            console.log('🎤 Запрашиваем доступ к микрофону...');
+            this.stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    sampleRate: 48000
+                } 
+            });
+
+            console.log('✅ Доступ к микрофону получен');
+            console.log('🎤 Создаем Opus Recorder для записи в OGG/Opus');
+            
+            // Создаем Opus Recorder
+            this.recorder = new Recorder({
+                encoderPath: '/static/js/encoderWorker.min.js',
+                encoderSampleRate: 16000, // Cloud Voice рекомендует 16kHz для речи
+                encoderApplication: 2048, // VOIP
+                encoderFrameSize: 20, // 20ms фреймы
+                encoderComplexity: 10, // Максимальное качество
+                encoderBitRate: 16000, // 16kbps битрейт
+                streamPages: false, // Получаем весь файл целиком
+                numberOfChannels: 1,
+                sourceNode: this.stream
+            });
+
+            // Добавляем обработчик ошибок
+            this.recorder.onerror = (error) => {
+                console.error('❌ Ошибка Opus Recorder:', error);
+            };
+
+            await this.recorder.start();
+            this.isRecording = true;
+            
+            console.log('🎤 Запись началась в формате OGG/Opus');
+            return true;
+        } catch (error) {
+            console.error('❌ Ошибка доступа к микрофону:', error);
+            console.error('Детали ошибки:', {
+                name: error.name,
+                message: error.message,
+                stack: error.stack
+            });
+            
+            let errorMessage = 'Не удалось получить доступ к микрофону. ';
+            if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                errorMessage += 'Проверьте разрешения браузера.';
+            } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+                errorMessage += 'Микрофон не найден.';
+            } else if (error.name === 'NotSupportedError') {
+                errorMessage += 'Формат записи не поддерживается.';
+            } else {
+                errorMessage += error.message;
+            }
+            
+            alert(errorMessage);
+            return false;
+        }
+    }
+
+    async stopRecording() {
+        return new Promise((resolve, reject) => {
+            if (!this.recorder || !this.isRecording) {
+                reject(new Error('Запись не начата'));
+                return;
+            }
+
+            // Устанавливаем callback ДО вызова stop()
+            this.recorder.ondataavailable = (typedArray) => {
+                console.log('🎤 Получены аудио данные:', typedArray.length, 'байт');
+                console.log('🔍 Первые байты:', Array.from(typedArray.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+                console.log('🔍 Первые символы:', String.fromCharCode(...typedArray.slice(0, 4)));
+                
+                const audioBlob = new Blob([typedArray], { type: 'audio/ogg; codecs=opus' });
+                
+                if (this.stream) {
+                    this.stream.getTracks().forEach(track => track.stop());
+                    this.stream = null;
+                }
+
+                this.isRecording = false;
+                console.log('🎤 Запись завершена, размер Blob:', audioBlob.size, 'байт, формат: OGG/Opus');
+                
+                resolve({
+                    blob: audioBlob,
+                    mimeType: 'audio/ogg; codecs=opus'
+                });
+            };
+
+            // Останавливаем запись - это вызовет ondataavailable
+            console.log('🎤 Останавливаем запись...');
+            this.recorder.stop();
+        });
+    }
+
+    cancelRecording() {
+        if (this.recorder && this.isRecording) {
+            this.recorder.stop();
+            
+            if (this.stream) {
+                this.stream.getTracks().forEach(track => track.stop());
+                this.stream = null;
+            }
+            
+            this.isRecording = false;
+            console.log('🎤 Запись отменена');
+        }
+    }
+}
+
 class ChatManager {
     constructor(app) {
         this.app = app;
@@ -36,6 +157,7 @@ class ChatManager {
         this.isVisible = false;
         this.container = null;
         this.messageRenderer = new ChatMessageRenderer();
+        this.voiceRecorder = new VoiceRecorder(); // Рекордер для голоса
     }
 
     // Загрузка сохраненных сессий агентов из localStorage
@@ -393,6 +515,9 @@ class ChatManager {
         attachBtn?.addEventListener('click', () => this.openFileDialog());
         sendBtn?.addEventListener('click', () => this.sendMessage());
         fileInput?.addEventListener('change', (e) => this.handleFileSelection(e));
+        
+        // Инициализация кнопки микрофона
+        this.initVoiceRecording();
 
         // Обработчики для команд
         document.addEventListener('click', (e) => {
@@ -1265,6 +1390,117 @@ class ChatManager {
     // Показать ошибку
     showError(message) {
         this.app.showNotification(message, 'danger');
+    }
+
+    // Инициализация записи голоса
+    initVoiceRecording() {
+        const voiceBtn = document.getElementById('chat-voice-btn') || document.getElementById('chat-widget-voice');
+        const indicator = document.getElementById('voice-recording-indicator') || document.getElementById('voice-recording-indicator-widget');
+        
+        if (!voiceBtn) {
+            console.log('⚠️ Кнопка микрофона не найдена');
+            return;
+        }
+
+        console.log('🎤 Инициализация кнопки микрофона:', voiceBtn.id);
+
+        // Обработчик нажатия (начало записи)
+        voiceBtn.addEventListener('mousedown', async (e) => {
+            e.preventDefault();
+            const success = await this.voiceRecorder.startRecording();
+            if (success) {
+                if (indicator) indicator.style.display = 'block';
+                voiceBtn.classList.add('recording');
+            }
+        });
+
+        // Обработчик отпускания (остановка и отправка)
+        voiceBtn.addEventListener('mouseup', async (e) => {
+            e.preventDefault();
+            await this.handleVoiceRecordingStop(voiceBtn, indicator);
+        });
+
+        // Обработчик если мышь ушла с кнопки во время записи
+        voiceBtn.addEventListener('mouseleave', async (e) => {
+            if (this.voiceRecorder.isRecording) {
+                await this.handleVoiceRecordingStop(voiceBtn, indicator);
+            }
+        });
+
+        // Поддержка touch событий для мобильных
+        voiceBtn.addEventListener('touchstart', async (e) => {
+            e.preventDefault();
+            const success = await this.voiceRecorder.startRecording();
+            if (success) {
+                if (indicator) indicator.style.display = 'block';
+                voiceBtn.classList.add('recording');
+            }
+        });
+
+        voiceBtn.addEventListener('touchend', async (e) => {
+            e.preventDefault();
+            await this.handleVoiceRecordingStop(voiceBtn, indicator);
+        });
+    }
+
+    // Обработка остановки записи
+    async handleVoiceRecordingStop(voiceBtn, indicator) {
+        if (!this.voiceRecorder.isRecording) return;
+
+        try {
+            // Останавливаем запись
+            const { blob, mimeType } = await this.voiceRecorder.stopRecording();
+            
+            // Скрываем индикатор
+            if (indicator) indicator.style.display = 'none';
+            if (voiceBtn) voiceBtn.classList.remove('recording');
+
+            // Проверяем размер
+            if (blob.size < 1000) {
+                this.app.showNotification('Запись слишком короткая', 'warning');
+                return;
+            }
+
+            // Определяем расширение по MIME типу
+            let extension = 'webm';  // По умолчанию webm (Chrome/Edge)
+            let finalMimeType = mimeType;
+            
+            if (mimeType.includes('ogg')) {
+                extension = 'ogg';
+                // Добавляем codecs=opus если это OGG без параметра
+                if (mimeType === 'audio/ogg' || mimeType === 'audio/ogg;') {
+                    finalMimeType = 'audio/ogg; codecs=opus';
+                }
+            } else if (mimeType.includes('wav')) {
+                extension = 'wav';
+                finalMimeType = 'audio/wave';
+            } else if (mimeType.includes('webm')) {
+                extension = 'webm';
+                // WebM уже имеет правильный формат
+            }
+            
+            // Создаем файл
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const audioFile = new File([blob], `voice-${timestamp}.${extension}`, {
+                type: finalMimeType
+            });
+
+            console.log('🎤 Голосовое сообщение записано:', {
+                fileName: audioFile.name,
+                originalMime: mimeType,
+                finalMime: finalMimeType,
+                size: blob.size
+            });
+
+            // Добавляем в превью как обычный файл
+            this.showFilePreview([audioFile]);
+            
+        } catch (error) {
+            console.error('❌ Ошибка обработки голосового сообщения:', error);
+            if (indicator) indicator.style.display = 'none';
+            if (voiceBtn) voiceBtn.classList.remove('recording');
+            this.app.showNotification('Ошибка записи голоса: ' + error.message, 'danger');
+        }
     }
 }
 
