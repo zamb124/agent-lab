@@ -59,8 +59,18 @@ class PaymentService:
             f"провайдер={provider.provider_name}"
         )
         
-        success_url = f"/billing/payment/success?transaction_id={transaction_id}"
-        fail_url = f"/billing/payment/fail?transaction_id={transaction_id}"
+        # Формируем абсолютные URL для редиректов
+        from ..core.config import settings
+        
+        # Определяем базовый URL
+        if settings.server.env == "local":
+            base_url = f"http://{company.subdomain}.localhost:{settings.server.port}"
+        else:
+            # Для production используем HTTPS и поддомен
+            base_url = f"https://{company.subdomain}.{settings.server.domain}"
+        
+        success_url = f"{base_url}/frontend/billing?payment=success&transaction_id={transaction_id}"
+        fail_url = f"{base_url}/frontend/billing?payment=fail&transaction_id={transaction_id}"
         
         payment_request = PaymentRequest(
             amount=amount,
