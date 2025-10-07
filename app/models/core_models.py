@@ -768,12 +768,14 @@ class FileRecord(BaseModel):
         context = get_context()
         subdomain = context.active_company.subdomain
         
-        # Формируем base_url без порта для стандартных портов
-        if settings.server.port in [80, 443]:
-            protocol = "https" if settings.server.port == 443 else "http"
-            base_url = f"{protocol}://{subdomain}.{settings.server.domain}"
-        else:
+        # На проде используется nginx/reverse proxy на стандартных портах
+        if settings.server.env == "local":
+            # Локально добавляем порт
             base_url = f"http://{subdomain}.{settings.server.domain}:{settings.server.port}"
+        else:
+            # На проде порт не нужен (nginx на 80/443)
+            protocol = "https" if settings.server.env in ["production", "testing"] else "http"
+            base_url = f"{protocol}://{subdomain}.{settings.server.domain}"
         
         return f"{base_url}/api/v1/files/download/{self.file_id}"
 

@@ -1311,15 +1311,18 @@ class ChatMessageRenderer {
         // Парсим ссылки на скачивание из текста
         const { cleanContentWithoutLinks, downloadLinks } = this.parseDownloadLinksFromContent(cleanContent);
         
+        // Убираем метки [СКАЧАТЬ: ...] из текста
+        let finalContent = cleanContentWithoutLinks.replace(/\[СКАЧАТЬ:\s*[^\]]+\]/g, '').trim();
+        
         switch (message.type) {
             case MESSAGE_TYPES.HTML:
-                div.innerHTML = this.sanitizeHTML(cleanContentWithoutLinks);
+                div.innerHTML = this.sanitizeHTML(finalContent);
                 break;
             case MESSAGE_TYPES.MARKDOWN:
-                div.innerHTML = this.renderMarkdown(cleanContentWithoutLinks);
+                div.innerHTML = this.renderMarkdown(finalContent);
                 break;
             default:
-                div.textContent = cleanContentWithoutLinks;
+                div.textContent = finalContent;
         }
         
         // Добавляем файлы как карточки
@@ -1429,8 +1432,8 @@ class ChatMessageRenderer {
 
     // Парсинг ссылок на скачивание из текста
     parseDownloadLinksFromContent(content) {
-        // Ищем ссылки на наши файлы в тексте
-        const linkRegex = /(https?:\/\/[^\s]+\/api\/v1\/files\/download\/[^\s]+)/g;
+        // Ищем ссылки на наши файлы в тексте (исключаем скобки и другие спецсимволы из конца URL)
+        const linkRegex = /(https?:\/\/[^\s]+\/api\/v1\/files\/download\/file_[a-z0-9]+)/gi;
         const downloadLinks = [];
         let cleanContent = content;
         
@@ -1441,7 +1444,7 @@ class ChatMessageRenderer {
             
             // Пытаемся извлечь имя файла из контекста
             const contextMatch = content.match(new RegExp(`файла?\\s+"([^"]+)"[^]*?${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
-            const fileName = contextMatch ? contextMatch[1] : `файл_${fileId}`;
+            const fileName = contextMatch ? contextMatch[1] : fileId;
             
             downloadLinks.push({
                 url: url,
