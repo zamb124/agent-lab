@@ -79,17 +79,39 @@
             </div>
             
             <div class="toolbar-right">
-                <button class="btn btn-secondary btn-sm" id="themeToggleBtn" title="Переключить тему">
+                <!-- Dropdown для выбора языка -->
+                <div class="dropdown">
+                    <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
+                        <i class="bi bi-translate"></i>
+                        <span id="current-language">{{ get_current_language().upper() }}</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('ru');">
+                            <i class="bi bi-check" style="visibility: hidden" id="lang-ru"></i> 
+                            {{ t('languages.ru') }}
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('en');">
+                            <i class="bi bi-check" style="visibility: hidden" id="lang-en"></i> 
+                            {{ t('languages.en') }}
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('es');">
+                            <i class="bi bi-check" style="visibility: hidden" id="lang-es"></i> 
+                            {{ t('languages.es') }}
+                        </a></li>
+                    </ul>
+                </div>
+                
+                <button class="btn btn-secondary btn-sm" id="themeToggleBtn" title="{{ t('dashboard.header.theme_toggle') }}">
                     <i class="bi bi-moon-stars"></i>
                 </button>
-                <button class="btn btn-secondary btn-sm" id="clearCanvasBtn" title="Очистить канвас">
+                <button class="btn btn-secondary btn-sm" id="clearCanvasBtn" title="{{ t('builder.toolbar.clear_canvas') }}">
                     <i class="bi bi-trash"></i>
                 </button>
                 <button class="btn btn-success btn-sm" id="saveFlowBtn" disabled>
-                    <i class="bi bi-cloud-upload"></i> Сохранить
+                    <i class="bi bi-cloud-upload"></i> {{ t('builder.toolbar.save') }}
                 </button>
                 <button class="btn btn-primary btn-sm" id="runFlowBtn" disabled>
-                    <i class="bi bi-play-fill"></i> Запустить
+                    <i class="bi bi-play-fill"></i> {{ t('builder.toolbar.run') }}
                 </button>
             </div>
         </div>

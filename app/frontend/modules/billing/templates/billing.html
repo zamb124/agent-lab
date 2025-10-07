@@ -17,7 +17,29 @@
             <h1 class="billing-title">Тарифы и оплата</h1>
         </div>
         <div class="billing-header-right">
-            <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="Переключить тему">
+            <!-- Dropdown для выбора языка -->
+            <div class="dropdown">
+                <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
+                    <i class="bi bi-translate"></i>
+                    <span id="current-language">{{ get_current_language().upper() }}</span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('ru');">
+                        <i class="bi bi-check" style="visibility: hidden" id="lang-ru"></i> 
+                        {{ t('languages.ru') }}
+                    </a></li>
+                    <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('en');">
+                        <i class="bi bi-check" style="visibility: hidden" id="lang-en"></i> 
+                        {{ t('languages.en') }}
+                    </a></li>
+                    <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('es');">
+                        <i class="bi bi-check" style="visibility: hidden" id="lang-es"></i> 
+                        {{ t('languages.es') }}
+                    </a></li>
+                </ul>
+            </div>
+            
+            <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="{{ t('dashboard.header.theme_toggle') }}">
                 <i class="bi bi-sun"></i>
             </button>
         </div>
