@@ -98,8 +98,8 @@
     gap: 0.5rem;
     padding: 0.5rem 1rem;
     background: var(--primary);
-    color: white;
-    border-radius: var(--border-radius);
+    color: #ffffff !important;
+    border-radius: 8px;
     font-weight: 600;
     font-size: 0.875rem;
     margin-bottom: 1.5rem;
@@ -371,9 +371,9 @@
 
 .modal-content {
     background: var(--bg-secondary);
-    border-radius: var(--border-radius-lg);
+    border-radius: 16px;
     overflow: hidden;
-    box-shadow: var(--shadow-xl);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
 .modal-header {
