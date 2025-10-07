@@ -89,7 +89,13 @@ async def payment_webhook(provider_name: str, request: Request):
     Провайдер должен совпадать с именем в конфигурации.
     """
     
-    logger.info(f"Получен webhook от провайдера: {provider_name}")
+    logger.info(f"📨 Получен POST webhook от провайдера: {provider_name}")
+    
+    # Логируем headers
+    logger.info(f"📋 Headers: {dict(request.headers)}")
+    
+    # Логируем метод и content-type
+    logger.info(f"🔧 Method: {request.method}, Content-Type: {request.headers.get('content-type')}")
     
     provider = PaymentProviderFactory.get_provider(provider_name)
     if not provider:
@@ -99,10 +105,10 @@ async def payment_webhook(provider_name: str, request: Request):
     content_type = request.headers.get("content-type", "")
     if "application/x-www-form-urlencoded" in content_type:
         webhook_data = dict(await request.form())
+        logger.info(f"📦 Данные webhook (form-urlencoded): {webhook_data}")
     else:
         webhook_data = await request.json()
-    
-    logger.debug(f"Данные webhook: {webhook_data}")
+        logger.info(f"📦 Данные webhook (json): {webhook_data}")
     
     try:
         verification_result = await provider.verify_webhook(webhook_data)
