@@ -204,25 +204,39 @@ class PaymentService:
     
     async def get_transaction(self, transaction_id: str) -> Optional[Transaction]:
         """Получает транзакцию по ID"""
-        data = await self.storage.get(
-            f"transaction:{transaction_id}",
-            force_global=True
-        )
+        prefix = f"payment:"
+        keys = await self.storage.list_by_prefix(prefix, force_global=True)
         
-        if not data:
-            return None
+        for key in keys:
+            if key.endswith(f":{transaction_id}"):
+                data = await self.storage.get(key, force_global=True)
+                if data:
+                    return Transaction.model_validate_json(data)
         
-        return Transaction.model_validate_json(data)
+        return None
     
     async def get_company_transactions(
         self,
         company_id: str,
         limit: int = 50,
-        offset: int = 0
+        offset: int = 0,
+        provider_name: Optional[str] = None
     ) -> List[Transaction]:
-        """Получает список транзакций компании"""
+        """
+        Получает список транзакций компании.
         
-        prefix = f"transaction:"
+        Args:
+            company_id: ID компании
+            limit: Максимальное количество результатов
+            offset: Смещение для пагинации
+            provider_name: Опционально - фильтр по провайдеру
+        """
+        
+        if provider_name:
+            prefix = f"payment:{company_id}:{provider_name}:"
+        else:
+            prefix = f"payment:{company_id}:"
+        
         keys = await self.storage.list_by_prefix(prefix, force_global=True)
         
         transactions = []
@@ -230,20 +244,29 @@ class PaymentService:
             data = await self.storage.get(key, force_global=True)
             if data:
                 transaction = Transaction.model_validate_json(data)
-                if transaction.company_id == company_id:
-                    transactions.append(transaction)
+                transactions.append(transaction)
         
         transactions.sort(key=lambda t: t.created_at, reverse=True)
         
         return transactions[offset:offset + limit]
     
     async def _save_transaction(self, transaction: Transaction):
-        """Сохраняет транзакцию"""
+        """
+        Сохраняет транзакцию с составным ключом.
+        Формат: payment:{company_id}:{provider}:{transaction_id}
+        """
+        # Получаем короткое имя провайдера (yoomoney вместо yoomoney_main)
+        provider_type = transaction.payment_provider.value  # yoomoney, yukassa
+        
+        key = f"payment:{transaction.company_id}:{provider_type}:{transaction.transaction_id}"
+        
         await self.storage.set(
-            f"transaction:{transaction.transaction_id}",
+            key,
             transaction.model_dump_json(),
             force_global=True
         )
+        
+        logger.debug(f"💾 Транзакция сохранена с ключом: {key}")
     
     async def _save_notification(self, notification: PaymentNotification):
         """Сохраняет уведомление"""

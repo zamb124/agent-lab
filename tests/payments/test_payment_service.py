@@ -102,9 +102,15 @@ async def test_process_webhook_success(payment_service):
         payment_provider=PaymentProviderType.YOOMONEY
     )
     
+    # Мокируем list_by_prefix для нового формата
+    payment_service.storage.list_by_prefix = AsyncMock(side_effect=lambda prefix, **kwargs: {
+        "payment:": ["payment:test_company:yoomoney:txn_test123"],
+        "payment_notification:": []
+    }.get(prefix, []))
+    
     # Мокируем методы storage
     payment_service.storage.get = AsyncMock(side_effect=lambda key, **kwargs: {
-        "transaction:txn_test123": test_transaction.model_dump_json(),
+        "payment:test_company:yoomoney:txn_test123": test_transaction.model_dump_json(),
         "company:test_company": Company(
             company_id="test_company",
             subdomain="test", 
@@ -114,7 +120,6 @@ async def test_process_webhook_success(payment_service):
     }.get(key))
     
     payment_service.storage.set = AsyncMock()
-    payment_service.storage.list_by_prefix = AsyncMock(return_value=[])
     
     verification_result = WebhookVerificationResult(
         is_valid=True,
@@ -181,6 +186,10 @@ async def test_get_transaction(payment_service):
         payment_provider=PaymentProviderType.YOOMONEY
     )
     
+    # Мокируем list_by_prefix и get для нового формата ключей
+    payment_service.storage.list_by_prefix = AsyncMock(return_value=[
+        "payment:test_company:yoomoney:txn_test123"
+    ])
     payment_service.storage.get = AsyncMock(return_value=test_transaction.model_dump_json())
     
     result = await payment_service.get_transaction("txn_test123")
@@ -221,14 +230,17 @@ async def test_get_company_transactions(payment_service):
         for i in range(1, 6)
     ]
     
-    # Мокируем storage
+    # Мокируем storage с новым форматом ключей
     payment_service.storage.list_by_prefix = AsyncMock(
-        return_value=[f"transaction:txn_{i}" for i in range(1, 6)]
+        return_value=[
+            "payment:test_company:yoomoney:txn_1",
+            "payment:test_company:yoomoney:txn_2"
+        ]
     )
     
     def mock_get(key, **kwargs):
         for t in transactions:
-            if key == f"transaction:{t.transaction_id}":
+            if t.transaction_id in key and t.company_id == "test_company":
                 return t.model_dump_json()
         return None
     
