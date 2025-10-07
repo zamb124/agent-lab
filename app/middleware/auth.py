@@ -38,6 +38,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             request.url.path.startswith("/static/")
             or request.url.path.startswith("/.well-known/")
             or request.url.path.startswith("/favicon.ico")
+            or request.url.path.startswith("/api/v1/payments/webhook/")  # Webhook публичные
         ):
             return await call_next(request)
             
