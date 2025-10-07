@@ -546,6 +546,122 @@
     }
 }
 
+/* История транзакций */
+.transactions-container {
+    margin-top: 1rem;
+}
+
+.transactions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.transaction-item {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: var(--border-radius);
+    border-left: 3px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.transaction-item:hover {
+    background: var(--bg-tertiary);
+    transform: translateX(4px);
+}
+
+.transaction-item.status-success {
+    border-left-color: var(--success);
+}
+
+.transaction-item.status-pending {
+    border-left-color: var(--warning);
+}
+
+.transaction-item.status-failed {
+    border-left-color: var(--danger);
+}
+
+.transaction-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    background: var(--bg-tertiary);
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.transaction-icon i {
+    font-size: 1.5rem;
+    color: var(--success);
+}
+
+.transaction-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.transaction-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.transaction-amount {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--success);
+}
+
+.transaction-status {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.875rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    background: var(--bg-tertiary);
+}
+
+.transaction-item.status-success .transaction-status {
+    color: var(--success);
+}
+
+.transaction-item.status-pending .transaction-status {
+    color: var(--warning);
+}
+
+.transaction-item.status-failed .transaction-status {
+    color: var(--danger);
+}
+
+.transaction-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+.transaction-meta span {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.transaction-meta i {
+    font-size: 0.75rem;
+}
+
+.transaction-id {
+    font-family: 'Courier New', monospace;
+}
+
 /* Анимации для уведомлений */
 @keyframes slideIn {
     from {

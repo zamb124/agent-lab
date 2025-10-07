@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from app.frontend.core.template_loader import get_templates
 from app.core.context import get_context
 from app.services.billing_service import BillingService
+from app.services.payment_service import PaymentService
 from app.models.billing_models import TariffPlan, TARIFF_PRICES
 
 router = APIRouter(prefix="/frontend/billing", tags=["billing-pages"])
@@ -31,8 +32,16 @@ async def billing_index(request: Request):
         )
     
     billing_service = BillingService()
+    payment_service = PaymentService()
     
     stats = await billing_service.get_company_usage_stats(company.company_id)
+    
+    # Получаем историю платежей (последние 10)
+    payment_history = await payment_service.get_company_transactions(
+        company_id=company.company_id,
+        limit=10,
+        offset=0
+    )
     
     tariff_prices = TARIFF_PRICES.get(company.tariff_plan, {})
     
@@ -50,6 +59,7 @@ async def billing_index(request: Request):
             "tariff_prices": tariff_prices,
             "budget_percent": budget_percent,
             "tariff_plans": TariffPlan,
+            "payment_history": payment_history,
         }
     )
 
