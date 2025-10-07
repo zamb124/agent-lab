@@ -1432,8 +1432,8 @@ class ChatMessageRenderer {
 
     // Парсинг ссылок на скачивание из текста
     parseDownloadLinksFromContent(content) {
-        // Ищем ссылки на наши файлы в тексте (исключаем скобки и другие спецсимволы из конца URL)
-        const linkRegex = /(https?:\/\/[^\s]+\/api\/v1\/files\/download\/file_[a-z0-9]+)/gi;
+        // Ищем ссылки на наши файлы в тексте (поддерживаем file_ и audio_ префиксы)
+        const linkRegex = /(https?:\/\/[^\s]+\/api\/v1\/files\/download\/(file_|audio_)[a-z0-9]+)/gi;
         const downloadLinks = [];
         let cleanContent = content;
         
@@ -1478,8 +1478,11 @@ class ChatMessageRenderer {
         // Пытаемся определить тип файла
         const fileType = this.detectFileType(link.fileName);
         
-        // Если не смогли определить по расширению, пробуем загрузить и проверить MIME
-        if (fileType === 'document' && !link.fileName.includes('.')) {
+        // Если уже определен конкретный тип (не document), сразу показываем превью
+        if (fileType !== 'document') {
+            this.renderFilePreview(container, link, null, fileType);
+        } else {
+            // Иначе пробуем загрузить MIME тип через API
             try {
                 const mimeType = await this.fetchFileMimeType(link.url);
                 this.renderFilePreview(container, link, mimeType);
@@ -1487,9 +1490,6 @@ class ChatMessageRenderer {
                 console.error('Ошибка загрузки файла:', error);
                 this.renderFilePreview(container, link, null);
             }
-        } else {
-            // Рендерим превью по известному типу
-            this.renderFilePreview(container, link, null, fileType);
         }
         
         return container;
@@ -1600,6 +1600,16 @@ class ChatMessageRenderer {
     
     // Определение типа файла
     detectFileType(fileName) {
+        // Проверяем префикс для специальных ID
+        if (fileName.startsWith('audio_')) {
+            return 'audio';
+        }
+        
+        // Если нет расширения, возвращаем document (будет определен через API)
+        if (!fileName.includes('.')) {
+            return 'document';
+        }
+        
         const ext = fileName.split('.').pop().toLowerCase();
         
         // Изображения
