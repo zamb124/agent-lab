@@ -1,0 +1,1282 @@
+{
+  "meta": {
+    "language": "en",
+    "version": "1.0.0",
+    "last_updated": "2025-10-07T13:12:43.928301",
+    "completeness": 100.0,
+    "total_keys": 592,
+    "translated_keys": 592
+  },
+  "common": {
+    "app_name": "Agents Lab",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "warning": "Warning",
+    "info": "Information",
+    "confirm": "Confirm",
+    "close": "Close",
+    "search": "Search",
+    "filter": "Filter",
+    "sort": "Sort",
+    "export": "Export",
+    "import": "Import",
+    "refresh": "Refresh",
+    "back": "Back",
+    "next": "Next"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome_message": "Welcome, {user_name}!",
+    "navigation": {
+      "bots": "Bots",
+      "chats": "Chats",
+      "store": "Store",
+      "history": "History",
+      "builder": "Agent Builder",
+      "admin": "Administration",
+      "billing": "Billing & Payment",
+      "agents": "Agents",
+      "flows": "Flows",
+      "tasks": "Tasks",
+      "users": "Users",
+      "company_management": "Company Management"
+    },
+    "header": {
+      "theme_toggle": "Toggle theme",
+      "language_toggle": "Select language",
+      "logout": "Logout",
+      "collapse_menu": "Collapse menu"
+    },
+    "footer": {
+      "user": "User",
+      "online": "Online"
+    },
+    "empty_state": {
+      "welcome_title": "Welcome to Agents Lab",
+      "welcome_description": "Select a section from the left menu to start working with agents and flows",
+      "view_flows": "View flows",
+      "view_agents": "View agents"
+    }
+  },
+  "landing": {
+    "header": {
+      "builder": "Agent Builder",
+      "login": "Login",
+      "dashboard": "Dashboard"
+    },
+    "hero": {
+      "title_main": "Your business. Powered by agents.",
+      "title_accent": "Artificial Intelligence Support.",
+      "subtitle": "Agents Lab is a proprietary platform that allows companies to implement agent automation + AI assistants in processes, communications and management.",
+      "start_button": "Get Started",
+      "learn_more": "Learn More",
+      "floating_tags": {
+        "ai": "AI",
+        "automation": "Automation",
+        "rag": "RAG",
+        "search": "Information Search",
+        "support": "Support",
+        "efficiency": "Efficiency",
+        "growth": "Growth",
+        "integrations": "Integrations"
+      }
+    },
+    "about": {
+      "title": "What is Agents Lab",
+      "subtitle": "We help not just automate routine tasks, but transform business operations, bringing them to a new level of efficiency."
+    },
+    "features": {
+      "autonomous_agents": {
+        "title": "Autonomous Agents",
+        "description": "Agents that act instead of humans, make decisions, learn and interact with each other."
+      },
+      "multi_agent": {
+        "title": "Multi-Agent Systems",
+        "description": "Multiple agents work together: front-office, support service, sales department, analytics, logistics."
+      },
+      "low_code": {
+        "title": "Low-code / No-code",
+        "description": "Business teams can quickly develop solutions without extensive development."
+      },
+      "integrations": {
+        "title": "Flexible Integrations",
+        "description": "Integrations with systems, messengers, databases and enterprise internal software."
+      },
+      "security": {
+        "title": "Security",
+        "description": "Cloud or on-premise deployment, data control, compliance with regulatory requirements."
+      },
+      "scalability": {
+        "title": "Scalability",
+        "description": "From one agent to an entire network of agents interacting with each other."
+      }
+    },
+    "benefits": {
+      "title": "Our Strengths",
+      "speed": {
+        "title": "Implementation Speed",
+        "description": "MVP or agent prototype in just a few days; start without huge budgets."
+      },
+      "control_security": {
+        "title": "Control & Security",
+        "description": "Data encryption, strict access policies, ability to deploy in your infrastructure."
+      },
+      "scalability": {
+        "title": "Scalability",
+        "description": "From a single agent to a whole network of agents interacting with each other."
+      },
+      "manageability": {
+        "title": "Manageability",
+        "description": "Monitoring, analytics, reporting, workflow optimization."
+      }
+    },
+    "audience": {
+      "title": "Who We Serve",
+      "subtitle": "Agents Lab is especially useful for:",
+      "cost_reduction": "Companies looking to reduce operational costs and manual work errors",
+      "repetitive_tasks": "Businesses with repetitive processes, customer communications, or tasks requiring quick response",
+      "no_dev_team": "Those who want to implement AI agents but don't have a large development team",
+      "security_control": "Those who value data security and control, and need to comply with standards and regulations"
+    },
+    "cta": {
+      "title": "Ready to Start?",
+      "subtitle": "Learn how Agents Lab can help your specific business",
+      "login_button": "Login to Platform",
+      "contact_button": "Contact Us"
+    },
+    "contact_modal": {
+      "title": "Start with Agents Lab",
+      "message_label": "Message *",
+      "message_placeholder": "Tell us about your tasks and goals...",
+      "email_label": "Email *",
+      "email_placeholder": "your@email.com",
+      "phone_label": "Phone",
+      "phone_placeholder": "+1 (555) 123-4567",
+      "cancel_button": "Cancel",
+      "send_button": "Send",
+      "notification_success_title": "Message Sent",
+      "notification_success_message": "We will contact you shortly",
+      "notification_error_title": "Send Error",
+      "notification_error_message_default": "Please try again or contact us directly",
+      "notification_error_message_email_invalid": "Please enter a valid email address",
+      "sending": "Sending..."
+    },
+    "footer": {
+      "copyright": "© 2025 Agents Lab. AI Agents Laboratory."
+    }
+  },
+  "builder": {
+    "title": "Agent Builder",
+    "toolbar": {
+      "back_to_dashboard": "Back to Dashboard",
+      "zoom_in": "Zoom In",
+      "zoom_out": "Zoom Out",
+      "fit_to_screen": "Fit to Screen",
+      "select_or_create_flow": "Select or Create Flow",
+      "save": "Save",
+      "run": "Run",
+      "clear_canvas": "Clear Canvas"
+    },
+    "sidebar": {
+      "collapse": "Collapse Panel",
+      "flows_tab": "Flows",
+      "agents_tab": "Agents",
+      "tools_tab": "Tools",
+      "search_placeholder": "Search...",
+      "create_new_element": "Create New Element"
+    },
+    "context_menu": {
+      "edit": "Edit",
+      "duplicate": "Duplicate",
+      "delete": "Delete"
+    }
+  },
+  "bots": {
+    "title": "Bots",
+    "create_bot": "Create Bot",
+    "loading": "Loading bots...",
+    "configure": "Configure",
+    "chat": "Chat",
+    "platforms": "Platforms",
+    "agent": "Agent",
+    "no_description": "No description",
+    "empty_state": {
+      "title": "You don't have any bots yet",
+      "description": "Create your first bot to get started"
+    }
+  },
+  "languages": {
+    "ru": "Russian",
+    "en": "English"
+  },
+  "models": {
+    "common": {
+      "records": "records",
+      "table_view": "Table",
+      "cards_view": "Cards",
+      "no_data": "No Data",
+      "no_data_description": "No records found. Create the first record.",
+      "duplicate": "Duplicate",
+      "show_details": "Show Details",
+      "model": "Model"
+    },
+    "agent": {
+      "title_plural": "Agents",
+      "fields": {
+        "agent_id": {
+          "title": "AGENT ID"
+        },
+        "name": {
+          "title": "NAME"
+        },
+        "description": {
+          "title": "DESCRIPTION"
+        },
+        "type": {
+          "title": "AGENT TYPE"
+        },
+        "created_at": {
+          "title": "CREATED"
+        },
+        "updated_at": {
+          "title": "UPDATED"
+        },
+        "source": {
+          "title": "SOURCE"
+        }
+      }
+    },
+    "flow": {
+      "title_plural": "Flows"
+    },
+    "task": {
+      "title_plural": "Tasks"
+    },
+    "user": {
+      "title_plural": "Users"
+    },
+    "toolcallinfo": {
+      "fields": {
+        "tool_name": {
+          "title": "Tool Name",
+          "description": "Name of the called tool"
+        },
+        "tool_id": {
+          "title": "Call ID",
+          "description": "Unique identifier of the tool call"
+        },
+        "arguments": {
+          "title": "Arguments",
+          "description": "Arguments passed to the tool"
+        },
+        "result": {
+          "title": "Result",
+          "description": "Result of the tool execution"
+        }
+      }
+    },
+    "messageitem": {
+      "fields": {
+        "role": {
+          "title": "Role",
+          "description": "Role of the message sender"
+        },
+        "content": {
+          "title": "Content",
+          "description": "Message text"
+        },
+        "timestamp": {
+          "title": "Time",
+          "description": "Message send time"
+        },
+        "tool_calls": {
+          "title": "Tool Calls",
+          "description": "List of tool calls in this message"
+        },
+        "source_node": {
+          "title": "Source Node",
+          "description": "Name of the node/agent that created this message"
+        },
+        "metadata": {
+          "title": "Metadata",
+          "description": "Additional message metadata"
+        }
+      }
+    },
+    "checkpointinfo": {
+      "fields": {
+        "checkpoint_id": {
+          "title": "Checkpoint ID",
+          "description": "Unique checkpoint identifier"
+        },
+        "thread_id": {
+          "title": "Thread ID",
+          "description": "Thread ID (session_id)"
+        },
+        "checkpoint_ns": {
+          "title": "Namespace",
+          "description": "Checkpoint namespace"
+        },
+        "step": {
+          "title": "Step",
+          "description": "Step number in the graph"
+        },
+        "source_node": {
+          "title": "Source Node",
+          "description": "Name of the node/agent that created the checkpoint"
+        },
+        "timestamp": {
+          "title": "Time",
+          "description": "Checkpoint creation time"
+        },
+        "messages": {
+          "title": "Messages",
+          "description": "Messages in this checkpoint"
+        },
+        "metadata": {
+          "title": "Metadata",
+          "description": "Checkpoint metadata"
+        }
+      }
+    },
+    "messagehistoryresponse": {
+      "fields": {
+        "session_id": {
+          "title": "Session ID",
+          "description": "Identifier session"
+        },
+        "thread_id": {
+          "title": "Thread ID",
+          "description": "Thread ID for LangGraph"
+        },
+        "flow_id": {
+          "title": "Flow ID",
+          "description": "Identifier flow"
+        },
+        "flow_name": {
+          "title": "Name Flow",
+          "description": "Human-readable flow name"
+        },
+        "messages": {
+          "title": "Messages",
+          "description": "List of all messages in chronological order"
+        },
+        "checkpoints": {
+          "title": "Checkpoints",
+          "description": "List of all checkpoints (for detailed analysis)"
+        },
+        "total_messages": {
+          "title": "Total Messages",
+          "description": "Total number of messages"
+        },
+        "total_checkpoints": {
+          "title": "Total Checkpoints",
+          "description": "Total number of checkpoints"
+        },
+        "created_at": {
+          "title": "Created",
+          "description": "Time of first message"
+        },
+        "last_activity": {
+          "title": "Last Activity",
+          "description": "Time of last message"
+        }
+      }
+    },
+    "sessionlistitem": {
+      "fields": {
+        "session_id": {
+          "title": "Session ID",
+          "description": "Identifier session"
+        },
+        "flow_id": {
+          "title": "Flow",
+          "description": "Identifier flow"
+        },
+        "flow_name": {
+          "title": "Name Flow",
+          "description": "Human-readable flow name"
+        },
+        "platform": {
+          "title": "Platform",
+          "description": "Platform (web/telegram/api)"
+        },
+        "user_id": {
+          "title": "User",
+          "description": "User identifier"
+        },
+        "user_name": {
+          "title": "User Name",
+          "description": "User name"
+        },
+        "status": {
+          "title": "Status",
+          "description": "Status session"
+        },
+        "message_count": {
+          "title": "Messages",
+          "description": "Number of messages in session"
+        },
+        "created_at": {
+          "title": "Created",
+          "description": "Creation time session"
+        },
+        "last_activity": {
+          "title": "Last activity",
+          "description": "Time of last activity"
+        },
+        "metadata": {
+          "title": "Metadata",
+          "description": "Additional metadata"
+        }
+      }
+    },
+    "sessionlistresponse": {
+      "fields": {
+        "sessions": {
+          "title": "Sessions",
+          "description": "List of sessions"
+        },
+        "total": {
+          "title": "Total",
+          "description": "Total number of sessions"
+        },
+        "limit": {
+          "title": "Limit",
+          "description": "Maximum number of results"
+        },
+        "offset": {
+          "title": "Offset",
+          "description": "Offset for pagination"
+        },
+        "filters": {
+          "title": "Filters",
+          "description": "Applied filters"
+        }
+      }
+    },
+    "context": {
+      "fields": {
+        "user": {
+          "title": "User",
+          "description": "User performing the request"
+        },
+        "session_id": {
+          "title": "Session ID",
+          "description": "Identifier session"
+        },
+        "platform": {
+          "title": "Platform",
+          "description": "Platform from which request came"
+        },
+        "active_company": {
+          "title": "Active Company",
+          "description": "Current active company of the user"
+        },
+        "user_companies": {
+          "title": "User Companies",
+          "description": "All available companies of the user"
+        },
+        "metadata": {
+          "title": "Metadata",
+          "description": "Additional context metadata"
+        },
+        "language": {
+          "title": "User Language",
+          "description": "Preferred interface language of the user"
+        },
+        "flow_variables": {
+          "title": "Flow Variables",
+          "description": "Variables available in flow and agents"
+        },
+        "company_variables": {
+          "title": "Company Variables",
+          "description": "Company variables for use in prompts"
+        },
+        "state": {
+          "title": "Agent State",
+          "description": "Reference to current agent state (available in tools)"
+        }
+      }
+    },
+    "tryonparameters": {
+      "fields": {
+        "model_height_cm": {
+          "description": "Model height in cm"
+        },
+        "product_width_cm": {
+          "description": "Product width in cm"
+        },
+        "product_height_cm": {
+          "description": "Product height in cm"
+        },
+        "item_kind": {
+          "description": "Product type"
+        },
+        "placement": {
+          "description": "Placement"
+        },
+        "offset_x_pct": {
+          "description": "X axis offset in %"
+        },
+        "offset_y_pct": {
+          "description": "Y axis offset in %"
+        },
+        "visible_top_pct": {
+          "description": "Top figure crop"
+        },
+        "visible_bottom_pct": {
+          "description": "Bottom figure crop"
+        },
+        "scale_bias": {
+          "description": "Size multiplier"
+        },
+        "variations": {
+          "description": "Number of variations"
+        }
+      }
+    },
+    "tryonrecord": {
+      "fields": {
+        "id": {
+          "description": "Unique try-on ID"
+        },
+        "user_id": {
+          "description": "User ID"
+        },
+        "created_at": {
+          "description": "Creation time in ISO format"
+        },
+        "model_file_id": {
+          "description": "User photo file ID"
+        },
+        "model_url": {
+          "description": "User photo URL"
+        },
+        "product_file_id": {
+          "description": "Product image file ID"
+        },
+        "product_image_url": {
+          "description": "Product image URL"
+        },
+        "product_url": {
+          "description": "Original product URL from website"
+        },
+        "result_urls": {
+          "description": "Try-on result URLs"
+        },
+        "parameters": {
+          "description": "Try-on parameters"
+        },
+        "metadata": {
+          "description": "Additional data"
+        }
+      }
+    },
+    "tryonhistoryresponse": {
+      "fields": {
+        "try_ons": {
+          "description": "List of try-ons"
+        },
+        "total": {
+          "description": "Total number of try-ons"
+        },
+        "page": {
+          "description": "Page number"
+        },
+        "limit": {
+          "description": "Number per page"
+        }
+      }
+    },
+    "translationkey": {
+      "fields": {
+        "key": {
+          "description": "Unique translation key (example: models.user.fields.name)"
+        },
+        "context": {
+          "description": "Context of key usage"
+        },
+        "source_file": {
+          "description": "Source file where key is found"
+        },
+        "default_value": {
+          "description": "Default value (usually in Russian)"
+        },
+        "category": {
+          "description": "Key category (models, common, errors, etc)"
+        }
+      }
+    },
+    "translation": {
+      "fields": {
+        "language": {
+          "description": "Translation language"
+        },
+        "key": {
+          "description": "Translation key"
+        },
+        "value": {
+          "description": "Translated value"
+        },
+        "last_updated": {
+          "description": "Last update time"
+        },
+        "is_auto_generated": {
+          "description": "Auto-generated or manually translated"
+        }
+      }
+    },
+    "translationset": {
+      "fields": {
+        "key": {
+          "description": "Translation key"
+        },
+        "translations": {
+          "description": "Translations in different languages"
+        },
+        "context": {
+          "description": "Usage context"
+        }
+      }
+    },
+    "translationfile": {
+      "fields": {
+        "language": {
+          "description": "Language file"
+        },
+        "version": {
+          "description": "Translation file version"
+        },
+        "last_updated": {
+          "description": "Last update time"
+        },
+        "completeness": {
+          "description": "Translation completion percentage (0-100)"
+        },
+        "total_keys": {
+          "description": "Total number of keys"
+        },
+        "translated_keys": {
+          "description": "Number of translated keys"
+        }
+      }
+    },
+    "translationstats": {
+      "fields": {
+        "total_languages": {
+          "description": "Total number of languages"
+        },
+        "total_keys": {
+          "description": "Total number of keys"
+        },
+        "languages_stats": {
+          "description": "Statistics by languages"
+        }
+      }
+    },
+    "i18nconfig": {
+      "fields": {
+        "default_language": {
+          "description": "Default language"
+        },
+        "fallback_language": {
+          "description": "Fallback language"
+        },
+        "auto_generate_missing": {
+          "description": "Automatically generate missing keys"
+        },
+        "auto_generate_on_startup": {
+          "description": "Generate translations on application startup"
+        },
+        "scan_directories": {
+          "description": "Directories for scanning keys"
+        },
+        "translations_directory": {
+          "description": "Directory with translation files"
+        }
+      }
+    },
+    "graphnode": {
+      "fields": {
+        "id": {
+          "title": "Node ID",
+          "description": "Unique identifier of node in graph"
+        },
+        "type": {
+          "title": "Node Type",
+          "description": "Type of node in graph"
+        },
+        "params": {
+          "title": "Parameters",
+          "description": "Node parameters"
+        },
+        "code_mode": {
+          "title": "Code Mode",
+          "description": "Node code storage mode"
+        },
+        "function_class": {
+          "title": "Function Class",
+          "description": "Path to agent class",
+          "placeholder": "app.agents.calculator.CalculatorAgent"
+        },
+        "function_path": {
+          "title": "Function Path",
+          "description": "Path to function",
+          "placeholder": "app.tools.calc_tools.add_numbers"
+        },
+        "inline_code": {
+          "title": "Inline Code",
+          "description": "Python code of node"
+        },
+        "prompt": {
+          "title": "Prompt",
+          "description": "Prompt for ReAct nodes"
+        },
+        "input_mapping": {
+          "title": "Input Data Mapping",
+          "description": "How to get data from state"
+        },
+        "output_mapping": {
+          "title": "Output Data Mapping",
+          "description": "How to save result to state"
+        }
+      }
+    },
+    "graphedge": {
+      "fields": {
+        "source": {
+          "title": "Source",
+          "description": "Source node ID"
+        },
+        "target": {
+          "title": "Target",
+          "description": "Target node ID"
+        },
+        "condition": {
+          "title": "Condition",
+          "description": "Condition or expression for transition"
+        },
+        "condition_type": {
+          "title": "Condition Type",
+          "description": "Type of condition for transition"
+        }
+      }
+    },
+    "builderentity": {
+      "fields": {
+        "source": {
+          "title": "Source",
+          "description": "Creation source (manual, migration, canvas_created)"
+        },
+        "created_at": {
+          "title": "Created",
+          "description": "Creation date"
+        },
+        "updated_at": {
+          "title": "Updated",
+          "description": "Update date"
+        }
+      }
+    },
+    "graphdefinition": {
+      "fields": {
+        "nodes": {
+          "title": "Nodes",
+          "description": "List of nodes in graph"
+        },
+        "edges": {
+          "title": "Edges",
+          "description": "List of edges in graph"
+        },
+        "entry_point": {
+          "title": "Entry Point",
+          "description": "Node ID from which graph execution starts"
+        }
+      }
+    },
+    "llmconfig": {
+      "fields": {
+        "provider": {
+          "title": "Provider",
+          "description": "LLM provider (openai, anthropic, yandex, etc.)"
+        },
+        "model": {
+          "title": "Model",
+          "description": "Model name",
+          "placeholder": "gpt-4, claude-3-sonnet, yandexgpt"
+        },
+        "temperature": {
+          "title": "Temperature",
+          "description": "Temperature for generation (0.0-1.0)"
+        },
+        "max_tokens": {
+          "title": "Maximum Tokens",
+          "description": "Maximum number of tokens in response"
+        },
+        "api_key": {
+          "title": "API Key",
+          "description": "API key for provider"
+        },
+        "base_url": {
+          "title": "Base URL",
+          "description": "Base URL for API",
+          "placeholder": "https://api.openai.com/v1"
+        },
+        "additional_params": {
+          "title": "Additional Parameters",
+          "description": "Additional parameters for LLM"
+        }
+      }
+    },
+    "taskconfig": {
+      "fields": {
+        "task_id": {
+          "title": "Task ID",
+          "description": "Unique task identifier"
+        },
+        "flow_id": {
+          "title": "Flow ID",
+          "description": "Flow identifier for task"
+        },
+        "context": {
+          "title": "Context",
+          "description": "Task execution context"
+        },
+        "status": {
+          "title": "Status",
+          "description": "Task execution status"
+        },
+        "input_data": {
+          "title": "Input Data",
+          "description": "Input data for task"
+        },
+        "output_data": {
+          "title": "Output Data",
+          "description": "Task execution result"
+        },
+        "error_message": {
+          "title": "Error Message",
+          "description": "Error message during execution"
+        },
+        "created_at": {
+          "title": "Created",
+          "description": "Task creation time"
+        },
+        "started_at": {
+          "title": "Started",
+          "description": "Execution start time"
+        },
+        "completed_at": {
+          "title": "Completed",
+          "description": "Execution completion time"
+        }
+      }
+    },
+    "sessionconfig": {
+      "fields": {
+        "session_id": {
+          "title": "Session ID",
+          "description": "Unique session identifier"
+        },
+        "platform": {
+          "title": "Platform",
+          "description": "Platform (telegram, api, web)"
+        },
+        "user_id": {
+          "title": "User ID",
+          "description": "User identifier"
+        },
+        "flow_id": {
+          "title": "Flow ID",
+          "description": "Flow identifier"
+        },
+        "status": {
+          "title": "Status",
+          "description": "Session status"
+        },
+        "metadata": {
+          "title": "Metadata",
+          "description": "Additional session metadata"
+        },
+        "created_at": {
+          "title": "Created",
+          "description": "Session creation time"
+        },
+        "last_activity": {
+          "title": "Last Activity",
+          "description": "Last activity time"
+        }
+      }
+    },
+    "cloudvoicetokenconfig": {
+      "fields": {
+        "client_id": {
+          "title": "Client ID",
+          "description": "Cloud Voice API client identifier"
+        },
+        "access_token": {
+          "title": "Access Token",
+          "description": "API access token"
+        },
+        "refresh_token": {
+          "title": "Refresh Token",
+          "description": "Token for refreshing access_token"
+        },
+        "expires_at": {
+          "title": "Expiration Time",
+          "description": "Time when access_token expires"
+        },
+        "created_at": {
+          "title": "Creation Time",
+          "description": "Token creation time"
+        },
+        "updated_at": {
+          "title": "Update Time",
+          "description": "Last token update time"
+        }
+      }
+    },
+    "filerecord": {
+      "fields": {
+        "file_id": {
+          "title": "File ID",
+          "description": "Unique file ID in system"
+        },
+        "provider": {
+          "title": "Provider",
+          "description": "S3 provider (aws, yandex, minio, etc.)"
+        },
+        "original_name": {
+          "title": "Original Name",
+          "description": "Original file name"
+        },
+        "s3_key": {
+          "title": "S3 Key",
+          "description": "File key in S3"
+        },
+        "s3_bucket": {
+          "title": "S3 Bucket",
+          "description": "Bucket in S3"
+        },
+        "s3_endpoint": {
+          "title": "S3 Endpoint",
+          "description": "Provider endpoint URL"
+        },
+        "content_type": {
+          "title": "Content Type",
+          "description": "File MIME type"
+        },
+        "file_size": {
+          "title": "File Size",
+          "description": "File size in bytes"
+        },
+        "checksum": {
+          "title": "Checksum",
+          "description": "MD5 or other checksum"
+        },
+        "status": {
+          "title": "Status",
+          "description": "File status"
+        },
+        "uploaded_by": {
+          "title": "Uploaded By",
+          "description": "User ID who uploaded"
+        },
+        "metadata": {
+          "title": "Metadata",
+          "description": "Additional file metadata"
+        },
+        "tags": {
+          "title": "Tags",
+          "description": "Tags for categorization"
+        },
+        "is_public": {
+          "title": "Public",
+          "description": "Is file accessible without authorization"
+        },
+        "created_at": {
+          "title": "Created",
+          "description": "File creation time"
+        },
+        "updated_at": {
+          "title": "Updated",
+          "description": "File update time"
+        }
+      }
+    },
+    "audiorecord": {
+      "fields": {
+        "audio_id": {
+          "title": "Audio ID",
+          "description": "Unique audio file ID in system"
+        },
+        "provider": {
+          "title": "Provider",
+          "description": "S3 provider (aws, yandex, minio, etc.)"
+        },
+        "original_name": {
+          "title": "Original Name",
+          "description": "Original audio file name"
+        },
+        "s3_key": {
+          "title": "S3 Key",
+          "description": "Audio file key in S3"
+        },
+        "s3_bucket": {
+          "title": "S3 Bucket",
+          "description": "Bucket in S3"
+        },
+        "s3_endpoint": {
+          "title": "S3 Endpoint",
+          "description": "Provider endpoint URL"
+        },
+        "content_type": {
+          "title": "Content Type",
+          "description": "Audio file MIME type"
+        },
+        "file_size": {
+          "title": "File Size",
+          "description": "Audio file size in bytes"
+        },
+        "duration": {
+          "title": "Duration",
+          "description": "Audio duration in seconds"
+        },
+        "checksum": {
+          "title": "Checksum",
+          "description": "MD5 or other checksum"
+        },
+        "status": {
+          "title": "Status",
+          "description": "Audio file status"
+        },
+        "uploaded_by": {
+          "title": "Uploaded By",
+          "description": "User ID who uploaded"
+        },
+        "recognition_text": {
+          "title": "Recognized Text",
+          "description": "Speech recognition result"
+        },
+        "recognition_confidence": {
+          "title": "Recognition Confidence",
+          "description": "Recognition confidence from 0.0 to 1.0"
+        },
+        "recognition_qid": {
+          "title": "Cloud Voice QID",
+          "description": "Cloud Voice API request ID"
+        },
+        "metadata": {
+          "title": "Metadata",
+          "description": "Additional audio file metadata"
+        },
+        "tags": {
+          "title": "Tags",
+          "description": "Tags for categorization"
+        },
+        "created_at": {
+          "title": "Created",
+          "description": "Audio record creation time"
+        },
+        "updated_at": {
+          "title": "Updated",
+          "description": "Audio record update time"
+        }
+      }
+    },
+    "usagerecord": {
+      "fields": {
+        "usage_id": {
+          "title": "Record ID"
+        },
+        "user_id": {
+          "title": "User ID"
+        },
+        "company_id": {
+          "title": "Company ID"
+        },
+        "session_id": {
+          "title": "Session ID"
+        },
+        "usage_type": {
+          "title": "Usage Type"
+        },
+        "resource_name": {
+          "title": "Resource Name"
+        },
+        "cost": {
+          "title": "Cost in RUB"
+        },
+        "quantity": {
+          "title": "Quantity"
+        },
+        "metadata": {
+          "title": "Additional Data"
+        }
+      }
+    },
+    "modellistwrapper": {
+      "fields": {
+        "models": {
+          "title": "Models",
+          "description": "List of models for display"
+        },
+        "count": {
+          "title": "Quantity"
+        },
+        "model_type": {
+          "title": "Model Type"
+        }
+      }
+    }
+  },
+  "billing": {
+    "title": "Tariffs and Payment",
+    "current_plan": {
+      "title": "Current Plan",
+      "company": "Company",
+      "balance": "Balance",
+      "monthly_limit": "Monthly Limit",
+      "no_limit": "No Limit"
+    },
+    "tariff_plans": {
+      "free": {
+        "name": "Free"
+      },
+      "basic": {
+        "name": "Basic"
+      },
+      "premium": {
+        "name": "Premium"
+      },
+      "enterprise": {
+        "name": "Enterprise"
+      }
+    },
+    "budget_usage": {
+      "title": "Budget Usage",
+      "add_funds": "Add Funds",
+      "spent_this_month": "Spent This Month",
+      "used": "used",
+      "billing_period": "Billing Period"
+    },
+    "usage_stats": {
+      "title": "Usage Statistics",
+      "total_calls": "Total Calls",
+      "total_cost": "Total Cost"
+    },
+    "resources": {
+      "title": "Resource Details",
+      "resource": "Resource",
+      "calls": "Calls",
+      "cost": "Cost",
+      "no_data": "Resource usage data not yet available"
+    },
+    "users": {
+      "title": "User Details",
+      "user": "User",
+      "calls": "Calls",
+      "cost": "Cost",
+      "no_data": "User data not yet available"
+    },
+    "payment_modal": {
+      "title": "Top Up Balance",
+      "coming_soon": "Payment functionality will be available in future versions.",
+      "integrations_info": "In the future, integration with payment systems (Stripe, YooKassa and others) will be here.",
+      "card_payment": "Bank Card Payment",
+      "secure_transaction": "Secure Transaction",
+      "auto_receipt": "Automatic Receipt Issuance"
+    }
+  },
+  "admin": {
+    "companies": {
+      "title": "Company Management",
+      "table": {
+        "company_id": "Company",
+        "name": "Name",
+        "subdomain": "Subdomain",
+        "status": "Status",
+        "tariff_plan": "Plan",
+        "monthly_budget": "Limit (month)",
+        "current_month_spent": "Spent",
+        "created_at": "Created",
+        "actions": "Actions",
+        "balance": "Balance",
+        "no_limit": "No Limit",
+        "edit_balance": "Balance",
+        "edit_limit": "Limit",
+        "edit_tariff": "Plan"
+      },
+      "modal": {
+        "edit_balance_title": "Top Up Balance",
+        "current_balance": "Current Balance",
+        "new_balance": "Top-Up Amount (₽)",
+        "update_button": "Top Up",
+        "edit_limit_title": "Set Monthly Limit",
+        "new_limit": "Monthly Limit (₽)",
+        "no_limit_placeholder": "0 = no limit",
+        "no_limit_help": "0 = no restrictions",
+        "edit_tariff_title": "Change Plan",
+        "tariff_plan": "Tariff Plan"
+      },
+      "errors": {
+        "amount_required": "Enter top-up amount greater than 0",
+        "error_prefix": "Error: ",
+        "balance_error": "Error during top-up: ",
+        "save_error": "Error during save: "
+      },
+      "success": {
+        "tariff_updated": "Plan successfully changed"
+      }
+    }
+  },
+  "validation": {
+    "required": "Field is required",
+    "email_invalid": "Invalid email address",
+    "min_length": "Minimum length {min_length} characters",
+    "max_length": "Maximum length {max_length} characters",
+    "numeric": "Field must contain only numbers",
+    "positive": "Value must be positive"
+  },
+  "errors": {
+    "network": "Network error. Check connection",
+    "server": "Server error. Try again later",
+    "validation": "Data validation error",
+    "permission": "Insufficient access rights",
+    "not_found": "Requested resource not found",
+    "timeout": "Request timeout exceeded"
+  },
+  "": {
+    "modal-overlay": ".modal-overlay",
+    "notification": ".notification"
+  },
+  "{{ bot": {
+    "flow_id }}": "{{ bot.flow_id }}"
+  },
+  "username": "username",
+  "message": "message",
+  "email": "email",
+  "phone": "phone",
+  "div": "div",
+  "Введите сумму пополнения больше 0": "Enter top-up amount greater than 0",
+  "Тариф успешно изменен": "Plan successfully changed",
+  "{{ history": {
+    "session_id }}": "{{ history.session_id }}"
+  },
+  "tool_call_id": "tool_call_id",
+  "description": "description",
+  ";": ";",
+  "auth": {
+    "title": "Authorization",
+    "subtitle": "Agent Platform",
+    "choose_provider": "Choose a method to log in to the system",
+    "footer_text": "Secure authorization via OAuth 2.0"
+  }
+}
