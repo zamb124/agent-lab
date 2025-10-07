@@ -232,7 +232,7 @@
                             <td>
                                 <div class="resource-name">
                                     <i class="bi bi-person"></i>
-                                    {{ user_id[:20] }}...
+                                    {{ user_stats.user_name if user_stats.user_name else user_id }}
                                 </div>
                             </td>
                             <td>{{ user_stats.calls }}</td>
@@ -251,68 +251,68 @@
                 {% endif %}
             </div>
         </div>
-    </div>
-</div>
 
-<!-- История пополнений -->
-<div class="billing-section">
-    <div class="billing-section-header">
-        <h2 class="billing-section-title">
-            <i class="bi bi-clock-history"></i>
-            История пополнений
-        </h2>
-    </div>
-    
-    <div class="transactions-container">
-        {% if payment_history and payment_history|length > 0 %}
-        <div class="transactions-list">
-            {% for transaction in payment_history %}
-            <div class="transaction-item status-{{ transaction.status }}">
-                <div class="transaction-icon">
-                    <i class="bi bi-arrow-down-circle"></i>
-                </div>
-                <div class="transaction-details">
-                    <div class="transaction-header">
-                        <span class="transaction-amount">+{{ "%.2f"|format(transaction.amount) }} ₽</span>
-                        <span class="transaction-status">
-                            {% if transaction.status == 'success' %}
-                                <i class="bi bi-check-circle-fill"></i> Успешно
-                            {% elif transaction.status == 'pending' %}
-                                <i class="bi bi-clock-fill"></i> Ожидание
-                            {% elif transaction.status == 'failed' %}
-                                <i class="bi bi-x-circle-fill"></i> Ошибка
-                            {% endif %}
-                        </span>
-                    </div>
-                    <div class="transaction-meta">
-                        <span class="transaction-date">
-                            <i class="bi bi-calendar3"></i>
-                            {{ transaction.created_at.strftime('%d.%m.%Y %H:%M') }}
-                        </span>
-                        <span class="transaction-id">
-                            <i class="bi bi-hash"></i>
-                            {{ transaction.transaction_id }}
-                        </span>
-                        <span class="transaction-provider">
-                            <i class="bi bi-credit-card"></i>
-                            {% if transaction.payment_provider == 'yoomoney' %}
-                                ЮMoney
-                            {% elif transaction.payment_provider == 'yukassa' %}
-                                ЮКасса
-                            {% endif %}
-                        </span>
-                    </div>
-                </div>
+        <!-- История пополнений -->
+        <div class="billing-section">
+            <div class="billing-section-header">
+                <h2 class="billing-section-title">
+                    <i class="bi bi-clock-history"></i>
+                    История пополнений
+                </h2>
             </div>
-            {% endfor %}
+            
+            <div class="transactions-container">
+                {% if payment_history and payment_history|length > 0 %}
+                <div class="transactions-list">
+                    {% for transaction in payment_history %}
+                    <div class="transaction-item status-{{ transaction.status }}">
+                        <div class="transaction-icon">
+                            <i class="bi bi-arrow-down-circle"></i>
+                        </div>
+                        <div class="transaction-details">
+                            <div class="transaction-header">
+                                <span class="transaction-amount">+{{ "%.2f"|format(transaction.amount) }} ₽</span>
+                                <span class="transaction-status">
+                                    {% if transaction.status == 'success' %}
+                                        <i class="bi bi-check-circle-fill"></i> Успешно
+                                    {% elif transaction.status == 'pending' %}
+                                        <i class="bi bi-clock-fill"></i> Ожидание
+                                    {% elif transaction.status == 'failed' %}
+                                        <i class="bi bi-x-circle-fill"></i> Ошибка
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div class="transaction-meta">
+                                <span class="transaction-date">
+                                    <i class="bi bi-calendar3"></i>
+                                    {{ transaction.created_at.strftime('%d.%m.%Y %H:%M') }}
+                                </span>
+                                <span class="transaction-id">
+                                    <i class="bi bi-hash"></i>
+                                    {{ transaction.transaction_id }}
+                                </span>
+                                <span class="transaction-provider">
+                                    <i class="bi bi-credit-card"></i>
+                                    {% if transaction.payment_provider == 'yoomoney' %}
+                                        ЮMoney
+                                    {% elif transaction.payment_provider == 'yukassa' %}
+                                        ЮКасса
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="bi bi-inbox"></i>
+                    <p>История пополнений пуста</p>
+                    <p class="text-muted">Платежи появятся здесь после пополнения баланса</p>
+                </div>
+                {% endif %}
+            </div>
         </div>
-        {% else %}
-        <div class="empty-state">
-            <i class="bi bi-inbox"></i>
-            <p>История пополнений пуста</p>
-            <p class="text-muted">Платежи появятся здесь после пополнения баланса</p>
-        </div>
-        {% endif %}
     </div>
 </div>
 
