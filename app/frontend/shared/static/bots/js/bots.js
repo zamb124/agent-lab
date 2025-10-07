@@ -253,17 +253,35 @@
             max_retries: parseInt(document.getElementById('bot-max-retries')?.value) || 0,
         };
         
+        // Собираем конфигурацию платформ (БЕЗ токенов)
         const telegramToken = document.getElementById(`telegram-token-${botId}`);
+        
         if (telegramToken && telegramToken.value) {
             if (!flowData.platforms) flowData.platforms = {};
-            flowData.platforms.telegram = { token: telegramToken.value };
+            
+            // Пытаемся найти существующий username из точного поля
+            const telegramUsernameField = document.getElementById(`telegram-username-${botId}`);
+            const existingUsername = telegramUsernameField?.value || null;
+            
+            // Сохраняем в platforms только username, токен сохраним отдельно
+            flowData.platforms.telegram = {
+                username: existingUsername || `bot_${botId}`
+            };
         }
         
         // Получаем значение из Prompt Editor
         const promptValue = promptEditor ? promptEditor.getValue() : null;
         
+        console.log('💾 Сохранение настроек бота:', {
+            botId: botId,
+            flowData: flowData,
+            promptValue: promptValue ? `${promptValue.substring(0, 100)}...` : null,
+            hasPromptEditor: !!promptEditor
+        });
+        
         try {
-            const flowResponse = await fetch(`/api/v1/flows/${botId}`, {
+            // 1. Сохраняем FlowConfig
+            const flowResponse = await fetch(`/frontend/api/flows/${botId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -278,12 +296,33 @@
                 return;
             }
             
+            // 2. Сохраняем токен отдельно, если есть
+            if (telegramToken && telegramToken.value && flowData.platforms?.telegram?.username) {
+                const tokenResponse = await fetch('/api/v1/admin/tokens', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${window.app.authToken}`
+                    },
+                    body: JSON.stringify({
+                        platform: 'telegram',
+                        username: flowData.platforms.telegram.username,
+                        token: telegramToken.value
+                    })
+                });
+                
+                if (!tokenResponse.ok) {
+                    console.warn('Не удалось сохранить токен Telegram');
+                }
+            }
+            
+            // 3. Сохраняем промпт агента, если есть
             if (promptValue !== undefined && promptValue !== null) {
-                const placeholder = document.querySelector('.embedded-chat-placeholder');
-                const entryPoint = placeholder?.dataset?.entryPoint;
+                const entryPointField = document.getElementById('bot-entry-point');
+                const entryPoint = entryPointField?.value;
                 
                 if (entryPoint) {
-                    const agentResponse = await fetch(`/frontend/api/models/agent/${encodeURIComponent(entryPoint)}`, {
+                    const agentResponse = await fetch(`/frontend/api/agents/${encodeURIComponent(entryPoint)}`, {
                         method: 'PUT',
                         headers: {
                             'Content-Type': 'application/json',
@@ -293,21 +332,14 @@
                     });
                     
                     if (!agentResponse.ok) {
-                        console.warn('Не удалось сохранить промпт агента');
+                        console.warn('❌ Не удалось сохранить промпт агента:', agentResponse.status, agentResponse.statusText);
+                    } else {
+                        console.log('✅ Промпт агента сохранен успешно');
                     }
                 }
             }
             
             showNotification('Настройки бота сохранены', 'success');
-            
-            setTimeout(() => {
-                htmx.ajax('GET', '/frontend/bots/list', {
-                    target: '.bots-content',
-                    swap: 'innerHTML'
-                });
-            }, 1000);
-            
-            window.closeBotModal();
             
         } catch (error) {
             console.error('Ошибка сохранения:', error);
@@ -316,7 +348,351 @@
     };
 
     window.addPlatform = function(botId) {
-        showNotification('Функция добавления платформ будет реализована позже', 'info');
+        let modal = document.getElementById('add-platform-modal');
+        
+        // Перемещаем модальное окно в body если оно не там
+        if (modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+        }
+        
+        modal.style.display = 'flex';
+        modal.style.position = 'fixed';
+        modal.style.top = '0';
+        modal.style.left = '0';
+        modal.style.width = '100%';
+        modal.style.height = '100%';
+        modal.style.zIndex = '9999';
+        
+        document.getElementById('platform-type-select').value = '';
+        document.getElementById('platform-config-section').style.display = 'none';
+        resetPlatformForm();
+        
+        // Блокируем прокрутку body
+        document.body.style.overflow = 'hidden';
+        
+        console.log('🔧 Modal opened, parent:', modal.parentElement.tagName);
+    };
+
+    window.closeAddPlatformModal = function() {
+        document.getElementById('add-platform-modal').style.display = 'none';
+        document.body.style.overflow = 'auto'; // Возвращаем прокрутку
+        resetPlatformForm();
+    };
+
+    // Глобальная переменная для хранения выбранной платформы
+    let selectedPlatformType = '';
+
+    window.togglePlatformDropdown = function() {
+        const dropdown = document.getElementById('platform-dropdown');
+        const selectValue = document.querySelector('.select-value');
+        
+        console.log('🔽 Toggle dropdown called, dropdown:', dropdown, 'selectValue:', selectValue);
+        
+        const isOpen = dropdown.classList.contains('show');
+        console.log('🔽 Current state isOpen:', isOpen);
+        
+        if (isOpen) {
+            dropdown.classList.remove('show');
+            selectValue.classList.remove('active');
+            console.log('🔽 Dropdown закрыт');
+        } else {
+            dropdown.classList.add('show');
+            selectValue.classList.add('active');
+            console.log('🔽 Dropdown открыт, z-index:', window.getComputedStyle(dropdown).zIndex);
+        }
+    };
+
+    window.selectPlatform = function(value, icon, text) {
+        selectedPlatformType = value;
+        
+        // Обновляем отображение выбранной платформы
+        const selectText = document.querySelector('.select-text');
+        selectText.innerHTML = `<i class="${icon}"></i> ${text}`;
+        
+        // Закрываем dropdown
+        document.getElementById('platform-dropdown').classList.remove('show');
+        document.querySelector('.select-value').classList.remove('active');
+        
+        // Вызываем функцию обновления полей
+        updatePlatformFields();
+    };
+
+    window.updatePlatformFields = function() {
+        const platformType = selectedPlatformType;
+        const configSection = document.getElementById('platform-config-section');
+        
+        if (platformType) {
+            configSection.style.display = 'block';
+            
+            // Обновляем плейсхолдеры в зависимости от типа платформы
+            const tokenField = document.getElementById('platform-token');
+            const usernameField = document.getElementById('platform-username');
+            
+            // Сбрасываем состояние полей
+            tokenField.disabled = false;
+            
+            switch(platformType) {
+                case 'telegram':
+                    tokenField.placeholder = 'Токен от @BotFather';
+                    usernameField.placeholder = 'username бота (без @)';
+                    break;
+                case 'whatsapp':
+                    tokenField.placeholder = 'WhatsApp Business API токен';
+                    usernameField.placeholder = 'Номер телефона';
+                    break;
+                case 'amocrm':
+                    tokenField.placeholder = 'API ключ AmoCRM';
+                    usernameField.placeholder = 'Домен (example.amocrm.ru)';
+                    break;
+                case 'retailcrm':
+                    tokenField.placeholder = 'API ключ RetailCRM';
+                    usernameField.placeholder = 'URL магазина';
+                    break;
+                case 'discord':
+                    tokenField.placeholder = 'Discord Bot Token';
+                    usernameField.placeholder = 'Application ID';
+                    break;
+                case 'slack':
+                    tokenField.placeholder = 'Slack Bot Token';
+                    usernameField.placeholder = 'App ID';
+                    break;
+                case 'web':
+                    tokenField.placeholder = 'Не требуется';
+                    usernameField.placeholder = 'Название чата';
+                    tokenField.disabled = true;
+                    break;
+                case 'api':
+                    tokenField.placeholder = 'API ключ (опционально)';
+                    usernameField.placeholder = 'Название API';
+                    break;
+                case 'viber':
+                    tokenField.placeholder = 'Viber API токен';
+                    usernameField.placeholder = 'Имя бота';
+                    break;
+                case 'vk':
+                    tokenField.placeholder = 'VK API токен';
+                    usernameField.placeholder = 'ID группы';
+                    break;
+                default:
+                    tokenField.placeholder = 'Токен платформы';
+                    usernameField.placeholder = 'Username/ID';
+                    break;
+            }
+        } else {
+            configSection.style.display = 'none';
+        }
+    };
+
+    window.addVariableRow = function() {
+        const container = document.getElementById('custom-variables');
+        const row = document.createElement('div');
+        row.className = 'variable-row';
+        row.innerHTML = `
+            <input type="text" class="form-control" placeholder="Ключ" 
+                   onchange="updateVariableName(this)">
+            <input type="text" class="form-control" placeholder="Значение"
+                   onchange="updateVariableValue(this)">
+            <button class="btn btn-outline-danger btn-sm" onclick="removeVariableRow(this)">
+                <i class="bi bi-trash"></i>
+            </button>
+        `;
+        container.appendChild(row);
+    };
+
+    window.removeVariableRow = function(button) {
+        button.closest('.variable-row').remove();
+    };
+
+    window.updateVariableName = function(input) {
+        // Можно добавить валидацию ключа
+        console.log('Variable name updated:', input.value);
+    };
+
+    window.updateVariableValue = function(input) {
+        // Можно добавить валидацию значения
+        console.log('Variable value updated:', input.value);
+    };
+
+    function resetPlatformForm() {
+        // Сбрасываем выбранную платформу
+        selectedPlatformType = '';
+        
+        // Сбрасываем отображение dropdown
+        const selectText = document.querySelector('.select-text');
+        selectText.innerHTML = 'Выберите платформу';
+        
+        // Закрываем dropdown если открыт
+        document.getElementById('platform-dropdown').classList.remove('show');
+        document.querySelector('.select-value').classList.remove('active');
+        
+        // Очищаем поля
+        document.getElementById('platform-token').value = '';
+        document.getElementById('platform-username').value = '';
+        document.getElementById('platform-token').disabled = false;
+        
+        // Скрываем секцию настроек
+        document.getElementById('platform-config-section').style.display = 'none';
+        
+        // Очищаем кастомные переменные, оставляя только одну строку
+        const container = document.getElementById('custom-variables');
+        const rows = container.querySelectorAll('.variable-row');
+        rows.forEach((row, index) => {
+            if (index > 0) {
+                row.remove();
+            } else {
+                row.querySelectorAll('input').forEach(input => input.value = '');
+            }
+        });
+    }
+
+    window.savePlatform = async function(botId) {
+        const platformType = selectedPlatformType;
+        const token = document.getElementById('platform-token').value;
+        const username = document.getElementById('platform-username').value;
+        
+        if (!platformType) {
+            showNotification('Выберите тип платформы', 'warning');
+            return;
+        }
+
+        // Собираем конфигурацию платформы
+        const platformConfig = {};
+        
+        if (token && !document.getElementById('platform-token').disabled) {
+            platformConfig.token = token;
+        }
+        if (username) {
+            platformConfig.username = username;
+        }
+
+        // Добавляем кастомные переменные
+        const variableRows = document.querySelectorAll('#custom-variables .variable-row');
+        variableRows.forEach(row => {
+            const keyInput = row.querySelector('input[placeholder="Ключ"]');
+            const valueInput = row.querySelector('input[placeholder="Значение"]');
+            
+            if (keyInput.value && valueInput.value) {
+                platformConfig[keyInput.value] = valueInput.value;
+            }
+        });
+
+        try {
+            // Получаем текущие настройки флоу
+            const currentFlowResponse = await fetch(`/frontend/api/flows/${botId}`, {
+                headers: {
+                    'Authorization': `Bearer ${window.app.authToken}`
+                }
+            });
+            
+            if (!currentFlowResponse.ok) {
+                throw new Error('Не удалось загрузить текущие настройки');
+            }
+
+            const currentFlow = await currentFlowResponse.json();
+            
+            // Добавляем новую платформу
+            if (!currentFlow.platforms) {
+                currentFlow.platforms = {};
+            }
+            currentFlow.platforms[platformType] = platformConfig;
+
+            // Сохраняем обновленную конфигурацию
+            const updateResponse = await fetch(`/frontend/api/flows/${botId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.app.authToken}`
+                },
+                body: JSON.stringify({
+                    platforms: currentFlow.platforms
+                })
+            });
+
+            if (!updateResponse.ok) {
+                throw new Error('Не удалось сохранить платформу');
+            }
+
+            // Сохраняем токен отдельно, если есть
+            if (token && username && !document.getElementById('platform-token').disabled) {
+                const tokenResponse = await fetch('/api/v1/admin/tokens', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${window.app.authToken}`
+                    },
+                    body: JSON.stringify({
+                        platform: platformType,
+                        username: username,
+                        token: token
+                    })
+                });
+                
+                if (!tokenResponse.ok) {
+                    console.warn('Не удалось сохранить токен отдельно');
+                }
+            }
+
+            showNotification(`Платформа ${platformType} добавлена`, 'success');
+            closeAddPlatformModal();
+            
+            // Перезагружаем детали бота для отображения новой платформы
+            await expandBot(botId);
+
+        } catch (error) {
+            console.error('Ошибка добавления платформы:', error);
+            showNotification('Ошибка добавления платформы: ' + error.message, 'danger');
+        }
+    };
+
+    window.removePlatform = async function(botId, platformType) {
+        if (!confirm(`Удалить платформу ${platformType}?`)) {
+            return;
+        }
+
+        try {
+            // Получаем текущие настройки флоу
+            const currentFlowResponse = await fetch(`/frontend/api/flows/${botId}`, {
+                headers: {
+                    'Authorization': `Bearer ${window.app.authToken}`
+                }
+            });
+            
+            if (!currentFlowResponse.ok) {
+                throw new Error('Не удалось загрузить текущие настройки');
+            }
+
+            const currentFlow = await currentFlowResponse.json();
+            
+            // Удаляем платформу
+            if (currentFlow.platforms && currentFlow.platforms[platformType]) {
+                delete currentFlow.platforms[platformType];
+                
+                // Сохраняем обновленную конфигурацию
+                const updateResponse = await fetch(`/frontend/api/flows/${botId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${window.app.authToken}`
+                    },
+                    body: JSON.stringify({
+                        platforms: currentFlow.platforms
+                    })
+                });
+
+                if (!updateResponse.ok) {
+                    throw new Error('Не удалось удалить платформу');
+                }
+
+                showNotification(`Платформа ${platformType} удалена`, 'success');
+                
+                // Перезагружаем детали бота
+                await expandBot(botId);
+            }
+
+        } catch (error) {
+            console.error('Ошибка удаления платформы:', error);
+            showNotification('Ошибка удаления платформы: ' + error.message, 'danger');
+        }
     };
 
     window.createBot = function() {
@@ -338,8 +714,30 @@
     });
 
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && currentBotModal) {
-            window.closeBotModal();
+        if (e.key === 'Escape') {
+            if (document.getElementById('add-platform-modal').style.display === 'flex') {
+                window.closeAddPlatformModal();
+            } else if (currentBotModal) {
+                window.closeBotModal();
+            }
+        }
+    });
+
+    // Закрытие модального окна добавления платформы по клику на фон
+    document.addEventListener('click', (e) => {
+        if (e.target.id === 'add-platform-modal') {
+            window.closeAddPlatformModal();
+        }
+        
+        // Закрытие dropdown платформ при клике вне его области
+        const dropdown = document.getElementById('platform-dropdown');
+        const customSelect = document.getElementById('platform-type-select');
+        
+        if (dropdown && customSelect && dropdown.classList.contains('show')) {
+            if (!customSelect.contains(e.target)) {
+                dropdown.classList.remove('show');
+                document.querySelector('.select-value').classList.remove('active');
+            }
         }
     });
 

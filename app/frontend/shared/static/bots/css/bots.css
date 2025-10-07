@@ -760,3 +760,324 @@ input:checked + .slider:before {
         grid-template-columns: 1fr;
     }
 }
+
+/* Модальное окно добавления платформы */
+#add-platform-modal {
+    position: fixed !important;
+    top: 0 !important;  
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;  
+    background: rgba(0, 0, 0, 0.6) !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 9999 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Скрытое состояние */
+#add-platform-modal[style*="display: none"] {
+    display: none !important;
+}
+
+/* Видимое состояние */  
+#add-platform-modal[style*="display: flex"] {
+    display: flex !important;
+}
+
+#add-platform-modal .modal-content {
+    background: var(--bg-card) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2) !important;
+    width: 90% !important;
+    max-width: 600px !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+    position: relative !important;
+    margin: 0 !important;
+    transform: none !important;
+}
+
+#add-platform-modal .modal-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#add-platform-modal .modal-header h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+#add-platform-modal .btn-close {
+    background: transparent !important;
+    border: none !important;
+    color: var(--text-secondary) !important;
+    font-size: 1.5rem !important;
+    cursor: pointer !important;
+    padding: 0.5rem !important;
+    border-radius: var(--radius) !important;
+    transition: all 0.2s ease !important;
+    width: 2.5rem !important;
+    height: 2.5rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1 !important;
+}
+
+#add-platform-modal .btn-close:hover {
+    background: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+    transform: scale(1.1) !important;
+}
+
+#add-platform-modal .btn-close:active {
+    transform: scale(0.95) !important;
+}
+
+#add-platform-modal .btn-close i {
+    font-size: 1.2rem !important;
+    line-height: 1 !important;
+}
+
+#add-platform-modal .modal-body {
+    padding: 1.5rem;
+}
+
+#add-platform-modal .modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    gap: 1rem;
+    justify-content: flex-end;
+}
+
+/* Строки кастомных переменных */
+.variable-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    align-items: center;
+}
+
+.variable-row input {
+    flex: 1;
+}
+
+.variable-row .btn {
+    flex-shrink: 0;
+    padding: 0.5rem;
+    font-size: 0.875rem;
+}
+
+/* Выпадающий список платформ */
+#platform-type-select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
+#platform-type-select option {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+/* Секция настроек платформы */
+#platform-config-section {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+#platform-config-section h4 {
+    margin: 0 0 1rem 0;
+    color: var(--text-primary);
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+/* Заголовок платформы с кнопкой удаления */  
+.platform-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.platform-header h5 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.platform-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.platform-actions .btn {
+    padding: 0.375rem 0.5rem;
+    font-size: 0.875rem;
+    border-radius: var(--radius);
+    transition: all 0.2s ease;
+}
+
+.platform-actions .btn-outline-danger {
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    background: transparent;
+}
+
+.platform-actions .btn-outline-danger:hover {
+    background: var(--danger);
+    color: white;
+}
+
+/* Кастомный dropdown для выбора платформы */
+.custom-select-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.custom-select {
+    position: relative !important;
+    width: 100%;
+    cursor: pointer;
+    z-index: 9999 !important;
+}
+
+.select-value {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+}
+
+.select-value:hover {
+    border-color: var(--accent-primary);
+}
+
+.select-value.active {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.select-text {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.select-dropdown {
+    position: absolute !important;
+    top: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    background: var(--bg-card) !important;
+    border: 2px solid var(--accent-primary) !important;
+    border-radius: var(--radius) !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2) !important;
+    z-index: 99999 !important;
+    max-height: 300px !important;
+    overflow-y: auto !important;
+    display: none !important;
+    margin-top: 4px !important;
+    transform: translateZ(0) !important;
+}
+
+.select-dropdown.show {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.dropdown-option {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.dropdown-option:last-child {
+    border-bottom: none;
+}
+
+.dropdown-option:hover {
+    background: var(--bg-tertiary);
+}
+
+.dropdown-option i {
+    font-size: 1.1rem;
+    width: 1.2rem;
+    text-align: center;
+    color: var(--accent-primary);
+}
+
+.dropdown-option span {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+/* Иконки специфичных платформ */
+.dropdown-option[data-value="telegram"] i {
+    color: #0088cc;
+}
+
+.dropdown-option[data-value="whatsapp"] i {
+    color: #25d366;
+}
+
+.dropdown-option[data-value="discord"] i {
+    color: #5865f2;
+}
+
+.dropdown-option[data-value="slack"] i {
+    color: #4a154b;
+}
+
+.dropdown-option[data-value="viber"] i {
+    color: #665cac;
+}
+
+.dropdown-option[data-value="vk"] i {
+    color: #0077ff;
+}
+
+.dropdown-option[data-value="web"] i {
+    color: var(--accent-primary);
+}
+
+.dropdown-option[data-value="api"] i {
+    color: #28a745;
+}
+
+.dropdown-option[data-value="amocrm"] i {
+    color: #339933;
+}
+
+.dropdown-option[data-value="retailcrm"] i {
+    color: #ff6b35;
+}
