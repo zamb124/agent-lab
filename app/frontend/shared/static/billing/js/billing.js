@@ -177,6 +177,45 @@ function updateStatsDisplay(data) {
 // Запуск автообновления при загрузке страницы
 document.addEventListener('DOMContentLoaded', () => {
     startStatsRefresh();
+    
+    // Проверяем URL параметры для показа результата платежа
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentStatus = urlParams.get('payment');
+    const transactionId = urlParams.get('transaction_id');
+    
+    if (paymentStatus === 'success' && transactionId) {
+        showNotification('Платеж успешно обработан! Баланс будет обновлен в течение минуты.', 'success');
+        
+        // Обновляем статистику через 2 секунды
+        setTimeout(async () => {
+            try {
+                const response = await fetch('/frontend/billing/api/stats');
+                if (response.ok) {
+                    const data = await response.json();
+                    updateStatsDisplay(data);
+                    
+                    // Обновляем баланс в заголовке
+                    const balanceElement = document.querySelector('.balance-amount');
+                    if (balanceElement && data.balance !== undefined) {
+                        balanceElement.textContent = `${data.balance.toFixed(2)} ₽`;
+                    }
+                }
+            } catch (error) {
+                console.error('Ошибка обновления статистики:', error);
+            }
+            
+            // Очищаем URL параметры
+            window.history.replaceState({}, '', '/frontend/billing');
+        }, 2000);
+        
+    } else if (paymentStatus === 'fail' && transactionId) {
+        showNotification('Ошибка оплаты. Попробуйте еще раз или выберите другой способ.', 'error');
+        
+        // Очищаем URL параметры
+        setTimeout(() => {
+            window.history.replaceState({}, '', '/frontend/billing');
+        }, 3000);
+    }
 });
 
 // Остановка при уходе со страницы
