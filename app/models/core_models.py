@@ -767,7 +767,14 @@ class FileRecord(BaseModel):
         from ..core.context import get_context
         context = get_context()
         subdomain = context.active_company.subdomain
-        base_url = f"http://{subdomain}.{settings.server.domain}:{settings.server.port}"
+        
+        # Формируем base_url без порта для стандартных портов
+        if settings.server.port in [80, 443]:
+            protocol = "https" if settings.server.port == 443 else "http"
+            base_url = f"{protocol}://{subdomain}.{settings.server.domain}"
+        else:
+            base_url = f"http://{subdomain}.{settings.server.domain}:{settings.server.port}"
+        
         return f"{base_url}/api/v1/files/download/{self.file_id}"
 
     @property

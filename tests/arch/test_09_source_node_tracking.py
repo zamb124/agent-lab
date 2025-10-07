@@ -4,7 +4,7 @@
 
 import pytest
 from app.core.flow_factory import FlowFactory
-from app.flows.smart_flow import SmartFlow
+from app.flows.smart_flow import SmartFlowAgent
 from app.models import FlowConfig, LLMConfig, AgentConfig
 from app.core.storage import Storage
 from datetime import datetime, timezone
@@ -38,8 +38,7 @@ async def test_source_node_in_history(save_test_company):
     )
     await storage.set_flow_config(flow_config)
     
-    flow = SmartFlow(flow_config)
-    await flow.initialize()
+    flow = SmartFlowAgent()
     
     session_id = f"test:source_tracking:{datetime.now().timestamp()}"
     
@@ -122,8 +121,7 @@ async def test_checkpoint_metadata_structure(save_test_company):
     )
     await storage.set_flow_config(flow_config)
     
-    flow = SmartFlow(flow_config)
-    await flow.initialize()
+    flow = SmartFlowAgent()
     
     session_id = f"test:metadata:{datetime.now().timestamp()}"
     
