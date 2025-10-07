@@ -505,7 +505,7 @@ class PromptEditor {
         // Создаем map для быстрого поиска
         const varMap = {};
         allVariables.forEach(v => {
-            varMap[v.name] = v.value;
+            varMap[v.name] = v;
         });
         
         // Экранируем HTML и подсвечиваем переменные
@@ -515,8 +515,16 @@ class PromptEditor {
             .replace(/>/g, '&gt;')
             .replace(/\n/g, '\n')
             .replace(/\{(\w+)\}/g, (match, varName) => {
-                const value = varMap[varName];
-                const title = value !== undefined && value !== null ? `Текущее значение: ${value}` : varName;
+                const variable = varMap[varName];
+                let title = varName;
+                
+                if (variable) {
+                    title = variable.description ? `${variable.name} - ${variable.description}` : variable.name;
+                    if (variable.value !== undefined && variable.value !== null) {
+                        title += `\nТекущее значение: ${variable.value}`;
+                    }
+                }
+                
                 return `<span class="variable-highlight" title="${title}">{${varName}}</span>`;
             });
         
@@ -852,7 +860,8 @@ class PromptEditor {
         allVariables.forEach(v => {
             if (v.value !== undefined && v.value !== null) {
                 const regex = new RegExp(`\\{${v.name}\\}`, 'g');
-                text = text.replace(regex, `<span class="variable-value-inline" title="${v.name}">${v.value}</span>`);
+                const tooltipText = v.description ? `${v.name} - ${v.description}` : v.name;
+                text = text.replace(regex, `<span class="variable-value-inline" title="${tooltipText}">${v.value}</span>`);
             }
         });
         

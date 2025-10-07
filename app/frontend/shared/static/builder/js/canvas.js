@@ -278,7 +278,7 @@ class BuilderCanvas {
         try {
             // Пытаемся загрузить данные тула из БД
             const encodedToolId = encodeURIComponent(toolId);
-            const response = await fetch(`/frontend/builder/tools/${encodedToolId}`);
+            const response = await fetch(`/frontend/api/tools/${encodedToolId}`);
             
             if (response.ok) {
                 const toolData = await response.json();
