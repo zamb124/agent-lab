@@ -36,16 +36,19 @@ class PaymentProviderFactory:
             try:
                 cls._configs[provider_name] = provider_config
                 
-                if not provider_config.enabled:
+                # provider_config это словарь из JSON, преобразуем в объект
+                config_obj = cls._create_config_object(provider_config)
+                
+                if not config_obj.enabled:
                     logger.info(f"⚠️ Платежный провайдер {provider_name} отключен")
                     continue
                 
-                provider = cls._create_provider(provider_name, provider_config)
+                provider = cls._create_provider(provider_name, config_obj)
                 cls._providers[provider_name] = provider
                 
                 logger.info(
                     f"✅ Платежный провайдер {provider_name} "
-                    f"({provider_config.provider_type}) инициализирован"
+                    f"({config_obj.provider_type}) инициализирован"
                 )
                 
             except Exception as e:
@@ -61,6 +64,18 @@ class PaymentProviderFactory:
             )
         else:
             logger.warning("Не инициализировано ни одного платежного провайдера")
+    
+    @classmethod
+    def _create_config_object(cls, config_dict: dict):
+        """Создает объект конфигурации из словаря"""
+        provider_type = config_dict.get("provider_type")
+        
+        if provider_type == "yoomoney":
+            return YooMoneyConfig(**config_dict)
+        elif provider_type == "yukassa":
+            return YuKassaConfig(**config_dict)
+        else:
+            raise ValueError(f"Неизвестный тип провайдера: {provider_type}")
     
     @classmethod
     def _create_provider(cls, provider_name: str, config) -> BasePaymentProvider:

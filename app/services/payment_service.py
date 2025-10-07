@@ -125,9 +125,25 @@ class PaymentService:
         
         notification_id = f"notif_{uuid.uuid4().hex[:16]}"
         
+        # Мапим имя провайдера на тип
+        provider_type_map = {
+            "yoomoney_main": PaymentProviderType.YOOMONEY,
+            "yukassa_main": PaymentProviderType.YUKASSA
+        }
+        
+        provider_type = provider_type_map.get(provider_name)
+        if not provider_type:
+            # Пытаемся определить по типу из имени
+            if "yoomoney" in provider_name:
+                provider_type = PaymentProviderType.YOOMONEY
+            elif "yukassa" in provider_name:
+                provider_type = PaymentProviderType.YUKASSA
+            else:
+                raise ValueError(f"Неизвестный провайдер: {provider_name}")
+        
         notification = PaymentNotification(
             notification_id=notification_id,
-            provider=PaymentProviderType(provider_name),
+            provider=provider_type,
             transaction_id=verification_result.transaction_id,
             external_payment_id=verification_result.external_payment_id,
             raw_data=raw_data,
