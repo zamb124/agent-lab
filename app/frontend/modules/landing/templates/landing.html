@@ -15,12 +15,34 @@
                 <div class="header-actions">
                     <a href="/frontend/builder/" class="btn btn-outline-primary">
                         <i class="bi bi-diagram-3"></i>
-                        Agent Builder
+                        {{ t('landing.header.builder') }}
                     </a>
                     <a href="/frontend/auth" class="btn btn-outline-primary">
                         <i class="bi bi-box-arrow-in-right"></i>
-                        Войти
+                        {{ t('landing.header.login') }}
                     </a>
+                    
+                    <!-- Dropdown для выбора языка - в самом правом углу -->
+                    <div class="dropdown">
+                        <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
+                            <i class="bi bi-translate"></i>
+                            <span id="current-language">{{ get_current_language().upper() }}</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setLandingLanguage('ru');">
+                            <i class="bi bi-check" style="visibility: hidden" id="lang-ru"></i> 
+                            {{ t('languages.ru') }}
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setLandingLanguage('en');">
+                            <i class="bi bi-check" style="visibility: hidden" id="lang-en"></i> 
+                            {{ t('languages.en') }}
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setLandingLanguage('es');">
+                            <i class="bi bi-check" style="visibility: hidden" id="lang-es"></i> 
+                            {{ t('languages.es') }}
+                        </a></li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
@@ -32,20 +54,20 @@
             <div class="hero-content">
                 <div class="hero-text">
                     <h1 class="hero-title">
-                        Ваш бизнес. Под управлением агентов.
-                        <span class="langflow-gradient">Поддержка Искусственного Интеллекта.</span>
+                        {{ t('landing.hero.title_main') }}
+                        <span class="langflow-gradient">{{ t('landing.hero.title_accent') }}</span>
                     </h1>
                     <p class="hero-subtitle">
-                        Agents Lab — это собственная платформа, которая позволяет компаниям внедрять агентную автоматизацию + ИИ-ассистентов в процессы, коммуникации и управление.
+                        {{ t('landing.hero.subtitle') }}
                     </p>
                     <div class="hero-actions">
                         <button class="btn btn-primary btn-lg" onclick="openContactModal()">
                             <i class="bi bi-rocket"></i>
-                            Начать работу
+                            {{ t('landing.hero.start_button') }}
                         </button>
                         <button class="btn btn-outline-primary btn-lg" onclick="scrollToSection('about')">
                             <i class="bi bi-info-circle"></i>
-                            Узнать больше
+                            {{ t('landing.hero.learn_more') }}
                         </button>
                     </div>
                 </div>
@@ -96,9 +118,9 @@
     <section id="about" class="about-section">
         <div class="container">
             <div class="section-header">
-                <h2 class="section-title">Что такое Agents Lab</h2>
+                <h2 class="section-title">{{ t('landing.about.title') }}</h2>
                 <p class="section-subtitle">
-                    Мы помогаем не просто автоматизировать рутинные задачи, но трансформировать бизнес-операции, выводя их на новый уровень эффективности.
+                    {{ t('landing.about.subtitle') }}
                 </p>
             </div>
             
@@ -107,9 +129,9 @@
                     <div class="feature-icon">
                         <i class="bi bi-robot"></i>
                     </div>
-                    <h3 class="feature-title">Автономные агенты</h3>
+                    <h3 class="feature-title">{{ t('landing.features.autonomous_agents.title') }}</h3>
                     <p class="feature-description">
-                        Агенты, которые действуют вместо человека, принимают решения, обучаются и взаимодействуют между собой.
+                        {{ t('landing.features.autonomous_agents.description') }}
                     </p>
                 </div>
                 
@@ -117,9 +139,9 @@
                     <div class="feature-icon">
                         <i class="bi bi-diagram-3"></i>
                     </div>
-                    <h3 class="feature-title">Мультиагентные системы</h3>
+                    <h3 class="feature-title">{{ t('landing.features.multi_agent.title') }}</h3>
                     <p class="feature-description">
-                        Несколько агентов работают совместно: фронт-офис, служба поддержки, отдел продаж, аналитика, логистика.
+                        {{ t('landing.features.multi_agent.description') }}
                     </p>
                 </div>
                 
@@ -127,9 +149,9 @@
                     <div class="feature-icon">
                         <i class="bi bi-code-slash"></i>
                     </div>
-                    <h3 class="feature-title">Low-code / No-code</h3>
+                    <h3 class="feature-title">{{ t('landing.features.low_code.title') }}</h3>
                     <p class="feature-description">
-                        Бизнес-команды могут быстро формировать решения без узкой разработки.
+                        {{ t('landing.features.low_code.description') }}
                     </p>
                 </div>
                 
@@ -137,9 +159,9 @@
                     <div class="feature-icon">
                         <i class="bi bi-puzzle"></i>
                     </div>
-                    <h3 class="feature-title">Гибкие интеграции</h3>
+                    <h3 class="feature-title">{{ t('landing.features.integrations.title') }}</h3>
                     <p class="feature-description">
-                        Интеграции с системами, мессенджерами, базами данных и внутренним ПО предприятия.
+                        {{ t('landing.features.integrations.description') }}
                     </p>
                 </div>
                 
@@ -147,9 +169,9 @@
                     <div class="feature-icon">
                         <i class="bi bi-shield-check"></i>
                     </div>
-                    <h3 class="feature-title">Безопасность</h3>
+                    <h3 class="feature-title">{{ t('landing.features.security.title') }}</h3>
                     <p class="feature-description">
-                        Развёртывание в облаке или on-premise, контроль данных, соответствие требованиям регуляторов.
+                        {{ t('landing.features.security.description') }}
                     </p>
                 </div>
                 
@@ -157,9 +179,9 @@
                     <div class="feature-icon">
                         <i class="bi bi-graph-up"></i>
                     </div>
-                    <h3 class="feature-title">Масштабируемость</h3>
+                    <h3 class="feature-title">{{ t('landing.features.scalability.title') }}</h3>
                     <p class="feature-description">
-                        От одного агента до целой сети агентов, взаимодействующих между собой.
+                        {{ t('landing.features.scalability.description') }}
                     </p>
                 </div>
             </div>
@@ -170,7 +192,7 @@
     <section class="benefits-section">
         <div class="container">
             <div class="section-header">
-                <h2 class="section-title">Наши сильные стороны</h2>
+                <h2 class="section-title">{{ t('landing.benefits.title') }}</h2>
             </div>
             
             <div class="benefits-grid">
@@ -243,18 +265,18 @@
     <section class="cta-section">
         <div class="container">
             <div class="cta-content">
-                <h2 class="cta-title">Готовы начать?</h2>
+                <h2 class="cta-title">{{ t('landing.cta.title') }}</h2>
                 <p class="cta-subtitle">
-                    Узнайте, как Agents Lab может помочь именно вашему бизнесу
+                    {{ t('landing.cta.subtitle') }}
                 </p>
                     <div class="cta-actions">
                         <a href="/frontend/auth" class="btn btn-primary btn-lg">
                             <i class="bi bi-rocket"></i>
-                            Войти в платформу
+                            {{ t('landing.cta.login_button') }}
                         </a>
                         <button class="btn btn-outline-primary btn-lg" onclick="openContactModal()">
                             <i class="bi bi-envelope"></i>
-                            Связаться с нами
+                            {{ t('landing.cta.contact_button') }}
                         </button>
                     </div>
             </div>
@@ -434,6 +456,72 @@ document.addEventListener('keydown', function(event) {
     if (event.key === 'Escape') {
         closeContactModal();
     }
+});
+
+// Упрощенная функция смены языка для landing page
+function setLandingLanguage(language) {
+    const supportedLanguages = ['ru', 'en', 'es'];
+    
+    if (!supportedLanguages.includes(language)) {
+        console.warn(`Неподдерживаемый язык: ${language}`);
+        return;
+    }
+    
+    console.log(`🔄 Смена языка на landing page: ${language}`);
+    
+    // Сохраняем выбор в localStorage и cookie
+    localStorage.setItem('language', language);
+    setCookie('language', language, 365);
+    
+    // Обновляем UI индикатор
+    updateLanguageIndicator(language);
+    
+    // Перезагружаем страницу для применения переводов
+    window.location.reload();
+}
+
+function updateLanguageIndicator(language) {
+    // Обновляем текст текущего языка
+    const currentLangElement = document.querySelector('#current-language');
+    if (currentLangElement) {
+        currentLangElement.textContent = language.toUpperCase();
+    }
+    
+    // Обновляем галочки в dropdown
+    const supportedLanguages = ['ru', 'en', 'es'];
+    supportedLanguages.forEach(lang => {
+        const indicator = document.querySelector(`#lang-${lang}`);
+        if (indicator) {
+            indicator.style.visibility = (lang === language) ? 'visible' : 'hidden';
+        }
+    });
+    
+    // Устанавливаем атрибут lang
+    document.documentElement.setAttribute('lang', language);
+}
+
+function setCookie(name, value, days) {
+    const expires = new Date();
+    expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+    document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+}
+
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+}
+
+// Инициализация языкового индикатора при загрузке
+document.addEventListener('DOMContentLoaded', function() {
+    // Определяем текущий язык из localStorage или cookie
+    let currentLang = localStorage.getItem('language') || getCookie('language') || 'ru';
+    
+    // Обновляем индикатор
+    updateLanguageIndicator(currentLang);
+    
+    console.log(`✅ Landing page язык инициализирован: ${currentLang}`);
 });
 </script>
 {% endblock %}

@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Union, List, get_origin, get_args
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 import pydantic
-
+import re
 from app.frontend.core.template_loader import render_template, template_exists
 from app.core.context import get_context
 
@@ -124,8 +124,37 @@ class FrontendFieldInfo(FieldInfo):
         sortable: bool = True,
         filterable: bool = True,
         searchable: bool = True,
+        # Параметры интернационализации
+        i18n_key: Optional[str] = None,
+        i18n_title: Optional[str] = None,
+        i18n_description: Optional[str] = None,
+        i18n_placeholder: Optional[str] = None,
+        i18n_help_text: Optional[str] = None,
         **kwargs,
     ):
+        def normalize_key_part(text: str) -> str:
+            """Нормализует текст для использования в качестве части ключа"""
+            
+            # Приводим к нижнему регистру и заменяем все не-буквы-цифры на подчеркивания
+            normalized = re.sub(r'[^\w\s]', '_', text.lower())
+            # Заменяем пробелы на подчеркивания
+            normalized = re.sub(r'\s+', '_', normalized)
+            # Убираем повторяющиеся подчеркивания
+            normalized = re.sub(r'_+', '_', normalized)
+            # Убираем подчеркивания в начале и конце
+            normalized = normalized.strip('_')
+            return normalized[:50]  # Ограничиваем длину
+
+        # Автогенерация ключей переводов если не указаны явно
+        if i18n_title is None and title:
+            i18n_title = f"field.title.{normalize_key_part(title)}"
+        if i18n_description is None and description:
+            i18n_description = f"field.description.{normalize_key_part(description)}"
+        if i18n_placeholder is None and placeholder:
+            i18n_placeholder = f"field.placeholder.{normalize_key_part(placeholder)}"
+        if i18n_help_text is None and help_text:
+            i18n_help_text = f"field.help_text.{normalize_key_part(help_text)}"
+
         # Подготавливаем json_schema_extra с нашими расширениями
         frontend_extra = {
             "readonly": readonly,
@@ -141,6 +170,12 @@ class FrontendFieldInfo(FieldInfo):
             "sortable": sortable,
             "filterable": filterable,
             "searchable": searchable,
+            # Ключи интернационализации
+            "i18n_key": i18n_key,
+            "i18n_title": i18n_title,
+            "i18n_description": i18n_description,
+            "i18n_placeholder": i18n_placeholder,
+            "i18n_help_text": i18n_help_text,
         }
 
         # Объединяем с существующим json_schema_extra
@@ -338,6 +373,12 @@ def Field(
     sortable: bool = True,
     filterable: bool = True,
     searchable: bool = True,
+    # Параметры интернационализации
+    i18n_key: Optional[str] = None,
+    i18n_title: Optional[str] = None,
+    i18n_description: Optional[str] = None,
+    i18n_placeholder: Optional[str] = None,
+    i18n_help_text: Optional[str] = None,
 ) -> Any:
     """
     Расширенная версия Pydantic Field с дополнительными параметрами для фронтенда
@@ -354,6 +395,13 @@ def Field(
     - sortable: Можно ли сортировать по полю
     - filterable: Можно ли фильтровать по полю
     - searchable: Участвует ли в поиске
+    
+    Параметры интернационализации:
+    - i18n_key: Общий ключ перевода для поля
+    - i18n_title: Ключ перевода для title (автогенерируется если не указан)
+    - i18n_description: Ключ перевода для description (автогенерируется если не указан)
+    - i18n_placeholder: Ключ перевода для placeholder (автогенерируется если не указан)  
+    - i18n_help_text: Ключ перевода для help_text (автогенерируется если не указан)
     """
     return FrontendFieldInfo(
         default=default,
@@ -399,6 +447,11 @@ def Field(
         sortable=sortable,
         filterable=filterable,
         searchable=searchable,
+        i18n_key=i18n_key,
+        i18n_title=i18n_title,
+        i18n_description=i18n_description,
+        i18n_placeholder=i18n_placeholder,
+        i18n_help_text=i18n_help_text,
     )
 
 

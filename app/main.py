@@ -26,6 +26,7 @@ from app.frontend.api import flows as frontend_flows
 from app.frontend.api import agents as frontend_agents
 from app.frontend.api import tools as frontend_tools
 from app.frontend.api import variables as frontend_variables
+from app.frontend.api import i18n as frontend_i18n
 from app.frontend.pages import auth as auth_pages
 from app.frontend.pages import dashboard as dashboard_pages
 from app.frontend.pages import public as public_pages
@@ -39,6 +40,7 @@ from app.frontend.websockets import notifications as websocket_notifications
 from app.frontend.websockets import chat as websocket_chat
 from app.middleware.auth import AuthMiddleware
 from app.services.cleanup_service import CleanupService
+from app.core.translation_manager import get_translation_manager
 
 # Условные импорты для локального окружения
 if settings.server.env == "local1":
@@ -153,6 +155,12 @@ async def lifespan(app: FastAPI):
         migrator = Migrator()
         await migrator.run_full_migration()
 
+        # Инициализация системы переводов
+        logger.info("🌐 Инициализация системы интернационализации...")
+        translation_manager = get_translation_manager()
+        await translation_manager.initialize()
+        logger.info("✅ Система переводов инициализирована")
+
         # Запуск воркера задач для локальной разработки
         if settings.server.env == "local1":
             logger.info("⚙️ Запуск воркера задач для локальной разработки...")
@@ -239,11 +247,12 @@ app.include_router(leads.router, prefix="/api/v1", tags=["leads"])
 app.include_router(history.router, tags=["history"])
 
 # Frontend API (JSON CRUD)
-app.include_router(frontend_models.router, prefix="/frontend/api", tags=["frontend-models"])
+app.include_router(frontend_models.router, tags=["frontend-models"])  # Убираем дублирующий prefix
 app.include_router(frontend_flows.router, prefix="/frontend/api", tags=["frontend-flows"])
 app.include_router(frontend_agents.router, prefix="/frontend/api", tags=["frontend-agents"])
 app.include_router(frontend_tools.router, prefix="/frontend/api", tags=["frontend-tools"])
 app.include_router(frontend_variables.router, prefix="/frontend/api", tags=["frontend-variables"])
+app.include_router(frontend_i18n.router, prefix="/frontend/api/i18n", tags=["frontend-i18n"])
 
 # Frontend Pages (HTML)
 app.include_router(public_pages.router, tags=["public-pages"])
@@ -262,7 +271,7 @@ app.include_router(bots_module, tags=["bots-module"])
 app.include_router(websocket_notifications.router, tags=["websocket-notifications"])
 app.include_router(websocket_chat.router, prefix="/frontend/chat", tags=["websocket-chat"])
 
-# Статические файлы
+# Основные статические файлы
 static_dir = Path(__file__).parent / "frontend" / "shared" / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
