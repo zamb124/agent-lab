@@ -80,24 +80,30 @@ class TryOnResponse(BaseModel):
 async def download_image(url: str) -> bytes:
     """Скачивает изображение по URL"""
     try:
-        # Если это относительная ссылка на наш API - используем прямой доступ к файлу
-        if url.startswith("/api/v1/files/download/"):
+        logger.info(f"Скачивание изображения: {url}")
+        
+        # Если это ссылка на наш API (относительная или абсолютная) - используем прямой доступ к файлу
+        if "/api/v1/files/download/" in url:
             file_id = url.split("/")[-1]
+            logger.info(f"Обнаружена ссылка на внутренний файл, file_id: {file_id}")
 
             # Получаем файл напрямую из файлового процессора
             file_processor = await get_default_file_processor()
             file_record = await file_processor.get_file_record(file_id)
 
             if not file_record:
+                logger.error(f"Файл {file_id} не найден в базе данных")
                 raise HTTPException(status_code=404, detail=f"Файл {file_id} не найден")
 
             # Используем прямую ссылку на S3
             s3_url = file_record.direct_s3_url
             if not s3_url:
+                logger.error(f"Не удалось получить S3 URL для файла {file_id}")
                 raise HTTPException(
                     status_code=500, detail="Не удалось получить ссылку на файл"
                 )
 
+            logger.info(f"Использую прямую S3 ссылку: {s3_url}")
             url = s3_url  # Заменяем на абсолютную ссылку
 
         headers = {
