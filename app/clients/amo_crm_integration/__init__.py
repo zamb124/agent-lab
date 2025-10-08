@@ -19,11 +19,6 @@ from .client import (
     register_subdomain,
 )
 
-from .chat_client import (
-    AmoCRMChatClient,
-    ChatMessage,
-    get_amocrm_chat_client,
-)
 
 __all__ = [
     # Основной клиент API v4
@@ -32,9 +27,5 @@ __all__ = [
     "AmoCRMContact",
     "get_amocrm_client",
     "register_subdomain",
-    # Chat API клиент
-    "AmoCRMChatClient",
-    "ChatMessage",
-    "get_amocrm_chat_client",
 ]
 

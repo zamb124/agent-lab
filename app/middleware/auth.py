@@ -27,7 +27,7 @@ class CompanyCreationRequired(Exception):
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """Middleware для создания RequestContext с пользователем"""
-    
+
     def __init__(self, app):
         super().__init__(app)
         self.storage = Storage()
@@ -41,24 +41,24 @@ class AuthMiddleware(BaseHTTPMiddleware):
             or request.url.path.startswith("/api/v1/payments/webhook/")
         ):
             return await call_next(request)
-        
+
         # Для Telegram webhook - извлекаем company_id из полного ключа
         if request.url.path.startswith("/api/v1/webhook/telegram/"):
             flow_key = request.url.path.split("/api/v1/webhook/telegram/")[1]
-            
+
             # Формат ключа: company:{company_id}:flow:{flow_id}
             parts = flow_key.split(":")
             if len(parts) < 4 or parts[0] != "company" or parts[2] != "flow":
                 raise HTTPException(status_code=400, detail=f"Invalid flow key format: {flow_key}")
-            
+
             company_id = parts[1]
-            
+
             company_data = await self.storage.get(f"company:{company_id}", force_global=True)
             if not company_data:
                 raise HTTPException(status_code=404, detail=f"Company {company_id} not found")
-            
+
             requested_company = Company.model_validate_json(company_data)
-            
+
             context = await self._create_telegram_context(request, requested_company)
             set_context(context)
             request.state.context = context
@@ -66,30 +66,32 @@ class AuthMiddleware(BaseHTTPMiddleware):
             request.state.language = context.language.value
             logger.info(f"📨 Telegram webhook: key={flow_key}, company={company_id}")
             return await call_next(request)
-            
         # Для скачивания файлов - создаем минимальный контекст с компанией из поддомена
         if request.url.path.startswith("/api/v1/files/download/"):
             try:
                 # Определяем компанию по Host
                 requested_company = await self._get_company_from_host(request)
-                
+
                 # Создаем минимальный анонимный контекст с этой компанией
                 context = await self._create_anonymous_context(request, requested_company)
                 set_context(context)
                 request.state.context = context
                 request.state.user = context.user
+
                 request.state.language = context.language.value
-                
+
                 logger.info(f"📂 Контекст для скачивания файла: компания {requested_company.company_id}")
-                
+
             except Exception as e:
                 logger.error(f"❌ Не удалось создать контекст для скачивания файла: {e}")
                 raise HTTPException(status_code=500, detail="Ошибка определения компании")
-            
+
             return await call_next(request)
 
         try:
             # Создаем контекст на основе типа запроса
+
+
             context = await self._create_request_context(request)
 
             # Устанавливаем глобальный контекст
@@ -107,7 +109,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         except CompanyCreationRequired:
             # Всегда редиректим на выбор компании на основном домене
             # Страница сама разберется - если компаний нет, перенаправит на создание
-            base_url = f"https://{settings.server.domain}" if settings.server.env != "local" else "http://localhost:8001"
+            base_url = f"https://{settings.server.domain}" if settings.server.env != "local" else f"http://{settings.server.domain}:{settings.server.port}"
             return RedirectResponse(url=f"{base_url}/frontend/select-company", status_code=307)
         except HTTPException as e:
             # Для HTML запросов редиректим на авторизацию
@@ -129,7 +131,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Определяем запрашиваемую компанию по Host
         requested_company = await self._get_company_from_host(request)
-        
+
         # Определяем, есть ли субдомен в запросе
         host = request.headers.get("host", "")
         has_subdomain = self._has_subdomain(host)
@@ -144,6 +146,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         elif "/api/v1/" in path:
             logger.info("🔌 API контекст")
             return await self._create_api_context(request, requested_company)
+        elif "/api/amocrm" in path:
+            logger.info("🔌 AmoCRM контекст")
+            return await self._create_amocrm_context(request, requested_company)
         elif path == "/frontend/auth":
             logger.info("🔐 Страница авторизации - публичная")
             return await self._create_anonymous_context(request, requested_company)
@@ -162,6 +167,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         elif path.startswith("/auth/"):
             logger.info("🔐 OAuth контекст")
             return await self._create_anonymous_context(request, requested_company)
+        elif path in ("/docs", "/redoc", "/openapi.json") and settings.server.env == "local":
+            logger.info("🔍 Docs контекст")
+            return await self._create_anonymous_context(request, requested_company)
         elif path == "/":
             logger.info("🏠 Корневой путь - проверяем авторизацию")
             # Для главной страницы пытаемся создать frontend контекст, но без ошибки если пользователь не авторизован
@@ -178,21 +186,21 @@ class AuthMiddleware(BaseHTTPMiddleware):
     def _has_subdomain(self, host: str) -> bool:
         """Проверяет, содержит ли host субдомен"""
         domain = settings.server.domain
-        
+
         # Для локальной разработки: проверяем наличие точки перед localhost
         if settings.server.env == "local":
             return ".localhost" in host
-        
+
         # Для продакшена: проверяем, что есть субдомен перед основным доменом
         return host.endswith(f".{domain}") and not host.startswith(domain)
-    
+
     async def _get_company_from_host(self, request: Request) -> Company:
         """Определяет компанию по Host заголовку"""
         host = request.headers.get("host", "")
         domain = settings.server.domain
-        
+
         logger.info(f"🔍 Определяем компанию: host={host}, domain={domain}, env={settings.server.env}")
-        
+
         # Специальная логика для локальной разработки
         if settings.server.env == "local" and ".localhost" in host:
             # Для localhost: ssd.localhost:8001 -> subdomain = ssd
@@ -206,7 +214,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 if company_data:
                     logger.info(f"✅ Найдена компания по поддомену: {clean_company_id}")
                     return Company.model_validate_json(company_data)
-        
+
         # Продакшен логика
         elif host.endswith(f".{domain}") and not host.startswith(domain):
             subdomain = host.split(".")[0]
@@ -219,15 +227,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 if company_data:
                     logger.info(f"✅ Найдена компания по поддомену: {clean_company_id}")
                     return Company.model_validate_json(company_data)
-            
+
             # Если поддомен есть, но компания не найдена - это ошибка
             logger.error(f"❌ Компания не найдена для поддомена: {subdomain}")
             raise HTTPException(status_code=404, detail=f"Company not found for subdomain: {subdomain}")
-        
+
         # Если это основной домен (без поддомена) - возвращаем системную компанию
         logger.info(f"🔍 Основной домен без поддомена, возвращаем системную компанию")
         return await self._get_system_company()
-    
+
     def _detect_user_language(self, request: Request) -> Language:
         """Определяет предпочитаемый язык пользователя"""
         # 1. Приоритет: заголовок Accept-Language (для HTMX запросов)
@@ -237,7 +245,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 if lang.value == accept_language:
                     logger.debug(f"🌐 Язык определен из заголовка Accept-Language: {lang.value}")
                     return lang
-        
+
         # 2. Cookie language
         language_cookie = request.cookies.get('language')
         if language_cookie:
@@ -246,7 +254,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 if lang.value == language_cookie:
                     logger.debug(f"🌐 Язык определен из cookie: {lang.value}")
                     return lang
-        
+
         # 3. Accept-Language заголовок браузера (парсим более детально)
         browser_accept = request.headers.get('accept-language', '').lower()
         if browser_accept:
@@ -257,7 +265,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     if lang.value == browser_lang.strip():
                         logger.debug(f"🌐 Язык определен из браузера Accept-Language: {lang.value}")
                         return lang
-        
+
         # 4. По умолчанию
         logger.debug(f"🌐 Используем язык по умолчанию: {Language.RU.value}")
         return Language.RU
@@ -268,7 +276,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         company_data = await self.storage.get("company:main", force_global=True)
         if company_data:
             return Company.model_validate_json(company_data)
-        
+
         # Создаем главную компанию
         main_company = Company(
             company_id="main",
@@ -285,7 +293,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         company_data = await self.storage.get("company:system", force_global=True)
         if company_data:
             return Company.model_validate_json(company_data)
-        
+
         # Если системной компании нет - что-то пошло не так
         raise Exception("Системная компания не найдена - нужно запустить миграцию")
 
@@ -344,13 +352,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Получаем session_id из куки или заголовка Authorization
         session_id = request.cookies.get("session_id")
-        
+
         # Если нет куки, проверяем заголовок Authorization
         if not session_id:
             auth_header = request.headers.get("authorization", "")
             if auth_header.startswith("Bearer "):
                 session_id = auth_header[7:]  # Убираем "Bearer "
-        
+
         # Сессия обязательна для API запросов
         if not session_id:
             raise HTTPException(status_code=401, detail="Session required")
@@ -358,13 +366,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Получаем пользователя по сессии
         auth_service = AuthService()
         user = await auth_service.get_user_by_session(session_id)
-        
+
         if not user:
             raise HTTPException(status_code=401, detail="Invalid session")
 
         # Получаем все компании пользователя
         user_companies = await self._get_user_companies(user)
-        
+
         # Проверяем доступ к запрашиваемой компании
         if requested_company.company_id not in user.companies:
             # Если у пользователя нет доступа к запрашиваемой компании,
@@ -374,10 +382,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 company_data = await self.storage.get(f"company:{user.active_company_id}", force_global=True)
                 if company_data:
                     active_company = Company.model_validate_json(company_data)
-            
+
             if not active_company and user_companies:
                 active_company = user_companies[0]
-                
+
             if not active_company:
                 # У пользователя нет доступных компаний
                 raise HTTPException(status_code=403, detail="No accessible companies")
@@ -419,8 +427,32 @@ class AuthMiddleware(BaseHTTPMiddleware):
         language = self._detect_user_language(request)
 
         return Context(
-            user=user, 
-            platform="api", 
+            user=user,
+            platform="api",
+            active_company=requested_company,
+            user_companies=[requested_company],
+            language=language,
+            metadata={"anonymous": True}
+        )
+
+    async def _create_amocrm_context(self, request: Request, requested_company: Company) -> Context:
+        """Создает анонимный контекст"""
+        user = User(
+            user_id="anonymous",
+            provider=None,  # TODO: сделать провайдера API?
+            provider_user_id="anonymous",
+            email="",
+            name="Anonymous",
+            status=UserStatus.ACTIVE,
+            groups=["guest"],
+            companies={requested_company.company_id: ["guest"]},
+            active_company_id=requested_company.company_id,
+        )
+        language = self._detect_user_language(request)
+
+        return Context(
+            user=user,
+            platform="amocrm",
             active_company=requested_company,
             user_companies=[requested_company],
             language=language,
@@ -444,10 +476,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Получаем все компании пользователя
         user_companies = await self._get_user_companies(user)
-        
+
+
         # Определяем язык пользователя
         language = self._detect_user_language(request)
-        
+
         # Если у пользователя нет компаний
         if not user.companies:
             if allow_no_company:
@@ -464,20 +497,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
             else:
                 # Бросаем исключение для редиректа на создание компании
                 raise CompanyCreationRequired()
-        
+
         # Проверка: если это защищенная страница и запрос БЕЗ субдомена,
         # редиректим на выбор компании
         # Все пользователи должны работать через субдомены конкретных компаний
         if not allow_no_company and not has_subdomain:
             logger.info(f"🔄 Пользователь {user.user_id} зашел на защищенную страницу без субдомена, редиректим на выбор компании")
             raise CompanyCreationRequired()
-        
         # Проверяем доступ к запрашиваемой компании (только если не разрешен доступ без компании)
         if not allow_no_company and requested_company.company_id not in user.companies:
             logger.warning(f"Пользователь {user.user_id} не имеет доступа к компании {requested_company.company_id}. Доступные компании: {list(user.companies.keys())}")
             # Вместо ошибки - редиректим на выбор компании
             raise CompanyCreationRequired()
-        
         # Обновляем активную компанию у пользователя если нужно (только если не allow_no_company)
         if not allow_no_company and user.active_company_id != requested_company.company_id:
             logger.info(f"🔄 Смена активной компании: {user.active_company_id} → {requested_company.company_id}")

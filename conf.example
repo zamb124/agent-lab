@@ -219,6 +219,9 @@
     "model_name": "gemini-2.5-flash-image-preview",
     "timeout": 60
   },
+  "amocrm": {
+    "access_token": "your-amocrm-access-token-here"
+  },
   "proxy": {
     "enabled": false,
     "http_proxy": "your-proxy-host:port",

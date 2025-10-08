@@ -56,3 +56,4 @@ packages = ["app"]
 dev = [
     "ruff>=0.13.0",
 ]
+

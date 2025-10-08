@@ -1,0 +1,18 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+Не делай излишние try except, лучше добавь проверки и сделай исключение
+Так плохо: logger.error(f"Ошибка получения контактов: {e.response.status_code} - {e.response.text}")
+
+Если лог не избежен, то делай exc_info=True
+
+Ещё из вариантов тебе:
+raise httpx.HTTPStatusError(
+                f"Не удалось получить контакты из AmoCRM (subdomain={self.subdomain}, limit={limit}): "
+                f"{e.response.status_code} - {e.response.text[:200]}",
+                request=e.request,
+                response=e.response,
+            ) from e
+Расширять исключение и прокидывать дальше
