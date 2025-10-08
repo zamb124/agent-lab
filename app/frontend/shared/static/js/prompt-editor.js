@@ -1164,10 +1164,12 @@ class PromptEditor {
     
     /**
      * Получить flow переменные как объект для сохранения
+     * Возвращает ОРИГИНАЛЬНЫЕ значения (@var:key), а не резолвнутые
      */
     getFlowVariables() {
         const variables = {};
         this.flowVariables.forEach(v => {
+            // v.value уже содержит оригинальное значение (@var:key или хардкод)
             variables[v.name] = v.value;
         });
         return variables;
