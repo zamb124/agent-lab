@@ -1381,6 +1381,7 @@
     "title": "Авторизация",
     "subtitle": "Платформа для агентов",
     "choose_provider": "Выберите способ входа в систему",
+    "login_with_provider": "Войти через {provider}",
     "footer_text": "Безопасная авторизация через OAuth 2.0"
   }
 }

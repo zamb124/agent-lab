@@ -647,6 +647,7 @@
   "auth.title": "Авторизация",
   "auth.subtitle": "Платформа для агентов",
   "auth.choose_provider": "Выберите способ входа в систему",
+  "auth.login_with_provider": "Войти через {provider}",
   "auth.footer_text": "Безопасная авторизация через OAuth 2.0"
 };
     console.log('✅ Переводы для ru загружены: ' + Object.keys(window.translations.ru).length + ' ключей');
