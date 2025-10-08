@@ -112,15 +112,20 @@ class AuthService:
         try:
             # Проверяем, не использован ли уже этот код
             code_key = f"oauth_code:{auth_request.provider.value}:{auth_request.code}"
-            existing_code = await self.storage.get(code_key)
-            if existing_code:
-                logger.warning(f"⚠️ Попытка повторного использования OAuth кода")
-                return AuthResult(
-                    success=False, error_message="Авторизация уже выполнена. Пожалуйста, обновите страницу."
-                )
-            
-            # Помечаем код как использованный на 5 минут
-            await self.storage.set(code_key, "used", ttl=300)
+            cached_result = await self.storage.get(code_key)
+            if cached_result:
+                # Код уже использовался - возвращаем кешированный результат
+                logger.info(f"⚠️ Повторный запрос с тем же OAuth кодом - возвращаем кешированный результат")
+                result_data = json.loads(cached_result)
+                
+                # Восстанавливаем объекты из кеша
+                user = await self._get_user(result_data["user_id"])
+                session = await self._get_session(result_data["session_id"])
+                
+                if user and session:
+                    return AuthResult(success=True, user=user, session=session)
+                else:
+                    logger.warning(f"⚠️ Не удалось восстановить пользователя/сессию из кеша")
             
             # Проверяем state
             auth_state = await self._get_auth_state(auth_request.state)
@@ -150,6 +155,13 @@ class AuthService:
 
             # Создаем сессию
             session = await self._create_session(user, auth_request.provider, access_token, refresh_token)
+
+            # Кешируем результат на 5 минут
+            result_cache = json.dumps({
+                "user_id": user.user_id,
+                "session_id": session.session_id
+            })
+            await self.storage.set(code_key, result_cache, ttl=300)
 
             # Очищаем временный state
             await self._cleanup_auth_state(auth_request.state)
