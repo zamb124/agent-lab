@@ -12,7 +12,9 @@
                     <i class="bi bi-robot icon-lg"></i>
                     <span class="brand-text langflow-gradient">Agents Lab</span>
                 </div>
-                <div class="header-actions">
+                
+                <!-- Desktop navigation -->
+                <div class="header-actions desktop-nav">
                     <a href="/frontend/builder/" class="btn btn-outline-primary">
                         <i class="bi bi-diagram-3"></i>
                         {{ t('landing.header.builder') }}
@@ -29,7 +31,6 @@
                         </a>
                     {% endif %}
                     
-                    <!-- Dropdown для выбора языка - в самом правом углу -->
                     <div class="dropdown">
                         <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
                             <i class="bi bi-translate"></i>
@@ -47,9 +48,59 @@
                         </ul>
                     </div>
                 </div>
+                
+                <!-- Mobile burger button -->
+                <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
+                    <i class="bi bi-list"></i>
+                </button>
             </div>
         </div>
     </header>
+    
+    <!-- Mobile menu overlay -->
+    <div class="mobile-menu-overlay" id="mobileMenuOverlay" onclick="closeMobileMenu()"></div>
+    <div class="mobile-menu" id="mobileMenu">
+        <div class="mobile-menu-header">
+            <div class="brand">
+                <i class="bi bi-robot"></i>
+                <span class="brand-text langflow-gradient">Agents Lab</span>
+            </div>
+            <button class="mobile-menu-close" onclick="closeMobileMenu()">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <nav class="mobile-menu-nav">
+            <a href="/frontend/builder/" class="mobile-menu-item">
+                <i class="bi bi-diagram-3"></i>
+                <span>{{ t('landing.header.builder') }}</span>
+            </a>
+            {% if is_authenticated %}
+                <a href="/frontend/dashboard" class="mobile-menu-item">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>{{ t('landing.header.dashboard') }}</span>
+                </a>
+            {% else %}
+                <a href="/frontend/auth" class="mobile-menu-item">
+                    <i class="bi bi-box-arrow-in-right"></i>
+                    <span>{{ t('landing.header.login') }}</span>
+                </a>
+            {% endif %}
+            
+            <div class="mobile-menu-divider"></div>
+            
+            <div class="mobile-menu-section">
+                <div class="mobile-menu-section-title">{{ t('dashboard.header.language_toggle') }}</div>
+                <button class="mobile-menu-item" onclick="event.preventDefault(); setLandingLanguage('ru'); closeMobileMenu();">
+                    <i class="bi bi-check" style="visibility: hidden" id="mobile-lang-ru"></i>
+                    <span>{{ t('languages.ru') }}</span>
+                </button>
+                <button class="mobile-menu-item" onclick="event.preventDefault(); setLandingLanguage('en'); closeMobileMenu();">
+                    <i class="bi bi-check" style="visibility: hidden" id="mobile-lang-en"></i>
+                    <span>{{ t('languages.en') }}</span>
+                </button>
+            </div>
+        </nav>
+    </div>
 
     <!-- Hero Section -->
     <section class="hero-section">
@@ -464,8 +515,33 @@ function closeNotification(button) {
 document.addEventListener('keydown', function(event) {
     if (event.key === 'Escape') {
         closeContactModal();
+        closeMobileMenu();
     }
 });
+
+// Mobile menu functions
+function toggleMobileMenu() {
+    const menu = document.getElementById('mobileMenu');
+    const overlay = document.getElementById('mobileMenuOverlay');
+    
+    menu.classList.toggle('active');
+    overlay.classList.toggle('active');
+    
+    if (menu.classList.contains('active')) {
+        document.body.style.overflow = 'hidden';
+    } else {
+        document.body.style.overflow = 'auto';
+    }
+}
+
+function closeMobileMenu() {
+    const menu = document.getElementById('mobileMenu');
+    const overlay = document.getElementById('mobileMenuOverlay');
+    
+    menu.classList.remove('active');
+    overlay.classList.remove('active');
+    document.body.style.overflow = 'auto';
+}
 
 // Упрощенная функция смены языка для landing page
 function setLandingLanguage(language) {
@@ -496,12 +572,18 @@ function updateLanguageIndicator(language) {
         currentLangElement.textContent = language.toUpperCase();
     }
     
-    // Обновляем галочки в dropdown
+    // Обновляем галочки в desktop dropdown
     const supportedLanguages = ['ru', 'en', 'es'];
     supportedLanguages.forEach(lang => {
         const indicator = document.querySelector(`#lang-${lang}`);
         if (indicator) {
             indicator.style.visibility = (lang === language) ? 'visible' : 'hidden';
+        }
+        
+        // Обновляем галочки в mobile menu
+        const mobileIndicator = document.querySelector(`#mobile-lang-${lang}`);
+        if (mobileIndicator) {
+            mobileIndicator.style.visibility = (lang === language) ? 'visible' : 'hidden';
         }
     });
     
