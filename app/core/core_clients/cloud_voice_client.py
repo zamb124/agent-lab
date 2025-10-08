@@ -563,11 +563,20 @@ async def get_default_cloud_voice_client() -> Optional[CloudVoiceClient]:
     global _default_cloud_voice_client
 
     if _default_cloud_voice_client is None:
+        logger.info(f"🔍 Cloud Voice клиент не инициализирован, проверяем конфигурацию...")
+        logger.info(f"🔍 hasattr(settings, 'cloud_voice'): {hasattr(settings, 'cloud_voice')}")
+        
+        if hasattr(settings, "cloud_voice"):
+            logger.info(f"🔍 settings.cloud_voice.enabled: {settings.cloud_voice.enabled}")
+            logger.info(f"🔍 settings.cloud_voice.client_id: {'есть' if settings.cloud_voice.client_id else 'НЕТ'}")
+            logger.info(f"🔍 settings.cloud_voice.secret_key: {'есть' if settings.cloud_voice.secret_key else 'НЕТ'}")
+        
         if hasattr(settings, "cloud_voice") and settings.cloud_voice.enabled:
+            logger.info("🔄 Создаем Cloud Voice клиент...")
             _default_cloud_voice_client = CloudVoiceClientFactory.create_client()
             logger.info("✅ Инициализирован дефолтный Cloud Voice клиент")
         else:
-            logger.info("ℹ️ Cloud Voice не настроен в конфигурации")
+            logger.warning("⚠️ Cloud Voice не настроен в конфигурации (enabled=False или отсутствует)")
             return None
 
     return _default_cloud_voice_client
