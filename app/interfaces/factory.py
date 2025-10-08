@@ -36,20 +36,32 @@ class InterfaceFactory:
             return None
         
         if platform == "telegram":
+            # Получаем flow_id и bot_username из метаданных
+            flow_id = config.get("flow_id")
             bot_username = config.get("bot_username")
-            if not bot_username:
-                logger.error("Нет bot_username для создания Telegram интерфейса")
+            
+            if not flow_id:
+                logger.error("Нет flow_id для создания Telegram интерфейса")
                 return None
-
-            token_key = f"token:telegram:{bot_username}"
-            token_json = await self.storage.get(token_key, force_global=True)
-
-            if not token_json:
-                logger.error(f"Не найден токен для бота {bot_username}")
+            
+            # Загружаем flow config чтобы получить telegram_config
+            flow_config = await self.storage.get_flow_config(flow_id)
+            if not flow_config:
+                logger.error(f"Flow {flow_id} не найден")
                 return None
-
-            bot_token = json.loads(token_json)
-            return TelegramInterface(bot_token, {"username": bot_username})
+            
+            telegram_config = flow_config.platforms.get("telegram")
+            if not telegram_config:
+                logger.error(f"Flow {flow_id} не имеет telegram платформы")
+                return None
+            
+            # Получаем токен через новый способ (поддерживает @var:key)
+            bot_token = await TelegramInterface.get_bot_token_for_flow(flow_id, telegram_config)
+            if not bot_token:
+                logger.error(f"Не найден токен для flow {flow_id}")
+                return None
+            
+            return TelegramInterface(bot_token, telegram_config)
         
         return interface_class(config)
 

@@ -114,21 +114,57 @@ class TelegramPoller:
             telegram_config = flow_config.platforms.get("telegram")
             if not telegram_config:
                 continue
-
-            username = telegram_config.get("username")
-            if not username:
+            
+            # Резолвим весь telegram_config (username и token могут быть @var:key)
+            from app.services.variables_service import get_variables_service
+            from app.core.context import set_context
+            from app.models import Context
+            from app.identity.models import User, AuthProvider, UserStatus, Company
+            from app.models.i18n_models import Language
+            
+            # Создаем контекст для резолюции
+            company_id = flow_key.split(":")[1] if ":" in flow_key else "system"
+            company_data = await storage.get(f"company:{company_id}", force_global=True)
+            if not company_data:
                 continue
             
-            # Проверяем что есть token в конфигурации
-            if not telegram_config.get("token"):
-                logger.warning(f"⚠️ Flow {flow_id} не имеет token в platforms.telegram, пропускаем")
-                continue
-
-            token = await TelegramInterface.get_bot_token_for_flow(
-                flow_id, telegram_config
+            company = Company.model_validate_json(company_data)
+            user = User(
+                user_id="system",
+                provider=AuthProvider.YANDEX,
+                provider_user_id="system",
+                email="",
+                name="System",
+                status=UserStatus.ACTIVE,
+                groups=["system"],
+                companies={company_id: ["admin"]},
+                active_company_id=company_id
             )
-            if not token:
+            context = Context(
+                user=user,
+                platform="telegram",
+                active_company=company,
+                user_companies=[company],
+                language=Language.RU
+            )
+            set_context(context)
+            
+            # Резолвим telegram_config
+            variables_service = get_variables_service()
+            resolved_config = await variables_service.resolve(telegram_config, auto_create=True)
+            
+            username = resolved_config.get("username")
+            token = resolved_config.get("token")
+            
+            if not username:
+                logger.warning(f"⚠️ Flow {flow_id} не имеет username после резолюции")
                 continue
+            
+            if not token:
+                logger.warning(f"⚠️ Flow {flow_id} не имеет token после резолюции")
+                continue
+            
+            logger.info(f"✅ Резолвнуто: username={username}, token={'***'}")
 
             self.active_bots[username] = {
                 "token": token,

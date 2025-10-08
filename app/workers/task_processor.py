@@ -91,6 +91,11 @@ class TaskProcessor:
 
         interface_factory = InterfaceFactory()
         metadata = task.input_data.get("metadata", {})
+        
+        # Добавляем flow_id для telegram интерфейса
+        if task.context.platform == "telegram":
+            metadata["flow_id"] = task.flow_id
+        
         interface = await interface_factory.create_interface(task.context.platform, metadata)
         
         if interface:
