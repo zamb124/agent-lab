@@ -303,6 +303,300 @@
     color: var(--accent-danger);
 }
 
+/* Language Dropdown в Header */
+.header-right .dropdown {
+    position: relative;
+}
+
+.header-right .dropdown .btn {
+    /* Переопределяем Bootstrap dropdown-toggle стили */
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    position: relative;
+}
+
+.header-right .dropdown .btn::after {
+    /* Убираем Bootstrap dropdown arrow */
+    display: none !important;
+}
+
+.header-right .dropdown .btn::before {
+    /* Убираем возможные Bootstrap псевдоэлементы */
+    display: none !important;
+}
+
+.header-right .dropdown .btn.show {
+    /* Состояние когда dropdown открыт */
+    background: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+}
+
+.header-right .dropdown .btn-ghost {
+    /* Гарантируем что ghost стили применяются */
+    background: transparent;
+    color: var(--text-secondary);
+    border: none;
+    padding: 0.375rem 0.75rem;
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+}
+
+.header-right .dropdown .btn-ghost:hover,
+.header-right .dropdown .btn-ghost:focus,
+.header-right .dropdown .btn-ghost:focus-visible {
+    background: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+.header-right .dropdown .btn-ghost:active {
+    background: var(--bg-hover) !important;
+    transform: none !important;
+}
+
+.header-right .dropdown #current-language {
+    margin-left: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    opacity: 0.8;
+    text-transform: uppercase;
+}
+
+/* Dropdown Menu Styling */
+.header-right .dropdown-menu {
+    background: var(--bg-card);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 0.5rem 0;
+    min-width: 140px;
+    margin-top: 0.25rem;
+    z-index: var(--z-dropdown);
+    /* ВАЖНО: по умолчанию dropdown должен быть скрыт */
+    display: none;
+    /* Убираем маркеры списка */
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+}
+
+/* Показываем dropdown только когда Bootstrap добавляет класс show */
+.header-right .dropdown-menu.show {
+    display: block;
+}
+
+/* Убираем маркеры у элементов списка */
+.header-right .dropdown-menu li {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.header-right .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    color: var(--text-primary);
+    background: transparent;
+    border: none;
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: background var(--transition-fast);
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+}
+
+.header-right .dropdown-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.header-right .dropdown-item i.bi-check {
+    color: var(--accent-success);
+    font-size: 0.875rem;
+}
+
+/* Tooltip для кнопки языка */
+.header-right .dropdown .btn[data-tooltip]:hover::before {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: -2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    z-index: var(--z-tooltip);
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-primary);
+}
+
+/* Универсальные стили для dropdown языков на всех страницах */
+.dropdown .btn .bi-translate {
+    font-size: 0.875rem;
+}
+
+/* Landing Page Header Actions */
+.header-actions .dropdown {
+    position: relative;
+}
+
+.header-actions .dropdown .btn {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+.header-actions .dropdown .btn::after {
+    display: none !important;
+}
+
+.header-actions .dropdown .btn-ghost:hover,
+.header-actions .dropdown .btn-ghost:focus {
+    background: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Builder Toolbar Dropdown */
+.toolbar-right .dropdown {
+    position: relative;
+}
+
+.toolbar-right .dropdown .btn {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+.toolbar-right .dropdown .btn::after {
+    display: none !important;
+}
+
+/* Billing Header Dropdown */
+.billing-header-right .dropdown {
+    position: relative;
+}
+
+.billing-header-right .dropdown .btn {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+.billing-header-right .dropdown .btn::after {
+    display: none !important;
+}
+
+/* Admin Header Dropdown */
+.admin-header-right .dropdown {
+    position: relative;
+}
+
+.admin-header-right .dropdown .btn {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+.admin-header-right .dropdown .btn::after {
+    display: none !important;
+}
+
+/* Универсальные стили для всех dropdown меню с языками */
+.dropdown-menu {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-primary) !important;
+    border-radius: var(--radius-md) !important;
+    box-shadow: var(--shadow-lg) !important;
+    padding: 0.5rem 0 !important;
+    min-width: 140px !important;
+    margin-top: 0.25rem !important;
+    z-index: var(--z-dropdown) !important;
+    list-style: none !important;
+    display: none !important;
+}
+
+.dropdown-menu.show {
+    display: block !important;
+}
+
+.dropdown-menu li {
+    list-style: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.dropdown-item {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    padding: 0.5rem 1rem !important;
+    color: var(--text-primary) !important;
+    background: transparent !important;
+    border: none !important;
+    text-decoration: none !important;
+    font-size: 0.875rem !important;
+    transition: background var(--transition-fast) !important;
+    cursor: pointer !important;
+    width: 100% !important;
+    text-align: left !important;
+}
+
+.dropdown-item:hover {
+    background: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+}
+
+.dropdown-item i.bi-check {
+    color: var(--accent-success) !important;
+    font-size: 0.875rem !important;
+}
+
+/* Дополнительные переопределения для Bootstrap dropdown */
+.dropdown-toggle.btn-ghost:focus {
+    box-shadow: none !important;
+    border: none !important;
+    outline: none !important;
+}
+
+.dropdown-toggle:focus {
+    box-shadow: none !important;
+}
+
+/* Убираем Bootstrap outline для всех dropdown кнопок в header */
+.header-right .dropdown .btn:focus,
+.header-right .dropdown .btn:active,
+.header-right .dropdown .btn.active {
+    box-shadow: none !important;
+    outline: none !important;
+    background: var(--bg-hover) !important;
+}
+
+/* Переопределяем все возможные Bootstrap состояния */
+.header-right .dropdown .btn.dropdown-toggle:active,
+.header-right .dropdown .btn.dropdown-toggle.active,
+.header-right .dropdown .btn.dropdown-toggle:focus,
+.header-right .dropdown .btn.dropdown-toggle.focus,
+.header-right .dropdown .btn.dropdown-toggle.show {
+    background: var(--bg-hover) !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
 /* Чекбоксы и радио */
 .form-check {
     display: flex;

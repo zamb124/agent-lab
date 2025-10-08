@@ -8,13 +8,13 @@
                 </div>
                 <div class="bot-info">
                     <h3 class="bot-name">{{ bot.name }}</h3>
-                    <p class="bot-description">{{ bot.description }}</p>
+                    <p class="bot-description">{{ bot.description|safe }}</p>
                 </div>
             </div>
             
             <div class="bot-card-body">
                 <div class="bot-platforms">
-                    <span class="platforms-label">Платформы:</span>
+                    <span class="platforms-label" data-i18n="bots.platforms">Платформы:</span>
                     <div class="platform-tags">
                         {% for platform in bot.platforms %}
                         <span class="platform-tag platform-{{ platform }}">
@@ -35,7 +35,7 @@
                 <div class="bot-meta">
                     <span class="meta-item">
                         <i class="bi bi-diagram-3"></i>
-                        Агент: <code>{{ bot.entry_point }}</code>
+                        <span data-i18n="bots.agent">Агент:</span> <code>{{ bot.entry_point }}</code>
                     </span>
                 </div>
             </div>
@@ -44,12 +44,12 @@
                 <button class="btn btn-sm btn-outline-primary btn-chat" 
                         onclick="openBotChat('{{ bot.flow_id }}', '{{ bot.name }}')">
                     <i class="bi bi-chat-dots"></i>
-                    Чат
+                    <span data-i18n="bots.chat">Чат</span>
                 </button>
                 <button class="btn btn-sm btn-primary btn-expand" 
                         onclick="expandBot('{{ bot.flow_id }}')">
-                    <i class="bi bi-arrows-fullscreen"></i>
-                    Раскрыть
+                    <i class="bi bi-gear"></i>
+                    <span data-i18n="bots.configure">Настроить</span>
                 </button>
             </div>
         </div>
@@ -59,11 +59,11 @@
             <div class="empty-state-icon">
                 <i class="bi bi-robot display-1"></i>
             </div>
-            <h3>У вас пока нет ботов</h3>
-            <p>Создайте своего первого бота, чтобы начать работу</p>
+            <h3 data-i18n="bots.empty_state.title">У вас пока нет ботов</h3>
+            <p data-i18n="bots.empty_state.description">Создайте своего первого бота, чтобы начать работу</p>
             <button class="btn btn-primary" onclick="createBot()">
                 <i class="bi bi-plus-circle"></i>
-                Создать бота
+                <span data-i18n="bots.create_bot">Создать бота</span>
             </button>
         </div>
     {% endif %}

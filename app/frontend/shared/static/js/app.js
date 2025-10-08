@@ -22,17 +22,21 @@ class APP {
         try {
             console.log('🔄 Загружаем модули менеджеров...');
             const { default: ThemeManager } = await import('./theme-manager.js');
+            const { default: LanguageManager } = await import('./language-manager.js');
             const { default: LayoutManager } = await import('./layout-manager.js');
             const { default: HTMXManager } = await import('./htmx-manager.js');
             const { default: ChatManager } = await import('./chat.js');
             
             console.log('✅ Модули загружены, создаем экземпляры...');
             this.themeManager = new ThemeManager();
+            this.languageManager = new LanguageManager();
             this.layoutManager = new LayoutManager();
             this.htmxManager = new HTMXManager();
             this.chatManager = new ChatManager(this);
             
-            // Инициализируем все менеджеры
+            // Инициализируем все менеджеры  
+            console.log('🔄 Инициализируем language manager...');
+            await this.languageManager.init();
             console.log('🔄 Инициализируем layout manager...');
             this.layoutManager.init();
             console.log('🔄 Инициализируем chat manager...');
@@ -45,7 +49,22 @@ class APP {
                 send: (message) => this.chatManager.sendUserMessage(message)
             };
             
-            // Создаем глобальный доступ к layoutManager
+            // Создаем глобальный API для интернационализации
+            this.i18n = {
+                t: (key, params) => this.languageManager.t(key, params),
+                setLanguage: async (lang) => await this.languageManager.setLanguage(lang),
+                getCurrentLanguage: () => this.languageManager.getCurrentLanguage(),
+                getSupportedLanguages: () => this.languageManager.getSupportedLanguages(),
+                refreshTranslations: async () => await this.languageManager.refreshTranslations()
+            };
+            
+            // Загружаем PromptEditor
+            if (typeof PromptEditor !== 'undefined') {
+                this.PromptEditor = PromptEditor;
+                console.log('✅ PromptEditor загружен');
+            }
+            
+            // Создаем глобальный доступ к app
             window.app = this;
             
         } catch (error) {
@@ -57,6 +76,8 @@ class APP {
     
     setupFallbackManagers() {
         // Простые fallback методы если модули не загрузились
+        console.log('⚠️ Используем fallback менеджеры');
+        
         this.themeManager = {
             toggleTheme: () => {
                 const html = document.documentElement;
@@ -89,8 +110,25 @@ class APP {
             send: (message) => console.log('Chat fallback: send', message)
         };
         
+        // PromptEditor fallback
+        if (typeof PromptEditor !== 'undefined') {
+            this.PromptEditor = PromptEditor;
+        }
+        
         // Устанавливаем глобальный доступ
         window.app = this;
+    }
+    
+    /**
+     * Создать prompt editor
+     */
+    createPromptEditor(containerElement, options = {}) {
+        if (!this.PromptEditor) {
+            console.error('PromptEditor не загружен');
+            return null;
+        }
+        
+        return new this.PromptEditor(containerElement, options);
     }
     
     setupAuth() {

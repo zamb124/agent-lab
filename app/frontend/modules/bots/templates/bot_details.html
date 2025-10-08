@@ -1,65 +1,104 @@
 <div class="bot-details-header">
-    <h2>
-        <i class="bi bi-robot"></i>
-        {{ bot.name }}
-    </h2>
-    <div class="header-actions">
-        <button class="btn btn-primary btn-sm" onclick="openBotChat('{{ bot.flow_id }}', '{{ bot.name }}')">
-            <i class="bi bi-chat-dots"></i>
-            Открыть чат
-        </button>
-        <button class="btn-close-details" onclick="closeBotModal()" title="Закрыть">
-            <i class="bi bi-x-lg"></i>
-        </button>
+    <div class="header-top-row">
+        <div class="header-left">
+            <h2>
+                <i class="bi bi-robot"></i>
+                {{ bot.name }}
+            </h2>
+        </div>
+        <div class="header-right">
+            <button class="btn btn-outline btn-sm" onclick="openBotChat('{{ bot.flow_id }}', '{{ bot.name }}')">
+                <i class="bi bi-chat-dots"></i>
+                Тестировать
+            </button>
+            <button class="btn-icon" onclick="toggleBotModalFullscreen()" title="На весь экран">
+                <i class="bi bi-fullscreen"></i>
+            </button>
+            <button class="btn-icon" onclick="closeBotModal()" title="Закрыть">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+    </div>
+    
+    <div class="header-controls-row">
+        <div class="control-group">
+            <label class="control-label">Flow ID</label>
+            <div class="control-value">
+                <code>{{ bot.flow_id }}</code>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label class="control-label">Агент</label>
+            <div class="control-value">
+                <code>{{ bot.entry_point }}</code>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label class="control-label">Платформы</label>
+            <div class="control-value platforms-list">
+                {% for platform in bot.platforms.keys() %}
+                <span class="platform-badge platform-{{ platform }}">
+                    {% if platform == 'telegram' %}
+                        <i class="bi bi-telegram"></i>
+                    {% elif platform == 'api' %}
+                        <i class="bi bi-code-slash"></i>
+                    {% elif platform == 'web' %}
+                        <i class="bi bi-globe"></i>
+                    {% endif %}
+                    {{ platform }}
+                </span>
+                {% endfor %}
+            </div>
+        </div>
     </div>
 </div>
 
 <div class="bot-details-content">
     <div class="bot-settings-section-full">
         <div class="settings-tabs">
-            <button class="settings-tab active" data-tab="general">
-                <i class="bi bi-gear"></i>
-                Общие
+            <button class="settings-tab active" data-tab="main">
+                <i class="bi bi-star"></i>
+                Основное
             </button>
             <button class="settings-tab" data-tab="platforms">
                 <i class="bi bi-globe"></i>
                 Платформы
             </button>
-            <button class="settings-tab" data-tab="prompt">
-                <i class="bi bi-chat-text"></i>
-                Промпт
+            <button class="settings-tab" data-tab="advanced">
+                <i class="bi bi-gear"></i>
+                Дополнительно
             </button>
         </div>
         
         <div class="settings-content">
-            <div class="settings-panel active" data-panel="general">
-                <h4>Общие настройки</h4>
-                
-                <div class="form-group">
-                    <label>Название бота</label>
-                    <input type="text" class="form-control" value="{{ bot.name }}" id="bot-name">
-                </div>
-                
-                <div class="form-group">
-                    <label>Описание</label>
-                    <textarea class="form-control" rows="3" id="bot-description">{{ bot.description }}</textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label>Агент точки входа</label>
-                    <input type="text" class="form-control" value="{{ bot.entry_point }}" id="bot-entry-point" readonly>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Таймаут (сек)</label>
-                        <input type="number" class="form-control" value="{{ bot.timeout or '' }}" id="bot-timeout">
+            <div class="settings-panel active" data-panel="main">
+                <div class="main-settings-header">
+                    <div class="form-row-main">
+                        <div class="form-group">
+                            <label>Название бота</label>
+                            <input type="text" class="form-control" value="{{ bot.name }}" id="bot-name">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Таймаут (сек)</label>
+                            <input type="number" class="form-control" value="{{ bot.timeout or '' }}" id="bot-timeout" placeholder="По умолчанию">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Максимум повторов</label>
+                            <input type="number" class="form-control" value="{{ bot.max_retries }}" id="bot-max-retries">
+                        </div>
                     </div>
-                    
-                    <div class="form-group">
-                        <label>Максимум повторов</label>
-                        <input type="number" class="form-control" value="{{ bot.max_retries }}" id="bot-max-retries">
-                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Промпт агента</label>
+                    <div id="bot-prompt-editor-container" 
+                         data-prompt="{{ bot.prompt }}"
+                         data-flow-id="{{ bot.flow_id }}"
+                         data-entry-point="{{ bot.entry_point }}"></div>
                 </div>
             </div>
             
@@ -76,14 +115,30 @@
                                 <i class="bi bi-code-slash"></i> API
                             {% elif platform == 'web' %}
                                 <i class="bi bi-globe"></i> Web
+                            {% elif platform == 'whatsapp' %}
+                                <i class="bi bi-whatsapp"></i> WhatsApp
+                            {% elif platform == 'amocrm' %}
+                                <i class="bi bi-building"></i> AmoCRM
+                            {% elif platform == 'retailcrm' %}
+                                <i class="bi bi-shop"></i> RetailCRM
+                            {% elif platform == 'discord' %}
+                                <i class="bi bi-discord"></i> Discord
+                            {% elif platform == 'slack' %}
+                                <i class="bi bi-slack"></i> Slack
+                            {% elif platform == 'viber' %}
+                                <i class="bi bi-heart-fill"></i> Viber
+                            {% elif platform == 'vk' %}
+                                <i class="bi bi-circle-fill"></i> VK
                             {% else %}
                                 <i class="bi bi-gear"></i> {{ platform }}
                             {% endif %}
                         </h5>
-                        <label class="switch">
-                            <input type="checkbox" checked>
-                            <span class="slider"></span>
-                        </label>
+                        <div class="platform-actions">
+                            <button class="btn btn-outline-danger btn-sm" 
+                                    onclick="removePlatform('{{ bot.flow_id }}', '{{ platform }}')">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
                     </div>
                     
                     {% if platform == 'telegram' %}
@@ -102,7 +157,8 @@
                         <label>Username</label>
                         <div class="input-group">
                             <span class="input-group-text">@</span>
-                            <input type="text" class="form-control" value="{{ config.username }}" readonly>
+                            <input type="text" class="form-control" value="{{ config.username }}" 
+                                   id="telegram-username-{{ bot.flow_id }}" readonly>
                         </div>
                     </div>
                     {% endif %}
@@ -121,17 +177,19 @@
                 </button>
             </div>
             
-            <div class="settings-panel" data-panel="prompt">
-                <h4>Системный промпт</h4>
+            <div class="settings-panel" data-panel="advanced">
+                <h4>Дополнительные настройки</h4>
                 
                 <div class="form-group">
-                    <label>Промпт агента</label>
-                    <textarea class="form-control code-editor" 
-                              rows="15" 
-                              id="bot-prompt"
-                              placeholder="Введите системный промпт для агента...">{{ bot.prompt }}</textarea>
+                    <label>Описание</label>
+                    <textarea class="form-control" rows="3" id="bot-description">{{ bot.description }}</textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Агент точки входа</label>
+                    <input type="text" class="form-control" value="{{ bot.entry_point }}" id="bot-entry-point" readonly>
                     <small class="form-text">
-                        Изменения будут сохранены в конфигурацию агента "{{ bot.entry_point }}"
+                        Системный агент, который обрабатывает запросы к боту
                     </small>
                 </div>
             </div>
@@ -146,6 +204,117 @@
                     Сохранить изменения
                 </button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно добавления платформы -->
+<div id="add-platform-modal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Добавить платформу</h3>
+            <button class="btn-close" onclick="closeAddPlatformModal()" title="Закрыть">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Тип платформы</label>
+                <div class="custom-select-wrapper">
+                    <div class="custom-select" id="platform-type-select" onclick="togglePlatformDropdown()">
+                        <div class="select-value">
+                            <span class="select-text">Выберите платформу</span>
+                            <i class="bi bi-chevron-down"></i>
+                        </div>
+                        <div class="select-dropdown" id="platform-dropdown">
+                            <div class="dropdown-option" data-value="telegram" onclick="selectPlatform('telegram', 'bi-telegram', 'Telegram')">
+                                <i class="bi bi-telegram"></i>
+                                <span>Telegram</span>
+                            </div>
+                            <div class="dropdown-option" data-value="whatsapp" onclick="selectPlatform('whatsapp', 'bi-whatsapp', 'WhatsApp')">
+                                <i class="bi bi-whatsapp"></i>
+                                <span>WhatsApp</span>
+                            </div>
+                            <div class="dropdown-option" data-value="web" onclick="selectPlatform('web', 'bi-globe', 'Web Chat')">
+                                <i class="bi bi-globe"></i>
+                                <span>Web Chat</span>
+                            </div>
+                            <div class="dropdown-option" data-value="api" onclick="selectPlatform('api', 'bi-code-slash', 'REST API')">
+                                <i class="bi bi-code-slash"></i>
+                                <span>REST API</span>
+                            </div>
+                            <div class="dropdown-option" data-value="amocrm" onclick="selectPlatform('amocrm', 'bi-building', 'AmoCRM')">
+                                <i class="bi bi-building"></i>
+                                <span>AmoCRM</span>
+                            </div>
+                            <div class="dropdown-option" data-value="retailcrm" onclick="selectPlatform('retailcrm', 'bi-shop', 'RetailCRM')">
+                                <i class="bi bi-shop"></i>
+                                <span>RetailCRM</span>
+                            </div>
+                            <div class="dropdown-option" data-value="discord" onclick="selectPlatform('discord', 'bi-discord', 'Discord')">
+                                <i class="bi bi-discord"></i>
+                                <span>Discord</span>
+                            </div>
+                            <div class="dropdown-option" data-value="slack" onclick="selectPlatform('slack', 'bi-slack', 'Slack')">
+                                <i class="bi bi-slack"></i>
+                                <span>Slack</span>
+                            </div>
+                            <div class="dropdown-option" data-value="viber" onclick="selectPlatform('viber', 'bi-heart-fill', 'Viber')">
+                                <i class="bi bi-heart-fill"></i>
+                                <span>Viber</span>
+                            </div>
+                            <div class="dropdown-option" data-value="vk" onclick="selectPlatform('vk', 'bi-circle-fill', 'VKontakte')">
+                                <i class="bi bi-circle-fill"></i>
+                                <span>VKontakte</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="platform-config-section" style="display: none;">
+                <h4>Настройки платформы</h4>
+                
+                <div class="form-group">
+                    <label>Токен</label>
+                    <input type="password" class="form-control" id="platform-token" 
+                           placeholder="Токен платформы">
+                </div>
+                
+                <div class="form-group">
+                    <label>Username/ID</label>
+                    <input type="text" class="form-control" id="platform-username" 
+                           placeholder="Имя пользователя или ID">
+                </div>
+
+                <div class="form-group">
+                    <label>Дополнительные параметры</label>
+                    <div id="custom-variables">
+                        <div class="variable-row">
+                            <input type="text" class="form-control" placeholder="Ключ" 
+                                   onchange="updateVariableName(this)">
+                            <input type="text" class="form-control" placeholder="Значение"
+                                   onchange="updateVariableValue(this)">
+                            <button class="btn btn-outline-danger btn-sm" onclick="removeVariableRow(this)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button class="btn btn-outline-primary btn-sm" onclick="addVariableRow()">
+                        <i class="bi bi-plus"></i>
+                        Добавить параметр
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeAddPlatformModal()">
+                Отмена
+            </button>
+            <button class="btn btn-primary" onclick="savePlatform('{{ bot.flow_id }}')">
+                <i class="bi bi-plus-circle"></i>
+                Добавить
+            </button>
         </div>
     </div>
 </div>

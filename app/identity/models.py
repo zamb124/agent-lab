@@ -231,6 +231,12 @@ class Company(BaseModel):
         description="Начало текущего расчетного периода",
         readonly=True
     )
+    
+    payment_provider: Optional[str] = Field(
+        default=None,
+        title="Платежный провайдер",
+        description="Платежный провайдер для пополнения баланса (yoomoney, yukassa). None = использовать дефолтный"
+    )
 
 
 class CreateCompanyForm(BaseModel):

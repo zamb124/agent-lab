@@ -15,6 +15,7 @@ from ..core.config import settings
 from ..identity.models import User, AuthProvider, UserStatus, Company
 from ..identity.auth_service import AuthService
 from ..core.storage import Storage
+from ..models.i18n_models import Language
 from fastapi.responses import RedirectResponse
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             request.url.path.startswith("/static/")
             or request.url.path.startswith("/.well-known/")
             or request.url.path.startswith("/favicon.ico")
+            or request.url.path.startswith("/api/v1/payments/webhook/")  # Webhook публичные
         ):
             return await call_next(request)
 
@@ -51,6 +53,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 set_context(context)
                 request.state.context = context
                 request.state.user = context.user
+
+                request.state.language = context.language.value
 
                 logger.info(f"📂 Контекст для скачивания файла: компания {requested_company.company_id}")
 
@@ -72,6 +76,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # Также сохраняем в request.state для совместимости
             request.state.context = context
             request.state.user = context.user
+            request.state.language = context.language.value
 
             # Продолжаем обработку
             response = await call_next(request)
@@ -136,10 +141,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await self._create_anonymous_context(request, requested_company)
         elif path == "/":
             logger.info("🏠 Корневой путь - пропускаем через middleware")
-            return await self._create_anonymous_context(request, requested_company)
+            # Для главной страницы пытаемся создать frontend контекст, но без ошибки если пользователь не авторизован
+            try:
+                return await self._create_frontend_context(request, requested_company, allow_no_company=True)
+            except HTTPException:
+                # Если авторизация не удалась, создаем анонимный контекст
+                logger.info("🏠 Пользователь не авторизован, создаем анонимный контекст")
+                return await self._create_anonymous_context(request, requested_company)
         elif path in ("/docs", "/redoc", "/openapi.json") and settings.server.env == "local":
             logger.info("🔍 Docs контекст")
             return await self._create_anonymous_context(request, requested_company)
+            logger.info("🏠 Корневой путь - проверяем авторизацию")
         else:
             logger.warning(f"❌ Неизвестный путь: {path}")
             raise HTTPException(status_code=404, detail="Not Found")
@@ -185,6 +197,40 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Если это основной домен (без поддомена) - возвращаем системную компанию
         logger.info(f"🔍 Основной домен без поддомена, возвращаем системную компанию")
         return await self._get_system_company()
+
+    def _detect_user_language(self, request: Request) -> Language:
+        """Определяет предпочитаемый язык пользователя"""
+        # 1. Приоритет: заголовок Accept-Language (для HTMX запросов)
+        accept_language = request.headers.get('Accept-Language', '').lower()
+        if accept_language:
+            for lang in Language:
+                if lang.value == accept_language:
+                    logger.debug(f"🌐 Язык определен из заголовка Accept-Language: {lang.value}")
+                    return lang
+
+        # 2. Cookie language
+        language_cookie = request.cookies.get('language')
+        if language_cookie:
+            language_cookie = language_cookie.lower()
+            for lang in Language:
+                if lang.value == language_cookie:
+                    logger.debug(f"🌐 Язык определен из cookie: {lang.value}")
+                    return lang
+
+        # 3. Accept-Language заголовок браузера (парсим более детально)
+        browser_accept = request.headers.get('accept-language', '').lower()
+        if browser_accept:
+            # Парсим заголовок вида "ru-RU,ru;q=0.9,en;q=0.8"
+            languages = [lang.split(';')[0].split('-')[0] for lang in browser_accept.split(',')]
+            for browser_lang in languages:
+                for lang in Language:
+                    if lang.value == browser_lang.strip():
+                        logger.debug(f"🌐 Язык определен из браузера Accept-Language: {lang.value}")
+                        return lang
+
+        # 4. По умолчанию
+        logger.debug(f"🌐 Используем язык по умолчанию: {Language.RU.value}")
+        return Language.RU
 
     async def _get_default_company(self) -> Company:
         """Возвращает главную компанию по умолчанию"""
@@ -245,11 +291,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
             active_company_id=requested_company.company_id,
         )
 
+        # Определяем язык пользователя
+        language = self._detect_user_language(request)
+
         return Context(
             user=user,
             platform="telegram",
             active_company=requested_company,
             user_companies=[requested_company],
+            language=language,
             metadata={
                 "telegram_user_id": telegram_user_id,
                 "username": username,
@@ -308,12 +358,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 user.active_company_id = requested_company.company_id
                 await self._update_user_active_company(user)
 
+        # Определяем язык пользователя
+        language = self._detect_user_language(request)
+
         return Context(
             user=user,
             session_id=session_id,
             platform="api",
             active_company=active_company,
             user_companies=user_companies,
+            language=language,
             metadata={"authenticated": True},
         )
 
@@ -330,6 +384,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             companies={requested_company.company_id: ["guest"]},
             active_company_id=requested_company.company_id,
         )
+
+        # Определяем язык пользователя
+        language = self._detect_user_language(request)
 
         return Context(
             user=user,
@@ -358,6 +415,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             platform="amocrm",
             active_company=requested_company,
             user_companies=[requested_company],
+            language=language,
             metadata={"anonymous": True}
         )
 
@@ -379,6 +437,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Получаем все компании пользователя
         user_companies = await self._get_user_companies(user)
 
+
+        # Определяем язык пользователя
+        language = self._detect_user_language(request)
+
         # Если у пользователя нет компаний
         if not user.companies:
             if allow_no_company:
@@ -389,6 +451,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     platform="frontend",
                     active_company=None,
                     user_companies=[],
+                    language=language,
                     metadata={"authenticated": True, "needs_company_creation": True},
                 )
             else:
@@ -424,6 +487,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             platform="frontend",
             active_company=active_company,
             user_companies=user_companies,
+            language=language,
             metadata={"authenticated": True, "allow_no_company": allow_no_company},
         )
 

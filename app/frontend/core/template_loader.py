@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 from starlette.responses import Response
 from app.core.context import get_context
+from app.core.translation_manager import get_translation_manager
 
 
 class TemplateLoader:
@@ -92,11 +93,58 @@ class TemplateLoader:
             
             return False
         
+        def t(key: str, **kwargs) -> str:
+            """Функция перевода для шаблонов"""
+            try:
+                manager = get_translation_manager()
+                return manager.t(key, **kwargs)
+            except Exception:
+                # Если что-то пошло не так, возвращаем ключ
+                return key
+        
+        def t_field(field_info: dict, attr: str = "title") -> str:
+            """Перевод атрибутов поля с поддержкой i18n ключей"""
+            try:
+                # Проверяем что field_info валидный
+                if not field_info or not isinstance(field_info, dict):
+                    return ""
+                
+                # Сначала пытаемся использовать i18n ключ
+                i18n_key = field_info.get(f"i18n_{attr}")
+                if i18n_key:
+                    manager = get_translation_manager()
+                    translation = manager.t(i18n_key)
+                    # Если перевод найден (не равен ключу), используем его
+                    if translation != i18n_key:
+                        return translation
+                
+                # Иначе возвращаем оригинальное значение
+                return field_info.get(attr, "")
+            except Exception:
+                # При ошибке возвращаем пустую строку или оригинальное значение
+                if field_info and isinstance(field_info, dict):
+                    return field_info.get(attr, "")
+                return ""
+        
+        def get_current_language() -> str:
+            """Получить текущий язык пользователя"""
+            try:
+                context = get_context()
+                if context and hasattr(context, 'language'):
+                    return context.language.value
+                return 'ru'
+            except Exception:
+                return 'ru'
+
         templates.env.globals['current_user'] = get_current_user
         templates.env.globals['current_company'] = get_current_company
         templates.env.globals['user_roles'] = user_roles
         templates.env.globals['user_has_role'] = user_has_role
         templates.env.globals['is_system_admin'] = is_system_admin
+        # Функции интернационализации
+        templates.env.globals['t'] = t
+        templates.env.globals['t_field'] = t_field
+        templates.env.globals['get_current_language'] = get_current_language
         
         return templates
     

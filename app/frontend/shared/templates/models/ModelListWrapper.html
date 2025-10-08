@@ -1,8 +1,8 @@
 {% set titles = {
-    'agent': 'Агенты',
-    'flow': 'Потоки', 
-    'task': 'Задачи',
-    'user': 'Пользователи'
+    'agent': t('models.agent.title_plural'),
+    'flow': t('models.flow.title_plural'), 
+    'task': t('models.task.title_plural'),
+    'user': t('models.user.title_plural')
 } %}
 
 <h1 class="header-title" id="page-title" hx-swap-oob="true">
@@ -19,13 +19,13 @@
                 </div>
                 <div>
                     <h5 class="mb-0 font-semibold">{{ model_type.title() }}</h5>
-                    <small class="text-muted">{{ count }} записей</small>
+                    <small class="text-muted">{{ count }} {{ t('models.common.records') }}</small>
                 </div>
             </div>
             <div class="btn-group">
                 <button class="btn btn-secondary btn-sm active">
                     <i class="bi bi-table"></i>
-                    Таблица
+                    {{ t('models.common.table_view') }}
                 </button>
                 <button class="btn btn-ghost btn-sm" 
                         hx-get="/frontend/models/{{ model_type }}?view=cards" 
@@ -33,7 +33,7 @@
                         hx-push-url="true"
                         hx-indicator="#content-loading">
                     <i class="bi bi-grid"></i>
-                    Карточки
+                    {{ t('models.common.cards_view') }}
                 </button>
                 <button class="btn btn-primary btn-sm" 
                         hx-get="/frontend/models/{{ model_type }}?view=form" 
@@ -41,7 +41,7 @@
                         hx-push-url="true"
                         hx-indicator="#content-loading">
                     <i class="bi bi-plus"></i>
-                    Создать
+                    {{ t('common.create') }}
                 </button>
             </div>
         </div>
@@ -77,9 +77,9 @@
             <div class="empty-state-icon">
                 <i class="bi bi-inbox display-4"></i>
             </div>
-            <div class="empty-state-title">Нет данных</div>
+            <div class="empty-state-title">{{ t('models.common.no_data') }}</div>
             <div class="empty-state-description">
-                Записи отсутствуют. Создайте первую запись.
+                {{ t('models.common.no_data_description') }}
             </div>
             <button class="btn btn-primary" 
                     hx-get="/frontend/models/{{ model_type }}?view=form" 
@@ -87,7 +87,7 @@
                     hx-push-url="true"
                     hx-indicator="#content-loading">
                 <i class="bi bi-plus"></i>
-                Создать {{ model_type }}
+                {{ t('common.create') }} {{ titles.get(model_type, model_type.title()) }}
             </button>
         </div>
         {% endif %}

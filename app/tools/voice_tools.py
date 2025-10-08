@@ -107,7 +107,7 @@ async def synthesize_speech(
         tempo: Скорость речи (0.75 - 1.75)
         
     Returns:
-        [AUDIO] блок со ссылкой на синтезированное аудио
+        Форматированное сообщение с информацией об аудио и ссылкой для скачивания
     """
     try:
         client = await get_default_cloud_voice_client()
@@ -153,8 +153,8 @@ async def synthesize_speech(
             tags=["synthesized", "speech", model_name]
         )
         
-        # Возвращаем простой формат с ID
-        return f"[AUDIO]{audio_record.audio_id}[/AUDIO]"
+        # Возвращаем форматированное сообщение через audio_processor
+        return audio_processor.format_audio_message(audio_record)
             
     except ValueError as e:
         return f"❌ Неверные параметры: {str(e)}"

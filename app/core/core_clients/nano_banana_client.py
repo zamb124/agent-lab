@@ -5,6 +5,11 @@ Nano Banana клиент для генерации изображений чер
 import logging
 import uuid
 from typing import List, Optional
+
+from ..proxy_setup import configure_proxy_from_settings
+
+configure_proxy_from_settings()
+
 import google.generativeai as genai
 
 from ..config import settings
