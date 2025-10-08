@@ -466,3 +466,57 @@ async def create_my_company(request: Request):
         # Для продакшена используем поддомен
         company_url = f"http://{subdomain}.{settings.server.domain}/frontend/dashboard"
         return RedirectResponse(url=company_url, status_code=302)
+
+
+@router.post("/remigrate/{entity_type}/{entity_id:path}")
+async def remigrate_entity(entity_type: str, entity_id: str):
+    """
+    Перемигрирует сущность из кода для отката к базовому состоянию.
+    
+    Args:
+        entity_type: Тип сущности (flow, agent, tool)
+        entity_id: ID сущности (например, app.flows.test_flow.test_flow_config)
+    """
+    context = get_context()
+    if not context or not context.active_company:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    migrator = Migrator()
+    company = context.active_company
+    
+    if entity_type == "flow":
+        await migrator.remigrate_flow(entity_id, company)
+        return {"status": "success", "message": f"Flow {entity_id} успешно перемигрирован"}
+    elif entity_type == "agent":
+        await migrator.remigrate_agent(entity_id, company)
+        return {"status": "success", "message": f"Агент {entity_id} успешно перемигрирован"}
+    elif entity_type == "tool":
+        await migrator.remigrate_tool(entity_id, company)
+        return {"status": "success", "message": f"Tool {entity_id} успешно перемигрирован"}
+    else:
+        raise HTTPException(status_code=400, detail=f"Неизвестный тип сущности: {entity_type}")
+
+
+@router.post("/remigrate-flow-with-deps/{flow_id:path}")
+async def remigrate_flow_with_dependencies(flow_id: str):
+    """
+    Перемигрирует flow со всеми зависимостями.
+    Полный сброс flow к базовому состоянию.
+    
+    Args:
+        flow_id: ID flow (например, app.flows.test_flow.test_flow_config)
+    """
+    context = get_context()
+    if not context or not context.active_company:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    migrator = Migrator()
+    company = context.active_company
+    
+    await migrator.migrate_for_company(
+        company=company,
+        flows=[flow_id],
+        with_dependencies=True
+    )
+    
+    return {"status": "success", "message": f"Flow {flow_id} и все зависимости успешно перемигрированы"}
