@@ -118,6 +118,36 @@ class BaseInterface(ABC):
         logger.info(f"📋 Команды для {self.platform_name} не требуют установки")
         return True
 
+    @classmethod
+    async def register(
+        cls,
+        flow_id: str,
+        username: str,
+        platform_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Регистрирует/инициализирует платформу для flow.
+        
+        Базовая реализация - для платформ без специальной регистрации.
+        Переопределяется в наследниках для платформ требующих настройки.
+        
+        Args:
+            flow_id: ID flow
+            username: Username на платформе
+            platform_config: Конфигурация платформы из FlowConfig
+        
+        Returns:
+            Результат регистрации
+        """
+        platform_name = cls.__name__.replace("Interface", "").lower()
+        logger.info(f"📋 Платформа {platform_name} не требует регистрации")
+        return {
+            "success": True,
+            "platform": platform_name,
+            "mode": "direct",
+            "registered": False
+        }
+
     async def create_task(self, message: Message, flow_id: str) -> str:
         """
         Создает задачу в БД для TaskProcessor.

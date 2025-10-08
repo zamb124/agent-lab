@@ -2,12 +2,15 @@
 API для работы с флоу в Builder.
 """
 
+import logging
 from fastapi import APIRouter, HTTPException
 from typing import List, Optional, Dict, Any
 import uuid
 
 from app.models import FlowConfig
 from app.frontend.dependencies import StorageDep, CanvasServiceDep
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/flows", tags=["builder-flows"])
 
@@ -125,7 +128,54 @@ async def update_flow(
     # Валидируем через модель - валидаторы автоматически преобразуют типы
     validated_flow = FlowConfig(**flow_dict)
     
+    # Если обновили platforms - проверяем уникальность username
+    if "platforms" in updates:
+        for platform_name, platform_config in updates["platforms"].items():
+            username = platform_config.get("username")
+            if not username:
+                continue
+            
+            # Ищем все flow с этим username на этой платформе
+            all_keys = await storage.list_by_prefix("", limit=1000, force_global=True)
+            for key in all_keys:
+                if ":flow:" not in key:
+                    continue
+                
+                other_flow_data = await storage.get(key, force_global=True)
+                if not other_flow_data:
+                    continue
+                
+                other_flow = FlowConfig.model_validate_json(other_flow_data)
+                if other_flow.flow_id == flow_id:
+                    continue
+                
+                other_platform_config = other_flow.platforms.get(platform_name)
+                if other_platform_config and other_platform_config.get("username") == username:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Username {username} уже используется в flow {other_flow.flow_id} ({other_flow.name})"
+                    )
+    
     await storage.set_flow_config(validated_flow)
+    
+    # Если обновили platforms - регистрируем их
+    if "platforms" in updates:
+        from app.interfaces.factory import InterfaceFactory
+        
+        factory = InterfaceFactory()
+        
+        for platform_name, platform_config in updates["platforms"].items():
+            username = platform_config.get("username")
+            if not username:
+                continue
+            
+            registration_result = await factory.register_platform(
+                platform=platform_name,
+                username=username,
+                flow_id=validated_flow.flow_id
+            )
+            logger.info(f"📋 Регистрация {platform_name} для {validated_flow.flow_id}: {registration_result}")
+    
     return validated_flow
 
 

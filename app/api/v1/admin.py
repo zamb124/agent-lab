@@ -520,3 +520,31 @@ async def remigrate_flow_with_dependencies(flow_id: str):
     )
     
     return {"status": "success", "message": f"Flow {flow_id} и все зависимости успешно перемигрированы"}
+
+
+@router.post("/reload-telegram-bots")
+async def reload_telegram_bots():
+    """
+    Перезагружает список Telegram ботов в long polling режиме.
+    Используется после добавления новых платформ.
+    Работает только в локальном окружении (ENV=local).
+    """
+    from app.core.config import settings
+    
+    if settings.server.env != "local":
+        raise HTTPException(
+            status_code=400,
+            detail="Telegram polling доступен только в локальном окружении"
+        )
+    
+    try:
+        from app.services.telegram_poller import telegram_poller
+        await telegram_poller.reload()
+        return {
+            "status": "success",
+            "message": f"Telegram polling перезагружен. Активных ботов: {len(telegram_poller.active_bots)}",
+            "bots": list(telegram_poller.active_bots.keys())
+        }
+    except Exception as e:
+        logger.error(f"Ошибка перезагрузки telegram polling: {e}")
+        raise HTTPException(status_code=500, detail=f"Ошибка перезагрузки: {str(e)}")
