@@ -221,6 +221,11 @@ class SessionListItem(BaseModel):
         title="Сообщений",
         description="Количество сообщений в сессии"
     )
+    first_message: Optional[str] = Field(
+        default=None,
+        title="Первое сообщение",
+        description="Первое сообщение пользователя в сессии"
+    )
     created_at: Optional[datetime] = Field(
         default=None,
         title="Создано",

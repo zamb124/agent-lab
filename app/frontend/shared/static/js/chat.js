@@ -657,6 +657,77 @@ class ChatManager {
         }
     }
 
+    // Открыть существующую сессию чата
+    async openExistingSession(agent_id, session_id) {
+        console.log('🔵 Открытие существующей сессии:', { agent_id, session_id });
+        
+        if (!agent_id || !session_id) {
+            console.error('❌ Необходимы agent_id и session_id для открытия существующей сессии');
+            return;
+        }
+
+        this.activeAgents.add(agent_id);
+        this.currentAgent = agent_id;
+        this.currentSession = session_id;
+
+        this.agentSessions[agent_id] = session_id;
+        this.saveAgentSessions();
+
+        await this.updateChatHeader();
+        this.updateAgentsPanel();
+
+        this.showChat();
+
+        this.connectWebSocket();
+
+        await this.loadSessionHistory(session_id);
+    }
+
+    // Загрузка истории сообщений для сессии
+    async loadSessionHistory(session_id) {
+        try {
+            console.log('📜 Загрузка истории для сессии:', session_id);
+            
+            const response = await fetch(`/api/v1/history/sessions/${session_id}/messages?limit=100`);
+            
+            if (!response.ok) {
+                throw new Error(`Ошибка загрузки истории: ${response.status}`);
+            }
+
+            const history = await response.json();
+            
+            this.clearChatMessages();
+
+            if (history.messages && history.messages.length > 0) {
+                for (const msg of history.messages) {
+                    if (msg.role === 'user') {
+                        this.addUserMessage(msg.content, msg.timestamp, `history_${msg.timestamp}`);
+                    } else if (msg.role === 'assistant') {
+                        if (msg.content) {
+                            this.addAgentMessage({
+                                content: msg.content,
+                                timestamp: msg.timestamp,
+                                message_type: 'text',
+                                message_id: `history_${msg.timestamp}`
+                            });
+                        }
+                    }
+                }
+                
+                console.log(`✅ Загружено ${history.messages.length} сообщений из истории`);
+            } else {
+                console.log('📭 История сессии пуста');
+            }
+        } catch (error) {
+            console.error('❌ Ошибка загрузки истории сессии:', error);
+            this.addAgentMessage({
+                content: 'Не удалось загрузить историю сообщений',
+                timestamp: new Date().toISOString(),
+                message_type: 'text'
+            });
+        }
+    }
+
     // Показать чат
     showChat() {
         const widget = document.getElementById('chat-widget');

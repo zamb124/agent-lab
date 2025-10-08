@@ -31,6 +31,7 @@ from app.frontend.pages import auth as auth_pages
 from app.frontend.pages import dashboard as dashboard_pages
 from app.frontend.pages import public as public_pages
 from app.frontend.modules.chat import router as chat_module
+from app.frontend.modules.chats.router import router as chats_module
 from app.frontend.modules.builder import router as builder_module
 from app.frontend.modules.billing.router import router as billing_module
 from app.frontend.modules.admin.router import router as admin_module
@@ -284,6 +285,7 @@ app.include_router(dashboard_pages.router, tags=["dashboard-pages"])
 
 # Frontend Modules
 app.include_router(chat_module.router, tags=["chat-module"])
+app.include_router(chats_module, tags=["chats-module"])
 app.include_router(builder_module.router, tags=["builder-module"])
 app.include_router(billing_module, tags=["billing-module"])
 app.include_router(admin_module, tags=["admin-module"])

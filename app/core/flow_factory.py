@@ -22,7 +22,6 @@ from app.models.history_models import (
 )
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from app.core.config import get_settings
-
 logger = logging.getLogger(__name__)
 
 
@@ -164,12 +163,9 @@ class FlowFactory:
         
         flow_name = None
         if flow_id:
-            try:
-                flow_config = await self.storage.get_flow_config(flow_id)
-                if flow_config and hasattr(flow_config, 'name'):
-                    flow_name = flow_config.name
-            except Exception as e:
-                logger.warning(f"⚠️ Не удалось получить имя flow {flow_id}: {e}")
+            flow_config = await self.storage.get_flow_config(flow_id)
+            if flow_config and hasattr(flow_config, 'name'):
+                flow_name = flow_config.name
         
         logger.info(
             f"✅ Загружено {len(all_messages)} сообщений из {checkpoint_count} checkpoint'ов для {session_id}"
@@ -243,15 +239,13 @@ class FlowFactory:
                 continue
             
             message_count = await self._get_session_message_count(session.session_id)
+            first_message = await self._get_first_user_message(session.session_id)
             
             flow_name = None
             if session.flow_id:
-                try:
-                    flow_config = await self.storage.get_flow_config(session.flow_id)
-                    if flow_config and hasattr(flow_config, 'name'):
-                        flow_name = flow_config.name
-                except Exception:
-                    pass
+                flow_config = await self.storage.get_flow_config(session.flow_id)
+                if flow_config and hasattr(flow_config, 'name'):
+                    flow_name = flow_config.name
             
             user_name = None
             if session.user_id:
@@ -279,6 +273,7 @@ class FlowFactory:
                 user_name=user_name,
                 status=session.status.value,
                 message_count=message_count,
+                first_message=first_message,
                 created_at=session.created_at,
                 last_activity=session.last_activity,
                 metadata=session.metadata
@@ -434,3 +429,36 @@ class FlowFactory:
                     message_count = max(message_count, len(messages))
         
             return message_count
+
+    async def _get_first_user_message(self, session_id: str) -> Optional[str]:
+        """
+        Получает первое сообщение пользователя в сессии.
+        
+        Args:
+            session_id: ID сессии
+            
+        Returns:
+            Текст первого сообщения пользователя или None
+        """
+
+        
+        settings = get_settings()
+        config = {"configurable": {"thread_id": session_id}}
+        
+        checkpointer_cm = AsyncPostgresSaver.from_conn_string(settings.database.checkpointer_url)
+        async with checkpointer_cm as checkpointer:
+            oldest_checkpoint = None
+            async for checkpoint_tuple in checkpointer.alist(config, limit=100):
+                if checkpoint_tuple and checkpoint_tuple.checkpoint:
+                    oldest_checkpoint = checkpoint_tuple
+            
+            if oldest_checkpoint:
+                channel_values = oldest_checkpoint.checkpoint.get("channel_values", {})
+                messages = channel_values.get("messages", [])
+                
+                for msg in messages:
+                    if isinstance(msg, HumanMessage):
+                        content = msg.content or ""
+                        return content[:60] if len(content) > 60 else content
+        
+        return None
