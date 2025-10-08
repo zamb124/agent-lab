@@ -305,47 +305,45 @@ class AmoCRMInterface(BaseInterface):
 
     async def send_typing_notification(self, session_id: str, is_typing: bool):
         """Отправка уведомления о печати в AmoCRM"""
-        try:
-            # Получаем метаданные сессии
-            session = await self.get_session(session_id)
-            if not session:
-                logger.warning(f"❌ Сессия {session_id} не найдена")
-                return
 
-            chat_id = session.metadata.get("chat_id")
-            talk_id = session.metadata.get("talk_id")
+        # Получаем метаданные сессии
+        session = await self.get_session(session_id)
+        if not session:
+            logger.warning(f"❌ Сессия {session_id} не найдена")
+            return
 
-            if not chat_id:
-                logger.warning(f"❌ chat_id не найден в метаданных сессии {session_id}")
-                return
+        chat_id = session.metadata.get("chat_id")
+        talk_id = session.metadata.get("talk_id")
 
-            if not talk_id:
-                logger.warning(f"❌ talk_id не найден в метаданных сессии {session_id}")
-                return
+        if not chat_id:
+            logger.warning(f"❌ chat_id не найден в метаданных сессии {session_id}")
+            return
 
-            # Получаем клиент AmoCRM
-            access_token = getattr(settings, 'amocrm', None) and settings.amocrm.access_token
-            if not access_token:
-                logger.error("❌ AMOCRM_ACCESS_TOKEN не настроен в settings")
-                return
+        if not talk_id:
+            logger.warning(f"❌ talk_id не найден в метаданных сессии {session_id}")
+            return
 
-            client = get_amocrm_client(subdomain=self.subdomain, access_token=access_token)
+        # Получаем клиент AmoCRM
+        access_token = getattr(settings, 'amocrm', None) and settings.amocrm.access_token
+        if not access_token:
+            logger.error("❌ AMOCRM_ACCESS_TOKEN не настроен в settings")
+            return
 
-            if is_typing:
-                # Запускаем индикатор "печатает" с автоматической отменой через 5 секунд
-                await client.start_typing_indicator(
-                    chat_id=chat_id,
-                    crm_dialog_id=int(talk_id),
-                    max_duration=5.0
-                )
-                logger.info(f"🔵 Запущен индикатор 'печатает' в чат {chat_id} (сессия {session_id})")
-            else:
-                # Останавливаем индикатор "печатает"
-                await client.stop_typing_indicator(chat_id)
-                logger.info(f"🔴 Остановлен индикатор 'печатает' в чат {chat_id} (сессия {session_id})")
+        client = get_amocrm_client(subdomain=self.subdomain, access_token=access_token)
 
-        except Exception as e:
-            logger.error(f"❌ Ошибка управления индикатором 'печатает' для сессии {session_id}: {e}", exc_info=True)
+        if is_typing:
+            # Запускаем индикатор "печатает" с автоматической отменой через 5 секунд
+            await client.start_typing_indicator(
+                chat_id=chat_id,
+                crm_dialog_id=int(talk_id),
+                max_duration=5.0
+            )
+            logger.info(f"🔵 Запущен индикатор 'печатает' в чат {chat_id} (сессия {session_id})")
+        else:
+            # Останавливаем индикатор "печатает"
+            await client.stop_typing_indicator(chat_id)
+            logger.info(f"🔴 Остановлен индикатор 'печатает' в чат {chat_id} (сессия {session_id})")
+
 
 
 
