@@ -20,7 +20,7 @@ from app.core.config import settings
 from app.core.checkpointer import init_checkpointer, close_checkpointer
 from app.db.database import create_tables, close_db
 from app.core.migrator import Migrator
-from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads, history, payments, admin_payments
+from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads, history, payments, admin_payments, variables
 from app.frontend.api import models as frontend_models
 from app.frontend.api import flows as frontend_flows
 from app.frontend.api import agents as frontend_agents
@@ -267,6 +267,7 @@ app.include_router(leads.router, prefix="/api/v1", tags=["leads"])
 app.include_router(history.router, tags=["history"])
 app.include_router(payments.router, prefix="/api/v1", tags=["payments"])
 app.include_router(admin_payments.router, prefix="/api/v1", tags=["admin-payments"])
+app.include_router(variables.router, prefix="/api/v1", tags=["variables"])
 
 # Frontend API (JSON CRUD)
 app.include_router(frontend_models.router, tags=["frontend-models"])  # Убираем дублирующий prefix
