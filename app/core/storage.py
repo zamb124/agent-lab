@@ -301,6 +301,8 @@ class Storage:
         """Получает конфигурацию агента"""
         key = f"agent:{agent_id}"
         data = await self.get(key)
+        if data is None:
+            return None
         return AgentConfig.model_validate_json(data)
 
     async def set_agent_config(self, config: AgentConfig) -> bool:
