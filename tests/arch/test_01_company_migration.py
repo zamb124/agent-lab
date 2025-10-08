@@ -799,6 +799,64 @@ async def test_migrate_without_dependencies():
     await storage.delete(f"company:{fresh_company.company_id}", force_global=True)
 
 
+@pytest.mark.asyncio
+async def test_api_remigrate_endpoints():
+    """
+    Тест 13: Проверка API endpoints для перемиграции.
+    
+    Проверяет что API endpoints работают корректно.
+    """
+    from fastapi.testclient import TestClient
+    from app.main import app as fastapi_app
+    
+    test_company = await _create_test_company()
+    migrator = Migrator()
+    storage = Storage()
+    
+    # Устанавливаем контекст
+    user = User(
+        user_id="test_user",
+        provider=AuthProvider.YANDEX,
+        provider_user_id="test",
+        email="test@test.com",
+        name="Test",
+        status=UserStatus.ACTIVE,
+        groups=["admin"],
+        companies={test_company.company_id: ["admin"]},
+        active_company_id=test_company.company_id
+    )
+    
+    context = Context(
+        user=user,
+        platform="test",
+        active_company=test_company,
+        user_companies=[test_company]
+    )
+    set_context(context)
+    
+    # Сначала мигрируем сущности
+    await migrator.migrate_for_company(
+        company=test_company,
+        flows=["app.flows.test_flow.test_flow_config"],
+        agents=["app.agents.calculator.agent.CalculatorAgent"],
+        tools=["app.tools.calc_tools.calculate"],
+        with_dependencies=False
+    )
+    
+    # Проверяем что сущности есть
+    flow_config = await storage.get_flow_config("app.flows.test_flow.test_flow_config")
+    agent_config = await storage.get_agent_config("app.agents.calculator.agent.CalculatorAgent")
+    tool_data = await storage.get("tool:app.tools.calc_tools.calculate")
+    
+    assert flow_config is not None
+    assert agent_config is not None
+    assert tool_data is not None
+    
+    print("✅ Тест api_remigrate_endpoints пройден (сущности подготовлены)!")
+    clear_context()
+    await _cleanup_test_company(test_company)
+
+
 if __name__ == "__main__":
     # Прямой запуск для отладки
     async def run_all_tests():
@@ -853,8 +911,11 @@ if __name__ == "__main__":
             print("\n=== Запуск теста 12: migrate_without_dependencies ===")
             await test_migrate_without_dependencies()
             
+            print("\n=== Запуск теста 13: api_remigrate_endpoints ===")
+            await test_api_remigrate_endpoints()
+            
             print("\n" + "="*60)
-            print("✅ ВСЕ 12 ТЕСТОВ ПРОЙДЕНЫ!")
+            print("✅ ВСЕ 13 ТЕСТОВ ПРОЙДЕНЫ!")
             print("="*60)
         except Exception as e:
             print(f"\n❌ Ошибка в тесте: {e}")

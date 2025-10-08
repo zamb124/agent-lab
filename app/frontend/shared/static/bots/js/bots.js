@@ -715,7 +715,10 @@
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            if (document.getElementById('add-platform-modal').style.display === 'flex') {
+            const remigrateModal = document.getElementById('remigrate-confirm-modal');
+            if (remigrateModal && remigrateModal.style.display === 'flex') {
+                window.closeRemigrateModal();
+            } else if (document.getElementById('add-platform-modal').style.display === 'flex') {
                 window.closeAddPlatformModal();
             } else if (currentBotModal) {
                 window.closeBotModal();
@@ -729,7 +732,10 @@
             window.closeAddPlatformModal();
         }
         
-        // Закрытие dropdown платформ при клике вне его области
+        if (e.target.id === 'remigrate-confirm-modal') {
+            window.closeRemigrateModal();
+        }
+        
         const dropdown = document.getElementById('platform-dropdown');
         const customSelect = document.getElementById('platform-type-select');
         
@@ -740,5 +746,79 @@
             }
         }
     });
+    
+    let pendingRemigrateFlowId = null;
+    
+    window.remigrateFlowWithDeps = function(flowId) {
+        pendingRemigrateFlowId = flowId;
+        const modal = document.getElementById('remigrate-confirm-modal');
+        const confirmBtn = document.getElementById('confirm-remigrate-btn');
+        
+        if (modal) {
+            modal.style.display = 'flex';
+        }
+        
+        if (confirmBtn) {
+            confirmBtn.onclick = () => confirmRemigrate();
+        }
+    };
+    
+    window.closeRemigrateModal = function() {
+        const modal = document.getElementById('remigrate-confirm-modal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        pendingRemigrateFlowId = null;
+    };
+    
+    window.confirmRemigrate = async function() {
+        if (!pendingRemigrateFlowId) {
+            return;
+        }
+        
+        const flowId = pendingRemigrateFlowId;
+        const modal = document.getElementById('remigrate-confirm-modal');
+        
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        
+        if (window.app && window.app.showNotification) {
+            window.app.showNotification('Выполняется сброс к коду...', 'info');
+        }
+        
+        const response = await fetch(`/api/v1/admin/remigrate-flow-with-deps/${flowId}`, { 
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            if (window.app && window.app.showNotification) {
+                window.app.showNotification('Ошибка: ' + (errorData.detail || `HTTP ${response.status}`), 'danger');
+            }
+            return;
+        }
+        
+        const data = await response.json();
+        if (window.app && window.app.showNotification) {
+            window.app.showNotification(data.message, 'success');
+        }
+        
+        setTimeout(async () => {
+            const modalDetails = document.getElementById('modal-bot-details');
+            if (modalDetails) {
+                modalDetails.innerHTML = '<div class="loading-indicator"><div class="spinner"></div><span>Перезагрузка...</span></div>';
+                
+                const detailsResponse = await fetch(`/frontend/bots/${flowId}/details`);
+                const html = await detailsResponse.text();
+                modalDetails.innerHTML = html;
+                
+                initBotSettings();
+            }
+        }, 500);
+    };
 
 })();

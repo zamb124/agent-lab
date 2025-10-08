@@ -11,6 +11,12 @@
                 <i class="bi bi-chat-dots"></i>
                 Тестировать
             </button>
+            <button class="btn btn-warning btn-sm" 
+                    onclick="remigrateFlowWithDeps('{{ bot.flow_id }}')"
+                    title="Сбросить flow и все зависимости к коду">
+                <i class="bi bi-arrow-counterclockwise"></i>
+                Сброс к коду
+            </button>
             <button class="btn-icon" onclick="toggleBotModalFullscreen()" title="На весь экран">
                 <i class="bi bi-fullscreen"></i>
             </button>
