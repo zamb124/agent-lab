@@ -115,12 +115,9 @@ class CloudVoiceClient:
     
     async def _save_token_to_db(self, token_config: CloudVoiceTokenConfig):
         """Сохраняет токен в БД"""
-        try:
-            token_config.updated_at = datetime.now(timezone.utc)
-            await self._storage.set(self._token_key, token_config.model_dump_json())
-            logger.info("✅ Токен Cloud Voice сохранен в БД")
-        except Exception as e:
-            logger.error(f"❌ Ошибка сохранения токена в БД: {e}")
+        token_config.updated_at = datetime.now(timezone.utc)
+        await self._storage.set(self._token_key, token_config.model_dump_json())
+        logger.info("✅ Токен Cloud Voice сохранен в БД")
     
     async def _get_access_token(self) -> str:
         """
@@ -566,14 +563,11 @@ async def get_default_cloud_voice_client() -> Optional[CloudVoiceClient]:
     global _default_cloud_voice_client
 
     if _default_cloud_voice_client is None:
-        try:
-            if hasattr(settings, "cloud_voice") and settings.cloud_voice.enabled:
-                _default_cloud_voice_client = CloudVoiceClientFactory.create_client()
-                logger.info("✅ Инициализирован дефолтный Cloud Voice клиент")
-            else:
-                logger.info("ℹ️ Cloud Voice не настроен в конфигурации")
-        except Exception as e:
-            logger.error(f"❌ Ошибка инициализации Cloud Voice клиента: {e}")
+        if hasattr(settings, "cloud_voice") and settings.cloud_voice.enabled:
+            _default_cloud_voice_client = CloudVoiceClientFactory.create_client()
+            logger.info("✅ Инициализирован дефолтный Cloud Voice клиент")
+        else:
+            logger.info("ℹ️ Cloud Voice не настроен в конфигурации")
             return None
 
     return _default_cloud_voice_client
