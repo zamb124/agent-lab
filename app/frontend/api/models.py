@@ -55,10 +55,10 @@ async def show_inline_modal(request_data: Dict[str, Any]) -> HTMLResponse:
 
     # Создаем модель
     model = ModelClass(**model_data)
-    
+
     # Получаем значение поля
     field_value = getattr(model, field_name, None)
-    
+
     # Сериализуем значение поля в JSON
     try:
         if hasattr(field_value, 'model_dump'):
@@ -97,7 +97,7 @@ async def show_inline_modal(request_data: Dict[str, Any]) -> HTMLResponse:
 @router.get("/{model_type}")
 async def get_models(request: Request, model_type: str, view: str = "table") -> HTMLResponse:
     """Получить список моделей в указанном виде"""
-    
+
     # При прямом переходе (не HTMX) возвращаем dashboard с preload_url
     if not is_htmx_request(request):
         return templates.TemplateResponse(
@@ -107,7 +107,7 @@ async def get_models(request: Request, model_type: str, view: str = "table") -> 
                 "preload_url": f"/frontend/models/{model_type}?view={view}",
             }
         )
-    
+
     # При HTMX запросе возвращаем фрагмент
     storage = Storage()
 
@@ -145,26 +145,26 @@ async def get_model(
     model_type: str, model_id: str, view: str = "table", parent_view_mode: str = None
 ) -> HTMLResponse:
     """Получить конкретную модель как HTML"""
-    
+
     # Специальный случай: создание новой модели
     if model_id == "new":
         ModelClass = ModelRegistry.get_model_class(model_type)
-        
+
         # Создаем пустую модель с дефолтными значениями
         model = ModelClass()
-        
+
         # Для формы создания компании добавляем HTMX атрибуты
         if model_type == "create_company_form":
             # Рендерим только форму с HTMX атрибутами
             html = f"""
-            <form hx-post="/api/v1/admin/create-my-company" 
+            <form hx-post="/api/v1/admin/create-my-company"
                   hx-ext="json-enc"
                   hx-trigger="submit"
                   class="space-y-6">
                 {model.render(view_mode="form")}
-                
+
                 <div class="mt-6">
-                    <button type="submit" 
+                    <button type="submit"
                             class="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-lg
                                    transition-colors duration-200 focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
                                    disabled:opacity-50 disabled:cursor-not-allowed">
@@ -183,15 +183,15 @@ async def get_model(
             </form>
             """
             return HTMLResponse(content=html)
-        
+
         # Для остальных моделей - обычный рендер
         kwargs = {"model_type": model_type, "model_id": "new"}
         if parent_view_mode:
             kwargs["parent_view_mode"] = parent_view_mode
-        
+
         html = model.render(view_mode=view, **kwargs)
         return HTMLResponse(content=html)
-    
+
     # Обычный случай: загрузка существующей модели
     storage = Storage()
     key = f"{model_type}:{model_id}"
@@ -271,14 +271,14 @@ async def update_model(
         # Если поле BaseModel и пришла строка - парсим
         if field_name in ModelClass.model_fields:
             field_info = ModelClass.model_fields[field_name]
-            
+
             # Запрещаем изменение frozen полей
             if field_info.frozen:
                 raise HTTPException(
-                    status_code=400, 
+                    status_code=400,
                     detail=f"Поле '{field_name}' является неизменяемым (frozen) и не может быть обновлено"
                 )
-                
+
             annotation = field_info.annotation
 
             # Убираем Optional
@@ -316,10 +316,9 @@ async def update_model(
                         parsed_value = json.loads(field_value)
                         existing_model_data[field_name] = parsed_value
                     # Проверяем, является ли это List[BaseModel]
-                    elif (hasattr(annotation, '__origin__') and 
-                          annotation.__origin__ is list and 
-                          len(annotation.__args__) > 0 and 
-                          inspect.isclass(annotation.__args__[0]) and
+                    elif (hasattr(annotation, '__origin__') and
+                          annotation.__origin__ is list and
+                          len(annotation.__args__) > 0 and
                           issubclass(annotation.__args__[0], BaseModel)):
                         parsed_value = json.loads(field_value)
                         existing_model_data[field_name] = parsed_value

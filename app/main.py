@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.core.checkpointer import init_checkpointer, close_checkpointer
 from app.db.database import create_tables, close_db
 from app.core.migrator import Migrator
+from app.api.amocrm import router as amocrm_router
 from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads, history, payments, admin_payments, variables
 from app.frontend.api import models as frontend_models
 from app.frontend.api import flows as frontend_flows
@@ -164,12 +165,12 @@ async def lifespan(app: FastAPI):
         translation_manager = get_translation_manager()
         await translation_manager.initialize()
         logger.info("✅ Система переводов инициализирована")
-        
+
         # Инициализация платежных провайдеров
         logger.info("💳 Инициализация платежных провайдеров...")
         PaymentProviderFactory.initialize(settings)
         logger.info("✅ Платежные провайдеры инициализированы")
-        
+
         # Запуск синхронизации транзакций (раз в час)
         logger.info("🔄 Запуск фоновой синхронизации транзакций...")
         payment_sync_worker = PaymentSyncWorker(sync_interval=3600)  # Каждый час
@@ -182,7 +183,7 @@ async def lifespan(app: FastAPI):
             task_processor = TaskProcessor()
             asyncio.create_task(task_processor.start())
             logger.info("✅ Воркер задач запущен")
-            
+
             logger.info("🤖 Запуск Telegram long polling для локальной разработки...")
             await telegram_poller.start()
             logger.info("✅ Telegram polling запущен")
@@ -225,6 +226,9 @@ app = FastAPI(
     version="0.1.0",
     debug=settings.server.debug,
     lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
 )
 
 # Proxy headers middleware (для правильной работы за nginx)
@@ -296,6 +300,7 @@ app.include_router(variables_module, tags=["variables-module"])
 # WebSockets
 app.include_router(websocket_notifications.router, tags=["websocket-notifications"])
 app.include_router(websocket_chat.router, prefix="/frontend/chat", tags=["websocket-chat"])
+app.include_router(amocrm_router, prefix="/api/amocrm", tags=["amocrm"])
 
 # Основные статические файлы
 static_dir = Path(__file__).parent / "frontend" / "shared" / "static"

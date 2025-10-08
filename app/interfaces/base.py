@@ -30,6 +30,7 @@ class Message:
     platform: str
     metadata: Dict[str, Any] = None  # Дополнительные данные (кнопки, raw_data и т.д.)
     files: List[Dict[str, Any]] = None  # Информация о прикрепленных файлах
+    context: Dict[str, Any] = None  # Контекст сообщения (импортированные сообщения и т.д.)
 
 
 class BaseInterface(ABC):
@@ -171,16 +172,16 @@ class BaseInterface(ABC):
             if session_config.status == SessionStatus.PROCESSING:
                 # Ищем pending задачу для этой сессии
                 pending_task = await storage.find_pending_task(message.session_id, flow_id)
-                
+
                 if pending_task:
                     # Приклеиваем сообщение к существующей pending задаче
                     logger.info(f"🔄 Найдена pending задача {pending_task.task_id}, приклеиваем сообщение")
-                    
+
                     old_message = pending_task.input_data.get("message", "")
                     new_message = f"{old_message} | {message.content}"
                     pending_task.input_data["message"] = new_message
                     pending_task.input_data["message_count"] = pending_task.input_data.get("message_count", 1) + 1
-                    
+
                     await storage.set_task_config(pending_task)
                     logger.info(f"✅ Приклеили сообщение к задаче {pending_task.task_id}")
                     return pending_task.task_id
@@ -229,6 +230,34 @@ class BaseInterface(ABC):
         # Обогащаем контекст session_id если его нет
         context.session_id = message.session_id or context.session_id
 
+        # Добавляем импортированные сообщения в context.state.messages если есть
+        if context.state is None:
+            context.state = {}
+
+        # Получаем импортированные сообщения из context сообщения
+        imported_messages = []
+        if message.context and "imported_messages" in message.context:
+            imported_messages = message.context["imported_messages"]
+
+            # Инициализируем messages если нет
+            if "messages" not in context.state:
+                context.state["messages"] = []
+
+            # Мержим сообщения по external_id чтобы избежать дублирования
+            existing_messages = context.state["messages"]
+            existing_external_ids = {msg.get("external_id") for msg in existing_messages if msg.get("external_id")}
+
+            # Добавляем только новые сообщения
+            new_messages = []
+            for msg in imported_messages:
+                if msg.get("external_id") not in existing_external_ids:
+                    new_messages.append(msg)
+                    existing_external_ids.add(msg.get("external_id"))
+
+            # Добавляем новые сообщения в начало истории
+            context.state["messages"] = new_messages + existing_messages
+            logger.info(f"📚 Добавлено {len(new_messages)} новых сообщений из {len(imported_messages)} импортированных в context.state.messages")
+
         task_config = TaskConfig(
             task_id=task_id,
             flow_id=flow_id,
@@ -272,6 +301,10 @@ class BaseInterface(ABC):
 
         # Создаем новую сессию
         return await self._create_new_session(user_id, flow_id, metadata or {})
+
+    async def get_session(self, session_id: str) -> Optional[SessionConfig]:
+        """Получает сессию по session_id"""
+        return await self.storage.get_session_config(session_id)
 
     async def _find_active_session(
         self, user_id: str, flow_id: str
@@ -365,7 +398,7 @@ class BaseInterface(ABC):
 🤖 **Доступные команды:**
 
 /clear - Очистить контекст диалога
-/help - Показать эту справку  
+/help - Показать эту справку
 /start - Начать новый диалог
 
 Просто напишите сообщение для общения с ИИ агентом!
@@ -531,24 +564,24 @@ class BaseInterface(ABC):
     def extract_outgoing_audio_from_message(self, message_content: str) -> tuple[str, List[Dict[str, Any]]]:
         """
         Извлекает [AUDIO] блоки из исходящего сообщения агента.
-        
+
         Args:
             message_content: Содержимое сообщения от агента
-            
+
         Returns:
             (текст_без_аудио, список_аудиофайлов)
         """
-        
-        
+
+
         # Извлекаем аудио блоки
         audio_files = AudioProcessor.extract_audio_info_from_message(message_content)
-        
+
         if not audio_files:
             return message_content, []
-        
+
         # Удаляем [AUDIO] блоки из текста сообщения
         import re
         pattern = r"\[AUDIO\].*?\[/AUDIO\]"
         clean_text = re.sub(pattern, "", message_content, flags=re.DOTALL).strip()
-        
+
         return clean_text, audio_files
