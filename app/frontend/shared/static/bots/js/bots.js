@@ -313,6 +313,23 @@
                 
                 if (!tokenResponse.ok) {
                     console.warn('Не удалось сохранить токен Telegram');
+                } else {
+                    // Перезагружаем Telegram polling
+                    try {
+                        const reloadResponse = await fetch('/api/v1/admin/reload-telegram-bots', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${window.app.authToken}`
+                            }
+                        });
+                        
+                        if (reloadResponse.ok) {
+                            const reloadData = await reloadResponse.json();
+                            console.log('✅ Telegram polling перезагружен:', reloadData);
+                        }
+                    } catch (reloadError) {
+                        console.warn('⚠️ Ошибка перезагрузки telegram polling:', reloadError);
+                    }
                 }
             }
             
@@ -596,23 +613,7 @@
             }
             currentFlow.platforms[platformType] = platformConfig;
 
-            // Сохраняем обновленную конфигурацию
-            const updateResponse = await fetch(`/frontend/api/flows/${botId}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${window.app.authToken}`
-                },
-                body: JSON.stringify({
-                    platforms: currentFlow.platforms
-                })
-            });
-
-            if (!updateResponse.ok) {
-                throw new Error('Не удалось сохранить платформу');
-            }
-
-            // Сохраняем токен отдельно, если есть
+            // 1. Сначала сохраняем токен (если есть)
             if (token && username && !document.getElementById('platform-token').disabled) {
                 const tokenResponse = await fetch('/api/v1/admin/tokens', {
                     method: 'POST',
@@ -628,8 +629,27 @@
                 });
                 
                 if (!tokenResponse.ok) {
-                    console.warn('Не удалось сохранить токен отдельно');
+                    const error = await tokenResponse.json();
+                    throw new Error(error.detail || 'Не удалось сохранить токен');
                 }
+                
+                console.log('✅ Токен сохранен');
+            }
+
+            // 2. Потом обновляем platforms в flow (это вызовет регистрацию)
+            const updateResponse = await fetch(`/frontend/api/flows/${botId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.app.authToken}`
+                },
+                body: JSON.stringify({
+                    platforms: currentFlow.platforms
+                })
+            });
+
+            if (!updateResponse.ok) {
+                throw new Error('Не удалось сохранить платформу');
             }
 
             showNotification(`Платформа ${platformType} добавлена`, 'success');

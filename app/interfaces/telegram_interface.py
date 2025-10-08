@@ -534,7 +534,6 @@ class TelegramInterface(BaseInterface):
         """Получает токен бота для flow из БД"""
         username = platform_config.get("username", f"bot_{flow_id}")
 
-        # Ищем токен в БД: token:telegram:username
         storage = Storage()
         token_key = f"token:telegram:{username}"
 
@@ -547,6 +546,117 @@ class TelegramInterface(BaseInterface):
         else:
             logger.error(f"❌ Не найден токен в БД: {token_key}")
             return None
+
+    @staticmethod
+    async def get_bot_info(bot_token: str) -> Optional[Dict]:
+        """Получает информацию о боте через getMe API"""
+        url = f"https://api.telegram.org/bot{bot_token}/getMe"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url)
+            
+            if response.status_code != 200:
+                logger.error(f"❌ getMe API error: {response.status_code}")
+                return None
+            
+            data = response.json()
+            if not data.get("ok"):
+                logger.error(f"❌ getMe API returned not ok: {data}")
+                return None
+            
+            return data["result"]
+
+    @classmethod
+    async def register(
+        cls,
+        flow_id: str,
+        username: str,
+        platform_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Регистрирует Telegram бота:
+        1. Проверяет токен через getMe
+        2. Обновляет username в config
+        3. Local: перезагружает polling
+        4. Production: устанавливает webhook
+        5. Устанавливает команды бота
+        """
+        from app.core.config import settings
+        
+        storage = Storage()
+        
+        # Получаем токен
+        token_key = f"token:telegram:{username}"
+        token_json = await storage.get(token_key, force_global=True)
+        if not token_json:
+            raise ValueError(f"Token not found for {username}")
+        
+        token = json.loads(token_json)
+        
+        # Проверяем токен через getMe API
+        bot_info = await cls.get_bot_info(token)
+        if not bot_info:
+            raise ValueError("Invalid token or bot not accessible")
+        
+        actual_username = bot_info.get("username")
+        bot_name = bot_info.get("first_name", "Bot")
+        
+        logger.info(f"🤖 Telegram bot: @{actual_username} ({bot_name})")
+        
+        # Обновляем username в platform_config если отличается
+        if actual_username != username:
+            logger.warning(f"⚠️ Username изменен: {username} → {actual_username}")
+            platform_config["username"] = actual_username
+            
+            flow_config = await storage.get_flow_config(flow_id)
+            if flow_config:
+                flow_config.platforms["telegram"]["username"] = actual_username
+                await storage.set_flow_config(flow_config)
+                logger.info(f"✅ Username обновлен в FlowConfig")
+        
+        # Устанавливаем команды
+        interface = cls(token, platform_config)
+        await interface.setup_commands()
+        
+        # Получаем полный ключ flow (company:ssd:flow:...)
+        all_keys = await storage.list_by_prefix("", limit=1000, force_global=True)
+        flow_key = None
+        for key in all_keys:
+            if f":flow:{flow_id}" in key:
+                flow_key = key
+                break
+        
+        if not flow_key:
+            raise ValueError(f"Flow key not found for {flow_id}")
+        
+        # Настраиваем webhook или polling
+        if settings.server.env == "local":
+            from app.services.telegram_poller import telegram_poller
+            await telegram_poller.reload()
+            
+            return {
+                "success": True,
+                "platform": "telegram",
+                "mode": "polling",
+                "username": actual_username,
+                "bot_name": bot_name,
+                "flow_key": flow_key
+            }
+        else:
+            webhook_url = f"https://{settings.server.domain}/api/v1/webhook/telegram/{flow_key}"
+            webhook_success = await cls.set_webhook(token, webhook_url)
+            
+            if not webhook_success:
+                raise RuntimeError(f"Failed to set webhook for {actual_username}")
+            
+            return {
+                "success": True,
+                "platform": "telegram",
+                "mode": "webhook",
+                "username": actual_username,
+                "bot_name": bot_name,
+                "webhook_url": webhook_url,
+                "flow_key": flow_key
+            }
 
     async def _handle_media_group(
         self, media_group_id: str, tg_message: Dict[str, Any], 

@@ -38,8 +38,33 @@ class AuthMiddleware(BaseHTTPMiddleware):
             request.url.path.startswith("/static/")
             or request.url.path.startswith("/.well-known/")
             or request.url.path.startswith("/favicon.ico")
-            or request.url.path.startswith("/api/v1/payments/webhook/")  # Webhook публичные
+            or request.url.path.startswith("/api/v1/payments/webhook/")
         ):
+            return await call_next(request)
+        
+        # Для Telegram webhook - извлекаем company_id из полного ключа
+        if request.url.path.startswith("/api/v1/webhook/telegram/"):
+            flow_key = request.url.path.split("/api/v1/webhook/telegram/")[1]
+            
+            # Формат ключа: company:{company_id}:flow:{flow_id}
+            parts = flow_key.split(":")
+            if len(parts) < 4 or parts[0] != "company" or parts[2] != "flow":
+                raise HTTPException(status_code=400, detail=f"Invalid flow key format: {flow_key}")
+            
+            company_id = parts[1]
+            
+            company_data = await self.storage.get(f"company:{company_id}", force_global=True)
+            if not company_data:
+                raise HTTPException(status_code=404, detail=f"Company {company_id} not found")
+            
+            requested_company = Company.model_validate_json(company_data)
+            
+            context = await self._create_telegram_context(request, requested_company)
+            set_context(context)
+            request.state.context = context
+            request.state.user = context.user
+            request.state.language = context.language.value
+            logger.info(f"📨 Telegram webhook: key={flow_key}, company={company_id}")
             return await call_next(request)
             
         # Для скачивания файлов - создаем минимальный контекст с компанией из поддомена

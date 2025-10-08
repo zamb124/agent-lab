@@ -46,7 +46,7 @@ from app.core.clients.payment_providers.factory import PaymentProviderFactory
 from app.workers.payment_sync_worker import PaymentSyncWorker
 
 # Условные импорты для локального окружения
-if settings.server.env == "local1":
+if settings.server.env == "local":
     from app.workers.task_processor import TaskProcessor
     from app.services.telegram_poller import telegram_poller
 
@@ -176,12 +176,12 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Payment sync worker запущен")
 
         # Запуск воркера задач для локальной разработки
-        if settings.server.env == "local1":
+        if settings.server.env == "local":
             logger.info("⚙️ Запуск воркера задач для локальной разработки...")
             task_processor = TaskProcessor()
             asyncio.create_task(task_processor.start())
             logger.info("✅ Воркер задач запущен")
-
+            
             logger.info("🤖 Запуск Telegram long polling для локальной разработки...")
             await telegram_poller.start()
             logger.info("✅ Telegram polling запущен")
@@ -205,14 +205,12 @@ async def lifespan(app: FastAPI):
         logger.info("🔄 Закрытие ресурсов...")
 
         # Останавливаем сервисы если запущены
-        if settings.server.env == "local1":
+        if settings.server.env == "local":
             try:
                 await telegram_poller.stop()
                 logger.info("🛑 Telegram polling остановлен")
             except Exception as e:
                 logger.error(f"Ошибка остановки Telegram polling: {e}")
-
-            # Воркер задач остановится автоматически при завершении приложения
 
         await close_checkpointer()
         await close_db()

@@ -60,6 +60,41 @@ class TelegramPoller:
         self.polling_tasks.clear()
         logger.info("🛑 Telegram long polling остановлен")
 
+    async def reload(self):
+        """Перезагружает список ботов без полной остановки сервиса"""
+        logger.info("🔄 Перезагрузка Telegram ботов...")
+        
+        # Останавливаем текущие polling tasks
+        for task in self.polling_tasks:
+            task.cancel()
+        
+        if self.polling_tasks:
+            await asyncio.gather(*self.polling_tasks, return_exceptions=True)
+        
+        self.polling_tasks.clear()
+        
+        # Сохраняем старые офсеты
+        old_offsets = {username: bot_data["offset"] for username, bot_data in self.active_bots.items()}
+        
+        # Очищаем список ботов
+        self.active_bots.clear()
+        
+        # Заново ищем ботов
+        await self._discover_bots()
+        
+        # Восстанавливаем офсеты для существующих ботов
+        for username, bot_data in self.active_bots.items():
+            if username in old_offsets:
+                bot_data["offset"] = old_offsets[username]
+        
+        # Запускаем polling для всех ботов
+        for username, bot_data in self.active_bots.items():
+            task = asyncio.create_task(self._poll_bot(username, bot_data))
+            self.polling_tasks.append(task)
+            logger.info(f"🤖 Запущен polling для @{username}")
+        
+        logger.info(f"✅ Перезагрузка завершена. Активных ботов: {len(self.active_bots)}")
+
     async def _discover_bots(self):
         """Находит всех ботов с токенами в БД"""
         storage = Storage()
@@ -69,57 +104,41 @@ class TelegramPoller:
         flow_keys = [key for key in all_keys if ":flow:" in key]
         
         for flow_key in flow_keys:
-            try:
-                # Получаем данные флоу прямо по ключу
-                flow_data = await storage.get(flow_key, force_global=True)
-                if not flow_data:
-                    continue
-                
-                flow_config = FlowConfig.model_validate_json(flow_data)
-                flow_id = flow_config.flow_id
+            flow_data = await storage.get(flow_key, force_global=True)
+            if not flow_data:
+                continue
+            
+            flow_config = FlowConfig.model_validate_json(flow_data)
+            flow_id = flow_config.flow_id
 
-                telegram_config = flow_config.platforms.get("telegram")
-                if not telegram_config:
-                    continue
+            telegram_config = flow_config.platforms.get("telegram")
+            if not telegram_config:
+                continue
 
-                username = telegram_config.get("username")
-                if not username:
-                    continue
+            username = telegram_config.get("username")
+            if not username:
+                continue
 
-                # Получаем токен из БД
-                token = await TelegramInterface.get_bot_token_for_flow(
-                    flow_id, telegram_config
-                )
-                if not token:
-                    continue
+            token = await TelegramInterface.get_bot_token_for_flow(
+                flow_id, telegram_config
+            )
+            if not token:
+                continue
 
-                self.active_bots[username] = {
-                    "token": token,
-                    "flow_id": flow_id,
-                    "offset": 0,
-                    "platform_config": telegram_config,
-                }
+            self.active_bots[username] = {
+                "token": token,
+                "flow_key": flow_key,
+                "flow_id": flow_id,
+                "offset": 0,
+                "platform_config": telegram_config,
+            }
 
-                # Устанавливаем команды для бота
-                try:
-                    telegram_interface = TelegramInterface(token, telegram_config)
-                    await telegram_interface.setup_commands()
-                    logger.info(f"✅ Команды установлены для @{username}")
-                except Exception as cmd_error:
-                    logger.warning(
-                        f"⚠️ Не удалось установить команды для @{username}: {cmd_error}"
-                    )
-
-                logger.info(f"🔍 Найден бот @{username} для flow {flow_id}")
-
-            except Exception as e:
-                logger.error(f"Ошибка обработки flow {flow_id}: {e}")
-                logger.error(f"Тип ошибки: {type(e).__name__}")
-                logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.info(f"🔍 Найден бот @{username} для {flow_key}")
 
     async def _poll_bot(self, username: str, bot_data: Dict):
         """Long polling для одного бота"""
         token = bot_data["token"]
+        flow_key = bot_data["flow_key"]
         flow_id = bot_data["flow_id"]
         offset = bot_data["offset"]
         platform_config = bot_data["platform_config"]
@@ -154,15 +173,10 @@ class TelegramPoller:
 
                     # Обрабатываем каждое обновление
                     for update in updates:
-                        try:
-                            await self._process_update(
-                                update, flow_id, platform_config, token
-                            )
-                            offset = max(offset, update["update_id"] + 1)
-                        except Exception as e:
-                            logger.error(
-                                f"Ошибка обработки update {update.get('update_id')}: {e}"
-                            )
+                        await self._process_update(
+                            update, flow_key, platform_config, token
+                        )
+                        offset = max(offset, update["update_id"] + 1)
 
                     # Обновляем offset
                     bot_data["offset"] = offset
@@ -177,29 +191,24 @@ class TelegramPoller:
                 await asyncio.sleep(5)  # Пауза при ошибке
 
     async def _process_update(
-        self, update: Dict, flow_id: str, platform_config: Dict, token: str
+        self, update: Dict, flow_key: str, platform_config: Dict, token: str
     ):
         """Обрабатывает одно обновление от Telegram через webhook endpoint"""
-        try:
-            # Отправляем update в наш webhook endpoint (эмуляция webhook)
-            webhook_url = (
-                f"http://localhost:{settings.port}/api/v1/webhook/telegram/{flow_id}"
-            )
+        webhook_url = f"http://127.0.0.1:{settings.server.port}/api/v1/webhook/telegram/{flow_key}"
+        update_id = update.get('update_id', 'unknown')
+        
+        logger.info(f"📤 Отправка update {update_id} в webhook: {webhook_url}")
 
-            async with httpx.AsyncClient() as client:
-                response = await client.post(webhook_url, json=update)
+        async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
+            response = await client.post(webhook_url, json=update)
 
-                if response.status_code == 200:
-                    logger.info(
-                        f"📋 Long polling: update {update.get('update_id')} отправлен в webhook"
-                    )
-                else:
-                    logger.error(
-                        f"❌ Ошибка отправки в webhook: {response.status_code}"
-                    )
-
-        except Exception as e:
-            logger.error(f"Ошибка отправки update в webhook: {e}")
+            if response.status_code == 200:
+                logger.info(f"✅ Update {update_id} успешно обработан")
+            else:
+                logger.error(f"❌ Ошибка webhook: {response.status_code}")
+                logger.error(f"❌ URL: {webhook_url}")
+                logger.error(f"❌ Ответ: {response.text}")
+                logger.error(f"❌ Update ID: {update_id}")
 
 
 # Глобальный экземпляр
