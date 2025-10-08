@@ -319,6 +319,7 @@ async def update_model(
                     elif (hasattr(annotation, '__origin__') and 
                           annotation.__origin__ is list and 
                           len(annotation.__args__) > 0 and 
+                          inspect.isclass(annotation.__args__[0]) and
                           issubclass(annotation.__args__[0], BaseModel)):
                         parsed_value = json.loads(field_value)
                         existing_model_data[field_name] = parsed_value

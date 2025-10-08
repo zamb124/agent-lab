@@ -732,7 +732,7 @@ class Migrator:
             module = importlib.import_module(module_path)
             agent_class = getattr(module, class_name)
 
-            if not issubclass(agent_class, BaseAgent):
+            if not inspect.isclass(agent_class) or not issubclass(agent_class, BaseAgent):
                 raise ValueError(
                     f"Класс {agent_class_path} не является наследником BaseAgent"
                 )
