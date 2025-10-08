@@ -245,6 +245,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# UTF-8 middleware для правильной кодировки JSON ответов
+@app.middleware("http")
+async def utf8_response_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if "application/json" in response.headers.get("content-type", ""):
+        response.headers["content-type"] = "application/json; charset=utf-8"
+    return response
+
 # Подключение роутеров
 
 # API v1

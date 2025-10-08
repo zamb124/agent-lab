@@ -110,6 +110,18 @@ class AuthService:
             Результат авторизации
         """
         try:
+            # Проверяем, не использован ли уже этот код
+            code_key = f"oauth_code:{auth_request.provider.value}:{auth_request.code}"
+            existing_code = await self.storage.get(code_key)
+            if existing_code:
+                logger.warning(f"⚠️ Попытка повторного использования OAuth кода")
+                return AuthResult(
+                    success=False, error_message="Авторизация уже выполнена. Пожалуйста, обновите страницу."
+                )
+            
+            # Помечаем код как использованный на 5 минут
+            await self.storage.set(code_key, "used", ttl=300)
+            
             # Проверяем state
             auth_state = await self._get_auth_state(auth_request.state)
             if not auth_state:
