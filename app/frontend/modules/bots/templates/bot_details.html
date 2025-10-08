@@ -283,8 +283,28 @@
                 
                 <div class="form-group">
                     <label>Токен</label>
-                    <input type="password" class="form-control" id="platform-token" 
-                           placeholder="Токен платформы">
+                    <div class="mb-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="token-type" id="token-type-var" value="var" checked onchange="toggleTokenInput()">
+                            <label class="form-check-label" for="token-type-var">
+                                Ссылка на переменную
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="token-type" id="token-type-hardcoded" value="hardcoded" onchange="toggleTokenInput()">
+                            <label class="form-check-label" for="token-type-hardcoded">
+                                Хардкод токен
+                            </label>
+                        </div>
+                    </div>
+                    <div id="token-var-select-group">
+                        <select class="form-control" id="platform-token-select">
+                            <option value="">-- Выберите переменную --</option>
+                        </select>
+                    </div>
+                    <div id="token-hardcoded-group" style="display: none;">
+                        <input type="password" class="form-control" id="platform-token" placeholder="Введите токен">
+                    </div>
                 </div>
                 
                 <div class="form-group">

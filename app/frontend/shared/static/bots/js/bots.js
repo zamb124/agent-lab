@@ -273,6 +273,8 @@
         const promptValue = promptEditor ? promptEditor.getValue() : null;
         const flowVariables = promptEditor ? promptEditor.getFlowVariables() : null;
         
+        console.log('🔍 DEBUG: flowVariables до добавления =', flowVariables);
+        
         // Добавляем переменные в flowData если есть
         if (flowVariables && Object.keys(flowVariables).length > 0) {
             flowData.variables = flowVariables;
@@ -371,8 +373,33 @@
         }
     };
 
-    window.addPlatform = function(botId) {
+    window.addPlatform = async function(botId) {
         let modal = document.getElementById('add-platform-modal');
+        
+        // Загружаем доступные переменные для токена
+        try {
+            const response = await fetch('/api/v1/admin/variables', {
+                headers: {
+                    'Authorization': `Bearer ${window.app.authToken}`
+                }
+            });
+            if (response.ok) {
+                const varsData = await response.json();
+                const select = document.getElementById('platform-token-select');
+                
+                // Очищаем и заполняем dropdown
+                select.innerHTML = '<option value="">-- Выберите переменную --</option>';
+                Object.entries(varsData).forEach(([key, varInfo]) => {
+                    const desc = varInfo.description ? ` - ${varInfo.description}` : '';
+                    const option = document.createElement('option');
+                    option.value = `@var:${key}`;
+                    option.textContent = `@var:${key}${desc}`;
+                    select.appendChild(option);
+                });
+            }
+        } catch (err) {
+            console.error('Ошибка загрузки переменных:', err);
+        }
         
         // Перемещаем модальное окно в body если оно не там
         if (modal.parentElement !== document.body) {
@@ -395,6 +422,22 @@
         document.body.style.overflow = 'hidden';
         
         console.log('🔧 Modal opened, parent:', modal.parentElement.tagName);
+    };
+    
+    window.toggleTokenInput = function() {
+        const varGroup = document.getElementById('token-var-select-group');
+        const hardcodedGroup = document.getElementById('token-hardcoded-group');
+        const varRadio = document.getElementById('token-type-var');
+        
+        if (varGroup && hardcodedGroup) {
+            if (varRadio.checked) {
+                varGroup.style.display = 'block';
+                hardcodedGroup.style.display = 'none';
+            } else {
+                varGroup.style.display = 'none';
+                hardcodedGroup.style.display = 'block';
+            }
+        }
     };
 
     window.closeAddPlatformModal = function() {
@@ -582,12 +625,30 @@
         // Собираем конфигурацию платформы
         const platformConfig = {};
         
-        if (token && !document.getElementById('platform-token').disabled) {
-            platformConfig.token = token;
+        // Получаем токен (из select или input)
+        let finalToken = '';
+        const varRadio = document.getElementById('token-type-var');
+        if (varRadio && varRadio.checked) {
+            // Ссылка на переменную
+            const select = document.getElementById('platform-token-select');
+            finalToken = select ? select.value : '';
+        } else {
+            // Хардкод токен
+            const input = document.getElementById('platform-token');
+            finalToken = input ? input.value : '';
+        }
+        
+        console.log('🔍 DEBUG: finalToken =', finalToken);
+        console.log('🔍 DEBUG: username =', username);
+        
+        if (finalToken) {
+            platformConfig.token = finalToken;
         }
         if (username) {
             platformConfig.username = username;
         }
+        
+        console.log('🔍 DEBUG: platformConfig =', platformConfig);
 
         // Добавляем кастомные переменные
         const variableRows = document.querySelectorAll('#custom-variables .variable-row');
@@ -642,6 +703,7 @@
                 
                 console.log('✅ Токен сохранен');
             }
+            
 
             // 2. Потом обновляем platforms в flow (это вызовет регистрацию)
             const updateResponse = await fetch(`/frontend/api/flows/${botId}`, {
