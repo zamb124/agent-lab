@@ -389,6 +389,35 @@
     transform: scale(1.05);
 }
 
+.variable-actions {
+    display: flex;
+    gap: 0.25rem;
+    align-items: center;
+}
+
+.btn-delete-variable {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    transition: all 0.2s;
+    opacity: 0.6;
+}
+
+.btn-delete-variable:hover {
+    background: var(--danger-color-alpha);
+    color: var(--danger-color);
+    opacity: 1;
+    transform: scale(1.1);
+}
+
 .no-variables {
     padding: 16px 12px;
     text-align: center;

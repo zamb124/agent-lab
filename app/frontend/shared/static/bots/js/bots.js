@@ -271,11 +271,18 @@
         
         // Получаем значение из Prompt Editor
         const promptValue = promptEditor ? promptEditor.getValue() : null;
+        const flowVariables = promptEditor ? promptEditor.getFlowVariables() : null;
+        
+        // Добавляем переменные в flowData если есть
+        if (flowVariables && Object.keys(flowVariables).length > 0) {
+            flowData.variables = flowVariables;
+        }
         
         console.log('💾 Сохранение настроек бота:', {
             botId: botId,
             flowData: flowData,
             promptValue: promptValue ? `${promptValue.substring(0, 100)}...` : null,
+            flowVariables: flowVariables,
             hasPromptEditor: !!promptEditor
         });
         

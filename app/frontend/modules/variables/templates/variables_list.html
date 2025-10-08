@@ -216,6 +216,11 @@
                 <div class="form-text">Используйте snake_case без пробелов</div>
             </div>
             
+            <div class="mb-3">
+                <label class="form-label">Описание</label>
+                <input type="text" class="form-control" id="variable-description" placeholder="Краткое описание переменной">
+            </div>
+            
                 <div class="mb-3">
                     <label class="form-label">Значение</label>
                     <textarea class="form-control" id="variable-value" rows="3" placeholder="Значение переменной"></textarea>
@@ -427,6 +432,7 @@ window.openAddVariableModal = function() {
     document.getElementById('variable-modal-title').textContent = 'Добавить переменную';
     document.getElementById('variable-key').value = '';
     document.getElementById('variable-key').disabled = false;
+    document.getElementById('variable-description').value = '';
     document.getElementById('variable-value').value = '';
     document.getElementById('variable-secret').checked = false;
     renderGroups();
@@ -442,7 +448,7 @@ window.openAddVariableModal = function() {
 window.editVariable = async function(key, value, isSecret) {
     window.variablesEditingKey = key;
     
-    // Загружаем полные данные переменной для получения groups и реального значения
+    // Загружаем полные данные переменной для получения groups, description и реального значения
     try {
         const response = await fetch(`/api/v1/admin/variables/${key}`, {
             headers: {'Authorization': `Bearer ${window.app.authToken}`}
@@ -451,11 +457,14 @@ window.editVariable = async function(key, value, isSecret) {
             const data = await response.json();
             window.variablesCurrentGroups = data.groups || [];
             value = data.value; // Реальное значение для секретов
+            document.getElementById('variable-description').value = data.description || '';
         } else {
             window.variablesCurrentGroups = [];
+            document.getElementById('variable-description').value = '';
         }
     } catch {
         window.variablesCurrentGroups = [];
+        document.getElementById('variable-description').value = '';
     }
     
     document.getElementById('variable-modal-title').textContent = 'Изменить переменную';
@@ -498,6 +507,7 @@ document.addEventListener('keydown', (e) => {
 window.saveVariable = async function() {
     const editingKey = window.variablesEditingKey;
     const key = document.getElementById('variable-key').value.trim();
+    const description = document.getElementById('variable-description').value.trim();
     const value = document.getElementById('variable-value').value;
     const secret = document.getElementById('variable-secret').checked;
     const groups = window.variablesCurrentGroups || [];
@@ -527,7 +537,7 @@ window.saveVariable = async function() {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${window.app.authToken}`
             },
-            body: JSON.stringify({ key, value, secret, groups })
+            body: JSON.stringify({ key, value, secret, groups, description })
         });
         
         if (response.ok) {
@@ -535,16 +545,11 @@ window.saveVariable = async function() {
             if (window.app && window.app.showNotification) {
                 window.app.showNotification('Переменная сохранена', 'success');
             }
-            // Обновляем только grid переменных
-            const gridElement = document.querySelector('.variables-grid') || document.querySelector('.text-center');
-            if (gridElement && gridElement.parentElement) {
-                htmx.ajax('GET', '/frontend/variables/list', {
-                    target: gridElement.parentElement,
-                    swap: 'innerHTML'
-                });
-            } else {
-                window.location.reload();
-            }
+            // Обновляем весь контейнер чтобы hx-swap-oob работал правильно
+            htmx.ajax('GET', '/frontend/variables/list', {
+                target: '#variables-container',
+                swap: 'outerHTML'
+            });
         } else {
             const error = await response.json();
             if (window.app && window.app.showNotification) {
@@ -578,16 +583,11 @@ window.deleteVariable = async function(key) {
             if (window.app && window.app.showNotification) {
                 window.app.showNotification('Переменная удалена', 'success');
             }
-            // Обновляем только grid переменных
-            const gridElement = document.querySelector('.variables-grid') || document.querySelector('.text-center');
-            if (gridElement && gridElement.parentElement) {
-                htmx.ajax('GET', '/frontend/variables/list', {
-                    target: gridElement.parentElement,
-                    swap: 'innerHTML'
-                });
-            } else {
-                window.location.reload();
-            }
+            // Обновляем весь контейнер чтобы hx-swap-oob работал правильно
+            htmx.ajax('GET', '/frontend/variables/list', {
+                target: '#variables-container',
+                swap: 'outerHTML'
+            });
         } else {
             if (window.app && window.app.showNotification) {
                 window.app.showNotification('Ошибка удаления', 'danger');

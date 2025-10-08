@@ -20,6 +20,7 @@ class VariableRequest(BaseModel):
     value: str
     secret: bool = False
     groups: list[str] = []
+    description: str = ""
 
 
 class VariableResponse(BaseModel):
@@ -43,7 +44,8 @@ async def set_variable(request: VariableRequest):
         key=request.key,
         value=request.value,
         is_secret=request.secret,
-        groups=request.groups
+        groups=request.groups,
+        description=request.description
     )
     
     return VariableResponse(
@@ -76,7 +78,8 @@ async def get_variable(key: str) -> Dict[str, Any]:
         "key": key,
         "value": var_data.get("value", ""),
         "secret": var_data.get("secret", False),
-        "groups": var_data.get("groups", [])
+        "groups": var_data.get("groups", []),
+        "description": var_data.get("description", "")
     }
 
 
