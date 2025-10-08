@@ -2,6 +2,7 @@
 API для работы с переменными.
 """
 
+import logging
 from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Any
 from pydantic import BaseModel
@@ -9,6 +10,8 @@ from pydantic import BaseModel
 from app.frontend.dependencies import StorageDep
 from app.core.variables import VariableResolver
 from app.core.context import get_context
+from app.services.variables_service import get_variables_service
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/variables", tags=["variables"])
 
@@ -160,15 +163,44 @@ async def get_flow_variables(flow_id: str, storage: StorageDep) -> VariablesResp
             ),
         ]
     
-    # Переменные flow
+    # Переменные flow (резолвим и flatten для вложенных структур)
     flow_vars = []
+    logger.info(f"🔍 Flow variables для {flow_id}: {flow_config.variables if hasattr(flow_config, 'variables') else 'НЕТ'}")
     if hasattr(flow_config, 'variables') and flow_config.variables:
-        for key, value in flow_config.variables.items():
+        # Резолвим @var:key перед отображением
+        
+        variables_service = get_variables_service()
+        resolved_flow_vars = await variables_service.resolve(flow_config.variables, auto_create=True)
+        logger.info(f"✅ Резолвнутые flow variables: {resolved_flow_vars}")
+        
+        def flatten_vars(obj, prefix=""):
+            """Разворачивает вложенные dict/list в плоский список"""
+            result = []
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    full_key = f"{prefix}.{k}" if prefix else k
+                    if isinstance(v, (dict, list)):
+                        result.extend(flatten_vars(v, full_key))
+                    else:
+                        result.append((full_key, v))
+            elif isinstance(obj, list):
+                for i, v in enumerate(obj):
+                    full_key = f"{prefix}[{i}]"
+                    if isinstance(v, (dict, list)):
+                        result.extend(flatten_vars(v, full_key))
+                    else:
+                        result.append((full_key, v))
+            else:
+                result.append((prefix, obj))
+            return result
+        
+        flat_vars = flatten_vars(resolved_flow_vars)
+        for key, value in flat_vars:
             flow_vars.append(Variable(
                 name=key,
                 description=f"Flow переменная",
                 category="flow",
-                value=value,
+                value=str(value),
                 editable=True
             ))
     

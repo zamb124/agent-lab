@@ -97,6 +97,8 @@ class VariableResolver:
         
         Поддерживаемые форматы:
         - {variable} - простая подстановка
+        - {dict.key} - доступ к вложенным dict
+        - {list[0]} - доступ к элементам list
         - {{variable}} - двойные скобки (Jinja-style)
         
         Args:
@@ -114,24 +116,39 @@ class VariableResolver:
         
         result = template
         
-        # Подстановка {variable}
-        for key, value in variables.items():
-            placeholder = f"{{{key}}}"
-            if placeholder in result:
-                result = result.replace(placeholder, str(value))
+        import re
         
-        # Подстановка {{variable}}
-        for key, value in variables.items():
-            placeholder = f"{{{{{key}}}}}"
-            if placeholder in result:
-                result = result.replace(placeholder, str(value))
+        # Подстановка {key.nested} и {key[index]}
+        pattern = r'\{([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*|\[\d+\])*)\}'
         
-        # Проверка на неподставленные переменные
-        if not safe:
-            import re
-            unresolved = re.findall(r'\{(\w+)\}', result)
-            if unresolved:
-                logger.warning(f"Неразрешенные переменные в шаблоне: {unresolved}")
+        def replace_var(match):
+            expr = match.group(1)
+            
+            try:
+                # Парсим выражение: key.nested или key[0]
+                value = variables
+                parts = re.split(r'\.|\[|\]', expr)
+                parts = [p for p in parts if p]
+                
+                for part in parts:
+                    if part.isdigit():
+                        value = value[int(part)]
+                    else:
+                        value = value[part]
+                
+                return str(value)
+            except (KeyError, IndexError, TypeError) as e:
+                if safe:
+                    return match.group(0)
+                else:
+                    logger.warning(f"Не удалось резолвить {expr}: {e}")
+                    return match.group(0)
+        
+        result = re.sub(pattern, replace_var, result)
+        
+        # Подстановка {{variable}} (двойные скобки)
+        pattern_double = r'\{\{([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*|\[\d+\])*)\}\}'
+        result = re.sub(pattern_double, replace_var, result)
         
         return result
 

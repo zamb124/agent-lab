@@ -2,10 +2,10 @@
   "meta": {
     "language": "en",
     "version": "1.0.0",
-    "last_updated": "2025-10-08T12:03:08.345302",
-    "completeness": 93.3641975308642,
-    "total_keys": 648,
-    "translated_keys": 605
+    "last_updated": "2025-10-08T15:23:31.706404",
+    "completeness": 92.96187683284457,
+    "total_keys": 682,
+    "translated_keys": 634
   },
   "common": {
     "app_name": "Agents Lab",
@@ -1429,5 +1429,10 @@
     "choose_provider": "Choose a method to log in to the system",
     "login_with_provider": "Login with {provider}",
     "footer_text": "Secure authorization via OAuth 2.0"
-  }
+  },
+  "{{ key }}": "[TODO: {{ key }}]",
+  "Введите ключ переменной": "[TODO: Введите ключ переменной]",
+  "Введите значение": "[TODO: Введите значение]",
+  "Ошибка удаления": "[TODO: Ошибка удаления]",
+  "button": "[TODO: button]"
 }
