@@ -14,66 +14,63 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/webhook/telegram/{flow_id}")
-async def telegram_webhook(flow_id: str, request: Request):
+@router.post("/webhook/telegram/{flow_key:path}")
+async def telegram_webhook(flow_key: str, request: Request):
     """
     Universal Telegram webhook для любого flow.
     Создает TelegramInterface на лету.
+    
+    Args:
+        flow_key: Полный ключ flow включая company (company:ssd:flow:app.flows...)
     """
-    try:
-        # Получаем flow config из БД
-        storage = Storage()
-        flow_config = await storage.get_flow_config(flow_id)
+    # Извлекаем flow_id из ключа
+    if ":flow:" in flow_key:
+        flow_id = flow_key.split(":flow:")[1]
+    else:
+        flow_id = flow_key
+    
+    storage = Storage()
+    flow_config = await storage.get_flow_config(flow_id)
 
-        if not flow_config:
-            logger.error(f"Flow {flow_id} не найден в БД")
-            raise HTTPException(status_code=404, detail=f"Flow {flow_id} not found")
+    if not flow_config:
+        logger.error(f"Flow {flow_id} не найден в БД")
+        raise HTTPException(status_code=404, detail=f"Flow {flow_id} not found")
 
-        # Проверяем что flow поддерживает Telegram
-        telegram_config = flow_config.platforms.get("telegram")
-        if not telegram_config:
-            logger.error(f"Flow {flow_id} не поддерживает Telegram")
-            raise HTTPException(
-                status_code=400, detail=f"Flow {flow_id} does not support Telegram"
-            )
-
-        # Получаем токен бота
-        bot_token = await TelegramInterface.get_bot_token_for_flow(
-            flow_id, telegram_config
-        )
-        if not bot_token:
-            logger.error(f"Не найден токен для Telegram бота flow {flow_id}")
-            raise HTTPException(status_code=500, detail="Bot token not found")
-
-        # Создаем интерфейс на лету
-        telegram_interface = TelegramInterface(bot_token, telegram_config)
-
-        # Получаем raw данные от Telegram
-        raw_data = await request.json()
-        logger.info(
-            f"📨 Telegram webhook для flow {flow_id}: update {raw_data.get('update_id', 'unknown')}"
+    telegram_config = flow_config.platforms.get("telegram")
+    if not telegram_config:
+        logger.error(f"Flow {flow_id} не поддерживает Telegram")
+        raise HTTPException(
+            status_code=400, detail=f"Flow {flow_id} does not support Telegram"
         )
 
-        # Преобразуем в Message
-        message = await telegram_interface.handle_message(raw_data, flow_id)
-        if not message:
-            return {"ok": True}  # Telegram ожидает 200 OK
+    bot_token = await TelegramInterface.get_bot_token_for_flow(
+        flow_id, telegram_config
+    )
+    if not bot_token:
+        logger.error(f"Не найден токен для Telegram бота flow {flow_id}")
+        raise HTTPException(status_code=500, detail="Bot token not found")
 
-        # Создаем задачу для TaskProcessor
-        task_id = await telegram_interface.create_task(message, flow_id)
+    telegram_interface = TelegramInterface(bot_token, telegram_config)
 
-        if task_id:
-            logger.info(
-                f"📋 Создана задача {task_id} для flow {flow_id} от пользователя {message.user_id}"
-            )
-        else:
-            logger.info(f"⏳ Задача не создана - сессия занята для {message.user_id}")
+    raw_data = await request.json()
+    logger.info(
+        f"📨 Telegram webhook для {flow_key}: update {raw_data.get('update_id', 'unknown')}"
+    )
 
+    message = await telegram_interface.handle_message(raw_data, flow_id)
+    if not message:
         return {"ok": True}
 
-    except Exception as e:
-        logger.error(f"Ошибка Telegram webhook для flow {flow_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    task_id = await telegram_interface.create_task(message, flow_id)
+
+    if task_id:
+        logger.info(
+            f"📋 Создана задача {task_id} для {flow_key} от пользователя {message.user_id}"
+        )
+    else:
+        logger.info(f"⏳ Задача не создана - сессия занята для {message.user_id}")
+
+    return {"ok": True}
 
 
 @router.post("/admin/telegram/set_webhook/{flow_id}")

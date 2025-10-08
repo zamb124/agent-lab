@@ -16,6 +16,7 @@ from app.identity.models import User, Company
 from app.core.storage import Storage
 from app.core.file_processor import FileProcessor
 from app.core.context import get_context
+from app.core.migrator import Migrator
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -439,6 +440,12 @@ async def create_my_company(request: Request):
     subdomain_saved = await storage.set(f"subdomain:{subdomain}", f'"{company_id}"', force_global=True)
     logger.info(f"🐛 DEBUG: subdomain:{subdomain} -> {company_id}, saved: {subdomain_saved}")
     
+    # Мигрируем базовые сущности для новой компании
+    migrator = Migrator()
+    logger.info(f"Начинаем миграцию базовых сущностей для компании {company_id}...")
+    await migrator.migrate_defaults_for_company(company)
+    logger.info(f"✅ Базовые сущности успешно мигрированы для компании {company_id}")
+    
     # Обновляем глобального пользователя - добавляем компанию
     user_key = f"user:{user.user_id}"
     user.companies[company_id] = ["admin", "user"]
@@ -459,3 +466,85 @@ async def create_my_company(request: Request):
         # Для продакшена используем поддомен
         company_url = f"http://{subdomain}.{settings.server.domain}/frontend/dashboard"
         return RedirectResponse(url=company_url, status_code=302)
+
+
+@router.post("/remigrate/{entity_type}/{entity_id:path}")
+async def remigrate_entity(entity_type: str, entity_id: str):
+    """
+    Перемигрирует сущность из кода для отката к базовому состоянию.
+    
+    Args:
+        entity_type: Тип сущности (flow, agent, tool)
+        entity_id: ID сущности (например, app.flows.test_flow.test_flow_config)
+    """
+    context = get_context()
+    if not context or not context.active_company:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    migrator = Migrator()
+    company = context.active_company
+    
+    if entity_type == "flow":
+        await migrator.remigrate_flow(entity_id, company)
+        return {"status": "success", "message": f"Flow {entity_id} успешно перемигрирован"}
+    elif entity_type == "agent":
+        await migrator.remigrate_agent(entity_id, company)
+        return {"status": "success", "message": f"Агент {entity_id} успешно перемигрирован"}
+    elif entity_type == "tool":
+        await migrator.remigrate_tool(entity_id, company)
+        return {"status": "success", "message": f"Tool {entity_id} успешно перемигрирован"}
+    else:
+        raise HTTPException(status_code=400, detail=f"Неизвестный тип сущности: {entity_type}")
+
+
+@router.post("/remigrate-flow-with-deps/{flow_id:path}")
+async def remigrate_flow_with_dependencies(flow_id: str):
+    """
+    Перемигрирует flow со всеми зависимостями.
+    Полный сброс flow к базовому состоянию.
+    
+    Args:
+        flow_id: ID flow (например, app.flows.test_flow.test_flow_config)
+    """
+    context = get_context()
+    if not context or not context.active_company:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    migrator = Migrator()
+    company = context.active_company
+    
+    await migrator.migrate_for_company(
+        company=company,
+        flows=[flow_id],
+        with_dependencies=True
+    )
+    
+    return {"status": "success", "message": f"Flow {flow_id} и все зависимости успешно перемигрированы"}
+
+
+@router.post("/reload-telegram-bots")
+async def reload_telegram_bots():
+    """
+    Перезагружает список Telegram ботов в long polling режиме.
+    Используется после добавления новых платформ.
+    Работает только в локальном окружении (ENV=local).
+    """
+    from app.core.config import settings
+    
+    if settings.server.env != "local":
+        raise HTTPException(
+            status_code=400,
+            detail="Telegram polling доступен только в локальном окружении"
+        )
+    
+    try:
+        from app.services.telegram_poller import telegram_poller
+        await telegram_poller.reload()
+        return {
+            "status": "success",
+            "message": f"Telegram polling перезагружен. Активных ботов: {len(telegram_poller.active_bots)}",
+            "bots": list(telegram_poller.active_bots.keys())
+        }
+    except Exception as e:
+        logger.error(f"Ошибка перезагрузки telegram polling: {e}")
+        raise HTTPException(status_code=500, detail=f"Ошибка перезагрузки: {str(e)}")

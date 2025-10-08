@@ -21,7 +21,7 @@ from app.core.checkpointer import init_checkpointer, close_checkpointer
 from app.db.database import create_tables, close_db
 from app.core.migrator import Migrator
 from app.api.amocrm import router as amocrm_router
-from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads, history, payments, admin_payments
+from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads, history, payments, admin_payments, variables
 from app.frontend.api import models as frontend_models
 from app.frontend.api import flows as frontend_flows
 from app.frontend.api import agents as frontend_agents
@@ -32,11 +32,13 @@ from app.frontend.pages import auth as auth_pages
 from app.frontend.pages import dashboard as dashboard_pages
 from app.frontend.pages import public as public_pages
 from app.frontend.modules.chat import router as chat_module
+from app.frontend.modules.chats.router import router as chats_module
 from app.frontend.modules.builder import router as builder_module
 from app.frontend.modules.billing.router import router as billing_module
 from app.frontend.modules.admin.router import router as admin_module
 from app.frontend.modules.history.router import router as history_module
 from app.frontend.modules.bots.router import router as bots_module
+from app.frontend.modules.variables.router import router as variables_module
 from app.frontend.websockets import notifications as websocket_notifications
 from app.frontend.websockets import chat as websocket_chat
 from app.middleware.auth import AuthMiddleware
@@ -46,7 +48,7 @@ from app.core.clients.payment_providers.factory import PaymentProviderFactory
 from app.workers.payment_sync_worker import PaymentSyncWorker
 
 # Условные импорты для локального окружения
-if settings.server.env == "local1":
+if settings.server.env == "local":
     from app.workers.task_processor import TaskProcessor
     from app.services.telegram_poller import telegram_poller
 
@@ -176,12 +178,12 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Payment sync worker запущен")
 
         # Запуск воркера задач для локальной разработки
-        if settings.server.env == "local1":
+        if settings.server.env == "local":
             logger.info("⚙️ Запуск воркера задач для локальной разработки...")
             task_processor = TaskProcessor()
             asyncio.create_task(task_processor.start())
             logger.info("✅ Воркер задач запущен")
-
+            
             logger.info("🤖 Запуск Telegram long polling для локальной разработки...")
             await telegram_poller.start()
             logger.info("✅ Telegram polling запущен")
@@ -205,14 +207,12 @@ async def lifespan(app: FastAPI):
         logger.info("🔄 Закрытие ресурсов...")
 
         # Останавливаем сервисы если запущены
-        if settings.server.env == "local1":
+        if settings.server.env == "local":
             try:
                 await telegram_poller.stop()
                 logger.info("🛑 Telegram polling остановлен")
             except Exception as e:
                 logger.error(f"Ошибка остановки Telegram polling: {e}")
-
-            # Воркер задач остановится автоматически при завершении приложения
 
         await close_checkpointer()
         await close_db()
@@ -272,6 +272,7 @@ app.include_router(leads.router, prefix="/api/v1", tags=["leads"])
 app.include_router(history.router, tags=["history"])
 app.include_router(payments.router, prefix="/api/v1", tags=["payments"])
 app.include_router(admin_payments.router, prefix="/api/v1", tags=["admin-payments"])
+app.include_router(variables.router, prefix="/api/v1", tags=["variables"])
 
 # Frontend API (JSON CRUD)
 app.include_router(frontend_models.router, tags=["frontend-models"])  # Убираем дублирующий prefix
@@ -288,11 +289,13 @@ app.include_router(dashboard_pages.router, tags=["dashboard-pages"])
 
 # Frontend Modules
 app.include_router(chat_module.router, tags=["chat-module"])
+app.include_router(chats_module, tags=["chats-module"])
 app.include_router(builder_module.router, tags=["builder-module"])
 app.include_router(billing_module, tags=["billing-module"])
 app.include_router(admin_module, tags=["admin-module"])
 app.include_router(history_module, tags=["history-module"])
 app.include_router(bots_module, tags=["bots-module"])
+app.include_router(variables_module, tags=["variables-module"])
 
 # WebSockets
 app.include_router(websocket_notifications.router, tags=["websocket-notifications"])

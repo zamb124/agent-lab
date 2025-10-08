@@ -1,0 +1,677 @@
+<h1 class="header-title" id="page-title" hx-swap-oob="true">
+    <i class="bi bi-key me-2"></i>
+    Ключи и Переменные
+</h1>
+
+<div class="header-right" hx-swap-oob="true">
+    <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="Переключить тему">
+        <i class="bi bi-sun"></i>
+    </button>
+</div>
+
+<div class="container-fluid py-4" id="variables-container">
+    <div class="mb-4 d-flex justify-content-between align-items-center">
+        <p class="text-muted mb-0">Управление секретами и переменными компании. Используйте <code>@var:key</code> для ссылок в конфигурации.</p>
+        <button class="btn btn-sm btn-outline-secondary" id="group-by-tags-btn" onclick="toggleGrouping()">
+            <i class="bi bi-grid"></i> Группировать по тегам
+        </button>
+    </div>
+
+    <div id="variables-content">
+    {% if variables %}
+    <div class="variables-grid">
+        <!-- Карточка создания новой переменной -->
+        <div class="variable-grid-item">
+            <div class="card variable-card variable-card-add h-100" onclick="openAddVariableModal()" style="cursor: pointer;">
+                <div class="card-body p-3 d-flex align-items-center justify-content-center gap-3" style="min-height: 120px;">
+                    <i class="bi bi-plus-circle" style="font-size: 2.5rem; color: var(--primary-color); opacity: 0.7;"></i>
+                    <div class="text-center">
+                        <small class="text-muted">Создать<br>переменную</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        {% for key, var_data in variables.items() %}
+        <div class="variable-grid-item">
+            <div class="card variable-card h-100">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div class="d-flex align-items-center gap-2 flex-grow-1">
+                            {% if var_data.secret %}
+                            <i class="bi bi-shield-lock text-warning" style="font-size: 1.1rem;"></i>
+                            {% else %}
+                            <i class="bi bi-tag text-primary" style="font-size: 1.1rem;"></i>
+                            {% endif %}
+                            
+                            {% if var_data.groups and var_data.groups|length > 0 %}
+                            <div class="d-flex gap-1 flex-wrap">
+                                {% for group in var_data.groups %}
+                                <span class="badge bg-secondary" style="font-size: 0.6rem; padding: 0.15rem 0.4rem;">{{ group }}</span>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="d-flex gap-1">
+                            <button class="btn-icon" onclick="editVariable('{{ key }}', '{{ var_data.value }}', {{ 'true' if var_data.secret else 'false' }})" title="Изменить">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn-icon text-danger" onclick="deleteVariable('{{ key }}')" title="Удалить">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <code class="d-block text-truncate" style="font-size: 0.8rem; font-weight: 600;" title="{{ key }}">{{ key }}</code>
+                    </div>
+                    
+                    <div class="variable-value-compact">
+                        {% if var_data.secret %}
+                        <div class="d-flex align-items-center gap-1">
+                            <input type="password" readonly value="••••••••••••" class="form-control form-control-sm" id="var-{{ key }}" data-secret-key="{{ key }}" style="font-size: 0.8rem; font-family: monospace;">
+                            <button class="btn btn-sm btn-outline-secondary" type="button" onclick="toggleSecret('{{ key }}', this)" style="padding: 0.2rem 0.4rem;">
+                                <i class="bi bi-eye" style="font-size: 0.8rem;"></i>
+                            </button>
+                        </div>
+                        {% else %}
+                        <div class="p-1 bg-light rounded">
+                            <code class="text-muted d-block text-truncate" style="font-size: 0.8rem;" title="{{ var_data.value }}">{{ var_data.value }}</code>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <style>
+    .variables-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+    
+    @media (min-width: 768px) {
+        .variables-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+    
+    @media (min-width: 1400px) {
+        .variables-grid {
+            grid-template-columns: repeat(5, 1fr);
+        }
+    }
+    
+    
+    .variable-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+        border: 1px solid var(--border-color);
+        height: 100%;
+    }
+    
+    .variable-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .variable-card-add {
+        border: 2px dashed var(--border-color);
+        background: var(--bg-secondary);
+    }
+    
+    .variable-card-add:hover {
+        border-color: var(--primary-color);
+        background: var(--primary-color-alpha);
+    }
+    
+    .variable-card-add:hover i {
+        opacity: 1 !important;
+        transform: scale(1.1);
+        transition: all 0.2s;
+    }
+    
+    .btn-icon {
+        background: none;
+        border: none;
+        color: var(--text-secondary);
+        cursor: pointer;
+        padding: 0.2rem;
+        border-radius: 4px;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        font-size: 0.9rem;
+    }
+    
+    .btn-icon:hover {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+    }
+    
+    .btn-icon.text-danger:hover {
+        background: var(--danger-color-alpha);
+        color: var(--danger-color);
+    }
+    
+    .variable-value-compact {
+        font-size: 0.75rem;
+    }
+    
+    .btn-close {
+        background: transparent;
+        border: none;
+        padding: 0.5rem;
+        cursor: pointer;
+        color: var(--text-secondary);
+        font-size: 1.2rem;
+        line-height: 1;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+    }
+    
+    .btn-close:hover {
+        opacity: 1;
+    }
+    </style>
+    {% else %}
+    <div class="variables-grid">
+        <!-- Карточка создания первой переменной -->
+        <div class="variable-grid-item" style="grid-column: 1 / -1;">
+            <div class="card variable-card variable-card-add h-100" onclick="openAddVariableModal()" style="cursor: pointer;">
+                <div class="card-body p-5 d-flex flex-column align-items-center justify-content-center">
+                    <i class="bi bi-plus-circle" style="font-size: 4rem; color: var(--primary-color); opacity: 0.7;"></i>
+                    <h3 class="mt-3">Нет переменных</h3>
+                    <p class="text-muted">Создайте первую переменную для использования в ботах и агентах</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    </div>
+</div>
+
+<script type="application/json" id="variables-data">
+{{ variables|tojson|safe }}
+</script>
+
+<!-- Модальное окно (вне контейнера чтобы не обновлялось) -->
+<div id="variable-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 99999; align-items: center; justify-content: center;" hx-preserve="true">
+    <div class="modal-content" style="max-width: 500px; background: var(--bg-primary); border-radius: 0.75rem; box-shadow: 0 4px 20px rgba(0,0,0,0.3); margin: auto;" onclick="event.stopPropagation()">
+        <div class="modal-header" style="border-bottom: 1px solid var(--border-color); padding: 1.5rem;">
+            <h3 id="variable-modal-title" style="margin: 0;">Добавить переменную</h3>
+            <button class="btn-close" onclick="closeVariableModal()" title="Закрыть">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div class="modal-body" style="padding: 1.5rem;">
+            <div class="mb-3">
+                <label class="form-label">Ключ переменной</label>
+                <input type="text" class="form-control" id="variable-key" placeholder="telegram_bot_token">
+                <div class="form-text">Используйте snake_case без пробелов</div>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Описание</label>
+                <input type="text" class="form-control" id="variable-description" placeholder="Краткое описание переменной">
+            </div>
+            
+                <div class="mb-3">
+                    <label class="form-label">Значение</label>
+                    <textarea class="form-control" id="variable-value" rows="3" placeholder="Значение переменной"></textarea>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Группы / Теги</label>
+                    <div id="variable-groups-container" class="mb-2"></div>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="variable-group-input" placeholder="Добавить группу (telegram, api, auth...)" onkeypress="if(event.key==='Enter'){event.preventDefault();addGroup();}">
+                        <button class="btn btn-warning" type="button" onclick="addGroup()">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                    </div>
+                    <small class="form-text">Группы помогают организовать переменные (telegram, api, database...)</small>
+                </div>
+                
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="variable-secret">
+                    <label class="form-check-label" for="variable-secret">
+                        Пометить как секрет (скрывать значение)
+                    </label>
+                </div>
+        </div>
+        <div class="modal-footer" style="border-top: 1px solid var(--border-color); padding: 1rem 1.5rem; display: flex; justify-content: flex-end; gap: 0.5rem;">
+            <button type="button" class="btn btn-secondary" onclick="closeVariableModal()">Отмена</button>
+            <button type="button" class="btn btn-primary" onclick="saveVariable()">Сохранить</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+'use strict';
+
+window.variablesEditingKey = window.variablesEditingKey || null;
+window.variablesCurrentGroups = window.variablesCurrentGroups || [];
+
+// Функция переключения группировки
+window.toggleGrouping = function() {
+    const btn = document.getElementById('group-by-tags-btn');
+    const contentDiv = document.getElementById('variables-content');
+    const variablesDataElement = document.getElementById('variables-data');
+    
+    if (!variablesDataElement) return;
+    
+    const variables = JSON.parse(variablesDataElement.textContent);
+    const isGrouped = btn.classList.contains('active');
+    
+    if (!isGrouped) {
+        btn.classList.add('active', 'btn-primary');
+        btn.classList.remove('btn-outline-secondary');
+        btn.innerHTML = '<i class="bi bi-grid-fill"></i> Группировано';
+        renderGroupedView(variables, contentDiv);
+    } else {
+        btn.classList.remove('active', 'btn-primary');
+        btn.classList.add('btn-outline-secondary');
+        btn.innerHTML = '<i class="bi bi-grid"></i> Группировать по тегам';
+        renderGridView(variables, contentDiv);
+    }
+};
+
+function renderGridView(variables, container) {
+    // Рендерим обычный grid (копируем из серверного шаблона)
+    htmx.ajax('GET', '/frontend/variables/list', {
+        target: '#variables-container',
+        swap: 'outerHTML'
+    });
+}
+
+function renderGroupedView(variables, container) {
+    // Собираем все уникальные группы
+    const allGroups = new Set();
+    const ungrouped = [];
+    
+    Object.entries(variables).forEach(([key, data]) => {
+        if (data.groups && data.groups.length > 0) {
+            data.groups.forEach(g => allGroups.add(g));
+        } else {
+            ungrouped.push([key, data]);
+        }
+    });
+    
+    let html = `
+        <style>
+        .variables-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+        @media (min-width: 768px) {
+            .variables-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        @media (min-width: 1400px) {
+            .variables-grid {
+                grid-template-columns: repeat(5, 1fr);
+            }
+        }
+        </style>
+    `;
+    
+    // Рендерим каждую группу
+    allGroups.forEach(group => {
+        const groupVars = Object.entries(variables).filter(([key, data]) => 
+            data.groups && data.groups.includes(group)
+        );
+        
+        if (groupVars.length > 0) {
+            html += `
+                <div class="mb-4">
+                    <h5 class="mb-3">
+                        <span class="badge bg-primary">${group}</span>
+                        <span class="text-muted ms-2">(${groupVars.length})</span>
+                    </h5>
+                    <div class="variables-grid">
+            `;
+            
+            groupVars.forEach(([key, data]) => {
+                html += renderVariableCard(key, data);
+            });
+            
+            html += `
+                    </div>
+                </div>
+            `;
+        }
+    });
+    
+    // Переменные без групп
+    if (ungrouped.length > 0) {
+        html += `
+            <div class="mb-4">
+                <h5 class="mb-3">
+                    <span class="text-muted">Без группы</span>
+                    <span class="text-muted ms-2">(${ungrouped.length})</span>
+                </h5>
+                <div class="variables-grid">
+        `;
+        
+        ungrouped.forEach(([key, data]) => {
+            html += renderVariableCard(key, data);
+        });
+        
+        html += `
+                </div>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = html;
+}
+
+function renderVariableCard(key, data) {
+    const isSecret = data.secret;
+    const icon = isSecret ? 
+        '<i class="bi bi-shield-lock text-warning" style="font-size: 1.1rem;"></i>' :
+        '<i class="bi bi-tag text-primary" style="font-size: 1.1rem;"></i>';
+    
+    const groups = data.groups && data.groups.length > 0 ? 
+        data.groups.map(g => `<span class="badge bg-secondary" style="font-size: 0.6rem; padding: 0.15rem 0.4rem;">${g}</span>`).join(' ') :
+        '';
+    
+    const valueDisplay = isSecret ?
+        `<div class="d-flex align-items-center gap-1">
+            <input type="password" readonly value="••••••••••••" class="form-control form-control-sm" id="var-${key}" style="font-size: 0.8rem; font-family: monospace;">
+            <button class="btn btn-sm btn-outline-secondary" type="button" onclick="toggleSecret('${key}', this)" style="padding: 0.2rem 0.4rem;">
+                <i class="bi bi-eye" style="font-size: 0.8rem;"></i>
+            </button>
+        </div>` :
+        `<div class="p-1 bg-light rounded">
+            <code class="text-muted d-block text-truncate" style="font-size: 0.8rem;" title="${data.value}">${data.value}</code>
+        </div>`;
+    
+    return `
+        <div class="variable-grid-item">
+            <div class="card variable-card h-100">
+                <div class="card-body p-3">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div class="d-flex align-items-center gap-2 flex-grow-1">
+                            ${icon}
+                            ${groups ? `<div class="d-flex gap-1 flex-wrap">${groups}</div>` : ''}
+                        </div>
+                        <div class="d-flex gap-1">
+                            <button class="btn-icon" onclick="event.stopPropagation();editVariable('${key}', '${data.value}', ${isSecret})" title="Изменить" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 0.2rem; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; font-size: 0.9rem;">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn-icon text-danger" onclick="event.stopPropagation();deleteVariable('${key}')" title="Удалить" style="background: none; border: none; cursor: pointer; padding: 0.2rem; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; font-size: 0.9rem;">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <code class="d-block text-truncate" style="font-size: 0.8rem; font-weight: 600;" title="${key}">${key}</code>
+                    </div>
+                    <div class="variable-value-compact">
+                        ${valueDisplay}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+window.openAddVariableModal = function() {
+    window.variablesEditingKey = null;
+    window.variablesCurrentGroups = [];
+    document.getElementById('variable-modal-title').textContent = 'Добавить переменную';
+    document.getElementById('variable-key').value = '';
+    document.getElementById('variable-key').disabled = false;
+    document.getElementById('variable-description').value = '';
+    document.getElementById('variable-value').value = '';
+    document.getElementById('variable-secret').checked = false;
+    renderGroups();
+    
+    const modal = document.getElementById('variable-modal');
+    // Перемещаем модалку в body если она не там
+    if (modal.parentElement !== document.body) {
+        document.body.appendChild(modal);
+    }
+    modal.style.display = 'flex';
+}
+
+window.editVariable = async function(key, value, isSecret) {
+    window.variablesEditingKey = key;
+    
+    // Загружаем полные данные переменной для получения groups, description и реального значения
+    try {
+        const response = await fetch(`/api/v1/admin/variables/${key}`, {
+            headers: {'Authorization': `Bearer ${window.app.authToken}`}
+        });
+        if (response.ok) {
+            const data = await response.json();
+            window.variablesCurrentGroups = data.groups || [];
+            value = data.value; // Реальное значение для секретов
+            document.getElementById('variable-description').value = data.description || '';
+        } else {
+            window.variablesCurrentGroups = [];
+            document.getElementById('variable-description').value = '';
+        }
+    } catch {
+        window.variablesCurrentGroups = [];
+        document.getElementById('variable-description').value = '';
+    }
+    
+    document.getElementById('variable-modal-title').textContent = 'Изменить переменную';
+    document.getElementById('variable-key').value = key;
+    document.getElementById('variable-key').disabled = true;
+    document.getElementById('variable-value').value = value === '***' ? '' : value;
+    document.getElementById('variable-secret').checked = isSecret;
+    renderGroups();
+    
+    const modal = document.getElementById('variable-modal');
+    // Перемещаем модалку в body если она не там
+    if (modal.parentElement !== document.body) {
+        document.body.appendChild(modal);
+    }
+    modal.style.display = 'flex';
+}
+
+window.closeVariableModal = function() {
+    const modal = document.getElementById('variable-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+    window.variablesEditingKey = null;
+}
+
+// Закрытие по клику на фон
+document.addEventListener('click', (e) => {
+    if (e.target.id === 'variable-modal') {
+        closeVariableModal();
+    }
+});
+
+// Закрытие по Escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.getElementById('variable-modal').style.display === 'flex') {
+        closeVariableModal();
+    }
+});
+
+window.saveVariable = async function() {
+    const editingKey = window.variablesEditingKey;
+    const key = document.getElementById('variable-key').value.trim();
+    const description = document.getElementById('variable-description').value.trim();
+    const value = document.getElementById('variable-value').value;
+    const secret = document.getElementById('variable-secret').checked;
+    const groups = window.variablesCurrentGroups || [];
+    
+    if (!key) {
+        if (window.app && window.app.showNotification) {
+            window.app.showNotification('Введите ключ переменной', 'warning');
+        } else {
+            alert('Введите ключ переменной');
+        }
+        return;
+    }
+    
+    if (!value && !editingKey) {
+        if (window.app && window.app.showNotification) {
+            window.app.showNotification('Введите значение', 'warning');
+        } else {
+            alert('Введите значение');
+        }
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/v1/admin/variables', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${window.app.authToken}`
+            },
+            body: JSON.stringify({ key, value, secret, groups, description })
+        });
+        
+        if (response.ok) {
+            closeVariableModal();
+            if (window.app && window.app.showNotification) {
+                window.app.showNotification('Переменная сохранена', 'success');
+            }
+            // Обновляем весь контейнер чтобы hx-swap-oob работал правильно
+            htmx.ajax('GET', '/frontend/variables/list', {
+                target: '#variables-container',
+                swap: 'outerHTML'
+            });
+        } else {
+            const error = await response.json();
+            if (window.app && window.app.showNotification) {
+                window.app.showNotification('Ошибка: ' + (error.detail || 'Не удалось сохранить'), 'danger');
+            } else {
+                alert('Ошибка: ' + (error.detail || 'Не удалось сохранить'));
+            }
+        }
+    } catch (err) {
+        console.error('Ошибка сохранения:', err);
+        if (window.app && window.app.showNotification) {
+            window.app.showNotification('Ошибка сохранения', 'danger');
+        }
+    }
+}
+
+window.deleteVariable = async function(key) {
+    if (!confirm(`Удалить переменную "${key}"?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/v1/admin/variables/${key}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${window.app.authToken}`
+            }
+        });
+        
+        if (response.ok) {
+            if (window.app && window.app.showNotification) {
+                window.app.showNotification('Переменная удалена', 'success');
+            }
+            // Обновляем весь контейнер чтобы hx-swap-oob работал правильно
+            htmx.ajax('GET', '/frontend/variables/list', {
+                target: '#variables-container',
+                swap: 'outerHTML'
+            });
+        } else {
+            if (window.app && window.app.showNotification) {
+                window.app.showNotification('Ошибка удаления', 'danger');
+            } else {
+                alert('Ошибка удаления');
+            }
+        }
+    } catch (err) {
+        console.error('Ошибка удаления:', err);
+    }
+}
+
+// Функции для работы с группами
+window.addGroup = function() {
+    const input = document.getElementById('variable-group-input');
+    const group = input.value.trim().toLowerCase();
+    
+    if (!group) return;
+    
+    if (!/^[a-z_][a-z0-9_]*$/.test(group)) {
+        if (window.app && window.app.showNotification) {
+            window.app.showNotification('Группа должна быть snake_case', 'warning');
+        }
+        return;
+    }
+    
+    if (!window.variablesCurrentGroups.includes(group)) {
+        window.variablesCurrentGroups.push(group);
+        renderGroups();
+    }
+    
+    input.value = '';
+};
+
+window.removeGroup = function(group) {
+    window.variablesCurrentGroups = window.variablesCurrentGroups.filter(g => g !== group);
+    renderGroups();
+};
+
+function renderGroups() {
+    const container = document.getElementById('variable-groups-container');
+    if (!container) return;
+    
+    if (window.variablesCurrentGroups.length === 0) {
+        container.innerHTML = '<small class="text-muted">Нет групп</small>';
+        return;
+    }
+    
+    container.innerHTML = window.variablesCurrentGroups.map(group => `
+        <span class="badge bg-primary me-1 mb-1" style="font-size: 0.85rem;">
+            ${group}
+            <i class="bi bi-x ms-1" onclick="removeGroup('${group}')" style="cursor: pointer;"></i>
+        </span>
+    `).join('');
+}
+
+window.toggleSecret = async function(key, btnElement) {
+    const input = document.getElementById(`var-${key}`);
+    const icon = btnElement.querySelector('i');
+    
+    if (input.type === 'password') {
+        // Загружаем реальное значение
+        try {
+            const response = await fetch(`/api/v1/admin/variables/${key}`, {
+                headers: {
+                    'Authorization': `Bearer ${window.app.authToken}`
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                input.value = data.value;
+                input.type = 'text';
+                icon.className = 'bi bi-eye-slash';
+            }
+        } catch (err) {
+            console.error('Ошибка загрузки значения:', err);
+        }
+    } else {
+        input.value = '••••••••••••';
+        input.type = 'password';
+        icon.className = 'bi bi-eye';
+    }
+};
+
+})();
+</script>

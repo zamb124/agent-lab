@@ -209,6 +209,35 @@ class PaymentProvidersConfig(BaseModel):
     )
 
 
+class MigrationSettings(BaseModel):
+    """Настройки миграции для новых компаний"""
+    
+    default_flows: list[str] = Field(
+        default_factory=lambda: [
+            "app.flows.test_flow.test_flow_config",
+            "app.flows.weather_flow.weather_flow_config",
+        ],
+        description="Список flow для миграции в новую компанию"
+    )
+    default_agents: list[str] = Field(
+        default_factory=lambda: [
+            "app.agents.calculator.agent.CalculatorAgent",
+        ],
+        description="Список агентов для миграции в новую компанию (если нужны без flow)"
+    )
+    default_tools: list[str] = Field(
+        default_factory=lambda: [
+            "app.tools.calc_tools.calculate",
+            "app.tools.calc_tools.get_math_help",
+        ],
+        description="Список тулов для миграции в новую компанию (если нужны отдельно)"
+    )
+    migrate_dependencies: bool = Field(
+        default=True,
+        description="Мигрировать ли зависимости автоматически при миграции flow"
+    )
+
+
 class Settings(BaseSettings):
     """Настройки приложения с поддержкой JSON конфигурации"""
 
@@ -226,6 +255,7 @@ class Settings(BaseSettings):
     amocrm: AmoCRMConfig = Field(default_factory=AmoCRMConfig)
     proxy: ProxyConfig = Field(default_factory=ProxyConfig)
     payment_providers: PaymentProvidersConfig = Field(default_factory=PaymentProvidersConfig)
+    migration: MigrationSettings = Field(default_factory=MigrationSettings)
 
     def __init__(self, **data):
         # Загружаем JSON конфигурацию и объединяем с переданными данными

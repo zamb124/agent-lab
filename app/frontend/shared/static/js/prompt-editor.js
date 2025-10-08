@@ -135,17 +135,6 @@ class PromptEditor {
                                     </div>
                                     <div class="category-items" data-category="flow"></div>
                                 </div>
-                                
-                                <!-- Локальные -->
-                                <div class="variable-category">
-                                    <div class="category-header">
-                                        <i class="bi bi-box"></i> Локальные
-                                        <button class="btn-add-variable" data-type="local" title="Добавить">
-                                            <i class="bi bi-plus-circle"></i>
-                                        </button>
-                                    </div>
-                                    <div class="category-items" data-category="local"></div>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -184,11 +173,33 @@ class PromptEditor {
             
             const data = await response.json();
             
+            console.log('🔍 DEBUG: API вернул данные:', data);
+            console.log('🔍 DEBUG: data.flow =', data.flow);
+            
             this.systemVariables = data.system || [];
             this.companyVariables = data.company || [];
             this.userVariables = data.user || [];
             this.flowVariables = data.flow || [];
             this.localVariables = data.local || [];
+            
+            // Пользовательские variables НЕ добавляются в company
+            // Они доступны только через Flow переменные с @var:key
+            // Но загружаем для dropdown при создании Flow переменных
+            window.availableCompanyVars = [];
+            try {
+                const varsResponse = await fetch('/api/v1/admin/variables');
+                if (varsResponse.ok) {
+                    const varsData = await varsResponse.json();
+                    window.availableCompanyVars = Object.entries(varsData).map(([key, varInfo]) => ({
+                        name: key,
+                        description: varInfo.description || '',
+                        value: varInfo.secret ? '***' : varInfo.value,
+                        groups: varInfo.groups || []
+                    }));
+                }
+            } catch (err) {
+                console.warn('Не удалось загрузить переменные компании:', err);
+            }
             
             console.log('✅ Переменные загружены:', {
                 system: this.systemVariables.length,
@@ -197,6 +208,7 @@ class PromptEditor {
                 flow: this.flowVariables.length,
                 local: this.localVariables.length
             });
+            console.log('🔍 DEBUG: flowVariables:', this.flowVariables);
             
         } catch (error) {
             console.error('Ошибка загрузки переменных:', error);
@@ -539,7 +551,7 @@ class PromptEditor {
         this.renderVariableCategory('company', this.companyVariables);
         this.renderVariableCategory('user', this.userVariables);
         this.renderVariableCategory('flow', this.flowVariables);
-        this.renderVariableCategory('local', this.localVariables);
+        // local не показываем в /bots, только в админке агентов
     }
     
     /**
@@ -563,11 +575,21 @@ class PromptEditor {
                     <div class="variable-description">${v.description || ''}</div>
                     ${v.value !== undefined && v.value !== null ? `<div class="variable-value">Текущее: ${v.value}</div>` : ''}
                 </div>
-                <button class="btn-insert-variable" 
-                        data-variable="${v.name}" 
-                        title="Вставить">
-                    <i class="bi bi-plus-lg"></i>
-                </button>
+                <div class="variable-actions">
+                    <button class="btn-insert-variable" 
+                            data-variable="${v.name}" 
+                            title="Вставить">
+                        <i class="bi bi-plus-lg"></i>
+                    </button>
+                    ${(category === 'flow' || category === 'local') ? `
+                    <button class="btn-delete-variable" 
+                            data-variable="${v.name}"
+                            data-category="${category}"
+                            title="Удалить">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                    ` : ''}
+                </div>
             </div>
         `).join('');
         
@@ -604,6 +626,14 @@ class PromptEditor {
             if (insertBtn) {
                 const variable = insertBtn.dataset.variable;
                 this.insertVariable(variable);
+            }
+            
+            // Удаление переменных
+            const deleteBtn = e.target.closest('.btn-delete-variable');
+            if (deleteBtn) {
+                const varName = deleteBtn.dataset.variable;
+                const category = deleteBtn.dataset.category;
+                this.deleteVariable(varName, category);
             }
         });
         
@@ -902,6 +932,60 @@ class PromptEditor {
     showAddVariableDialog(type) {
         const modal = document.createElement('div');
         modal.className = 'prompt-variable-modal';
+        
+        // Для flow переменных - выбор из company variables
+        let valueInput = '';
+        if (type === 'flow') {
+            // Используем availableCompanyVars вместо companyVariables
+            const vars = window.availableCompanyVars || [];
+            const companyVarsOptions = vars.map(v => {
+                const desc = v.description ? ` - ${v.description}` : '';
+                const val = v.value !== '***' ? ` (${v.value})` : '';
+                return `<option value="@var:${v.name}">@var:${v.name}${desc}${val}</option>`;
+            }).join('');
+            
+            valueInput = `
+                <div class="form-group">
+                    <label>Тип значения</label>
+                    <div class="mb-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="value-type" id="value-type-var" value="var" checked onchange="toggleValueInput()">
+                            <label class="form-check-label" for="value-type-var">
+                                Ссылка на переменную компании
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="value-type" id="value-type-hardcoded" value="hardcoded" onchange="toggleValueInput()">
+                            <label class="form-check-label" for="value-type-hardcoded">
+                                Хардкод значение
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group" id="var-select-group">
+                    <label>Выберите переменную</label>
+                    <select class="form-control" id="variable-value-select">
+                        <option value="">-- Выберите переменную --</option>
+                        ${companyVarsOptions}
+                    </select>
+                </div>
+                <div class="form-group" id="hardcoded-input-group" style="display: none;">
+                    <label>Значение</label>
+                    <input type="text" class="form-control" placeholder="Хардкод значение" id="variable-value-hardcoded">
+                </div>
+            `;
+        } else {
+            valueInput = `
+                <div class="form-group">
+                    <label>Значение по умолчанию</label>
+                    <input type="text" 
+                           class="form-control" 
+                           placeholder="Значение" 
+                           id="variable-value">
+                </div>
+            `;
+        }
+        
         modal.innerHTML = `
             <div class="modal-overlay" onclick="this.parentElement.remove()"></div>
             <div class="modal-content">
@@ -921,20 +1005,7 @@ class PromptEditor {
                                id="variable-name">
                         <small class="form-text">Только латинские буквы, цифры и подчеркивание</small>
                     </div>
-                    <div class="form-group">
-                        <label>Описание</label>
-                        <input type="text" 
-                               class="form-control" 
-                               placeholder="Описание переменной" 
-                               id="variable-description">
-                    </div>
-                    <div class="form-group">
-                        <label>Значение по умолчанию</label>
-                        <input type="text" 
-                               class="form-control" 
-                               placeholder="Значение" 
-                               id="variable-value">
-                    </div>
+                    ${valueInput}
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" onclick="this.closest('.prompt-variable-modal').remove()">
@@ -950,6 +1021,23 @@ class PromptEditor {
         document.body.appendChild(modal);
         window.currentEditor = this;
         
+        // Функция переключения между select и input для flow переменных
+        window.toggleValueInput = function() {
+            const varGroup = document.getElementById('var-select-group');
+            const hardcodedGroup = document.getElementById('hardcoded-input-group');
+            const varRadio = document.getElementById('value-type-var');
+            
+            if (varGroup && hardcodedGroup) {
+                if (varRadio.checked) {
+                    varGroup.style.display = 'block';
+                    hardcodedGroup.style.display = 'none';
+                } else {
+                    varGroup.style.display = 'none';
+                    hardcodedGroup.style.display = 'block';
+                }
+            }
+        };
+        
         // Фокус на поле ввода
         setTimeout(() => modal.querySelector('#variable-name').focus(), 100);
     }
@@ -960,8 +1048,25 @@ class PromptEditor {
     addVariable(type) {
         const modal = document.querySelector('.prompt-variable-modal');
         const name = modal.querySelector('#variable-name').value.trim();
-        const description = modal.querySelector('#variable-description').value.trim();
-        const value = modal.querySelector('#variable-value').value.trim();
+        
+        let value = '';
+        if (type === 'flow') {
+            // Для flow переменных проверяем тип
+            const varRadio = modal.querySelector('#value-type-var');
+            if (varRadio && varRadio.checked) {
+                // Ссылка на company variable
+                const select = modal.querySelector('#variable-value-select');
+                value = select ? select.value : '';
+            } else {
+                // Хардкод значение
+                const input = modal.querySelector('#variable-value-hardcoded');
+                value = input ? input.value.trim() : '';
+            }
+        } else {
+            // Для локальных переменных - обычный input
+            const valueInput = modal.querySelector('#variable-value');
+            value = valueInput ? valueInput.value.trim() : '';
+        }
         
         if (!name) {
             alert('Введите название переменной');
@@ -971,6 +1076,20 @@ class PromptEditor {
         if (!/^[a-z_][a-z0-9_]*$/.test(name)) {
             alert('Название должно содержать только латинские буквы, цифры и подчеркивание');
             return;
+        }
+        
+        if (!value) {
+            alert('Выберите или введите значение');
+            return;
+        }
+        
+        // Описание берем из company variable если это ссылка
+        let description = '';
+        if (type === 'flow' && value.startsWith('@var:')) {
+            const varKey = value.substring(5);
+            const vars = window.availableCompanyVars || [];
+            const companyVar = vars.find(v => v.name === varKey);
+            description = companyVar ? companyVar.description : '';
         }
         
         const variable = {
@@ -1016,10 +1135,44 @@ class PromptEditor {
     
     
     /**
+     * Удалить переменную
+     */
+    deleteVariable(varName, category) {
+        if (!confirm(`Удалить переменную {${varName}}?`)) {
+            return;
+        }
+        
+        if (category === 'flow') {
+            this.flowVariables = this.flowVariables.filter(v => v.name !== varName);
+        } else if (category === 'local') {
+            this.localVariables = this.localVariables.filter(v => v.name !== varName);
+        }
+        
+        this.renderVariables();
+        
+        if (this.options.onVariablesChange) {
+            this.options.onVariablesChange(category, this.getVariables(category));
+        }
+    }
+    
+    /**
      * Получить значение редактора
      */
     getValue() {
         return this.editor ? this.editor.value : '';
+    }
+    
+    /**
+     * Получить flow переменные как объект для сохранения
+     * Возвращает ОРИГИНАЛЬНЫЕ значения (@var:key), а не резолвнутые
+     */
+    getFlowVariables() {
+        const variables = {};
+        this.flowVariables.forEach(v => {
+            // v.value уже содержит оригинальное значение (@var:key или хардкод)
+            variables[v.name] = v.value;
+        });
+        return variables;
     }
     
     /**

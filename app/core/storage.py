@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.models import AgentConfig, FlowConfig, TaskConfig, SessionConfig, SessionStatus
 from app.db.database import AsyncSessionLocal
-from app.db.models import Storage as StorageModel, Users as UsersModel
+from app.db.models import Storage as StorageModel, Users as UsersModel, Variables as VariablesModel
 from app.core.context import get_context
 
 logger = logging.getLogger(__name__)
@@ -22,6 +22,7 @@ TABLE_ROUTING = {
     "user_providers:": {"table": "users", "company_specific": False},
     "auth_session:": {"table": "users", "company_specific": False},
     "auth_state:": {"table": "users", "company_specific": False},
+    "var:": {"table": "variables", "company_specific": False},
     
     "_default": {"table": "storage", "company_specific": False}
 }
@@ -48,10 +49,17 @@ class Storage:
         Returns:
             Имя таблицы (например, "users", "storage", "acme_tasks")
         """
+        # Убираем company prefix если есть для проверки маршрута
+        check_key = key
+        if key.startswith("company:") and ":" in key[8:]:
+            parts = key.split(":", 2)
+            if len(parts) >= 3:
+                check_key = parts[2]
+        
         for prefix, config in TABLE_ROUTING.items():
             if prefix == "_default":
                 continue
-            if key.startswith(prefix):
+            if check_key.startswith(prefix):
                 table_name = config["table"]
                 if config["company_specific"] and company_id:
                     return f"{company_id}_{table_name}"
@@ -77,6 +85,10 @@ class Storage:
         if table_name == "users":
             self._table_cache[table_name] = UsersModel
             return UsersModel
+        
+        if table_name == "variables":
+            self._table_cache[table_name] = VariablesModel
+            return VariablesModel
         
         table = Table(
             table_name,
@@ -149,13 +161,24 @@ class Storage:
             result = await session.execute(
                 select(UsersModel.value).where(UsersModel.key == key)
             )
+        elif table_name == "variables":
+            result = await session.execute(
+                select(VariablesModel.value).where(VariablesModel.key == key)
+            )
         else:
             query = text(f"SELECT value FROM {table_name} WHERE key = :key")
             result = await session.execute(query, {"key": key})
         
         row = result.first()
         if row:
-            return json.dumps(row.value if hasattr(row, 'value') else row[0]) if row else None
+            value = row.value if hasattr(row, 'value') else row[0]
+            # JSONB поля уже dict, просто сериализуем в строку
+            if isinstance(value, dict):
+                return json.dumps(value)
+            elif isinstance(value, str):
+                return value
+            else:
+                return json.dumps(value)
         return None
 
     async def set(
@@ -221,6 +244,19 @@ class Storage:
             await session.execute(stmt)
         elif table_name == "users":
             stmt = insert(UsersModel).values(
+                key=key, value=json_value, expired_at=expired_at
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["key"],
+                set_=dict(
+                    value=stmt.excluded.value,
+                    updated_at=stmt.excluded.updated_at,
+                    expired_at=stmt.excluded.expired_at,
+                ),
+            )
+            await session.execute(stmt)
+        elif table_name == "variables":
+            stmt = insert(VariablesModel).values(
                 key=key, value=json_value, expired_at=expired_at
             )
             stmt = stmt.on_conflict_do_update(
@@ -301,6 +337,8 @@ class Storage:
         """Получает конфигурацию агента"""
         key = f"agent:{agent_id}"
         data = await self.get(key)
+        if data is None:
+            return None
         return AgentConfig.model_validate_json(data)
 
     async def set_agent_config(self, config: AgentConfig) -> bool:
@@ -463,6 +501,13 @@ class Storage:
                 result = await session.execute(
                     select(UsersModel.key)
                     .where(UsersModel.key.like(f"{final_prefix}%"))
+                    .limit(limit)
+                )
+                return [row.key for row in result]
+            elif table_name == "variables":
+                result = await session.execute(
+                    select(VariablesModel.key)
+                    .where(VariablesModel.key.like(f"{final_prefix}%"))
                     .limit(limit)
                 )
                 return [row.key for row in result]

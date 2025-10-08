@@ -271,11 +271,20 @@
         
         // Получаем значение из Prompt Editor
         const promptValue = promptEditor ? promptEditor.getValue() : null;
+        const flowVariables = promptEditor ? promptEditor.getFlowVariables() : null;
+        
+        console.log('🔍 DEBUG: flowVariables до добавления =', flowVariables);
+        
+        // Добавляем переменные в flowData если есть
+        if (flowVariables && Object.keys(flowVariables).length > 0) {
+            flowData.variables = flowVariables;
+        }
         
         console.log('💾 Сохранение настроек бота:', {
             botId: botId,
             flowData: flowData,
             promptValue: promptValue ? `${promptValue.substring(0, 100)}...` : null,
+            flowVariables: flowVariables,
             hasPromptEditor: !!promptEditor
         });
         
@@ -313,6 +322,23 @@
                 
                 if (!tokenResponse.ok) {
                     console.warn('Не удалось сохранить токен Telegram');
+                } else {
+                    // Перезагружаем Telegram polling
+                    try {
+                        const reloadResponse = await fetch('/api/v1/admin/reload-telegram-bots', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${window.app.authToken}`
+                            }
+                        });
+                        
+                        if (reloadResponse.ok) {
+                            const reloadData = await reloadResponse.json();
+                            console.log('✅ Telegram polling перезагружен:', reloadData);
+                        }
+                    } catch (reloadError) {
+                        console.warn('⚠️ Ошибка перезагрузки telegram polling:', reloadError);
+                    }
                 }
             }
             
@@ -347,8 +373,33 @@
         }
     };
 
-    window.addPlatform = function(botId) {
+    window.addPlatform = async function(botId) {
         let modal = document.getElementById('add-platform-modal');
+        
+        // Загружаем доступные переменные для токена
+        try {
+            const response = await fetch('/api/v1/admin/variables', {
+                headers: {
+                    'Authorization': `Bearer ${window.app.authToken}`
+                }
+            });
+            if (response.ok) {
+                const varsData = await response.json();
+                const select = document.getElementById('platform-token-select');
+                
+                // Очищаем и заполняем dropdown
+                select.innerHTML = '<option value="">-- Выберите переменную --</option>';
+                Object.entries(varsData).forEach(([key, varInfo]) => {
+                    const desc = varInfo.description ? ` - ${varInfo.description}` : '';
+                    const option = document.createElement('option');
+                    option.value = `@var:${key}`;
+                    option.textContent = `@var:${key}${desc}`;
+                    select.appendChild(option);
+                });
+            }
+        } catch (err) {
+            console.error('Ошибка загрузки переменных:', err);
+        }
         
         // Перемещаем модальное окно в body если оно не там
         if (modal.parentElement !== document.body) {
@@ -371,6 +422,22 @@
         document.body.style.overflow = 'hidden';
         
         console.log('🔧 Modal opened, parent:', modal.parentElement.tagName);
+    };
+    
+    window.toggleTokenInput = function() {
+        const varGroup = document.getElementById('token-var-select-group');
+        const hardcodedGroup = document.getElementById('token-hardcoded-group');
+        const varRadio = document.getElementById('token-type-var');
+        
+        if (varGroup && hardcodedGroup) {
+            if (varRadio.checked) {
+                varGroup.style.display = 'block';
+                hardcodedGroup.style.display = 'none';
+            } else {
+                varGroup.style.display = 'none';
+                hardcodedGroup.style.display = 'block';
+            }
+        }
     };
 
     window.closeAddPlatformModal = function() {
@@ -558,12 +625,30 @@
         // Собираем конфигурацию платформы
         const platformConfig = {};
         
-        if (token && !document.getElementById('platform-token').disabled) {
-            platformConfig.token = token;
+        // Получаем токен (из select или input)
+        let finalToken = '';
+        const varRadio = document.getElementById('token-type-var');
+        if (varRadio && varRadio.checked) {
+            // Ссылка на переменную
+            const select = document.getElementById('platform-token-select');
+            finalToken = select ? select.value : '';
+        } else {
+            // Хардкод токен
+            const input = document.getElementById('platform-token');
+            finalToken = input ? input.value : '';
+        }
+        
+        console.log('🔍 DEBUG: finalToken =', finalToken);
+        console.log('🔍 DEBUG: username =', username);
+        
+        if (finalToken) {
+            platformConfig.token = finalToken;
         }
         if (username) {
             platformConfig.username = username;
         }
+        
+        console.log('🔍 DEBUG: platformConfig =', platformConfig);
 
         // Добавляем кастомные переменные
         const variableRows = document.querySelectorAll('#custom-variables .variable-row');
@@ -596,23 +681,7 @@
             }
             currentFlow.platforms[platformType] = platformConfig;
 
-            // Сохраняем обновленную конфигурацию
-            const updateResponse = await fetch(`/frontend/api/flows/${botId}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${window.app.authToken}`
-                },
-                body: JSON.stringify({
-                    platforms: currentFlow.platforms
-                })
-            });
-
-            if (!updateResponse.ok) {
-                throw new Error('Не удалось сохранить платформу');
-            }
-
-            // Сохраняем токен отдельно, если есть
+            // 1. Сначала сохраняем токен (если есть)
             if (token && username && !document.getElementById('platform-token').disabled) {
                 const tokenResponse = await fetch('/api/v1/admin/tokens', {
                     method: 'POST',
@@ -628,8 +697,28 @@
                 });
                 
                 if (!tokenResponse.ok) {
-                    console.warn('Не удалось сохранить токен отдельно');
+                    const error = await tokenResponse.json();
+                    throw new Error(error.detail || 'Не удалось сохранить токен');
                 }
+                
+                console.log('✅ Токен сохранен');
+            }
+            
+
+            // 2. Потом обновляем platforms в flow (это вызовет регистрацию)
+            const updateResponse = await fetch(`/frontend/api/flows/${botId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.app.authToken}`
+                },
+                body: JSON.stringify({
+                    platforms: currentFlow.platforms
+                })
+            });
+
+            if (!updateResponse.ok) {
+                throw new Error('Не удалось сохранить платформу');
             }
 
             showNotification(`Платформа ${platformType} добавлена`, 'success');
@@ -715,7 +804,10 @@
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            if (document.getElementById('add-platform-modal').style.display === 'flex') {
+            const remigrateModal = document.getElementById('remigrate-confirm-modal');
+            if (remigrateModal && remigrateModal.style.display === 'flex') {
+                window.closeRemigrateModal();
+            } else if (document.getElementById('add-platform-modal').style.display === 'flex') {
                 window.closeAddPlatformModal();
             } else if (currentBotModal) {
                 window.closeBotModal();
@@ -729,7 +821,10 @@
             window.closeAddPlatformModal();
         }
         
-        // Закрытие dropdown платформ при клике вне его области
+        if (e.target.id === 'remigrate-confirm-modal') {
+            window.closeRemigrateModal();
+        }
+        
         const dropdown = document.getElementById('platform-dropdown');
         const customSelect = document.getElementById('platform-type-select');
         
@@ -740,5 +835,79 @@
             }
         }
     });
+    
+    let pendingRemigrateFlowId = null;
+    
+    window.remigrateFlowWithDeps = function(flowId) {
+        pendingRemigrateFlowId = flowId;
+        const modal = document.getElementById('remigrate-confirm-modal');
+        const confirmBtn = document.getElementById('confirm-remigrate-btn');
+        
+        if (modal) {
+            modal.style.display = 'flex';
+        }
+        
+        if (confirmBtn) {
+            confirmBtn.onclick = () => confirmRemigrate();
+        }
+    };
+    
+    window.closeRemigrateModal = function() {
+        const modal = document.getElementById('remigrate-confirm-modal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        pendingRemigrateFlowId = null;
+    };
+    
+    window.confirmRemigrate = async function() {
+        if (!pendingRemigrateFlowId) {
+            return;
+        }
+        
+        const flowId = pendingRemigrateFlowId;
+        const modal = document.getElementById('remigrate-confirm-modal');
+        
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        
+        if (window.app && window.app.showNotification) {
+            window.app.showNotification('Выполняется сброс к коду...', 'info');
+        }
+        
+        const response = await fetch(`/api/v1/admin/remigrate-flow-with-deps/${flowId}`, { 
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            if (window.app && window.app.showNotification) {
+                window.app.showNotification('Ошибка: ' + (errorData.detail || `HTTP ${response.status}`), 'danger');
+            }
+            return;
+        }
+        
+        const data = await response.json();
+        if (window.app && window.app.showNotification) {
+            window.app.showNotification(data.message, 'success');
+        }
+        
+        setTimeout(async () => {
+            const modalDetails = document.getElementById('modal-bot-details');
+            if (modalDetails) {
+                modalDetails.innerHTML = '<div class="loading-indicator"><div class="spinner"></div><span>Перезагрузка...</span></div>';
+                
+                const detailsResponse = await fetch(`/frontend/bots/${flowId}/details`);
+                const html = await detailsResponse.text();
+                modalDetails.innerHTML = html;
+                
+                initBotSettings();
+            }
+        }, 500);
+    };
 
 })();

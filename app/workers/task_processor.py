@@ -19,7 +19,7 @@ from app.exceptions import TariffError, BillingError
 from langgraph.errors import GraphInterrupt
 from langchain_core.messages import HumanMessage
 from langgraph.types import Command
-
+from app.services.variables_service import get_variables_service
 logger = logging.getLogger(__name__)
 
 
@@ -91,6 +91,11 @@ class TaskProcessor:
 
         interface_factory = InterfaceFactory()
         metadata = task.input_data.get("metadata", {})
+        
+        # Добавляем flow_id для telegram интерфейса
+        if task.context.platform == "telegram":
+            metadata["flow_id"] = task.flow_id
+        
         interface = await interface_factory.create_interface(task.context.platform, metadata)
         
         if interface:
@@ -107,12 +112,15 @@ class TaskProcessor:
                 company_id = current_context.active_company.company_id if current_context and current_context.active_company else 'НЕТ'
                 raise ValueError(f"Flow {task.flow_id} не найден в БД (контекст: company={company_id})")
 
-            # Устанавливаем переменные flow в контекст
+            # Устанавливаем переменные flow в контекст с резолюцией @var:key
             current_context = get_context()
             if current_context:
                 if hasattr(flow_config, 'variables') and flow_config.variables:
-                    current_context.flow_variables = flow_config.variables
-                    logger.info(f"📝 Переменные flow установлены в контекст: {list(flow_config.variables.keys())}")
+
+                    variables_service = get_variables_service()
+                    resolved_variables = await variables_service.resolve(flow_config.variables)
+                    current_context.flow_variables = resolved_variables
+                    logger.info(f"📝 Переменные flow резолвнуты и установлены в контекст: {list(resolved_variables.keys())}")
 
             entry_agent = await self.agent_factory.get_agent(flow_config.entry_point_agent)
 
