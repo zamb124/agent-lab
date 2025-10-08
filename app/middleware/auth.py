@@ -409,6 +409,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             companies={requested_company.company_id: ["guest"]},
             active_company_id=requested_company.company_id,
         )
+        language = self._detect_user_language(request)
 
         return Context(
             user=user,

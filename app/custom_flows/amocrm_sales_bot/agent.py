@@ -5,6 +5,10 @@
 from app.agents.base import BaseAgent
 from .tools import save_fashn_issue_card, get_fashn_issue_status, add_fashn_issue_comment
 
+from app.core.proxy_setup import configure_proxy_from_settings
+
+configure_proxy_from_settings()
+
 
 class AmocrmSalesBot(BaseAgent):
     """Агент ассистента закупщика для сбора информации о брендовых вещах"""
