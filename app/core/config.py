@@ -154,6 +154,61 @@ class AmoCRMConfig(BaseModel):
     bot_amojo_id: Optional[str] = None
 
 
+class ProxyConfig(BaseModel):
+    """Конфигурация прокси для внешних запросов"""
+
+    enabled: bool = False
+    http_proxy: Optional[str] = None
+    https_proxy: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+
+    def get_proxy_url(self, protocol: str = "http") -> Optional[str]:
+        """Возвращает URL прокси с авторизацией"""
+        if not self.enabled:
+            return None
+
+        proxy_url = self.https_proxy if protocol == "https" else self.http_proxy
+        if not proxy_url:
+            return None
+
+        if self.username and self.password:
+            if "://" in proxy_url:
+                protocol_part, rest = proxy_url.split("://", 1)
+                return f"{protocol_part}://{self.username}:{self.password}@{rest}"
+            else:
+                return f"http://{self.username}:{self.password}@{proxy_url}"
+
+        return proxy_url
+
+    def get_proxies_dict(self) -> Optional[Dict[str, str]]:
+        """Возвращает словарь прокси для httpx/requests"""
+        if not self.enabled:
+            return None
+
+        proxies = {}
+
+        http_url = self.get_proxy_url("http")
+        if http_url:
+            proxies["http://"] = http_url
+
+        https_url = self.get_proxy_url("https")
+        if https_url:
+            proxies["https://"] = https_url
+
+        return proxies if proxies else None
+
+
+class PaymentProvidersConfig(BaseModel):
+    """Конфигурация платежных провайдеров"""
+
+    default_provider: Optional[str] = None
+    providers: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Платежные провайдеры (yoomoney_main, yukassa_main, etc.)"
+    )
+
+
 class Settings(BaseSettings):
     """Настройки приложения с поддержкой JSON конфигурации"""
 
@@ -169,6 +224,8 @@ class Settings(BaseSettings):
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
     nano_banana: NanoBananaConfig = Field(default_factory=NanoBananaConfig)
     amocrm: AmoCRMConfig = Field(default_factory=AmoCRMConfig)
+    proxy: ProxyConfig = Field(default_factory=ProxyConfig)
+    payment_providers: PaymentProvidersConfig = Field(default_factory=PaymentProvidersConfig)
 
     def __init__(self, **data):
         # Загружаем JSON конфигурацию и объединяем с переданными данными

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
 
 from app.identity.models import User, Company
+from app.models.i18n_models import Language
 
 if TYPE_CHECKING:
     from app.core.state import State
@@ -42,6 +43,12 @@ class Context(BaseModel):
         default_factory=dict,
         title="Метаданные",
         description="Дополнительные метаданные контекста",
+    )
+    
+    language: Language = Field(
+        default=Language.RU,
+        title="Язык пользователя",
+        description="Предпочитаемый язык интерфейса пользователя",
     )
     
     flow_variables: Dict[str, Any] = Field(

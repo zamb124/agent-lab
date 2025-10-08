@@ -186,7 +186,7 @@ class Builder {
     async loadFlow(flowId) {
         try {
             // Загружаем данные флоу
-            const response = await fetch(`/frontend/builder/flows/${encodeURIComponent(flowId)}`);
+            const response = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}`);
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
@@ -194,7 +194,7 @@ class Builder {
             this.currentFlow = await response.json();
             
             // Загружаем данные канваса
-            const canvasResponse = await fetch(`/frontend/builder/flows/${encodeURIComponent(flowId)}/canvas`);
+            const canvasResponse = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}/canvas`);
             if (canvasResponse.ok) {
                 const canvasData = await canvasResponse.json();
                 await this.canvas.loadGraph(canvasData);
@@ -238,7 +238,7 @@ class Builder {
             const canvasData = this.canvas.getGraphData();
             
             // Сохраняем канвас
-            const response = await fetch(`/frontend/builder/flows/${encodeURIComponent(this.currentFlow.flow_id)}/canvas`, {
+            const response = await fetch(`/frontend/api/flows/${encodeURIComponent(this.currentFlow.flow_id)}/canvas`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -306,7 +306,7 @@ class Builder {
             }
             
             // Получаем пустую модель Flow
-            const response = await fetch('/frontend/builder/flows/', {
+            const response = await fetch('/frontend/api/flows/', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({})
@@ -347,7 +347,7 @@ class Builder {
     async createEmptyAgentOnCanvas() {
         try {
             // Получаем пустую модель Agent
-            const response = await fetch('/frontend/builder/agents/', {
+            const response = await fetch('/frontend/api/agents/', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({})
@@ -381,7 +381,7 @@ class Builder {
     async createEmptyToolOnCanvas() {
         try {
             // Получаем пустую модель Tool
-            const response = await fetch('/frontend/builder/tools/', {
+            const response = await fetch('/frontend/api/tools/', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({})

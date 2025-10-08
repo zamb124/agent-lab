@@ -33,19 +33,19 @@ class State(TypedDict, total=False):
     Поля:
     - messages: История диалога (автоматически персистится)
     - store: Сессионное хранилище для любых данных агентов (автоматически персистится)
-    - remaining_steps: Счетчик оставшихся шагов для ReAct агентов
     - task_id: ID текущей задачи
     - session_id: ID текущей сессии
     - user_id: ID пользователя
+    - remaining_steps: Оставшееся количество шагов для ReAct агента (требуется для create_react_agent)
     """
     
     messages: Annotated[List, add_messages]
     store: Annotated[Dict[str, Any], merge_store]
-    remaining_steps: int
     
     task_id: str
     session_id: str
     user_id: str
+    remaining_steps: int
 
 
 def get_default_state() -> State:
@@ -53,8 +53,8 @@ def get_default_state() -> State:
     return {
         "messages": [],
         "store": {},
-        "remaining_steps": 25,
         "task_id": "",
         "session_id": "",
         "user_id": "",
+        "remaining_steps": 25,
     }

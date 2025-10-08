@@ -6,7 +6,8 @@ from typing import Any, Dict, Optional, Union, List, get_origin, get_args
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 import pydantic
-
+import re
+import inspect
 from app.frontend.core.template_loader import render_template, template_exists
 from app.core.context import get_context
 
@@ -60,7 +61,7 @@ def get_template_name_from_type(annotation: Any, value: Any = None) -> str:
             return origin_name
 
     # Проверяем BaseModel
-    if issubclass(annotation, BaseModel):
+    if inspect.isclass(annotation) and issubclass(annotation, BaseModel):
         return "basemodel"
 
     # Для обычных типов просто берем имя
@@ -124,8 +125,37 @@ class FrontendFieldInfo(FieldInfo):
         sortable: bool = True,
         filterable: bool = True,
         searchable: bool = True,
+        # Параметры интернационализации
+        i18n_key: Optional[str] = None,
+        i18n_title: Optional[str] = None,
+        i18n_description: Optional[str] = None,
+        i18n_placeholder: Optional[str] = None,
+        i18n_help_text: Optional[str] = None,
         **kwargs,
     ):
+        def normalize_key_part(text: str) -> str:
+            """Нормализует текст для использования в качестве части ключа"""
+            
+            # Приводим к нижнему регистру и заменяем все не-буквы-цифры на подчеркивания
+            normalized = re.sub(r'[^\w\s]', '_', text.lower())
+            # Заменяем пробелы на подчеркивания
+            normalized = re.sub(r'\s+', '_', normalized)
+            # Убираем повторяющиеся подчеркивания
+            normalized = re.sub(r'_+', '_', normalized)
+            # Убираем подчеркивания в начале и конце
+            normalized = normalized.strip('_')
+            return normalized[:50]  # Ограничиваем длину
+
+        # Автогенерация ключей переводов если не указаны явно
+        if i18n_title is None and title:
+            i18n_title = f"field.title.{normalize_key_part(title)}"
+        if i18n_description is None and description:
+            i18n_description = f"field.description.{normalize_key_part(description)}"
+        if i18n_placeholder is None and placeholder:
+            i18n_placeholder = f"field.placeholder.{normalize_key_part(placeholder)}"
+        if i18n_help_text is None and help_text:
+            i18n_help_text = f"field.help_text.{normalize_key_part(help_text)}"
+
         # Подготавливаем json_schema_extra с нашими расширениями
         frontend_extra = {
             "readonly": readonly,
@@ -141,6 +171,12 @@ class FrontendFieldInfo(FieldInfo):
             "sortable": sortable,
             "filterable": filterable,
             "searchable": searchable,
+            # Ключи интернационализации
+            "i18n_key": i18n_key,
+            "i18n_title": i18n_title,
+            "i18n_description": i18n_description,
+            "i18n_placeholder": i18n_placeholder,
+            "i18n_help_text": i18n_help_text,
         }
 
         # Объединяем с существующим json_schema_extra
@@ -220,7 +256,7 @@ class FrontendFieldInfo(FieldInfo):
             type_name = get_template_name_from_type(clean_annotation, value)
 
             # Если это BaseModel и значение существует И является BaseModel
-            if issubclass(clean_annotation, BaseModel):
+            if inspect.isclass(clean_annotation) and issubclass(clean_annotation, BaseModel):
                 if value is not None and isinstance(value, BaseModel):
                     # Проверяем, есть ли render=True у поля
                     json_extra = self.json_schema_extra or {}
@@ -338,6 +374,12 @@ def Field(
     sortable: bool = True,
     filterable: bool = True,
     searchable: bool = True,
+    # Параметры интернационализации
+    i18n_key: Optional[str] = None,
+    i18n_title: Optional[str] = None,
+    i18n_description: Optional[str] = None,
+    i18n_placeholder: Optional[str] = None,
+    i18n_help_text: Optional[str] = None,
 ) -> Any:
     """
     Расширенная версия Pydantic Field с дополнительными параметрами для фронтенда
@@ -354,6 +396,13 @@ def Field(
     - sortable: Можно ли сортировать по полю
     - filterable: Можно ли фильтровать по полю
     - searchable: Участвует ли в поиске
+    
+    Параметры интернационализации:
+    - i18n_key: Общий ключ перевода для поля
+    - i18n_title: Ключ перевода для title (автогенерируется если не указан)
+    - i18n_description: Ключ перевода для description (автогенерируется если не указан)
+    - i18n_placeholder: Ключ перевода для placeholder (автогенерируется если не указан)  
+    - i18n_help_text: Ключ перевода для help_text (автогенерируется если не указан)
     """
     return FrontendFieldInfo(
         default=default,
@@ -399,6 +448,11 @@ def Field(
         sortable=sortable,
         filterable=filterable,
         searchable=searchable,
+        i18n_key=i18n_key,
+        i18n_title=i18n_title,
+        i18n_description=i18n_description,
+        i18n_placeholder=i18n_placeholder,
+        i18n_help_text=i18n_help_text,
     )
 
 
@@ -674,8 +728,29 @@ class FrontendMixin:
         if hasattr(self, "models") and self.models:
             headers = []
             first_model = self.models[0]
+            model_class_name = first_model.__class__.__name__.lower().replace("config", "")
+            
             for field_name, field_info in first_model.__class__.model_fields.items():
-                title = field_info.title or field_name.replace("_", " ").title()
+                # Пытаемся получить перевод для заголовка поля
+                translation_key = f"models.{model_class_name}.fields.{field_name}.title"
+                
+                # Получаем контекст для доступа к функции перевода
+                ctx = get_context()
+                if ctx:
+                    try:
+                        from app.core.translation_manager import get_translation_manager
+                        manager = get_translation_manager()
+                        translated_title = manager.t(translation_key, ctx.language)
+                        # Если перевод найден и не является ключом
+                        if translated_title != translation_key and not translated_title.startswith("[TODO:"):
+                            title = translated_title
+                        else:
+                            title = field_info.title or field_name.replace("_", " ").title()
+                    except Exception as e:
+                        title = field_info.title or field_name.replace("_", " ").title()
+                else:
+                    title = field_info.title or field_name.replace("_", " ").title()
+                
                 headers.append({"name": field_name, "title": title})
             context["headers"] = headers
 

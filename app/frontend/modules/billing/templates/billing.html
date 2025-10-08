@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Биллинг - Agents Lab{% endblock %}
+{% block title %}{{ t('billing.title') }} - {{ t('common.app_name') }}{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="/static/billing/css/billing.css">
@@ -12,12 +12,30 @@
         <div class="billing-header-left">
             <a href="/frontend/dashboard" class="btn btn-ghost btn-sm">
                 <i class="bi bi-arrow-left"></i>
-                Назад
+                {{ t('common.back') }}
             </a>
-            <h1 class="billing-title">Тарифы и оплата</h1>
+            <h1 class="billing-title">{{ t('billing.title') }}</h1>
         </div>
         <div class="billing-header-right">
-            <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="Переключить тему">
+            <!-- Dropdown для выбора языка -->
+            <div class="dropdown">
+                <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
+                    <i class="bi bi-translate"></i>
+                    <span id="current-language">{{ get_current_language().upper() }}</span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('ru');">
+                        <i class="bi bi-check" style="visibility: hidden" id="lang-ru"></i> 
+                        {{ t('languages.ru') }}
+                    </a></li>
+                    <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('en');">
+                        <i class="bi bi-check" style="visibility: hidden" id="lang-en"></i> 
+                        {{ t('languages.en') }}
+                    </a></li>
+                </ul>
+            </div>
+            
+            <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="{{ t('dashboard.header.theme_toggle') }}">
                 <i class="bi bi-sun"></i>
             </button>
         </div>
@@ -29,39 +47,39 @@
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
                     <i class="bi bi-star"></i>
-                    Текущий тариф
+                    {{ t('billing.current_plan.title') }}
                 </h2>
             </div>
             
             <div class="tariff-card current-tariff">
                 <div class="tariff-badge">
                     {% if company.tariff_plan == 'free' %}
-                        <i class="bi bi-gift"></i> Бесплатный
+                        <i class="bi bi-gift"></i> {{ t('billing.tariff_plans.free.name') }}
                     {% elif company.tariff_plan == 'basic' %}
-                        <i class="bi bi-box"></i> Базовый
+                        <i class="bi bi-box"></i> {{ t('billing.tariff_plans.basic.name') }}
                     {% elif company.tariff_plan == 'premium' %}
-                        <i class="bi bi-gem"></i> Премиум
+                        <i class="bi bi-gem"></i> {{ t('billing.tariff_plans.premium.name') }}
                     {% elif company.tariff_plan == 'enterprise' %}
-                        <i class="bi bi-building"></i> Корпоративный
+                        <i class="bi bi-building"></i> {{ t('billing.tariff_plans.enterprise.name') }}
                     {% endif %}
                 </div>
                 
                 <div class="tariff-stats">
                     <div class="tariff-stat">
-                        <div class="tariff-stat-label">Компания</div>
+                        <div class="tariff-stat-label">{{ t('billing.current_plan.company') }}</div>
                         <div class="tariff-stat-value">{{ company.name }}</div>
                     </div>
                     <div class="tariff-stat">
-                        <div class="tariff-stat-label">Баланс</div>
+                        <div class="tariff-stat-label">{{ t('billing.current_plan.balance') }}</div>
                         <div class="tariff-stat-value">{{ "%.2f"|format(company.balance) }} ₽</div>
                     </div>
                     <div class="tariff-stat">
-                        <div class="tariff-stat-label">Месячный лимит</div>
+                        <div class="tariff-stat-label">{{ t('billing.current_plan.monthly_limit') }}</div>
                         <div class="tariff-stat-value">
                             {% if company.monthly_budget > 0 %}
                                 {{ "%.2f"|format(company.monthly_budget) }} ₽
                             {% else %}
-                                Без лимита
+                                {{ t('billing.current_plan.no_limit') }}
                             {% endif %}
                         </div>
                     </div>
@@ -74,19 +92,19 @@
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
                     <i class="bi bi-wallet2"></i>
-                    Использование бюджета
+                    {{ t('billing.budget_usage.title') }}
                 </h2>
                 <div class="billing-section-actions">
                     <button class="btn btn-primary btn-sm" onclick="openPaymentModal()">
                         <i class="bi bi-credit-card"></i>
-                        Пополнить баланс
+                        {{ t('billing.budget_usage.add_funds') }}
                     </button>
                 </div>
             </div>
             
             <div class="budget-card">
                 <div class="budget-info">
-                    <div class="budget-label">Потрачено в текущем месяце</div>
+                    <div class="budget-label">{{ t('billing.budget_usage.spent_this_month') }}</div>
                     <div class="budget-values">
                         <span class="budget-spent">{{ "%.2f"|format(company.current_month_spent) }} ₽</span>
                         {% if company.monthly_budget > 0 %}
@@ -101,13 +119,13 @@
                     <div class="progress-bar">
                         <div class="progress-fill" style="width: {{ budget_percent }}%"></div>
                     </div>
-                    <div class="progress-label">{{ "%.1f"|format(budget_percent) }}% использовано</div>
+                    <div class="progress-label">{{ "%.1f"|format(budget_percent) }}% {{ t('billing.budget_usage.used') }}</div>
                 </div>
                 {% endif %}
                 
                 <div class="budget-period">
                     <i class="bi bi-calendar3"></i>
-                    Расчетный период: {{ company.billing_period_start.strftime('%d.%m.%Y') }} - {{ company.billing_period_start.replace(day=28).strftime('%d.%m.%Y') if company.billing_period_start.month != 12 else company.billing_period_start.replace(month=12, day=31).strftime('%d.%m.%Y') }}
+                    {{ t('billing.budget_usage.billing_period') }}: {{ company.billing_period_start.strftime('%d.%m.%Y') }} - {{ company.billing_period_start.replace(day=28).strftime('%d.%m.%Y') if company.billing_period_start.month != 12 else company.billing_period_start.replace(month=12, day=31).strftime('%d.%m.%Y') }}
                 </div>
             </div>
         </div>
@@ -117,7 +135,7 @@
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
                     <i class="bi bi-graph-up"></i>
-                    Статистика использования
+                    {{ t('billing.usage_stats.title') }}
                 </h2>
             </div>
             
@@ -127,7 +145,7 @@
                         <i class="bi bi-telephone"></i>
                     </div>
                     <div class="stat-content">
-                        <div class="stat-label">Всего вызовов</div>
+                        <div class="stat-label">{{ t('billing.usage_stats.total_calls') }}</div>
                         <div class="stat-value">{{ stats.total_calls }}</div>
                     </div>
                 </div>
@@ -137,7 +155,7 @@
                         <i class="bi bi-cash-stack"></i>
                     </div>
                     <div class="stat-content">
-                        <div class="stat-label">Общая стоимость</div>
+                        <div class="stat-label">{{ t('billing.usage_stats.total_cost') }}</div>
                         <div class="stat-value">{{ "%.2f"|format(stats.total_cost) }} ₽</div>
                     </div>
                 </div>
@@ -149,7 +167,7 @@
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
                     <i class="bi bi-list-ul"></i>
-                    Детализация по ресурсам
+                    {{ t('billing.resources.title') }}
                 </h2>
             </div>
             
@@ -158,9 +176,9 @@
                 <table class="resources-table">
                     <thead>
                         <tr>
-                            <th>Ресурс</th>
-                            <th>Вызовов</th>
-                            <th>Стоимость</th>
+                            <th>{{ t('billing.resources.resource') }}</th>
+                            <th>{{ t('billing.resources.calls') }}</th>
+                            <th>{{ t('billing.resources.cost') }}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -183,7 +201,7 @@
                 {% else %}
                 <div class="empty-state">
                     <i class="bi bi-inbox"></i>
-                    <p>Данные по использованию ресурсов пока отсутствуют</p>
+                    <p>{{ t('billing.resources.no_data') }}</p>
                 </div>
                 {% endif %}
             </div>
@@ -194,7 +212,7 @@
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
                     <i class="bi bi-people"></i>
-                    Детализация по пользователям
+                    {{ t('billing.users.title') }}
                 </h2>
             </div>
             
@@ -203,9 +221,9 @@
                 <table class="resources-table">
                     <thead>
                         <tr>
-                            <th>Пользователь</th>
-                            <th>Вызовов</th>
-                            <th>Стоимость</th>
+                            <th>{{ t('billing.users.user') }}</th>
+                            <th>{{ t('billing.users.calls') }}</th>
+                            <th>{{ t('billing.users.cost') }}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -214,7 +232,7 @@
                             <td>
                                 <div class="resource-name">
                                     <i class="bi bi-person"></i>
-                                    {{ user_id[:20] }}...
+                                    {{ user_stats.user_name if user_stats.user_name else user_id }}
                                 </div>
                             </td>
                             <td>{{ user_stats.calls }}</td>
@@ -228,7 +246,69 @@
                 {% else %}
                 <div class="empty-state">
                     <i class="bi bi-inbox"></i>
-                    <p>Данные по пользователям пока отсутствуют</p>
+                    <p>{{ t('billing.users.no_data') }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- История пополнений -->
+        <div class="billing-section">
+            <div class="billing-section-header">
+                <h2 class="billing-section-title">
+                    <i class="bi bi-clock-history"></i>
+                    История пополнений
+                </h2>
+            </div>
+            
+            <div class="transactions-container">
+                {% if payment_history and payment_history|length > 0 %}
+                <div class="transactions-list">
+                    {% for transaction in payment_history %}
+                    <div class="transaction-item status-{{ transaction.status }}">
+                        <div class="transaction-icon">
+                            <i class="bi bi-arrow-down-circle"></i>
+                        </div>
+                        <div class="transaction-details">
+                            <div class="transaction-header">
+                                <span class="transaction-amount">+{{ "%.2f"|format(transaction.amount) }} ₽</span>
+                                <span class="transaction-status">
+                                    {% if transaction.status == 'success' %}
+                                        <i class="bi bi-check-circle-fill"></i> Успешно
+                                    {% elif transaction.status == 'pending' %}
+                                        <i class="bi bi-clock-fill"></i> Ожидание
+                                    {% elif transaction.status == 'failed' %}
+                                        <i class="bi bi-x-circle-fill"></i> Ошибка
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div class="transaction-meta">
+                                <span class="transaction-date">
+                                    <i class="bi bi-calendar3"></i>
+                                    {{ transaction.created_at.strftime('%d.%m.%Y %H:%M') }}
+                                </span>
+                                <span class="transaction-id">
+                                    <i class="bi bi-hash"></i>
+                                    {{ transaction.transaction_id }}
+                                </span>
+                                <span class="transaction-provider">
+                                    <i class="bi bi-credit-card"></i>
+                                    {% if transaction.payment_provider == 'yoomoney' %}
+                                        ЮMoney
+                                    {% elif transaction.payment_provider == 'yukassa' %}
+                                        ЮКасса
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="bi bi-inbox"></i>
+                    <p>История пополнений пуста</p>
+                    <p class="text-muted">Платежи появятся здесь после пополнения баланса</p>
                 </div>
                 {% endif %}
             </div>
@@ -241,32 +321,67 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 class="modal-title">Пополнение баланса</h3>
+                <h3 class="modal-title">
+                    <i class="bi bi-wallet2"></i>
+                    Пополнить баланс
+                </h3>
                 <button class="modal-close" onclick="closePaymentModal()">
                     <i class="bi bi-x-lg"></i>
                 </button>
             </div>
             <div class="modal-body">
-                <p>Функция оплаты будет доступна в следующих версиях.</p>
-                <p>В будущем здесь будет интеграция с платежными системами (Stripe, ЮKassa и другими).</p>
-                
-                <div class="payment-info">
-                    <div class="payment-info-item">
-                        <i class="bi bi-credit-card"></i>
-                        <span>Оплата банковской картой</span>
+                <form id="payment-form" onsubmit="event.preventDefault(); createPayment();">
+                    <div class="form-group">
+                        <label for="payment-amount">
+                            <i class="bi bi-currency-ruble"></i>
+                            Сумма пополнения (₽)
+                        </label>
+                        <input 
+                            type="number" 
+                            id="payment-amount" 
+                            class="form-control" 
+                            min="100" 
+                            max="1000000" 
+                            step="100" 
+                            value="1000"
+                            required
+                            placeholder="Введите сумму"
+                        >
+                        <small class="form-text">Минимум: 100₽, Максимум: 1,000,000₽</small>
                     </div>
-                    <div class="payment-info-item">
-                        <i class="bi bi-shield-check"></i>
-                        <span>Безопасная транзакция</span>
+                    
+                    <div class="payment-info">
+                        <div class="payment-info-item">
+                            <i class="bi bi-credit-card"></i>
+                            <span>Оплата картой через ЮMoney</span>
+                        </div>
+                        <div class="payment-info-item">
+                            <i class="bi bi-shield-check"></i>
+                            <span>Безопасная транзакция</span>
+                        </div>
+                        <div class="payment-info-item">
+                            <i class="bi bi-lightning-charge"></i>
+                            <span>Мгновенное зачисление</span>
+                        </div>
                     </div>
-                    <div class="payment-info-item">
-                        <i class="bi bi-receipt"></i>
-                        <span>Автоматическая выдача чека</span>
+                    
+                    <div class="payment-notice">
+                        <i class="bi bi-info-circle"></i>
+                        <div>
+                            <strong>Как это работает:</strong>
+                            <p>После нажатия кнопки вы будете перенаправлены на страницу ЮMoney для безопасной оплаты. После успешной оплаты средства автоматически зачислятся на баланс компании.</p>
+                        </div>
                     </div>
-                </div>
+                </form>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-ghost" onclick="closePaymentModal()">Закрыть</button>
+                <button class="btn btn-ghost" type="button" onclick="closePaymentModal()">
+                    Отмена
+                </button>
+                <button class="btn btn-primary" type="button" id="payment-submit-btn" onclick="createPayment()">
+                    <i class="bi bi-arrow-right-circle"></i>
+                    Перейти к оплате
+                </button>
             </div>
         </div>
     </div>

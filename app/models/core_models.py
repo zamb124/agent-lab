@@ -767,7 +767,16 @@ class FileRecord(BaseModel):
         from ..core.context import get_context
         context = get_context()
         subdomain = context.active_company.subdomain
-        base_url = f"http://{subdomain}.{settings.server.domain}:{settings.server.port}"
+        
+        # На проде используется nginx/reverse proxy на стандартных портах
+        if settings.server.env == "local":
+            # Локально добавляем порт
+            base_url = f"http://{subdomain}.{settings.server.domain}:{settings.server.port}"
+        else:
+            # На проде порт не нужен (nginx на 80/443)
+            protocol = "https" if settings.server.env in ["production", "testing"] else "http"
+            base_url = f"{protocol}://{subdomain}.{settings.server.domain}"
+        
         return f"{base_url}/api/v1/files/download/{self.file_id}"
 
     @property
@@ -780,82 +789,14 @@ class FileRecord(BaseModel):
         return f"{base_url}/{self.s3_bucket}/{self.s3_key}"
 
 
-class AudioStatus(str, Enum):
-    """Статус аудиофайла"""
+class AudioRecord(FileRecord):
+    """Запись об аудиофайле в системе - наследуется от FileRecord"""
     
-    UPLOADING = "uploading"
-    UPLOADED = "uploaded" 
-    PROCESSING = "processing"  # Распознается речь
-    PROCESSED = "processed"    # Речь распознана
-    ERROR = "error"           # Ошибка обработки
-    DELETED = "deleted"
-
-
-class AudioRecord(BaseModel):
-    """Запись об аудиофайле в системе"""
-    
-    audio_id: str = Field(
-        title="ID аудио", 
-        description="Уникальный ID аудиофайла в системе", 
-        readonly=True
-    )
-    provider: str = Field(
-        title="Провайдер",
-        description="Провайдер S3 (aws, yandex, minio, etc.)",
-    )
-    original_name: str = Field(
-        title="Оригинальное имя", 
-        description="Оригинальное имя аудиофайла"
-    )
-    s3_key: str = Field(
-        title="Ключ S3", 
-        description="Ключ аудиофайла в S3", 
-        readonly=True
-    )
-    s3_bucket: str = Field(
-        title="Bucket S3", 
-        description="Bucket в S3", 
-        readonly=True
-    )
-    s3_endpoint: Optional[str] = Field(
-        default=None,
-        title="Endpoint S3",
-        description="Endpoint URL провайдера",
-        readonly=True,
-    )
-    content_type: str = Field(
-        title="Тип содержимого", 
-        description="MIME тип аудиофайла", 
-        readonly=True
-    )
-    file_size: int = Field(
-        title="Размер файла", 
-        description="Размер аудиофайла в байтах", 
-        readonly=True
-    )
     duration: Optional[float] = Field(
         default=None,
         title="Длительность", 
         description="Длительность аудио в секундах",
         readonly=True
-    )
-    checksum: Optional[str] = Field(
-        default=None,
-        title="Контрольная сумма",
-        description="MD5 или другая контрольная сумма",
-        readonly=True,
-    )
-    status: AudioStatus = Field(
-        default=AudioStatus.UPLOADING,
-        title="Статус",
-        description="Статус аудиофайла",
-        readonly=True,
-    )
-    uploaded_by: Optional[str] = Field(
-        default=None,
-        title="Загрузил",
-        description="ID пользователя который загрузил",
-        readonly=True,
     )
     
     # Результаты распознавания речи
@@ -877,50 +818,15 @@ class AudioRecord(BaseModel):
         description="ID запроса к Cloud Voice API",
         readonly=True
     )
-    
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        title="Метаданные",
-        description="Дополнительные метаданные аудиофайла",
-    )
-    tags: List[str] = Field(
-        default_factory=list,
-        title="Теги",
-        description="Теги для категоризации",
-    )
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        title="Создан",
-        description="Время создания аудиозаписи",
-        readonly=True,
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        title="Обновлен",
-        description="Время обновления аудиозаписи",
-        readonly=True,
-    )
 
+    @property
+    def audio_id(self) -> str:
+        """Алиас для file_id для обратной совместимости"""
+        return self.file_id
+    
     @property
     def key(self) -> str:
         """Ключ для хранения в БД"""
-        return f"audio:{self.provider}:{self.audio_id}"
-
-    @property
-    def url(self) -> Optional[str]:
-        """URL для скачивания аудио через нашу платформу"""
-        if not self.audio_id:
-            return None
-
-        return f"/api/v1/files/download/audio/{self.audio_id}"
-
-    @property
-    def direct_s3_url(self) -> Optional[str]:
-        """Прямая ссылка на S3 (для внутреннего использования)"""
-        if not self.s3_bucket or not self.s3_key or not self.s3_endpoint:
-            return None
-
-        base_url = self.s3_endpoint.rstrip("/")
-        return f"{base_url}/{self.s3_bucket}/{self.s3_key}"
+        return f"audio:{self.provider}:{self.file_id}"
 
 

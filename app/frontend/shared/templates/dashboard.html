@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - Agents Lab{% endblock %}
+{% block title %}{{ t('dashboard.title') }} - {{ t('common.app_name') }}{% endblock %}
 
 {% block content %}
 <div class="app-container">
@@ -31,19 +31,19 @@
                        onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
                        class="sidebar-nav-link">
                         <i class="bi bi-people-fill"></i>
-                        <span class="sidebar-nav-text">Боты</span>
+                        <span class="sidebar-nav-text">{{ t('dashboard.navigation.bots') }}</span>
                     </a>
                 </div>
                 <div class="sidebar-nav-item">
                     <a href="#" class="sidebar-nav-link">
                         <i class="bi bi-chat-left-dots"></i>
-                        <span class="sidebar-nav-text">Чаты</span>
+                        <span class="sidebar-nav-text">{{ t('dashboard.navigation.chats') }}</span>
                     </a>
                 </div>
                 <div class="sidebar-nav-item">
                     <a href="#" class="sidebar-nav-link">
                         <i class="bi bi-shop"></i>
-                        <span class="sidebar-nav-text">Магазин</span>
+                        <span class="sidebar-nav-text">{{ t('dashboard.navigation.store') }}</span>
                     </a>
                 </div>
                 <div class="sidebar-nav-item">
@@ -55,20 +55,20 @@
                        onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
                        class="sidebar-nav-link">
                         <i class="bi bi-clock-history"></i>
-                        <span class="sidebar-nav-text">История</span>
+                        <span class="sidebar-nav-text">{{ t('dashboard.navigation.history') }}</span>
                     </a>
                 </div>
                 <div class="sidebar-nav-item">
                     <a href="/frontend/builder/" class="sidebar-nav-link">
                         <i class="bi bi-palette"></i>
-                        <span class="sidebar-nav-text">Agent Builder</span>
+                        <span class="sidebar-nav-text">{{ t('dashboard.navigation.builder') }}</span>
                     </a>
                 </div>
             </nav>
             
             {% if user_has_role('admin') %}
             <div class="sidebar-section">
-                <div class="sidebar-section-title">Администрирование</div>
+                <div class="sidebar-section-title">{{ t('dashboard.navigation.admin') }}</div>
                 <nav class="sidebar-nav">
                     <div class="sidebar-nav-item">
                         <a href="/frontend/models/agent?view=table" 
@@ -79,7 +79,7 @@
                            onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
                            class="sidebar-nav-link">
                             <i class="bi bi-robot"></i>
-                            <span class="sidebar-nav-text">Агенты</span>
+                            <span class="sidebar-nav-text">{{ t('dashboard.navigation.agents') }}</span>
                         </a>
                     </div>
                     <div class="sidebar-nav-item">
@@ -91,7 +91,7 @@
                            onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
                            class="sidebar-nav-link">
                             <i class="bi bi-diagram-3"></i>
-                            <span class="sidebar-nav-text">Потоки</span>
+                            <span class="sidebar-nav-text">{{ t('dashboard.navigation.flows') }}</span>
                         </a>
                     </div>
                     <div class="sidebar-nav-item">
@@ -103,7 +103,7 @@
                            onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
                            class="sidebar-nav-link">
                             <i class="bi bi-list-task"></i>
-                            <span class="sidebar-nav-text">Задачи</span>
+                            <span class="sidebar-nav-text">{{ t('dashboard.navigation.tasks') }}</span>
                         </a>
                     </div>
                     <div class="sidebar-nav-item">
@@ -115,7 +115,7 @@
                            onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
                            class="sidebar-nav-link">
                             <i class="bi bi-person-badge"></i>
-                            <span class="sidebar-nav-text">Пользователи</span>
+                            <span class="sidebar-nav-text">{{ t('dashboard.navigation.users') }}</span>
                         </a>
                     </div>
                     
@@ -124,7 +124,7 @@
                         <a href="/frontend/admin/companies" 
                            class="sidebar-nav-link">
                             <i class="bi bi-building"></i>
-                            <span class="sidebar-nav-text">Управление компаниями</span>
+                            <span class="sidebar-nav-text">{{ t('dashboard.navigation.company_management') }}</span>
                         </a>
                     </div>
                     {% endif %}
@@ -137,16 +137,16 @@
             <div class="sidebar-footer-link">
                 <a href="/frontend/billing/" class="sidebar-nav-link">
                     <i class="bi bi-credit-card"></i>
-                    <span class="sidebar-nav-text">Тарифы и оплата</span>
+                    <span class="sidebar-nav-text">{{ t('dashboard.navigation.billing') }}</span>
                 </a>
             </div>
             <div class="d-flex align-items-center gap-3">
                 <div class="status-dot status-online"></div>
                 <div class="flex-grow-1">
-                    <div class="small font-medium">Пользователь</div>
-                    <div class="small text-muted">Онлайн</div>
+                    <div class="small font-medium">{{ t('dashboard.footer.user') }}</div>
+                    <div class="small text-muted">{{ t('dashboard.footer.online') }}</div>
                 </div>
-                <button class="btn btn-ghost btn-sm" onclick="app.logout()" data-tooltip="Выйти">
+                <button class="btn btn-ghost btn-sm" onclick="app.logout()" data-tooltip="{{ t('dashboard.header.logout') }}">
                     <i class="bi bi-box-arrow-right"></i>
                 </button>
             </div>
@@ -163,17 +163,36 @@
                 <button class="mobile-menu-toggle" onclick="window.app.layoutManager.toggleMobileMenu()">
                     <i class="bi bi-list"></i>
                 </button>
-                <button class="btn btn-ghost btn-sm d-none d-md-block" onclick="window.app.layoutManager.toggleSidebar()" data-tooltip="Свернуть меню">
+                <button class="btn btn-ghost btn-sm d-none d-md-block" onclick="window.app.layoutManager.toggleSidebar()" data-tooltip="{{ t('dashboard.header.collapse_menu') }}">
                     <i class="bi bi-chevron-left"></i>
                 </button>
-                <h1 class="header-title" id="page-title">Панель управления</h1>
+                <h1 class="header-title" id="page-title">{{ t('dashboard.title') }}</h1>
             </div>
             <div class="header-right">
                 <button class="btn btn-primary btn-sm">
                     <i class="bi bi-plus"></i>
-                    Создать
+                    {{ t('common.create') }}
                 </button>
-                <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="Переключить тему">
+                
+                <!-- Dropdown для выбора языка -->
+                <div class="dropdown">
+                    <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
+                        <i class="bi bi-translate"></i>
+                        <span id="current-language">{{ get_current_language().upper() }}</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('ru');">
+                            <i class="bi bi-check" style="visibility: hidden" id="lang-ru"></i> 
+                            {{ t('languages.ru') }}
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('en');">
+                            <i class="bi bi-check" style="visibility: hidden" id="lang-en"></i> 
+                            {{ t('languages.en') }}
+                        </a></li>
+                    </ul>
+                </div>
+                
+                <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="{{ t('dashboard.header.theme_toggle') }}">
                     <i class="bi bi-sun"></i>
                 </button>
             </div>
@@ -184,7 +203,7 @@
             <div class="content-loading-indicator htmx-indicator" id="content-loading">
                 <div class="loading-spinner">
                     <div class="spinner"></div>
-                    <div class="loading-text">Загрузка...</div>
+                    <div class="loading-text">{{ t('common.loading') }}</div>
                 </div>
             </div>
             
@@ -194,22 +213,22 @@
                     <div class="empty-state-icon">
                         <i class="bi bi-house display-4"></i>
                     </div>
-                    <div class="empty-state-title">Добро пожаловать в Agents Lab</div>
+                    <div class="empty-state-title">{{ t('dashboard.empty_state.welcome_title') }}</div>
                     <div class="empty-state-description">
-                        Выберите раздел из меню слева для начала работы с агентами и потоками
+                        {{ t('dashboard.empty_state.welcome_description') }}
                     </div>
                     <div class="d-flex gap-3 justify-content-center">
                         <button class="btn btn-primary" 
                                 hx-get="/frontend/models/flow?view=table" 
                                 hx-target="#content">
                             <i class="bi bi-diagram-3"></i>
-                            Просмотреть потоки
+                            {{ t('dashboard.empty_state.view_flows') }}
                         </button>
                         <button class="btn btn-outline-primary" 
                                 hx-get="/frontend/models/agent?view=table" 
                                 hx-target="#content">
                             <i class="bi bi-robot"></i>
-                            Просмотреть агентов
+                            {{ t('dashboard.empty_state.view_agents') }}
                         </button>
                     </div>
                 </div>{% endif %}

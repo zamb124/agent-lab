@@ -12,7 +12,7 @@ from ..core.storage import Storage
 from ..core.context import get_context
 from ..identity.models import User, Company
 from ..models.billing_models import UsageRecord, UsageType, TariffPlan, TARIFF_PRICES
-
+from ..identity.models import User
 logger = logging.getLogger(__name__)
 
 
@@ -279,11 +279,21 @@ class BillingService:
                         
                         # По пользователям
                         if record.user_id not in stats["by_user"]:
-                            stats["by_user"][record.user_id] = {"cost": 0.0, "calls": 0}
+                            stats["by_user"][record.user_id] = {"cost": 0.0, "calls": 0, "user_name": None}
                         stats["by_user"][record.user_id]["cost"] += record.cost
                         stats["by_user"][record.user_id]["calls"] += record.quantity
                 except Exception:
                     continue
+        
+        # Обогащаем данные пользователей именами
+        for user_id in stats["by_user"].keys():
+            user_data = await self.storage.get(f"user:{user_id}", force_global=True)
+            if user_data:
+                
+                user = User.model_validate_json(user_data)
+                stats["by_user"][user_id]["user_name"] = user.name
+            else:
+                stats["by_user"][user_id]["user_name"] = user_id
         
         return stats
     

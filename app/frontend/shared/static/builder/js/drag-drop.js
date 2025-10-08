@@ -533,7 +533,7 @@ class BuilderDragDrop {
                 fullFlowData = this.builder.currentFlow;
                 console.log('📦 Используем уже загруженные данные флоу');
             } else {
-                const flowResponse = await fetch(`/frontend/builder/flows/${encodeURIComponent(flowData.id)}`);
+                const flowResponse = await fetch(`/frontend/api/flows/${encodeURIComponent(flowData.id)}`);
                 if (!flowResponse.ok) {
                     throw new Error(`Не удалось загрузить флоу: ${flowResponse.statusText}`);
                 }
@@ -612,7 +612,7 @@ class BuilderDragDrop {
         
         try {
             // Получаем данные агента
-            const agentResponse = await fetch(`/frontend/builder/agents/${agentId}`);
+            const agentResponse = await fetch(`/frontend/api/agents/${agentId}`);
             if (!agentResponse.ok) {
                 console.warn(`Агент ${agentId} не найден: ${agentResponse.statusText}`);
                 return null;
@@ -742,7 +742,7 @@ class BuilderDragDrop {
             const encodedToolId = encodeURIComponent(toolId);
             
             // Получаем данные тула
-            const toolResponse = await fetch(`/frontend/builder/tools/${encodedToolId}`);
+            const toolResponse = await fetch(`/frontend/api/tools/${encodedToolId}`);
             if (!toolResponse.ok) {
                 console.warn(`Тул ${toolId} не найден: ${toolResponse.statusText}`);
                 return null;
@@ -808,7 +808,7 @@ class BuilderDragDrop {
     async expandAgentTools(agentId, position, parentNodeId) {
         try {
             // Получаем данные агента
-            const agentResponse = await fetch(`/frontend/builder/agents/${agentId}`);
+            const agentResponse = await fetch(`/frontend/api/agents/${agentId}`);
             if (!agentResponse.ok) {
                 console.warn(`Агент ${agentId} не найден: ${agentResponse.statusText}`);
                 return;

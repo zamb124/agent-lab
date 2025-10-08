@@ -37,9 +37,15 @@
                 <div id="chat-input-container" class="p-3 bg-white border-top">
                     <div class="input-group">
                         <input type="text" id="chat-input" class="form-control" placeholder="Введите сообщение..." disabled>
+                        <button id="chat-voice-btn" class="btn btn-outline-secondary" disabled title="Удерживайте для записи голоса">
+                            <i class="bi bi-mic"></i>
+                        </button>
                         <button id="chat-send-btn" class="btn btn-primary" disabled>
                             <i class="bi bi-send"></i>
                         </button>
+                    </div>
+                    <div id="voice-recording-indicator" class="mt-2 text-center text-danger" style="display: none;">
+                        <i class="bi bi-record-circle"></i> Запись... Отпустите кнопку для отправки
                     </div>
                 </div>
             </div>

@@ -327,7 +327,7 @@ class TestS3WithDatabase:
         # Очистка
         await storage.delete(file_record.key)
     
-    async def test_full_s3_workflow_with_db(self, test_context):
+    async def test_full_s3_workflow_with_db(self):
         """Полный тест: загрузка в S3 + сохранение в БД + скачивание + удаление"""
         storage = Storage()
         client = S3ClientFactory.create_client_for_bucket('vkbucket')

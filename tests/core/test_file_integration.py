@@ -35,8 +35,15 @@ class TestFileIntegration:
             assert file_record.original_name == "test-integration.txt"
             assert file_record.s3_bucket == "vkbucket"
             assert file_record.key.startswith("s3:vkcloud:")
+            
+            # URL должен быть на платформу (для контроля доступа)
             assert file_record.url is not None
-            assert "hb.ru-msk.vkcloud-storage.ru" in file_record.url
+            assert "/api/v1/files/download/" in file_record.url
+            assert file_record.file_id in file_record.url
+            
+            # Прямой S3 URL должен содержать endpoint
+            assert file_record.direct_s3_url is not None
+            assert "hb.ru-msk.vkcloud-storage.ru" in file_record.direct_s3_url
             
             # Проверяем форматирование сообщения
             message = processor.format_file_message(file_record)

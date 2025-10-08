@@ -20,12 +20,14 @@ from app.core.config import settings
 from app.core.checkpointer import init_checkpointer, close_checkpointer
 from app.db.database import create_tables, close_db
 from app.core.migrator import Migrator
-from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads, history
 from app.api.amocrm import router as amocrm_router
+from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads, history, payments, admin_payments
 from app.frontend.api import models as frontend_models
 from app.frontend.api import flows as frontend_flows
 from app.frontend.api import agents as frontend_agents
 from app.frontend.api import tools as frontend_tools
+from app.frontend.api import variables as frontend_variables
+from app.frontend.api import i18n as frontend_i18n
 from app.frontend.pages import auth as auth_pages
 from app.frontend.pages import dashboard as dashboard_pages
 from app.frontend.pages import public as public_pages
@@ -39,6 +41,9 @@ from app.frontend.websockets import notifications as websocket_notifications
 from app.frontend.websockets import chat as websocket_chat
 from app.middleware.auth import AuthMiddleware
 from app.services.cleanup_service import CleanupService
+from app.core.translation_manager import get_translation_manager
+from app.core.clients.payment_providers.factory import PaymentProviderFactory
+from app.workers.payment_sync_worker import PaymentSyncWorker
 
 # Условные импорты для локального окружения
 if settings.server.env == "local1":
@@ -153,6 +158,23 @@ async def lifespan(app: FastAPI):
         migrator = Migrator()
         await migrator.run_full_migration()
 
+        # Инициализация системы переводов
+        logger.info("🌐 Инициализация системы интернационализации...")
+        translation_manager = get_translation_manager()
+        await translation_manager.initialize()
+        logger.info("✅ Система переводов инициализирована")
+
+        # Инициализация платежных провайдеров
+        logger.info("💳 Инициализация платежных провайдеров...")
+        PaymentProviderFactory.initialize(settings)
+        logger.info("✅ Платежные провайдеры инициализированы")
+
+        # Запуск синхронизации транзакций (раз в час)
+        logger.info("🔄 Запуск фоновой синхронизации транзакций...")
+        payment_sync_worker = PaymentSyncWorker(sync_interval=3600)  # Каждый час
+        asyncio.create_task(payment_sync_worker.start())
+        logger.info("✅ Payment sync worker запущен")
+
         # Запуск воркера задач для локальной разработки
         if settings.server.env == "local1":
             logger.info("⚙️ Запуск воркера задач для локальной разработки...")
@@ -227,6 +249,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# UTF-8 middleware для правильной кодировки JSON ответов
+@app.middleware("http")
+async def utf8_response_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if "application/json" in response.headers.get("content-type", ""):
+        response.headers["content-type"] = "application/json; charset=utf-8"
+    return response
+
 # Подключение роутеров
 
 # API v1
@@ -240,12 +270,16 @@ app.include_router(fashn.router, prefix="/api/v1/fashn", tags=["fashn"])
 app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
 app.include_router(leads.router, prefix="/api/v1", tags=["leads"])
 app.include_router(history.router, tags=["history"])
+app.include_router(payments.router, prefix="/api/v1", tags=["payments"])
+app.include_router(admin_payments.router, prefix="/api/v1", tags=["admin-payments"])
 
 # Frontend API (JSON CRUD)
-app.include_router(frontend_models.router, tags=["frontend-models"])
-app.include_router(frontend_flows.router, prefix="/frontend/builder", tags=["frontend-flows"])
-app.include_router(frontend_agents.router, prefix="/frontend/builder", tags=["frontend-agents"])
-app.include_router(frontend_tools.router, prefix="/frontend/builder", tags=["frontend-tools"])
+app.include_router(frontend_models.router, tags=["frontend-models"])  # Убираем дублирующий prefix
+app.include_router(frontend_flows.router, prefix="/frontend/api", tags=["frontend-flows"])
+app.include_router(frontend_agents.router, prefix="/frontend/api", tags=["frontend-agents"])
+app.include_router(frontend_tools.router, prefix="/frontend/api", tags=["frontend-tools"])
+app.include_router(frontend_variables.router, prefix="/frontend/api", tags=["frontend-variables"])
+app.include_router(frontend_i18n.router, prefix="/frontend/api/i18n", tags=["frontend-i18n"])
 
 # Frontend Pages (HTML)
 app.include_router(public_pages.router, tags=["public-pages"])
@@ -265,7 +299,7 @@ app.include_router(websocket_notifications.router, tags=["websocket-notification
 app.include_router(websocket_chat.router, prefix="/frontend/chat", tags=["websocket-chat"])
 app.include_router(amocrm_router, prefix="/api/amocrm", tags=["amocrm"])
 
-# Статические файлы
+# Основные статические файлы
 static_dir = Path(__file__).parent / "frontend" / "shared" / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 

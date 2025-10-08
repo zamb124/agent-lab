@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Управление компаниями - Admin{% endblock %}
+{% block title %}{{ t('admin.companies.title') }} - {{ t('common.app_name') }}{% endblock %}
 
 {% block head %}
 <style>
@@ -270,12 +270,30 @@
         <div class="admin-header-left">
             <a href="/frontend/dashboard" class="btn btn-ghost btn-sm">
                 <i class="bi bi-arrow-left"></i>
-                Назад
+                {{ t('common.back') }}
             </a>
-            <h1 class="admin-title">Управление компаниями</h1>
+            <h1 class="admin-title">{{ t('admin.companies.title') }}</h1>
         </div>
         <div class="admin-header-right">
-            <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="Переключить тему">
+            <!-- Dropdown для выбора языка -->
+            <div class="dropdown">
+                <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
+                    <i class="bi bi-translate"></i>
+                    <span id="current-language">{{ get_current_language().upper() }}</span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('ru');">
+                        <i class="bi bi-check" style="visibility: hidden" id="lang-ru"></i> 
+                        {{ t('languages.ru') }}
+                    </a></li>
+                    <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('en');">
+                        <i class="bi bi-check" style="visibility: hidden" id="lang-en"></i> 
+                        {{ t('languages.en') }}
+                    </a></li>
+                </ul>
+            </div>
+            
+            <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="{{ t('dashboard.header.theme_toggle') }}">
                 <i class="bi bi-sun"></i>
             </button>
         </div>
@@ -285,13 +303,13 @@
         <table>
             <thead>
                 <tr>
-                    <th>Компания</th>
-                    <th>Тариф</th>
-                    <th>Баланс</th>
-                    <th>Лимит (мес.)</th>
-                    <th>Потрачено</th>
-                    <th>Создана</th>
-                    <th>Действия</th>
+                    <th>{{ t('admin.companies.table.company_id') }}</th>
+                    <th>{{ t('admin.companies.table.tariff_plan') }}</th>
+                    <th>{{ t('admin.companies.table.balance') }}</th>
+                    <th>{{ t('admin.companies.table.monthly_budget') }}</th>
+                    <th>{{ t('admin.companies.table.current_month_spent') }}</th>
+                    <th>{{ t('admin.companies.table.created_at') }}</th>
+                    <th>{{ t('admin.companies.table.actions') }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -315,7 +333,7 @@
                                 {% if company.monthly_budget > 0 %}
                                     {{ "%.2f"|format(company.monthly_budget) }} ₽
                                 {% else %}
-                                    Без лимита
+                                    {{ t('admin.companies.table.no_limit') }}
                                 {% endif %}
                             </div>
                         </div>
@@ -329,13 +347,13 @@
                     <td>
                         <div class="action-buttons">
                             <button class="btn-edit" onclick="editBalance('{{ company.company_id }}', '{{ company.name }}', {{ company.balance }})">
-                                Баланс
+                                {{ t('admin.companies.table.edit_balance') }}
                             </button>
                             <button class="btn-edit" onclick="editLimit('{{ company.company_id }}', '{{ company.name }}', {{ company.monthly_budget }})">
-                                Лимит
+                                {{ t('admin.companies.table.edit_limit') }}
                             </button>
                             <button class="btn-edit" onclick="editTariff('{{ company.company_id }}', '{{ company.name }}', '{{ company.tariff_plan }}')">
-                                Тариф
+                                {{ t('admin.companies.table.edit_tariff') }}
                             </button>
                         </div>
                     </td>
@@ -351,22 +369,22 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 class="modal-title">Пополнить баланс</h3>
+                <h3 class="modal-title">{{ t('admin.companies.modal.edit_balance_title') }}</h3>
                 <button class="modal-close" onclick="closeBalanceModal()">
                     <i class="bi bi-x-lg"></i>
                 </button>
             </div>
             <div class="modal-body">
                 <p id="balance-company-name"></p>
-                <p>Текущий баланс: <strong id="current-balance"></strong> ₽</p>
+                <p>{{ t('admin.companies.modal.current_balance') }}: <strong id="current-balance"></strong> ₽</p>
                 <div class="form-group">
-                    <label for="balance-input">Сумма пополнения (₽)</label>
+                    <label for="balance-input">{{ t('admin.companies.modal.new_balance') }}</label>
                     <input type="number" id="balance-input" class="form-control" min="0" step="0.01" placeholder="1000.00">
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-ghost" onclick="closeBalanceModal()">Отмена</button>
-                <button class="btn btn-primary" onclick="saveBalance()">Пополнить</button>
+                <button class="btn btn-ghost" onclick="closeBalanceModal()">{{ t('common.cancel') }}</button>
+                <button class="btn btn-primary" onclick="saveBalance()">{{ t('admin.companies.modal.update_button') }}</button>
             </div>
         </div>
     </div>
@@ -377,7 +395,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 class="modal-title">Установить месячный лимит</h3>
+                <h3 class="modal-title">{{ t('admin.companies.modal.edit_limit_title') }}</h3>
                 <button class="modal-close" onclick="closeLimitModal()">
                     <i class="bi bi-x-lg"></i>
                 </button>
@@ -385,14 +403,14 @@
             <div class="modal-body">
                 <p id="limit-company-name"></p>
                 <div class="form-group">
-                    <label for="limit-input">Месячный лимит (₽)</label>
-                    <input type="number" id="limit-input" class="form-control" min="0" step="0.01" placeholder="0 = без лимита">
+                    <label for="limit-input">{{ t('admin.companies.modal.new_limit') }}</label>
+                    <input type="number" id="limit-input" class="form-control" min="0" step="0.01" placeholder="{{ t('admin.companies.modal.no_limit_placeholder') }}">
                 </div>
-                <small style="color: var(--text-muted);">0 = без самоограничения</small>
+                <small style="color: var(--text-muted);">{{ t('admin.companies.modal.no_limit_help') }}</small>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-ghost" onclick="closeLimitModal()">Отмена</button>
-                <button class="btn btn-primary" onclick="saveLimit()">Сохранить</button>
+                <button class="btn btn-ghost" onclick="closeLimitModal()">{{ t('common.cancel') }}</button>
+                <button class="btn btn-primary" onclick="saveLimit()">{{ t('common.save') }}</button>
             </div>
         </div>
     </div>
@@ -403,7 +421,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 class="modal-title">Изменить тариф</h3>
+                <h3 class="modal-title">{{ t('admin.companies.modal.edit_tariff_title') }}</h3>
                 <button class="modal-close" onclick="closeTariffModal()">
                     <i class="bi bi-x-lg"></i>
                 </button>
@@ -411,17 +429,17 @@
             <div class="modal-body">
                 <p id="tariff-company-name"></p>
                 <div class="form-group">
-                    <label for="tariff-select">Тарифный план</label>
+                    <label for="tariff-select">{{ t('admin.companies.modal.tariff_plan') }}</label>
                     <select id="tariff-select" class="form-control">
                         {% for plan in tariff_plans %}
-                        <option value="{{ plan.value }}">{{ plan.value }}</option>
+                        <option value="{{ plan.value }}">{{ t('billing.tariff_plans.' + plan.value + '.name') }}</option>
                         {% endfor %}
                     </select>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-ghost" onclick="closeTariffModal()">Отмена</button>
-                <button class="btn btn-primary" onclick="saveTariff()">Сохранить</button>
+                <button class="btn btn-ghost" onclick="closeTariffModal()">{{ t('common.cancel') }}</button>
+                <button class="btn btn-primary" onclick="saveTariff()">{{ t('common.save') }}</button>
             </div>
         </div>
     </div>
@@ -447,7 +465,7 @@ async function saveBalance() {
     const amount = document.getElementById('balance-input').value;
     
     if (!amount || parseFloat(amount) <= 0) {
-        alert('Введите сумму пополнения больше 0');
+        alert(t('admin.companies.errors.amount_required'));
         return;
     }
     
@@ -466,10 +484,10 @@ async function saveBalance() {
             alert(data.message);
             location.reload();
         } else {
-            alert('Ошибка: ' + data.message);
+            alert(t('admin.companies.errors.error_prefix') + data.message);
         }
     } catch (error) {
-        alert('Ошибка при пополнении: ' + error.message);
+        alert(t('admin.companies.errors.balance_error') + error.message);
     }
 }
 
@@ -503,10 +521,10 @@ async function saveLimit() {
             alert(data.message);
             location.reload();
         } else {
-            alert('Ошибка: ' + data.message);
+            alert(t('admin.companies.errors.error_prefix') + data.message);
         }
     } catch (error) {
-        alert('Ошибка при сохранении: ' + error.message);
+        alert(t('admin.companies.errors.save_error') + error.message);
     }
 }
 
@@ -537,13 +555,13 @@ async function saveTariff() {
         const data = await response.json();
         
         if (data.success) {
-            alert('Тариф успешно изменен');
+            alert(t('admin.companies.success.tariff_updated'));
             location.reload();
         } else {
-            alert('Ошибка: ' + data.message);
+            alert(t('admin.companies.errors.error_prefix') + data.message);
         }
     } catch (error) {
-        alert('Ошибка при сохранении: ' + error.message);
+        alert(t('admin.companies.errors.save_error') + error.message);
     }
 }
 

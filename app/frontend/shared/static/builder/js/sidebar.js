@@ -119,7 +119,7 @@ class BuilderSidebar {
      */
     async loadFlows() {
         try {
-            const response = await fetch('/frontend/builder/flows/');
+            const response = await fetch('/frontend/api/flows/');
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
@@ -138,7 +138,7 @@ class BuilderSidebar {
      */
     async loadAgents() {
         try {
-            const response = await fetch('/frontend/builder/agents/');
+            const response = await fetch('/frontend/api/agents/');
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
@@ -157,7 +157,7 @@ class BuilderSidebar {
      */
     async loadTools() {
         try {
-            const response = await fetch('/frontend/builder/tools/');
+            const response = await fetch('/frontend/api/tools/');
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
@@ -863,7 +863,7 @@ class BuilderSidebar {
         }
         
         try {
-            const response = await fetch(`/frontend/builder/flows/${encodeURIComponent(flowId)}`, {
+            const response = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}`, {
                 method: 'DELETE'
             });
             
@@ -925,7 +925,7 @@ class BuilderSidebar {
         }
         
         try {
-            const response = await fetch(`/frontend/builder/agents/${agentId}`, {
+            const response = await fetch(`/frontend/api/agents/${agentId}`, {
                 method: 'DELETE'
             });
             

@@ -6,6 +6,8 @@
 @import url('./components.css');
 @import url('./layout.css');
 @import url('./fields.css');
+@import url('./prompt-editor.css');
+@import url('./markdown-preview.css');
 /* Landing styles подключаются отдельно */
 
 /* Шрифты */

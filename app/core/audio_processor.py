@@ -15,7 +15,7 @@ import httpx
 
 from .core_clients.s3_client import S3ClientFactory, get_default_s3_client
 from .core_clients.cloud_voice_client import get_default_cloud_voice_client
-from app.models import AudioRecord, AudioStatus
+from app.models import AudioRecord, FileStatus
 from .storage import Storage
 from .config import settings
 
@@ -79,7 +79,7 @@ class AudioProcessor:
         auto_recognize: bool = True,
         metadata: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
-        public: bool = False,
+        public: bool = True,
     ) -> AudioRecord:
         """
         Обрабатывает аудиофайл из данных в памяти.
@@ -97,6 +97,8 @@ class AudioProcessor:
         Returns:
             Запись об аудиофайле
         """
+        logger.info(f"🎵 Начинаем обработку аудио: {original_name}, размер={len(data)} байт, content_type={content_type}, auto_recognize={auto_recognize}")
+        
         # Генерируем уникальный ID аудиофайла
         audio_id = f"audio_{uuid.uuid4().hex[:12]}"
 
@@ -105,6 +107,16 @@ class AudioProcessor:
             content_type, _ = mimetypes.guess_type(original_name)
             if not content_type or not content_type.startswith('audio/'):
                 content_type = "audio/wave"
+        
+        logger.info(f"🎵 Исходный content_type: {content_type}")
+        
+        # WebM не поддерживается Cloud Voice, отключаем распознавание
+        if content_type.startswith('audio/webm'):
+            logger.warning("⚠️ WebM формат не поддерживается Cloud Voice, распознавание отключено")
+            logger.info("💡 Для распознавания речи используйте OGG/Opus или WAV форматы")
+            auto_recognize = False
+        
+        logger.info(f"🎵 Финальный content_type: {content_type}")
 
         # Вычисляем MD5 хеш
         checksum = hashlib.md5(data).hexdigest()
@@ -118,7 +130,7 @@ class AudioProcessor:
 
         # Создаем запись в БД (статус UPLOADING)
         audio_record = AudioRecord(
-            audio_id=audio_id,
+            file_id=audio_id,
             provider=s3_client.provider_name,
             original_name=original_name,
             s3_key=s3_key,
@@ -127,7 +139,7 @@ class AudioProcessor:
             content_type=content_type,
             file_size=len(data),
             checksum=checksum,
-            status=AudioStatus.UPLOADING,
+            status=FileStatus.UPLOADING,
             uploaded_by=uploaded_by,
             metadata=metadata or {},
             tags=tags or [],
@@ -160,7 +172,7 @@ class AudioProcessor:
         )
 
         # Обновляем статус на UPLOADED
-        audio_record.status = AudioStatus.UPLOADED
+        audio_record.status = FileStatus.UPLOADED
         logger.info(f"✅ Аудиофайл загружен в S3: {s3_key}")
 
         # Сохраняем обновленный статус
@@ -181,6 +193,7 @@ class AudioProcessor:
         auto_recognize: bool = True,
         metadata: Optional[Dict[str, Any]] = None,
         tags: Optional[List[str]] = None,
+        public: bool = True,
     ) -> AudioRecord:
         """
         Обрабатывает аудиофайл по URL (например, из Telegram).
@@ -232,20 +245,21 @@ class AudioProcessor:
                 auto_recognize=auto_recognize,
                 metadata=metadata,
                 tags=tags,
+                public=public,
             )
 
     async def _recognize_audio_async(self, audio_record: AudioRecord, audio_data: bytes):
         """
         Асинхронно распознает речь в аудиофайле.
-        
+
         Args:
             audio_record: Запись об аудиофайле
             audio_data: Данные аудиофайла
         """
         logger.info(f"🎤 Начинаем распознавание для {audio_record.audio_id}")
         try:
-            # Обновляем статус на PROCESSING
-            audio_record.status = AudioStatus.PROCESSING
+            # Обновляем статус на UPLOADED
+            audio_record.status = FileStatus.UPLOADED
             await self.storage.set(audio_record.key, audio_record.model_dump_json())
             
             voice_client = await self._get_voice_client()
@@ -253,11 +267,32 @@ class AudioProcessor:
                 logger.warning(f"Cloud Voice не настроен, пропускаем распознавание для {audio_record.audio_id}")
                 return
 
+            # Cloud Voice поддерживает только: audio/wave и audio/ogg; codecs=opus
+            content_type_for_api = audio_record.content_type
+            
+            # Нормализуем content_type для Cloud Voice
+            if content_type_for_api.startswith('audio/wav'):
+                content_type_for_api = 'audio/wave'
+            elif content_type_for_api.startswith('audio/ogg'):
+                # Для OGG обязательно нужен параметр codecs=opus
+                if 'codecs=opus' not in content_type_for_api:
+                    content_type_for_api = 'audio/ogg; codecs=opus'
+            else:
+                # Неподдерживаемый формат
+                logger.warning(f"⚠️ Формат {audio_record.content_type} не поддерживается Cloud Voice для распознавания.")
+                logger.info(f"💡 Поддерживаемые форматы: audio/wave, audio/ogg; codecs=opus")
+                return
+
             # Логируем что отправляем
-            logger.info(f"🎵 Отправляем в Cloud Voice: content_type='{audio_record.content_type}', размер={len(audio_data)} байт")
+            logger.info(f"🎵 Отправляем в Cloud Voice: content_type='{content_type_for_api}', размер={len(audio_data)} байт")
+            
+            # Проверяем первые байты файла для диагностики
+            header = audio_data[:20] if len(audio_data) >= 20 else audio_data
+            logger.info(f"🔍 Первые байты файла: {header.hex()}")
+            logger.info(f"🔍 Первые символы: {header[:4]}")
 
             # Распознаем речь
-            result = await voice_client.recognize_audio_file(audio_data, audio_record.content_type)
+            result = await voice_client.recognize_audio_file(audio_data, content_type_for_api)
             
             # Извлекаем лучший результат
             recognition_text = voice_client.get_best_recognition_text(result)
@@ -276,7 +311,7 @@ class AudioProcessor:
             audio_record.recognition_text = recognition_text
             audio_record.recognition_confidence = confidence
             audio_record.recognition_qid = qid
-            audio_record.status = AudioStatus.PROCESSED
+            audio_record.status = FileStatus.UPLOADED
 
             await self.storage.set(audio_record.key, audio_record.model_dump_json())
             
@@ -287,8 +322,8 @@ class AudioProcessor:
         except Exception as e:
             logger.error(f"❌ Ошибка распознавания речи для {audio_record.audio_id}: {e}")
             
-            # Обновляем статус на ERROR
-            audio_record.status = AudioStatus.ERROR
+            # Обновляем статус на FAILED
+            audio_record.status = FileStatus.FAILED
             audio_record.metadata["recognition_error"] = str(e)
             await self.storage.set(audio_record.key, audio_record.model_dump_json())
 
@@ -319,7 +354,7 @@ class AudioProcessor:
 
             # Распознаем речь
             await self._recognize_audio_async(audio_record, audio_data)
-            return audio_record.status == AudioStatus.PROCESSED
+            return audio_record.status == FileStatus.UPLOADED
 
         except Exception as e:
             logger.error(f"❌ Ошибка принудительного распознавания {audio_id}: {e}")
@@ -383,7 +418,7 @@ class AudioProcessor:
 
             if delete_success:
                 # Обновляем статус в БД
-                audio_record.status = AudioStatus.DELETED
+                audio_record.status = FileStatus.DELETED
                 await self.storage.set(audio_record.key, audio_record.model_dump_json())
                 logger.info(f"✅ Аудиофайл удален: {audio_id}")
                 return True
@@ -413,19 +448,14 @@ class AudioProcessor:
             f"{size_kb:.1f} KB" if size_kb >= 1 else f"{audio_record.file_size} байт"
         )
 
-        # Базовая информация об аудио
-        message_parts = [
-            "[AUDIO]",
-            f"🎵 Аудио: {audio_record.original_name} "
-            f"(ID: {audio_record.audio_id}, URL: {audio_record.url}, "
-            f"тип: {audio_record.content_type}, размер: {size_str}"
-        ]
-
+        # Формат такой же как у file_processor
+        message = f"🎵 Аудио: {audio_record.original_name} (ID: {audio_record.audio_id}, [Скачать]({audio_record.url}), Тип: {audio_record.content_type}, Размер: {size_str}"
+        
         # Добавляем длительность если есть
         if audio_record.duration:
-            message_parts[-1] += f", длительность: {audio_record.duration:.1f} сек"
+            message += f", Длительность: {audio_record.duration:.1f} сек"
         
-        message_parts[-1] += ")"
+        message += ")"
 
         # Добавляем распознанный текст если есть
         if audio_record.recognition_text:
@@ -433,15 +463,16 @@ class AudioProcessor:
             if audio_record.recognition_confidence:
                 confidence_info = f" (уверенность: {audio_record.recognition_confidence:.2f})"
             
-            message_parts.append(f"📝 Распознанный текст: \"{audio_record.recognition_text}\"{confidence_info}")
-        elif audio_record.status == AudioStatus.PROCESSING:
-            message_parts.append("⏳ Распознавание речи в процессе...")
-        elif audio_record.status == AudioStatus.ERROR:
-            message_parts.append("❌ Ошибка распознавания речи")
-
-        message_parts.append("[/AUDIO]")
+            message += f"\n📝 Распознанный текст: \"{audio_record.recognition_text}\"{confidence_info}"
+        elif audio_record.status == FileStatus.UPLOADING:
+            message += "\n⏳ Загрузка..."
+        elif audio_record.status == FileStatus.FAILED:
+            error_detail = audio_record.metadata.get("recognition_error", "Неизвестная ошибка")
+            message += f"\n❌ Ошибка распознавания: {error_detail}"
+        elif not audio_record.recognition_text and audio_record.content_type.startswith('audio/webm'):
+            message += "\n⚠️ Формат WebM не поддерживается для распознавания речи"
         
-        return "\n".join(message_parts)
+        return message
 
     @staticmethod
     def extract_audio_info_from_message(message: str) -> List[Dict[str, Any]]:

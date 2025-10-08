@@ -23,6 +23,127 @@ const ATTACHMENT_TYPES = {
     FILE: 'file'
 };
 
+/**
+ * Класс для записи голоса через браузер в формате OGG/Opus
+ */
+class VoiceRecorder {
+    constructor() {
+        this.recorder = null;
+        this.stream = null;
+        this.isRecording = false;
+    }
+
+    async startRecording() {
+        try {
+            console.log('🎤 Запрашиваем доступ к микрофону...');
+            this.stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    sampleRate: 48000
+                } 
+            });
+
+            console.log('✅ Доступ к микрофону получен');
+            console.log('🎤 Создаем Opus Recorder для записи в OGG/Opus');
+            
+            // Создаем Opus Recorder
+            this.recorder = new Recorder({
+                encoderPath: '/static/js/encoderWorker.min.js',
+                encoderSampleRate: 16000, // Cloud Voice рекомендует 16kHz для речи
+                encoderApplication: 2048, // VOIP
+                encoderFrameSize: 20, // 20ms фреймы
+                encoderComplexity: 10, // Максимальное качество
+                encoderBitRate: 16000, // 16kbps битрейт
+                streamPages: false, // Получаем весь файл целиком
+                numberOfChannels: 1,
+                sourceNode: this.stream
+            });
+
+            // Добавляем обработчик ошибок
+            this.recorder.onerror = (error) => {
+                console.error('❌ Ошибка Opus Recorder:', error);
+            };
+
+            await this.recorder.start();
+            this.isRecording = true;
+            
+            console.log('🎤 Запись началась в формате OGG/Opus');
+            return true;
+        } catch (error) {
+            console.error('❌ Ошибка доступа к микрофону:', error);
+            console.error('Детали ошибки:', {
+                name: error.name,
+                message: error.message,
+                stack: error.stack
+            });
+            
+            let errorMessage = 'Не удалось получить доступ к микрофону. ';
+            if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                errorMessage += 'Проверьте разрешения браузера.';
+            } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+                errorMessage += 'Микрофон не найден.';
+            } else if (error.name === 'NotSupportedError') {
+                errorMessage += 'Формат записи не поддерживается.';
+            } else {
+                errorMessage += error.message;
+            }
+            
+            alert(errorMessage);
+            return false;
+        }
+    }
+
+    async stopRecording() {
+        return new Promise((resolve, reject) => {
+            if (!this.recorder || !this.isRecording) {
+                reject(new Error('Запись не начата'));
+                return;
+            }
+
+            // Устанавливаем callback ДО вызова stop()
+            this.recorder.ondataavailable = (typedArray) => {
+                console.log('🎤 Получены аудио данные:', typedArray.length, 'байт');
+                console.log('🔍 Первые байты:', Array.from(typedArray.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+                console.log('🔍 Первые символы:', String.fromCharCode(...typedArray.slice(0, 4)));
+                
+                const audioBlob = new Blob([typedArray], { type: 'audio/ogg; codecs=opus' });
+                
+                if (this.stream) {
+                    this.stream.getTracks().forEach(track => track.stop());
+                    this.stream = null;
+                }
+
+                this.isRecording = false;
+                console.log('🎤 Запись завершена, размер Blob:', audioBlob.size, 'байт, формат: OGG/Opus');
+                
+                resolve({
+                    blob: audioBlob,
+                    mimeType: 'audio/ogg; codecs=opus'
+                });
+            };
+
+            // Останавливаем запись - это вызовет ondataavailable
+            console.log('🎤 Останавливаем запись...');
+            this.recorder.stop();
+        });
+    }
+
+    cancelRecording() {
+        if (this.recorder && this.isRecording) {
+            this.recorder.stop();
+            
+            if (this.stream) {
+                this.stream.getTracks().forEach(track => track.stop());
+                this.stream = null;
+            }
+            
+            this.isRecording = false;
+            console.log('🎤 Запись отменена');
+        }
+    }
+}
+
 class ChatManager {
     constructor(app) {
         this.app = app;
@@ -36,6 +157,7 @@ class ChatManager {
         this.isVisible = false;
         this.container = null;
         this.messageRenderer = new ChatMessageRenderer();
+        this.voiceRecorder = new VoiceRecorder(); // Рекордер для голоса
     }
 
     // Загрузка сохраненных сессий агентов из localStorage
@@ -393,6 +515,9 @@ class ChatManager {
         attachBtn?.addEventListener('click', () => this.openFileDialog());
         sendBtn?.addEventListener('click', () => this.sendMessage());
         fileInput?.addEventListener('change', (e) => this.handleFileSelection(e));
+        
+        // Инициализация кнопки микрофона
+        this.initVoiceRecording();
 
         // Обработчики для команд
         document.addEventListener('click', (e) => {
@@ -1266,6 +1391,117 @@ class ChatManager {
     showError(message) {
         this.app.showNotification(message, 'danger');
     }
+
+    // Инициализация записи голоса
+    initVoiceRecording() {
+        const voiceBtn = document.getElementById('chat-voice-btn') || document.getElementById('chat-widget-voice');
+        const indicator = document.getElementById('voice-recording-indicator') || document.getElementById('voice-recording-indicator-widget');
+        
+        if (!voiceBtn) {
+            console.log('⚠️ Кнопка микрофона не найдена');
+            return;
+        }
+
+        console.log('🎤 Инициализация кнопки микрофона:', voiceBtn.id);
+
+        // Обработчик нажатия (начало записи)
+        voiceBtn.addEventListener('mousedown', async (e) => {
+            e.preventDefault();
+            const success = await this.voiceRecorder.startRecording();
+            if (success) {
+                if (indicator) indicator.style.display = 'block';
+                voiceBtn.classList.add('recording');
+            }
+        });
+
+        // Обработчик отпускания (остановка и отправка)
+        voiceBtn.addEventListener('mouseup', async (e) => {
+            e.preventDefault();
+            await this.handleVoiceRecordingStop(voiceBtn, indicator);
+        });
+
+        // Обработчик если мышь ушла с кнопки во время записи
+        voiceBtn.addEventListener('mouseleave', async (e) => {
+            if (this.voiceRecorder.isRecording) {
+                await this.handleVoiceRecordingStop(voiceBtn, indicator);
+            }
+        });
+
+        // Поддержка touch событий для мобильных
+        voiceBtn.addEventListener('touchstart', async (e) => {
+            e.preventDefault();
+            const success = await this.voiceRecorder.startRecording();
+            if (success) {
+                if (indicator) indicator.style.display = 'block';
+                voiceBtn.classList.add('recording');
+            }
+        });
+
+        voiceBtn.addEventListener('touchend', async (e) => {
+            e.preventDefault();
+            await this.handleVoiceRecordingStop(voiceBtn, indicator);
+        });
+    }
+
+    // Обработка остановки записи
+    async handleVoiceRecordingStop(voiceBtn, indicator) {
+        if (!this.voiceRecorder.isRecording) return;
+
+        try {
+            // Останавливаем запись
+            const { blob, mimeType } = await this.voiceRecorder.stopRecording();
+            
+            // Скрываем индикатор
+            if (indicator) indicator.style.display = 'none';
+            if (voiceBtn) voiceBtn.classList.remove('recording');
+
+            // Проверяем размер
+            if (blob.size < 1000) {
+                this.app.showNotification('Запись слишком короткая', 'warning');
+                return;
+            }
+
+            // Определяем расширение по MIME типу
+            let extension = 'webm';  // По умолчанию webm (Chrome/Edge)
+            let finalMimeType = mimeType;
+            
+            if (mimeType.includes('ogg')) {
+                extension = 'ogg';
+                // Добавляем codecs=opus если это OGG без параметра
+                if (mimeType === 'audio/ogg' || mimeType === 'audio/ogg;') {
+                    finalMimeType = 'audio/ogg; codecs=opus';
+                }
+            } else if (mimeType.includes('wav')) {
+                extension = 'wav';
+                finalMimeType = 'audio/wave';
+            } else if (mimeType.includes('webm')) {
+                extension = 'webm';
+                // WebM уже имеет правильный формат
+            }
+            
+            // Создаем файл
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const audioFile = new File([blob], `voice-${timestamp}.${extension}`, {
+                type: finalMimeType
+            });
+
+            console.log('🎤 Голосовое сообщение записано:', {
+                fileName: audioFile.name,
+                originalMime: mimeType,
+                finalMime: finalMimeType,
+                size: blob.size
+            });
+
+            // Добавляем в превью как обычный файл
+            this.showFilePreview([audioFile]);
+            
+        } catch (error) {
+            console.error('❌ Ошибка обработки голосового сообщения:', error);
+            if (indicator) indicator.style.display = 'none';
+            if (voiceBtn) voiceBtn.classList.remove('recording');
+            this.app.showNotification('Ошибка записи голоса: ' + error.message, 'danger');
+        }
+    }
 }
 
 // Рендерер сообщений
@@ -1311,15 +1547,18 @@ class ChatMessageRenderer {
         // Парсим ссылки на скачивание из текста
         const { cleanContentWithoutLinks, downloadLinks } = this.parseDownloadLinksFromContent(cleanContent);
         
+        // Убираем метки [СКАЧАТЬ: ...] из текста
+        let finalContent = cleanContentWithoutLinks.replace(/\[СКАЧАТЬ:\s*[^\]]+\]/g, '').trim();
+        
         switch (message.type) {
             case MESSAGE_TYPES.HTML:
-                div.innerHTML = this.sanitizeHTML(cleanContentWithoutLinks);
+                div.innerHTML = this.sanitizeHTML(finalContent);
                 break;
             case MESSAGE_TYPES.MARKDOWN:
-                div.innerHTML = this.renderMarkdown(cleanContentWithoutLinks);
+                div.innerHTML = this.renderMarkdown(finalContent);
                 break;
             default:
-                div.textContent = cleanContentWithoutLinks;
+                div.textContent = finalContent;
         }
         
         // Добавляем файлы как карточки
@@ -1340,8 +1579,8 @@ class ChatMessageRenderer {
             const linksContainer = document.createElement('div');
             linksContainer.className = 'message-download-links';
             
-            downloadLinks.forEach(link => {
-                const linkButton = this.renderDownloadButton(link);
+            downloadLinks.forEach(async (link) => {
+                const linkButton = await this.renderDownloadButton(link);
                 linksContainer.appendChild(linkButton);
             });
             
@@ -1429,8 +1668,8 @@ class ChatMessageRenderer {
 
     // Парсинг ссылок на скачивание из текста
     parseDownloadLinksFromContent(content) {
-        // Ищем ссылки на наши файлы в тексте
-        const linkRegex = /(https?:\/\/[^\s]+\/api\/v1\/files\/download\/[^\s]+)/g;
+        // Ищем ссылки на наши файлы в тексте (поддерживаем file_ и audio_ префиксы)
+        const linkRegex = /(https?:\/\/[^\s]+\/api\/v1\/files\/download\/(file_|audio_)[a-z0-9]+)/gi;
         const downloadLinks = [];
         let cleanContent = content;
         
@@ -1441,7 +1680,7 @@ class ChatMessageRenderer {
             
             // Пытаемся извлечь имя файла из контекста
             const contextMatch = content.match(new RegExp(`файла?\\s+"([^"]+)"[^]*?${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
-            const fileName = contextMatch ? contextMatch[1] : `файл_${fileId}`;
+            const fileName = contextMatch ? contextMatch[1] : fileId;
             
             downloadLinks.push({
                 url: url,
@@ -1459,20 +1698,177 @@ class ChatMessageRenderer {
         };
     }
 
-    // Рендеринг кнопки скачивания
-    renderDownloadButton(link) {
-        const button = document.createElement('a');
-        button.className = 'download-link-button';
-        button.href = link.url;
-        button.target = '_blank';
-        button.download = link.fileName;
+    // Рендеринг кнопки скачивания с превью
+    async renderDownloadButton(link) {
+        const container = document.createElement('div');
+        container.className = 'download-link-container';
         
-        button.innerHTML = `
-            <i class="bi bi-download"></i>
-            <span class="download-text">Скачать ${link.fileName}</span>
+        // Показываем индикатор загрузки
+        container.innerHTML = `
+            <div class="file-preview loading-preview">
+                <div class="spinner-border spinner-border-sm" role="status"></div>
+                <span class="ms-2">Загрузка превью...</span>
+            </div>
         `;
         
-        return button;
+        // Пытаемся определить тип файла
+        const fileType = this.detectFileType(link.fileName);
+        
+        // Если уже определен конкретный тип (не document), сразу показываем превью
+        if (fileType !== 'document') {
+            this.renderFilePreview(container, link, null, fileType);
+        } else {
+            // Иначе пробуем загрузить MIME тип через API
+            try {
+                const mimeType = await this.fetchFileMimeType(link.url);
+                this.renderFilePreview(container, link, mimeType);
+            } catch (error) {
+                console.error('Ошибка загрузки файла:', error);
+                this.renderFilePreview(container, link, null);
+            }
+        }
+        
+        return container;
+    }
+    
+    // Получение MIME типа файла через API
+    async fetchFileMimeType(url) {
+        try {
+            // Извлекаем file_id из URL
+            const fileId = url.split('/').pop();
+            
+            // Используем API эндпоинт для получения информации о файле
+            const infoUrl = url.replace(`/download/${fileId}`, `/info/${fileId}`);
+            const response = await fetch(infoUrl);
+            
+            if (!response.ok) {
+                console.warn('Не удалось получить информацию о файле:', response.status);
+                return null;
+            }
+            
+            const fileInfo = await response.json();
+            return fileInfo.content_type;
+        } catch (error) {
+            console.error('Ошибка получения MIME типа:', error);
+            return null;
+        }
+    }
+    
+    // Рендеринг превью на основе типа
+    renderFilePreview(container, link, mimeType = null, knownType = null) {
+        let fileType = knownType;
+        
+        // Если передан MIME тип, определяем тип файла по нему
+        if (mimeType && !knownType) {
+            if (mimeType.startsWith('image/')) fileType = 'image';
+            else if (mimeType.startsWith('video/')) fileType = 'video';
+            else if (mimeType.startsWith('audio/')) fileType = 'audio';
+            else if (mimeType.includes('pdf')) fileType = 'pdf';
+            else fileType = 'document';
+        }
+        
+        if (fileType === 'image') {
+            // Для изображений показываем превью
+            container.innerHTML = `
+                <div class="file-preview image-preview">
+                    <img src="${link.url}" alt="${link.fileName}" 
+                         style="max-width: 300px; max-height: 300px; border-radius: 8px; cursor: pointer; object-fit: contain;"
+                         onclick="window.open('${link.url}', '_blank')"
+                         onerror="this.parentElement.innerHTML='<div class=error-preview>❌ Не удалось загрузить изображение</div>'"
+                    >
+                    <div class="file-info" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+                        <span class="file-name" style="font-size: 14px; color: #666;">${link.fileName}</span>
+                        <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
+                            <i class="bi bi-download"></i> Скачать
+                        </a>
+                    </div>
+                </div>
+            `;
+        } else if (fileType === 'video') {
+            // Для видео показываем video player
+            container.innerHTML = `
+                <div class="file-preview video-preview">
+                    <video controls style="max-width: 400px; border-radius: 8px;">
+                        <source src="${link.url}" type="${mimeType || 'video/mp4'}">
+                        Ваш браузер не поддерживает видео.
+                    </video>
+                    <div class="file-info" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+                        <span class="file-name" style="font-size: 14px; color: #666;">${link.fileName}</span>
+                        <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
+                            <i class="bi bi-download"></i> Скачать
+                        </a>
+                    </div>
+                </div>
+            `;
+        } else if (fileType === 'audio') {
+            // Для аудио показываем audio player
+            container.innerHTML = `
+                <div class="file-preview audio-preview">
+                    <audio controls style="width: 300px;">
+                        <source src="${link.url}" type="${mimeType || 'audio/mpeg'}">
+                        Ваш браузер не поддерживает аудио.
+                    </audio>
+                    <div class="file-info" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+                        <span class="file-name" style="font-size: 14px; color: #666;">${link.fileName}</span>
+                        <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
+                            <i class="bi bi-download"></i> Скачать
+                        </a>
+                    </div>
+                </div>
+            `;
+        } else {
+            // Для остальных файлов показываем иконку и кнопку
+            const icon = this.getFileIcon(link.fileName);
+            container.innerHTML = `
+                <div class="file-preview document-preview" style="display: flex; align-items: center; padding: 12px; border: 1px solid #ddd; border-radius: 8px; background: #f8f9fa;">
+                    <div class="file-icon" style="font-size: 32px; margin-right: 12px;">${icon}</div>
+                    <div class="file-info" style="flex-grow: 1;">
+                        <div class="file-name" style="font-size: 14px; font-weight: 500;">${link.fileName}</div>
+                        ${mimeType ? `<div class="file-type" style="font-size: 12px; color: #666;">${mimeType}</div>` : ''}
+                    </div>
+                    <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
+                        <i class="bi bi-download"></i>
+                    </a>
+                </div>
+            `;
+        }
+    }
+    
+    // Определение типа файла
+    detectFileType(fileName) {
+        // Проверяем префикс для специальных ID
+        if (fileName.startsWith('audio_')) {
+            return 'audio';
+        }
+        
+        // Если нет расширения, возвращаем document (будет определен через API)
+        if (!fileName.includes('.')) {
+            return 'document';
+        }
+        
+        const ext = fileName.split('.').pop().toLowerCase();
+        
+        // Изображения
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) {
+            return 'image';
+        }
+        
+        // Видео
+        if (['mp4', 'webm', 'ogg', 'mov', 'avi'].includes(ext)) {
+            return 'video';
+        }
+        
+        // Аудио
+        if (['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(ext)) {
+            return 'audio';
+        }
+        
+        // PDF
+        if (ext === 'pdf') {
+            return 'pdf';
+        }
+        
+        return 'document';
     }
 
     renderAttachments(attachments) {

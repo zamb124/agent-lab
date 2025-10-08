@@ -54,6 +54,12 @@
                 <button id="chat-widget-attach" class="chat-attach-btn" title="Прикрепить файл">
                     <i class="bi bi-paperclip"></i>
                 </button>
+                <button id="chat-widget-voice" class="chat-voice-btn" title="Голосовое сообщение (зажмите и говорите)">
+                    <i class="bi bi-mic"></i>
+                </button>
+                <span id="voice-recording-indicator-widget" class="voice-recording-indicator" style="display: none;">
+                    🔴 Запись...
+                </span>
                 <input type="text" id="chat-widget-input" class="chat-input" placeholder="Введите сообщение...">
                 <button id="chat-widget-send" class="chat-send-btn">
                     <i class="bi bi-send"></i>
@@ -280,6 +286,58 @@
         opacity: 0.8;
     }
 
+    .chat-voice-btn {
+        flex-shrink: 0;
+        border: 1px solid var(--chat-input-border);
+        border-radius: 0;
+        border-right: none;
+        border-left: none;
+        background: var(--chat-input-bg);
+        color: var(--chat-input-text);
+        padding: 8px 10px;
+        cursor: pointer;
+        min-width: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all var(--transition-normal, 0.25s ease);
+        user-select: none;
+    }
+
+    .chat-voice-btn:hover {
+        background: var(--chat-agent-msg-bg);
+        opacity: 0.8;
+    }
+
+    .chat-voice-btn:active,
+    .chat-voice-btn.recording {
+        background: #ef4444;
+        color: white;
+        border-color: #ef4444;
+    }
+
+    .voice-recording-indicator {
+        position: absolute;
+        top: -30px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #ef4444;
+        color: white;
+        padding: 6px 12px;
+        border-radius: var(--radius-sm, 6px);
+        font-size: 0.85em;
+        font-weight: 500;
+        box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
+        z-index: 1000;
+        animation: pulse-recording 1s infinite;
+        white-space: nowrap;
+    }
+
+    @keyframes pulse-recording {
+        0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); }
+        50% { opacity: 0.8; transform: translateX(-50%) scale(1.05); }
+    }
+
     .chat-input {
         flex: 1;
         border: 1px solid var(--chat-input-border);
@@ -393,6 +451,12 @@
 
     .chat-widget.fullscreen .chat-attach-btn {
         padding: 16px 16px; /* Увеличиваем отступы кнопки прикрепления */
+        min-width: 56px; /* Увеличиваем минимальную ширину */
+        font-size: 16px; /* Увеличиваем размер иконки */
+    }
+
+    .chat-widget.fullscreen .chat-voice-btn {
+        padding: 16px 16px; /* Увеличиваем отступы кнопки микрофона */
         min-width: 56px; /* Увеличиваем минимальную ширину */
         font-size: 16px; /* Увеличиваем размер иконки */
     }

@@ -294,13 +294,7 @@ class FileProcessor:
             f"{size_mb:.2f} MB" if size_mb >= 1 else f"{file_record.file_size} байт"
         )
 
-        return (
-            f"[FILE]\n"
-            f"📎 Файл: {file_record.original_name} "
-            f"(ID: {file_record.file_id}, URL: {file_record.url}, "
-            f"тип: {file_record.content_type}, размер: {size_str})\n"
-            f"[/FILE]"
-        )
+        return f"📎 Файл: {file_record.original_name} (ID: {file_record.file_id}, [Скачать]({file_record.url}), Тип: {file_record.content_type}, Размер: {size_str})"
 
     @staticmethod
     def extract_file_info_from_message(message: str) -> list[Dict[str, str]]:

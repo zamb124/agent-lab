@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Авторизация - Agents Lab{% endblock %}
+{% block title %}{{ t('auth.title') }} - {{ t('common.app_name') }}{% endblock %}
 
 {% block content %}
 <div class="auth-container">
@@ -12,10 +12,10 @@
                         <i class="bi bi-robot"></i>
                         <div class="auth-brand-text">
                             <h1 class="langflow-gradient">Agents Lab</h1>
-                            <div class="auth-subtitle">Платформа для агентов</div>
+                            <div class="auth-subtitle">{{ t('auth.subtitle') }}</div>
                         </div>
                     </div>
-                    <p class="auth-description">Выберите способ входа в систему</p>
+                    <p class="auth-description">{{ t('auth.choose_provider') }}</p>
                 </div>
                 
                 <div class="auth-providers">
@@ -31,7 +31,7 @@
                         {% else %}
                             <i class="bi bi-person"></i>
                         {% endif %}
-                        <span>Войти через {{ provider.name }}</span>
+                        <span>{{ t('auth.login_with_provider', provider=provider.name) }}</span>
                     </a>
                     {% endfor %}
                 </div>
@@ -40,7 +40,7 @@
                 
                 <div class="auth-footer">
                     <p class="auth-footer-text">
-                        Безопасная авторизация через OAuth 2.0
+                        {{ t('auth.footer_text') }}
                     </p>
                 </div>
             </div>
