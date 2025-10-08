@@ -680,7 +680,12 @@
   "auth.subtitle": "Agent Platform",
   "auth.choose_provider": "Choose a method to log in to the system",
   "auth.login_with_provider": "Login with {provider}",
-  "auth.footer_text": "Secure authorization via OAuth 2.0"
+  "auth.footer_text": "Secure authorization via OAuth 2.0",
+  "{{ key }}": "[TODO: {{ key }}]",
+  "Введите ключ переменной": "[TODO: Введите ключ переменной]",
+  "Введите значение": "[TODO: Введите значение]",
+  "Ошибка удаления": "[TODO: Ошибка удаления]",
+  "button": "[TODO: button]"
 };
     console.log('✅ Переводы для en загружены: ' + Object.keys(window.translations.en).length + ' ключей');
 })();

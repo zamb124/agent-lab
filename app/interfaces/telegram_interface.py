@@ -14,6 +14,7 @@ from app.interfaces.base import BaseInterface, Message
 from app.core.storage import Storage
 from app.core.config import settings
 from app.core.audio_processor import get_default_audio_processor
+from app.services.variables_service import get_variables_service
 logger = logging.getLogger(__name__)
 
 
@@ -536,31 +537,18 @@ class TelegramInterface(BaseInterface):
         Поддерживает:
         - Хардкод: {"token": "123:ABC..."}
         - Ссылка: {"token": "@var:telegram_bot_token"}
-        - Legacy: username → token:telegram:{username}
         """
         token_value = platform_config.get("token")
         
-        if token_value:
-            from app.core.variables_service import get_variables_service
-            
-            variables_service = get_variables_service()
-            resolved_token = await variables_service.resolve(token_value)
-            logger.info(f"✅ Токен резолвнут для flow {flow_id}")
-            return resolved_token
+        if not token_value:
+            raise ValueError(f"No token configured for flow {flow_id}")
         
-        # Legacy: ищем по username
-        username = platform_config.get("username", f"bot_{flow_id}")
-        storage = Storage()
-        token_key = f"token:telegram:{username}"
-        token_json = await storage.get(token_key, force_global=True)
-
-        if token_json:
-            token = json.loads(token_json)
-            logger.info(f"✅ Найден legacy токен для {username} в БД")
-            return token
-        else:
-            logger.error(f"❌ Не найден токен в БД: {token_key}")
-            return None
+        from app.services.variables_service import get_variables_service
+        
+        variables_service = get_variables_service()
+        resolved_token = await variables_service.resolve(token_value)
+        logger.info(f"✅ Токен резолвнут для flow {flow_id}")
+        return resolved_token
 
     @staticmethod
     async def get_bot_info(bot_token: str) -> Optional[Dict]:
@@ -597,7 +585,7 @@ class TelegramInterface(BaseInterface):
         6. Устанавливает команды бота
         """
         from app.core.config import settings
-        from app.core.variables_service import get_variables_service
+        from app.services.variables_service import get_variables_service
         
         # Резолвим username если это ссылка
         variables_service = get_variables_service()

@@ -118,6 +118,11 @@ class TelegramPoller:
             username = telegram_config.get("username")
             if not username:
                 continue
+            
+            # Проверяем что есть token в конфигурации
+            if not telegram_config.get("token"):
+                logger.warning(f"⚠️ Flow {flow_id} не имеет token в platforms.telegram, пропускаем")
+                continue
 
             token = await TelegramInterface.get_bot_token_for_flow(
                 flow_id, telegram_config

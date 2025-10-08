@@ -19,6 +19,7 @@ class VariableRequest(BaseModel):
     key: str
     value: str
     secret: bool = False
+    groups: list[str] = []
 
 
 class VariableResponse(BaseModel):
@@ -41,7 +42,8 @@ async def set_variable(request: VariableRequest):
     await variables_service.set_var(
         key=request.key,
         value=request.value,
-        is_secret=request.secret
+        is_secret=request.secret,
+        groups=request.groups
     )
     
     return VariableResponse(
@@ -59,16 +61,22 @@ async def list_variables() -> Dict[str, Any]:
 
 @router.get("/admin/variables/{key}")
 async def get_variable(key: str) -> Dict[str, Any]:
-    """Получает переменную компании"""
+    """Получает переменную компании со всеми данными"""
     variables_service = get_variables_service()
-    value = await variables_service.get_var(key)
+    storage_key = f"var:{key}"
+    import json
+    data = await variables_service.storage.get(storage_key)
     
-    if value is None:
+    if not data:
         raise HTTPException(status_code=404, detail=f"Variable {key} not found")
+    
+    var_data = json.loads(data)
     
     return {
         "key": key,
-        "value": value
+        "value": var_data.get("value", ""),
+        "secret": var_data.get("secret", False),
+        "groups": var_data.get("groups", [])
     }
 
 

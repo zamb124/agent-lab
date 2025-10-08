@@ -19,7 +19,7 @@ class VariablesService:
     def __init__(self):
         self.storage = Storage()
     
-    async def set_var(self, key: str, value: str, is_secret: bool = False) -> bool:
+    async def set_var(self, key: str, value: str, is_secret: bool = False, groups: list = None) -> bool:
         """
         Сохраняет переменную компании.
         
@@ -27,6 +27,7 @@ class VariablesService:
             key: Ключ переменной
             value: Значение
             is_secret: Помечает как секрет (для UI)
+            groups: Список групп/тегов для организации переменных
         
         Returns:
             True если сохранено
@@ -35,18 +36,20 @@ class VariablesService:
         
         await self.storage.set(storage_key, json.dumps({
             "value": value,
-            "secret": is_secret
+            "secret": is_secret,
+            "groups": groups or []
         }))
         
-        logger.info(f"✅ Переменная сохранена: {key} (secret={is_secret})")
+        logger.info(f"✅ Переменная сохранена: {key} (secret={is_secret}, groups={groups})")
         return True
     
-    async def get_var(self, key: str) -> Optional[str]:
+    async def get_var(self, key: str, create_if_missing: bool = False) -> Optional[str]:
         """
         Получает переменную компании.
         
         Args:
             key: Ключ переменной
+            create_if_missing: Создать пустую переменную если не существует
         
         Returns:
             Значение или None
@@ -57,6 +60,11 @@ class VariablesService:
         if data:
             var_data = json.loads(data)
             return var_data["value"]
+        
+        if create_if_missing:
+            logger.warning(f"⚠️ Переменная {key} не найдена, создаем с пустым значением")
+            await self.set_var(key, "", is_secret=False)
+            return ""
         
         return None
     
@@ -85,12 +93,13 @@ class VariablesService:
                 var_data = json.loads(data)
                 variables[var_key] = {
                     "value": var_data["value"] if not var_data.get("secret") else "***",
-                    "secret": var_data.get("secret", False)
+                    "secret": var_data.get("secret", False),
+                    "groups": var_data.get("groups", [])
                 }
         
         return variables
     
-    async def resolve(self, value: Any) -> Any:
+    async def resolve(self, value: Any, auto_create: bool = True) -> Any:
         """
         Резолвит значение:
         - @var:key → загружает переменную компании
@@ -99,6 +108,7 @@ class VariablesService:
         
         Args:
             value: Значение для резолюции
+            auto_create: Автоматически создавать пустые переменные если не найдены
         
         Returns:
             Резолвнутое значение
@@ -106,17 +116,17 @@ class VariablesService:
         if isinstance(value, str):
             if value.startswith("@var:"):
                 var_key = value[5:]
-                resolved = await self.get_var(var_key)
+                resolved = await self.get_var(var_key, create_if_missing=auto_create)
                 if resolved is None:
                     raise ValueError(f"Variable {var_key} not found")
                 return resolved
             return value
         
         elif isinstance(value, dict):
-            return {k: await self.resolve(v) for k, v in value.items()}
+            return {k: await self.resolve(v, auto_create) for k, v in value.items()}
         
         elif isinstance(value, list):
-            return [await self.resolve(item) for item in value]
+            return [await self.resolve(item, auto_create) for item in value]
         
         else:
             return value

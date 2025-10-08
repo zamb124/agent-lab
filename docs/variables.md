@@ -278,17 +278,20 @@ company:acme:var:telegram_bot_token = "456:XYZ..."
 
 ### Что работает:
 
-✅ VariablesService - сохранение/получение/резолюция  
-✅ Таблицы per-company (ssd_variables, acme_variables)  
-✅ API endpoints для управления  
-✅ Резолюция @var:key в platform.token (TelegramInterface)  
+✅ **VariablesService** - сохранение/получение/резолюция  
+✅ **Таблица variables** - единая для всех компаний с изоляцией через префикс  
+✅ **API endpoints** - полное CRUD управление (`/api/v1/admin/variables`)  
+✅ **Резолюция @var:key в platforms** - автоматически в TelegramInterface  
+✅ **Резолюция FlowConfig.variables** - автоматически в TaskProcessor  
+✅ **Вложенные структуры** - dict/list с @var:key внутри  
+✅ **Per-company изоляция** - автоматическая через Storage  
+✅ **16 тестов** - все проходят (`tests/arch/test_11_variables.py`)  
 
-### Что нужно доделать:
+### Что можно улучшить:
 
-⏳ Резолюция FlowConfig.variables при инициализации  
-⏳ Подстановка {key} в промптах AgentConfig  
+⏳ Подстановка {key} в промптах AgentConfig (сейчас через VariableResolver)  
 ⏳ UI для управления переменными  
-⏳ Миграция старых токенов в переменные  
+⏳ Миграция старых `token:telegram:{username}` в company variables  
 
 ## Миграция со старого формата
 

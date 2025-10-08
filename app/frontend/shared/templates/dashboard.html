@@ -70,6 +70,18 @@
                         <span class="sidebar-nav-text">{{ t('dashboard.navigation.builder') }}</span>
                     </a>
                 </div>
+                <div class="sidebar-nav-item">
+                    <a href="/frontend/variables/" 
+                       hx-get="/frontend/variables/" 
+                       hx-target="#content"
+                       hx-push-url="true"
+                       hx-indicator="#content-loading"
+                       onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
+                       class="sidebar-nav-link">
+                        <i class="bi bi-key"></i>
+                        <span class="sidebar-nav-text">Ключи и Переменные</span>
+                    </a>
+                </div>
             </nav>
             
             {% if user_has_role('admin') %}

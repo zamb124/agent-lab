@@ -169,6 +169,12 @@ async def update_flow(
             if not username:
                 continue
             
+            # Проверяем что есть token для платформ требующих его
+            if platform_name == "telegram":
+                if not platform_config.get("token"):
+                    logger.warning(f"⚠️ Платформа telegram для {validated_flow.flow_id} не имеет token, пропускаем регистрацию")
+                    continue
+            
             registration_result = await factory.register_platform(
                 platform=platform_name,
                 username=username,
