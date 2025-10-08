@@ -167,8 +167,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         elif path.startswith("/auth/"):
             logger.info("🔐 OAuth контекст")
             return await self._create_anonymous_context(request, requested_company)
+        elif path in ("/docs", "/redoc", "/openapi.json") and settings.server.env == "local":
+            logger.info("🔍 Docs контекст")
+            return await self._create_anonymous_context(request, requested_company)
         elif path == "/":
-            logger.info("🏠 Корневой путь - пропускаем через middleware")
+            logger.info("🏠 Корневой путь - проверяем авторизацию")
             # Для главной страницы пытаемся создать frontend контекст, но без ошибки если пользователь не авторизован
             try:
                 return await self._create_frontend_context(request, requested_company, allow_no_company=True, has_subdomain=has_subdomain)
@@ -176,10 +179,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 # Если авторизация не удалась, создаем анонимный контекст
                 logger.info("🏠 Пользователь не авторизован, создаем анонимный контекст")
                 return await self._create_anonymous_context(request, requested_company)
-        elif path in ("/docs", "/redoc", "/openapi.json") and settings.server.env == "local":
-            logger.info("🔍 Docs контекст")
-            return await self._create_anonymous_context(request, requested_company)
-            logger.info("🏠 Корневой путь - проверяем авторизацию")
         else:
             logger.warning(f"❌ Неизвестный путь: {path}")
             raise HTTPException(status_code=404, detail="Not Found")
@@ -296,7 +295,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return Company.model_validate_json(company_data)
 
         # Если системной компании нет - что-то пошло не так
-        raise RuntimeError("Системная компания не найдена - нужно запустить миграцию")
+        raise Exception("Системная компания не найдена - нужно запустить миграцию")
 
     async def _create_telegram_context(self, request: Request, requested_company: Company) -> Context:
         """Создает контекст для Telegram запросов"""
@@ -429,7 +428,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         return Context(
             user=user,
-            platform="amocrm",
+            platform="api",
             active_company=requested_company,
             user_companies=[requested_company],
             language=language,
@@ -440,7 +439,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         """Создает анонимный контекст"""
         user = User(
             user_id="anonymous",
-            provider=AuthProvider.YANDEX,  # Placeholder
+            provider=None,  # TODO: сделать провайдера API?
             provider_user_id="anonymous",
             email="",
             name="Anonymous",

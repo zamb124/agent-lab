@@ -20,6 +20,7 @@ class InterfaceFactory:
         "telegram": TelegramInterface,
         "web": WebInterface,
         "api": APIInterface,
+        "amocrm": AmoCRMInterface,
     }
 
     def __init__(self):
@@ -29,7 +30,13 @@ class InterfaceFactory:
         self, platform: str, config: Dict[str, Any]
     ) -> Optional[BaseInterface]:
         """Создает интерфейс для указанной платформы"""
-        if platform == "amocrm":
+        interface_class = self.PLATFORM_INTERFACES.get(platform)
+        if not interface_class:
+            raise ValueError(f"Неизвестная платформа: {platform}")
+
+        if platform == "api":
+            return None
+        elif platform == "amocrm":
             return await self._create_amocrm_interface(config)
         elif platform == "telegram":
             # Получаем flow_id из метаданных
@@ -59,14 +66,12 @@ class InterfaceFactory:
             return TelegramInterface(bot_token, telegram_config)
         elif platform == "web":
             return WebInterface(config)
-        elif platform == "api":
-            # Для API не нужен интерфейс - результат уже в task.output_data
-            return None
         else:
             interface_class = self.PLATFORM_INTERFACES.get(platform)
             if not interface_class:
                 raise ValueError(f"Неизвестная платформа: {platform}")
             return interface_class(config)
+
     async def _create_amocrm_interface(
         self, config: Dict[str, Any]
     ) -> Optional[AmoCRMInterface]:
@@ -82,16 +87,6 @@ class InterfaceFactory:
             if not subdomain:
                 logger.error("Нет subdomain для создания AmoCRM интерфейса")
                 return None
-
-            platform_config = {
-                "subdomain": subdomain,
-                "scope_id": scope_id,
-            }
-
-            # Добавляем дополнительные данные из config если есть
-            for key in ["chat_id", "contact_id", "author_name"]:
-                if key in config:
-                    platform_config[key] = config[key]
 
             return AmoCRMInterface(scope_id, subdomain)
 

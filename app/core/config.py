@@ -144,14 +144,8 @@ class NanoBananaConfig(BaseModel):
     model_name: str = "gemini-2.5-flash-image-preview"
     timeout: int = 60
 class AmoCRMConfig(BaseModel):
-    """Конфигурация AmoCRM интеграции"""
-
-    enabled: bool = False
-    access_token: Optional[str] = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImp0aSI6ImYzMmQxMjE5N2EyODc1MzE4ODU3ZmZhNmU3MWM5NTZkNDcwZGMzNGMwOGE2ZjYwMzU0NGU4NjZjZTEyMzAwZDdlMzkzYTNjZWFlMTUwNjVhIn0.eyJhdWQiOiJhNmIxOWUwNi1iYWU1LTQ5M2EtODhiNi1hNTg0MDgyMjY1MGUiLCJqdGkiOiJmMzJkMTIxOTdhMjg3NTMxODg1N2ZmYTZlNzFjOTU2ZDQ3MGRjMzRjMDhhNmY2MDM1NDRlODY2Y2UxMjMwMGQ3ZTM5M2EzY2VhZTE1MDY1YSIsImlhdCI6MTc1OTc3ODM4MywibmJmIjoxNzU5Nzc4MzgzLCJleHAiOjE3NzQ5MTUyMDAsInN1YiI6IjEzMDUwOTI2IiwiZ3JhbnRfdHlwZSI6IiIsImFjY291bnRfaWQiOjMyNjkzODMwLCJiYXNlX2RvbWFpbiI6ImFtb2NybS5ydSIsInZlcnNpb24iOjIsInNjb3BlcyI6WyJjcm0iLCJmaWxlcyIsImZpbGVzX2RlbGV0ZSIsIm5vdGlmaWNhdGlvbnMiLCJwdXNoX25vdGlmaWNhdGlvbnMiXSwidXNlcl9mbGFncyI6MCwiaGFzaF91dWlkIjoiYjhhZDhhNGYtZmZlYi00ZDY3LThmNmMtZmJiZGZkYzgzNTQ0IiwiYXBpX2RvbWFpbiI6ImFwaS1iLmFtb2NybS5ydSJ9.EYwlx7RKntrAYLKujpR52TmH2pi8HE8DzWlg51FWqC-3-ZJucI574y2bv5XzmlBPObjqEJ3oZv68iV2gTXubfHW-ToZJxLt4S7--tg4FmT1XCYrsQaiwjpxhm6DpVjXjGEeX_5fzpNs95RA0MaUUz4DTM3ytexrdf062Ow9aajRGdnRZvJ5Mn3Th2zqE4Z1HRLQIFdjDf8mPA3ttc2qvawpvYytScQQCRduGp-TZEoQx1IDCJaxENmQt3Yf_tnjjHp4nJd4PlfgAUwNRfYvTq1P4hSaZij7-kAWW-dRmHVQt5v7b1Vnmc9gY8qUhEwC6CSyzNcCfV7-POWLH4Spy3Q'
-    channel_id: Optional[str] = None
-    secret_key: Optional[str] = None
-    account_id: Optional[str] = None
-    bot_amojo_id: Optional[str] = None
+    """Конфигурация AmoCRM интеграции. Временно тут, пока не настроим OAuth"""
+    access_token: Optional[str] = None
 
 
 class ProxyConfig(BaseModel):
@@ -211,7 +205,7 @@ class PaymentProvidersConfig(BaseModel):
 
 class MigrationSettings(BaseModel):
     """Настройки миграции для новых компаний"""
-    
+
     default_flows: list[str] = Field(
         default_factory=lambda: [
             "app.flows.test_flow.test_flow_config",

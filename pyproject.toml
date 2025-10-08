@@ -57,6 +57,3 @@ dev = [
     "ruff>=0.13.0",
 ]
 
-
-[project.scripts]
-agent-lab = "backend.app.main:run_server"

@@ -77,13 +77,13 @@ class WeatherAgent(BaseAgent):
 Будь дружелюбным и полезным.
 """
 
-    # tools = [
-    #     ask_user,
-    #     suggest_travel,
-    #     get_weather,
-    #     read_file,
-    #     synthesize_speech,  # Для ответа голосом
-    #     "agent:app.agents.weather.agent.TravelInfoAgent",  # Ссылка на субагента
-    #     generate_images,
+    tools = [
+        ask_user,
+        suggest_travel,
+        get_weather,
+        read_file,
+        synthesize_speech,  # Для ответа голосом
+        "agent:app.agents.weather.agent.TravelInfoAgent",  # Ссылка на субагента
+        generate_images,
 
-    # ]
+    ]

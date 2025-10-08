@@ -27,7 +27,6 @@ _client_cache: Dict[tuple, "AmoCRMClient"] = {}
 # TODO: Перенести в настройки или базу данных для продакшена
 _subdomain_to_token: Dict[str, str] = {}
 
-# Кеш для amojo_token с временем истечения
 _amojo_token_cache: Dict[str, tuple[str, datetime]] = {}
 
 # Активные индикаторы "печатает" {chat_id: task}
@@ -240,10 +239,9 @@ class AmoCRMClient:
             ...     crm_dialog_id=111
             ... )
         """
-        # Отменяем предыдущий индикатор для этого чата, если есть
-        await self.stop_typing_indicator(chat_id)
+        if chat_id in _active_typing_tasks:
+            return True
 
-        # Создаем новую задачу для индикатора
         task = asyncio.create_task(
             self._typing_indicator_task(chat_id, crm_dialog_id, max_duration)
         )

@@ -183,7 +183,7 @@ async def lifespan(app: FastAPI):
             task_processor = TaskProcessor()
             asyncio.create_task(task_processor.start())
             logger.info("✅ Воркер задач запущен")
-            
+
             logger.info("🤖 Запуск Telegram long polling для локальной разработки...")
             await telegram_poller.start()
             logger.info("✅ Telegram polling запущен")
