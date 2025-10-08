@@ -440,25 +440,33 @@ class FlowFactory:
         Returns:
             Текст первого сообщения пользователя или None
         """
-
-        
         settings = get_settings()
         config = {"configurable": {"thread_id": session_id}}
         
         checkpointer_cm = AsyncPostgresSaver.from_conn_string(settings.database.checkpointer_url)
         async with checkpointer_cm as checkpointer:
-            oldest_checkpoint = None
+            all_checkpoints = []
             async for checkpoint_tuple in checkpointer.alist(config, limit=100):
                 if checkpoint_tuple and checkpoint_tuple.checkpoint:
-                    oldest_checkpoint = checkpoint_tuple
+                    all_checkpoints.append(checkpoint_tuple)
             
-            if oldest_checkpoint:
-                channel_values = oldest_checkpoint.checkpoint.get("channel_values", {})
-                messages = channel_values.get("messages", [])
-                
-                for msg in messages:
-                    if isinstance(msg, HumanMessage):
-                        content = msg.content or ""
-                        return content[:60] if len(content) > 60 else content
+            logger.info(f"🔍 Для сессии {session_id} найдено {len(all_checkpoints)} checkpoint'ов")
+            
+            if all_checkpoints:
+                for checkpoint in reversed(all_checkpoints):
+                    channel_values = checkpoint.checkpoint.get("channel_values", {})
+                    messages = channel_values.get("messages", [])
+                    
+                    if messages:
+                        logger.info(f"🔍 Найден checkpoint с {len(messages)} сообщениями")
+                        
+                        for msg in messages:
+                            if isinstance(msg, HumanMessage):
+                                content = msg.content or ""
+                                logger.info(f"✅ Найдено первое сообщение: {content[:60]}")
+                                return content[:60] if len(content) > 60 else content
+                        
+                        break
         
+        logger.warning(f"⚠️ Первое сообщение для сессии {session_id} не найдено")
         return None
