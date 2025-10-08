@@ -163,12 +163,11 @@ async def get_flow_variables(flow_id: str, storage: StorageDep) -> VariablesResp
             ),
         ]
     
-    # Переменные flow (резолвим и flatten для вложенных структур)
+    # Переменные flow (резолвим значения + показываем description из company vars)
     flow_vars = []
     logger.info(f"🔍 Flow variables для {flow_id}: {flow_config.variables if hasattr(flow_config, 'variables') else 'НЕТ'}")
     if hasattr(flow_config, 'variables') and flow_config.variables:
-        # Резолвим @var:key перед отображением
-        
+        # Резолвим @var:key для показа значений
         variables_service = get_variables_service()
         resolved_flow_vars = await variables_service.resolve(flow_config.variables, auto_create=True)
         logger.info(f"✅ Резолвнутые flow variables: {resolved_flow_vars}")
@@ -194,13 +193,36 @@ async def get_flow_variables(flow_id: str, storage: StorageDep) -> VariablesResp
                 result.append((prefix, obj))
             return result
         
-        flat_vars = flatten_vars(resolved_flow_vars)
-        for key, value in flat_vars:
+        # Flatten для нерезолвнутых (оригинальных) переменных
+        flat_vars_orig = flatten_vars(flow_config.variables)
+        # Flatten для резолвнутых значений
+        flat_vars_resolved = flatten_vars(resolved_flow_vars)
+        
+        for (key, orig_value), (_, resolved_value) in zip(flat_vars_orig, flat_vars_resolved):
+            # Description и ссылка из company variable
+            description = "Flow переменная"
+            value_display = str(resolved_value)
+            
+            if isinstance(orig_value, str) and orig_value.startswith("@var:"):
+                var_key = orig_value[5:]
+                comp_var = next((v for v in company_vars if v.name == var_key), None)
+                
+                # Формируем description с указанием ссылки (подсвечиваем)
+                ref_text = f"Ссылка: <code style='color: var(--primary-color); background: var(--primary-color-alpha); padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.85em;'>{orig_value}</code>"
+                if comp_var and comp_var.description:
+                    description = f"{comp_var.description} ({ref_text})"
+                else:
+                    description = ref_text
+                
+                # Если значение отличается от ссылки - показываем оба
+                if str(resolved_value) != orig_value:
+                    value_display = f"{resolved_value}"
+            
             flow_vars.append(Variable(
                 name=key,
-                description=f"Flow переменная",
+                description=description,
                 category="flow",
-                value=str(value),
+                value=value_display,
                 editable=True
             ))
     

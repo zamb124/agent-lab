@@ -81,6 +81,29 @@ Response:
 DELETE /api/v1/admin/variables/telegram_bot_token
 ```
 
+## Scope переменных
+
+### Company Variables (системные, статичные):
+- `{company_name}`, `{company_id}`, `{company_subdomain}`
+- `{user_name}`, `{user_id}`  
+- `{current_date}`, `{current_time}`
+- Доступны всегда во всех flow
+
+### Variables (хранилище секретов):
+- `telegram_bot_token`, `weather_api_key`
+- НЕ доступны напрямую в промпте
+- Используются через Flow переменные с `@var:key`
+
+### Flow переменные:
+- Объявляются в `FlowConfig.variables`
+- Доступны всем агентам в flow
+- Можно использовать хардкод или `@var:key` ссылки
+
+### Local переменные (только в админке агентов):
+- Объявляются в `AgentConfig.local_variables`
+- Доступны только конкретному агенту
+- Редактируются через `/frontend/models/agent`
+
 ## Использование в конфигурации
 
 ### FlowConfig.platforms
@@ -285,7 +308,6 @@ company:acme:var:telegram_bot_token = "456:XYZ..."
 ✅ **Резолюция FlowConfig.variables** - автоматически в TaskProcessor  
 ✅ **Вложенные структуры** - dict/list с @var:key внутри  
 ✅ **Per-company изоляция** - автоматическая через Storage  
-✅ **16 тестов** - все проходят (`tests/arch/test_11_variables.py`)  
 
 ### Что можно улучшить:
 

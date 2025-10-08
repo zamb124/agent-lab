@@ -19,7 +19,7 @@ class VariablesService:
     def __init__(self):
         self.storage = Storage()
     
-    async def set_var(self, key: str, value: str, is_secret: bool = False, groups: list = None) -> bool:
+    async def set_var(self, key: str, value: str, is_secret: bool = False, groups: list = None, description: str = None) -> bool:
         """
         Сохраняет переменную компании.
         
@@ -28,6 +28,7 @@ class VariablesService:
             value: Значение
             is_secret: Помечает как секрет (для UI)
             groups: Список групп/тегов для организации переменных
+            description: Описание переменной
         
         Returns:
             True если сохранено
@@ -37,7 +38,8 @@ class VariablesService:
         await self.storage.set(storage_key, json.dumps({
             "value": value,
             "secret": is_secret,
-            "groups": groups or []
+            "groups": groups or [],
+            "description": description or ""
         }))
         
         logger.info(f"✅ Переменная сохранена: {key} (secret={is_secret}, groups={groups})")
@@ -94,7 +96,8 @@ class VariablesService:
                 variables[var_key] = {
                     "value": var_data["value"] if not var_data.get("secret") else "***",
                     "secret": var_data.get("secret", False),
-                    "groups": var_data.get("groups", [])
+                    "groups": var_data.get("groups", []),
+                    "description": var_data.get("description", "")
                 }
         
         return variables

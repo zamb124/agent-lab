@@ -120,7 +120,7 @@ async def update_flow(
     flow_dict = flow.model_dump()
     
     # Обновляем только разрешенные поля
-    allowed_fields = {"name", "description", "entry_point_agent", "platforms", "timeout", "max_retries", "canvas_data"}
+    allowed_fields = {"name", "description", "entry_point_agent", "platforms", "timeout", "max_retries", "canvas_data", "variables"}
     for field, value in updates.items():
         if field in allowed_fields:
             flow_dict[field] = value
