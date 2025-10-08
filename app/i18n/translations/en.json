@@ -2,10 +2,10 @@
   "meta": {
     "language": "en",
     "version": "1.0.0",
-    "last_updated": "2025-10-07T18:43:27.865921",
-    "completeness": 93.64341085271319,
-    "total_keys": 645,
-    "translated_keys": 604
+    "last_updated": "2025-10-08T15:23:31.706404",
+    "completeness": 92.96187683284457,
+    "total_keys": 682,
+    "translated_keys": 634
   },
   "common": {
     "app_name": "Agents Lab",
@@ -209,6 +209,45 @@
     "empty_state": {
       "title": "You don't have any bots yet",
       "description": "Create your first bot to get started"
+    }
+  },
+  "chats": {
+    "title": "Chats",
+    "shown": "Shown",
+    "total": "Total",
+    "platform": "Platform",
+    "flow": "Flow",
+    "first_message": "First message",
+    "status": "Status",
+    "messages": "Messages",
+    "created": "Created",
+    "activity": "Activity",
+    "chat_button": "Chat",
+    "open_chat": "Open chat",
+    "apply": "Apply",
+    "reset": "Reset",
+    "back": "Back",
+    "forward": "Forward",
+    "not_specified": "Not specified",
+    "empty_state": {
+      "title": "No chats",
+      "description": "Try changing the filters or start a new conversation with an agent"
+    },
+    "filters": {
+      "platform_placeholder": "Platform",
+      "flow_placeholder": "Flow",
+      "status_placeholder": "Status"
+    },
+    "status_values": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "processing": "Processing",
+      "waiting_input": "Waiting"
+    },
+    "platform_values": {
+      "web": "Web",
+      "telegram": "Telegram",
+      "api": "API"
     }
   },
   "languages": {
@@ -434,6 +473,10 @@
         "metadata": {
           "title": "Metadata",
           "description": "Additional metadata"
+        },
+        "first_message": {
+          "title": "[TODO: models.sessionlistitem.fields.first_message.title]",
+          "description": "[TODO: models.sessionlistitem.fields.first_message.description]"
         }
       }
     },
@@ -1386,5 +1429,10 @@
     "choose_provider": "Choose a method to log in to the system",
     "login_with_provider": "Login with {provider}",
     "footer_text": "Secure authorization via OAuth 2.0"
-  }
+  },
+  "{{ key }}": "[TODO: {{ key }}]",
+  "Введите ключ переменной": "[TODO: Введите ключ переменной]",
+  "Введите значение": "[TODO: Введите значение]",
+  "Ошибка удаления": "[TODO: Ошибка удаления]",
+  "button": "[TODO: button]"
 }

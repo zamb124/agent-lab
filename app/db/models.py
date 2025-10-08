@@ -95,3 +95,36 @@ class Users(Base):
 
     def __repr__(self):
         return f"<Users(key='{self.key}', updated_at='{self.updated_at}')>"
+
+
+class Variables(Base):
+    """
+    Таблица для переменных всех компаний.
+    
+    Ключи имеют формат: company:{company_id}:var:{key}
+    Изоляция per-company через префикс ключа.
+    """
+
+    __tablename__ = "variables"
+
+    key = Column(String, primary_key=True, index=True)
+    value = Column(JSONB, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    expired_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("key", name="uq_variables_key"),
+        Index("ix_variables_key_prefix", "key"),
+        Index("ix_variables_updated_at", "updated_at"),
+        Index("ix_variables_expired_at", "expired_at"),
+    )
+
+    def __repr__(self):
+        return f"<Variables(key='{self.key}', updated_at='{self.updated_at}')>"

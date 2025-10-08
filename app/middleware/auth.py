@@ -38,10 +38,34 @@ class AuthMiddleware(BaseHTTPMiddleware):
             request.url.path.startswith("/static/")
             or request.url.path.startswith("/.well-known/")
             or request.url.path.startswith("/favicon.ico")
-            or request.url.path.startswith("/api/v1/payments/webhook/")  # Webhook публичные
+            or request.url.path.startswith("/api/v1/payments/webhook/")
         ):
             return await call_next(request)
 
+        # Для Telegram webhook - извлекаем company_id из полного ключа
+        if request.url.path.startswith("/api/v1/webhook/telegram/"):
+            flow_key = request.url.path.split("/api/v1/webhook/telegram/")[1]
+
+            # Формат ключа: company:{company_id}:flow:{flow_id}
+            parts = flow_key.split(":")
+            if len(parts) < 4 or parts[0] != "company" or parts[2] != "flow":
+                raise HTTPException(status_code=400, detail=f"Invalid flow key format: {flow_key}")
+
+            company_id = parts[1]
+
+            company_data = await self.storage.get(f"company:{company_id}", force_global=True)
+            if not company_data:
+                raise HTTPException(status_code=404, detail=f"Company {company_id} not found")
+
+            requested_company = Company.model_validate_json(company_data)
+
+            context = await self._create_telegram_context(request, requested_company)
+            set_context(context)
+            request.state.context = context
+            request.state.user = context.user
+            request.state.language = context.language.value
+            logger.info(f"📨 Telegram webhook: key={flow_key}, company={company_id}")
+            return await call_next(request)
         # Для скачивания файлов - создаем минимальный контекст с компанией из поддомена
         if request.url.path.startswith("/api/v1/files/download/"):
             try:
@@ -105,8 +129,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         logger.info(f"🔍 Обрабатываем путь: {path}")
 
-        # НОВОЕ: Определяем запрашиваемую компанию по Host
+        # Определяем запрашиваемую компанию по Host
         requested_company = await self._get_company_from_host(request)
+
+        # Определяем, есть ли субдомен в запросе
+        host = request.headers.get("host", "")
+        has_subdomain = self._has_subdomain(host)
 
         # Определяем платформу по URL
         if "/webhook/telegram/" in path:
@@ -114,7 +142,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await self._create_telegram_context(request, requested_company)
         elif path == "/api/v1/admin/create-my-company":
             logger.info("🏢 API создания компании - требует авторизации")
-            return await self._create_frontend_context(request, requested_company, allow_no_company=True)
+            return await self._create_frontend_context(request, requested_company, allow_no_company=True, has_subdomain=has_subdomain)
         elif "/api/v1/" in path:
             logger.info("🔌 API контекст")
             return await self._create_api_context(request, requested_company)
@@ -126,16 +154,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await self._create_anonymous_context(request, requested_company)
         elif path == "/frontend/create-company":
             logger.info("🏢 Страница создания компании - требует авторизации")
-            return await self._create_frontend_context(request, requested_company, allow_no_company=True)
+            return await self._create_frontend_context(request, requested_company, allow_no_company=True, has_subdomain=has_subdomain)
         elif path == "/frontend/select-company":
             logger.info("🏢 Страница выбора компании - требует авторизации")
-            return await self._create_frontend_context(request, requested_company, allow_no_company=True)
+            return await self._create_frontend_context(request, requested_company, allow_no_company=True, has_subdomain=has_subdomain)
         elif path.startswith("/frontend/models/create_company_form/"):
             logger.info("🏢 API для формы создания компании - требует авторизации")
-            return await self._create_frontend_context(request, requested_company, allow_no_company=True)
+            return await self._create_frontend_context(request, requested_company, allow_no_company=True, has_subdomain=has_subdomain)
         elif path.startswith("/frontend/"):
             logger.info("🖥️ Frontend контекст - требует авторизации")
-            return await self._create_frontend_context(request, requested_company)
+            return await self._create_frontend_context(request, requested_company, has_subdomain=has_subdomain)
         elif path.startswith("/auth/"):
             logger.info("🔐 OAuth контекст")
             return await self._create_anonymous_context(request, requested_company)
@@ -143,7 +171,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             logger.info("🏠 Корневой путь - пропускаем через middleware")
             # Для главной страницы пытаемся создать frontend контекст, но без ошибки если пользователь не авторизован
             try:
-                return await self._create_frontend_context(request, requested_company, allow_no_company=True)
+                return await self._create_frontend_context(request, requested_company, allow_no_company=True, has_subdomain=has_subdomain)
             except HTTPException:
                 # Если авторизация не удалась, создаем анонимный контекст
                 logger.info("🏠 Пользователь не авторизован, создаем анонимный контекст")
@@ -155,6 +183,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
         else:
             logger.warning(f"❌ Неизвестный путь: {path}")
             raise HTTPException(status_code=404, detail="Not Found")
+
+    def _has_subdomain(self, host: str) -> bool:
+        """Проверяет, содержит ли host субдомен"""
+        domain = settings.server.domain
+
+        # Для локальной разработки: проверяем наличие точки перед localhost
+        if settings.server.env == "local":
+            return ".localhost" in host
+
+        # Для продакшена: проверяем, что есть субдомен перед основным доменом
+        return host.endswith(f".{domain}") and not host.startswith(domain)
 
     async def _get_company_from_host(self, request: Request) -> Company:
         """Определяет компанию по Host заголовку"""
@@ -257,7 +296,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return Company.model_validate_json(company_data)
 
         # Если системной компании нет - что-то пошло не так
-        raise Exception("Системная компания не найдена - нужно запустить миграцию")
+        raise RuntimeError("Системная компания не найдена - нужно запустить миграцию")
 
     async def _create_telegram_context(self, request: Request, requested_company: Company) -> Context:
         """Создает контекст для Telegram запросов"""
@@ -393,6 +432,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             platform="amocrm",
             active_company=requested_company,
             user_companies=[requested_company],
+            language=language,
             metadata={"anonymous": True}
         )
 
@@ -420,7 +460,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             metadata={"anonymous": True}
         )
 
-    async def _create_frontend_context(self, request: Request, requested_company: Company, allow_no_company: bool = False) -> Context:
+    async def _create_frontend_context(self, request: Request, requested_company: Company, allow_no_company: bool = False, has_subdomain: bool = False) -> Context:
         """Создает контекст для frontend запросов на основе куки"""
         # Получаем session_id из куки
         session_id = request.cookies.get("session_id")
@@ -459,12 +499,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 # Бросаем исключение для редиректа на создание компании
                 raise CompanyCreationRequired()
 
+        # Проверка: если это защищенная страница и запрос БЕЗ субдомена,
+        # редиректим на выбор компании
+        # Все пользователи должны работать через субдомены конкретных компаний
+        if not allow_no_company and not has_subdomain:
+            logger.info(f"🔄 Пользователь {user.user_id} зашел на защищенную страницу без субдомена, редиректим на выбор компании")
+            raise CompanyCreationRequired()
         # Проверяем доступ к запрашиваемой компании (только если не разрешен доступ без компании)
         if not allow_no_company and requested_company.company_id not in user.companies:
             logger.warning(f"Пользователь {user.user_id} не имеет доступа к компании {requested_company.company_id}. Доступные компании: {list(user.companies.keys())}")
             # Вместо ошибки - редиректим на выбор компании
-            raise CompanyCreationRequired()  # Переиспользуем исключение для редиректа
-
+            raise CompanyCreationRequired()
         # Обновляем активную компанию у пользователя если нужно (только если не allow_no_company)
         if not allow_no_company and user.active_company_id != requested_company.company_id:
             logger.info(f"🔄 Смена активной компании: {user.active_company_id} → {requested_company.company_id}")

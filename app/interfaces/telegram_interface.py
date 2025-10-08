@@ -14,6 +14,7 @@ from app.interfaces.base import BaseInterface, Message
 from app.core.storage import Storage
 from app.core.config import settings
 from app.core.audio_processor import get_default_audio_processor
+from app.services.variables_service import get_variables_service
 logger = logging.getLogger(__name__)
 
 
@@ -531,22 +532,137 @@ class TelegramInterface(BaseInterface):
     async def get_bot_token_for_flow(
         flow_id: str, platform_config: Dict[str, Any]
     ) -> Optional[str]:
-        """Получает токен бота для flow из БД"""
-        username = platform_config.get("username", f"bot_{flow_id}")
+        """
+        Получает токен бота для flow из БД.
+        Поддерживает:
+        - Хардкод: {"token": "123:ABC..."}
+        - Ссылка: {"token": "@var:telegram_bot_token"}
+        """
+        token_value = platform_config.get("token")
+        
+        if not token_value:
+            raise ValueError(f"No token configured for flow {flow_id}")
+        
+        from app.services.variables_service import get_variables_service
+        
+        variables_service = get_variables_service()
+        resolved_token = await variables_service.resolve(token_value)
+        logger.info(f"✅ Токен резолвнут для flow {flow_id}")
+        return resolved_token
 
-        # Ищем токен в БД: token:telegram:username
+    @staticmethod
+    async def get_bot_info(bot_token: str) -> Optional[Dict]:
+        """Получает информацию о боте через getMe API"""
+        url = f"https://api.telegram.org/bot{bot_token}/getMe"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url)
+            
+            if response.status_code != 200:
+                logger.error(f"❌ getMe API error: {response.status_code}")
+                return None
+            
+            data = response.json()
+            if not data.get("ok"):
+                logger.error(f"❌ getMe API returned not ok: {data}")
+                return None
+            
+            return data["result"]
+
+    @classmethod
+    async def register(
+        cls,
+        flow_id: str,
+        username: str,
+        platform_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Регистрирует Telegram бота:
+        1. Резолвит username (если @var:key)
+        2. Проверяет токен через getMe
+        3. Обновляет username в config
+        4. Local: перезагружает polling
+        5. Production: устанавливает webhook
+        6. Устанавливает команды бота
+        """
+        from app.core.config import settings
+        from app.services.variables_service import get_variables_service
+        
+        # Резолвим username если это ссылка
+        variables_service = get_variables_service()
+        resolved_username = await variables_service.resolve(username)
+        
         storage = Storage()
-        token_key = f"token:telegram:{username}"
-
-        token_json = await storage.get(token_key, force_global=True)
-
-        if token_json:
-            token = json.loads(token_json)
-            logger.info(f"✅ Найден токен для {username} в БД")
-            return token
+        
+        # Получаем токен через get_bot_token_for_flow (поддерживает @var:)
+        token = await cls.get_bot_token_for_flow(flow_id, platform_config)
+        if not token:
+            raise ValueError(f"Token not found for {resolved_username}")
+        
+        # Проверяем токен через getMe API
+        bot_info = await cls.get_bot_info(token)
+        if not bot_info:
+            raise ValueError("Invalid token or bot not accessible")
+        
+        actual_username = bot_info.get("username")
+        bot_name = bot_info.get("first_name", "Bot")
+        
+        logger.info(f"🤖 Telegram bot: @{actual_username} ({bot_name})")
+        
+        # Обновляем username в platform_config если отличается
+        if actual_username != username:
+            logger.warning(f"⚠️ Username изменен: {username} → {actual_username}")
+            platform_config["username"] = actual_username
+            
+            flow_config = await storage.get_flow_config(flow_id)
+            if flow_config:
+                flow_config.platforms["telegram"]["username"] = actual_username
+                await storage.set_flow_config(flow_config)
+                logger.info(f"✅ Username обновлен в FlowConfig")
+        
+        # Устанавливаем команды
+        interface = cls(token, platform_config)
+        await interface.setup_commands()
+        
+        # Получаем полный ключ flow (company:ssd:flow:...)
+        all_keys = await storage.list_by_prefix("", limit=1000, force_global=True)
+        flow_key = None
+        for key in all_keys:
+            if f":flow:{flow_id}" in key:
+                flow_key = key
+                break
+        
+        if not flow_key:
+            raise ValueError(f"Flow key not found for {flow_id}")
+        
+        # Настраиваем webhook или polling
+        if settings.server.env == "local":
+            from app.services.telegram_poller import telegram_poller
+            await telegram_poller.reload()
+            
+            return {
+                "success": True,
+                "platform": "telegram",
+                "mode": "polling",
+                "username": actual_username,
+                "bot_name": bot_name,
+                "flow_key": flow_key
+            }
         else:
-            logger.error(f"❌ Не найден токен в БД: {token_key}")
-            return None
+            webhook_url = f"https://{settings.server.domain}/api/v1/webhook/telegram/{flow_key}"
+            webhook_success = await cls.set_webhook(token, webhook_url)
+            
+            if not webhook_success:
+                raise RuntimeError(f"Failed to set webhook for {actual_username}")
+            
+            return {
+                "success": True,
+                "platform": "telegram",
+                "mode": "webhook",
+                "username": actual_username,
+                "bot_name": bot_name,
+                "webhook_url": webhook_url,
+                "flow_key": flow_key
+            }
 
     async def _handle_media_group(
         self, media_group_id: str, tg_message: Dict[str, Any], 

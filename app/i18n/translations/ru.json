@@ -2,10 +2,10 @@
   "meta": {
     "language": "ru",
     "version": "1.0.0",
-    "last_updated": "2025-10-07T18:43:27.863735",
+    "last_updated": "2025-10-08T15:23:31.704115",
     "completeness": 100.0,
-    "total_keys": 644,
-    "translated_keys": 644
+    "total_keys": 681,
+    "translated_keys": 681
   },
   "common": {
     "app_name": "Agents Lab",
@@ -209,6 +209,45 @@
     "empty_state": {
       "title": "У вас пока нет ботов",
       "description": "Создайте своего первого бота, чтобы начать работу"
+    }
+  },
+  "chats": {
+    "title": "Чаты",
+    "shown": "Показано",
+    "total": "Всего",
+    "platform": "Платформа",
+    "flow": "Flow",
+    "first_message": "Первое сообщение",
+    "status": "Статус",
+    "messages": "Сообщений",
+    "created": "Создано",
+    "activity": "Активность",
+    "chat_button": "Чат",
+    "open_chat": "Открыть чат",
+    "apply": "Применить",
+    "reset": "Сбросить",
+    "back": "Назад",
+    "forward": "Вперед",
+    "not_specified": "Не указан",
+    "empty_state": {
+      "title": "Нет чатов",
+      "description": "Попробуйте изменить фильтры или начать новый диалог с агентом"
+    },
+    "filters": {
+      "platform_placeholder": "Платформа",
+      "flow_placeholder": "Flow",
+      "status_placeholder": "Статус"
+    },
+    "status_values": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "processing": "Processing",
+      "waiting_input": "Waiting"
+    },
+    "platform_values": {
+      "web": "Web",
+      "telegram": "Telegram",
+      "api": "API"
     }
   },
   "languages": {
@@ -431,6 +470,10 @@
         "metadata": {
           "title": "Метаданные",
           "description": "Дополнительные метаданные"
+        },
+        "first_message": {
+          "title": "Первое сообщение",
+          "description": "Первое сообщение пользователя в сессии"
         }
       }
     },
@@ -1383,5 +1426,10 @@
     "choose_provider": "Выберите способ входа в систему",
     "login_with_provider": "Войти через {provider}",
     "footer_text": "Безопасная авторизация через OAuth 2.0"
-  }
+  },
+  "{{ key }}": "",
+  "Введите ключ переменной": "",
+  "Введите значение": "",
+  "Ошибка удаления": "",
+  "button": ""
 }
