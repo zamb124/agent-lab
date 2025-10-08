@@ -9,7 +9,7 @@ import inspect
 import pkgutil
 import traceback
 from pathlib import Path
-from typing import List, Any, Type
+from typing import List, Any, Type, Optional
 from datetime import datetime, timezone
 
 import app.agents
@@ -17,6 +17,7 @@ import app.flows
 import app.custom_flows
 
 from app.core.storage import Storage
+from app.core.config import settings
 from app.models import (
     AgentConfig,
     FlowConfig,
@@ -48,17 +49,12 @@ class Migrator:
         """Запускает полную миграцию агентов, флоу и инструментов"""
         logger.info("Запуск полной миграции...")
 
-        try:
-            # Сначала создаем системную компанию
-            await self._ensure_system_company()
-            
-            await self._migrate_tools()
-            await self._migrate_agents()
-            await self._migrate_flows()
-            logger.info("Полная миграция завершена успешно")
-        except Exception as e:
-            logger.error(f"Ошибка при миграции: {e}")
-            raise
+        await self._ensure_system_company()
+        
+        await self._migrate_tools()
+        await self._migrate_agents()
+        await self._migrate_flows()
+        logger.info("Полная миграция завершена успешно")
 
     async def _ensure_system_company(self):
         """Создает системную компанию если не существует"""
@@ -170,7 +166,17 @@ class Migrator:
         company_data = await self.storage.get("company:system", force_global=True)
         system_company = Company.model_validate_json(company_data)
         
-        # Создаем системного пользователя для миграции
+        # Используем общий метод
+        await self._set_company_context(system_company)
+        logger.info("✅ Установлен контекст системной компании для миграции")
+
+    async def _set_company_context(self, company: Company):
+        """
+        Устанавливает контекст указанной компании для миграции.
+        
+        Args:
+            company: Компания для которой устанавливается контекст
+        """
         system_user = User(
             user_id="system_migrator",
             provider=AuthProvider.YANDEX,
@@ -179,20 +185,19 @@ class Migrator:
             name="System Migrator",
             status=UserStatus.ACTIVE,
             groups=["system"],
-            companies={"system": ["admin"]},
-            active_company_id="system"
+            companies={company.company_id: ["admin"]},
+            active_company_id=company.company_id
         )
         
-        # Устанавливаем контекст
         context = Context(
             user=system_user,
             platform="migration",
-            active_company=system_company,
-            user_companies=[system_company]
+            active_company=company,
+            user_companies=[company]
         )
         
         set_context(context)
-        logger.info("✅ Установлен контекст системной компании для миграции")
+        logger.info(f"✅ Установлен контекст компании {company.company_id} для миграции")
 
     async def _find_agent_classes(self) -> List[Type[BaseAgent]]:
         """Находит все классы-наследники BaseAgent в проекте"""
@@ -343,47 +348,41 @@ class Migrator:
 
     async def _analyze_agent_graph(self, agent_class: Type[BaseAgent]):
         """Анализирует LangGraph агента и создает GraphDefinition"""
-        try:
-            logger.info(f"🔍 Анализируем граф агента {agent_class.__name__}")
+        logger.info(f"🔍 Анализируем граф агента {agent_class.__name__}")
 
-            # Проверяем статический graph_definition в классе
-            if (
-                hasattr(agent_class, "graph_definition")
-                and agent_class.graph_definition
-            ):
-                logger.info("🔍 Найден статический graph_definition в классе")
-                return agent_class.graph_definition
+        # Проверяем статический graph_definition в классе
+        if (
+            hasattr(agent_class, "graph_definition")
+            and agent_class.graph_definition
+        ):
+            logger.info("🔍 Найден статический graph_definition в классе")
+            return agent_class.graph_definition
 
-            # Создаем экземпляр агента для анализа
-            temp_config = AgentConfig(
-                agent_id=f"{agent_class.__module__}.{agent_class.__name__}",
-                name="temp",
-                description="temp",
-                type=AgentType.REACT,  # Временно
+        # Создаем экземпляр агента для анализа
+        temp_config = AgentConfig(
+            agent_id=f"{agent_class.__module__}.{agent_class.__name__}",
+            name="temp",
+            description="temp",
+            type=AgentType.REACT,
+        )
+
+        agent_instance = agent_class(temp_config)
+        logger.info(f"🔍 Экземпляр создан: {type(agent_instance)}")
+
+        # Проверяем есть ли у него LangGraph граф
+        if hasattr(agent_instance, "graph") and hasattr(
+            agent_instance.graph, "nodes"
+        ):
+            logger.info(f"🔍 Найден StateGraph: {type(agent_instance.graph)}")
+            logger.info(
+                f"🔍 Найдены nodes: {list(agent_instance.graph.nodes.keys())}"
             )
-
-            # Создаем экземпляр
-            agent_instance = agent_class(temp_config)
-            logger.info(f"🔍 Экземпляр создан: {type(agent_instance)}")
-
-            # Проверяем есть ли у него LangGraph граф
-            if hasattr(agent_instance, "graph") and hasattr(
-                agent_instance.graph, "nodes"
-            ):
-                logger.info(f"🔍 Найден StateGraph: {type(agent_instance.graph)}")
-                logger.info(
-                    f"🔍 Найдены nodes: {list(agent_instance.graph.nodes.keys())}"
-                )
-                logger.info(f"🔍 Найдены edges: {dict(agent_instance.graph.edges)}")
-                return await self._extract_stategraph_definition(agent_instance.graph)
-            else:
-                logger.info(
-                    f"🔍 Агент {agent_class.__name__} - простой ReAct агент (нет StateGraph)"
-                )
-
-        except Exception as e:
-            logger.error(f"❌ Ошибка анализа графа агента {agent_class.__name__}: {e}")
-            traceback.print_exc()
+            logger.info(f"🔍 Найдены edges: {dict(agent_instance.graph.edges)}")
+            return await self._extract_stategraph_definition(agent_instance.graph)
+        else:
+            logger.info(
+                f"🔍 Агент {agent_class.__name__} - простой ReAct агент (нет StateGraph)"
+            )
 
         return None
 
@@ -657,122 +656,174 @@ class Migrator:
         references = []
 
         for tool in raw_tools:
-            try:
-                if inspect.isfunction(tool) or inspect.ismethod(tool):
-                    # Это функция
-                    full_path = f"{tool.__module__}.{tool.__name__}"
-                    references.append(ToolReference(tool_id=full_path))
+            if inspect.isfunction(tool) or inspect.ismethod(tool):
+                full_path = f"{tool.__module__}.{tool.__name__}"
+                references.append(ToolReference(tool_id=full_path))
 
-                elif inspect.isclass(tool):
-                    # Это класс (например, BaseTool)
-                    full_path = f"{tool.__module__}.{tool.__name__}"
-                    references.append(ToolReference(tool_id=full_path))
+            elif inspect.isclass(tool):
+                full_path = f"{tool.__module__}.{tool.__name__}"
+                references.append(ToolReference(tool_id=full_path))
 
-                elif isinstance(tool, str) and tool.startswith("mcp:"):
-                    # Это MCP-инструмент
-                    references.append(ToolReference(tool_id=tool))
+            elif isinstance(tool, str) and tool.startswith("mcp:"):
+                references.append(ToolReference(tool_id=tool))
 
-                elif isinstance(tool, str) and tool.startswith("agent:"):
-                    # Это ссылка на агента
-                    references.append(ToolReference(tool_id=tool))
+            elif isinstance(tool, str) and tool.startswith("agent:"):
+                references.append(ToolReference(tool_id=tool))
 
-                elif hasattr(tool, "__class__") and issubclass(
-                    tool.__class__, BaseAgent
+            elif hasattr(tool, "__class__") and issubclass(
+                tool.__class__, BaseAgent
+            ):
+                agent_class = tool.__class__
+                full_path = f"{agent_class.__module__}.{agent_class.__name__}"
+                references.append(ToolReference(tool_id=full_path))
+
+            elif hasattr(tool, "name") and hasattr(tool, "func"):
+                if (
+                    tool.func
+                    and hasattr(tool.func, "__module__")
+                    and hasattr(tool.func, "__name__")
                 ):
-                    # Это экземпляр другого агента
-                    agent_class = tool.__class__
-                    full_path = f"{agent_class.__module__}.{agent_class.__name__}"
+                    full_path = f"{tool.func.__module__}.{tool.func.__name__}"
                     references.append(ToolReference(tool_id=full_path))
-
-                elif hasattr(tool, "name") and hasattr(tool, "func"):
-                    # Это уже готовый инструмент LangChain (StructuredTool и т.д.)
-                    # Пытаемся извлечь путь к функции
-                    if (
-                        tool.func
-                        and hasattr(tool.func, "__module__")
-                        and hasattr(tool.func, "__name__")
-                    ):
-                        full_path = f"{tool.func.__module__}.{tool.func.__name__}"
-                        references.append(ToolReference(tool_id=full_path))
-                    elif hasattr(tool, "coroutine") and tool.coroutine:
-                        # Для async @tool функций func=None, но есть coroutine
-                        full_path = (
-                            f"{tool.coroutine.__module__}.{tool.coroutine.__name__}"
-                        )
-                        references.append(ToolReference(tool_id=full_path))
-                    else:
-                        logger.warning(
-                            f"Не удалось извлечь путь к функции инструмента {tool.name}"
-                        )
-
-                else:
-                    logger.warning(
-                        f"Неизвестный тип инструмента при миграции: {type(tool)}. Пропускаем."
+                elif hasattr(tool, "coroutine") and tool.coroutine:
+                    full_path = (
+                        f"{tool.coroutine.__module__}.{tool.coroutine.__name__}"
                     )
+                    references.append(ToolReference(tool_id=full_path))
+                else:
+                    raise ValueError(f"Не удалось извлечь путь к функции инструмента {tool.name}")
 
-            except Exception as e:
-                logger.error(f"Ошибка конвертации инструмента {tool}: {e}")
-                continue
+            else:
+                raise ValueError(f"Неизвестный тип инструмента при миграции: {type(tool)}")
 
         return references
 
-    async def migrate_single_agent(self, agent_class_path: str) -> bool:
+    async def migrate_single_agent(self, agent_class_path: str):
         """
         Мигрирует один агент по пути к классу.
 
         Args:
             agent_class_path: Путь к классу агента (например, "app.agents.my_agent.MyAgent")
-
-        Returns:
-            True, если миграция успешна
         """
-        try:
-            # Импортируем класс
-            module_path, class_name = agent_class_path.rsplit(".", 1)
-            module = importlib.import_module(module_path)
-            agent_class = getattr(module, class_name)
+        await self._migrate_agent_from_code(agent_class_path, with_tools=False)
 
-            if not inspect.isclass(agent_class) or not issubclass(agent_class, BaseAgent):
-                raise ValueError(
-                    f"Класс {agent_class_path} не является наследником BaseAgent"
-                )
+    async def remigrate_flow(self, flow_id: str, company: Company):
+        """
+        Перемигрирует (обновляет) flow в указанной компании.
+        Полезно после изменения кода flow.
+        
+        Args:
+            flow_id: Путь к FlowConfig (например, "app.flows.test_flow.test_flow_config")
+            company: Компания для которой выполняется перемиграция
+        """
+        logger.info(f"Перемиграция flow {flow_id} для компании {company.company_id}...")
+        await self._set_company_context(company)
+        await self._migrate_single_flow_with_deps(flow_id, with_dependencies=False)
 
-            # Создаем конфигурацию и сохраняем
-            config = await self._create_agent_config_from_class(agent_class)
-            await self.storage.set_agent_config(config)
+    async def remigrate_agent(self, agent_id: str, company: Company):
+        """
+        Перемигрирует (обновляет) агента в указанной компании.
+        Полезно после изменения кода агента.
+        
+        Args:
+            agent_id: Путь к классу агента (например, "app.agents.calculator.CalculatorAgent")
+            company: Компания для которой выполняется перемиграция
+        """
+        logger.info(f"Перемиграция агента {agent_id} для компании {company.company_id}...")
+        await self._set_company_context(company)
+        await self._migrate_agent_from_code(agent_id, with_tools=False)
 
-            logger.info(f"Агент {agent_class_path} успешно мигрирован")
-            return True
+    async def remigrate_tool(self, tool_id: str, company: Company):
+        """
+        Перемигрирует (обновляет) tool в указанной компании.
+        Полезно после изменения кода tool.
+        
+        Args:
+            tool_id: Путь к функции tool (например, "app.tools.calc_tools.calculate")
+            company: Компания для которой выполняется перемиграция
+        """
+        logger.info(f"Перемиграция tool {tool_id} для компании {company.company_id}...")
+        await self._set_company_context(company)
+        await self._migrate_tool_from_code(tool_id)
 
-        except Exception as e:
-            logger.error(f"Ошибка миграции агента {agent_class_path}: {e}")
-            return False
+    async def migrate_defaults_for_company(self, company: Company):
+        """
+        Мигрирует базовые сущности для новой компании согласно настройкам.
+        Использует настройки из app.core.config.settings.migration
+        
+        Args:
+            company: Компания для которой выполняется миграция
+        """
+        migration_settings = settings.migration
+        
+        logger.info(f"Миграция базовых сущностей для компании {company.company_id}...")
+        logger.info(f"  Flows: {migration_settings.default_flows}")
+        logger.info(f"  Agents: {migration_settings.default_agents}")
+        logger.info(f"  Tools: {migration_settings.default_tools}")
+        logger.info(f"  With dependencies: {migration_settings.migrate_dependencies}")
+        
+        await self.migrate_for_company(
+            company=company,
+            flows=migration_settings.default_flows if migration_settings.default_flows else None,
+            agents=migration_settings.default_agents if migration_settings.default_agents else None,
+            tools=migration_settings.default_tools if migration_settings.default_tools else None,
+            with_dependencies=migration_settings.migrate_dependencies
+        )
 
-    async def migrate_single_flow(self, flow_config: FlowConfig) -> bool:
+    async def migrate_for_company(
+        self,
+        company: Company,
+        flows: Optional[List[str]] = None,
+        agents: Optional[List[str]] = None,
+        tools: Optional[List[str]] = None,
+        with_dependencies: bool = True
+    ):
+        """
+        Мигрирует выбранные сущности из кода в указанную компанию.
+        
+        Args:
+            company: Целевая компания
+            flows: Список flow для миграции (например, ["app.flows.test_flow.flow"])
+            agents: Список агентов для миграции (например, ["app.agents.calculator.CalculatorAgent"])
+            tools: Список tools для миграции (например, ["app.tools.calc_tools.calculate"])
+            with_dependencies: Мигрировать ли зависимости автоматически
+        """
+        logger.info(f"Миграция сущностей для компании {company.company_id}...")
+        
+        await self._set_company_context(company)
+        
+        if flows:
+            logger.info(f"Мигрируем {len(flows)} flow...")
+            for flow_id in flows:
+                await self._migrate_single_flow_with_deps(flow_id, with_dependencies)
+        
+        if agents:
+            logger.info(f"Мигрируем {len(agents)} агентов...")
+            for agent_id in agents:
+                await self._migrate_agent_from_code(agent_id, with_tools=with_dependencies)
+        
+        if tools:
+            logger.info(f"Мигрируем {len(tools)} tools...")
+            for tool_id in tools:
+                await self._migrate_tool_from_code(tool_id)
+        
+        logger.info(f"✅ Миграция для компании {company.company_id} завершена успешно")
+
+    async def migrate_single_flow(self, flow_config: FlowConfig):
         """
         Мигрирует один флоу.
 
         Args:
             flow_config: Конфигурация флоу
-
-        Returns:
-            True, если миграция успешна
         """
-        try:
-            # Обновляем метаданные
-            flow_config.source = "migration"
-            now = datetime.now(timezone.utc)
-            flow_config.updated_at = now
-            if not flow_config.created_at:
-                flow_config.created_at = now
+        flow_config.source = "migration"
+        now = datetime.now(timezone.utc)
+        flow_config.updated_at = now
+        if not flow_config.created_at:
+            flow_config.created_at = now
 
-            await self.storage.set_flow_config(flow_config)
-            logger.info(f"Флоу {flow_config.flow_id} успешно мигрирован")
-            return True
-
-        except Exception as e:
-            logger.error(f"Ошибка миграции флоу {flow_config.flow_id}: {e}")
-            return False
+        await self.storage.set_flow_config(flow_config)
+        logger.info(f"Флоу {flow_config.flow_id} успешно мигрирован")
 
     async def _find_tool_functions(self, package_name: str):
         """Находит все @tool функции в пакете (рекурсивно)"""
@@ -826,6 +877,138 @@ class Migrator:
         logger.info(f"🔧 Итого найдено {len(tool_functions)} @tool функций")
         return tool_functions
 
+    async def _migrate_single_flow_with_deps(
+        self,
+        flow_id: str,
+        with_dependencies: bool = True
+    ):
+        """
+        Мигрирует flow из кода с его зависимостями.
+        
+        Args:
+            flow_id: Путь к FlowConfig (например, "app.flows.test_flow.test_flow_config")
+            with_dependencies: Мигрировать ли entry_point_agent и его tools
+        """
+        module_path, var_name = flow_id.rsplit(".", 1)
+        module = importlib.import_module(module_path)
+        flow_config_orig = getattr(module, var_name)
+        
+        if not isinstance(flow_config_orig, FlowConfig):
+            raise ValueError(f"Объект {flow_id} не является FlowConfig")
+        
+        # Создаем новый FlowConfig с правильным flow_id (полный путь к переменной)
+        flow_config = FlowConfig(
+            flow_id=flow_id,
+            name=flow_config_orig.name,
+            description=flow_config_orig.description,
+            entry_point_agent=flow_config_orig.entry_point_agent,
+            platforms=flow_config_orig.platforms,
+            timeout=flow_config_orig.timeout,
+            max_retries=flow_config_orig.max_retries,
+            variables=flow_config_orig.variables,
+            source=flow_config_orig.source,
+            created_at=flow_config_orig.created_at,
+            updated_at=flow_config_orig.updated_at
+        )
+        
+        await self.migrate_single_flow(flow_config)
+        
+        if with_dependencies and flow_config.entry_point_agent:
+            logger.info(f"Мигрируем зависимости flow {flow_id}: entry_point_agent={flow_config.entry_point_agent}")
+            await self._migrate_agent_from_code(
+                flow_config.entry_point_agent,
+                with_tools=True
+            )
+
+    async def _migrate_agent_from_code(
+        self,
+        agent_id: str,
+        with_tools: bool = True,
+        visited: Optional[set] = None
+    ):
+        """
+        Мигрирует агента из кода со всеми его tools рекурсивно.
+        
+        Args:
+            agent_id: Путь к классу агента (например, "app.agents.calculator.CalculatorAgent")
+            with_tools: Мигрировать ли tools агента
+            visited: Набор уже посещенных агентов для избежания циклов
+        """
+        if visited is None:
+            visited = set()
+        
+        if agent_id in visited:
+            logger.info(f"Агент {agent_id} уже был мигрирован, пропускаем")
+            return
+        
+        visited.add(agent_id)
+        
+        module_path, class_name = agent_id.rsplit(".", 1)
+        module = importlib.import_module(module_path)
+        agent_class = getattr(module, class_name)
+        
+        if not inspect.isclass(agent_class) or not issubclass(agent_class, BaseAgent):
+            raise ValueError(f"Класс {agent_id} не является наследником BaseAgent")
+        
+        config = await self._create_agent_config_from_class(agent_class)
+        await self.storage.set_agent_config(config)
+        logger.info(f"Агент {agent_id} успешно мигрирован")
+        
+        if with_tools:
+            raw_tools = getattr(agent_class, "tools", [])
+            
+            for tool in raw_tools:
+                if inspect.isclass(tool) and issubclass(tool, BaseAgent):
+                    sub_agent_id = f"{tool.__module__}.{tool.__name__}"
+                    await self._migrate_agent_from_code(sub_agent_id, with_tools=True, visited=visited)
+                else:
+                    await self._migrate_tool_from_code(tool)
+
+    async def _migrate_tool_from_code(self, tool_identifier: Any):
+        """
+        Мигрирует один tool из кода в текущую компанию.
+        
+        Args:
+            tool_identifier: Может быть:
+                - Строка "app.tools.calc_tools.calculate" (путь к функции)
+                - Строка "agent:app.agents.weather.agent.TravelInfoAgent" (ссылка на агента)
+                - Функция/StructuredTool объект
+                - Класс агента
+        """
+        # Проверяем является ли это ссылкой на агента
+        if isinstance(tool_identifier, str) and tool_identifier.startswith("agent:"):
+            agent_id = tool_identifier.replace("agent:", "")
+            logger.info(f"Обнаружен субагент {agent_id}, мигрируем как агента")
+            await self._migrate_agent_from_code(agent_id, with_tools=True)
+            return
+        
+        # Проверяем является ли это классом агента
+        if inspect.isclass(tool_identifier) and issubclass(tool_identifier, BaseAgent):
+            agent_id = f"{tool_identifier.__module__}.{tool_identifier.__name__}"
+            logger.info(f"Обнаружен класс агента {agent_id}, мигрируем как агента")
+            await self._migrate_agent_from_code(agent_id, with_tools=True)
+            return
+        
+        # Загружаем tool если это строка
+        if isinstance(tool_identifier, str):
+            module_path, func_name = tool_identifier.rsplit(".", 1)
+            module = importlib.import_module(module_path)
+            tool_obj = getattr(module, func_name)
+        else:
+            tool_obj = tool_identifier
+        
+        if not (hasattr(tool_obj, "name") and hasattr(tool_obj, "description")):
+            raise ValueError(f"Объект {tool_identifier} не является tool")
+        
+        module_name = tool_obj.func.__module__ if hasattr(tool_obj, "func") and tool_obj.func else (
+            tool_obj.coroutine.__module__ if hasattr(tool_obj, "coroutine") and tool_obj.coroutine else "unknown"
+        )
+        
+        tool_ref = await self._create_tool_reference_from_function(tool_obj, module_name)
+        await self.storage.set(f"tool:{tool_ref.tool_id}", tool_ref.model_dump_json())
+        
+        logger.info(f"Tool {tool_ref.tool_id} успешно мигрирован")
+
     async def _create_tool_reference_from_function(
         self, tool_obj, module_name: str
     ) -> ToolReference:
@@ -852,24 +1035,21 @@ class Migrator:
         # Извлекаем параметры из args_schema
         params = {}
         if hasattr(tool_obj, "args_schema") and tool_obj.args_schema:
-            try:
-                # Получаем поля из Pydantic модели
-                if hasattr(tool_obj.args_schema, "model_fields"):
-                    for (
-                        field_name,
-                        field_info,
-                    ) in tool_obj.args_schema.model_fields.items():
-                        params[field_name] = {
-                            "type": str(field_info.annotation)
-                            if field_info.annotation
-                            else "str",
-                            "description": field_info.description or "",
-                            "required": field_info.is_required()
-                            if hasattr(field_info, "is_required")
-                            else True,
-                        }
-            except Exception as e:
-                logger.warning(f"Не удалось извлечь параметры для {tool_obj.name}: {e}")
+            # Получаем поля из Pydantic модели
+            if hasattr(tool_obj.args_schema, "model_fields"):
+                for (
+                    field_name,
+                    field_info,
+                ) in tool_obj.args_schema.model_fields.items():
+                    params[field_name] = {
+                        "type": str(field_info.annotation)
+                        if field_info.annotation
+                        else "str",
+                        "description": field_info.description or "",
+                        "required": field_info.is_required()
+                        if hasattr(field_info, "is_required")
+                        else True,
+                    }
 
         # Извлекаем метаданные платформы из декоратора
         platform_cost = getattr(tool_obj, '_platform_cost', 0.0)

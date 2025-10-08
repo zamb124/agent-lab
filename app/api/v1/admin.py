@@ -16,6 +16,7 @@ from app.identity.models import User, Company
 from app.core.storage import Storage
 from app.core.file_processor import FileProcessor
 from app.core.context import get_context
+from app.core.migrator import Migrator
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -438,6 +439,12 @@ async def create_my_company(request: Request):
     # Сохраняем mapping поддомена (как JSON строка)
     subdomain_saved = await storage.set(f"subdomain:{subdomain}", f'"{company_id}"', force_global=True)
     logger.info(f"🐛 DEBUG: subdomain:{subdomain} -> {company_id}, saved: {subdomain_saved}")
+    
+    # Мигрируем базовые сущности для новой компании
+    migrator = Migrator()
+    logger.info(f"Начинаем миграцию базовых сущностей для компании {company_id}...")
+    await migrator.migrate_defaults_for_company(company)
+    logger.info(f"✅ Базовые сущности успешно мигрированы для компании {company_id}")
     
     # Обновляем глобального пользователя - добавляем компанию
     user_key = f"user:{user.user_id}"
