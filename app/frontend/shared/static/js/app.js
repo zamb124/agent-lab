@@ -45,6 +45,7 @@ class APP {
             // Создаем глобальный API для чата
             this.chat = {
                 open: async (options) => await this.chatManager.open(options),
+                openExistingSession: async (agent_id, session_id) => await this.chatManager.openExistingSession(agent_id, session_id),
                 close: () => this.chatManager.closeChat(),
                 send: (message) => this.chatManager.sendUserMessage(message)
             };
@@ -106,6 +107,7 @@ class APP {
         // Fallback для чата
         this.chat = {
             open: (options) => console.log('Chat fallback: open', options),
+            openExistingSession: (agent_id, session_id) => console.log('Chat fallback: openExistingSession', agent_id, session_id),
             close: () => console.log('Chat fallback: close'),
             send: (message) => console.log('Chat fallback: send', message)
         };
