@@ -20,6 +20,8 @@ from app.models.history_models import (
     SessionListItem,
     SessionListResponse,
 )
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +71,7 @@ class FlowFactory:
         """
         logger.info(f"📜 Получение истории flow для сессии {session_id}")
         
-        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-        from app.core.config import get_settings
+
         
         settings = get_settings()
         config = {"configurable": {"thread_id": session_id}}
