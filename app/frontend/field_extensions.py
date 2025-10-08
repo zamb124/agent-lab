@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 import pydantic
 import re
+import inspect
 from app.frontend.core.template_loader import render_template, template_exists
 from app.core.context import get_context
 
@@ -60,7 +61,7 @@ def get_template_name_from_type(annotation: Any, value: Any = None) -> str:
             return origin_name
 
     # Проверяем BaseModel
-    if issubclass(annotation, BaseModel):
+    if inspect.isclass(annotation) and issubclass(annotation, BaseModel):
         return "basemodel"
 
     # Для обычных типов просто берем имя
@@ -255,7 +256,7 @@ class FrontendFieldInfo(FieldInfo):
             type_name = get_template_name_from_type(clean_annotation, value)
 
             # Если это BaseModel и значение существует И является BaseModel
-            if issubclass(clean_annotation, BaseModel):
+            if inspect.isclass(clean_annotation) and issubclass(clean_annotation, BaseModel):
                 if value is not None and isinstance(value, BaseModel):
                     # Проверяем, есть ли render=True у поля
                     json_extra = self.json_schema_extra or {}

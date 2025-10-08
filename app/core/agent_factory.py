@@ -6,6 +6,7 @@ import logging
 import importlib
 import asyncio
 import json
+import inspect
 from langchain_core.tools import tool
 
 from app.models import AgentConfig, CodeMode, ToolReference
@@ -72,7 +73,7 @@ class AgentFactory:
             module = importlib.import_module(module_path)
             agent_class = getattr(module, class_name)
 
-            if not issubclass(agent_class, BaseAgent):
+            if not inspect.isclass(agent_class) or not issubclass(agent_class, BaseAgent):
                 raise ValueError(
                     f"Класс {config.function_class} не наследуется от BaseAgent"
                 )
