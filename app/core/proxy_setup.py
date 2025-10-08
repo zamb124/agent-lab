@@ -5,7 +5,7 @@
 
 import os
 import logging
-
+from .config import settings
 logger = logging.getLogger(__name__)
 
 _proxy_configured = False
@@ -22,8 +22,6 @@ def configure_proxy_from_settings():
         return
     
     try:
-        from .config import settings
-        
         if settings.proxy.enabled:
             http_proxy = settings.proxy.get_proxy_url("http")
             https_proxy = settings.proxy.get_proxy_url("https")
