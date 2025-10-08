@@ -6,11 +6,14 @@ AmoCRM Interface - адаптер для обработки webhook'ов от Am
 import logging
 from typing import Dict, Any, Optional, List
 import json
+from datetime import datetime, timezone
 
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from app.interfaces.base import BaseInterface, Message
 from app.core.storage import Storage
 from app.clients.amo_crm_integration import get_amocrm_client
 from app.core.config import settings
+from app.core.checkpointer import get_checkpointer
 
 logger = logging.getLogger(__name__)
 
@@ -65,17 +68,12 @@ class AmoCRMInterface(BaseInterface):
         access_token = getattr(settings, 'amocrm', None) and settings.amocrm.access_token
         source_id = None
 
-        # Получаем историю чата и сохраняем все сообщения
-        imported_messages = []
+        # Получаем историю чата и сохраняем через checkpointer
         if access_token:
             client = get_amocrm_client(subdomain=self.subdomain, access_token=access_token)
             chat_history = await client.get_chat_history(chat_id=chat_id)
             logger.info(f"🔍 Получена история чата: {len(chat_history)} сообщений")
 
-            # Импортируем всю историю сообщений из чата в контекст
-            imported_messages = self._import_chat_history(chat_history, chat_id)
-            # TODO: тут надо будет останавливать бота, если ответил уже человек
-            # TODO: и как-то возвращать бота обратно
 
         user_id = f"amocrm:{chat_id}" # TODO: или talk_id? контекст по нему по идее должен бьть
 
@@ -102,10 +100,9 @@ class AmoCRMInterface(BaseInterface):
             f"(chat_id={chat_id}, session={session_id})"
         )
 
-        # импорт истории чата
-        context = {
-            "imported_messages": imported_messages
-        }
+        # Импортируем историю чата в checkpointer
+        if access_token and chat_history:
+            await self._add_chat_history_to_checkpointer(session_id, chat_history, chat_id)
 
         return Message(
             user_id=user_id,
@@ -113,7 +110,6 @@ class AmoCRMInterface(BaseInterface):
             flow_id=flow_id,
             content=text,
             platform="amocrm",
-            context=context,
             metadata={
                 "chat_id": chat_id,
                 "message_id": message_id,
@@ -178,7 +174,8 @@ class AmoCRMInterface(BaseInterface):
 
     def _import_chat_history(self, chat_history: List[Dict[str, Any]], chat_id: str) -> List[Dict[str, Any]]:
         """
-        Импортирует всю историю сообщений из чата и возвращает в формате JSON задачи
+        Импортирует всю историю сообщений из чата и возвращает в формате JSON задачи.
+        Этот метод оставлен для обратной совместимости, но теперь используется checkpointer.
         """
         messages = []
         for message_data in chat_history:
@@ -187,7 +184,6 @@ class AmoCRMInterface(BaseInterface):
                 continue
 
             # Определяем тип сообщения
-            # TODO: надо отличать сотрудника от ии
             author_type = message_data.get("author", {}).get("type", "")
             if author_type == "employee":
                 message_type = "ai"
@@ -212,6 +208,98 @@ class AmoCRMInterface(BaseInterface):
 
         logger.info(f"📚 Импортирована история чата {chat_id}: {len(messages)} сообщений")
         return messages
+
+    async def _add_chat_history_to_checkpointer(self, session_id: str, chat_history: List[Dict[str, Any]], chat_id: str):
+        """
+        Добавляет историю чата в checkpointer через thread_id (session_id).
+
+        Args:
+            session_id: ID сессии (используется как thread_id для checkpointer)
+            chat_history: История сообщений из AmoCRM
+            chat_id: ID чата для логирования
+        """
+        try:
+            checkpointer = await get_checkpointer()
+            config = {"configurable": {"thread_id": session_id}}
+
+            # Получаем текущее состояние
+            current_state = await checkpointer.aget_tuple(config)
+
+            # Создаем langchain сообщения из истории чата
+            langchain_messages = []
+            for message_data in chat_history:
+                external_id = message_data.get("id")
+                if not external_id:
+                    continue
+
+                author_type = message_data.get("author", {}).get("type", "")
+                text = message_data.get("text", "")
+                author_name = message_data.get("author", {}).get("name", "Неизвестный")
+
+                if not text:
+                    continue
+
+                # Определяем тип сообщения
+                if author_type == "employee":
+                    # Сообщение от сотрудника - считаем как AI
+                    langchain_message = AIMessage(
+                        content=text,
+                        additional_kwargs={
+                            "external_id": external_id,
+                            "author_name": author_name,
+                            "chat_id": chat_id,
+                            "imported_from_amocrm": True
+                        }
+                    )
+                else:
+                    # Сообщение от клиента - считаем как Human
+                    langchain_message = HumanMessage(
+                        content=text,
+                        additional_kwargs={
+                            "external_id": external_id,
+                            "author_name": author_name,
+                            "chat_id": chat_id,
+                            "imported_from_amocrm": True
+                        }
+                    )
+
+                langchain_messages.append(langchain_message)
+
+            if not langchain_messages:
+                logger.info(f"📭 Нет сообщений для импорта в checkpointer для чата {chat_id}")
+                return
+
+            # Если есть текущее состояние, добавляем сообщения к существующим
+            if current_state and current_state.checkpoint:
+                existing_messages = current_state.checkpoint.get("channel_values", {}).get("messages", [])
+                all_messages = existing_messages + langchain_messages
+            else:
+                all_messages = langchain_messages
+
+            # Создаем новое состояние с добавленными сообщениями
+            new_checkpoint = {
+                "channel_values": {
+                    "messages": all_messages
+                }
+            }
+
+            # Сохраняем в checkpointer
+            await checkpointer.aput(
+                config=config,
+                checkpoint=new_checkpoint,
+                metadata={
+                    "source": "amocrm_history_import",
+                    "chat_id": chat_id,
+                    "imported_messages_count": len(langchain_messages),
+                    "ts": datetime.now(timezone.utc).isoformat()
+                },
+                new_versions={}
+            )
+
+            logger.info(f"✅ Импортировано {len(langchain_messages)} сообщений в checkpointer для сессии {session_id}")
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка импорта истории чата в checkpointer: {e}", exc_info=True)
 
 
 

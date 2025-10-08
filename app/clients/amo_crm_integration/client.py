@@ -273,7 +273,8 @@ class AmoCRMClient:
                     await task
                 except asyncio.CancelledError:
                     pass
-            del _active_typing_tasks[chat_id]
+            if chat_id in _active_typing_tasks:
+                del _active_typing_tasks[chat_id]
             logger.info(f"🔴 Остановлен индикатор 'печатает' для чата {chat_id}")
             return True
         return False
