@@ -531,17 +531,32 @@ class TelegramInterface(BaseInterface):
     async def get_bot_token_for_flow(
         flow_id: str, platform_config: Dict[str, Any]
     ) -> Optional[str]:
-        """Получает токен бота для flow из БД"""
+        """
+        Получает токен бота для flow из БД.
+        Поддерживает:
+        - Хардкод: {"token": "123:ABC..."}
+        - Ссылка: {"token": "@var:telegram_bot_token"}
+        - Legacy: username → token:telegram:{username}
+        """
+        token_value = platform_config.get("token")
+        
+        if token_value:
+            from app.core.variables_service import get_variables_service
+            
+            variables_service = get_variables_service()
+            resolved_token = await variables_service.resolve(token_value)
+            logger.info(f"✅ Токен резолвнут для flow {flow_id}")
+            return resolved_token
+        
+        # Legacy: ищем по username
         username = platform_config.get("username", f"bot_{flow_id}")
-
         storage = Storage()
         token_key = f"token:telegram:{username}"
-
         token_json = await storage.get(token_key, force_global=True)
 
         if token_json:
             token = json.loads(token_json)
-            logger.info(f"✅ Найден токен для {username} в БД")
+            logger.info(f"✅ Найден legacy токен для {username} в БД")
             return token
         else:
             logger.error(f"❌ Не найден токен в БД: {token_key}")
@@ -574,23 +589,26 @@ class TelegramInterface(BaseInterface):
     ) -> Dict[str, Any]:
         """
         Регистрирует Telegram бота:
-        1. Проверяет токен через getMe
-        2. Обновляет username в config
-        3. Local: перезагружает polling
-        4. Production: устанавливает webhook
-        5. Устанавливает команды бота
+        1. Резолвит username (если @var:key)
+        2. Проверяет токен через getMe
+        3. Обновляет username в config
+        4. Local: перезагружает polling
+        5. Production: устанавливает webhook
+        6. Устанавливает команды бота
         """
         from app.core.config import settings
+        from app.core.variables_service import get_variables_service
+        
+        # Резолвим username если это ссылка
+        variables_service = get_variables_service()
+        resolved_username = await variables_service.resolve(username)
         
         storage = Storage()
         
-        # Получаем токен
-        token_key = f"token:telegram:{username}"
-        token_json = await storage.get(token_key, force_global=True)
-        if not token_json:
-            raise ValueError(f"Token not found for {username}")
-        
-        token = json.loads(token_json)
+        # Получаем токен через get_bot_token_for_flow (поддерживает @var:)
+        token = await cls.get_bot_token_for_flow(flow_id, platform_config)
+        if not token:
+            raise ValueError(f"Token not found for {resolved_username}")
         
         # Проверяем токен через getMe API
         bot_info = await cls.get_bot_info(token)
