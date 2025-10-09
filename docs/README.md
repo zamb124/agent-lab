@@ -19,6 +19,7 @@
 
 - **[Клиенты сервисов](clients.md)** - FASHN и другие интеграции
 - **[AmoCRM](integrations/amocrm/)** - интеграция с CRM системой
+- **[WhatsApp](integrations/whatsapp/)** - интеграция с WhatsApp Business API
 
 ## Развертывание
 

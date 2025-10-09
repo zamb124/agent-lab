@@ -684,7 +684,10 @@
   "Введите ключ переменной": "",
   "Введите значение": "",
   "Ошибка удаления": "",
-  "button": ""
+  "button": "",
+  "business_account_id": "",
+  "display_name": "",
+  "host": ""
 };
     console.log('✅ Переводы для ru загружены: ' + Object.keys(window.translations.ru).length + ' ключей');
 })();

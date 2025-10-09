@@ -2,9 +2,9 @@
   "meta": {
     "language": "en",
     "version": "1.0.0",
-    "last_updated": "2025-10-08T15:23:31.706404",
-    "completeness": 92.96187683284457,
-    "total_keys": 682,
+    "last_updated": "2025-10-09T09:50:24.506937",
+    "completeness": 92.55474452554745,
+    "total_keys": 685,
     "translated_keys": 634
   },
   "common": {
@@ -1434,5 +1434,8 @@
   "Введите ключ переменной": "[TODO: Введите ключ переменной]",
   "Введите значение": "[TODO: Введите значение]",
   "Ошибка удаления": "[TODO: Ошибка удаления]",
-  "button": "[TODO: button]"
+  "button": "[TODO: button]",
+  "business_account_id": "[TODO: business_account_id]",
+  "display_name": "[TODO: display_name]",
+  "host": "[TODO: host]"
 }

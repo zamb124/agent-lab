@@ -72,8 +72,10 @@ def get_weather(city: str) -> str:
 Адаптеры для разных платформ, преобразуют специфичные данные в унифицированный `Message`:
 
 - **TelegramInterface** - Telegram боты
+- **WhatsAppInterface** - WhatsApp Business Cloud API
 - **APIInterface** - REST API
 - **WebInterface** - веб-интерфейс
+- **AmoCRMInterface** - AmoCRM чаты
 
 **Файл**: `app/interfaces/base.py`
 
