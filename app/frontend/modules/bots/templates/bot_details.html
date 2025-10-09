@@ -3,10 +3,15 @@
         <div class="header-left">
             <h2>
                 <i class="bi bi-robot"></i>
-                {{ bot.name }}
+                {% if bot.is_new %}
+                    Создание нового бота
+                {% else %}
+                    {{ bot.name }}
+                {% endif %}
             </h2>
         </div>
         <div class="header-right">
+            {% if not bot.is_new %}
             <button class="btn btn-outline btn-sm" onclick="openBotChat('{{ bot.flow_id }}', '{{ bot.name }}')">
                 <i class="bi bi-chat-dots"></i>
                 Тестировать
@@ -17,6 +22,7 @@
                 <i class="bi bi-arrow-counterclockwise"></i>
                 Сброс к коду
             </button>
+            {% endif %}
             <button class="btn-icon" onclick="toggleBotModalFullscreen()" title="На весь экран">
                 <i class="bi bi-fullscreen"></i>
             </button>
@@ -27,6 +33,7 @@
     </div>
     
     <div class="header-controls-row">
+        {% if not bot.is_new %}
         <div class="control-group">
             <label class="control-label">Flow ID</label>
             <div class="control-value">
@@ -62,6 +69,7 @@
                 {% endfor %}
             </div>
         </div>
+        {% endif %}
     </div>
 </div>
 
@@ -87,8 +95,11 @@
                 <div class="main-settings-header">
                     <div class="form-row-main">
                         <div class="form-group">
-                            <label>Название бота</label>
-                            <input type="text" class="form-control" value="{{ bot.name }}" id="bot-name">
+                            <label>Название бота{% if bot.is_new %} <span class="text-danger">*</span>{% endif %}</label>
+                            <input type="text" class="form-control" value="{{ bot.name }}" id="bot-name" placeholder="Мой новый бот" {% if bot.is_new %}required{% endif %}>
+                            {% if bot.is_new %}
+                            <small class="form-text">На основе названия будет сгенерирован Flow ID и Agent ID</small>
+                            {% endif %}
                         </div>
                         
                         <div class="form-group">
@@ -101,6 +112,11 @@
                             <input type="number" class="form-control" value="{{ bot.max_retries }}" id="bot-max-retries">
                         </div>
                     </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Описание{% if bot.is_new %} <span class="text-danger">*</span>{% endif %}</label>
+                    <textarea class="form-control" rows="2" id="bot-description-main" placeholder="Краткое описание назначения бота">{{ bot.description if bot.description != 'Описание отсутствует' else '' }}</textarea>
                 </div>
                 
                 <div class="form-group">
@@ -250,18 +266,19 @@
             <div class="settings-panel" data-panel="advanced">
                 <h4>Дополнительные настройки</h4>
                 
+                {% if not bot.is_new %}
                 <div class="form-group">
-                    <label>Описание</label>
-                    <textarea class="form-control" rows="3" id="bot-description">{{ bot.description }}</textarea>
+                    <label>Flow ID</label>
+                    <input type="text" class="form-control" value="{{ bot.flow_id }}" readonly>
+                    <small class="form-text">Системный идентификатор flow</small>
                 </div>
                 
                 <div class="form-group">
                     <label>Агент точки входа</label>
                     <input type="text" class="form-control" value="{{ bot.entry_point }}" id="bot-entry-point" readonly>
-                    <small class="form-text">
-                        Системный агент, который обрабатывает запросы к боту
-                    </small>
+                    <small class="form-text">Системный агент, который обрабатывает запросы к боту</small>
                 </div>
+                {% endif %}
             </div>
             
             <div class="settings-actions">
@@ -270,8 +287,13 @@
                     Отмена
                 </button>
                 <button class="btn btn-primary" onclick="saveBotSettings('{{ bot.flow_id }}')">
-                    <i class="bi bi-save"></i>
-                    Сохранить изменения
+                    {% if bot.is_new %}
+                        <i class="bi bi-plus-circle"></i>
+                        Создать бота
+                    {% else %}
+                        <i class="bi bi-save"></i>
+                        Сохранить изменения
+                    {% endif %}
                 </button>
             </div>
         </div>

@@ -34,23 +34,43 @@ async def list_flows(storage: StorageDep) -> List[FlowConfig]:
 
 @router.post("/", response_model=FlowConfig)
 async def create_flow(
-    name: str = "Новый Flow",
-    description: Optional[str] = None,
-    entry_point_agent: Optional[str] = None,
+    flow_data: Dict[str, Any],
     storage: StorageDep = None
 ) -> FlowConfig:
     """Создать новый флоу и сразу сохранить в БД"""
-    flow_id = f"flow_{uuid.uuid4().hex[:8]}"
+    
+    flow_id = flow_data.get("flow_id")
+    if not flow_id:
+        flow_id = f"flow_{uuid.uuid4().hex[:8]}"
+    
+    entry_point_agent = flow_data.get("entry_point_agent", "")
+    
+    if entry_point_agent and not await storage.get_agent_config(entry_point_agent):
+        from app.models import AgentConfig, AgentType, CodeMode
+        
+        agent_config = AgentConfig(
+            agent_id=entry_point_agent,
+            name=flow_data.get("name", "Новый Agent"),
+            description=flow_data.get("description", ""),
+            type=AgentType.REACT,
+            prompt="",
+            code_mode=CodeMode.INLINE_CODE,
+            source="auto_created"
+        )
+        await storage.set_agent_config(agent_config)
     
     flow_config = FlowConfig(
         flow_id=flow_id,
-        name=name,
-        description=description or "",
-        entry_point_agent=entry_point_agent or "",
-        source="canvas_created"
+        name=flow_data.get("name", "Новый Flow"),
+        description=flow_data.get("description", ""),
+        entry_point_agent=entry_point_agent,
+        platforms=flow_data.get("platforms", {}),
+        timeout=flow_data.get("timeout"),
+        max_retries=flow_data.get("max_retries", 3),
+        variables=flow_data.get("variables", {}),
+        source="ui_created"
     )
     
-    # Сразу сохраняем в БД
     await storage.set_flow_config(flow_config)
     
     return flow_config
@@ -175,12 +195,25 @@ async def update_flow(
                     logger.warning(f"⚠️ Платформа telegram для {validated_flow.flow_id} не имеет token, пропускаем регистрацию")
                     continue
             
-            registration_result = await factory.register_platform(
-                platform=platform_name,
-                username=username,
-                flow_id=validated_flow.flow_id
-            )
-            logger.info(f"📋 Регистрация {platform_name} для {validated_flow.flow_id}: {registration_result}")
+            try:
+                registration_result = await factory.register_platform(
+                    platform=platform_name,
+                    username=username,
+                    flow_id=validated_flow.flow_id
+                )
+                logger.info(f"📋 Регистрация {platform_name} для {validated_flow.flow_id}: {registration_result}")
+            except ValueError as e:
+                logger.error(f"❌ Ошибка регистрации {platform_name}: {e}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Ошибка регистрации {platform_name}: {str(e)}"
+                )
+            except Exception as e:
+                logger.error(f"❌ Неожиданная ошибка регистрации {platform_name}: {e}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Не удалось зарегистрировать {platform_name}: {str(e)}"
+                )
     
     return validated_flow
 

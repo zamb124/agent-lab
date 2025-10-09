@@ -198,7 +198,6 @@
                 if (panel) {
                     panel.classList.add('active');
                     
-                    // Инициализируем Prompt Editor при переключении на вкладку "Основное"
                     if (targetPanel === 'main' && !promptEditor) {
                         initPromptEditor();
                     }
@@ -206,7 +205,6 @@
             });
         });
         
-        // Инициализируем prompt editor сразу для активной вкладки "Основное"
         const activePanel = document.querySelector('.settings-panel.active');
         if (activePanel && activePanel.dataset.panel === 'main') {
             initPromptEditor();
@@ -245,43 +243,86 @@
         }
     }
 
-    window.saveBotSettings = async function(botId) {
-        const flowData = {
-            name: document.getElementById('bot-name')?.value,
-            description: document.getElementById('bot-description')?.value,
-            timeout: document.getElementById('bot-timeout')?.value || null,
-            max_retries: parseInt(document.getElementById('bot-max-retries')?.value) || 0,
+    function slugify(text) {
+        const translitMap = {
+            'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e', 'ж': 'zh', 'з': 'z',
+            'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r',
+            'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
+            'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya'
         };
         
-        // Собираем конфигурацию платформ (БЕЗ токенов)
-        const telegramToken = document.getElementById(`telegram-token-${botId}`);
+        let slug = text
+            .toString()
+            .toLowerCase()
+            .trim()
+            .split('')
+            .map(char => translitMap[char] || char)
+            .join('')
+            .replace(/\s+/g, '_')
+            .replace(/[^\w\-]+/g, '')
+            .replace(/\_\_+/g, '_')
+            .replace(/^_+|_+$/g, '');
         
-        if (telegramToken && telegramToken.value) {
-            if (!flowData.platforms) flowData.platforms = {};
-            
-            // Пытаемся найти существующий username из точного поля
-            const telegramUsernameField = document.getElementById(`telegram-username-${botId}`);
-            const existingUsername = telegramUsernameField?.value || null;
-            
-            // Сохраняем в platforms только username, токен сохраним отдельно
-            flowData.platforms.telegram = {
-                username: existingUsername || `bot_${botId}`
-            };
+        if (!slug || slug.length < 2) {
+            slug = 'bot';
         }
         
-        // Получаем значение из Prompt Editor
+        return slug;
+    }
+    
+    function generateUniqueId(baseName) {
+        const slug = slugify(baseName);
+        const timestamp = Date.now().toString(36);
+        const random = Math.random().toString(36).substring(2, 6);
+        return `${slug}_${timestamp}${random}`;
+    }
+
+    window.saveBotSettings = async function(botId) {
+        const isNewBot = botId === 'new';
+        
+        const botName = document.getElementById('bot-name')?.value?.trim();
+        const botDescription = document.getElementById('bot-description-main')?.value?.trim();
+        
+        if (isNewBot) {
+            if (!botName) {
+                showNotification('Введите название бота', 'warning');
+                return;
+            }
+            if (!botDescription) {
+                showNotification('Введите описание бота', 'warning');
+                return;
+            }
+        }
+        
+        const flowData = {
+            name: botName,
+            description: botDescription,
+            timeout: document.getElementById('bot-timeout')?.value || null,
+            max_retries: parseInt(document.getElementById('bot-max-retries')?.value) || 3,
+        };
+        
+        if (isNewBot) {
+            const flowId = generateUniqueId(botName);
+            const agentSlug = slugify(botName);
+            const agentName = agentSlug.charAt(0).toUpperCase() + agentSlug.slice(1);
+            
+            flowData.flow_id = flowId;
+            flowData.entry_point_agent = `${agentName}Agent`;
+            flowData.platforms = {};
+        }
+        
         const promptValue = promptEditor ? promptEditor.getValue() : null;
         const flowVariables = promptEditor ? promptEditor.getFlowVariables() : null;
         
         console.log('🔍 DEBUG: flowVariables до добавления =', flowVariables);
         
-        // Добавляем переменные в flowData если есть
         if (flowVariables && Object.keys(flowVariables).length > 0) {
             flowData.variables = flowVariables;
         }
         
         console.log('💾 Сохранение настроек бота:', {
             botId: botId,
+            isNewBot: isNewBot,
             flowData: flowData,
             promptValue: promptValue ? `${promptValue.substring(0, 100)}...` : null,
             flowVariables: flowVariables,
@@ -289,9 +330,11 @@
         });
         
         try {
-            // 1. Сохраняем FlowConfig
-            const flowResponse = await fetch(`/frontend/api/flows/${botId}`, {
-                method: 'PUT',
+            const method = isNewBot ? 'POST' : 'PUT';
+            const url = isNewBot ? '/frontend/api/flows' : `/frontend/api/flows/${botId}`;
+            
+            const flowResponse = await fetch(url, {
+                method: method,
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${window.app.authToken}`
@@ -300,54 +343,23 @@
             });
             
             if (!flowResponse.ok) {
-                const error = await flowResponse.json();
-                showNotification(`Ошибка: ${error.detail || 'Не удалось сохранить'}`, 'danger');
+                const error = await flowResponse.json().catch(() => ({}));
+                const errorMsg = error.detail || `HTTP ${flowResponse.status}: ${flowResponse.statusText}`;
+                console.error('❌ Ошибка сохранения flow:', error);
+                showNotification(`Ошибка: ${errorMsg}`, 'danger');
                 return;
             }
             
-            // 2. Сохраняем токен отдельно, если есть
-            if (telegramToken && telegramToken.value && flowData.platforms?.telegram?.username) {
-                const tokenResponse = await fetch('/api/v1/admin/tokens', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${window.app.authToken}`
-                    },
-                    body: JSON.stringify({
-                        platform: 'telegram',
-                        username: flowData.platforms.telegram.username,
-                        token: telegramToken.value
-                    })
-                });
-                
-                if (!tokenResponse.ok) {
-                    console.warn('Не удалось сохранить токен Telegram');
-                } else {
-                    // Перезагружаем Telegram polling
-                    try {
-                        const reloadResponse = await fetch('/api/v1/admin/reload-telegram-bots', {
-                            method: 'POST',
-                            headers: {
-                                'Authorization': `Bearer ${window.app.authToken}`
-                            }
-                        });
-                        
-                        if (reloadResponse.ok) {
-                            const reloadData = await reloadResponse.json();
-                            console.log('✅ Telegram polling перезагружен:', reloadData);
-                        }
-                    } catch (reloadError) {
-                        console.warn('⚠️ Ошибка перезагрузки telegram polling:', reloadError);
-                    }
-                }
-            }
+            const savedFlow = await flowResponse.json();
+            const actualBotId = isNewBot ? savedFlow.flow_id : botId;
+            console.log('✅ Flow сохранен:', actualBotId);
             
-            // 3. Сохраняем промпт агента, если есть
-            if (promptValue !== undefined && promptValue !== null) {
-                const entryPointField = document.getElementById('bot-entry-point');
-                const entryPoint = entryPointField?.value;
+            // Сохраняем промпт агента, если есть
+            if (promptValue !== undefined && promptValue !== null && promptValue.trim()) {
+                const entryPoint = savedFlow.entry_point_agent;
                 
                 if (entryPoint) {
+                    console.log('💾 Сохраняем промпт для агента:', entryPoint);
                     const agentResponse = await fetch(`/frontend/api/agents/${encodeURIComponent(entryPoint)}`, {
                         method: 'PUT',
                         headers: {
@@ -358,18 +370,32 @@
                     });
                     
                     if (!agentResponse.ok) {
-                        console.warn('❌ Не удалось сохранить промпт агента:', agentResponse.status, agentResponse.statusText);
+                        const agentError = await agentResponse.json().catch(() => ({}));
+                        console.warn('❌ Не удалось сохранить промпт агента:', agentResponse.status, agentError);
                     } else {
                         console.log('✅ Промпт агента сохранен успешно');
                     }
                 }
             }
             
-            showNotification('Настройки бота сохранены', 'success');
+            if (isNewBot) {
+                showNotification('Бот успешно создан', 'success');
+                closeBotModal();
+                htmx.ajax('GET', '/frontend/bots/list', {
+                    target: '#bots-list-view',
+                    swap: 'innerHTML'
+                });
+            } else {
+                showNotification('Настройки бота сохранены', 'success');
+            }
             
         } catch (error) {
-            console.error('Ошибка сохранения:', error);
-            showNotification('Ошибка сохранения настроек', 'danger');
+            console.error('❌❌❌ Ошибка сохранения:', error);
+            console.error('Stack trace:', error.stack);
+            showNotification(
+                (isNewBot ? 'Ошибка создания бота: ' : 'Ошибка сохранения настроек: ') + error.message, 
+                'danger'
+            );
         }
     };
 
@@ -934,14 +960,13 @@
             return;
         }
 
-        // Собираем конфигурацию платформы
         let platformConfig = {};
+        let savedToken = null;
+        let savedUsername = null;
         
         if (platformType === 'whatsapp') {
-            // Собираем WhatsApp поля
             platformConfig = collectWhatsAppConfig();
             
-            // Валидация обязательных полей
             if (!platformConfig.phone_number_id) {
                 showNotification('Phone Number ID обязателен для WhatsApp', 'warning');
                 return;
@@ -955,45 +980,64 @@
                 return;
             }
         } else {
-            // Для остальных платформ собираем стандартные поля
-            const token = document.getElementById('platform-token').value;
-            const username = document.getElementById('platform-username').value;
+            const usernameInput = document.getElementById('platform-username');
+            savedUsername = usernameInput?.value?.trim() || '';
             
-            // Получаем токен (из select или input)
+            if (!savedUsername) {
+                showNotification('Введите username/ID для платформы', 'warning');
+                return;
+            }
+            
             let finalToken = '';
             const varRadio = document.getElementById('token-type-var');
-            if (varRadio && varRadio.checked) {
+            const isVarReference = varRadio && varRadio.checked;
+            
+            if (isVarReference) {
                 const select = document.getElementById('platform-token-select');
-                finalToken = select ? select.value : '';
+                finalToken = select?.value?.trim() || '';
+                
+                if (!finalToken) {
+                    showNotification('Выберите переменную с токеном', 'warning');
+                    return;
+                }
             } else {
                 const input = document.getElementById('platform-token');
-                finalToken = input ? input.value : '';
+                finalToken = input?.value?.trim() || '';
+                
+                if (!finalToken) {
+                    showNotification('Введите токен для платформы', 'warning');
+                    return;
+                }
+                
+                savedToken = finalToken;
             }
             
-            if (finalToken) {
-                platformConfig.token = finalToken;
-            }
-            if (username) {
-                platformConfig.username = username;
-            }
+            platformConfig.token = finalToken;
+            platformConfig.username = savedUsername;
 
-            // Добавляем кастомные переменные
             const variableRows = document.querySelectorAll('#custom-variables .variable-row');
             variableRows.forEach(row => {
                 const keyInput = row.querySelector('input[placeholder="Ключ"]');
                 const valueInput = row.querySelector('input[placeholder="Значение"]');
                 
-                if (keyInput.value && valueInput.value) {
+                if (keyInput?.value && valueInput?.value) {
                     platformConfig[keyInput.value] = valueInput.value;
                 }
             });
         }
         
+        console.log('🔍 DEBUG: botId =', botId);
         console.log('🔍 DEBUG: platformType =', platformType);
         console.log('🔍 DEBUG: platformConfig =', platformConfig);
+        console.log('🔍 DEBUG: savedToken =', savedToken ? '***' : null);
+        console.log('🔍 DEBUG: savedUsername =', savedUsername);
+
+        if (botId === 'new') {
+            showNotification('Сначала создайте бота, затем добавляйте платформы', 'warning');
+            return;
+        }
 
         try {
-            // Получаем текущие настройки флоу
             const currentFlowResponse = await fetch(`/frontend/api/flows/${botId}`, {
                 headers: {
                     'Authorization': `Bearer ${window.app.authToken}`
@@ -1001,7 +1045,8 @@
             });
             
             if (!currentFlowResponse.ok) {
-                throw new Error('Не удалось загрузить текущие настройки');
+                const errorData = await currentFlowResponse.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Не удалось загрузить текущие настройки');
             }
 
             const currentFlow = await currentFlowResponse.json();
@@ -1011,9 +1056,11 @@
                 currentFlow.platforms = {};
             }
             currentFlow.platforms[platformType] = platformConfig;
+            
+            console.log('📤 Обновляем platforms в flow:', currentFlow.platforms);
 
-            // 1. Сначала сохраняем токен (если есть)
-            if (token && username && !document.getElementById('platform-token').disabled) {
+            if (savedToken && savedUsername) {
+                console.log('💾 Сохраняем токен для платформы:', platformType);
                 const tokenResponse = await fetch('/api/v1/admin/tokens', {
                     method: 'POST',
                     headers: {
@@ -1022,44 +1069,47 @@
                     },
                     body: JSON.stringify({
                         platform: platformType,
-                        username: username,
-                        token: token
+                        username: savedUsername,
+                        token: savedToken
                     })
                 });
                 
                 if (!tokenResponse.ok) {
-                    const error = await tokenResponse.json();
+                    const error = await tokenResponse.json().catch(() => ({}));
+                    console.error('❌ Ошибка сохранения токена:', error);
                     throw new Error(error.detail || 'Не удалось сохранить токен');
                 }
                 
                 console.log('✅ Токен сохранен');
             }
             
+            console.log('📤 Отправляем PUT /frontend/api/flows/' + botId);
+            const updatePayload = { platforms: currentFlow.platforms };
+            console.log('📦 Payload:', JSON.stringify(updatePayload, null, 2));
 
-            // 2. Потом обновляем platforms в flow (это вызовет регистрацию)
             const updateResponse = await fetch(`/frontend/api/flows/${botId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${window.app.authToken}`
                 },
-                body: JSON.stringify({
-                    platforms: currentFlow.platforms
-                })
+                body: JSON.stringify(updatePayload)
             });
 
             if (!updateResponse.ok) {
-                throw new Error('Не удалось сохранить платформу');
+                const errorData = await updateResponse.json().catch(() => ({}));
+                const errorMessage = errorData.detail || `HTTP ${updateResponse.status}: ${updateResponse.statusText}`;
+                console.error('❌ Ошибка обновления flow:', errorData);
+                throw new Error(errorMessage);
             }
 
             showNotification(`Платформа ${platformType} добавлена`, 'success');
             closeAddPlatformModal();
             
-            // Перезагружаем детали бота для отображения новой платформы
             await expandBot(botId);
 
         } catch (error) {
-            console.error('Ошибка добавления платформы:', error);
+            console.error('❌ Ошибка добавления платформы:', error);
             showNotification('Ошибка добавления платформы: ' + error.message, 'danger');
         }
     };
@@ -1116,7 +1166,7 @@
     };
 
     window.createBot = function() {
-        window.location.href = '/frontend/builder/';
+        expandBot('new');
     };
 
     function showNotification(message, type = 'info') {
