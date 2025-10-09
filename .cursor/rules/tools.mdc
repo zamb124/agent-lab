@@ -1,0 +1,163 @@
+---
+description: "Правила создания инструментов (Tools)"
+alwaysApply: true
+---
+# Правила создания инструментов (Tools)
+
+## Декоратор @tool
+
+Используй декоратор `@tool` из `app/core/tool_decorator.py`:
+- Добавляет метаданные для биллинга
+- Все тулы должны быть асинхронными
+- Указывай стоимость через параметр `cost`
+
+<good_example>
+from app.core.tool_decorator import tool
+
+@tool(cost=0.1, billing_name="weather_api")
+async def get_weather(city: str) -> str:
+    """Получить погоду в городе
+    
+    Args:
+        city: Название города
+        
+    Returns:
+        Описание погоды
+    """
+    return f"Погода в {city}: солнечно"
+</good_example>
+
+## Типизация
+
+Всегда используй типы в сигнатуре функции:
+- Входные параметры с типами и описанием
+- Возвращаемое значение с типом
+- Docstring с описанием параметров и возврата
+
+<good_example>
+@tool
+async def calculate(expression: str) -> float:
+    """Вычислить математическое выражение
+    
+    Args:
+        expression: Выражение для вычисления (например, "2+2")
+        
+    Returns:
+        Результат вычисления
+    """
+    return eval(expression)
+</good_example>
+
+<bad_example>
+@tool
+async def calculate(expression):
+    return eval(expression)
+</bad_example>
+
+## Доступ к State
+
+Используй `get_state()` для доступа к текущему state:
+
+<good_example>
+from app.core.variables import get_state
+
+@tool
+async def save_user_data(key: str, value: str) -> str:
+    """Сохранить данные пользователя"""
+    state = get_state()
+    if not state:
+        raise ValueError("State недоступен")
+    
+    if "store" not in state:
+        state["store"] = {}
+    state["store"][key] = value
+    return f"Сохранено: {key} = {value}"
+</good_example>
+
+## Доступ к контексту
+
+Используй `get_context()` для доступа к пользователю, компании, переменным:
+
+<good_example>
+from app.core.context import get_context
+
+@tool
+async def get_company_info() -> str:
+    """Получить информацию о компании"""
+    context = get_context()
+    company = context.active_company
+    return f"Компания: {company.name}"
+</good_example>
+
+## Обработка ошибок
+
+Не используй излишние try-except блоки:
+- Добавляй проверки перед операциями
+- Пробрасывай исключения с контекстом
+- Используй `raise ... from e` для цепочки исключений
+
+<good_example>
+@tool
+async def fetch_data(url: str) -> dict:
+    """Получить данные по URL"""
+    if not url.startswith("https://"):
+        raise ValueError(f"Небезопасный URL: {url}")
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.json()
+    except httpx.HTTPStatusError as e:
+        raise ValueError(
+            f"Ошибка получения данных ({url}): {e.response.status_code}"
+        ) from e
+</good_example>
+
+<bad_example>
+@tool
+async def fetch_data(url: str) -> dict:
+    try:
+        response = await httpx.get(url)
+        return response.json()
+    except Exception as e:
+        logger.error(f"Ошибка: {e}")
+        return {}
+</bad_example>
+
+## Биллинг
+
+Указывай стоимость для дорогих операций:
+- API запросы к внешним сервисам
+- Обработка изображений/видео
+- Длительные вычисления
+
+<good_example>
+@tool(cost=0.5, billing_name="fashn_try_on")
+async def virtual_try_on(model_url: str, garment_url: str) -> str:
+    """Виртуальная примерка одежды (дорогая операция)"""
+    # API запрос к FASHN
+    pass
+</good_example>
+
+## Сессионные тулы
+
+Используй готовые сессионные тулы из `app/tools/session_tools.py`:
+- `session_set` - сохранить значение
+- `session_get` - получить значение
+- `session_has` - проверить наличие
+- `session_delete` - удалить значение
+- `session_keys` - список ключей
+- `get_variable` - получить переменную
+
+<good_example>
+from app.tools.session_tools import session_set, session_get
+
+class MyAgent(BaseAgent):
+    tools = [session_set, session_get]
+    prompt = """
+    Сохраняй важные данные:
+    - session_set("warehouse_id", "12345")
+    - session_get("warehouse_id")
+    """
+</good_example>
