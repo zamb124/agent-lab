@@ -614,7 +614,8 @@ class TelegramInterface(BaseInterface):
             platform_config["username"] = actual_username
             
             flow_config = await storage.get_flow_config(flow_id)
-            if flow_config:
+            if flow_config and flow_config.platforms.get("telegram"):
+                # Обновляем только username, не трогая остальные поля (token и т.д.)
                 flow_config.platforms["telegram"]["username"] = actual_username
                 await storage.set_flow_config(flow_config)
                 logger.info(f"✅ Username обновлен в FlowConfig")

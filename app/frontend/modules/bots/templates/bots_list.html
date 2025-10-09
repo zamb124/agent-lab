@@ -1,5 +1,15 @@
 <div class="bots-grid">
     {% if bots %}
+        <div class="bot-card bot-card-create" onclick="createBot()" style="cursor: pointer;">
+            <div class="bot-card-body" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; gap: 1rem;">
+                <i class="bi bi-plus-circle" style="font-size: 3rem; color: var(--primary-color); opacity: 0.7;"></i>
+                <div class="text-center">
+                    <h4 style="margin: 0; color: var(--text-primary);" data-i18n="bots.create_bot">Создать бота</h4>
+                    <small class="text-muted">Добавить нового бота</small>
+                </div>
+            </div>
+        </div>
+        
         {% for bot in bots %}
         <div class="bot-card" data-bot-id="{{ bot.flow_id }}">
             <div class="bot-card-header">

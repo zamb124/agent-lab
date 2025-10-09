@@ -58,8 +58,27 @@ async def bots_list(request: Request):
 @router.get("/{bot_id}/details", response_class=HTMLResponse)
 async def bot_details(request: Request, bot_id: str):
     """Детальная информация о боте (для раскрытой карточки)"""
-    storage = Storage()
     
+    if bot_id == 'new':
+        bot_info = {
+            "flow_id": "new",
+            "name": "",
+            "description": "",
+            "platforms": {},
+            "entry_point": "",
+            "timeout": None,
+            "max_retries": 3,
+            "prompt": "",
+            "flow_variables": {},
+            "local_variables": {},
+            "is_new": True,
+        }
+        return templates.TemplateResponse(
+            "bot_details.html",
+            {"request": request, "bot": bot_info}
+        )
+    
+    storage = Storage()
     flow_config = await storage.get_flow_config(bot_id)
     
     if not flow_config:
@@ -89,6 +108,7 @@ async def bot_details(request: Request, bot_id: str):
         "prompt": agent_prompt,
         "flow_variables": getattr(flow_config, 'variables', {}) or {},
         "local_variables": agent_local_variables,
+        "is_new": False,
     }
     
     return templates.TemplateResponse(
