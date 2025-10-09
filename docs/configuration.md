@@ -36,6 +36,10 @@
 **Проблема**: Боты не отвечают в Telegram  
 **Решение**: Добавьте токены ботов ⬇️
 
+### Если нужны WhatsApp боты
+**Проблема**: Боты не отвечают в WhatsApp  
+**Решение**: Настройте WhatsApp Business API ⬇️
+
 ### Если нужна работа с файлами
 **Проблема**: Нельзя загружать/сохранять файлы  
 **Решение**: Настройте S3 хранилище ⬇️
@@ -118,6 +122,36 @@
 }
 ```
 
+## WhatsApp боты
+
+### Настройка WhatsApp Business API
+**Где настроить**: https://developers.facebook.com  
+**Что делать**:
+1. Создайте Meta for Developers аккаунт
+2. Создайте приложение типа "Business"
+3. Добавьте продукт "WhatsApp"
+4. Получите credentials:
+   - Phone Number ID
+   - Access Token
+   - Business Account ID
+5. Создайте verify token (любая случайная строка)
+6. В `conf.json`:
+```json
+"whatsapp": {
+  "enabled": true,
+  "verify_token": "ваш-verify-token",
+  "graph_api_version": "v18.0"
+}
+```
+
+**Важно**: Для каждого flow настройте WhatsApp через переменные:
+- `whatsapp_phone_number_id`
+- `whatsapp_access_token`
+- `whatsapp_verify_token`
+- `whatsapp_business_account_id` (опционально)
+
+Подробная инструкция: [integrations/whatsapp/setup.md](integrations/whatsapp/setup.md)
+
 ## Хранилище файлов (S3)
 
 ### Зачем нужно?
@@ -153,6 +187,7 @@
 ## Что можно не настраивать (пока не нужно)
 
 - **Yandex OAuth** - только если нужна авторизация через Yandex
+- **WhatsApp** - только если нужны WhatsApp боты
 - **Cloud Voice** - только для голосовых функций  
 - **FASHN API** - только для виртуальной примерки одежды
 - **База данных** - Docker сам настроит PostgreSQL

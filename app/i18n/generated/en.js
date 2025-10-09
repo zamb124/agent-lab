@@ -685,7 +685,10 @@
   "Введите ключ переменной": "[TODO: Введите ключ переменной]",
   "Введите значение": "[TODO: Введите значение]",
   "Ошибка удаления": "[TODO: Ошибка удаления]",
-  "button": "[TODO: button]"
+  "button": "[TODO: button]",
+  "business_account_id": "[TODO: business_account_id]",
+  "display_name": "[TODO: display_name]",
+  "host": "[TODO: host]"
 };
     console.log('✅ Переводы для en загружены: ' + Object.keys(window.translations.en).length + ' ключей');
 })();

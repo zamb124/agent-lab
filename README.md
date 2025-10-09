@@ -65,7 +65,8 @@ Agent Lab - LangGraph Platform
 │   ├── clients.md      # Клиенты
 │   ├── deployment.md   # Развертывание
 │   └── integrations/
-│       └── amocrm/     # AmoCRM документация
+│       ├── amocrm/     # AmoCRM документация
+│       └── whatsapp/   # WhatsApp документация
 │
 ├── tests/               # Тесты
 │   ├── arch/           # Архитектурные тесты
@@ -234,6 +235,8 @@ Agent Lab - LangGraph Platform
 
 **telegram.py** - Telegram webhook endpoints. Создает TelegramInterface на лету для каждого флоу. Поддерживает универсальные webhooks вида `/webhook/telegram/{flow_id}`.
 
+**whatsapp.py** - WhatsApp webhook endpoints. Полная поддержка WhatsApp Business Cloud API с интерактивными кнопками, медиа и командами.
+
 **tokens.py** - Управление токенами ботов.
 
 **webhooks.py** - Универсальные webhook endpoints.
@@ -333,6 +336,8 @@ Agent Lab - LangGraph Platform
 **factory.py** - InterfaceFactory для создания адаптеров платформ.
 
 **telegram_interface.py** - Адаптер Telegram (webhook/polling).
+
+**whatsapp_interface.py** - Адаптер WhatsApp Business Cloud API.
 
 **api_interface.py** - Адаптер REST API.
 
