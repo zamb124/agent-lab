@@ -97,10 +97,8 @@ async def auth_callback(
         )
 
     if redirect_uri is None:
-        if settings.server.env == "local":
-            redirect_uri = f"http://{settings.server.domain}:{settings.server.port}/auth/callback/{provider_name}"
-        else:
-            redirect_uri = f"https://{settings.server.domain}/auth/callback/{provider_name}"
+        redirect_uri = f"https://agents-lab.ru/auth/callback/{provider_name}"
+
 
     auth_request = AuthRequest(
         provider=provider, code=code, state=state, redirect_uri=redirect_uri
@@ -159,10 +157,10 @@ async def get_current_user(session_id: str = None):
     user = await auth_service.get_user_by_session(session_id)
     if not user:
         raise HTTPException(status_code=401, detail="Сессия недействительна")
-    
+
     session = await auth_service._get_session(session_id)
     provider_value = session.provider.value if session else None
-    
+
     email = None
     avatar_url = None
     if session:
