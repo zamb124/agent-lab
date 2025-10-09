@@ -5,6 +5,7 @@
 
 import logging
 from typing import Optional
+from urllib.parse import quote
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 
@@ -36,7 +37,8 @@ def _get_rag_config_from_context(context):
 @tool
 async def search_knowledge_base(
     query: str,
-    config: RunnableConfig
+    limit: int = 5,
+    config: RunnableConfig = None
 ) -> str:
     """
     Поиск информации в базе знаний.
@@ -44,6 +46,8 @@ async def search_knowledge_base(
     
     Args:
         query: Запрос для поиска
+        limit: Максимальное количество фрагментов для возврата (по умолчанию 5).
+               Увеличь если нужно больше контекста (например, 10-15 для сложных запросов)
         
     Returns:
         Найденные фрагменты документов с релевантностью
@@ -54,11 +58,13 @@ async def search_knowledge_base(
     if not rag_config or not rag_config.enabled:
         return "RAG не настроен для этого flow"
     
+    limit = max(1, min(limit, 50))
+    
     rag_provider = get_default_rag_provider()
     
     namespace_ids = []
     company_id = context.active_company.company_id
-    flow_id = context.flow_config.flow_id
+    flow_id = context.flow_config.flow_id if context.flow_config else "unknown"
     session_id = context.session_id
     
     if "company" in rag_config.search_scopes:
@@ -76,10 +82,12 @@ async def search_knowledge_base(
     if not namespace_ids:
         return "Не настроены скоупы поиска"
     
+    logger.info(f"🔍 Поиск в RAG: query='{query[:50]}...', limit={limit}, scopes={len(namespace_ids)}")
+    
     all_results = await rag_provider.search_multiple_namespaces(
         namespace_ids=namespace_ids,
         query=query,
-        limit=5
+        limit=limit
     )
     
     formatted = []
@@ -224,11 +232,19 @@ async def list_documents_in_knowledge_base(
             "failed": "❌"
         }.get(doc.status, "❓")
         
+        source_url = doc.metadata.get("source_url")
+        
+        if source_url:
+            safe_url = quote(source_url, safe=':/?#[]@!$&\'()*+,;=')
+            doc_name = f"**[{doc.name}]({safe_url})**"
+        else:
+            doc_name = f"**{doc.name}**"
+        
         formatted.append(
-            f"\n{i}. {status_emoji} {doc.name}\n"
-            f"   ID: {doc.document_id}\n"
-            f"   Статус: {doc.status}\n"
-            f"   Создан: {doc.created_at or 'неизвестно'}"
+            f"\n{i}. {status_emoji} {doc_name}\n"
+            f"   - ID: `{doc.document_id}`\n"
+            f"   - Статус: {doc.status}\n"
+            f"   - Создан: {doc.created_at or 'неизвестно'}"
         )
     
     return "\n".join(formatted)

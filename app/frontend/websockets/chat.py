@@ -27,68 +27,53 @@ async def _poll_notifications(session_id: str):
     processed_notifications = set()
     
     logger.info(f"🔄 Начинаем polling уведомлений для сессии {session_id}")
+    iteration = 0
+    
+    # Получаем контекст один раз в начале и сохраняем user_id
+    context = get_context()
+    if not context or not context.user:
+        logger.error(f"❌ НЕТ КОНТЕКСТА при старте polling для {session_id}!")
+        return
+    
+    user_id = context.user.user_id
+    logger.info(f"✅ Контекст получен: user_id={user_id}")
     
     while session_id in websocket_manager.connections["chat"]:
             try:
-                # Ищем уведомления для всех web сессий пользователя
-                context = get_context()
-                if not context:
-                    logger.warning(f"Нет контекста для polling {session_id}")
-                    await asyncio.sleep(2)
-                    continue
-
-                user_id = context.user.user_id
+                iteration += 1
                 notification_pattern = f"web_notification:web:{user_id}:"
-                logger.debug(f"🔍 Ищем уведомления по pattern: {notification_pattern}")
+                if iteration == 1 or iteration % 10 == 0:
+                    logger.info(f"🔍 [Итерация {iteration}] Ищем уведомления по pattern: {notification_pattern}")
+                else:
+                    logger.debug(f"🔍 [Итерация {iteration}] Ищем уведомления по pattern: {notification_pattern}")
 
-                # Ищем все уведомления и сортируем по timestamp
+                # Ищем все уведомления
                 keys = await storage.list_by_prefix(notification_pattern)
+                if keys:
+                    logger.info(f"📬 [Итерация {iteration}] Найдено {len(keys)} уведомлений")
+                else:
+                    logger.debug(f"📭 [Итерация {iteration}] Уведомлений нет")
 
-                # Фильтруем и сортируем уведомления по timestamp
-                notifications_to_process = []
-                current_time = datetime.now(timezone.utc).timestamp()
-
+                # Обрабатываем новые уведомления
                 for key in keys:
                     if key not in processed_notifications:
-                        # Извлекаем timestamp из ключа
-                        parts = key.split(":")
-                        if len(parts) >= 2:
-                            try:
-                                key_timestamp = float(parts[-1])
-                                age = current_time - key_timestamp
-                                # Обрабатываем только свежие уведомления (за последние 60 секунд)
-                                if age <= 60:
-                                    notifications_to_process.append(
-                                        (key, key_timestamp)
-                                    )
-                                else:
-                                    logger.debug(f"⏭️ Пропускаем старое уведомление (age={age:.1f}s)")
-                            except ValueError:
-                                logger.debug(f"⚠️ Не удалось распарсить timestamp из ключа")
-                                continue
+                        notification_data = await storage.get(key)
+                        if notification_data:
+                            logger.info(f"📨 Найдено уведомление: {key}")
+                            notification = json.loads(notification_data)
+                            await websocket_manager.send_to_session(session_id, notification, "chat")
+                            processed_notifications.add(key)
 
-                # Сортируем по timestamp (старые сначала)
-                notifications_to_process.sort(key=lambda x: x[1])
-
-                # Обрабатываем уведомления в правильном порядке
-                for key, timestamp in notifications_to_process:
-                    notification_data = await storage.get(key)
-                    if notification_data:
-                        logger.info(f"📨 Найдено уведомление: {key}")
-                        notification = json.loads(notification_data)
-                        await websocket_manager.send_to_session(session_id, notification, "chat")
-                        processed_notifications.add(key)
-
-                        # Удаляем обработанное уведомление
-                        await storage.delete(key)
-                        logger.info(f"🗑️ Уведомление удалено: {key}")
+                            # Удаляем обработанное уведомление
+                            await storage.delete(key)
+                            logger.info(f"🗑️ Уведомление удалено: {key}")
 
                 # Очищаем старые processed_notifications (старше 5 минут)
                 if len(processed_notifications) > 300:
                     processed_notifications.clear()
 
             except Exception as e:
-                logger.error(f"❌ Ошибка в polling для {session_id}: {e}")
+                logger.error(f"❌ Ошибка в polling для {session_id} [Итерация {iteration}]: {e}", exc_info=True)
 
             # Ждем перед следующей проверкой
             await asyncio.sleep(2)
@@ -158,7 +143,8 @@ async def websocket_chat(websocket: WebSocket, session_id: str = None):
 
         await websocket_manager.connect(websocket, chat_session_id, "chat")
         
-        # Запускаем polling уведомлений
+        # Запускаем polling уведомлений (сохраняем контекст для задачи)
+        logger.info(f"🚀 Запускаем polling для {chat_session_id}, user_id={user.user_id}")
         websocket_manager.start_polling(
             chat_session_id, 
             _poll_notifications(chat_session_id),

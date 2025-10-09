@@ -195,12 +195,12 @@ class WebInterface(BaseInterface):
                     },
                 }
 
-        # Сохраняем уведомление в БД с TTL 5 минут
-        notification_key = f"web_notification:{message.session_id}:{datetime.now(timezone.utc).timestamp():.0f}"
+        # Сохраняем уведомление в БД с TTL 5 минут (используем UUID для уникальности)
+        notification_key = f"web_notification:{message.session_id}:{uuid.uuid4().hex}"
         await self.storage.set(notification_key, json.dumps(notification), ttl=300)
 
         logger.info(
-            f"📤 Уведомление сохранено в БД для сессии {message.session_id}: {message.content[:50]}..."
+            f"📤 Уведомление сохранено: key={notification_key}, type={notification.get('type', 'unknown')}, content={message.content[:50]}..."
         )
 
     async def send_typing_notification(self, session_id: str, is_typing: bool):
@@ -214,16 +214,13 @@ class WebInterface(BaseInterface):
             },
         }
 
-        notification_key = f"web_notification:{session_id}:{datetime.now(timezone.utc).timestamp():.0f}"
+        notification_key = f"web_notification:{session_id}:{uuid.uuid4().hex}"
         await self.storage.set(
             notification_key, json.dumps(typing_notification), ttl=300
         )
 
         status = "начал" if is_typing else "закончил"
-        logger.info(f"💬 Агент {status} печатать для веб-сессии {session_id}")
-        logger.info(
-            f"💬 Отправлено typing уведомление: {json.dumps(typing_notification)}"
-        )
+        logger.info(f"💬 Агент {status} печатать: key={notification_key}")
 
     async def send_interrupt_question(self, session_id: str, question: str):
         """Сохраняет interrupt вопрос в БД"""
@@ -236,13 +233,11 @@ class WebInterface(BaseInterface):
             },
         }
 
-        notification_key = (
-            f"web_notification:{session_id}:{datetime.now(timezone.utc).timestamp()}"
-        )
+        notification_key = f"web_notification:{session_id}:{uuid.uuid4().hex}"
         await self.storage.set(
             notification_key, json.dumps(interrupt_notification), ttl=300
         )
-        logger.info(f"🟡 Interrupt уведомление сохранено для сессии {session_id}")
+        logger.info(f"🟡 Interrupt уведомление сохранено: key={notification_key}")
 
     # Глобальный экземпляр для использования
     async def _process_single_file(
