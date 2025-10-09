@@ -2,6 +2,9 @@
  * Agents Lab - Главный JavaScript файл
  */
 
+import { getCookie } from '/static/js/utils/cookies.js';
+import { showNotification } from '/static/js/components/notification.js';
+
 class APP {
     constructor() {
         this.authToken = null;
@@ -18,14 +21,13 @@ class APP {
     }
     
     async setupManagers() {
-        // Инициализируем менеджеры
         try {
             console.log('🔄 Загружаем модули менеджеров...');
-            const { default: ThemeManager } = await import('./theme-manager.js');
-            const { default: LanguageManager } = await import('./language-manager.js');
-            const { default: LayoutManager } = await import('./layout-manager.js');
-            const { default: HTMXManager } = await import('./htmx-manager.js');
-            const { default: ChatManager } = await import('./chat.js');
+            const { default: ThemeManager } = await import('/static/js/theme-manager.js');
+            const { default: LanguageManager } = await import('/static/js/language-manager.js');
+            const { default: LayoutManager } = await import('/static/js/layout-manager.js');
+            const { default: HTMXManager } = await import('/static/js/htmx-manager.js');
+            const { default: ChatManager } = await import('/static/js/chat/manager.js');
             
             console.log('✅ Модули загружены, создаем экземпляры...');
             this.themeManager = new ThemeManager();
@@ -135,7 +137,7 @@ class APP {
     
     setupAuth() {
         console.log('🔐 Setting up auth...');
-        this.authToken = this.getCookie('auth_token') || localStorage.getItem('authToken');
+        this.authToken = getCookie('auth_token') || localStorage.getItem('authToken');
         console.log('🔑 Auth token:', this.authToken ? 'exists' : 'missing');
         
         document.addEventListener('htmx:configRequest', (e) => {
@@ -191,13 +193,6 @@ class APP {
         localStorage.setItem('authToken', token);
     }
     
-    getCookie(name) {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) return parts.pop().split(';').shift();
-        return null;
-    }
-    
     logout() {
         this.authToken = null;
         localStorage.removeItem('authToken');
@@ -205,42 +200,8 @@ class APP {
         document.cookie = 'session_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     }
     
-    // Утилиты для работы с UI
     showNotification(message, type = 'info') {
-        // Создаем уведомление
-        const notification = document.createElement('div');
-        notification.className = `alert alert-${type} notification`;
-        notification.innerHTML = `
-            <div class="d-flex align-items-center">
-                <i class="bi bi-info-circle me-2"></i>
-                <span>${message}</span>
-                <button class="btn btn-ghost btn-sm ms-auto" onclick="this.parentElement.parentElement.remove()">
-                    <i class="bi bi-x"></i>
-                </button>
-            </div>
-        `;
-        
-        // Добавляем в контейнер уведомлений или создаем его
-        let container = document.querySelector('.notifications-container');
-        if (!container) {
-            container = document.createElement('div');
-            container.className = 'notifications-container';
-            container.style.cssText = `
-                position: fixed;
-                top: 2rem;
-                right: 2rem;
-                z-index: 1050;
-                max-width: 300px;
-            `;
-            document.body.appendChild(container);
-        }
-        
-        container.appendChild(notification);
-        
-        // Автоудаление через 5 секунд
-        setTimeout(() => {
-            notification.remove();
-        }, 5000);
+        showNotification(message, type);
     }
     
     // Загрузка данных

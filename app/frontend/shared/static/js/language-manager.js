@@ -1,6 +1,9 @@
 /**
  * LanguageManager - управление переводами и языком интерфейса
  */
+
+import { getCookie, setCookie } from '/static/js/utils/cookies.js';
+
 class LanguageManager {
     constructor() {
         this.currentLanguage = 'ru';
@@ -33,7 +36,6 @@ class LanguageManager {
     }
     
     async detectLanguage() {
-        // 1. Из localStorage
         let savedLang = localStorage.getItem('language');
         if (savedLang && this.isValidLanguage(savedLang)) {
             this.currentLanguage = savedLang;
@@ -41,8 +43,7 @@ class LanguageManager {
             return;
         }
         
-        // 2. Из cookie
-        let cookieLang = this.getCookie('language');
+        let cookieLang = getCookie('language');
         if (cookieLang && this.isValidLanguage(cookieLang)) {
             this.currentLanguage = cookieLang;
             console.log(`🌐 Язык определен из cookie: ${cookieLang}`);
@@ -77,9 +78,8 @@ class LanguageManager {
         
         console.log(`🔄 Смена языка: ${oldLanguage} → ${lang}`);
         
-        // Сохраняем выбор
         localStorage.setItem('language', lang);
-        this.setCookie('language', lang, 365);
+        setCookie('language', lang, 365);
         
         // Загружаем переводы для нового языка
         await this.loadTranslations(lang);
@@ -302,21 +302,6 @@ class LanguageManager {
         document.dispatchEvent(event);
     }
     
-    // Утилитарные методы для работы с cookies
-    getCookie(name) {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) return parts.pop().split(';').shift();
-        return null;
-    }
-    
-    setCookie(name, value, days) {
-        const expires = new Date();
-        expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
-        document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
-    }
-    
-    // Публичные методы для других компонентов
     getCurrentLanguage() {
         return this.currentLanguage;
     }

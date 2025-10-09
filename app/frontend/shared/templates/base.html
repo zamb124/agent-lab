@@ -29,8 +29,8 @@
     <script src="https://unpkg.com/htmx.org/dist/ext/json-enc.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/htmx-ext-ws@2.0.2" defer></script>
     
-    <!-- Custom CSS (включает все модули) -->
-    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Custom CSS (единый файл со всеми компонентами) -->
+    <link rel="stylesheet" href="/static/css/main.css">
     
     {% block head %}{% endblock %}
 </head>
@@ -50,10 +50,10 @@
     <script src="/static/js/opus-recorder.min.js"></script>
     
     <!-- Prompt Editor -->
-    <script src="/static/js/prompt-editor.js"></script>
+    <script src="/static/js/prompt-editor.js" type="module"></script>
     
     <!-- Main APP JavaScript -->
-    <script src="/static/js/app.js" defer></script>
+    <script src="/static/js/app.js" type="module"></script>
     
     {% block scripts %}{% endblock %}
 </body>

@@ -304,7 +304,15 @@ app.include_router(websocket_notifications.router, tags=["websocket-notification
 app.include_router(websocket_chat.router, prefix="/frontend/chat", tags=["websocket-chat"])
 app.include_router(amocrm_router, prefix="/api/amocrm", tags=["amocrm"])
 
-# Основные статические файлы
+# Модульные статические файлы (монтируем ПЕРВЫМИ - более специфичные маршруты)
+modules_dir = Path(__file__).parent / "frontend" / "modules"
+for module_path in sorted(modules_dir.iterdir()):
+    if module_path.is_dir() and (module_path / "static").exists():
+        module_name = module_path.name
+        module_static = module_path / "static"
+        app.mount(f"/static/{module_name}", StaticFiles(directory=str(module_static)), name=f"static-{module_name}")
+
+# Основные статические файлы (монтируем после модульных)
 static_dir = Path(__file__).parent / "frontend" / "shared" / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 

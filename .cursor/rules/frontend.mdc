@@ -88,39 +88,365 @@ shared/static/my_module/
 {% endif %}
 </good_example>
 
-## HTMX
+## HTMX - Приоритетный подход
 
-Используй HTMX для интерактивности:
-- Минимум JavaScript
-- Все формы через HTMX
-- Используй `hx-target`, `hx-swap` для обновления UI
+**HTMX в приоритете для загрузки шаблонов и обновления UI!**
+
+### Принципы использования HTMX
+
+1. **Загрузка контента**: HTMX для динамической загрузки HTML с сервера
+2. **Обновление UI**: HTMX для частичного обновления страницы
+3. **Формы**: HTMX для отправки форм без перезагрузки
+4. **Минимум JS**: JavaScript только для сложной логики (чат, drag&drop, canvas)
+
+### Когда использовать HTMX vs JavaScript
+
+✅ **HTMX используй для:**
+- Загрузки списков (боты, flows, история)
+- Обновления контента (таблицы, карточки)
+- Отправки форм (создание, редактирование)
+- Модальных окон с серверным контентом
+- Навигации (табы, пагинация)
+- Автообновления (статистика, статусы)
+
+❌ **JavaScript используй для:**
+- Чат с WebSocket
+- Canvas редактор (Builder)
+- Drag & Drop
+- Голосовая запись
+- Сложные UI взаимодействия (виртуальная примерка)
+
+### Базовые паттерны HTMX
+
+#### Загрузка контента при открытии страницы
+```html
+<div hx-get="/frontend/bots/list" 
+     hx-trigger="load" 
+     hx-indicator="#loading">
+    <div id="loading" class="loading-indicator htmx-indicator">
+        <div class="spinner"></div>
+    </div>
+</div>
+```
+
+#### Отправка формы с обновлением списка
+```html
+<form hx-post="/frontend/api/flows" 
+      hx-target="#flows-list" 
+      hx-swap="afterbegin"
+      hx-on::after-request="if(event.detail.successful) this.reset()">
+    <input name="name" type="text" required>
+    <button type="submit" class="btn btn-primary">Создать</button>
+</form>
+```
+
+#### Автосохранение полей (используется в Builder)
+```html
+<input type="text" 
+       name="name"
+       hx-put="/frontend/api/flows/{{ flow_id }}"
+       hx-trigger="change delay:500ms"
+       hx-swap="none"
+       hx-ext="json-enc">
+```
+
+#### Загрузка модального окна
+```html
+<button hx-get="/frontend/models/flow/new?view=form" 
+        hx-target="#modal-container"
+        hx-swap="innerHTML"
+        class="btn btn-primary">
+    Создать Flow
+</button>
+
+<div id="modal-container"></div>
+```
+
+#### Удаление элемента из списка
+```html
+<button hx-delete="/frontend/api/flows/{{ flow_id }}"
+        hx-target="closest .flow-card"
+        hx-swap="outerHTML swap:300ms"
+        hx-confirm="Удалить флоу?">
+    <i class="bi bi-trash"></i>
+</button>
+```
+
+#### Обновление строки таблицы
+```html
+<tr hx-get="/frontend/models/flow/{{ flow_id }}?view=table"
+    hx-trigger="refresh from:body"
+    hx-target="this"
+    hx-swap="outerHTML">
+    <td>{{ flow.name }}</td>
+    <td>{{ flow.status }}</td>
+</tr>
+```
+
+#### Polling для обновления статистики
+```html
+<div hx-get="/frontend/billing/api/stats" 
+     hx-trigger="every 30s"
+     hx-target="#billing-stats"
+     hx-swap="innerHTML">
+    <div id="billing-stats">...</div>
+</div>
+```
+
+### HTMX Extensions
+
+Используй расширения для специфичных задач:
+
+```html
+<!-- JSON encoding для форм -->
+<form hx-ext="json-enc" 
+      hx-post="/api/v1/flows"
+      hx-headers='{"Content-Type": "application/json"}'>
+  ...
+</form>
+
+<!-- WebSocket (для чата, уведомлений) -->
+<div hx-ext="ws" ws-connect="/ws/notifications">
+  ...
+</div>
+```
+
+### Обработка событий HTMX
+
+JavaScript может слушать HTMX события:
+
+```javascript
+// После успешного запроса
+document.addEventListener('htmx:afterRequest', (e) => {
+    if (e.detail.successful) {
+        showNotification('Сохранено', 'success');
+    }
+});
+
+// После обновления модального окна
+document.addEventListener('htmx:afterSwap', (e) => {
+    if (e.detail.target.id === 'modal-container') {
+        // Инициализируем JS компоненты в модалке
+        initModalComponents(e.detail.target);
+    }
+});
+```
+
+### Индикаторы загрузки
+
+```html
+<!-- Индикатор для конкретного элемента -->
+<button hx-get="/api/endpoint" 
+        hx-indicator="#my-spinner">
+    Загрузить
+</button>
+<div id="my-spinner" class="htmx-indicator">
+    <div class="spinner"></div>
+</div>
+
+<!-- Глобальный индикатор -->
+<div class="htmx-indicator" id="global-indicator">
+    <div class="spinner"></div>
+</div>
+```
+
+### Комбинирование HTMX и JavaScript
+
+HTMX для загрузки, JS для интерактивности:
+
+```html
+<!-- HTMX загружает список -->
+<div hx-get="/frontend/bots/list" hx-trigger="load">
+    <!-- Загрузится список ботов -->
+</div>
+
+<!-- После загрузки JS добавляет интерактивность -->
+<script type="module">
+import { showNotification } from '/static/js/components/notification.js';
+
+document.addEventListener('htmx:afterSwap', (e) => {
+    // Добавляем обработчики к загруженному контенту
+    document.querySelectorAll('.bot-card').forEach(card => {
+        card.addEventListener('click', () => {
+            openBotChat(card.dataset.botId);
+        });
+    });
+});
+</script>
+```
+
+### Best Practices
+
+1. **Всегда указывай hx-target и hx-swap**
+   ```html
+   <button hx-get="/api/data" 
+           hx-target="#result" 
+           hx-swap="innerHTML">
+   ```
+
+2. **Используй hx-indicator для лоадеров**
+   ```html
+   <button hx-post="/api/save" 
+           hx-indicator="#saving">
+       Сохранить
+   </button>
+   <div id="saving" class="htmx-indicator">
+       <div class="spinner"></div>
+   </div>
+   ```
+
+3. **Добавляй задержки для автосохранения**
+   ```html
+   <input hx-put="/api/update" 
+          hx-trigger="change delay:500ms">
+   ```
+
+4. **Используй hx-confirm для опасных действий**
+   ```html
+   <button hx-delete="/api/delete/{{ id }}" 
+           hx-confirm="Вы уверены?">
+       Удалить
+   </button>
+   ```
+
+5. **Обрабатывай ошибки через события**
+   ```javascript
+   document.addEventListener('htmx:responseError', (e) => {
+       if (e.detail.xhr.status === 401) {
+           window.location.href = '/frontend/auth';
+       }
+   });
+   ```
+
+### Рекомендации
+
+- Предпочитай HTMX для простых операций CRUD
+- Используй JavaScript только для сложной логики
+- Комбинируй HTMX (загрузка) + JS (интерактивность)
+- Все формы через HTMX с `hx-ext="json-enc"`
+- Индикаторы загрузки через `hx-indicator`
+- Обработка успеха/ошибок через HTMX события
+
+
+## CSS Архитектура
+
+### Принцип приоритета
+
+**ВСЕГДА** используй shared компоненты, специфичные стили - только в крайнем случае:
+
+1. **Приоритет 1: Shared компоненты** (`app/frontend/shared/static/css/components/`)
+   - `.btn`, `.card`, `.modal`, `.form-control`, `.badge`, `.table` и т.д.
+   - Эти компоненты определены ОДИН РАЗ и используются везде
+
+2. **Приоритет 2: Shared utilities** (`app/frontend/shared/static/css/utilities/`)
+   - `.flex`, `.gap-4`, `.text-center`, `.rounded-lg`, `.shadow-md` и т.д.
+
+3. **Приоритет 3: Модульные стили** (только если компонент уникален для модуля)
+   - `app/frontend/modules/{module}/static/css/{module}.css`
+   - Используй префикс модуля: `.billing-card`, `.bot-modal`, `.builder-canvas`
+
+### Структура CSS
+
+```
+app/frontend/shared/static/css/
+├── main.css                  # Единая точка входа - импортирует все
+│
+├── core/                     # Базовые настройки
+│   ├── variables.css        # CSS переменные
+│   ├── reset.css           # Reset стили
+│   └── typography.css      # Типографика
+│
+├── layout/                   # Структура страницы
+│   ├── app-layout.css      # .app-container, .main-content
+│   ├── sidebar.css         # .sidebar
+│   ├── header.css          # .header
+│   └── content.css         # .content
+│
+├── components/               # Переиспользуемые компоненты
+│   ├── buttons.css         # .btn, .btn-primary, .btn-ghost
+│   ├── forms.css           # .form-group, .form-control
+│   ├── cards.css           # .card, .card-header
+│   ├── modals.css          # .modal-overlay, .modal-content
+│   ├── dropdowns.css       # .dropdown, .dropdown-menu
+│   ├── badges.css          # .badge, .badge-success
+│   ├── tables.css          # .table, .table-container
+│   ├── alerts.css          # .alert, .alert-danger
+│   ├── notifications.css   # .notification
+│   └── loading.css         # .loading, .spinner
+│
+├── utilities/                # Утилиты
+│   ├── spacing.css         # .m-*, .p-*, .gap-*
+│   ├── flexbox.css         # .flex, .justify-center
+│   ├── colors.css          # .text-*, .bg-*
+│   ├── sizing.css          # .w-full, .h-full
+│   ├── borders.css         # .rounded, .shadow-*
+│   └── animations.css      # @keyframes, анимации
+│
+└── special/                  # Проект-специфичные компоненты
+    ├── fields.css          # Динамические поля форм
+    ├── prompt-editor.css   # Редактор промптов
+    └── markdown-preview.css
+
+app/frontend/modules/{module}/static/css/
+└── {module}.css             # ТОЛЬКО уникальные стили модуля
+```
+
+### Подключение стилей
+# СТАРАЕМСЯ НЕ ДЕЛАТЬ СПЕЦИФИЧНЫХ КОМПОНЕНТОВ!!!!!!!!
+**base.html** (для всех страниц с сайдбаром):
+```html
+<link rel="stylesheet" href="/static/css/main.css">
+```
+
+**Модульные страницы**:
+```html
+{% extends "base.html" %}
+{% block head %}
+<link rel="stylesheet" href="/static/{module}/css/{module}.css">
+{% endblock %}
+```
+
+<bad_example>
+<!-- НЕ дублируй компоненты в модульных CSS -->
+/* billing.css */
+.btn {
+    padding: 0.5rem 1rem;
+    /* ... 20 строк дублирования */
+}
+
+.billing-custom-button { /* используй вместо этого */ }
+</bad_example>
 
 <good_example>
-<form hx-post="/api/models/flow" hx-target="#flow-list" hx-swap="beforeend">
-  <input name="name" type="text" required>
-  <button type="submit">Создать</button>
-</form>
+<!-- Используй shared компоненты -->
+<button class="btn btn-primary">Сохранить</button>
+
+<!-- Если нужна специфика - комбинируй с модульным классом -->
+<div class="card billing-stats-card">...</div>
+
+/* billing.css - только уникальное */
+.billing-stats-card {
+    background: linear-gradient(...);
+}
 </good_example>
 
-## Роли и доступ
+### Именование классов
 
-Используй роли в компаниях (НЕ глобальные группы):
-- `user.companies[company_id]` - список ролей в компании
-- Проверяй роли через `user_has_role()` в шаблонах
-- Проверяй роли через `context.user` в роутерах
+Используй BEM для модульных классов:
+- **Блок**: `.billing-card`, `.bot-modal`, `.builder-canvas`
+- **Элемент**: `.billing-card__header`, `.bot-modal__content`
+- **Модификатор**: `.billing-card--highlighted`, `.bot-modal--large`
 
 <good_example>
-# В шаблоне
-{% if user_has_role('admin') %}
-  <button>Удалить</button>
-{% endif %}
-
-# В роутере
-from app.core.context import get_context
-
-context = get_context()
-if "admin" not in context.user.companies.get(context.active_company.company_id, []):
-    raise HTTPException(403, "Access denied")
+<!-- Модульный компонент -->
+<div class="billing-tariff-card">
+    <div class="billing-tariff-card__header">
+        <h3 class="billing-tariff-card__title">Pro</h3>
+    </div>
+    <div class="billing-tariff-card__body">
+        <span class="billing-tariff-card__price">$99</span>
+    </div>
+</div>
 </good_example>
 
 ## Единый стиль
@@ -128,12 +454,12 @@ if "admin" not in context.user.companies.get(context.active_company.company_id, 
 Все модалы и формы должны использовать единый стиль:
 - Наследуй от `base.html`
 - Используй CSS переменные из `variables.css`
-- Используй компоненты из `components.css`
+- Используй shared компоненты из `components/`
 
 <bad_example>
 <div style="color: red">Ошибка</div>
 </bad_example>
 
 <good_example>
-<div class="alert alert-error">Ошибка</div>
+<div class="alert alert-danger">Ошибка</div>
 </good_example>

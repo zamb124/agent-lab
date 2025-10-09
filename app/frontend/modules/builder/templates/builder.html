@@ -156,7 +156,10 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/builder/js/builder.js"></script>
+<script src="/static/builder/js/sidebar.js" type="module"></script>
+<script src="/static/builder/js/canvas.js" type="module"></script>
+<script src="/static/builder/js/drag-drop.js" type="module"></script>
+<script src="/static/builder/js/builder.js" type="module"></script>
 <script>
     // Инициализация Builder после загрузки HTMX
     function initBuilder() {
