@@ -79,10 +79,7 @@
                         style="width: auto; min-width: 120px;">
                     <option value="">По умолчанию</option>
                     <option value="openai" {% if bot.llm_config and bot.llm_config.provider == 'openai' %}selected{% endif %}>OpenAI</option>
-                    <option value="anthropic" {% if bot.llm_config and bot.llm_config.provider == 'anthropic' %}selected{% endif %}>Anthropic</option>
-                    <option value="yandex" {% if bot.llm_config and bot.llm_config.provider == 'yandex' %}selected{% endif %}>YandexGPT</option>
                     <option value="gemini" {% if bot.llm_config and bot.llm_config.provider == 'gemini' %}selected{% endif %}>Gemini</option>
-                    <option value="ollama" {% if bot.llm_config and bot.llm_config.provider == 'ollama' %}selected{% endif %}>Ollama</option>
                 </select>
             </div>
         </div>
