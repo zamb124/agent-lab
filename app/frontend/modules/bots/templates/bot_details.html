@@ -158,7 +158,8 @@
                                class="form-control" 
                                placeholder="Введите токен Telegram бота"
                                id="telegram-token-{{ bot.flow_id }}"
-                               value="{{ config.get('token', '') }}">
+                               value="{{ config.get('token', '') }}" 
+                               readonly>
                         <small class="form-text">Получите токен у @BotFather</small>
                     </div>
                     
@@ -172,6 +173,65 @@
                         </div>
                     </div>
                     {% endif %}
+                    
+                    {% elif platform == 'whatsapp' %}
+                    <div class="form-group">
+                        <label>Phone Number ID</label>
+                        <input type="text" class="form-control" 
+                               value="{{ config.get('phone_number_id', '') }}" readonly>
+                        <small class="form-text text-muted">ID телефонного номера из WhatsApp Business</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Access Token</label>
+                        <input type="password" class="form-control" 
+                               value="{{ config.get('access_token', '') }}" readonly>
+                        <small class="form-text text-muted">Токен доступа от Meta for Developers</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Verify Token</label>
+                        <input type="password" class="form-control" 
+                               value="{{ config.get('verify_token', '') }}" readonly>
+                        <small class="form-text text-muted">Токен для верификации webhook</small>
+                    </div>
+                    
+                    {% if config.get('business_account_id') %}
+                    <div class="form-group">
+                        <label>Business Account ID</label>
+                        <input type="text" class="form-control" 
+                               value="{{ config.business_account_id }}" readonly>
+                    </div>
+                    {% endif %}
+                    
+                    {% if config.get('display_name') %}
+                    <div class="form-group">
+                        <label>Display Name</label>
+                        <input type="text" class="form-control" 
+                               value="{{ config.display_name }}" readonly>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <div class="mb-2">
+                            <strong>Webhook URL:</strong><br>
+                            <small class="text-muted">Настройте этот URL в Meta for Developers</small>
+                        </div>
+                        <div class="input-group mb-2">
+                            <input type="text" class="form-control font-monospace" 
+                                   id="whatsapp-webhook-url-{{ bot.flow_id }}" 
+                                   value="https://{{ request.headers.get('host') }}/api/v1/webhook/whatsapp/flow:{{ bot.flow_id }}" 
+                                   readonly>
+                            <button class="btn btn-outline-secondary" onclick="copyToClipboard('whatsapp-webhook-url-{{ bot.flow_id }}')">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <button class="btn btn-outline-primary btn-sm" onclick="registerWhatsApp('{{ bot.flow_id }}')">
+                            <i class="bi bi-link-45deg"></i> Проверить регистрацию
+                        </button>
+                    </div>
+                    
                     {% elif platform == 'api' %}
                     <div class="api-info">
                         <p>API endpoint для этого бота:</p>
