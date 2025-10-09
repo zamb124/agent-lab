@@ -21,7 +21,7 @@ from app.core.checkpointer import init_checkpointer, close_checkpointer
 from app.db.database import create_tables, close_db
 from app.core.migrator import Migrator
 from app.api.amocrm import router as amocrm_router
-from app.api.v1 import webhooks, admin, telegram, tokens, auth, flows, fashn, files, leads, history, payments, admin_payments, variables
+from app.api.v1 import webhooks, admin, telegram, whatsapp, tokens, auth, flows, fashn, files, leads, history, payments, admin_payments, variables
 from app.frontend.api import models as frontend_models
 from app.frontend.api import flows as frontend_flows
 from app.frontend.api import agents as frontend_agents
@@ -263,6 +263,7 @@ async def utf8_response_middleware(request: Request, call_next):
 app.include_router(webhooks.router, prefix="/api/v1", tags=["webhooks"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(telegram.router, prefix="/api/v1", tags=["telegram"])
+app.include_router(whatsapp.router, prefix="/api/v1", tags=["whatsapp"])
 app.include_router(tokens.router, prefix="/api/v1", tags=["tokens"])
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(flows.router, prefix="/api/v1/flows", tags=["flows"])

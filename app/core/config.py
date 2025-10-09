@@ -136,6 +136,15 @@ class TelegramConfig(BaseModel):
     bots: Dict[str, str] = Field(default_factory=dict)  # bot_name -> token
 
 
+class WhatsAppConfig(BaseModel):
+    """Конфигурация WhatsApp интеграции"""
+
+    enabled: bool = True
+    verify_token: Optional[str] = None
+    graph_api_version: str = "v18.0"
+    graph_api_url: str = "https://graph.facebook.com"
+
+
 class NanoBananaConfig(BaseModel):
     """Конфигурация Nano Banana (Gemini Image Generation)"""
 
@@ -245,6 +254,7 @@ class Settings(BaseSettings):
     fashn: FashnConfig = Field(default_factory=FashnConfig)
     cloud_voice: CloudVoiceConfig = Field(default_factory=CloudVoiceConfig)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
+    whatsapp: WhatsAppConfig = Field(default_factory=WhatsAppConfig)
     nano_banana: NanoBananaConfig = Field(default_factory=NanoBananaConfig)
     amocrm: AmoCRMConfig = Field(default_factory=AmoCRMConfig)
     proxy: ProxyConfig = Field(default_factory=ProxyConfig)

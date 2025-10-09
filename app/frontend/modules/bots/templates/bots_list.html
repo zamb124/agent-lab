@@ -20,10 +20,14 @@
                         <span class="platform-tag platform-{{ platform }}">
                             {% if platform == 'telegram' %}
                                 <i class="bi bi-telegram"></i> Telegram
+                            {% elif platform == 'whatsapp' %}
+                                <i class="bi bi-whatsapp"></i> WhatsApp
                             {% elif platform == 'api' %}
                                 <i class="bi bi-code-slash"></i> API
                             {% elif platform == 'web' %}
                                 <i class="bi bi-globe"></i> Web
+                            {% elif platform == 'amocrm' %}
+                                <i class="bi bi-building"></i> AmoCRM
                             {% else %}
                                 <i class="bi bi-gear"></i> {{ platform }}
                             {% endif %}

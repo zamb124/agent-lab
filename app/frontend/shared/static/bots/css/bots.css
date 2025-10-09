@@ -163,6 +163,12 @@
     color: #10b981;
 }
 
+.platform-tag.platform-amocrm {
+    background: rgba(51, 153, 51, 0.1);
+    border-color: rgba(51, 153, 51, 0.3);
+    color: #339933;
+}
+
 .bot-meta {
     display: flex;
     flex-direction: column;
@@ -430,6 +436,12 @@
     background: rgba(16, 185, 129, 0.1);
     border-color: rgba(16, 185, 129, 0.3);
     color: #10b981;
+}
+
+.platform-badge.platform-amocrm {
+    background: rgba(51, 153, 51, 0.1);
+    border-color: rgba(51, 153, 51, 0.3);
+    color: #339933;
 }
 
 .bot-details-content {

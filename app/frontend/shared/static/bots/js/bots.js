@@ -374,7 +374,15 @@
     };
 
     window.addPlatform = async function(botId) {
-        let modal = document.getElementById('add-platform-modal');
+        const modal = document.getElementById('add-platform-modal');
+        
+        if (!modal) {
+            console.error('Модальное окно add-platform-modal не найдено');
+            return;
+        }
+        
+        // Сначала сбрасываем форму для чистого состояния
+        resetPlatformForm();
         
         // Загружаем доступные переменные для токена
         try {
@@ -387,15 +395,17 @@
                 const varsData = await response.json();
                 const select = document.getElementById('platform-token-select');
                 
-                // Очищаем и заполняем dropdown
-                select.innerHTML = '<option value="">-- Выберите переменную --</option>';
-                Object.entries(varsData).forEach(([key, varInfo]) => {
-                    const desc = varInfo.description ? ` - ${varInfo.description}` : '';
-                    const option = document.createElement('option');
-                    option.value = `@var:${key}`;
-                    option.textContent = `@var:${key}${desc}`;
-                    select.appendChild(option);
-                });
+                if (select) {
+                    // Очищаем и заполняем dropdown
+                    select.innerHTML = '<option value="">-- Выберите переменную --</option>';
+                    Object.entries(varsData).forEach(([key, varInfo]) => {
+                        const desc = varInfo.description ? ` - ${varInfo.description}` : '';
+                        const option = document.createElement('option');
+                        option.value = `@var:${key}`;
+                        option.textContent = `@var:${key}${desc}`;
+                        select.appendChild(option);
+                    });
+                }
             }
         } catch (err) {
             console.error('Ошибка загрузки переменных:', err);
@@ -406,6 +416,7 @@
             document.body.appendChild(modal);
         }
         
+        // Показываем модалку
         modal.style.display = 'flex';
         modal.style.position = 'fixed';
         modal.style.top = '0';
@@ -414,14 +425,10 @@
         modal.style.height = '100%';
         modal.style.zIndex = '9999';
         
-        document.getElementById('platform-type-select').value = '';
-        document.getElementById('platform-config-section').style.display = 'none';
-        resetPlatformForm();
-        
         // Блокируем прокрутку body
         document.body.style.overflow = 'hidden';
         
-        console.log('🔧 Modal opened, parent:', modal.parentElement.tagName);
+        console.log('🔧 Модалка открыта, parent:', modal.parentElement.tagName);
     };
     
     window.toggleTokenInput = function() {
@@ -441,9 +448,20 @@
     };
 
     window.closeAddPlatformModal = function() {
-        document.getElementById('add-platform-modal').style.display = 'none';
-        document.body.style.overflow = 'auto'; // Возвращаем прокрутку
+        const modal = document.getElementById('add-platform-modal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        document.body.style.overflow = 'auto';
+        
+        // Сбрасываем форму
         resetPlatformForm();
+        
+        // Удаляем WhatsApp контейнер если он был создан
+        const whatsappContainer = document.getElementById('whatsapp-fields-container');
+        if (whatsappContainer) {
+            whatsappContainer.remove();
+        }
     };
 
     // Глобальная переменная для хранения выбранной платформы
@@ -491,64 +509,330 @@
         if (platformType) {
             configSection.style.display = 'block';
             
-            // Обновляем плейсхолдеры в зависимости от типа платформы
-            const tokenField = document.getElementById('platform-token');
-            const usernameField = document.getElementById('platform-username');
-            
-            // Сбрасываем состояние полей
-            tokenField.disabled = false;
-            
-            switch(platformType) {
-                case 'telegram':
-                    tokenField.placeholder = 'Токен от @BotFather';
-                    usernameField.placeholder = 'username бота (без @)';
-                    break;
-                case 'whatsapp':
-                    tokenField.placeholder = 'WhatsApp Business API токен';
-                    usernameField.placeholder = 'Номер телефона';
-                    break;
-                case 'amocrm':
-                    tokenField.placeholder = 'API ключ AmoCRM';
-                    usernameField.placeholder = 'Домен (example.amocrm.ru)';
-                    break;
-                case 'retailcrm':
-                    tokenField.placeholder = 'API ключ RetailCRM';
-                    usernameField.placeholder = 'URL магазина';
-                    break;
-                case 'discord':
-                    tokenField.placeholder = 'Discord Bot Token';
-                    usernameField.placeholder = 'Application ID';
-                    break;
-                case 'slack':
-                    tokenField.placeholder = 'Slack Bot Token';
-                    usernameField.placeholder = 'App ID';
-                    break;
-                case 'web':
-                    tokenField.placeholder = 'Не требуется';
-                    usernameField.placeholder = 'Название чата';
-                    tokenField.disabled = true;
-                    break;
-                case 'api':
-                    tokenField.placeholder = 'API ключ (опционально)';
-                    usernameField.placeholder = 'Название API';
-                    break;
-                case 'viber':
-                    tokenField.placeholder = 'Viber API токен';
-                    usernameField.placeholder = 'Имя бота';
-                    break;
-                case 'vk':
-                    tokenField.placeholder = 'VK API токен';
-                    usernameField.placeholder = 'ID группы';
-                    break;
-                default:
-                    tokenField.placeholder = 'Токен платформы';
-                    usernameField.placeholder = 'Username/ID';
-                    break;
+            // Для WhatsApp показываем специальные поля
+            if (platformType === 'whatsapp') {
+                showWhatsAppFields();
+            } else {
+                // Для остальных платформ показываем стандартные поля
+                showStandardPlatformFields(platformType);
             }
         } else {
             configSection.style.display = 'none';
         }
     };
+
+    function showStandardPlatformFields(platformType) {
+        const configSection = document.getElementById('platform-config-section');
+        
+        const tokenField = document.getElementById('platform-token');
+        const usernameField = document.getElementById('platform-username');
+        
+        // Показываем стандартные поля
+        document.getElementById('platform-token').closest('.form-group').style.display = 'block';
+        document.getElementById('platform-username').closest('.form-group').style.display = 'block';
+        
+        // Скрываем WhatsApp поля если они были
+        const whatsappFields = document.getElementById('whatsapp-fields-container');
+        if (whatsappFields) whatsappFields.style.display = 'none';
+        
+        // Сбрасываем состояние полей
+        tokenField.disabled = false;
+        
+        switch(platformType) {
+            case 'telegram':
+                tokenField.placeholder = 'Токен от @BotFather';
+                usernameField.placeholder = 'username бота (без @)';
+                break;
+            case 'amocrm':
+                tokenField.placeholder = 'API ключ AmoCRM';
+                usernameField.placeholder = 'Домен (example.amocrm.ru)';
+                break;
+            case 'retailcrm':
+                tokenField.placeholder = 'API ключ RetailCRM';
+                usernameField.placeholder = 'URL магазина';
+                break;
+            case 'discord':
+                tokenField.placeholder = 'Discord Bot Token';
+                usernameField.placeholder = 'Application ID';
+                break;
+            case 'slack':
+                tokenField.placeholder = 'Slack Bot Token';
+                usernameField.placeholder = 'App ID';
+                break;
+            case 'web':
+                tokenField.placeholder = 'Не требуется';
+                usernameField.placeholder = 'Название чата';
+                tokenField.disabled = true;
+                break;
+            case 'api':
+                tokenField.placeholder = 'API ключ (опционально)';
+                usernameField.placeholder = 'Название API';
+                break;
+            case 'viber':
+                tokenField.placeholder = 'Viber API токен';
+                usernameField.placeholder = 'Имя бота';
+                break;
+            case 'vk':
+                tokenField.placeholder = 'VK API токен';
+                usernameField.placeholder = 'ID группы';
+                break;
+            default:
+                tokenField.placeholder = 'Токен платформы';
+                usernameField.placeholder = 'Username/ID';
+                break;
+        }
+    }
+
+    function showWhatsAppFields() {
+        // Скрываем стандартные поля токена и username
+        document.getElementById('platform-token').closest('.form-group').style.display = 'none';
+        document.getElementById('platform-username').closest('.form-group').style.display = 'none';
+        
+        // Создаем или показываем WhatsApp поля
+        let whatsappContainer = document.getElementById('whatsapp-fields-container');
+        
+        if (!whatsappContainer) {
+            whatsappContainer = document.createElement('div');
+            whatsappContainer.id = 'whatsapp-fields-container';
+            whatsappContainer.innerHTML = `
+                <div class="alert alert-info mb-3">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>WhatsApp Business API</strong><br>
+                    Получите credentials в <a href="https://developers.facebook.com" target="_blank">Meta for Developers</a>
+                </div>
+                
+                <div class="form-group">
+                    <label>Phone Number ID <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="whatsapp-phone-number-id" 
+                           placeholder="111111111111111">
+                    <small class="form-text">ID телефонного номера из WhatsApp Business</small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Access Token <span class="text-danger">*</span></label>
+                    <div class="mb-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="wa-token-type" id="wa-token-type-var" value="var" checked onchange="toggleWhatsAppTokenInput()">
+                            <label class="form-check-label" for="wa-token-type-var">
+                                Ссылка на переменную (рекомендуется)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="wa-token-type" id="wa-token-type-hardcoded" value="hardcoded" onchange="toggleWhatsAppTokenInput()">
+                            <label class="form-check-label" for="wa-token-type-hardcoded">
+                                Хардкод токен
+                            </label>
+                        </div>
+                    </div>
+                    <div id="wa-token-var-select-group">
+                        <select class="form-control" id="whatsapp-access-token-select">
+                            <option value="">-- Выберите переменную --</option>
+                        </select>
+                    </div>
+                    <div id="wa-token-hardcoded-group" style="display: none;">
+                        <input type="password" class="form-control" id="whatsapp-access-token" placeholder="EAAxxxx...">
+                    </div>
+                    <small class="form-text">Access Token от WhatsApp Business API</small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Verify Token <span class="text-danger">*</span></label>
+                    <div class="mb-2">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="wa-verify-type" id="wa-verify-type-var" value="var" checked onchange="toggleWhatsAppVerifyInput()">
+                            <label class="form-check-label" for="wa-verify-type-var">
+                                Ссылка на переменную (рекомендуется)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="wa-verify-type" id="wa-verify-type-hardcoded" value="hardcoded" onchange="toggleWhatsAppVerifyInput()">
+                            <label class="form-check-label" for="wa-verify-type-hardcoded">
+                                Хардкод токен
+                            </label>
+                        </div>
+                    </div>
+                    <div id="wa-verify-var-select-group">
+                        <select class="form-control" id="whatsapp-verify-token-select">
+                            <option value="">-- Выберите переменную --</option>
+                        </select>
+                    </div>
+                    <div id="wa-verify-hardcoded-group" style="display: none;">
+                        <input type="password" class="form-control" id="whatsapp-verify-token" placeholder="Ваш verify token">
+                    </div>
+                    <small class="form-text">Токен для верификации webhook</small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Business Account ID</label>
+                    <input type="text" class="form-control" id="whatsapp-business-account-id" 
+                           placeholder="123456789">
+                    <small class="form-text">Опционально: ID бизнес аккаунта</small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Display Name</label>
+                    <input type="text" class="form-control" id="whatsapp-display-name" 
+                           placeholder="My WhatsApp Bot">
+                    <small class="form-text">Опционально: отображаемое имя бота</small>
+                </div>
+            `;
+            
+            const customVarsSection = document.getElementById('custom-variables').closest('.form-group');
+            customVarsSection.insertAdjacentElement('beforebegin', whatsappContainer);
+            
+            // Загружаем переменные для select'ов
+            loadVariablesForWhatsAppSelects();
+        } else {
+            whatsappContainer.style.display = 'block';
+        }
+    }
+    
+    window.toggleWhatsAppTokenInput = function() {
+        const isVar = document.getElementById('wa-token-type-var').checked;
+        document.getElementById('wa-token-var-select-group').style.display = isVar ? 'block' : 'none';
+        document.getElementById('wa-token-hardcoded-group').style.display = isVar ? 'none' : 'block';
+    };
+    
+    window.toggleWhatsAppVerifyInput = function() {
+        const isVar = document.getElementById('wa-verify-type-var').checked;
+        document.getElementById('wa-verify-var-select-group').style.display = isVar ? 'block' : 'none';
+        document.getElementById('wa-verify-hardcoded-group').style.display = isVar ? 'none' : 'block';
+    };
+    
+    async function loadVariablesForWhatsAppSelects() {
+        try {
+            const response = await fetch('/api/v1/admin/variables', {
+                headers: {
+                    'Authorization': `Bearer ${window.app.authToken}`
+                }
+            });
+            
+            if (response.ok) {
+                const varsData = await response.json();
+                const variables = Object.entries(varsData).map(([key, info]) => ({
+                    key: key,
+                    is_secret: info.is_secret || false
+                }));
+                
+                // Наполняем select для access_token
+                const accessTokenSelect = document.getElementById('whatsapp-access-token-select');
+                if (accessTokenSelect) {
+                    accessTokenSelect.innerHTML = '<option value="">-- Выберите переменную --</option>';
+                    variables.forEach(v => {
+                        const option = document.createElement('option');
+                        option.value = `@var:${v.key}`;
+                        option.textContent = `@var:${v.key}${v.is_secret ? ' 🔒' : ''}`;
+                        accessTokenSelect.appendChild(option);
+                    });
+                }
+                
+                // Наполняем select для verify_token
+                const verifyTokenSelect = document.getElementById('whatsapp-verify-token-select');
+                if (verifyTokenSelect) {
+                    verifyTokenSelect.innerHTML = '<option value="">-- Выберите переменную --</option>';
+                    variables.forEach(v => {
+                        const option = document.createElement('option');
+                        option.value = `@var:${v.key}`;
+                        option.textContent = `@var:${v.key}${v.is_secret ? ' 🔒' : ''}`;
+                        verifyTokenSelect.appendChild(option);
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Ошибка загрузки переменных для WhatsApp:', error);
+        }
+    }
+    
+    function collectWhatsAppConfig() {
+        const config = {};
+        
+        // Phone Number ID (обязательно)
+        const phoneNumberId = document.getElementById('whatsapp-phone-number-id')?.value;
+        if (phoneNumberId) {
+            config.phone_number_id = phoneNumberId;
+        }
+        
+        // Access Token (обязательно)
+        const tokenVarRadio = document.getElementById('wa-token-type-var');
+        if (tokenVarRadio && tokenVarRadio.checked) {
+            // Ссылка на переменную
+            const select = document.getElementById('whatsapp-access-token-select');
+            if (select && select.value) {
+                config.access_token = select.value;
+            }
+        } else {
+            // Хардкод токен
+            const input = document.getElementById('whatsapp-access-token');
+            if (input && input.value) {
+                config.access_token = input.value;
+            }
+        }
+        
+        // Verify Token (обязательно)
+        const verifyVarRadio = document.getElementById('wa-verify-type-var');
+        if (verifyVarRadio && verifyVarRadio.checked) {
+            // Ссылка на переменную
+            const select = document.getElementById('whatsapp-verify-token-select');
+            if (select && select.value) {
+                config.verify_token = select.value;
+            }
+        } else {
+            // Хардкод токен
+            const input = document.getElementById('whatsapp-verify-token');
+            if (input && input.value) {
+                config.verify_token = input.value;
+            }
+        }
+        
+        // Business Account ID (опционально)
+        const businessAccountId = document.getElementById('whatsapp-business-account-id')?.value;
+        if (businessAccountId) {
+            config.business_account_id = businessAccountId;
+        }
+        
+        // Display Name (опционально)
+        const displayName = document.getElementById('whatsapp-display-name')?.value;
+        if (displayName) {
+            config.display_name = displayName;
+        }
+        
+        return config;
+    }
+    
+    window.registerWhatsApp = async function(flowId) {
+        try {
+            showNotification('Регистрация WhatsApp...', 'info');
+            
+            const response = await fetch(`/api/v1/admin/whatsapp/register/${flowId}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${window.app.authToken}`
+                }
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                showNotification('WhatsApp успешно зарегистрирован!', 'success');
+                
+                // Показываем webhook URL
+                if (result.result && result.result.webhook_url) {
+                    const urlElement = document.getElementById('whatsapp-webhook-url');
+                    if (urlElement) {
+                        urlElement.textContent = result.result.webhook_url;
+                    }
+                }
+                
+                // Перезагружаем детали бота
+                await expandBot(flowId);
+            } else {
+                const error = await response.json();
+                showNotification(`Ошибка регистрации: ${error.detail}`, 'error');
+            }
+        } catch (error) {
+            console.error('Ошибка регистрации WhatsApp:', error);
+            showNotification('Ошибка регистрации WhatsApp', 'error');
+        }
+    }
 
     window.addVariableRow = function() {
         const container = document.getElementById('custom-variables');
@@ -586,36 +870,64 @@
         
         // Сбрасываем отображение dropdown
         const selectText = document.querySelector('.select-text');
-        selectText.innerHTML = 'Выберите платформу';
+        if (selectText) {
+            selectText.innerHTML = 'Выберите платформу';
+        }
         
         // Закрываем dropdown если открыт
-        document.getElementById('platform-dropdown').classList.remove('show');
-        document.querySelector('.select-value').classList.remove('active');
+        const dropdown = document.getElementById('platform-dropdown');
+        if (dropdown) {
+            dropdown.classList.remove('show');
+        }
         
-        // Очищаем поля
-        document.getElementById('platform-token').value = '';
-        document.getElementById('platform-username').value = '';
-        document.getElementById('platform-token').disabled = false;
+        const selectValue = document.querySelector('.select-value');
+        if (selectValue) {
+            selectValue.classList.remove('active');
+        }
+        
+        // Очищаем стандартные поля
+        const tokenField = document.getElementById('platform-token');
+        const usernameField = document.getElementById('platform-username');
+        
+        if (tokenField) {
+            tokenField.value = '';
+            tokenField.disabled = false;
+            tokenField.closest('.form-group').style.display = 'block';
+        }
+        
+        if (usernameField) {
+            usernameField.value = '';
+            usernameField.closest('.form-group').style.display = 'block';
+        }
         
         // Скрываем секцию настроек
-        document.getElementById('platform-config-section').style.display = 'none';
+        const configSection = document.getElementById('platform-config-section');
+        if (configSection) {
+            configSection.style.display = 'none';
+        }
+        
+        // Удаляем WhatsApp контейнер если был создан
+        const whatsappContainer = document.getElementById('whatsapp-fields-container');
+        if (whatsappContainer) {
+            whatsappContainer.remove();
+        }
         
         // Очищаем кастомные переменные, оставляя только одну строку
         const container = document.getElementById('custom-variables');
-        const rows = container.querySelectorAll('.variable-row');
-        rows.forEach((row, index) => {
-            if (index > 0) {
-                row.remove();
-            } else {
-                row.querySelectorAll('input').forEach(input => input.value = '');
-            }
-        });
+        if (container) {
+            const rows = container.querySelectorAll('.variable-row');
+            rows.forEach((row, index) => {
+                if (index > 0) {
+                    row.remove();
+                } else {
+                    row.querySelectorAll('input').forEach(input => input.value = '');
+                }
+            });
+        }
     }
 
     window.savePlatform = async function(botId) {
         const platformType = selectedPlatformType;
-        const token = document.getElementById('platform-token').value;
-        const username = document.getElementById('platform-username').value;
         
         if (!platformType) {
             showNotification('Выберите тип платформы', 'warning');
@@ -623,43 +935,62 @@
         }
 
         // Собираем конфигурацию платформы
-        const platformConfig = {};
+        let platformConfig = {};
         
-        // Получаем токен (из select или input)
-        let finalToken = '';
-        const varRadio = document.getElementById('token-type-var');
-        if (varRadio && varRadio.checked) {
-            // Ссылка на переменную
-            const select = document.getElementById('platform-token-select');
-            finalToken = select ? select.value : '';
-        } else {
-            // Хардкод токен
-            const input = document.getElementById('platform-token');
-            finalToken = input ? input.value : '';
-        }
-        
-        console.log('🔍 DEBUG: finalToken =', finalToken);
-        console.log('🔍 DEBUG: username =', username);
-        
-        if (finalToken) {
-            platformConfig.token = finalToken;
-        }
-        if (username) {
-            platformConfig.username = username;
-        }
-        
-        console.log('🔍 DEBUG: platformConfig =', platformConfig);
-
-        // Добавляем кастомные переменные
-        const variableRows = document.querySelectorAll('#custom-variables .variable-row');
-        variableRows.forEach(row => {
-            const keyInput = row.querySelector('input[placeholder="Ключ"]');
-            const valueInput = row.querySelector('input[placeholder="Значение"]');
+        if (platformType === 'whatsapp') {
+            // Собираем WhatsApp поля
+            platformConfig = collectWhatsAppConfig();
             
-            if (keyInput.value && valueInput.value) {
-                platformConfig[keyInput.value] = valueInput.value;
+            // Валидация обязательных полей
+            if (!platformConfig.phone_number_id) {
+                showNotification('Phone Number ID обязателен для WhatsApp', 'warning');
+                return;
             }
-        });
+            if (!platformConfig.access_token) {
+                showNotification('Access Token обязателен для WhatsApp', 'warning');
+                return;
+            }
+            if (!platformConfig.verify_token) {
+                showNotification('Verify Token обязателен для WhatsApp', 'warning');
+                return;
+            }
+        } else {
+            // Для остальных платформ собираем стандартные поля
+            const token = document.getElementById('platform-token').value;
+            const username = document.getElementById('platform-username').value;
+            
+            // Получаем токен (из select или input)
+            let finalToken = '';
+            const varRadio = document.getElementById('token-type-var');
+            if (varRadio && varRadio.checked) {
+                const select = document.getElementById('platform-token-select');
+                finalToken = select ? select.value : '';
+            } else {
+                const input = document.getElementById('platform-token');
+                finalToken = input ? input.value : '';
+            }
+            
+            if (finalToken) {
+                platformConfig.token = finalToken;
+            }
+            if (username) {
+                platformConfig.username = username;
+            }
+
+            // Добавляем кастомные переменные
+            const variableRows = document.querySelectorAll('#custom-variables .variable-row');
+            variableRows.forEach(row => {
+                const keyInput = row.querySelector('input[placeholder="Ключ"]');
+                const valueInput = row.querySelector('input[placeholder="Значение"]');
+                
+                if (keyInput.value && valueInput.value) {
+                    platformConfig[keyInput.value] = valueInput.value;
+                }
+            });
+        }
+        
+        console.log('🔍 DEBUG: platformType =', platformType);
+        console.log('🔍 DEBUG: platformConfig =', platformConfig);
 
         try {
             // Получаем текущие настройки флоу

@@ -27,14 +27,34 @@ weather_flow_config = FlowConfig(
         
         # Вариант 2: Ссылка на переменную компании (рекомендуется)
         "telegram": {
-            "username": "@var:weather_bot_name",      # Из company variables
-            "token": "@var:telegram_bot_token"        # Из company variables
+            "username": "@var:agent_lab_whether_bot",
+            "token": "@var:agent_lab_whether_bot_telegram_bot_token"
         },
         
         # Вариант 3: Смешанное использование
         # "telegram": {
-        #     "username": "weather_bot",              # Хардкод
-        #     "token": "@var:telegram_bot_token"      # Ссылка
+        #     "username": "weather_bot",
+        #     "token": "@var:telegram_bot_token"
+        # },
+        
+        # WhatsApp - все креды через переменные (рекомендуется)
+        "whatsapp": {
+            "phone_number_id": "@var:whether_bot_whatsapp_phone_number_id",
+            "access_token": "@var:whether_bot_whatsapp_access_token",
+            "verify_token": "@var:whether_bot_whatsapp_verify_token",
+            "business_account_id": "@var:whether_bot_whatsapp_business_account_id",
+            "display_name": "Weather Assistant",
+            "graph_api_version": "v18.0",
+            "graph_api_url": "https://graph.facebook.com"
+        },
+        
+        # WhatsApp (альтернативный вариант с хардкодом - НЕ рекомендуется)
+        # "whatsapp": {
+        #     "phone_number_id": "111111111111111",
+        #     "access_token": "EAAxxxx...",
+        #     "verify_token": "my_secret_verify_token_123",
+        #     "business_account_id": "123456789",
+        #     "display_name": "Weather Assistant"
         # }
     },
     
