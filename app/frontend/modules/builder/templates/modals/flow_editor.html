@@ -102,7 +102,21 @@
                                            value="telegram"
                                            {% if 'telegram' in platforms %}checked{% endif %}>
                                     <label class="form-check-label" for="platform_telegram">
-                                        Telegram
+                                        <i class="bi bi-telegram"></i> Telegram
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="platform-item">
+                                <div class="form-check">
+                                    <input class="form-check-input" 
+                                           type="checkbox" 
+                                           id="platform_whatsapp" 
+                                           name="platforms[]" 
+                                           value="whatsapp"
+                                           {% if 'whatsapp' in platforms %}checked{% endif %}>
+                                    <label class="form-check-label" for="platform_whatsapp">
+                                        <i class="bi bi-whatsapp"></i> WhatsApp
                                     </label>
                                 </div>
                             </div>
@@ -116,7 +130,7 @@
                                            value="web"
                                            {% if 'web' in platforms %}checked{% endif %}>
                                     <label class="form-check-label" for="platform_web">
-                                        Web
+                                        <i class="bi bi-globe"></i> Web
                                     </label>
                                 </div>
                             </div>
@@ -130,7 +144,7 @@
                                            value="amocrm"
                                            {% if 'amocrm' in platforms %}checked{% endif %}>
                                     <label class="form-check-label" for="platform_amocrm">
-                                        AmoCRM
+                                        <i class="bi bi-building"></i> AmoCRM
                                     </label>
                                 </div>
                             </div>

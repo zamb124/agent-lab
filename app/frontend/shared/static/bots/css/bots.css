@@ -151,6 +151,12 @@
     color: #0088cc;
 }
 
+.platform-tag.platform-whatsapp {
+    background: rgba(37, 211, 102, 0.1);
+    border-color: rgba(37, 211, 102, 0.3);
+    color: #25d366;
+}
+
 .platform-tag.platform-api {
     background: rgba(99, 102, 241, 0.1);
     border-color: rgba(99, 102, 241, 0.3);
@@ -424,6 +430,12 @@
     background: rgba(0, 136, 204, 0.1);
     border-color: rgba(0, 136, 204, 0.3);
     color: #0088cc;
+}
+
+.platform-badge.platform-whatsapp {
+    background: rgba(37, 211, 102, 0.1);
+    border-color: rgba(37, 211, 102, 0.3);
+    color: #25d366;
 }
 
 .platform-badge.platform-api {

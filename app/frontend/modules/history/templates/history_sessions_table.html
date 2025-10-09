@@ -30,12 +30,16 @@
                                 <span class="badge bg-primary">
                                     <i class="bi bi-telegram"></i>&nbsp;Telegram
                                 </span>
+                            {% elif session.platform == 'whatsapp' %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-whatsapp"></i>&nbsp;WhatsApp
+                                </span>
                             {% elif session.platform == 'api' %}
                                 <span class="badge bg-success">
                                     <i class="bi bi-code-slash"></i>&nbsp;API
                                 </span>
                             {% elif session.platform == 'amocrm' %}
-                                <span class="badge bg-success">
+                                <span class="badge bg-warning">
                                     <i class="bi bi-building"></i>&nbsp;AmoCRM
                                 </span>
                             {% else %}
