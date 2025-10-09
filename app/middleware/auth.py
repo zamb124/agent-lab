@@ -270,24 +270,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         logger.debug(f"🌐 Используем язык по умолчанию: {Language.RU.value}")
         return Language.RU
 
-    async def _get_default_company(self) -> Company:
-        """Возвращает главную компанию по умолчанию"""
-        # Ищем главную компанию или создаем если не существует
-        company_data = await self.storage.get("company:main", force_global=True)
-        if company_data:
-            return Company.model_validate_json(company_data)
-
-        # Создаем главную компанию
-        main_company = Company(
-            company_id="main",
-            subdomain="main",
-            name="Agents Lab",
-            status="active"
-        )
-        await self.storage.set("company:main", main_company.model_dump_json(), force_global=True)
-        await self.storage.set("subdomain:main", "main", force_global=True)
-        return main_company
-
     async def _get_system_company(self) -> Company:
         """Возвращает системную компанию"""
         company_data = await self.storage.get("company:system", force_global=True)

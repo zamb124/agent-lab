@@ -66,16 +66,16 @@ class AmoCRMInterface(BaseInterface):
             return None
 
         access_token = getattr(settings, 'amocrm', None) and settings.amocrm.access_token
+        if not access_token:
+            raise ValueError("AMOCRM_ACCESS_TOKEN не настроен в settings - невозможно работать с AmoCRM")
+        
         source_id = None
 
-        # Получаем историю чата и сохраняем через checkpointer
-        if access_token:
-            client = get_amocrm_client(subdomain=self.subdomain, access_token=access_token)
-            chat_history = await client.get_chat_history(chat_id=chat_id)
-            logger.info(f"🔍 Получена история чата: {len(chat_history)} сообщений")
+        client = get_amocrm_client(subdomain=self.subdomain, access_token=access_token)
+        chat_history = await client.get_chat_history(chat_id=chat_id)
+        logger.info(f"🔍 Получена история чата: {len(chat_history)} сообщений")
 
-
-        user_id = f"amocrm:{chat_id}" # TODO: или talk_id? контекст по нему по идее должен бьть
+        user_id = f"amocrm:{chat_id}"
 
         session_id = await self.get_or_create_session(
             user_id=user_id,
@@ -101,7 +101,7 @@ class AmoCRMInterface(BaseInterface):
         )
 
         # Импортируем историю чата в checkpointer
-        if access_token and chat_history:
+        if chat_history:
             await self._add_chat_history_to_checkpointer(session_id, chat_history, chat_id)
 
         return Message(
