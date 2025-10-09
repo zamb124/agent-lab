@@ -182,6 +182,64 @@
         currentBotChat = null;
     };
     
+    window.updateLLMModels = function() {
+        const provider = document.getElementById('bot-llm-provider')?.value;
+        const modelSelect = document.getElementById('bot-llm-model');
+        
+        if (!modelSelect) return;
+        
+        const currentValue = modelSelect.dataset.currentValue || modelSelect.value;
+        
+        const modelsByProvider = {
+            '': [{ value: '', label: 'По умолчанию' }],
+            'openai': [
+                { value: '', label: 'По умолчанию' },
+                { value: 'gpt-4', label: 'GPT-4' },
+                { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
+                { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
+                { value: 'gpt-4o', label: 'GPT-4o' },
+                { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
+            ],
+            'anthropic': [
+                { value: '', label: 'По умолчанию' },
+                { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+                { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus' },
+                { value: 'claude-3-sonnet-20240229', label: 'Claude 3 Sonnet' },
+                { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku' },
+            ],
+            'yandex': [
+                { value: '', label: 'По умолчанию' },
+                { value: 'yandexgpt', label: 'YandexGPT' },
+                { value: 'yandexgpt-lite', label: 'YandexGPT Lite' },
+            ],
+            'gemini': [
+                { value: '', label: 'По умолчанию' },
+                { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
+                { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+                { value: 'gemini-pro', label: 'Gemini Pro' },
+            ],
+            'ollama': [
+                { value: '', label: 'По умолчанию' },
+                { value: 'llama3', label: 'Llama 3' },
+                { value: 'mixtral', label: 'Mixtral' },
+                { value: 'phi', label: 'Phi' },
+            ]
+        };
+        
+        const models = modelsByProvider[provider] || modelsByProvider[''];
+        
+        modelSelect.innerHTML = '';
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.value;
+            option.textContent = model.label;
+            if (model.value === currentValue) {
+                option.selected = true;
+            }
+            modelSelect.appendChild(option);
+        });
+    };
+
     function initBotSettings() {
         const tabs = document.querySelectorAll('.settings-tab');
         const panels = document.querySelectorAll('.settings-panel');
@@ -209,6 +267,8 @@
         if (activePanel && activePanel.dataset.panel === 'main') {
             initPromptEditor();
         }
+        
+        updateLLMModels();
     }
     
     function initPromptEditor() {
@@ -354,26 +414,53 @@
             const actualBotId = isNewBot ? savedFlow.flow_id : botId;
             console.log('✅ Flow сохранен:', actualBotId);
             
-            // Сохраняем промпт агента, если есть
-            if (promptValue !== undefined && promptValue !== null && promptValue.trim()) {
-                const entryPoint = savedFlow.entry_point_agent;
+            // Сохраняем настройки агента (промпт и LLM)
+            const entryPoint = savedFlow.entry_point_agent;
+            if (entryPoint) {
+                const agentUpdates = {};
                 
-                if (entryPoint) {
-                    console.log('💾 Сохраняем промпт для агента:', entryPoint);
+                if (promptValue !== undefined && promptValue !== null && promptValue.trim()) {
+                    agentUpdates.prompt = promptValue;
+                }
+                
+                const llmProvider = document.getElementById('bot-llm-provider')?.value;
+                const llmModel = document.getElementById('bot-llm-model')?.value;
+                const llmTemperature = document.getElementById('bot-llm-temperature')?.value;
+                
+                if (llmProvider || llmModel || llmTemperature) {
+                    const llmConfig = {};
+                    
+                    if (llmProvider) {
+                        llmConfig.provider = llmProvider;
+                    }
+                    if (llmModel) {
+                        llmConfig.model = llmModel;
+                    }
+                    if (llmTemperature !== '' && llmTemperature !== null) {
+                        llmConfig.temperature = parseFloat(llmTemperature);
+                    }
+                    
+                    if (Object.keys(llmConfig).length > 0) {
+                        agentUpdates.llm_config = llmConfig;
+                    }
+                }
+                
+                if (Object.keys(agentUpdates).length > 0) {
+                    console.log('💾 Сохраняем настройки агента:', entryPoint, agentUpdates);
                     const agentResponse = await fetch(`/frontend/api/agents/${encodeURIComponent(entryPoint)}`, {
                         method: 'PUT',
                         headers: {
                             'Content-Type': 'application/json',
                             'Authorization': `Bearer ${window.app.authToken}`
                         },
-                        body: JSON.stringify({ prompt: promptValue })
+                        body: JSON.stringify(agentUpdates)
                     });
                     
                     if (!agentResponse.ok) {
                         const agentError = await agentResponse.json().catch(() => ({}));
-                        console.warn('❌ Не удалось сохранить промпт агента:', agentResponse.status, agentError);
+                        console.warn('❌ Не удалось сохранить настройки агента:', agentResponse.status, agentError);
                     } else {
-                        console.log('✅ Промпт агента сохранен успешно');
+                        console.log('✅ Настройки агента сохранены успешно');
                     }
                 }
             }
