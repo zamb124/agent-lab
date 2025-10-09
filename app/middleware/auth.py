@@ -140,6 +140,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if "/webhook/telegram/" in path:
             logger.info("📱 Telegram контекст")
             return await self._create_telegram_context(request, requested_company)
+        elif "/webhook/whatsapp/" in path:
+            logger.info("📱 WhatsApp контекст")
+            return await self._create_whatsapp_context(request, requested_company)
         elif path == "/api/v1/admin/create-my-company":
             logger.info("🏢 API создания компании - требует авторизации")
             return await self._create_frontend_context(request, requested_company, allow_no_company=True, has_subdomain=has_subdomain)
@@ -328,6 +331,58 @@ class AuthMiddleware(BaseHTTPMiddleware):
             },
         )
 
+    async def _create_whatsapp_context(self, request: Request, requested_company: Company) -> Context:
+        """Создает контекст для WhatsApp запросов"""
+        body = await request.body()
+        data = json.loads(body)
+
+        # Извлекаем данные WhatsApp пользователя из webhook
+        entry = data.get("entry", [{}])[0]
+        changes = entry.get("changes", [{}])
+        value = changes[0].get("value", {}) if changes else {}
+        
+        messages = value.get("messages", [])
+        contacts = value.get("contacts", [])
+        
+        # Получаем информацию о пользователе
+        if messages:
+            wa_message = messages[0]
+            phone_number = wa_message.get("from", "unknown")
+        else:
+            phone_number = "unknown"
+        
+        # Профиль пользователя
+        profile_name = "User"
+        if contacts:
+            profile_name = contacts[0].get("profile", {}).get("name", "User")
+
+        # Создаем WhatsApp пользователя
+        user = User(
+            user_id=f"whatsapp_{phone_number}",
+            provider=AuthProvider.YANDEX,
+            provider_user_id=phone_number,
+            email="",
+            name=profile_name,
+            status=UserStatus.ACTIVE,
+            groups=["user"],
+            companies={requested_company.company_id: ["user"]},
+            active_company_id=requested_company.company_id,
+        )
+
+        # Определяем язык пользователя
+        language = self._detect_user_language(request)
+
+        return Context(
+            user=user,
+            platform="whatsapp",
+            active_company=requested_company,
+            user_companies=[requested_company],
+            language=language,
+            metadata={
+                "whatsapp_phone": phone_number,
+                "profile_name": profile_name,
+            },
+        )
 
     async def _create_api_context(self, request: Request, requested_company: Company) -> Context:
         """Создает контекст для API запросов"""

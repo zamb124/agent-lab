@@ -7,6 +7,7 @@ from app.interfaces.telegram_interface import TelegramInterface
 from app.interfaces.amocrm_interface import AmoCRMInterface
 from app.interfaces.web_interface import WebInterface
 from app.interfaces.api_interface import APIInterface
+from app.interfaces.whatsapp_interface import WhatsAppInterface
 from app.core.storage import Storage
 from app.models import FlowConfig
 
@@ -21,6 +22,7 @@ class InterfaceFactory:
         "web": WebInterface,
         "api": APIInterface,
         "amocrm": AmoCRMInterface,
+        "whatsapp": WhatsAppInterface,
     }
 
     def __init__(self):
@@ -38,6 +40,8 @@ class InterfaceFactory:
             return None
         elif platform == "amocrm":
             return await self._create_amocrm_interface(config)
+        elif platform == "whatsapp":
+            return await self._create_whatsapp_interface(config)
         elif platform == "telegram":
             # Получаем flow_id из метаданных
             flow_id = config.get("flow_id")
@@ -92,6 +96,39 @@ class InterfaceFactory:
 
         except Exception as e:
             logger.error(f"Ошибка создания AmoCRM интерфейса: {e}", exc_info=True)
+            return None
+
+    async def _create_whatsapp_interface(
+        self, config: Dict[str, Any]
+    ) -> Optional[WhatsAppInterface]:
+        """Создает WhatsApp интерфейс"""
+        try:
+            flow_id = config.get("flow_id")
+            if not flow_id:
+                logger.error("Нет flow_id для создания WhatsApp интерфейса")
+                return None
+
+            flow_config = await self.storage.get_flow_config(flow_id)
+            if not flow_config:
+                logger.error(f"Flow {flow_id} не найден")
+                return None
+
+            whatsapp_config = flow_config.platforms.get("whatsapp")
+            if not whatsapp_config:
+                logger.error(f"Flow {flow_id} не имеет whatsapp платформы")
+                return None
+
+            access_token = await WhatsAppInterface.get_access_token_for_flow(
+                flow_id, whatsapp_config
+            )
+            if not access_token:
+                logger.error(f"Не найден токен для flow {flow_id}")
+                return None
+
+            return WhatsAppInterface(access_token, whatsapp_config)
+
+        except Exception as e:
+            logger.error(f"Ошибка создания WhatsApp интерфейса: {e}", exc_info=True)
             return None
 
     async def register_platform(

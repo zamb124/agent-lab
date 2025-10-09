@@ -48,10 +48,14 @@
                 <span class="platform-badge platform-{{ platform }}">
                     {% if platform == 'telegram' %}
                         <i class="bi bi-telegram"></i>
+                    {% elif platform == 'whatsapp' %}
+                        <i class="bi bi-whatsapp"></i>
                     {% elif platform == 'api' %}
                         <i class="bi bi-code-slash"></i>
                     {% elif platform == 'web' %}
                         <i class="bi bi-globe"></i>
+                    {% elif platform == 'amocrm' %}
+                        <i class="bi bi-building"></i>
                     {% endif %}
                     {{ platform }}
                 </span>
@@ -252,26 +256,6 @@
                             <div class="dropdown-option" data-value="amocrm" onclick="selectPlatform('amocrm', 'bi-building', 'AmoCRM')">
                                 <i class="bi bi-building"></i>
                                 <span>AmoCRM</span>
-                            </div>
-                            <div class="dropdown-option" data-value="retailcrm" onclick="selectPlatform('retailcrm', 'bi-shop', 'RetailCRM')">
-                                <i class="bi bi-shop"></i>
-                                <span>RetailCRM</span>
-                            </div>
-                            <div class="dropdown-option" data-value="discord" onclick="selectPlatform('discord', 'bi-discord', 'Discord')">
-                                <i class="bi bi-discord"></i>
-                                <span>Discord</span>
-                            </div>
-                            <div class="dropdown-option" data-value="slack" onclick="selectPlatform('slack', 'bi-slack', 'Slack')">
-                                <i class="bi bi-slack"></i>
-                                <span>Slack</span>
-                            </div>
-                            <div class="dropdown-option" data-value="viber" onclick="selectPlatform('viber', 'bi-heart-fill', 'Viber')">
-                                <i class="bi bi-heart-fill"></i>
-                                <span>Viber</span>
-                            </div>
-                            <div class="dropdown-option" data-value="vk" onclick="selectPlatform('vk', 'bi-circle-fill', 'VKontakte')">
-                                <i class="bi bi-circle-fill"></i>
-                                <span>VKontakte</span>
                             </div>
                         </div>
                     </div>
