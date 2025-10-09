@@ -36,15 +36,21 @@
         {% if not bot.is_new %}
         <div class="control-group">
             <label class="control-label">Flow ID</label>
-            <div class="control-value">
-                <code>{{ bot.flow_id }}</code>
+            <div class="control-value d-flex align-items-center gap-2">
+                <code title="{{ bot.flow_id }}">{{ bot.flow_id[:10] }}{% if bot.flow_id|length > 10 %}...{% endif %}</code>
+                <button class="btn-icon" onclick="copyToClipboard('{{ bot.flow_id }}')" title="Копировать">
+                    <i class="bi bi-clipboard"></i>
+                </button>
             </div>
         </div>
         
         <div class="control-group">
             <label class="control-label">Агент</label>
-            <div class="control-value">
-                <code>{{ bot.entry_point }}</code>
+            <div class="control-value d-flex align-items-center gap-2">
+                <code title="{{ bot.entry_point }}">{{ bot.entry_point[:10] }}{% if bot.entry_point|length > 10 %}...{% endif %}</code>
+                <button class="btn-icon" onclick="copyToClipboard('{{ bot.entry_point }}')" title="Копировать">
+                    <i class="bi bi-clipboard"></i>
+                </button>
             </div>
         </div>
         

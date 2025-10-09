@@ -3,9 +3,9 @@
  * Поддержка переменных {variable} с автокомплитом
  */
 
-/**
- * Класс для работы с редактором промптов
- */
+import { renderMarkdown } from '/static/js/utils/markdown.js';
+import { isValidVariableName } from '/static/js/utils/validation.js';
+
 class PromptEditor {
     constructor(containerElement, options = {}) {
         this.container = containerElement;
@@ -895,35 +895,9 @@ class PromptEditor {
             }
         });
         
-        // Простой markdown рендеринг
-        text = this.renderMarkdown(text);
+        text = renderMarkdown(text);
         
         this.previewElement.innerHTML = text;
-    }
-    
-    /**
-     * Простой markdown рендеринг
-     */
-    renderMarkdown(text) {
-        return text
-            // Заголовки
-            .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-            .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-            .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-            // Жирный
-            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-            // Курсив
-            .replace(/\*(.+?)\*/g, '<em>$1</em>')
-            // Код
-            .replace(/`(.+?)`/g, '<code>$1</code>')
-            // Списки
-            .replace(/^- (.+)$/gm, '<li>$1</li>')
-            .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-            .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
-            // Переносы строк
-            .replace(/\n\n/g, '</p><p>')
-            .replace(/^(.+)$/gm, '<p>$1</p>')
-            .replace(/<p><\/p>/g, '');
     }
     
     /**
@@ -1073,7 +1047,7 @@ class PromptEditor {
             return;
         }
         
-        if (!/^[a-z_][a-z0-9_]*$/.test(name)) {
+        if (!isValidVariableName(name)) {
             alert('Название должно содержать только латинские буквы, цифры и подчеркивание');
             return;
         }

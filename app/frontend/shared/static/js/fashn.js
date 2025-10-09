@@ -2,6 +2,9 @@
  * AI Stylist - JavaScript для управления виртуальной примеркой
  */
 
+import { formatFileSize } from '/static/js/utils/formatting.js';
+import { uploadFile } from '/static/js/api/files.js';
+
 class FashnApp {
     constructor() {
         this.userPhotoFile = null;
@@ -597,26 +600,12 @@ class FashnApp {
 
     async uploadFile(file) {
         try {
-            const formData = new FormData();
-            formData.append('file', file);
-
-            const response = await fetch('/api/v1/admin/upload', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || 'File upload error');
-            }
-
-            const result = await response.json();
+            const result = await uploadFile(file);
             return {
                 success: true,
                 url: result.url,
                 fileId: result.file_id
             };
-
         } catch (error) {
             return {
                 success: false,
@@ -728,15 +717,6 @@ class FashnApp {
         }
     }
 
-    formatFileSize(bytes) {
-        if (bytes === 0) return '0 Bytes';
-        
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
 
     initFullscreenViewer() {
         const fullscreenOverlay = document.getElementById('fullscreenOverlay');
