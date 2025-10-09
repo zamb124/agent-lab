@@ -71,6 +71,7 @@ async def bot_details(request: Request, bot_id: str):
             "prompt": "",
             "flow_variables": {},
             "local_variables": {},
+            "llm_config": None,
             "is_new": True,
         }
         return templates.TemplateResponse(
@@ -89,6 +90,7 @@ async def bot_details(request: Request, bot_id: str):
     
     agent_prompt = ""
     agent_local_variables = {}
+    agent_llm_config = None
     if flow_config.entry_point_agent:
         agent_config = await storage.get_agent_config(flow_config.entry_point_agent)
         if agent_config:
@@ -96,6 +98,8 @@ async def bot_details(request: Request, bot_id: str):
                 agent_prompt = agent_config.prompt
             if hasattr(agent_config, 'local_variables'):
                 agent_local_variables = agent_config.local_variables or {}
+            if hasattr(agent_config, 'llm_config') and agent_config.llm_config:
+                agent_llm_config = agent_config.llm_config
     
     bot_info = {
         "flow_id": flow_config.flow_id,
@@ -108,6 +112,7 @@ async def bot_details(request: Request, bot_id: str):
         "prompt": agent_prompt,
         "flow_variables": getattr(flow_config, 'variables', {}) or {},
         "local_variables": agent_local_variables,
+        "llm_config": agent_llm_config,
         "is_new": False,
     }
     

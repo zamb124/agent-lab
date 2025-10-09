@@ -406,6 +406,16 @@
     border: 1px solid var(--border-secondary);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
+    display: inline-block;
+    line-height: 1.4;
+}
+
+.control-value .form-control-sm {
+    font-size: 0.8125rem;
+    padding: 0.25rem 0.5rem;
+    height: auto;
+    line-height: 1.4;
+    border-radius: var(--radius-sm);
 }
 
 .platforms-list {
