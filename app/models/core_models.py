@@ -3,15 +3,20 @@ Pydantic модели для конфигурации агентов и флоу
 Это источник правды для Storage, Migrator и FlowFactory.
 """
 
+from __future__ import annotations
+
 from pydantic import BaseModel, field_validator
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal, TYPE_CHECKING
 from enum import Enum
 from datetime import datetime, timezone, timedelta
 import json
 from ..core.config import settings
 from ..fields import Field
 
-from .context_models import Context
+from .rag_models import AgentRAGConfig
+
+if TYPE_CHECKING:
+    from .context_models import Context
 
 
 class HistorySource(str):
@@ -461,6 +466,18 @@ class FlowConfig(BuilderEntity):
         description="Переменные доступные во всех агентах флоу (используйте {variable} в промптах)",
         widget_attrs={"rows": 6, "placeholder": '{"bot_name": "Помощник", "timeout_minutes": 30}'}
     )
+    
+    # RAG конфигурация для flow
+    rag_config: Optional[AgentRAGConfig] = Field(
+        default_factory=lambda: AgentRAGConfig(
+            enabled=True,
+            namespace_scope="flow",
+            search_scopes=["flow", "company"],
+            auto_index_messages=False
+        ),
+        title="RAG конфигурация",
+        description="Настройки базы знаний для агентов в этом flow"
+    )
 
     # Данные канваса Builder
     canvas_data: Optional[Dict[str, Any]] = Field(
@@ -496,6 +513,19 @@ class FlowConfig(BuilderEntity):
         if isinstance(v, str) and v.strip() == "":
             return 0
         return v
+    
+    @field_validator('rag_config', mode='before')
+    @classmethod
+    def ensure_rag_config(cls, v):
+        """Создаёт дефолтный RAG конфиг если он None (для старых flow)"""
+        if v is None:
+            return AgentRAGConfig(
+                enabled=True,
+                namespace_scope="flow",
+                search_scopes=["flow", "company"],
+                auto_index_messages=False
+            )
+        return v
 
 
 class TaskStatus(str, Enum):
@@ -519,7 +549,7 @@ class TaskConfig(BaseModel):
         title="ID задачи", description="Уникальный идентификатор задачи", readonly=True
     )
     flow_id: str = Field(title="ID флоу", description="Идентификатор флоу для задачи")
-    context: Context = Field(
+    context: Any = Field(
         title="Контекст",
         description="Контекст выполнения задачи",
     )
@@ -563,6 +593,15 @@ class TaskConfig(BaseModel):
         description="Время завершения выполнения",
         readonly=True,
     )
+    
+    @field_validator('context', mode='before')
+    @classmethod
+    def validate_context(cls, v):
+        """Преобразует dict в Context если нужно"""
+        if v is None or not isinstance(v, dict):
+            return v
+        from .context_models import Context
+        return Context(**v)
 
     # Свойства для обратной совместимости
     @property

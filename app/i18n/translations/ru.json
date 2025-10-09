@@ -2,10 +2,10 @@
   "meta": {
     "language": "ru",
     "version": "1.0.0",
-    "last_updated": "2025-10-09T09:50:24.502181",
+    "last_updated": "2025-10-09T14:07:30.800859",
     "completeness": 100.0,
-    "total_keys": 684,
-    "translated_keys": 684
+    "total_keys": 694,
+    "translated_keys": 694
   },
   "common": {
     "app_name": "Agents Lab",
@@ -542,6 +542,14 @@
         "state": {
           "title": "State агента",
           "description": "Ссылка на текущий state агента (доступен в тулах)"
+        },
+        "flow_config": {
+          "title": "Конфигурация flow",
+          "description": "FlowConfig для текущего запроса"
+        },
+        "agent_config": {
+          "title": "Конфигурация агента",
+          "description": "AgentConfig для текущего запроса"
         }
       }
     },
@@ -1280,6 +1288,22 @@
         },
         "amount": {
           "description": "Сумма пополнения"
+        }
+      }
+    },
+    "agentragconfig": {
+      "fields": {
+        "namespace_scope": {
+          "title": "Скоуп хранения",
+          "description": "Где хранить документы агента"
+        },
+        "search_scopes": {
+          "title": "Скоупы поиска",
+          "description": "Где искать документы при запросах"
+        },
+        "auto_index_messages": {
+          "title": "Автоматическая индексация",
+          "description": "Автоматически индексировать сообщения из сессии"
         }
       }
     }

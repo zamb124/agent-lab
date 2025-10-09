@@ -219,9 +219,6 @@
     "model_name": "gemini-2.5-flash-image-preview",
     "timeout": 60
   },
-  "amocrm": {
-    "access_token": "your-amocrm-access-token-here"
-  },
   "proxy": {
     "enabled": false,
     "http_proxy": "your-proxy-host:port",
@@ -237,7 +234,9 @@
         "enabled": false,
         "account_number": "410011234567890",
         "notification_secret": "your-notification-secret-here",
-        "quickpay_url": "https://yoomoney.ru/quickpay/confirm.xml"
+        "quickpay_url": "https://yoomoney.ru/quickpay/confirm.xml",
+        "client_id": "your-oauth-client-id-here",
+        "client_secret": "your-oauth-client-secret-here"
       },
       "yukassa_main": {
         "provider_type": "yukassa",

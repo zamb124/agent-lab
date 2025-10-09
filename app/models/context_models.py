@@ -3,7 +3,9 @@
 Используются в core/context.py для избежания циклических импортов.
 """
 
-from pydantic import BaseModel, Field
+from __future__ import annotations
+
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
 
 from app.identity.models import User, Company
@@ -11,6 +13,7 @@ from app.models.i18n_models import Language
 
 if TYPE_CHECKING:
     from app.core.state import State
+    from app.models.core_models import FlowConfig, AgentConfig
 
 
 class Context(BaseModel):
@@ -67,6 +70,36 @@ class Context(BaseModel):
         title="State агента",
         description="Ссылка на текущий state агента (доступен в тулах)",
     )
+    
+    flow_config: Optional[Any] = Field(
+        default=None,
+        title="Конфигурация flow",
+        description="FlowConfig для текущего запроса (устанавливается в API/TaskProcessor/Interface)",
+    )
+    
+    agent_config: Optional[Any] = Field(
+        default=None,
+        title="Конфигурация агента",
+        description="AgentConfig для текущего запроса (устанавливается при выполнении агента)",
+    )
+    
+    @field_validator('flow_config', mode='before')
+    @classmethod
+    def validate_flow_config(cls, v):
+        """Преобразует dict в FlowConfig если нужно"""
+        if v is None or not isinstance(v, dict):
+            return v
+        from app.models.core_models import FlowConfig
+        return FlowConfig(**v)
+    
+    @field_validator('agent_config', mode='before')
+    @classmethod
+    def validate_agent_config(cls, v):
+        """Преобразует dict в AgentConfig если нужно"""
+        if v is None or not isinstance(v, dict):
+            return v
+        from app.models.core_models import AgentConfig
+        return AgentConfig(**v)
     
     class Config:
         arbitrary_types_allowed = True

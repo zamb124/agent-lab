@@ -72,6 +72,12 @@ async def bot_details(request: Request, bot_id: str):
             "flow_variables": {},
             "local_variables": {},
             "llm_config": None,
+            "rag_config": {
+                "enabled": True,
+                "namespace_scope": "flow",
+                "search_scopes": ["flow", "company"],
+                "auto_index_messages": False
+            },
             "is_new": True,
         }
         return templates.TemplateResponse(
@@ -113,6 +119,7 @@ async def bot_details(request: Request, bot_id: str):
         "flow_variables": getattr(flow_config, 'variables', {}) or {},
         "local_variables": agent_local_variables,
         "llm_config": agent_llm_config,
+        "rag_config": getattr(flow_config, 'rag_config', None),
         "is_new": False,
     }
     

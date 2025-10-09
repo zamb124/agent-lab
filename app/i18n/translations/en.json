@@ -2,9 +2,9 @@
   "meta": {
     "language": "en",
     "version": "1.0.0",
-    "last_updated": "2025-10-09T09:50:24.506937",
-    "completeness": 92.55474452554745,
-    "total_keys": 685,
+    "last_updated": "2025-10-09T14:07:30.803449",
+    "completeness": 91.22302158273381,
+    "total_keys": 695,
     "translated_keys": 634
   },
   "common": {
@@ -545,6 +545,14 @@
         "state": {
           "title": "Agent State",
           "description": "Reference to current agent state (available in tools)"
+        },
+        "flow_config": {
+          "title": "[TODO: models.context.fields.flow_config.title]",
+          "description": "[TODO: models.context.fields.flow_config.description]"
+        },
+        "agent_config": {
+          "title": "[TODO: models.context.fields.agent_config.title]",
+          "description": "[TODO: models.context.fields.agent_config.description]"
         }
       }
     },
@@ -1283,6 +1291,22 @@
         },
         "amount": {
           "description": "[TODO: models.createpaymentresponse.fields.amount.description]"
+        }
+      }
+    },
+    "agentragconfig": {
+      "fields": {
+        "namespace_scope": {
+          "title": "[TODO: models.agentragconfig.fields.namespace_scope.title]",
+          "description": "[TODO: models.agentragconfig.fields.namespace_scope.description]"
+        },
+        "search_scopes": {
+          "title": "[TODO: models.agentragconfig.fields.search_scopes.title]",
+          "description": "[TODO: models.agentragconfig.fields.search_scopes.description]"
+        },
+        "auto_index_messages": {
+          "title": "[TODO: models.agentragconfig.fields.auto_index_messages.title]",
+          "description": "[TODO: models.agentragconfig.fields.auto_index_messages.description]"
         }
       }
     }

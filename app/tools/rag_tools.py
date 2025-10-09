@@ -1,0 +1,235 @@
+"""
+Инструменты для работы с RAG хранилищем.
+Позволяют агентам загружать и искать документы.
+"""
+
+import logging
+from typing import Optional
+from langchain_core.tools import tool
+from langchain_core.runnables import RunnableConfig
+
+from app.core.rag.factory import get_default_rag_provider
+from app.core.rag.namespace_manager import get_or_create_namespace
+from app.core.context import get_context
+from app.core.storage import Storage
+from app.core.file_processor import get_default_file_processor
+from app.models.rag_models import AgentRAGConfig
+
+logger = logging.getLogger(__name__)
+
+
+def _get_rag_config_from_context(context):
+    """
+    Получает RAG конфигурацию из context.
+    Приоритет: agent > flow (агент может переопределить настройки flow)
+    Если конфига нет - возвращает дефолтный
+    """
+    if context.agent_config and context.agent_config.rag_config:
+        return context.agent_config.rag_config
+    
+    if context.flow_config and context.flow_config.rag_config:
+        return context.flow_config.rag_config
+    
+    return AgentRAGConfig(enabled=True, namespace_scope="flow", search_scopes=["flow", "company"])
+
+
+@tool
+async def search_knowledge_base(
+    query: str,
+    config: RunnableConfig
+) -> str:
+    """
+    Поиск информации в базе знаний.
+    Автоматически ищет в настроенных скоупах (компания/агент/сессия).
+    
+    Args:
+        query: Запрос для поиска
+        
+    Returns:
+        Найденные фрагменты документов с релевантностью
+    """
+    context = get_context()
+    rag_config = _get_rag_config_from_context(context)
+    
+    if not rag_config or not rag_config.enabled:
+        return "RAG не настроен для этого flow"
+    
+    rag_provider = get_default_rag_provider()
+    
+    namespace_ids = []
+    company_id = context.active_company.company_id
+    flow_id = context.flow_config.flow_id
+    session_id = context.session_id
+    
+    if "company" in rag_config.search_scopes:
+        ns_id = await get_or_create_namespace("company", company_id)
+        namespace_ids.append(ns_id)
+    
+    if "flow" in rag_config.search_scopes:
+        ns_id = await get_or_create_namespace("flow", f"{company_id}_{flow_id}")
+        namespace_ids.append(ns_id)
+    
+    if "session" in rag_config.search_scopes:
+        ns_id = await get_or_create_namespace("session", f"{company_id}_{flow_id}_{session_id}")
+        namespace_ids.append(ns_id)
+    
+    if not namespace_ids:
+        return "Не настроены скоупы поиска"
+    
+    all_results = await rag_provider.search_multiple_namespaces(
+        namespace_ids=namespace_ids,
+        query=query,
+        limit=5
+    )
+    
+    formatted = []
+    total_found = 0
+    
+    for ns_id, results in all_results.items():
+        if results:
+            scope_name = ns_id.split("_")[-1] if "_" in ns_id else ns_id
+            formatted.append(f"\n📁 Результаты из скоупа '{scope_name}':")
+            
+            for i, result in enumerate(results, 1):
+                formatted.append(
+                    f"{i}. {result.document_name} (релевантность: {result.score:.2f})\n"
+                    f"   {result.content[:300]}..."
+                )
+                total_found += 1
+    
+    if not formatted:
+        return f"По запросу '{query}' ничего не найдено в базе знаний"
+    
+    header = f"Найдено {total_found} релевантных фрагментов:\n"
+    return header + "\n".join(formatted)
+
+
+@tool
+async def upload_document_to_knowledge_base(
+    file_id: str,
+    description: Optional[str] = None,
+    config: RunnableConfig = None
+) -> str:
+    """
+    Загружает документ в базу знаний.
+    
+    Args:
+        file_id: ID файла уже загруженного в S3 через file_tools
+        description: Описание документа
+        
+    Returns:
+        Результат загрузки
+    """
+    context = get_context()
+    rag_config = _get_rag_config_from_context(context)
+    
+    logger.info(f"🔍 upload_document: context.flow_config={context.flow_config is not None}, rag_config={rag_config}")
+    
+    if not rag_config or not rag_config.enabled:
+        return "RAG не настроен для этого flow"
+    
+    file_processor = await get_default_file_processor()
+    file_record = await file_processor.get_file_record(file_id)
+    
+    if not file_record:
+        return f"Файл {file_id} не найден в системе"
+    
+    company_id = context.active_company.company_id
+    flow_id = context.flow_config.flow_id if context.flow_config else "unknown"
+    session_id = context.session_id
+    scope = rag_config.namespace_scope
+    
+    logger.info(f"🔍 upload_document: scope={scope}, company={company_id}, flow={flow_id}, session={session_id}")
+    
+    if scope == "flow":
+        namespace_id = await get_or_create_namespace("flow", f"{company_id}_{flow_id}")
+    elif scope == "company":
+        namespace_id = await get_or_create_namespace("company", company_id)
+    else:
+        namespace_id = await get_or_create_namespace("session", f"{company_id}_{flow_id}_{session_id}")
+    
+    logger.info(f"✅ upload_document: используем namespace_id={namespace_id}")
+    
+    rag_provider = get_default_rag_provider()
+    
+    document = await rag_provider.upload_document_from_s3(
+        namespace_id=namespace_id,
+        s3_key=file_record.s3_key,
+        document_name=file_record.original_name,
+        metadata={
+            "description": description,
+            "uploaded_by": context.user.user_id,
+            "file_id": file_id,
+            "original_name": file_record.original_name
+        }
+    )
+    
+    scope_name = {
+        "flow": "базу текущего flow",
+        "company": "общую базу компании",
+        "session": "базу текущей сессии"
+    }.get(scope, scope)
+    
+    return (
+        f"✅ Документ '{document.name}' успешно добавлен в {scope_name}\n"
+        f"ID документа: {document.document_id}\n"
+        f"Статус: {document.status}\n"
+        f"Документ будет проиндексирован и доступен для поиска через несколько минут"
+    )
+
+
+@tool
+async def list_documents_in_knowledge_base(
+    config: RunnableConfig = None
+) -> str:
+    """
+    Показывает список всех документов в базе знаний.
+    
+    Returns:
+        Список документов с деталями
+    """
+    context = get_context()
+    rag_config = _get_rag_config_from_context(context)
+    
+    if not rag_config or not rag_config.enabled:
+        return "RAG не настроен для этого flow"
+    
+    rag_provider = get_default_rag_provider()
+    
+    company_id = context.active_company.company_id
+    flow_id = context.flow_config.flow_id if context.flow_config else "unknown"
+    session_id = context.session_id
+    scope = rag_config.namespace_scope
+    
+    if scope == "flow":
+        namespace_id = await get_or_create_namespace("flow", f"{company_id}_{flow_id}")
+    elif scope == "company":
+        namespace_id = await get_or_create_namespace("company", company_id)
+    else:
+        namespace_id = await get_or_create_namespace("session", f"{company_id}_{flow_id}_{session_id}")
+    
+    logger.info(f"✅ upload_document: используем namespace_id={namespace_id}")
+    
+    documents = await rag_provider.list_documents(namespace_id, limit=50)
+    
+    if not documents:
+        return "В базе знаний пока нет документов"
+    
+    formatted = [f"📚 Документы в базе знаний ({len(documents)}):"]
+    
+    for i, doc in enumerate(documents, 1):
+        status_emoji = {
+            "ready": "✅",
+            "processing": "⏳",
+            "failed": "❌"
+        }.get(doc.status, "❓")
+        
+        formatted.append(
+            f"\n{i}. {status_emoji} {doc.name}\n"
+            f"   ID: {doc.document_id}\n"
+            f"   Статус: {doc.status}\n"
+            f"   Создан: {doc.created_at or 'неизвестно'}"
+        )
+    
+    return "\n".join(formatted)
+
