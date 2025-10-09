@@ -8,7 +8,7 @@ from app.tools.weather_tools import suggest_travel, get_weather
 from app.tools.file_tools import read_file
 from app.tools.voice_tools import synthesize_speech
 from app.tools.nano_banana_tools import generate_images
-from app.tools.rag_tools import search_knowledge_base
+from app.tools.rag_tools import search_knowledge_base, list_documents_in_knowledge_base
 
 
 class TravelInfoAgent(BaseAgent):
@@ -66,6 +66,19 @@ class WeatherAgent(BaseAgent):
   3. ВЕРНИ ТОЧНО то что вернул synthesize_speech - НИ СЛОВА БОЛЬШЕ
 - НИКОГДА не добавляй текст к [AUDIO] блокам
 
+РАБОТА С БАЗОЙ ЗНАНИЙ:
+1. **Список документов** (list_documents_in_knowledge_base):
+   - Используй когда пользователь спрашивает "какие документы есть", "покажи документы"
+   - Показывает все доступные документы в базе знаний
+   
+2. **Поиск информации** (search_knowledge_base):
+   - Используй когда пользователь задает вопрос по документам
+   - Параметры:
+     * query: вопрос пользователя
+     * limit: количество фрагментов (по умолчанию 5, для сложных вопросов можно 10-15)
+   - Пример: search_knowledge_base(query="какая погода в Париже по документу", limit=10)
+   - ВАЖНО: включи найденные факты в свой ответ
+
 ВАЖНО:
 - Если пользователь упоминает путешествие, поездку, отпуск - ОБЯЗАТЕЛЬНО используй travel_info_agent
 - Если в сообщении есть блоки [FILE]...[/FILE], это означает что пользователь прикрепил файлы
@@ -73,8 +86,6 @@ class WeatherAgent(BaseAgent):
 - Если передан файл ОБЯЗАТЕЛЬНО используй инструмент read_file для чтения файла
 - Если передано аудио, распознанный текст уже включен в сообщение в блоке [AUDIO]
 - Если хочешь дать юзеру файлы ТО обязательно отдавай полный url
-- Если пользователь спрашивает о документах или просит найти информацию в базе знаний - 
-  используй search_knowledge_base с его вопросом и включи найденные факты в ответ
 
 Используй инструменты для получения информации.
 Будь дружелюбным и полезным.
@@ -89,4 +100,5 @@ class WeatherAgent(BaseAgent):
         "agent:app.agents.weather.agent.TravelInfoAgent",
         generate_images,
         search_knowledge_base,
+        list_documents_in_knowledge_base,
     ]
