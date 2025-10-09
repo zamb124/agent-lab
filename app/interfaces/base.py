@@ -229,6 +229,12 @@ class BaseInterface(ABC):
 
         # Обогащаем контекст session_id если его нет
         context.session_id = message.session_id or context.session_id
+        
+        # Загружаем и добавляем flow_config в контекст
+        flow_config = await storage.get_flow_config(flow_id)
+        if flow_config:
+            context.flow_config = flow_config
+            logger.debug(f"Flow config добавлен в контекст: {flow_id}")
 
         # Добавляем импортированные сообщения в context.state.messages если есть
         if context.state is None:

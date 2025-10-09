@@ -8,6 +8,7 @@ from app.tools.weather_tools import suggest_travel, get_weather
 from app.tools.file_tools import read_file
 from app.tools.voice_tools import synthesize_speech
 from app.tools.nano_banana_tools import generate_images
+from app.tools.rag_tools import search_knowledge_base
 
 
 class TravelInfoAgent(BaseAgent):
@@ -72,6 +73,8 @@ class WeatherAgent(BaseAgent):
 - Если передан файл ОБЯЗАТЕЛЬНО используй инструмент read_file для чтения файла
 - Если передано аудио, распознанный текст уже включен в сообщение в блоке [AUDIO]
 - Если хочешь дать юзеру файлы ТО обязательно отдавай полный url
+- Если пользователь спрашивает о документах или просит найти информацию в базе знаний - 
+  используй search_knowledge_base с его вопросом и включи найденные факты в ответ
 
 Используй инструменты для получения информации.
 Будь дружелюбным и полезным.
@@ -82,8 +85,8 @@ class WeatherAgent(BaseAgent):
         suggest_travel,
         get_weather,
         read_file,
-        synthesize_speech,  # Для ответа голосом
-        "agent:app.agents.weather.agent.TravelInfoAgent",  # Ссылка на субагента
+        synthesize_speech,
+        "agent:app.agents.weather.agent.TravelInfoAgent",
         generate_images,
-
+        search_knowledge_base,
     ]

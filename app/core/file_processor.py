@@ -125,17 +125,21 @@ class FileProcessor:
         await self.storage.set(file_record.key, file_record.model_dump_json())
         logger.info(f"📝 Создана запись о файле в БД: {file_record.key}")
 
-        # Подготавливаем метаданные для S3 (только строки)
+        # Подготавливаем метаданные для S3 (только ASCII)
         s3_metadata = {
             "file_id": file_id,
-            "original_name": original_name,
             "uploaded_by": uploaded_by or "unknown",
         }
 
-        # Добавляем пользовательские метаданные, конвертируя в строки
+        # Добавляем только ASCII метаданные
         if metadata:
             for k, v in metadata.items():
-                s3_metadata[k] = str(v)
+                try:
+                    str_value = str(v)
+                    str_value.encode('ascii')
+                    s3_metadata[k] = str_value
+                except UnicodeEncodeError:
+                    pass
 
         # Загружаем файл в S3
         await s3_client.upload_bytes(

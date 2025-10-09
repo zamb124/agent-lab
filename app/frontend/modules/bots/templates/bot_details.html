@@ -115,6 +115,10 @@
                 <i class="bi bi-star"></i>
                 Основное
             </button>
+            <button class="settings-tab" data-tab="knowledge">
+                <i class="bi bi-book"></i>
+                База знаний
+            </button>
             <button class="settings-tab" data-tab="platforms">
                 <i class="bi bi-globe"></i>
                 Платформы
@@ -160,6 +164,84 @@
                          data-prompt="{{ bot.prompt }}"
                          data-flow-id="{{ bot.flow_id }}"
                          data-entry-point="{{ bot.entry_point }}"></div>
+                </div>
+            </div>
+            
+            <div class="settings-panel" data-panel="knowledge">
+                <h4>
+                    <i class="bi bi-book"></i>
+                    База знаний бота
+                </h4>
+                
+                <div class="rag-settings-section">
+                    <div class="form-group">
+                            <label>Скоуп хранения</label>
+                            <select class="form-control" id="rag-namespace-scope">
+                                <option value="company" {% if bot.rag_config and bot.rag_config.namespace_scope == 'company' %}selected{% endif %}>
+                                    Компания (общая база для всех flow)
+                                </option>
+                                <option value="flow" {% if bot.rag_config and bot.rag_config.namespace_scope == 'flow' %}selected{% endif %}>
+                                    Flow (личная база этого бота)
+                                </option>
+                                <option value="session" {% if bot.rag_config and bot.rag_config.namespace_scope == 'session' %}selected{% endif %}>
+                                    Сессия (временные документы для каждой сессии)
+                                </option>
+                            </select>
+                            <small class="form-text">
+                                Где будут храниться документы загруженные через бота
+                            </small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Скоупы поиска</label>
+                            <div class="checkbox-group">
+                                <div class="form-check">
+                                    <input class="form-check-input rag-search-scope" type="checkbox" value="company" id="rag-search-company"
+                                           {% if bot.rag_config and 'company' in bot.rag_config.search_scopes %}checked{% endif %}>
+                                    <label class="form-check-label" for="rag-search-company">
+                                        Искать в общей базе компании
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input rag-search-scope" type="checkbox" value="flow" id="rag-search-flow"
+                                           {% if bot.rag_config and 'flow' in bot.rag_config.search_scopes %}checked{% endif %}>
+                                    <label class="form-check-label" for="rag-search-flow">
+                                        Искать в базе этого flow
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input rag-search-scope" type="checkbox" value="session" id="rag-search-session"
+                                           {% if bot.rag_config and 'session' in bot.rag_config.search_scopes %}checked{% endif %}>
+                                    <label class="form-check-label" for="rag-search-session">
+                                        Искать в базе текущей сессии
+                                    </label>
+                                </div>
+                            </div>
+                            <small class="form-text">
+                                Где бот будет искать информацию при запросах
+                            </small>
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="knowledge-base-documents">
+                            <div class="documents-header">
+                                <h5>
+                                    <i class="bi bi-files"></i>
+                                    Документы в базе знаний
+                                </h5>
+                                <button class="document-upload-button" onclick="uploadDocumentToKnowledgeBase('{{ bot.flow_id }}')" title="Загрузить документ">
+                                    <i class="bi bi-upload"></i>
+                                </button>
+                            </div>
+                            
+                            <div id="knowledge-base-docs-list" class="documents-list">
+                                <div class="loading-state">
+                                    <i class="bi bi-hourglass-split"></i>
+                                    Загрузка документов...
+                                </div>
+                            </div>
+                        </div>
                 </div>
             </div>
             

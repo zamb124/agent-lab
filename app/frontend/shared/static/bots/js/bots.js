@@ -241,6 +241,16 @@
                     if (targetPanel === 'main' && !promptEditor) {
                         initPromptEditor();
                     }
+                    
+                    if (targetPanel === 'knowledge') {
+                        const flowIdElement = document.querySelector('[data-flow-id]');
+                        if (flowIdElement) {
+                            const flowId = flowIdElement.dataset.flowId;
+                            if (flowId && flowId !== 'new') {
+                                loadKnowledgeBaseDocuments(flowId);
+                            }
+                        }
+                    }
                 }
             });
         });
@@ -361,6 +371,19 @@
         if (flowVariables && Object.keys(flowVariables).length > 0) {
             flowData.variables = flowVariables;
         }
+        
+        const namespaceScope = document.getElementById('rag-namespace-scope')?.value || 'flow';
+        const searchScopes = [];
+        document.querySelectorAll('.rag-search-scope:checked').forEach(checkbox => {
+            searchScopes.push(checkbox.value);
+        });
+        
+        flowData.rag_config = {
+            enabled: true,
+            namespace_scope: namespaceScope,
+            search_scopes: searchScopes.length > 0 ? searchScopes : ['flow'],
+            auto_index_messages: false
+        };
         
         console.log('💾 Сохранение настроек бота:', {
             botId: botId,
@@ -1358,6 +1381,188 @@
                 initBotSettings();
             }
         }, 500);
+    };
+
+    window.uploadDocumentToKnowledgeBase = async function(flowId) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.pdf,.txt,.docx,.html,.md,.csv';
+        
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('flow_id', flowId);
+            
+            try {
+                showNotification('Загрузка документа...', 'info');
+                
+                const response = await fetch(`/api/v1/knowledge-base/flows/${flowId}/documents`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Ошибка загрузки документа');
+                }
+                
+                const result = await response.json();
+                showNotification('Документ успешно загружен и добавлен в базу знаний', 'success');
+                
+                await loadKnowledgeBaseDocuments(flowId);
+                
+            } catch (error) {
+                console.error('Ошибка загрузки документа:', error);
+                showNotification('Не удалось загрузить документ: ' + error.message, 'danger');
+            }
+        };
+        
+        input.click();
+    };
+    
+    window.loadKnowledgeBaseDocuments = async function(flowId) {
+        const listContainer = document.getElementById('knowledge-base-docs-list');
+        if (!listContainer) return;
+        
+        listContainer.innerHTML = '<div class="loading-indicator"><div class="spinner"></div></div>';
+        
+        try {
+            const response = await fetch(`/api/v1/knowledge-base/flows/${flowId}/documents`);
+            
+            if (!response.ok) {
+                throw new Error('Ошибка получения списка документов');
+            }
+            
+            const data = await response.json();
+            const documents = data.documents || [];
+            
+            if (documents.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-inbox"></i>
+                        <p>В базе знаний пока нет документов</p>
+                        <p class="text-muted">Загрузите документы чтобы бот мог использовать их для ответов</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const escapeAttr = (value) => String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;');
+            
+            let html = '<div class="documents-grid">';
+            
+            documents.forEach(doc => {
+                const statusIcon = {
+                    'ready': '<i class="bi bi-check-circle-fill text-success"></i>',
+                    'processing': '<i class="bi bi-hourglass-split text-warning"></i>',
+                    'failed': '<i class="bi bi-x-circle-fill text-danger"></i>'
+                }[doc.status] || '<i class="bi bi-question-circle"></i>';
+                
+                const downloadUrl = doc.metadata && doc.metadata.source_url ? doc.metadata.source_url : null;
+                const safeDownloadAttr = downloadUrl ? escapeAttr(downloadUrl) : '';
+                const cardClasses = downloadUrl ? 'document-card document-card-clickable' : 'document-card';
+                const dataDownloadAttr = downloadUrl ? ` data-download-url="${safeDownloadAttr}"` : '';
+                
+                html += `
+                    <div class="${cardClasses}"${dataDownloadAttr}>
+                        <div class="document-header">
+                            <div class="document-icon">
+                                <i class="bi bi-file-earmark-pdf"></i>
+                            </div>
+                            <div class="document-info">
+                                <div class="document-name">${doc.name}</div>
+                                <div class="document-meta">
+                                    ${statusIcon}
+                                    <span class="status-text">${doc.status}</span>
+                                    ${doc.created_at ? `• ${new Date(doc.created_at).toLocaleDateString('ru')}` : ''}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="document-actions">
+                            <button class="btn btn-sm btn-outline-danger" 
+                                    onclick="deleteKnowledgeBaseDocument('${flowId}', '${doc.document_id}', event)"
+                                    title="Удалить">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            listContainer.innerHTML = html;
+            
+            listContainer.querySelectorAll('.document-card-clickable').forEach(card => {
+                card.addEventListener('click', (e) => {
+                    const url = card.dataset.downloadUrl;
+                    if (!url) {
+                        return;
+                    }
+                    const withinActions = e.target.closest('.document-actions');
+                    if (withinActions) {
+                        return;
+                    }
+                    window.open(url, '_blank', 'noopener');
+                });
+            });
+            
+        } catch (error) {
+            console.error('Ошибка загрузки документов:', error);
+            listContainer.innerHTML = `
+                <div class="error-state">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <p>Не удалось загрузить документы</p>
+                </div>
+            `;
+        }
+    };
+    
+    window.deleteKnowledgeBaseDocument = async function(flowId, documentId, event) {
+        if (event) {
+            event.stopPropagation();
+        }
+        if (!confirm('Удалить этот документ из базы знаний?')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/v1/knowledge-base/flows/${flowId}/documents/${documentId}`, {
+                method: 'DELETE'
+            });
+            
+            if (!response.ok) {
+                throw new Error('Ошибка удаления документа');
+            }
+            
+            showNotification('Документ удален из базы знаний', 'success');
+            await loadKnowledgeBaseDocuments(flowId);
+            
+        } catch (error) {
+            console.error('Ошибка удаления документа:', error);
+            showNotification('Не удалось удалить документ: ' + error.message, 'danger');
+        }
+    };
+    
+    const originalInitBotSettings = window.initBotSettings;
+    window.initBotSettings = function() {
+        if (originalInitBotSettings) {
+            originalInitBotSettings();
+        }
+        
+        const knowledgeTab = document.querySelector('[data-tab="knowledge"]');
+        if (knowledgeTab && knowledgeTab.classList.contains('active')) {
+            const flowIdElement = document.querySelector('[data-flow-id]');
+            if (flowIdElement) {
+                const flowId = flowIdElement.dataset.flowId;
+                if (flowId && flowId !== 'new') {
+                    loadKnowledgeBaseDocuments(flowId);
+                }
+            }
+        }
     };
 
 })();

@@ -241,6 +241,29 @@ class MigrationSettings(BaseModel):
     )
 
 
+class RAGProviderConfig(BaseModel):
+    """Конфигурация одного RAG провайдера"""
+    
+    enabled: bool = False
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    timeout: int = 60
+    
+    embedding_provider: str = "openai"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_api_key: Optional[str] = None
+    
+    extra_params: Dict[str, Any] = Field(default_factory=dict)
+
+
+class RAGConfig(BaseModel):
+    """Конфигурация RAG системы"""
+    
+    enabled: bool = False
+    default_provider: str = "agentset"
+    providers: Dict[str, RAGProviderConfig] = Field(default_factory=dict)
+
+
 class Settings(BaseSettings):
     """Настройки приложения с поддержкой JSON конфигурации"""
 
@@ -260,6 +283,7 @@ class Settings(BaseSettings):
     proxy: ProxyConfig = Field(default_factory=ProxyConfig)
     payment_providers: PaymentProvidersConfig = Field(default_factory=PaymentProvidersConfig)
     migration: MigrationSettings = Field(default_factory=MigrationSettings)
+    rag: RAGConfig = Field(default_factory=RAGConfig)
 
     def __init__(self, **data):
         # Загружаем JSON конфигурацию и объединяем с переданными данными
