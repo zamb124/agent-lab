@@ -127,3 +127,24 @@ async def bot_details(request: Request, bot_id: str):
         "bot_details.html",
         {"request": request, "bot": bot_info}
     )
+
+
+@router.get("/platform-fields/{platform}", response_class=HTMLResponse)
+async def get_platform_fields(request: Request, platform: str):
+    """Получить HTML для полей конкретной платформы"""
+    
+    # Проверяем поддерживаемые платформы
+    supported_platforms = ["whatsapp", "telegram", "amocrm", "web", "api"]
+    
+    if platform not in supported_platforms:
+        return HTMLResponse(content="<p>Неподдерживаемая платформа</p>", status_code=404)
+    
+    # Для whatsapp возвращаем специальный шаблон
+    if platform == "whatsapp":
+        return templates.TemplateResponse(
+            "platform_fields_whatsapp.html",
+            {"request": request}
+        )
+    
+    # Для остальных платформ возвращаем пустой ответ (стандартные поля уже есть)
+    return HTMLResponse(content="", status_code=200)

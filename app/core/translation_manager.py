@@ -437,10 +437,7 @@ class TranslationManager:
         """Генерирует JavaScript модули для фронтенда"""
         logger.debug("Генерация JavaScript модулей...")
         
-        # Генерируем в основную директорию i18n
-        generated_path = self.translations_dir / "generated"
-        
-        # И дублируем в static директорию для веб-доступа
+        # Генерируем только в static директорию для веб-доступа
         frontend_static_path = Path("app/frontend/shared/static/i18n/generated")
         frontend_static_path.mkdir(parents=True, exist_ok=True)
         
@@ -458,17 +455,12 @@ class TranslationManager:
 }})();
 """
                 
-                # Сохраняем в основную директорию
-                js_file = generated_path / f"{language.value}.js"
-                with open(js_file, 'w', encoding='utf-8') as f:
-                    f.write(js_content)
-                
-                # Дублируем в static директорию
+                # Сохраняем в static директорию
                 static_js_file = frontend_static_path / f"{language.value}.js"
                 with open(static_js_file, 'w', encoding='utf-8') as f:
                     f.write(js_content)
         
-        logger.debug(f"Сгенерированы JS модули для {len(Language)} языков в обе директории")
+        logger.debug(f"Сгенерированы JS модули для {len(Language)} языков")
     
     def t(self, key: str, language: Language = None, **kwargs) -> str:
         """
