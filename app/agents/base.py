@@ -239,7 +239,10 @@ class BaseAgent(ABC):
                 )
                 raise e
             else:
-                logger.error(f"❌ Ошибка выполнения агента {self.config.agent_id}: {e}")
+                logger.error(
+                    f"❌ Ошибка выполнения агента {self.config.agent_id}: {e}",
+                    exc_info=True
+                )
                 raise
 
     def as_tool(self, name: Optional[str] = None, description: Optional[str] = None):
@@ -296,7 +299,7 @@ class BaseAgent(ABC):
                     raise e  # Пробрасываем прерывание дальше в родительский граф
                 else:
                     error_msg = f"Ошибка выполнения субагента {self.config.name}: {e}"
-                    logger.error(f"❌ {error_msg}")
+                    logger.error(f"❌ {error_msg}", exc_info=True)
                     return error_msg
 
         tool_name = name or self.config.agent_id.replace(".", "_")

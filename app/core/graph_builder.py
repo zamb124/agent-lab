@@ -110,7 +110,8 @@ class GraphBuilder:
 
                 except Exception as e:
                     logger.error(
-                        f"❌ Ошибка извлечения функции условия из inline кода: {e}"
+                        f"❌ Ошибка извлечения функции условия из inline кода: {e}",
+                        exc_info=True
                     )
 
             # Если не нашли в inline коде, ищем по пути
@@ -191,7 +192,7 @@ class GraphBuilder:
                     state.update(result)
                 return state
             except Exception as e:
-                logger.error(f"Ошибка в ноде агента {node.id}: {e}")
+                logger.error(f"Ошибка в ноде агента {node.id}: {e}", exc_info=True)
                 if "store" not in state:
                     state["store"] = {}
                 state["store"]["error"] = str(e)
@@ -235,7 +236,7 @@ class GraphBuilder:
 
                 return state
             except Exception as e:
-                logger.error(f"Ошибка в ноде инструмента {node.id}: {e}")
+                logger.error(f"Ошибка в ноде инструмента {node.id}: {e}", exc_info=True)
                 if "store" not in state:
                     state["store"] = {}
                 state["store"]["error"] = str(e)
@@ -286,7 +287,7 @@ class GraphBuilder:
 
                 return state
             except Exception as e:
-                logger.error(f"Ошибка в ноде функции {node.id}: {e}")
+                logger.error(f"Ошибка в ноде функции {node.id}: {e}", exc_info=True)
                 if "store" not in state:
                     state["store"] = {}
                 state["store"]["error"] = str(e)
@@ -330,7 +331,7 @@ class GraphBuilder:
             raise ValueError(f"Не найдена функция в inline коде ноды {node.id}")
 
         except Exception as e:
-            logger.error(f"❌ Ошибка выполнения inline кода ноды {node.id}: {e}")
+            logger.error(f"❌ Ошибка выполнения inline кода ноды {node.id}: {e}", exc_info=True)
             raise
 
     def _create_message_node(self, node):
@@ -360,7 +361,7 @@ class GraphBuilder:
                 else:
                     return "end"
             except Exception as e:
-                logger.error(f"Ошибка в условии {condition}: {e}")
+                logger.error(f"Ошибка в условии {condition}: {e}", exc_info=True)
                 return "end"
 
         return condition_func
