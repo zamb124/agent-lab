@@ -229,6 +229,84 @@ Webhooks для Telegram ботов.
 
 Webhook для получения обновлений от Telegram.
 
+### GET /api/v1/webhook/whatsapp/{flow_key}
+
+Верификация webhook для WhatsApp Business API.
+
+**Параметры query:**
+- `hub.mode` - должен быть "subscribe"
+- `hub.verify_token` - токен для верификации
+- `hub.challenge` - значение для возврата
+
+**Ответ**: Возвращает `hub.challenge` при успешной верификации.
+
+### POST /api/v1/webhook/whatsapp/{flow_key}
+
+Webhook для получения сообщений от WhatsApp Business API.
+
+**Тело запроса**: WhatsApp webhook payload (JSON)
+
+**Ответ**:
+```json
+{
+  "status": "ok"
+}
+```
+
+### POST /api/v1/admin/whatsapp/register/{flow_id}
+
+Регистрирует WhatsApp для flow и возвращает webhook URL.
+
+**Ответ**:
+```json
+{
+  "success": true,
+  "flow_id": "my_flow",
+  "result": {
+    "platform": "whatsapp",
+    "mode": "webhook",
+    "phone_number": "+1234567890",
+    "webhook_url": "https://domain.com/api/v1/webhook/whatsapp/company:xxx:flow:my_flow"
+  }
+}
+```
+
+### POST /api/v1/admin/whatsapp/send_template/{flow_id}
+
+Отправляет template сообщение через WhatsApp.
+
+**Параметры query:**
+- `phone_number` - номер получателя
+- `template_name` - название template
+- `language_code` - код языка (ru, en)
+- `parameters` - параметры для подстановки (опционально)
+
+**Ответ**:
+```json
+{
+  "success": true,
+  "message_id": "wamid.xxx",
+  "phone_number": "1234567890"
+}
+```
+
+### GET /api/v1/admin/whatsapp/phone_info/{flow_id}
+
+Получает информацию о WhatsApp номере.
+
+**Ответ**:
+```json
+{
+  "success": true,
+  "phone_data": {
+    "id": "111111111111111",
+    "display_phone_number": "+1234567890",
+    "verified_name": "Company Name",
+    "quality_rating": "GREEN"
+  }
+}
+```
+
 ## Health Check
 
 ### GET /health
