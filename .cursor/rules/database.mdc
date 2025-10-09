@@ -1,0 +1,82 @@
+---
+description: "Правила работы с базой данных"
+alwaysApply: true
+---
+# Правила работы с базой данных
+
+## Storage (Key-Value)
+
+Используй `Storage` (`app/core/storage.py`) для всех операций с конфигурацией:
+
+### Префиксы ключей:
+- `agent:{agent_id}` - конфигурации агентов
+- `flow:{flow_id}` - конфигурации flows
+- `task:{task_id}` - задачи для обработки
+- `session:{session_id}` - сессии диалогов
+- `user:{user_id}` - пользователи
+- `company:{company_id}` - компании
+- `subdomain:{subdomain}` - маппинг поддоменов
+
+<good_example>
+from app.core.storage import Storage
+
+storage = Storage()
+await storage.set("agent:my_agent", agent_config.model_dump())
+agent_data = await storage.get("agent:my_agent")
+</good_example>
+
+## Изоляция по компаниям
+
+Все данные изолированы по компаниям:
+- Ключи содержат company_id: `company:{company_id}:flow:{flow_id}`
+- Используй `get_context().active_company` для текущей компании
+- Не смешивай данные разных компаний
+
+<good_example>
+from app.core.context import get_context
+
+context = get_context()
+company_id = context.active_company.company_id
+key = f"company:{company_id}:flow:{flow_id}"
+</good_example>
+
+## Асинхронные операции
+
+Все операции с БД асинхронные:
+- Используй `await` для всех запросов
+- Не блокируй event loop синхронными вызовами
+
+<good_example>
+async def get_agent_config(agent_id: str) -> AgentConfig:
+    storage = Storage()
+    data = await storage.get(f"agent:{agent_id}")
+    return AgentConfig(**data)
+</good_example>
+
+## PostgreSQL Checkpointer
+
+Для LangGraph используй PostgreSQL checkpointer:
+- Не используй MemorySaver в production
+- Checkpointer создается через `get_checkpointer()`
+- Автоматически сохраняет state графов
+
+<good_example>
+from app.core.checkpointer import get_checkpointer
+
+checkpointer = await get_checkpointer()
+graph = graph.compile(checkpointer=checkpointer)
+</good_example>
+
+## Транзакции
+
+Используй SQLAlchemy транзакции для атомарных операций:
+
+<good_example>
+from app.db.database import get_db_session
+
+async with get_db_session() as session:
+    async with session.begin():
+        # Операции с БД
+        session.add(obj)
+        await session.flush()
+</good_example>

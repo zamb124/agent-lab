@@ -1,0 +1,75 @@
+---
+description: "Архитектурные принципы Agent Lab"
+alwaysApply: true
+---
+# Архитектурные принципы Agent Lab
+
+## Database-First подход
+
+**ВСЕГДА** следуй принципу Database-First:
+- Вся конфигурация агентов, flows и tools хранится в БД
+- Код определяет только поведение, но не структуру
+- Используй `Storage` (`app/core/storage.py`) для всех операций с конфигурацией
+- Фабрики создают объекты из БД: `AgentFactory`, `FlowFactory`, `ToolFactory`
+
+<good_example>
+# Создание агента через фабрику из БД
+agent = await agent_factory.create_agent(agent_id)
+</good_example>
+
+<bad_example>
+# Не хардкодь конфигурацию в коде
+agent = MyAgent(prompt="...", tools=[...])
+</bad_example>
+
+## Асинхронность
+
+Вся архитектура полностью асинхронная:
+- Используй `async/await` для всех операций с БД, HTTP, LLM
+- Все тулы должны быть асинхронными (`async def`)
+- Все фабрики и сервисы - асинхронные
+
+<good_example>
+@tool
+async def my_tool(query: str) -> str:
+    result = await some_async_operation()
+    return result
+</good_example>
+
+## Контекст выполнения
+
+Используй глобальный контекст (`app/core/context.py`) для доступа к:
+- Текущему пользователю (`get_context().user`)
+- Активной компании (`get_context().active_company`)
+- Переменным flow (`get_context().flow_variables`)
+- Текущему state (`get_context().state`)
+
+<good_example>
+from app.core.context import get_context
+
+def get_current_user():
+    context = get_context()
+    return context.user
+</good_example>
+
+## Модульность
+
+Каждый компонент независим и заменяем:
+- Агенты не должны зависеть от конкретной платформы (Telegram/WhatsApp/Web)
+- Interfaces адаптируют платформу к унифицированному `Message`
+- Tools работают независимо от агентов
+
+## Единообразие
+
+Агенты из кода и созданные через UI работают идентично:
+- Миграция (`app/core/migrator.py`) сканирует код и создает записи в БД
+- После миграции агенты работают из БД
+- Нет различий между "кодовыми" и "UI" агентами
+
+## LangGraph-native
+
+Используй современные возможности LangGraph:
+- Предпочитай встроенные механизмы LangGraph кастомным решениям
+- Используй `checkpointer` для персистентности
+- Используй `GraphInterrupt` для запроса данных у пользователя
+- Используй `State` (TypedDict) как единое хранилище данных

@@ -1,0 +1,139 @@
+---
+description: "Правила для Frontend"
+globs:
+  - "app/frontend/**"
+alwaysApply: false
+---
+# Правила для Frontend
+
+## Рекурсивный рендеринг
+
+Используй систему автоматического рендеринга Pydantic моделей:
+- `model.render(view_mode="form")` - форма редактирования
+- `model.render(view_mode="table")` - строка таблицы
+- `model.render(view_mode="compact")` - компактный вид
+
+<good_example>
+# В роутере
+@router.get("/flows/{flow_id}")
+async def get_flow(flow_id: str):
+    flow = await storage.get(f"flow:{flow_id}")
+    flow_config = FlowConfig(**flow)
+    return HTMLResponse(flow_config.render(view_mode="form"))
+</good_example>
+
+## Template Loader
+
+Используй единый template loader:
+- Импортируй `get_templates()` из `app/frontend/core/template_loader.py`
+- Не создавай свой Jinja2Templates
+
+<good_example>
+from app.frontend.core.template_loader import get_templates
+
+templates = get_templates()
+
+@router.get("/my-page")
+async def my_page(request: Request):
+    return templates.TemplateResponse("my_page.html", {"request": request})
+</good_example>
+
+## Модульная структура
+
+При создании нового модуля:
+1. Создай `app/frontend/modules/{module_name}/`
+2. Добавь `router.py` с prefix `/frontend/{module_name}`
+3. Создай `templates/` для HTML
+4. Создай `app/frontend/shared/static/{module_name}/` для CSS/JS
+5. Подключи роутер в `app/main.py`
+
+<good_example>
+# Структура модуля
+modules/my_module/
+├── __init__.py
+├── router.py
+└── templates/
+    └── my_module.html
+
+shared/static/my_module/
+├── css/
+│   └── my_module.css
+└── js/
+    └── my_module.js
+</good_example>
+
+## Шаблоны полей
+
+При добавлении нового типа поля:
+1. Создай шаблон в `app/frontend/shared/templates/fields/`
+2. Имя файла должно соответствовать типу: `list_str.html`, `dict_str_any.html`
+3. Наследуй от `base_field.html` или используй его макросы
+
+## Доступ к контексту в шаблонах
+
+Используй глобальные функции без явной передачи:
+- `current_user()` - текущий пользователь
+- `current_company()` - текущая компания
+- `user_roles()` - роли пользователя
+- `user_has_role('admin')` - проверка роли
+- `is_system_admin()` - системный администратор
+
+<good_example>
+{% if is_system_admin() %}
+  <button>Админ-панель</button>
+{% endif %}
+
+{% if user_has_role('admin') %}
+  <button>Редактировать</button>
+{% endif %}
+</good_example>
+
+## HTMX
+
+Используй HTMX для интерактивности:
+- Минимум JavaScript
+- Все формы через HTMX
+- Используй `hx-target`, `hx-swap` для обновления UI
+
+<good_example>
+<form hx-post="/api/models/flow" hx-target="#flow-list" hx-swap="beforeend">
+  <input name="name" type="text" required>
+  <button type="submit">Создать</button>
+</form>
+</good_example>
+
+## Роли и доступ
+
+Используй роли в компаниях (НЕ глобальные группы):
+- `user.companies[company_id]` - список ролей в компании
+- Проверяй роли через `user_has_role()` в шаблонах
+- Проверяй роли через `context.user` в роутерах
+
+<good_example>
+# В шаблоне
+{% if user_has_role('admin') %}
+  <button>Удалить</button>
+{% endif %}
+
+# В роутере
+from app.core.context import get_context
+
+context = get_context()
+if "admin" not in context.user.companies.get(context.active_company.company_id, []):
+    raise HTTPException(403, "Access denied")
+</good_example>
+
+## Единый стиль
+
+Все модалы и формы должны использовать единый стиль:
+- Наследуй от `base.html`
+- Используй CSS переменные из `variables.css`
+- Используй компоненты из `components.css`
+
+<bad_example>
+<div style="color: red">Ошибка</div>
+</bad_example>
+
+<good_example>
+<div class="alert alert-error">Ошибка</div>
+</good_example>
