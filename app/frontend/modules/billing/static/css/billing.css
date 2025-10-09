@@ -1,0 +1,686 @@
+/**
+ * Стили для модуля биллинга
+ */
+
+.billing-container {
+    min-height: 100vh;
+    background: var(--bg-primary);
+    padding: 2rem;
+}
+
+.billing-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-primary);
+}
+
+.billing-header-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.billing-title {
+    font-size: 2rem;
+    font-weight: 600;
+    margin: 0;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.billing-header-right {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.billing-content {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Секции */
+.billing-section {
+    margin-bottom: 2rem;
+}
+
+.billing-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.billing-section-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.billing-section-title i {
+    color: var(--primary);
+}
+
+.billing-section-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* Карточка тарифа */
+.tariff-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    padding: 2rem;
+    transition: all 0.3s ease;
+}
+
+.tariff-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+}
+
+.current-tariff {
+    border: 2px solid var(--primary);
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+}
+
+.tariff-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--primary);
+    color: #ffffff !important;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    margin-bottom: 1.5rem;
+}
+
+.tariff-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.tariff-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.tariff-stat-label {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.tariff-stat-value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Карточка бюджета */
+.budget-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    padding: 2rem;
+}
+
+.budget-info {
+    margin-bottom: 1.5rem;
+}
+
+.budget-label {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.budget-values {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.budget-spent {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.budget-separator {
+    font-size: 1.5rem;
+    color: var(--text-muted);
+}
+
+.budget-total {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.budget-progress {
+    margin-bottom: 1rem;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 12px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--primary-light));
+    border-radius: 6px;
+    transition: width 0.3s ease;
+}
+
+.progress-label {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    text-align: right;
+}
+
+.budget-period {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+/* Статистика */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.stat-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: var(--border-radius);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.stat-icon-primary {
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    color: white;
+}
+
+.stat-icon-success {
+    background: linear-gradient(135deg, var(--success), #51cf66);
+    color: white;
+}
+
+.stat-content {
+    flex: 1;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* Таблица ресурсов */
+.resources-table-container {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    overflow: hidden;
+}
+
+.resources-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.resources-table thead {
+    background: var(--bg-tertiary);
+}
+
+.resources-table th {
+    padding: 1rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.resources-table tbody tr {
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.2s ease;
+}
+
+.resources-table tbody tr:hover {
+    background: var(--bg-tertiary);
+}
+
+.resources-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.resources-table td {
+    padding: 1rem;
+    color: var(--text-primary);
+}
+
+.resource-name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+}
+
+.resource-name i {
+    color: var(--primary);
+}
+
+.resource-cost {
+    font-weight: 600;
+    color: var(--success);
+}
+
+/* Empty state */
+.empty-state {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: var(--text-muted);
+}
+
+.empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.empty-state p {
+    margin: 0;
+    font-size: 1rem;
+}
+
+/* Модальное окно оплаты */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 10000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-dialog {
+    width: 90%;
+    max-width: 500px;
+    margin: 0 auto;
+    position: relative;
+}
+
+.modal-content {
+    background: var(--bg-secondary);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.modal-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    transition: color 0.2s ease;
+}
+
+.modal-close:hover {
+    color: var(--text-primary);
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-body p {
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.form-group label i {
+    margin-right: 0.5rem;
+    color: var(--primary);
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 1rem;
+    transition: border-color 0.2s ease;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.form-text {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+.payment-notice {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: var(--bg-tertiary);
+    border-left: 3px solid var(--primary);
+    border-radius: var(--border-radius);
+    margin-top: 1.5rem;
+}
+
+.payment-notice i {
+    color: var(--primary);
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.payment-notice strong {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.payment-notice p {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.payment-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.payment-info-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: var(--bg-tertiary);
+    border-radius: var(--border-radius);
+    color: var(--text-primary);
+}
+
+.payment-info-item i {
+    color: var(--primary);
+    font-size: 1.25rem;
+}
+
+.modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .billing-container {
+        padding: 1rem;
+    }
+
+    .billing-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .billing-title {
+        font-size: 1.5rem;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .tariff-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .resources-table {
+        font-size: 0.875rem;
+    }
+
+    .resources-table th,
+    .resources-table td {
+        padding: 0.75rem 0.5rem;
+    }
+}
+
+/* История транзакций */
+.transactions-container {
+    margin-top: 1rem;
+}
+
+.transactions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.transaction-item {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: var(--border-radius);
+    border-left: 3px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.transaction-item:hover {
+    background: var(--bg-tertiary);
+    transform: translateX(4px);
+}
+
+.transaction-item.status-success {
+    border-left-color: var(--success);
+}
+
+.transaction-item.status-pending {
+    border-left-color: var(--warning);
+}
+
+.transaction-item.status-failed {
+    border-left-color: var(--danger);
+}
+
+.transaction-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    background: var(--bg-tertiary);
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.transaction-icon i {
+    font-size: 1.5rem;
+    color: var(--success);
+}
+
+.transaction-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.transaction-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.transaction-amount {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--success);
+}
+
+.transaction-status {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.875rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    background: var(--bg-tertiary);
+}
+
+.transaction-item.status-success .transaction-status {
+    color: var(--success);
+}
+
+.transaction-item.status-pending .transaction-status {
+    color: var(--warning);
+}
+
+.transaction-item.status-failed .transaction-status {
+    color: var(--danger);
+}
+
+.transaction-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+.transaction-meta span {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.transaction-meta i {
+    font-size: 0.75rem;
+}
+
+.transaction-id {
+    font-family: 'Courier New', monospace;
+}
+
+/* Анимации для уведомлений */
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
