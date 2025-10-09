@@ -1,0 +1,80 @@
+<!-- WhatsApp Platform Fields Template -->
+<div id="whatsapp-fields-container">
+    <div class="alert alert-info mb-3">
+        <i class="bi bi-info-circle"></i>
+        <strong>WhatsApp Business API</strong><br>
+        Получите credentials в <a href="https://developers.facebook.com" target="_blank">Meta for Developers</a>
+    </div>
+    
+    <div class="form-group">
+        <label>Phone Number ID <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="whatsapp-phone-number-id" 
+               placeholder="111111111111111">
+        <small class="form-text">ID телефонного номера из WhatsApp Business</small>
+    </div>
+    
+    <div class="form-group">
+        <label>Access Token <span class="text-danger">*</span></label>
+        <div class="form-check">
+            <input class="form-check-input" type="radio" name="wa-token-type" id="wa-token-type-var" value="var" checked onchange="toggleWhatsAppTokenInput()">
+            <label class="form-check-label" for="wa-token-type-var">
+                Ссылка на переменную (рекомендуется)
+            </label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="radio" name="wa-token-type" id="wa-token-type-hardcoded" value="hardcoded" onchange="toggleWhatsAppTokenInput()">
+            <label class="form-check-label" for="wa-token-type-hardcoded">
+                Хардкод токен
+            </label>
+        </div>
+        <div id="wa-token-var-select-group">
+            <select class="form-control" id="whatsapp-access-token-select">
+                <option value="">-- Выберите переменную --</option>
+            </select>
+        </div>
+        <div id="wa-token-hardcoded-group" style="display: none;">
+            <input type="password" class="form-control" id="whatsapp-access-token" placeholder="EAAxxxx...">
+        </div>
+        <small class="form-text">Access Token от WhatsApp Business API</small>
+    </div>
+    
+    <div class="form-group">
+        <label>Verify Token <span class="text-danger">*</span></label>
+        <div class="form-check">
+            <input class="form-check-input" type="radio" name="wa-verify-type" id="wa-verify-type-var" value="var" checked onchange="toggleWhatsAppVerifyInput()">
+            <label class="form-check-label" for="wa-verify-type-var">
+                Ссылка на переменную (рекомендуется)
+            </label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="radio" name="wa-verify-type" id="wa-verify-type-hardcoded" value="hardcoded" onchange="toggleWhatsAppVerifyInput()">
+            <label class="form-check-label" for="wa-verify-type-hardcoded">
+                Хардкод токен
+            </label>
+        </div>
+        <div id="wa-verify-var-select-group">
+            <select class="form-control" id="whatsapp-verify-token-select">
+                <option value="">-- Выберите переменную --</option>
+            </select>
+        </div>
+        <div id="wa-verify-hardcoded-group" style="display: none;">
+            <input type="password" class="form-control" id="whatsapp-verify-token" placeholder="Ваш verify token">
+        </div>
+        <small class="form-text">Токен для верификации webhook</small>
+    </div>
+    
+    <div class="form-group">
+        <label>Business Account ID</label>
+        <input type="text" class="form-control" id="whatsapp-business-account-id" 
+               placeholder="123456789">
+        <small class="form-text">Опционально: ID бизнес аккаунта</small>
+    </div>
+    
+    <div class="form-group">
+        <label>Display Name</label>
+        <input type="text" class="form-control" id="whatsapp-display-name" 
+               placeholder="My WhatsApp Bot">
+        <small class="form-text">Опционально: отображаемое имя бота</small>
+    </div>
+</div>
+
