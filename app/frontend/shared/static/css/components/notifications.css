@@ -1,0 +1,144 @@
+/* Уведомления */
+
+.notifications-container {
+    position: fixed;
+    top: 2rem;
+    right: 2rem;
+    z-index: calc(var(--z-modal) + 10);
+    max-width: 350px;
+}
+
+.notification {
+    margin-bottom: 1rem;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    animation: slideInRight 0.3s ease-out;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 300px;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.notification-success {
+    border-left: 4px solid var(--accent-success);
+}
+
+.notification.success {
+    border-left: 4px solid var(--accent-success);
+}
+
+.notification-error {
+    border-left: 4px solid var(--accent-danger);
+}
+
+.notification.error {
+    border-left: 4px solid var(--accent-danger);
+}
+
+.notification-warning {
+    border-left: 4px solid var(--accent-warning);
+}
+
+.notification.warning {
+    border-left: 4px solid var(--accent-warning);
+}
+
+.notification-info {
+    border-left: 4px solid var(--accent-info);
+}
+
+.notification.info {
+    border-left: 4px solid var(--accent-info);
+}
+
+.notification-icon {
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.notification.success .notification-icon {
+    color: var(--accent-success);
+}
+
+.notification.error .notification-icon {
+    color: var(--accent-danger);
+}
+
+.notification.warning .notification-icon {
+    color: var(--accent-warning);
+}
+
+.notification.info .notification-icon {
+    color: var(--accent-info);
+}
+
+.notification-content {
+    flex-grow: 1;
+}
+
+.notification-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.notification-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
+    margin: 0 0 0.25rem 0;
+}
+
+.notification-message {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.notification-body {
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.notification-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: var(--radius-sm);
+    transition: all 0.15s ease;
+    font-size: 18px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.notification-close:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.notification.show {
+    transform: translateX(0);
+}
+
