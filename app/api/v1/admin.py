@@ -17,6 +17,7 @@ from app.core.storage import Storage
 from app.core.file_processor import FileProcessor
 from app.core.context import get_context
 from app.core.migrator import Migrator
+from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -548,3 +549,176 @@ async def reload_telegram_bots():
     except Exception as e:
         logger.error(f"Ошибка перезагрузки telegram polling: {e}")
         raise HTTPException(status_code=500, detail=f"Ошибка перезагрузки: {str(e)}")
+
+
+@router.get("/llm/providers")
+async def get_llm_providers():
+    """Получить список доступных LLM провайдеров и их моделей"""
+    settings = get_settings()
+    
+    providers_data = {}
+    for provider_name, provider_config in settings.llm.providers.items():
+        if not provider_config.enabled:
+            continue
+            
+        providers_data[provider_name] = {
+            "name": provider_name,
+            "default_model": provider_config.default_model,
+            "models": []
+        }
+    
+    # Добавляем модели для каждого провайдера
+    model_definitions = {
+        "openai": [
+            {"value": "", "label": "По умолчанию"},
+            {"value": "gpt-4", "label": "GPT-4"},
+            {"value": "gpt-4-turbo", "label": "GPT-4 Turbo"},
+            {"value": "gpt-3.5-turbo", "label": "GPT-3.5 Turbo"},
+            {"value": "gpt-4o", "label": "GPT-4o"},
+            {"value": "gpt-4o-mini", "label": "GPT-4o Mini"},
+        ],
+        "gemini": [
+            {"value": "", "label": "По умолчанию"},
+            {"value": "gemini-1.5-pro", "label": "Gemini 1.5 Pro"},
+            {"value": "gemini-1.5-flash", "label": "Gemini 1.5 Flash"},
+            {"value": "gemini-pro", "label": "Gemini Pro"},
+        ],
+        "yandex": [
+            {"value": "", "label": "По умолчанию"},
+            {"value": "yandexgpt/latest", "label": "YandexGPT Latest"},
+            {"value": "yandexgpt-lite/latest", "label": "YandexGPT Lite"},
+        ],
+        "anthropic": [
+            {"value": "", "label": "По умолчанию"},
+            {"value": "claude-3-opus-20240229", "label": "Claude 3 Opus"},
+            {"value": "claude-3-sonnet-20240229", "label": "Claude 3 Sonnet"},
+            {"value": "claude-3-haiku-20240307", "label": "Claude 3 Haiku"},
+        ]
+    }
+    
+    for provider_name in providers_data:
+        if provider_name in model_definitions:
+            providers_data[provider_name]["models"] = model_definitions[provider_name]
+        else:
+            providers_data[provider_name]["models"] = [{"value": "", "label": "По умолчанию"}]
+    
+    return {
+        "default_provider": settings.llm.default_provider,
+        "providers": providers_data
+    }
+
+
+@router.get("/platforms/config")
+async def get_platforms_config():
+    """Получить конфигурацию поддерживаемых платформ"""
+    return {
+        "platforms": {
+            "telegram": {
+                "name": "Telegram",
+                "icon": "bi-telegram",
+                "fields": [
+                    {
+                        "name": "token",
+                        "type": "password",
+                        "label": "Bot Token",
+                        "placeholder": "Токен от @BotFather",
+                        "required": True
+                    },
+                    {
+                        "name": "username",
+                        "type": "text",
+                        "label": "Username",
+                        "placeholder": "username бота (без @)",
+                        "required": True
+                    }
+                ]
+            },
+            "whatsapp": {
+                "name": "WhatsApp",
+                "icon": "bi-whatsapp",
+                "fields": [
+                    {
+                        "name": "phone_number_id",
+                        "type": "text",
+                        "label": "Phone Number ID",
+                        "placeholder": "111111111111111",
+                        "required": True
+                    },
+                    {
+                        "name": "access_token",
+                        "type": "password",
+                        "label": "Access Token",
+                        "placeholder": "EAAxxxx...",
+                        "required": True
+                    },
+                    {
+                        "name": "verify_token",
+                        "type": "password",
+                        "label": "Verify Token",
+                        "placeholder": "Ваш verify token",
+                        "required": True
+                    },
+                    {
+                        "name": "business_account_id",
+                        "type": "text",
+                        "label": "Business Account ID",
+                        "placeholder": "123456789",
+                        "required": False
+                    }
+                ]
+            },
+            "amocrm": {
+                "name": "AmoCRM",
+                "icon": "bi-building",
+                "fields": [
+                    {
+                        "name": "token",
+                        "type": "password",
+                        "label": "API Key",
+                        "placeholder": "API ключ AmoCRM",
+                        "required": True
+                    },
+                    {
+                        "name": "username",
+                        "type": "text",
+                        "label": "Subdomain",
+                        "placeholder": "Домен (example.amocrm.ru)",
+                        "required": True
+                    }
+                ]
+            },
+            "web": {
+                "name": "Web",
+                "icon": "bi-globe",
+                "fields": [
+                    {
+                        "name": "username",
+                        "type": "text",
+                        "label": "Chat Name",
+                        "placeholder": "Название чата",
+                        "required": True
+                    }
+                ]
+            },
+            "api": {
+                "name": "API",
+                "icon": "bi-code-slash",
+                "fields": [
+                    {
+                        "name": "token",
+                        "type": "password",
+                        "label": "API Key",
+                        "placeholder": "API ключ (опционально)",
+                        "required": False
+                    },
+                    {
+                        "name": "username",
+                        "type": "text",
+                        "label": "API Name",
+                        "placeholder": "Название API",
+                        "required": True
+                    }
+                ]
+            }
+        }
+    }

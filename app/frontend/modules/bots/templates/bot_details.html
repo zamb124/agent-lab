@@ -470,22 +470,20 @@
             <div id="platform-config-section" style="display: none;">
                 <h4>Настройки платформы</h4>
                 
-                <div class="form-group">
-                    <label>Токен</label>
-                    <div class="mb-2">
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="token-type" id="token-type-var" value="var" checked onchange="toggleTokenInput()">
-                            <label class="form-check-label" for="token-type-var">
-                                Ссылка на переменную
-                            </label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="token-type" id="token-type-hardcoded" value="hardcoded" onchange="toggleTokenInput()">
-                            <label class="form-check-label" for="token-type-hardcoded">
-                                Хардкод токен
-                            </label>
-                        </div>
-                    </div>
+            <div class="form-group">
+                <label>Токен</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="token-type" id="token-type-var" value="var" checked onchange="toggleTokenInput()">
+                    <label class="form-check-label" for="token-type-var">
+                        Ссылка на переменную
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="token-type" id="token-type-hardcoded" value="hardcoded" onchange="toggleTokenInput()">
+                    <label class="form-check-label" for="token-type-hardcoded">
+                        Хардкод токен
+                    </label>
+                </div>
                     <div id="token-var-select-group">
                         <select class="form-control" id="platform-token-select">
                             <option value="">-- Выберите переменную --</option>
