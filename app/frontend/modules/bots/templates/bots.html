@@ -15,22 +15,19 @@
     </button>
 </div>
 
-<div class="bots-container" style="position: relative;">
-
-    <div class="bots-content" 
-         id="bots-list-view"
-         hx-get="/frontend/bots/list" 
-         hx-trigger="load" 
-         hx-indicator="#bots-loading">
-        <div id="bots-loading" class="loading-indicator htmx-indicator">
-            <div class="spinner"></div>
-            <span data-i18n="bots.loading">Загрузка ботов...</span>
-        </div>
+<div class="bots-container" 
+     id="bots-list-view"
+     hx-get="/frontend/bots/list" 
+     hx-trigger="load" 
+     hx-indicator="#bots-loading">
+    <div id="bots-loading" class="loading-indicator htmx-indicator">
+        <div class="spinner"></div>
+        <span data-i18n="bots.loading">Загрузка ботов...</span>
     </div>
+</div>
 
-    <div id="bot-expanded-modal" class="bot-modal" style="display: none;">
-        <div class="bot-modal-content" id="modal-bot-details">
-        </div>
+<div id="bot-expanded-modal" class="bot-modal" style="display: none;" hx-preserve="true">
+    <div class="bot-modal-content" id="modal-bot-details">
     </div>
 </div>
 

@@ -15,3 +15,14 @@
 .justify-content-between { justify-content: space-between; }
 .flex-grow-1 { flex-grow: 1; }
 
+/* Респонсивные утилиты */
+@media (min-width: 768px) {
+    .d-md-none { display: none !important; }
+    .d-md-block { display: block !important; }
+    .d-md-flex { display: flex !important; }
+}
+
+@media (max-width: 767px) {
+    .d-none.d-md-block { display: none !important; }
+}
+

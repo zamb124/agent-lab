@@ -89,94 +89,43 @@
     <style>
     .variables-grid {
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 1rem;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1.25rem;
+        width: 100%;
     }
-    
-    @media (min-width: 768px) {
-        .variables-grid {
-            grid-template-columns: repeat(3, 1fr);
-        }
-    }
-    
-    @media (min-width: 1400px) {
-        .variables-grid {
-            grid-template-columns: repeat(5, 1fr);
-        }
-    }
-    
     
     .variable-card {
-        transition: transform 0.2s, box-shadow 0.2s;
-        border: 1px solid var(--border-color);
+        transition: all var(--transition-normal);
+        border: 1px solid var(--border-primary);
+        background: var(--bg-secondary);
         height: 100%;
     }
     
     .variable-card:hover {
+        border-color: var(--border-secondary);
+        box-shadow: var(--shadow-md);
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }
     
     .variable-card-add {
-        border: 2px dashed var(--border-color);
-        background: var(--bg-secondary);
+        border: 1px dashed var(--border-secondary);
+        background: var(--bg-tertiary);
+        transition: all var(--transition-normal);
     }
     
     .variable-card-add:hover {
-        border-color: var(--primary-color);
-        background: var(--primary-color-alpha);
+        border-color: var(--accent-primary);
+        box-shadow: var(--shadow-md);
+        transform: translateY(-2px);
     }
     
     .variable-card-add:hover i {
         opacity: 1 !important;
-        transform: scale(1.1);
-        transition: all 0.2s;
-    }
-    
-    .btn-icon {
-        background: none;
-        border: none;
-        color: var(--text-secondary);
-        cursor: pointer;
-        padding: 0.2rem;
-        border-radius: 4px;
-        transition: all 0.2s;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 24px;
-        height: 24px;
-        font-size: 0.9rem;
-    }
-    
-    .btn-icon:hover {
-        background: var(--bg-hover);
-        color: var(--text-primary);
-    }
-    
-    .btn-icon.text-danger:hover {
-        background: var(--danger-color-alpha);
-        color: var(--danger-color);
+        color: var(--accent-primary);
     }
     
     .variable-value-compact {
         font-size: 0.75rem;
-    }
-    
-    .btn-close {
-        background: transparent;
-        border: none;
-        padding: 0.5rem;
-        cursor: pointer;
-        color: var(--text-secondary);
-        font-size: 1.2rem;
-        line-height: 1;
-        opacity: 0.7;
-        transition: opacity 0.2s;
-    }
-    
-    .btn-close:hover {
-        opacity: 1;
     }
     </style>
     {% else %}
@@ -201,15 +150,15 @@
 </script>
 
 <!-- Модальное окно (вне контейнера чтобы не обновлялось) -->
-<div id="variable-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); z-index: 99999; align-items: center; justify-content: center;" hx-preserve="true">
-    <div class="modal-content" style="max-width: 500px; background: var(--bg-primary); border-radius: 0.75rem; box-shadow: 0 4px 20px rgba(0,0,0,0.3); margin: auto;" onclick="event.stopPropagation()">
-        <div class="modal-header" style="border-bottom: 1px solid var(--border-color); padding: 1.5rem;">
-            <h3 id="variable-modal-title" style="margin: 0;">Добавить переменную</h3>
+<div id="variable-modal" class="modal-overlay" style="display: none;" hx-preserve="true">
+    <div class="modal-content" style="max-width: 500px;" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3 id="variable-modal-title">Добавить переменную</h3>
             <button class="btn-close" onclick="closeVariableModal()" title="Закрыть">
                 <i class="bi bi-x-lg"></i>
             </button>
         </div>
-        <div class="modal-body" style="padding: 1.5rem;">
+        <div class="modal-body">
             <div class="mb-3">
                 <label class="form-label">Ключ переменной</label>
                 <input type="text" class="form-control" id="variable-key" placeholder="telegram_bot_token">
@@ -245,7 +194,7 @@
                     </label>
                 </div>
         </div>
-        <div class="modal-footer" style="border-top: 1px solid var(--border-color); padding: 1rem 1.5rem; display: flex; justify-content: flex-end; gap: 0.5rem;">
+        <div class="modal-footer">
             <button type="button" class="btn btn-secondary" onclick="closeVariableModal()">Отмена</button>
             <button type="button" class="btn btn-primary" onclick="saveVariable()">Сохранить</button>
         </div>

@@ -4,7 +4,6 @@
     background: var(--bg-card);
     border: 1px solid var(--border-primary);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
     overflow: hidden;
     transition: all var(--transition-normal);
     width: 100%;
@@ -15,6 +14,7 @@
 .card:hover {
     border-color: var(--border-secondary);
     box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
 }
 
 .card-header {
