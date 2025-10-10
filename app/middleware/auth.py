@@ -41,6 +41,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
             or request.url.path.startswith("/api/v1/payments/webhook/")
         ):
             return await call_next(request)
+        
+        # Пропускаем middleware для GET запросов верификации WhatsApp webhook
+        if request.url.path.startswith("/api/v1/webhook/whatsapp") and request.method == "GET":
+            logger.info(f"🔍 WhatsApp webhook verification (GET) - пропускаем авторизацию")
+            return await call_next(request)
 
         # Для Telegram webhook - извлекаем company_id из полного ключа
         if request.url.path.startswith("/api/v1/webhook/telegram/"):
