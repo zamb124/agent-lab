@@ -1,0 +1,16 @@
+{
+  "fields": {
+    "try_ons": {
+      "description": "Список примерок"
+    },
+    "total": {
+      "description": "Общее количество примерок"
+    },
+    "page": {
+      "description": "Номер страницы"
+    },
+    "limit": {
+      "description": "Количество на странице"
+    }
+  }
+}

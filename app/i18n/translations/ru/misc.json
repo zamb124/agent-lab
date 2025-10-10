@@ -1,0 +1,30 @@
+{
+  "": {
+    "modal-overlay": ".modal-overlay",
+    "notification": ".notification"
+  },
+  "{{ bot": {
+    "flow_id }}": "{{ bot.flow_id }}"
+  },
+  "username": "username",
+  "message": "message",
+  "email": "email",
+  "phone": "phone",
+  "div": "div",
+  "Введите сумму пополнения больше 0": "Введите сумму пополнения больше 0",
+  "Тариф успешно изменен": "Тариф успешно изменен",
+  "{{ history": {
+    "session_id }}": "{{ history.session_id }}"
+  },
+  "tool_call_id": "tool_call_id",
+  "description": "description",
+  ";": ";",
+  "{{ key }}": "",
+  "Введите ключ переменной": "",
+  "Введите значение": "",
+  "Ошибка удаления": "",
+  "button": "",
+  "business_account_id": "",
+  "display_name": "",
+  "host": ""
+}

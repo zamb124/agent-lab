@@ -1,0 +1,107 @@
+{
+  "header": {
+    "builder": "Agent Builder",
+    "login": "Login",
+    "dashboard": "Dashboard"
+  },
+  "hero": {
+    "title_main": "Your business. Powered by agents.",
+    "title_accent": "Artificial Intelligence Support.",
+    "subtitle": "Agents Lab is a proprietary platform that allows companies to implement agent automation + AI assistants in processes, communications and management.",
+    "start_button": "Get Started",
+    "learn_more": "Learn More",
+    "floating_tags": {
+      "ai": "AI",
+      "automation": "Automation",
+      "rag": "RAG",
+      "search": "Information Search",
+      "support": "Support",
+      "efficiency": "Efficiency",
+      "growth": "Growth",
+      "integrations": "Integrations"
+    }
+  },
+  "about": {
+    "title": "What is Agents Lab",
+    "subtitle": "We help not just automate routine tasks, but transform business operations, bringing them to a new level of efficiency."
+  },
+  "features": {
+    "autonomous_agents": {
+      "title": "Autonomous Agents",
+      "description": "Agents that act instead of humans, make decisions, learn and interact with each other."
+    },
+    "multi_agent": {
+      "title": "Multi-Agent Systems",
+      "description": "Multiple agents work together: front-office, support service, sales department, analytics, logistics."
+    },
+    "low_code": {
+      "title": "Low-code / No-code",
+      "description": "Business teams can quickly develop solutions without extensive development."
+    },
+    "integrations": {
+      "title": "Flexible Integrations",
+      "description": "Integrations with systems, messengers, databases and enterprise internal software."
+    },
+    "security": {
+      "title": "Security",
+      "description": "Cloud or on-premise deployment, data control, compliance with regulatory requirements."
+    },
+    "scalability": {
+      "title": "Scalability",
+      "description": "From one agent to an entire network of agents interacting with each other."
+    }
+  },
+  "benefits": {
+    "title": "Our Strengths",
+    "speed": {
+      "title": "Implementation Speed",
+      "description": "MVP or agent prototype in just a few days; start without huge budgets."
+    },
+    "control_security": {
+      "title": "Control & Security",
+      "description": "Data encryption, strict access policies, ability to deploy in your infrastructure."
+    },
+    "scalability": {
+      "title": "Scalability",
+      "description": "From a single agent to a whole network of agents interacting with each other."
+    },
+    "manageability": {
+      "title": "Manageability",
+      "description": "Monitoring, analytics, reporting, workflow optimization."
+    }
+  },
+  "audience": {
+    "title": "Who We Serve",
+    "subtitle": "Agents Lab is especially useful for:",
+    "cost_reduction": "Companies looking to reduce operational costs and manual work errors",
+    "repetitive_tasks": "Businesses with repetitive processes, customer communications, or tasks requiring quick response",
+    "no_dev_team": "Those who want to implement AI agents but don't have a large development team",
+    "security_control": "Those who value data security and control, and need to comply with standards and regulations"
+  },
+  "cta": {
+    "title": "Ready to Start?",
+    "subtitle": "Learn how Agents Lab can help your specific business",
+    "login_button": "Login to Platform",
+    "contact_button": "Contact Us"
+  },
+  "contact_modal": {
+    "title": "Start with Agents Lab",
+    "message_label": "Message *",
+    "message_placeholder": "Tell us about your tasks and goals...",
+    "email_label": "Email *",
+    "email_placeholder": "your@email.com",
+    "phone_label": "Phone",
+    "phone_placeholder": "+1 (555) 123-4567",
+    "cancel_button": "Cancel",
+    "send_button": "Send",
+    "notification_success_title": "Message Sent",
+    "notification_success_message": "We will contact you shortly",
+    "notification_error_title": "Send Error",
+    "notification_error_message_default": "Please try again or contact us directly",
+    "notification_error_message_email_invalid": "Please enter a valid email address",
+    "sending": "Sending..."
+  },
+  "footer": {
+    "copyright": "© 2025 Agents Lab. AI Agents Laboratory."
+  }
+}

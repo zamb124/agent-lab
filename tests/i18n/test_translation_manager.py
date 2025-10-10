@@ -83,16 +83,10 @@ class TestTranslationManagerBasicFunctionality:
                 "validation.required": "Поле обязательно для заполнения"
             },
             Language.EN: {
-                "common.save": "Save", 
+                "common.save": "Save",
                 "common.cancel": "Cancel",
                 "dashboard.title": "Dashboard",
                 "validation.required": "Field is required"
-            },
-            Language.ES: {
-                "common.save": "Guardar",
-                "common.cancel": "Cancelar",
-                "dashboard.title": "[TODO: dashboard.title]",
-                "validation.required": "[TODO: validation.required]"
             }
         }
         
@@ -120,7 +114,7 @@ class TestTranslationManagerBasicFunctionality:
         self.manager._translations_cache[Language.RU]["test.fallback"] = "Только на русском"
         
         # Ключ отсутствует в ES, должен быть fallback на RU
-        result = self.manager.t("test.fallback", Language.ES)
+        result = self.manager.t("test.fallback", Language.EN)
         assert result == "Только на русском"  # Fallback на RU
     
     def test_t_function_with_params(self):
@@ -152,16 +146,16 @@ class TestTranslationManagerBasicFunctionality:
     def test_get_translations_empty_language(self):
         """Проверяем получение переводов для неподдерживаемого языка"""
         # Очищаем кеш для одного языка
-        del self.manager._translations_cache[Language.ES]
+        del self.manager._translations_cache[Language.EN]
         
-        translations = self.manager.get_translations(Language.ES)
+        translations = self.manager.get_translations(Language.EN)
         assert translations == {}
     
     def test_get_stats(self):
         """Проверяем получение статистики переводов"""
         stats = self.manager.get_stats()
         
-        assert stats.total_languages == 3
+        assert stats.total_languages == 2
         assert stats.total_keys == 4  # По количеству ключей в RU
         
         # Проверяем статистику по языкам
@@ -170,10 +164,10 @@ class TestTranslationManagerBasicFunctionality:
         assert ru_stats.translated_keys == 4
         assert ru_stats.completeness == 100.0
         
-        es_stats = stats.languages_stats[Language.ES]
-        assert es_stats.total_keys == 4
-        assert es_stats.translated_keys == 2  # Только 2 без [TODO:]
-        assert es_stats.completeness == 50.0
+        en_stats = stats.languages_stats[Language.EN]
+        assert en_stats.total_keys == 4
+        assert en_stats.translated_keys == 4  # Все переведены
+        assert en_stats.completeness == 100.0
 
 
 class TestTranslationManagerFileOperations:

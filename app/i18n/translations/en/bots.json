@@ -1,0 +1,14 @@
+{
+  "title": "Bots",
+  "create_bot": "Create Bot",
+  "loading": "Loading bots...",
+  "configure": "Configure",
+  "chat": "Chat",
+  "platforms": "Platforms",
+  "agent": "Agent",
+  "no_description": "No description",
+  "empty_state": {
+    "title": "You don't have any bots yet",
+    "description": "Create your first bot to get started"
+  }
+}

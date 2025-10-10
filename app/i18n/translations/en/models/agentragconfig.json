@@ -1,0 +1,16 @@
+{
+  "fields": {
+    "namespace_scope": {
+      "title": "[TODO: models.agentragconfig.fields.namespace_scope.title]",
+      "description": "[TODO: models.agentragconfig.fields.namespace_scope.description]"
+    },
+    "search_scopes": {
+      "title": "[TODO: models.agentragconfig.fields.search_scopes.title]",
+      "description": "[TODO: models.agentragconfig.fields.search_scopes.description]"
+    },
+    "auto_index_messages": {
+      "title": "[TODO: models.agentragconfig.fields.auto_index_messages.title]",
+      "description": "[TODO: models.agentragconfig.fields.auto_index_messages.description]"
+    }
+  }
+}

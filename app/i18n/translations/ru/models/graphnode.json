@@ -1,0 +1,46 @@
+{
+  "fields": {
+    "id": {
+      "title": "ID ноды",
+      "description": "Уникальный идентификатор ноды в графе"
+    },
+    "type": {
+      "title": "Тип ноды",
+      "description": "Тип ноды в графе"
+    },
+    "params": {
+      "title": "Параметры",
+      "description": "Параметры ноды"
+    },
+    "code_mode": {
+      "title": "Режим кода",
+      "description": "Режим хранения кода ноды"
+    },
+    "function_class": {
+      "title": "Класс функции",
+      "description": "Путь к классу агента",
+      "placeholder": "app.agents.calculator.CalculatorAgent"
+    },
+    "function_path": {
+      "title": "Путь к функции",
+      "description": "Путь к функции",
+      "placeholder": "app.tools.calc_tools.add_numbers"
+    },
+    "inline_code": {
+      "title": "Инлайн код",
+      "description": "Python код ноды"
+    },
+    "prompt": {
+      "title": "Промпт",
+      "description": "Промпт для ReAct нод"
+    },
+    "input_mapping": {
+      "title": "Маппинг входных данных",
+      "description": "Как брать данные из state"
+    },
+    "output_mapping": {
+      "title": "Маппинг выходных данных",
+      "description": "Как сохранять результат в state"
+    }
+  }
+}

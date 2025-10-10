@@ -1,0 +1,80 @@
+{
+  "fields": {
+    "audio_id": {
+      "title": "ID аудио",
+      "description": "Уникальный ID аудиофайла в системе"
+    },
+    "provider": {
+      "title": "Провайдер",
+      "description": "Провайдер S3 (aws, yandex, minio, etc.)"
+    },
+    "original_name": {
+      "title": "Оригинальное имя",
+      "description": "Оригинальное имя аудиофайла"
+    },
+    "s3_key": {
+      "title": "Ключ S3",
+      "description": "Ключ аудиофайла в S3"
+    },
+    "s3_bucket": {
+      "title": "Bucket S3",
+      "description": "Bucket в S3"
+    },
+    "s3_endpoint": {
+      "title": "Endpoint S3",
+      "description": "Endpoint URL провайдера"
+    },
+    "content_type": {
+      "title": "Тип содержимого",
+      "description": "MIME тип аудиофайла"
+    },
+    "file_size": {
+      "title": "Размер файла",
+      "description": "Размер аудиофайла в байтах"
+    },
+    "duration": {
+      "title": "Длительность",
+      "description": "Длительность аудио в секундах"
+    },
+    "checksum": {
+      "title": "Контрольная сумма",
+      "description": "MD5 или другая контрольная сумма"
+    },
+    "status": {
+      "title": "Статус",
+      "description": "Статус аудиофайла"
+    },
+    "uploaded_by": {
+      "title": "Загрузил",
+      "description": "ID пользователя который загрузил"
+    },
+    "recognition_text": {
+      "title": "Распознанный текст",
+      "description": "Результат распознавания речи"
+    },
+    "recognition_confidence": {
+      "title": "Уверенность распознавания",
+      "description": "Уверенность распознавания от 0.0 до 1.0"
+    },
+    "recognition_qid": {
+      "title": "QID Cloud Voice",
+      "description": "ID запроса к Cloud Voice API"
+    },
+    "metadata": {
+      "title": "Метаданные",
+      "description": "Дополнительные метаданные аудиофайла"
+    },
+    "tags": {
+      "title": "Теги",
+      "description": "Теги для категоризации"
+    },
+    "created_at": {
+      "title": "Создан",
+      "description": "Время создания аудиозаписи"
+    },
+    "updated_at": {
+      "title": "Обновлен",
+      "description": "Время обновления аудиозаписи"
+    }
+  }
+}

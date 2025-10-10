@@ -1,0 +1,36 @@
+{
+  "fields": {
+    "checkpoint_id": {
+      "title": "ID checkpoint",
+      "description": "Уникальный идентификатор checkpoint"
+    },
+    "thread_id": {
+      "title": "Thread ID",
+      "description": "ID треда (session_id)"
+    },
+    "checkpoint_ns": {
+      "title": "Namespace",
+      "description": "Namespace checkpoint"
+    },
+    "step": {
+      "title": "Шаг",
+      "description": "Номер шага в графе"
+    },
+    "source_node": {
+      "title": "Node источник",
+      "description": "Название node/агента, создавшего checkpoint"
+    },
+    "timestamp": {
+      "title": "Время",
+      "description": "Время создания checkpoint"
+    },
+    "messages": {
+      "title": "Сообщения",
+      "description": "Сообщения в этом checkpoint"
+    },
+    "metadata": {
+      "title": "Метаданные",
+      "description": "Метаданные checkpoint"
+    }
+  }
+}

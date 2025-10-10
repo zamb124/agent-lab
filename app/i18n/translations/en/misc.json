@@ -1,0 +1,30 @@
+{
+  "": {
+    "modal-overlay": ".modal-overlay",
+    "notification": ".notification"
+  },
+  "{{ bot": {
+    "flow_id }}": "{{ bot.flow_id }}"
+  },
+  "username": "username",
+  "message": "message",
+  "email": "email",
+  "phone": "phone",
+  "div": "div",
+  "Введите сумму пополнения больше 0": "Enter top-up amount greater than 0",
+  "Тариф успешно изменен": "Plan successfully changed",
+  "{{ history": {
+    "session_id }}": "{{ history.session_id }}"
+  },
+  "tool_call_id": "tool_call_id",
+  "description": "description",
+  ";": ";",
+  "{{ key }}": "[TODO: {{ key }}]",
+  "Введите ключ переменной": "[TODO: Введите ключ переменной]",
+  "Введите значение": "[TODO: Введите значение]",
+  "Ошибка удаления": "[TODO: Ошибка удаления]",
+  "button": "[TODO: button]",
+  "business_account_id": "[TODO: business_account_id]",
+  "display_name": "[TODO: display_name]",
+  "host": "[TODO: host]"
+}

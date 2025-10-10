@@ -1,0 +1,34 @@
+{
+  "title": "Панель управления",
+  "welcome_message": "Добро пожаловать, {user_name}!",
+  "navigation": {
+    "bots": "Боты",
+    "chats": "Чаты",
+    "store": "Магазин",
+    "history": "История",
+    "builder": "Agent Builder",
+    "admin": "Администрирование",
+    "billing": "Тарифы и оплата",
+    "agents": "Агенты",
+    "flows": "Потоки",
+    "tasks": "Задачи",
+    "users": "Пользователи",
+    "company_management": "Управление компаниями"
+  },
+  "header": {
+    "theme_toggle": "Переключить тему",
+    "language_toggle": "Выбрать язык",
+    "logout": "Выйти",
+    "collapse_menu": "Свернуть меню"
+  },
+  "footer": {
+    "user": "Пользователь",
+    "online": "Онлайн"
+  },
+  "empty_state": {
+    "welcome_title": "Добро пожаловать в Agents Lab",
+    "welcome_description": "Выберите раздел из меню слева для начала работы с агентами и потоками",
+    "view_flows": "Просмотреть потоки",
+    "view_agents": "Просмотреть агентов"
+  }
+}

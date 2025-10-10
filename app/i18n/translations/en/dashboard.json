@@ -1,0 +1,34 @@
+{
+  "title": "Dashboard",
+  "welcome_message": "Welcome, {user_name}!",
+  "navigation": {
+    "bots": "Bots",
+    "chats": "Chats",
+    "store": "Store",
+    "history": "History",
+    "builder": "Agent Builder",
+    "admin": "Administration",
+    "billing": "Billing & Payment",
+    "agents": "Agents",
+    "flows": "Flows",
+    "tasks": "Tasks",
+    "users": "Users",
+    "company_management": "Company Management"
+  },
+  "header": {
+    "theme_toggle": "Toggle theme",
+    "language_toggle": "Select language",
+    "logout": "Logout",
+    "collapse_menu": "Collapse menu"
+  },
+  "footer": {
+    "user": "User",
+    "online": "Online"
+  },
+  "empty_state": {
+    "welcome_title": "Welcome to Agents Lab",
+    "welcome_description": "Select a section from the left menu to start working with agents and flows",
+    "view_flows": "View flows",
+    "view_agents": "View agents"
+  }
+}

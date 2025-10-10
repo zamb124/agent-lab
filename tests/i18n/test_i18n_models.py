@@ -17,21 +17,21 @@ class TestLanguage:
         """Проверяем значения поддерживаемых языков"""
         assert Language.RU == "ru"
         assert Language.EN == "en" 
-        assert Language.ES == "es"
+        assert Language.EN == "en"
     
     def test_language_iteration(self):
         """Проверяем итерацию по языкам"""
         languages = list(Language)
-        assert len(languages) == 3
+        assert len(languages) == 2
         assert Language.RU in languages
         assert Language.EN in languages
-        assert Language.ES in languages
+        assert Language.EN in languages
     
     def test_language_from_string(self):
         """Проверяем создание Language из строки"""
         assert Language("ru") == Language.RU
         assert Language("en") == Language.EN
-        assert Language("es") == Language.ES
+        assert Language("en") == Language.EN
         
     def test_invalid_language(self):
         """Проверяем ошибку для неподдерживаемого языка"""
@@ -112,13 +112,13 @@ class TestTranslationSet:
             translations={
                 Language.RU: "Сохранить",
                 Language.EN: "Save",
-                Language.ES: "Guardar"
+                Language.EN: "Guardar"
             },
             context="Common save button"
         )
         
         assert translation_set.key == "common.save"
-        assert len(translation_set.translations) == 3
+        assert len(translation_set.translations) == 2
         assert translation_set.translations[Language.RU] == "Сохранить"
         assert translation_set.context == "Common save button"
     

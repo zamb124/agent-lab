@@ -1,0 +1,52 @@
+{
+  "fields": {
+    "user": {
+      "title": "Пользователь",
+      "description": "Пользователь выполняющий запрос"
+    },
+    "session_id": {
+      "title": "ID сессии",
+      "description": "Идентификатор сессии"
+    },
+    "platform": {
+      "title": "Платформа",
+      "description": "Платформа откуда поступил запрос"
+    },
+    "active_company": {
+      "title": "Активная компания",
+      "description": "Текущая активная компания пользователя"
+    },
+    "user_companies": {
+      "title": "Компании пользователя",
+      "description": "Все доступные компании пользователя"
+    },
+    "metadata": {
+      "title": "Метаданные",
+      "description": "Дополнительные метаданные контекста"
+    },
+    "language": {
+      "title": "Язык пользователя",
+      "description": "Предпочитаемый язык интерфейса пользователя"
+    },
+    "flow_variables": {
+      "title": "Переменные flow",
+      "description": "Переменные доступные во flow и агентах"
+    },
+    "company_variables": {
+      "title": "Переменные компании",
+      "description": "Переменные компании для использования в промптах"
+    },
+    "state": {
+      "title": "State агента",
+      "description": "Ссылка на текущий state агента (доступен в тулах)"
+    },
+    "flow_config": {
+      "title": "Конфигурация flow",
+      "description": "FlowConfig для текущего запроса"
+    },
+    "agent_config": {
+      "title": "Конфигурация агента",
+      "description": "AgentConfig для текущего запроса"
+    }
+  }
+}

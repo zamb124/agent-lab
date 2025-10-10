@@ -1,0 +1,19 @@
+{
+  "fields": {
+    "transaction_id": {
+      "description": "ID транзакции"
+    },
+    "payment_url": {
+      "description": "URL для оплаты"
+    },
+    "provider": {
+      "description": "Использованный провайдер"
+    },
+    "status": {
+      "description": "Статус транзакции"
+    },
+    "amount": {
+      "description": "Сумма пополнения"
+    }
+  }
+}

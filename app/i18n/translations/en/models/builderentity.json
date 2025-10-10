@@ -1,0 +1,16 @@
+{
+  "fields": {
+    "source": {
+      "title": "Source",
+      "description": "Creation source (manual, migration, canvas_created)"
+    },
+    "created_at": {
+      "title": "Created",
+      "description": "Creation date"
+    },
+    "updated_at": {
+      "title": "Updated",
+      "description": "Update date"
+    }
+  }
+}

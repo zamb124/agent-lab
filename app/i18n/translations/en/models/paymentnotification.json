@@ -1,0 +1,30 @@
+{
+  "fields": {
+    "notification_id": {
+      "title": "[TODO: models.paymentnotification.fields.notification_id.title]",
+      "description": "[TODO: models.paymentnotification.fields.notification_id.description]"
+    },
+    "provider": {
+      "title": "[TODO: models.paymentnotification.fields.provider.title]",
+      "description": "[TODO: models.paymentnotification.fields.provider.description]"
+    },
+    "transaction_id": {
+      "title": "[TODO: models.paymentnotification.fields.transaction_id.title]",
+      "description": "[TODO: models.paymentnotification.fields.transaction_id.description]"
+    },
+    "external_payment_id": {
+      "title": "[TODO: models.paymentnotification.fields.external_payment_id.title]"
+    },
+    "raw_data": {
+      "title": "[TODO: models.paymentnotification.fields.raw_data.title]",
+      "description": "[TODO: models.paymentnotification.fields.raw_data.description]"
+    },
+    "processed": {
+      "title": "[TODO: models.paymentnotification.fields.processed.title]",
+      "description": "[TODO: models.paymentnotification.fields.processed.description]"
+    },
+    "created_at": {
+      "title": "[TODO: models.paymentnotification.fields.created_at.title]"
+    }
+  }
+}
