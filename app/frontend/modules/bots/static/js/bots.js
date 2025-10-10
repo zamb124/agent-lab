@@ -30,6 +30,16 @@ import { showNotification } from '/static/js/components/notification.js';
         const modalDetails = document.getElementById('modal-bot-details');
         const listView = document.getElementById('bots-list-view');
         
+        if (!modal || !modalDetails) {
+            console.error('Modal elements not found!');
+            alert('Модалка не найдена в DOM');
+            return;
+        }
+        
+        if (modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+        }
+        
         modalDetails.innerHTML = '<div class="loading-indicator"><div class="spinner"></div><span>Загрузка...</span></div>';
         modal.style.display = 'flex';
         if (listView) listView.style.display = 'none';
@@ -54,6 +64,15 @@ import { showNotification } from '/static/js/components/notification.js';
             modalDetails.innerHTML = '<div class="empty-state"><p>Ошибка загрузки деталей бота</p></div>';
         }
     };
+    
+    document.body.addEventListener('htmx:beforeSwap', function(event) {
+        if (event.detail.target.id === 'content') {
+            const modal = document.getElementById('bot-expanded-modal');
+            if (modal && modal.style.display === 'flex') {
+                closeBotModal();
+            }
+        }
+    });
 
     window.toggleChat = function(flowId, botName) {
         const chatSection = document.getElementById(`bot-chat-section-${flowId}`);

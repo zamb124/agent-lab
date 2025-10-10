@@ -182,19 +182,13 @@ class LayoutManager {
         if (!sidebar || !mainContent) return;
         
         if (this.sidebarCollapsed && !this.isMobile) {
-            sidebar.style.setProperty('width', '60px', 'important');
-            mainContent.style.setProperty('margin-left', '60px', 'important');
             sidebar.classList.add('collapsed');
-            mainContent.classList.add('sidebar-collapsed');
+            document.body.classList.add('sidebar-collapsed');
         } else {
-            // Убираем inline стили - возвращаем к CSS переменным
-            sidebar.style.removeProperty('width');
-            mainContent.style.removeProperty('margin-left');
             sidebar.classList.remove('collapsed');
-            mainContent.classList.remove('sidebar-collapsed');
+            document.body.classList.remove('sidebar-collapsed');
         }
         
-        // Обновляем иконку кнопки
         this.updateToggleIcon();
     }
     

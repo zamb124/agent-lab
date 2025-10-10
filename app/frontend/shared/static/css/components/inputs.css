@@ -2,20 +2,25 @@
 
 .input-group {
     display: flex;
+    gap: 0.5rem;
 }
 
 .input-group-text {
     padding: 0.625rem 1rem;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-primary);
-    border-right: none;
-    border-radius: var(--radius-md) 0 0 var(--radius-md);
+    border-radius: var(--radius-md);
     color: var(--text-secondary);
     font-weight: 500;
 }
 
 .input-group .form-control {
-    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    flex: 1;
+    border-radius: var(--radius-md);
+}
+
+.input-group .btn {
+    border-radius: var(--radius-md);
 }
 
 .form-check {

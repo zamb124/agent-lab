@@ -1,42 +1,38 @@
-/* Agents Lab - CSS Variables для темной темы в стиле Langflow */
+/* Agents Lab - CSS Variables (Linear-inspired dark theme) */
 
 :root {
     /* Основные цвета темной темы */
-    --bg-primary: #0f0f23;
-    --bg-secondary: #1a1a2e;
-    --bg-tertiary: #16213e;
-    --bg-card: #1e1e2e;
-    --bg-hover: #252545;
+    --bg-primary: #0d0d0d;
+    --bg-secondary: #1a1a1a;
+    --bg-tertiary: #262626;
+    --bg-card: #1a1a1a;
+    --bg-hover: #262626;
     
     /* Текст */
     --text-primary: #ffffff;
-    --text-secondary: #a8a8b3;
-    --text-muted: #6b7280;
-    --text-disabled: #4b5563;
+    --text-secondary: #a1a1a1;
+    --text-muted: #737373;
+    --text-disabled: #525252;
     
-    /* Акцентные цвета */
-    --accent-primary: #6366f1;
-    --accent-secondary: #8b5cf6;
+    /* Акцентные цвета (плоские, без градиентов) */
+    --accent-primary: #5e6ad2;
+    --accent-primary-hover: #4e5bc4;
+    --accent-secondary: #7c3aed;
     --accent-success: #10b981;
     --accent-warning: #f59e0b;
     --accent-danger: #ef4444;
     --accent-info: #06b6d4;
     
-    /* Градиенты */
-    --gradient-primary: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-    --gradient-success: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    --gradient-danger: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-    
     /* Границы */
-    --border-primary: #374151;
-    --border-secondary: #4b5563;
-    --border-focus: #6366f1;
+    --border-primary: #2a2a2a;
+    --border-secondary: #3a3a3a;
+    --border-focus: #5e6ad2;
     
-    /* Тени */
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
-    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+    /* Тени (минимальные) */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+    --shadow-md: 0 2px 4px 0 rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 4px 8px 0 rgba(0, 0, 0, 0.4);
+    --shadow-xl: 0 8px 16px 0 rgba(0, 0, 0, 0.5);
     
     /* Скругления */
     --radius-sm: 6px;
@@ -47,7 +43,7 @@
     
     /* Размеры */
     --sidebar-width: 280px;
-    --header-height: 64px;
+    --header-height: 52px;
     
     /* Анимации */
     --transition-fast: 0.15s ease;
@@ -63,22 +59,26 @@
 
 /* Светлая тема (для переключения в будущем) */
 [data-theme="light"] {
-    --bg-primary: #f5f5f7;
-    --bg-secondary: #f8fafc;
-    --bg-tertiary: #f1f5f9;
+    --bg-primary: #fafafa;
+    --bg-secondary: #f5f5f5;
+    --bg-tertiary: #e8e8e8;
     --bg-card: #ffffff;
-    --bg-hover: #f8fafc;
+    --bg-hover: #f3f4f6;
     
-    --text-primary: #1e293b;
-    --text-secondary: #475569;
-    --text-muted: #64748b;
-    --text-disabled: #94a3b8;
+    --text-primary: #111827;
+    --text-secondary: #6b7280;
+    --text-muted: #9ca3af;
+    --text-disabled: #d1d5db;
     
-    --border-primary: #e2e8f0;
-    --border-secondary: #cbd5e1;
+    --accent-primary: #5e6ad2;
+    --accent-primary-hover: #4e5bc4;
+    
+    --border-primary: #e5e7eb;
+    --border-secondary: #d1d5db;
+    --border-focus: #5e6ad2;
     
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    --shadow-md: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 4px 8px 0 rgba(0, 0, 0, 0.1);
+    --shadow-xl: 0 8px 16px 0 rgba(0, 0, 0, 0.15);
 }

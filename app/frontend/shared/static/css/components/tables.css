@@ -40,21 +40,22 @@
 }
 
 .table th {
-    padding: 0.75rem 1rem;
+    padding: 0.625rem 0.875rem;
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border-primary);
     font-weight: 600;
     text-align: left;
     color: var(--text-primary);
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
 
 .table td {
-    padding: 0.75rem 1rem;
+    padding: 0.625rem 0.875rem;
     border-bottom: 1px solid var(--border-primary);
     color: var(--text-secondary);
+    font-size: 0.8125rem;
     overflow: hidden;
     text-overflow: ellipsis;
     width: auto;
@@ -81,16 +82,15 @@
 }
 
 .table-icon {
-    width: 2rem;
-    height: 2rem;
+    width: 1.75rem;
+    height: 1.75rem;
     background: var(--accent-primary);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-size: 0.875rem;
-    box-shadow: var(--shadow-sm);
+    font-size: 0.75rem;
 }
 
 @media (max-width: 768px) {
