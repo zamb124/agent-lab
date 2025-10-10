@@ -47,6 +47,8 @@
     display: flex;
     flex-direction: column;
     gap: 0.875rem;
+    position: relative;
+    min-height: 200px;
 }
 
 .bot-card:hover {
@@ -55,10 +57,37 @@
     transform: translateY(-2px);
 }
 
+.btn-chat-mini {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-primary);
+    color: var(--text-secondary);
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+    z-index: 10;
+    font-size: 0.875rem;
+}
+
+.btn-chat-mini:hover {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: white;
+    transform: scale(1.1);
+}
+
 .bot-card-header {
     display: flex;
     gap: 1rem;
     align-items: flex-start;
+    min-height: 4.5rem;
 }
 
 .bot-icon {
@@ -90,6 +119,8 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    max-width: 100%;
+    height: 1.5rem;
 }
 
 .bot-description {
@@ -101,6 +132,8 @@
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    height: 2.4375rem;
+    max-height: 2.4375rem;
 }
 
 .bot-card-body {
@@ -175,6 +208,24 @@
     color: #339933;
 }
 
+.platform-empty {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.5rem;
+    background: var(--bg-secondary);
+    border: 1px dashed var(--border-secondary);
+    border-radius: var(--radius-lg);
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.platform-empty i {
+    font-size: 0.75rem;
+    opacity: 0.6;
+}
+
 .bot-meta {
     display: flex;
     flex-direction: column;
@@ -209,17 +260,6 @@
     text-overflow: ellipsis;
     max-width: 200px;
     display: inline-block;
-}
-
-.bot-card-footer {
-    display: flex;
-    gap: 0.75rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--border-secondary);
-}
-
-.bot-card-footer .btn {
-    flex: 1;
 }
 
 .empty-state {
@@ -436,6 +476,19 @@ body.sidebar-collapsed .bot-modal {
 .platforms-list {
     display: flex;
     gap: 0.375rem;
+    align-items: center;
+}
+
+.platforms-list .btn-icon {
+    color: var(--text-muted);
+    opacity: 0.7;
+    transition: all var(--transition-fast);
+}
+
+.platforms-list .btn-icon:hover {
+    color: var(--accent-primary);
+    opacity: 1;
+    transform: scale(1.1);
 }
 
 .platform-badge {
@@ -445,7 +498,7 @@ body.sidebar-collapsed .bot-modal {
     padding: 0.125rem 0.5rem;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-secondary);
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     font-size: 0.6875rem;
     font-weight: 500;
     text-transform: capitalize;
@@ -583,7 +636,7 @@ body.sidebar-collapsed .bot-modal {
     height: 36px;
     border-radius: 50%;
     border: 1px solid var(--border-secondary);
-    background: var(--bg-card-lighter);
+    background: var(--bg-secondary);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -658,7 +711,7 @@ body.sidebar-collapsed .bot-modal {
 }
 
 .form-group {
-    margin-bottom: 1.5rem;
+    margin-bottom: 1.25rem;
 }
 
 .form-group label {
@@ -666,7 +719,7 @@ body.sidebar-collapsed .bot-modal {
     margin-bottom: 0.5rem;
     font-weight: 500;
     color: var(--text-primary);
-    font-size: 0.9375rem;
+    font-size: 0.8125rem;
 }
 
 .form-control {
@@ -781,7 +834,7 @@ input:checked + .slider:before {
 
 .input-group-text {
     padding: 0.625rem 1rem;
-    background: var(--bg-tertiary);
+    background: var(--bg-secondary);
     border: 1px solid var(--border-primary);
     border-right: none;
     border-radius: var(--radius-md) 0 0 var(--radius-md);
@@ -818,16 +871,6 @@ input:checked + .slider:before {
 .code-editor {
     font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
     font-size: 0.875rem;
-}
-
-.settings-actions {
-    display: flex;
-    gap: 1rem;
-    justify-content: flex-end;
-    padding: 1.5rem;
-    border-top: 1px solid var(--border-primary);
-    background: var(--bg-card);
-    flex-shrink: 0;
 }
 
 @media (max-width: 1200px) {
@@ -915,8 +958,8 @@ input:checked + .slider:before {
 }
 
 #add-platform-modal .modal-header {
-    padding: 1.5rem;
-    border-bottom: 1px solid var(--border-color);
+    padding: 1.25rem;
+    border-bottom: 1px solid var(--border-primary);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -925,7 +968,7 @@ input:checked + .slider:before {
 #add-platform-modal .modal-header h3 {
     margin: 0;
     color: var(--text-primary);
-    font-size: 1.25rem;
+    font-size: 1.125rem;
     font-weight: 600;
 }
 
@@ -933,13 +976,13 @@ input:checked + .slider:before {
     background: transparent !important;
     border: none !important;
     color: var(--text-secondary) !important;
-    font-size: 1.5rem !important;
+    font-size: 1.125rem !important;
     cursor: pointer !important;
-    padding: 0.5rem !important;
-    border-radius: var(--radius) !important;
-    transition: all 0.2s ease !important;
-    width: 2.5rem !important;
-    height: 2.5rem !important;
+    padding: 0.375rem !important;
+    border-radius: var(--radius-sm) !important;
+    transition: all var(--transition-fast) !important;
+    width: 1.75rem !important;
+    height: 1.75rem !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -957,20 +1000,12 @@ input:checked + .slider:before {
 }
 
 #add-platform-modal .btn-close i {
-    font-size: 1.2rem !important;
+    font-size: 1rem !important;
     line-height: 1 !important;
 }
 
 #add-platform-modal .modal-body {
-    padding: 1.5rem;
-}
-
-#add-platform-modal .modal-footer {
-    padding: 1rem 1.5rem;
-    border-top: 1px solid var(--border-color);
-    display: flex;
-    gap: 1rem;
-    justify-content: flex-end;
+    padding: 1.25rem;
 }
 
 /* Строки кастомных переменных */
@@ -995,8 +1030,8 @@ input:checked + .slider:before {
 #platform-type-select {
     width: 100%;
     padding: 0.75rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
     background: var(--bg-primary);
     color: var(--text-primary);
     font-size: 0.875rem;
@@ -1011,13 +1046,13 @@ input:checked + .slider:before {
 #platform-config-section {
     margin-top: 1.5rem;
     padding-top: 1.5rem;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-primary);
 }
 
 #platform-config-section h4 {
     margin: 0 0 1rem 0;
     color: var(--text-primary);
-    font-size: 1.1rem;
+    font-size: 1.125rem;
     font-weight: 600;
 }
 
@@ -1034,7 +1069,7 @@ input:checked + .slider:before {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 1.1rem;
+    font-size: 1rem;
     font-weight: 600;
     color: var(--text-primary);
 }
@@ -1047,18 +1082,18 @@ input:checked + .slider:before {
 .platform-actions .btn {
     padding: 0.375rem 0.5rem;
     font-size: 0.875rem;
-    border-radius: var(--radius);
-    transition: all 0.2s ease;
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
 }
 
 .platform-actions .btn-outline-danger {
-    border: 1px solid var(--danger);
-    color: var(--danger);
+    border: 1px solid var(--accent-danger);
+    color: var(--accent-danger);
     background: transparent;
 }
 
 .platform-actions .btn-outline-danger:hover {
-    background: var(--danger);
+    background: var(--accent-danger);
     color: white;
 }
 
@@ -1080,12 +1115,12 @@ input:checked + .slider:before {
     align-items: center;
     justify-content: space-between;
     padding: 0.75rem;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
     background: var(--bg-primary);
     color: var(--text-primary);
     font-size: 0.875rem;
-    transition: all 0.2s ease;
+    transition: all var(--transition-fast);
 }
 
 .select-value:hover {
@@ -1132,8 +1167,8 @@ input:checked + .slider:before {
     gap: 0.75rem;
     padding: 0.75rem;
     cursor: pointer;
-    transition: all 0.2s ease;
-    border-bottom: 1px solid var(--border-color);
+    transition: all var(--transition-fast);
+    border-bottom: 1px solid var(--border-primary);
 }
 
 .dropdown-option:last-child {
@@ -1226,7 +1261,7 @@ input:checked + .slider:before {
     height: 36px;
     border-radius: 50%;
     border: 1px solid var(--border-secondary);
-    background: var(--bg-card-lighter);
+    background: var(--bg-secondary);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1248,9 +1283,9 @@ input:checked + .slider:before {
 
 .documents-header h5 {
     margin: 0;
-    font-size: 16px;
+    font-size: 1rem;
     font-weight: 600;
-    color: var(--text-color);
+    color: var(--text-primary);
 }
 
 .documents-list {
@@ -1260,11 +1295,11 @@ input:checked + .slider:before {
 .documents-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 15px;
+    gap: 0.9375rem;
 }
 
 .document-card {
-    background: var(--bg-card-lighter);
+    background: var(--bg-secondary);
     border: 1px solid var(--border-secondary);
     border-radius: var(--radius-md);
     padding: 1rem;
@@ -1295,13 +1330,13 @@ input:checked + .slider:before {
 
 .document-header {
     display: flex;
-    gap: 12px;
+    gap: 0.75rem;
     flex: 1;
 }
 
 .document-icon {
-    font-size: 32px;
-    color: var(--primary-color);
+    font-size: 2rem;
+    color: var(--accent-primary);
     opacity: 0.7;
 }
 
@@ -1325,11 +1360,11 @@ input:checked + .slider:before {
 }
 
 .document-meta {
-    font-size: 12px;
+    font-size: 0.75rem;
     color: var(--text-muted);
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 0.375rem;
 }
 
 .document-meta .status-text {
@@ -1338,7 +1373,7 @@ input:checked + .slider:before {
 
 .document-actions {
     display: flex;
-    gap: 8px;
+    gap: 0.5rem;
 }
 
 .loading-state,
@@ -1352,16 +1387,16 @@ input:checked + .slider:before {
 .loading-state i,
 .empty-state i,
 .error-state i {
-    font-size: 48px;
+    font-size: 3rem;
     display: block;
-    margin-bottom: 15px;
+    margin-bottom: 0.9375rem;
     opacity: 0.5;
 }
 
 .empty-state p:first-of-type {
     font-weight: 600;
-    color: var(--text-color);
-    margin-bottom: 8px;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
 }
 
 .checkbox-group {
