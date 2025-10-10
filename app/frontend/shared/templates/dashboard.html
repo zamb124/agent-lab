@@ -159,9 +159,10 @@
                 </a>
             </div>
             <div class="d-flex align-items-center gap-3">
+                <img id="user-avatar" class="user-avatar" src="" alt="Avatar" style="display: none;">
                 <div class="status-dot status-online"></div>
                 <div class="flex-grow-1">
-                    <div class="small font-medium">{{ t('dashboard.footer.user') }}</div>
+                    <div class="small font-medium" id="user-name">{{ t('dashboard.footer.user') }}</div>
                     <div class="small text-muted">{{ t('dashboard.footer.online') }}</div>
                 </div>
                 <button class="btn btn-ghost btn-sm" onclick="app.logout()" data-tooltip="{{ t('dashboard.header.logout') }}">

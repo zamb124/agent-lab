@@ -207,3 +207,16 @@
     }
 }
 
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--border-primary);
+    flex-shrink: 0;
+}
+
+.sidebar.collapsed .user-avatar {
+    display: none !important;
+}
+

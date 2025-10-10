@@ -18,6 +18,7 @@ class APP {
         this.setupHTMX();
         this.setupManagers();
         this.setupUI();
+        this.loadUserProfile();
     }
     
     async setupManagers() {
@@ -204,7 +205,40 @@ class APP {
         showNotification(message, type);
     }
     
-    // Загрузка данных
+    async loadUserProfile() {
+        try {
+            const response = await fetch('/api/v1/admin/me', {
+                headers: {
+                    'Authorization': this.authToken ? `Bearer ${this.authToken}` : '',
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                console.warn('Не удалось загрузить профиль пользователя');
+                return;
+            }
+            
+            const userData = await response.json();
+            
+            const avatarElement = document.getElementById('user-avatar');
+            const nameElement = document.getElementById('user-name');
+            
+            if (userData.avatar_url && avatarElement) {
+                avatarElement.src = userData.avatar_url;
+                avatarElement.style.display = 'block';
+            }
+            
+            if (userData.name && nameElement) {
+                nameElement.textContent = userData.name;
+            }
+            
+            console.log('✅ Профиль пользователя загружен:', userData.name);
+        } catch (error) {
+            console.error('Ошибка загрузки профиля пользователя:', error);
+        }
+    }
+    
     async loadData(url, options = {}) {
         try {
             const response = await fetch(url, {
