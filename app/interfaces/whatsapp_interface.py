@@ -815,7 +815,7 @@ class WhatsAppInterface(BaseInterface):
                     response=response
                 )
             
-            phone_data = await response.json()
+            phone_data = response.json()
             display_phone_number = phone_data.get("display_phone_number", "Unknown")
             logger.info(f"📱 WhatsApp номер: {display_phone_number}")
         
