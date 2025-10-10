@@ -313,7 +313,8 @@ class TaskProcessor:
         factory = InterfaceFactory()
         metadata = task.input_data.get("metadata", {})
         
-        interface = await factory.create_interface(task.platform, metadata)
+        config = {**metadata, "flow_id": task.flow_id}
+        interface = await factory.create_interface(task.platform, config)
 
         if interface is None:
             logger.error(f"❌ Не удалось создать интерфейс для отправки ошибки")
@@ -333,11 +334,11 @@ class TaskProcessor:
 
     async def _send_result_via_interface(self, task, result):
         """Отправляет результат через соответствующий интерфейс платформы"""
-        # Создаем интерфейс для платформы
         factory = InterfaceFactory()
         metadata = task.input_data.get("metadata", {})
-
-        interface = await factory.create_interface(task.platform, metadata)
+        
+        config = {**metadata, "flow_id": task.flow_id}
+        interface = await factory.create_interface(task.platform, config)
 
         if interface is None:
             # Для API или если интерфейс не нужен
