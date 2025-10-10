@@ -355,6 +355,9 @@
                             <button class="btn-edit" onclick="editTariff('{{ company.company_id }}', '{{ company.name }}', '{{ company.tariff_plan }}')">
                                 {{ t('admin.companies.table.edit_tariff') }}
                             </button>
+                            <button class="btn-edit" onclick="remigrateAllPublic('{{ company.company_id }}', '{{ company.name }}')" style="background: var(--accent-warning);">
+                                <i class="bi bi-arrow-clockwise"></i> Перемигрировать все
+                            </button>
                         </div>
                     </td>
                 </tr>
@@ -562,6 +565,32 @@ async function saveTariff() {
         }
     } catch (error) {
         alert(t('admin.companies.errors.save_error') + error.message);
+    }
+}
+
+async function remigrateAllPublic(companyId, companyName) {
+    if (!confirm(`Перемигрировать все публичные flows, агенты и тулы для компании "${companyName}"?\n\nЭто обновит компанию до актуального состояния из кода.`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/v1/admin/remigrate-all-public/${companyId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('Ошибка: ' + (data.detail || data.message));
+        }
+    } catch (error) {
+        alert('Ошибка перемиграции: ' + error.message);
     }
 }
 

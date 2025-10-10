@@ -111,16 +111,14 @@ async def auth_callback(
         logger.error(f"Ошибка завершения авторизации: {result.error_message}")
         raise HTTPException(status_code=400, detail=result.error_message)
 
-    # Устанавливаем сессию в cookies и перенаправляем на dashboard
-    response = RedirectResponse(url="/frontend/dashboard")
+    # Устанавливаем сессию в cookies и перенаправляем на страницу выбора компании
+    response = RedirectResponse(url="/frontend/select-company")
     # Настройки куки в зависимости от окружения
     is_production = settings.server.env == "production"
 
-    # Устанавливаем домен чтобы cookies работали на всех субдоменах
-    if settings.server.env == "local":
-        domain = ".localhost"
-    else:
-        domain = f".{settings.server.domain}"
+    # НЕ устанавливаем domain для локальной разработки - cookie привяжется к хосту запроса
+    # Для продакшена устанавливаем wildcard домен для работы на субдоменах
+    domain = None if settings.server.env == "local" else f".{settings.server.domain}"
 
     logger.info(f"🍪 Устанавливаем cookies: session_id={result.session.session_id}, domain={domain}, secure={is_production}")
 

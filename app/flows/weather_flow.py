@@ -82,7 +82,8 @@ weather_flow_config = FlowConfig(
             "Санкт-Петербург",
             "@var:company_city"  # Ссылка внутри list
         ]
-    }
+    },
+    is_public=True,
 )
 
 # Для использования переменных в промптах агента:

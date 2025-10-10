@@ -71,7 +71,10 @@ async def bot_details(request: Request, bot_id: str):
             "prompt": "",
             "flow_variables": {},
             "local_variables": {},
-            "llm_config": None,
+            "llm_config": {
+                "provider": "openai",
+                "model": "gpt-4"
+            },
             "rag_config": {
                 "enabled": True,
                 "namespace_scope": "flow",

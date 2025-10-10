@@ -58,4 +58,5 @@ test_flow_config = FlowConfig(
     description="Простой тестовый флоу без LLM",
     entry_point_agent="app.flows.test_flow.TestFlowAgent",
     platforms={"api": {}, "telegram": {"username": "agents_lab_bot"}},
+    is_public=True,
 )

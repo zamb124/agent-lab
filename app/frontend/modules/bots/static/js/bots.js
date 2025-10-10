@@ -345,8 +345,8 @@ import { showNotification } from '/static/js/components/notification.js';
         
         try {
             const [publicToolsResponse, publicAgentsResponse] = await Promise.all([
-                fetch('/frontend/api/tools?public_only=true'),
-                fetch('/frontend/api/agents?public_only=true')
+                fetch('/frontend/api/tools/?public_only=true'),
+                fetch('/frontend/api/agents/?public_only=true')
             ]);
             
             if (!publicToolsResponse.ok) {
