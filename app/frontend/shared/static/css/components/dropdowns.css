@@ -145,3 +145,7 @@
     font-size: 0.875rem;
 }
 
+.header .dropdown-menu {
+    z-index: 1025 !important;
+}
+

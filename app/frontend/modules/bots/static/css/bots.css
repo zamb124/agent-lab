@@ -631,6 +631,17 @@ body.sidebar-collapsed .bot-modal {
     color: var(--text-primary);
 }
 
+.panel-description {
+    padding: 0 1.5rem 1rem;
+}
+
+.panel-description p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
 .btn-add-platform {
     width: 36px;
     height: 36px;
