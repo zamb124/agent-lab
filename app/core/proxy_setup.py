@@ -36,6 +36,12 @@ def configure_proxy_from_settings():
                 os.environ["https_proxy"] = https_proxy
                 logger.info(f"🌐 HTTPS прокси: {https_proxy.split('@')[1] if '@' in https_proxy else https_proxy}")
             
+            # Исключаем localhost и внутренние сервисы из прокси
+            no_proxy = "localhost,127.0.0.1,sgr,postgres,app,worker"
+            os.environ["NO_PROXY"] = no_proxy
+            os.environ["no_proxy"] = no_proxy
+            logger.info(f"🌐 NO_PROXY: {no_proxy}")
+            
             _proxy_configured = True
             logger.info("✅ Глобальный прокси настроен")
         else:

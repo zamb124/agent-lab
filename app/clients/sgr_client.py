@@ -142,12 +142,16 @@ class SGRClient:
             model=model
         )
         
+        url = f"{self.base_url}/v1/chat/completions"
+        logger.debug(f"SGR запрос: URL={url}, model={model}, query={query[:50]}...")
+        
         async with self.client.stream(
             "POST",
-            f"{self.base_url}/v1/chat/completions",
+            url,
             json=request.model_dump(),
             headers=self._get_headers()
         ) as response:
+            logger.debug(f"SGR ответ: status={response.status_code}")
             response.raise_for_status()
             
             async for chunk in response.aiter_text():
