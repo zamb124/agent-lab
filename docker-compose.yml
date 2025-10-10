@@ -54,12 +54,10 @@ services:
   # SGR Deep Research Service
   sgr:
     build:
-      context: ./sgr-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./sgr-service/Dockerfile
     ports:
       - "${SGR_PORT:-8010}:8010"
-    env_file:
-      - .env.sgr
     restart: unless-stopped
 
 volumes:
