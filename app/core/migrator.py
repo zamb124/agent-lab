@@ -296,6 +296,7 @@ class Migrator:
 
         # Извлекаем статические атрибуты
         name = getattr(agent_class, "name", agent_class.__name__)
+        title = getattr(agent_class, "title", None)
 
         # Используем полный путь к классу как agent_id для возможности импорта
         agent_id = f"{agent_class.__module__}.{agent_class.__name__}"
@@ -304,6 +305,7 @@ class Migrator:
         raw_tools = getattr(agent_class, "tools", [])
         raw_llm_config = getattr(agent_class, "llm_config", None)
         history_from = getattr(agent_class, "history_from", None)
+        is_public = getattr(agent_class, "is_public", False)
 
         # Проверяем статический graph_definition
         graph_definition = getattr(agent_class, "graph_definition", None)
@@ -331,6 +333,7 @@ class Migrator:
         config = AgentConfig(
             agent_id=agent_id,
             name=name,
+            title=title,
             description=description,
             type=agent_type,
             function_class=f"{agent_class.__module__}.{agent_class.__name__}",  # Полный путь к классу для импорта
@@ -339,6 +342,7 @@ class Migrator:
             tools=tool_references,
             llm_config=llm_config,
             history_from=history_from,
+            is_public=is_public,
             source="migration",
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
@@ -1052,12 +1056,15 @@ class Migrator:
                     }
 
         # Извлекаем метаданные платформы из декоратора
+        platform_title = getattr(tool_obj, '_platform_title', None)
         platform_cost = getattr(tool_obj, '_platform_cost', 0.0)
         platform_billing_name = getattr(tool_obj, '_platform_billing_name', None)
         platform_free_for_plans = getattr(tool_obj, '_platform_free_for_plans', [])
+        platform_is_public = getattr(tool_obj, '_platform_is_public', False)
         
         return ToolReference(
             tool_id=function_path,
+            title=platform_title,
             code_mode=CodeMode.CODE_REFERENCE,
             function_path=function_path,
             inline_code=source_code,  # Сохраняем код для возможности INLINE режима
@@ -1068,4 +1075,5 @@ class Migrator:
             billing_name=platform_billing_name,
             free_for_plans=platform_free_for_plans,
             tariff_limits={},  # Будут заполняться через UI или конфиг
+            is_public=platform_is_public,
         )

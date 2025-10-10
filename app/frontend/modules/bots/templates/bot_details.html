@@ -121,6 +121,10 @@
                 <i class="bi bi-star"></i>
                 Основное
             </button>
+            <button class="settings-tab" data-tab="abilities">
+                <i class="bi bi-tools"></i>
+                Способности
+            </button>
             <button class="settings-tab" data-tab="knowledge">
                 <i class="bi bi-book"></i>
                 База знаний
@@ -170,6 +174,25 @@
                          data-prompt="{{ bot.prompt }}"
                          data-flow-id="{{ bot.flow_id }}"
                          data-entry-point="{{ bot.entry_point }}"></div>
+                </div>
+            </div>
+            
+            <div class="settings-panel" data-panel="abilities">
+                <h4>
+                    <i class="bi bi-tools"></i>
+                    Способности бота
+                </h4>
+                <p class="text-secondary mb-3 mt-2" style="padding-left: 20px;">
+                    Выберите функции и агенты, которые будут доступны боту как инструменты.
+                    Публичные функции доступны для всех ботов, приватные (🔒) — только для этого бота,
+                    агенты-инструменты помечены 🤖.
+                </p>
+                
+                <div id="bot-tools-selector" class="tools-selector">
+                    <div class="tools-loading">
+                        <i class="bi bi-hourglass-split"></i>
+                        Загрузка доступных функций...
+                    </div>
                 </div>
             </div>
             

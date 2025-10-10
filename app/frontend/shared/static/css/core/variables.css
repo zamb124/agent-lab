@@ -7,6 +7,7 @@
     --bg-tertiary: #262626;
     --bg-card: #1a1a1a;
     --bg-hover: #262626;
+    --bg-surface: #141414;
     
     /* Текст */
     --text-primary: #ffffff;
@@ -64,6 +65,7 @@
     --bg-tertiary: #e8e8e8;
     --bg-card: #ffffff;
     --bg-hover: #f3f4f6;
+    --bg-surface: #f9fafb;
     
     --text-primary: #111827;
     --text-secondary: #6b7280;

@@ -1408,3 +1408,114 @@ input:checked + .slider:before {
     margin: 0 !important;
 }
 
+.settings-panel h4 {
+    margin-bottom: 0.5rem;
+}
+
+.settings-panel p {
+    margin-top: 0.75rem;
+}
+
+.tools-selector {
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    background: var(--bg-surface);
+}
+
+.tools-loading {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-secondary);
+}
+
+.tools-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.tool-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-sm);
+    background: var(--bg-card);
+    transition: all var(--transition-fast);
+}
+
+.tool-item:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-primary);
+}
+
+.tool-item input[type="checkbox"] {
+    width: 1.125rem;
+    height: 1.125rem;
+    cursor: pointer;
+}
+
+.tool-item-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.tool-item-name {
+    font-weight: 500;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.tool-type-badge {
+    font-size: 0.625rem;
+    font-weight: 600;
+    padding: 0.125rem 0.5rem;
+    border-radius: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.tool-type-badge.agent {
+    background: rgba(94, 106, 210, 0.12);
+    color: #5e6ad2;
+}
+
+.tool-type-badge.function {
+    background: rgba(245, 158, 11, 0.12);
+    color: #d97706;
+}
+
+[data-theme="light"] .tool-type-badge.agent {
+    background: rgba(94, 106, 210, 0.08);
+    color: #4338ca;
+}
+
+[data-theme="light"] .tool-type-badge.function {
+    background: rgba(245, 158, 11, 0.08);
+    color: #ca8a04;
+}
+
+.tool-item-description {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.tool-item-cost {
+    font-size: 0.75rem;
+    color: var(--accent-primary);
+    font-weight: 500;
+}
+
+.tools-empty {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-secondary);
+}
+
