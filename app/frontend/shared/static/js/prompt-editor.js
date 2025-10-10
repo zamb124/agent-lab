@@ -104,7 +104,12 @@ class PromptEditor {
                                 <!-- Системные -->
                                 <div class="variable-category">
                                     <div class="category-header">
-                                        <i class="bi bi-gear"></i> Системные
+                                        <span class="category-title">
+                                            <i class="bi bi-gear"></i> Системные
+                                        </span>
+                                        <button class="btn-toggle-category" title="Свернуть/Развернуть">
+                                            <i class="bi bi-chevron-down"></i>
+                                        </button>
                                     </div>
                                     <div class="category-items" data-category="system"></div>
                                 </div>
@@ -112,7 +117,12 @@ class PromptEditor {
                                 <!-- Компания -->
                                 <div class="variable-category">
                                     <div class="category-header">
-                                        <i class="bi bi-building"></i> Компания
+                                        <span class="category-title">
+                                            <i class="bi bi-building"></i> Компания
+                                        </span>
+                                        <button class="btn-toggle-category" title="Свернуть/Развернуть">
+                                            <i class="bi bi-chevron-down"></i>
+                                        </button>
                                     </div>
                                     <div class="category-items" data-category="company"></div>
                                 </div>
@@ -120,7 +130,12 @@ class PromptEditor {
                                 <!-- Пользователь -->
                                 <div class="variable-category">
                                     <div class="category-header">
-                                        <i class="bi bi-person"></i> Пользователь
+                                        <span class="category-title">
+                                            <i class="bi bi-person"></i> Пользователь
+                                        </span>
+                                        <button class="btn-toggle-category" title="Свернуть/Развернуть">
+                                            <i class="bi bi-chevron-down"></i>
+                                        </button>
                                     </div>
                                     <div class="category-items" data-category="user"></div>
                                 </div>
@@ -128,10 +143,17 @@ class PromptEditor {
                                 <!-- Flow -->
                                 <div class="variable-category">
                                     <div class="category-header">
-                                        <i class="bi bi-diagram-3"></i> Flow
-                                        <button class="btn-add-variable" data-type="flow" title="Добавить">
-                                            <i class="bi bi-plus-circle"></i>
-                                        </button>
+                                        <span class="category-title">
+                                            <i class="bi bi-diagram-3"></i> Flow
+                                        </span>
+                                        <div class="category-actions">
+                                            <button class="btn-add-variable" data-type="flow" title="Добавить">
+                                                <i class="bi bi-plus-circle"></i>
+                                            </button>
+                                            <button class="btn-toggle-category" title="Свернуть/Развернуть">
+                                                <i class="bi bi-chevron-down"></i>
+                                            </button>
+                                        </div>
                                     </div>
                                     <div class="category-items" data-category="flow"></div>
                                 </div>
@@ -665,6 +687,30 @@ class PromptEditor {
                 }
             });
         }
+        
+        // Сворачивание/разворачивание категорий переменных
+        this.container.querySelectorAll('.category-header').forEach(header => {
+            header.addEventListener('click', (e) => {
+                if (e.target.closest('.btn-add-variable')) {
+                    return;
+                }
+                
+                const category = header.closest('.variable-category');
+                const items = category.querySelector('.category-items');
+                const toggleBtn = header.querySelector('.btn-toggle-category');
+                const icon = toggleBtn?.querySelector('i');
+                
+                if (category.classList.contains('collapsed')) {
+                    category.classList.remove('collapsed');
+                    items.style.display = 'flex';
+                    if (icon) icon.className = 'bi bi-chevron-down';
+                } else {
+                    category.classList.add('collapsed');
+                    items.style.display = 'none';
+                    if (icon) icon.className = 'bi bi-chevron-right';
+                }
+            });
+        });
         
         // Поиск переменных
         const searchInput = this.container.querySelector('.variables-search input');
