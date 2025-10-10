@@ -415,7 +415,7 @@
                         <div class="input-group mb-2">
                             <input type="text" class="form-control font-monospace" 
                                    id="whatsapp-webhook-url-{{ bot.flow_id }}" 
-                                   value="https://{{ request.headers.get('host') }}/api/v1/webhook/whatsapp/company:{{ active_company.company_id }}:flow:{{ bot.flow_id }}" 
+                                   value="https://{{ request.headers.get('host') }}/api/v1/webhook/whatsapp/company:{{ request.state.context.active_company.company_id }}:flow:{{ bot.flow_id }}" 
                                    readonly>
                             <button class="btn btn-outline-secondary" onclick="copyToClipboard('whatsapp-webhook-url-{{ bot.flow_id }}')">
                                 <i class="bi bi-clipboard"></i>
