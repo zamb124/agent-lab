@@ -1,25 +1,38 @@
 #!/bin/bash
 set -e
 
-echo "🔧 Генерация config.yaml для SGR..."
+echo "🔧 Генерация config.yaml для SGR из conf.json..."
 
-# Проверяем переменные окружения
-if [ -z "$OPENAI_API_KEY" ]; then
-    echo "❌ Ошибка: OPENAI_API_KEY не установлен"
+# Проверяем наличие conf.json
+if [ ! -f "/app/conf.json" ]; then
+    echo "❌ Ошибка: /app/conf.json не найден"
     exit 1
 fi
 
-if [ -z "$TAVILY_API_KEY" ]; then
-    echo "❌ Ошибка: TAVILY_API_KEY не установлен"
-    exit 1
-fi
-
-# Создаем config.yaml
+# Создаем config.yaml из conf.json
 python3 << 'PYTHON_SCRIPT'
-import os
+import json
 
-openai_key = os.environ.get('OPENAI_API_KEY')
-tavily_key = os.environ.get('TAVILY_API_KEY')
+# Читаем conf.json
+with open('/app/conf.json', 'r') as f:
+    config = json.load(f)
+
+sgr_config = config.get('sgr', {})
+
+if not sgr_config:
+    print("❌ Ошибка: секция 'sgr' не найдена в conf.json")
+    exit(1)
+
+openai_key = sgr_config.get('openai_api_key', '')
+tavily_key = sgr_config.get('tavily_api_key', '')
+
+if not openai_key:
+    print("❌ Ошибка: sgr.openai_api_key не найден в conf.json")
+    exit(1)
+
+if not tavily_key:
+    print("❌ Ошибка: sgr.tavily_api_key не найден в conf.json")
+    exit(1)
 
 # Создаем config.yaml для SGR
 config_yaml = f"""# Auto-generated from conf.json

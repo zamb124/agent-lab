@@ -17,8 +17,9 @@ RUN git clone https://github.com/vamplabAI/sgr-deep-research.git /tmp/sgr && \
     mv /tmp/sgr/* /app/ && \
     rm -rf /tmp/sgr
 
-# Копируем entrypoint для генерации конфига
-COPY entrypoint.sh /app/entrypoint.sh
+# Копируем конфигурацию и entrypoint
+COPY conf.json /app/conf.json
+COPY sgr-service/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 # Устанавливаем зависимости через uv

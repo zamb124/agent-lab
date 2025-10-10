@@ -1,8 +1,16 @@
 # Простые команды для Agents Lab
 
+# Сборка образов
+build:
+	docker-compose build
+
 # Запустить
 up:
 	docker-compose up -d
+
+# Перезапустить с пересборкой
+rebuild:
+	docker-compose up -d --build
 
 # Остановить
 down:
