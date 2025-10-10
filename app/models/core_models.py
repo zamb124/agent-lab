@@ -212,6 +212,12 @@ class ToolReference(BuilderEntity):
         description="ID инструмента (путь к функции, ID агента, MCP tool)",
         pattern=r"^[a-zA-Z0-9_.:/-]+$",
     )
+    title: Optional[str] = Field(
+        default=None,
+        title="Название",
+        description="Название для отображения в UI",
+        placeholder="Красивое название функции"
+    )
     params: Dict[str, Any] = Field(
         default_factory=dict,
         title="Параметры",
@@ -243,7 +249,7 @@ class ToolReference(BuilderEntity):
         widget_attrs={"rows": 3},
     )
     
-    # Поля для биллинга
+    # Поля для биллинга и доступа
     cost: float = Field(
         default=0.0,
         title="Стоимость",
@@ -268,6 +274,11 @@ class ToolReference(BuilderEntity):
         title="Лимиты по тарифам",
         description="Лимиты использования по тарифным планам (-1 = без лимитов, 0 = запрещено)",
         widget_attrs={"rows": 4, "placeholder": '{"free": 10, "basic": 100, "premium": -1}'}
+    )
+    is_public: bool = Field(
+        default=False,
+        title="Публичный",
+        description="Доступен ли инструмент в публичном редакторе ботов"
     )
 
 
@@ -331,6 +342,12 @@ class AgentConfig(BuilderEntity):
     )
     name: str = Field(
         title="Название", description="Название агента", placeholder="Мой агент"
+    )
+    title: Optional[str] = Field(
+        default=None,
+        title="Название для UI",
+        description="Название для отображения в списке способностей (по умолчанию name)",
+        placeholder="Красивое название агента"
     )
     description: Optional[str] = Field(
         default=None,
@@ -408,6 +425,13 @@ class AgentConfig(BuilderEntity):
         title="Локальные переменные",
         description="Переменные доступные только в этом агенте (перекрывают переменные flow)",
         widget_attrs={"rows": 4, "placeholder": '{"max_attempts": 3, "greeting": "Привет!"}'}
+    )
+    
+    # Публичность агента
+    is_public: bool = Field(
+        default=False,
+        title="Публичный",
+        description="Доступен ли агент как инструмент в публичном редакторе ботов"
     )
 
 

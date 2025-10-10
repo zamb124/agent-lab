@@ -4,9 +4,9 @@
 """
 
 import logging
-from langchain_core.tools import tool
 from typing import Any, Optional
 
+from app.core.tool_decorator import tool
 from app.core.variables import get_state
 
 logger = logging.getLogger(__name__)

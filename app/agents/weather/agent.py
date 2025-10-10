@@ -15,7 +15,9 @@ class TravelInfoAgent(BaseAgent):
     """Субагент для сбора информации о направлении путешествия"""
 
     name = "travel_info_agent"
+    title = "Помощник по выбору направления"
     description = "Определяет куда пользователь хочет поехать в путешествие"
+    is_public = True
 
     llm_config = {"provider": "gemini", "model": "gemini-2.0-flash-exp", "temperature": 0.3}
 

@@ -13,8 +13,15 @@ router = APIRouter(prefix="/agents", tags=["builder-agents"])
 
 
 @router.get("/", response_model=List[AgentConfig])
-async def list_agents(storage: StorageDep) -> List[AgentConfig]:
-    """Получить список всех агентов"""
+async def list_agents(
+    storage: StorageDep,
+    public_only: bool = False
+) -> List[AgentConfig]:
+    """Получить список всех агентов
+    
+    Args:
+        public_only: Если True, возвращает только публичные агенты (для редактора ботов)
+    """
     # Получаем все ключи с префиксом "agent:"
     agent_keys = await storage.list_by_prefix("agent:")
     
@@ -24,6 +31,9 @@ async def list_agents(storage: StorageDep) -> List[AgentConfig]:
         agent_id = key.split(":")[-1]  # Берем последнюю часть после ":"
         agent = await storage.get_agent_config(agent_id)
         if agent:
+            # Фильтруем по публичности если нужно
+            if public_only and not getattr(agent, 'is_public', False):
+                continue
             agents.append(agent)
     
     return agents

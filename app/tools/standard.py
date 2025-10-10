@@ -3,9 +3,10 @@
 """
 
 import logging
-from langchain_core.tools import tool
 from langgraph.errors import GraphInterrupt
 from langgraph.types import interrupt
+
+from app.core.tool_decorator import tool
 
 
 @tool

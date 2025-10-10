@@ -5,7 +5,7 @@
 from ..core.tool_decorator import tool
 
 
-@tool
+@tool(is_public=True, title="Калькулятор")
 def calculate(expression: str) -> str:
     """
     Вычислить математическое выражение.
@@ -35,7 +35,7 @@ def calculate(expression: str) -> str:
         return f"Ошибка вычисления: {str(e)}"
 
 
-@tool
+@tool(is_public=True, title="Справка по математике")
 def get_math_help() -> str:
     """
     Получить справку по математическим операциям.

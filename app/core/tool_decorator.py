@@ -14,12 +14,16 @@ from langchain_core.tools import tool as langchain_tool
 def tool(
     func: Optional[Callable] = None,
     *,
+    # Параметры отображения
+    title: Optional[str] = None,          # Название для UI (по умолчанию имя функции)
+    
     # Параметры биллинга
     cost: float = 0.0,                    # Стоимость за вызов в RUB
     billing_name: Optional[str] = None,   # Название для биллинга (по умолчанию имя функции)
     free_for_plans: Optional[List[str]] = None, # Для каких планов бесплатно
     
-    # Параметры доступа (будущее расширение)
+    # Параметры доступа
+    is_public: bool = False,                      # Доступен ли тул в публичном редакторе
     required_permissions: Optional[List[str]] = None,  # Требуемые разрешения
     max_calls_per_hour: Optional[int] = None,         # Лимит вызовов в час
     
@@ -34,24 +38,26 @@ def tool(
     Расширенный декоратор @tool для платформы Agent Lab
     
     Args:
+        title: Название для UI (по умолчанию имя функции)
         cost: Стоимость вызова в RUB (0.0 = бесплатно)
         billing_name: Название для биллинга и лимитов (по умолчанию имя функции)
         free_for_plans: Список планов для которых функция бесплатна
-        required_permissions: Список требуемых разрешений (для будущего расширения)
-        max_calls_per_hour: Максимум вызовов в час (для будущего расширения)
+        is_public: Доступен ли тул в публичном редакторе (False = только код, True = доступен в UI)
+        required_permissions: Список требуемых разрешений
+        max_calls_per_hour: Максимум вызовов в час
     
     Examples:
-        @tool(cost=0.1, billing_name="weather_api")
+        @tool(is_public=True, title="Погода в городе", cost=0.1, billing_name="weather_api")
         def get_weather(city: str) -> str:
             '''Получить погоду в городе'''
             pass
             
-        @tool  # Бесплатная функция
+        @tool(is_public=True, title="Калькулятор")
         def calculate(expression: str) -> str:
             '''Вычислить выражение'''
             pass
             
-        @tool(cost=1.0, free_for_plans=["premium", "enterprise"])
+        @tool(is_public=True, title="Премиум функция", cost=1.0, free_for_plans=["premium", "enterprise"])
         def premium_feature() -> str:
             '''Премиум функция'''
             pass
@@ -73,9 +79,11 @@ def tool(
         langchain_decorated = langchain_tool(**langchain_kwargs)(func)
         
         # Добавляем метаданные платформы к инструменту
+        langchain_decorated._platform_title = title or func.__name__
         langchain_decorated._platform_cost = cost
         langchain_decorated._platform_billing_name = billing_name or func.__name__
         langchain_decorated._platform_free_for_plans = free_for_plans or []
+        langchain_decorated._platform_is_public = is_public
         langchain_decorated._platform_required_permissions = required_permissions or []
         langchain_decorated._platform_max_calls_per_hour = max_calls_per_hour
         

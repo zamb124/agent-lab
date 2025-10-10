@@ -16,8 +16,15 @@ router = APIRouter(prefix="/tools", tags=["builder-tools"])
 
 
 @router.get("/")
-async def list_tools(storage: StorageDep) -> List[Dict[str, Any]]:
-    """Получить список всех доступных тулов"""
+async def list_tools(
+    storage: StorageDep,
+    public_only: bool = False
+) -> List[Dict[str, Any]]:
+    """Получить список всех доступных тулов
+    
+    Args:
+        public_only: Если True, возвращает только публичные тулы (для редактора ботов)
+    """
     tools_data = []
     
     # Получаем тулы из БД
@@ -43,19 +50,24 @@ async def list_tools(storage: StorageDep) -> List[Dict[str, Any]]:
             else:
                 tool_data = tool_data_json
             
+            # Фильтруем по публичности если нужно
+            is_public = tool_data.get("is_public", False)
+            if public_only and not is_public:
+                continue
+            
             tool_info = {
                 "id": tool_id,
-                "name": tool_data.get("tool_id", tool_id).split(".")[-1],  # Берем имя функции
+                "name": tool_data.get("tool_id", tool_id).split(".")[-1],
+                "title": tool_data.get("title") or tool_data.get("tool_id", tool_id).split(".")[-1],
                 "description": tool_data.get("description", ""),
                 "type": "tool",
                 "category": _get_tool_category_from_path(tool_id),
                 "parameters": tool_data.get("params", {}),
                 "cost": tool_data.get("cost", 0.0),
+                "is_public": is_public,
                 "source_path": tool_id
             }
             tools_data.append(tool_info)
-    
-    # Инструменты теперь фильтруются по компаниям - убрали глобальные инструменты из кода
     
     return tools_data
 
@@ -116,6 +128,7 @@ async def get_tool(tool_id: str, storage: StorageDep) -> Dict[str, Any]:
                 return {
                     "id": tool_id,
                     "name": tool_data.get("tool_id", tool_id).split(".")[-1],
+                    "title": tool_data.get("title") or tool_data.get("tool_id", tool_id).split(".")[-1],
                     "description": tool_data.get("description", ""),
                     "type": "tool",
                     "category": _get_tool_category_from_path(tool_id),
