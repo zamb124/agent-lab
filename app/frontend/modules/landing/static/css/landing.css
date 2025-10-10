@@ -556,10 +556,8 @@
 
 /* Исправление для градиентных переменных */
 .langflow-gradient {
-    background: var(--gradient-primary);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: var(--accent-primary);
+    font-weight: 600;
 }
 
 /* Модальное окно */
