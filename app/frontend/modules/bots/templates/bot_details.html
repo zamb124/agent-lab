@@ -252,7 +252,12 @@
             </div>
             
             <div class="settings-panel" data-panel="platforms">
-                <h4>Настройки платформ</h4>
+                <div class="platforms-header">
+                    <h4>Настройки платформ</h4>
+                    <button class="btn-add-platform" onclick="addPlatform('{{ bot.flow_id }}')" title="Добавить платформу">
+                        <i class="bi bi-plus-circle"></i>
+                    </button>
+                </div>
                 
                 {% for platform, config in bot.platforms.items() %}
                 <div class="platform-settings">
@@ -379,11 +384,6 @@
                     {% endif %}
                 </div>
                 {% endfor %}
-                
-                <button class="btn btn-outline-primary btn-sm" onclick="addPlatform('{{ bot.flow_id }}')">
-                    <i class="bi bi-plus-circle"></i>
-                    Добавить платформу
-                </button>
             </div>
             
             <div class="settings-panel" data-panel="advanced">
