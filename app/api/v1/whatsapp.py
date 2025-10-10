@@ -14,6 +14,145 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/webhook/whatsapp")
+async def whatsapp_global_webhook_verify(
+    hub_mode: str = Query(alias="hub.mode"),
+    hub_verify_token: str = Query(alias="hub.verify_token"),
+    hub_challenge: str = Query(alias="hub.challenge")
+):
+    """
+    Глобальная верификация webhook для всех WhatsApp flows.
+    
+    Один webhook для всех flows - резолвинг происходит при получении сообщения.
+    Проверяет verify_token из любого активного flow с WhatsApp.
+    """
+    logger.info("🔍 Глобальная верификация WhatsApp webhook")
+    
+    if hub_mode != "subscribe":
+        logger.error(f"❌ Неверный hub.mode: {hub_mode}")
+        raise HTTPException(status_code=403, detail="Invalid hub.mode")
+    
+    storage = Storage()
+    all_keys = await storage.list_by_prefix("", limit=1000, force_global=True)
+    
+    from app.services.variables_service import get_variables_service
+    variables_service = get_variables_service()
+    
+    for key in all_keys:
+        if ":flow:" in key:
+            flow_id = key.split(":flow:")[1] if ":flow:" in key else None
+            if not flow_id:
+                continue
+                
+            flow_config = await storage.get_flow_config(flow_id)
+            if not flow_config:
+                continue
+                
+            whatsapp_config = flow_config.platforms.get("whatsapp")
+            if not whatsapp_config:
+                continue
+            
+            expected_verify_token = whatsapp_config.get("verify_token", "")
+            expected_verify_token = await variables_service.resolve(expected_verify_token)
+            
+            if hub_verify_token == expected_verify_token:
+                logger.info(f"✅ Глобальный webhook верифицирован (совпадение с flow {flow_id})")
+                return int(hub_challenge)
+    
+    logger.error("❌ Verify token не совпал ни с одним активным flow")
+    raise HTTPException(status_code=403, detail="Invalid verify_token")
+
+
+@router.post("/webhook/whatsapp")
+async def whatsapp_global_webhook(request: Request):
+    """
+    Глобальный webhook для всех WhatsApp flows.
+    
+    Автоматически резолвит flow по phone_number_id из webhook payload.
+    Один webhook обслуживает все flows - настраивается один раз в Meta.
+    """
+    raw_data = await request.json()
+    
+    if "entry" not in raw_data or not raw_data["entry"]:
+        logger.warning("❌ Пустой webhook payload")
+        return {"status": "ok"}
+    
+    entry = raw_data["entry"][0]
+    changes = entry.get("changes", [])
+    if not changes:
+        return {"status": "ok"}
+    
+    value = changes[0].get("value", {})
+    metadata = value.get("metadata", {})
+    phone_number_id = metadata.get("phone_number_id")
+    
+    if not phone_number_id:
+        logger.error("❌ Нет phone_number_id в webhook payload")
+        raise HTTPException(status_code=400, detail="Missing phone_number_id")
+    
+    logger.info(f"📨 Глобальный webhook: phone_number_id={phone_number_id}")
+    
+    storage = Storage()
+    all_keys = await storage.list_by_prefix("", limit=1000, force_global=True)
+    
+    from app.services.variables_service import get_variables_service
+    variables_service = get_variables_service()
+    
+    matched_flow_id = None
+    matched_flow_config = None
+    
+    for key in all_keys:
+        if ":flow:" not in key:
+            continue
+            
+        flow_id = key.split(":flow:")[1]
+        flow_config = await storage.get_flow_config(flow_id)
+        
+        if not flow_config:
+            continue
+            
+        whatsapp_config = flow_config.platforms.get("whatsapp")
+        if not whatsapp_config:
+            continue
+        
+        config_phone_id = whatsapp_config.get("phone_number_id", "")
+        config_phone_id = await variables_service.resolve(config_phone_id)
+        
+        if config_phone_id == phone_number_id:
+            matched_flow_id = flow_id
+            matched_flow_config = flow_config
+            logger.info(f"✅ Резолвнут flow: {flow_id} для phone_number_id={phone_number_id}")
+            break
+    
+    if not matched_flow_id or not matched_flow_config:
+        logger.error(f"❌ Не найден flow для phone_number_id={phone_number_id}")
+        raise HTTPException(
+            status_code=404, 
+            detail=f"No flow configured for phone_number_id={phone_number_id}"
+        )
+    
+    whatsapp_config = matched_flow_config.platforms.get("whatsapp")
+    
+    access_token = await WhatsAppInterface.get_access_token_for_flow(
+        matched_flow_id, whatsapp_config
+    )
+    if not access_token:
+        logger.error(f"❌ Не найден access token для flow {matched_flow_id}")
+        raise HTTPException(status_code=500, detail="Access token not found")
+    
+    whatsapp_interface = WhatsAppInterface(access_token, whatsapp_config)
+    
+    message = await whatsapp_interface.handle_message(raw_data, matched_flow_id)
+    
+    if message:
+        task_id = await whatsapp_interface.create_task(message, matched_flow_id)
+        logger.info(f"📋 Задача {task_id} создана для flow {matched_flow_id} (WhatsApp от {message.user_id})")
+    else:
+        logger.info("ℹ️ Webhook обработан (статус/уведомление)")
+    
+    return {"status": "ok"}
+
+
 @router.get("/webhook/whatsapp/{flow_key:path}")
 async def whatsapp_webhook_verify(
     flow_key: str,
