@@ -71,6 +71,31 @@ class AuthMiddleware(BaseHTTPMiddleware):
             request.state.language = context.language.value
             logger.info(f"📨 Telegram webhook: key={flow_key}, company={company_id}")
             return await call_next(request)
+        
+        # Для WhatsApp webhook - извлекаем company_id из полного ключа (POST запросы)
+        if request.url.path.startswith("/api/v1/webhook/whatsapp/") and request.method == "POST":
+            flow_key = request.url.path.split("/api/v1/webhook/whatsapp/")[1]
+
+            # Формат ключа: company:{company_id}:flow:{flow_id}
+            parts = flow_key.split(":")
+            if len(parts) < 4 or parts[0] != "company" or parts[2] != "flow":
+                raise HTTPException(status_code=400, detail=f"Invalid flow key format: {flow_key}")
+
+            company_id = parts[1]
+
+            company_data = await self.storage.get(f"company:{company_id}", force_global=True)
+            if not company_data:
+                raise HTTPException(status_code=404, detail=f"Company {company_id} not found")
+
+            requested_company = Company.model_validate_json(company_data)
+
+            context = await self._create_whatsapp_context(request, requested_company)
+            set_context(context)
+            request.state.context = context
+            request.state.user = context.user
+            request.state.language = context.language.value
+            logger.info(f"📨 WhatsApp webhook: key={flow_key}, company={company_id}")
+            return await call_next(request)
         # Для скачивания файлов - создаем минимальный контекст с компанией из поддомена
         if request.url.path.startswith("/api/v1/files/download/"):
             try:
