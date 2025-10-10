@@ -20,8 +20,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-async def _poll_notifications(session_id: str):
-    """Polling уведомлений из БД для конкретной сессии"""
+async def _poll_notifications(session_id: str, context: Context):
+    """Polling уведомлений из БД для конкретной сессии
+    
+    Args:
+        session_id: ID сессии для polling
+        context: Контекст пользователя (передается явно, т.к. asyncio.create_task теряет contextvars)
+    """
+    
+    set_context(context)
     
     storage = Storage()
     processed_notifications = set()
@@ -29,14 +36,9 @@ async def _poll_notifications(session_id: str):
     logger.info(f"🔄 Начинаем polling уведомлений для сессии {session_id}")
     iteration = 0
     
-    # Получаем контекст один раз в начале и сохраняем user_id
-    context = get_context()
-    if not context or not context.user:
-        logger.error(f"❌ НЕТ КОНТЕКСТА при старте polling для {session_id}!")
-        return
-    
     user_id = context.user.user_id
-    logger.info(f"✅ Контекст получен: user_id={user_id}")
+    company_id = context.active_company.company_id if context.active_company else "НЕТ"
+    logger.info(f"✅ Контекст установлен: user_id={user_id}, company={company_id}")
     
     while session_id in websocket_manager.connections["chat"]:
             try:
@@ -77,6 +79,9 @@ async def _poll_notifications(session_id: str):
 
             # Ждем перед следующей проверкой
             await asyncio.sleep(2)
+    
+    clear_context()
+    logger.info(f"🔄 Polling завершен для сессии {session_id}, контекст очищен")
 
 
 @router.websocket("/ws/chat")
@@ -143,11 +148,11 @@ async def websocket_chat(websocket: WebSocket, session_id: str = None):
 
         await websocket_manager.connect(websocket, chat_session_id, "chat")
         
-        # Запускаем polling уведомлений (сохраняем контекст для задачи)
-        logger.info(f"🚀 Запускаем polling для {chat_session_id}, user_id={user.user_id}")
+        # Запускаем polling уведомлений (передаем контекст явно)
+        logger.info(f"🚀 Запускаем polling для {chat_session_id}, user_id={user.user_id}, company={context.active_company.company_id}")
         websocket_manager.start_polling(
             chat_session_id, 
-            _poll_notifications(chat_session_id),
+            _poll_notifications(chat_session_id, context),
             "chat"
         )
 

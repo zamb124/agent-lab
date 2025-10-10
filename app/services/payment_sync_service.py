@@ -169,10 +169,16 @@ class PaymentSyncService:
         company_ids = []
         for subdomain_key in subdomain_keys:
             company_id_json = await self.storage.get(subdomain_key, force_global=True)
-            if company_id_json:
-                
+            if not company_id_json:
+                continue
+            
+            try:
                 company_id = json.loads(company_id_json)
-                company_ids.append(company_id)
+                if company_id:
+                    company_ids.append(company_id)
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.debug(f"Пропускаем невалидный subdomain ключ {subdomain_key}: {e}")
+                continue
         
         logger.info(f"Найдено компаний для синхронизации: {len(company_ids)}")
         
