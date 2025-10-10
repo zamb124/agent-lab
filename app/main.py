@@ -41,6 +41,7 @@ from app.frontend.modules.bots.router import router as bots_module
 from app.frontend.modules.variables.router import router as variables_module
 from app.frontend.websockets import notifications as websocket_notifications
 from app.frontend.websockets import chat as websocket_chat
+from app.frontend.api import websocket_status as websocket_status_api
 from app.middleware.auth import AuthMiddleware
 from app.services.cleanup_service import CleanupService
 from app.core.translation_manager import get_translation_manager
@@ -302,6 +303,7 @@ app.include_router(variables_module, tags=["variables-module"])
 # WebSockets
 app.include_router(websocket_notifications.router, tags=["websocket-notifications"])
 app.include_router(websocket_chat.router, prefix="/frontend/chat", tags=["websocket-chat"])
+app.include_router(websocket_status_api.router, tags=["websocket-status"])
 app.include_router(amocrm_router, prefix="/api/amocrm", tags=["amocrm"])
 
 # Модульные статические файлы (монтируем ПЕРВЫМИ - более специфичные маршруты)

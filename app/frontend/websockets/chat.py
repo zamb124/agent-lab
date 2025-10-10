@@ -35,6 +35,8 @@ async def _poll_notifications(session_id: str, context: Context):
     
     logger.info(f"🔄 Начинаем polling уведомлений для сессии {session_id}")
     iteration = 0
+    consecutive_errors = 0
+    max_consecutive_errors = 5
     
     user_id = context.user.user_id
     company_id = context.active_company.company_id if context.active_company else "НЕТ"
@@ -44,44 +46,64 @@ async def _poll_notifications(session_id: str, context: Context):
             try:
                 iteration += 1
                 notification_pattern = f"web_notification:web:{user_id}:"
+                
                 if iteration == 1 or iteration % 10 == 0:
-                    logger.info(f"🔍 [Итерация {iteration}] Ищем уведомления по pattern: {notification_pattern}")
-                else:
-                    logger.debug(f"🔍 [Итерация {iteration}] Ищем уведомления по pattern: {notification_pattern}")
-
-                # Ищем все уведомления
+                    connection_status = session_id in websocket_manager.connections["chat"]
+                    logger.info(f"🔍 [Итерация {iteration}] Polling активен: connection={connection_status}, pattern={notification_pattern}")
+                
                 keys = await storage.list_by_prefix(notification_pattern)
+                
                 if keys:
-                    logger.info(f"📬 [Итерация {iteration}] Найдено {len(keys)} уведомлений")
-                else:
-                    logger.debug(f"📭 [Итерация {iteration}] Уведомлений нет")
-
-                # Обрабатываем новые уведомления
-                for key in keys:
-                    if key not in processed_notifications:
-                        notification_data = await storage.get(key)
-                        if notification_data:
-                            logger.info(f"📨 Найдено уведомление: {key}")
-                            notification = json.loads(notification_data)
-                            await websocket_manager.send_to_session(session_id, notification, "chat")
-                            processed_notifications.add(key)
-
-                            # Удаляем обработанное уведомление
-                            await storage.delete(key)
-                            logger.info(f"🗑️ Уведомление удалено: {key}")
-
-                # Очищаем старые processed_notifications (старше 5 минут)
+                    logger.info(f"📬 [Итерация {iteration}] Найдено {len(keys)} уведомлений: {keys[:3]}...")
+                    
+                    for key in keys:
+                        if key not in processed_notifications:
+                            notification_data = await storage.get(key)
+                            if notification_data:
+                                try:
+                                    notification = json.loads(notification_data)
+                                    notification_type = notification.get('type', 'unknown')
+                                    logger.info(f"📨 Отправляем уведомление типа {notification_type}: {key}")
+                                    
+                                    await websocket_manager.send_to_session(session_id, notification, "chat")
+                                    processed_notifications.add(key)
+                                    
+                                    await storage.delete(key)
+                                    logger.debug(f"🗑️ Уведомление удалено: {key}")
+                                except json.JSONDecodeError as e:
+                                    logger.error(f"❌ Ошибка парсинга уведомления {key}: {e}")
+                                    await storage.delete(key)
+                                except Exception as e:
+                                    logger.error(f"❌ Ошибка обработки уведомления {key}: {e}", exc_info=True)
+                
                 if len(processed_notifications) > 300:
+                    logger.info(f"🧹 Очистка кэша обработанных уведомлений: {len(processed_notifications)} -> 0")
                     processed_notifications.clear()
+                
+                consecutive_errors = 0
 
             except Exception as e:
-                logger.error(f"❌ Ошибка в polling для {session_id} [Итерация {iteration}]: {e}", exc_info=True)
+                consecutive_errors += 1
+                logger.error(
+                    f"❌ Ошибка в polling для {session_id} [Итерация {iteration}, ошибка #{consecutive_errors}]: {e}", 
+                    exc_info=True
+                )
+                
+                if consecutive_errors >= max_consecutive_errors:
+                    logger.error(
+                        f"🛑 Критическая ошибка: {consecutive_errors} последовательных ошибок в polling для {session_id}. "
+                        f"Останавливаем polling."
+                    )
+                    break
 
-            # Ждем перед следующей проверкой
             await asyncio.sleep(2)
     
+    connection_still_exists = session_id in websocket_manager.connections["chat"]
+    logger.info(
+        f"🔄 Polling завершен для сессии {session_id}. "
+        f"Connection exists: {connection_still_exists}, iterations: {iteration}"
+    )
     clear_context()
-    logger.info(f"🔄 Polling завершен для сессии {session_id}, контекст очищен")
 
 
 @router.websocket("/ws/chat")
