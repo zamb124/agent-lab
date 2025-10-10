@@ -195,9 +195,9 @@ class WebInterface(BaseInterface):
                     },
                 }
 
-        # Сохраняем уведомление в БД с TTL 5 минут (используем UUID для уникальности)
+        # Сохраняем уведомление в БД с TTL 15 минут (используем UUID для уникальности)
         notification_key = f"web_notification:{message.session_id}:{uuid.uuid4().hex}"
-        await self.storage.set(notification_key, json.dumps(notification), ttl=300)
+        await self.storage.set(notification_key, json.dumps(notification), ttl=900)
 
         logger.info(
             f"📤 Уведомление сохранено: key={notification_key}, type={notification.get('type', 'unknown')}, content={message.content[:50]}..."
@@ -216,7 +216,7 @@ class WebInterface(BaseInterface):
 
         notification_key = f"web_notification:{session_id}:{uuid.uuid4().hex}"
         await self.storage.set(
-            notification_key, json.dumps(typing_notification), ttl=300
+            notification_key, json.dumps(typing_notification), ttl=900
         )
 
         status = "начал" if is_typing else "закончил"
@@ -235,7 +235,7 @@ class WebInterface(BaseInterface):
 
         notification_key = f"web_notification:{session_id}:{uuid.uuid4().hex}"
         await self.storage.set(
-            notification_key, json.dumps(interrupt_notification), ttl=300
+            notification_key, json.dumps(interrupt_notification), ttl=900
         )
         logger.info(f"🟡 Interrupt уведомление сохранено: key={notification_key}")
 

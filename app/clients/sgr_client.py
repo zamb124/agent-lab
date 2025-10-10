@@ -7,6 +7,7 @@ import logging
 import httpx
 from typing import Optional, AsyncIterator
 from pydantic import BaseModel
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -104,10 +105,30 @@ class SGRClient:
         
         logger.info(f"SGR исследование: {query[:100]}...")
         
-        content = ""
-        async for chunk in self.research_streaming(query, model):
-            content += chunk
         
+        content_parts = []
+        
+        async for chunk in self.research_streaming(query, model):
+            # Парсим SSE формат: "data: {...}"
+            for line in chunk.split('\n'):
+                line = line.strip()
+                if line.startswith('data: '):
+                    data_str = line[6:]  # Убираем "data: "
+                    
+                    if data_str == '[DONE]':
+                        continue
+                    
+                    try:
+                        data = json.loads(data_str)
+                        # Извлекаем content из delta
+                        if 'choices' in data and len(data['choices']) > 0:
+                            delta = data['choices'][0].get('delta', {})
+                            if 'content' in delta and delta['content']:
+                                content_parts.append(delta['content'])
+                    except json.JSONDecodeError:
+                        pass
+        
+        content = ''.join(content_parts)
         logger.info(f"SGR исследование завершено: {len(content)} символов")
         
         return SGRResponse(
