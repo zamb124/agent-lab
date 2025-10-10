@@ -502,6 +502,13 @@ class FlowConfig(BuilderEntity):
         title="RAG конфигурация",
         description="Настройки базы знаний для агентов в этом flow"
     )
+    
+    # Публичность
+    is_public: bool = Field(
+        default=False,
+        title="Публичный",
+        description="Доступен ли flow для копирования в новые компании"
+    )
 
     # Данные канваса Builder
     canvas_data: Optional[Dict[str, Any]] = Field(

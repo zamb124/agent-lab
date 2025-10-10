@@ -44,18 +44,25 @@ async def admin_companies(request: Request):
     
     storage = Storage()
     
-    # Получаем все компании
+    # Получаем все компании через subdomain маппинг
     companies = []
-    company_keys = await storage.list_by_prefix("company:", force_global=True)
+    subdomain_keys = await storage.list_by_prefix("subdomain:", force_global=True)
     
-    for key in company_keys:
-        company_data = await storage.get(key, force_global=True)
-        if company_data:
-            try:
-                company = Company.model_validate_json(company_data)
-                companies.append(company)
-            except Exception:
-                continue
+    for subdomain_key in subdomain_keys:
+        # Получаем company_id из subdomain маппинга
+        company_id_json = await storage.get(subdomain_key, force_global=True)
+        if company_id_json:
+            # Убираем кавычки из JSON строки
+            company_id = company_id_json.strip('"') if isinstance(company_id_json, str) else company_id_json
+            
+            # Получаем данные компании
+            company_data = await storage.get(f"company:{company_id}", force_global=True)
+            if company_data:
+                try:
+                    company = Company.model_validate_json(company_data)
+                    companies.append(company)
+                except Exception as e:
+                    continue
     
     # Сортируем по дате создания
     companies.sort(key=lambda c: c.created_at, reverse=True)

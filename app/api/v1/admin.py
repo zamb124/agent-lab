@@ -558,6 +558,44 @@ async def remigrate_flow_with_dependencies(flow_id: str):
     return {"status": "success", "message": f"Flow {flow_id} и все зависимости успешно перемигрированы"}
 
 
+@router.post("/remigrate-all-public/{company_id}")
+async def remigrate_all_public_for_company(company_id: str):
+    """
+    Перемигрирует все публичные (is_public=True) flows, агенты и тулы для компании.
+    Используется для обновления компании до актуального состояния из кода.
+    
+    Args:
+        company_id: ID компании для перемиграции
+    """
+    context = get_context()
+    if not context or not context.user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    # Проверяем что пользователь - system admin
+    if "system" not in context.user.companies or "admin" not in context.user.companies["system"]:
+        raise HTTPException(status_code=403, detail="Access denied. System admin required.")
+    
+    storage = Storage()
+    company_data = await storage.get(f"company:{company_id}", force_global=True)
+    
+    if not company_data:
+        raise HTTPException(status_code=404, detail=f"Company {company_id} not found")
+    
+    from app.identity.models import Company
+    company = Company.model_validate_json(company_data)
+    
+    migrator = Migrator()
+    await migrator.migrate_for_company(
+        company=company,
+        copy_all_public=True
+    )
+    
+    return {
+        "status": "success",
+        "message": f"Все публичные сущности успешно перемигрированы для компании {company.name}"
+    }
+
+
 @router.post("/reload-telegram-bots")
 async def reload_telegram_bots():
     """

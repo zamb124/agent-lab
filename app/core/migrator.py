@@ -752,26 +752,17 @@ class Migrator:
 
     async def migrate_defaults_for_company(self, company: Company):
         """
-        Мигрирует базовые сущности для новой компании согласно настройкам.
-        Использует настройки из app.core.config.settings.migration
+        Мигрирует все публичные (is_public=True) сущности для новой компании.
+        Сканирует код и находит все flows, агенты и тулы с is_public=True.
         
         Args:
             company: Компания для которой выполняется миграция
         """
-        migration_settings = settings.migration
-        
-        logger.info(f"Миграция базовых сущностей для компании {company.company_id}...")
-        logger.info(f"  Flows: {migration_settings.default_flows}")
-        logger.info(f"  Agents: {migration_settings.default_agents}")
-        logger.info(f"  Tools: {migration_settings.default_tools}")
-        logger.info(f"  With dependencies: {migration_settings.migrate_dependencies}")
+        logger.info(f"Миграция всех публичных сущностей для компании {company.company_id}...")
         
         await self.migrate_for_company(
             company=company,
-            flows=migration_settings.default_flows if migration_settings.default_flows else None,
-            agents=migration_settings.default_agents if migration_settings.default_agents else None,
-            tools=migration_settings.default_tools if migration_settings.default_tools else None,
-            with_dependencies=migration_settings.migrate_dependencies
+            copy_all_public=True
         )
 
     async def migrate_for_company(
@@ -780,7 +771,8 @@ class Migrator:
         flows: Optional[List[str]] = None,
         agents: Optional[List[str]] = None,
         tools: Optional[List[str]] = None,
-        with_dependencies: bool = True
+        with_dependencies: bool = True,
+        copy_all_public: bool = False
     ):
         """
         Мигрирует выбранные сущности из кода в указанную компанию.
@@ -791,10 +783,16 @@ class Migrator:
             agents: Список агентов для миграции (например, ["app.agents.calculator.CalculatorAgent"])
             tools: Список tools для миграции (например, ["app.tools.calc_tools.calculate"])
             with_dependencies: Мигрировать ли зависимости автоматически
+            copy_all_public: Копировать ли все публичные (is_public=True) сущности из системной компании
         """
         logger.info(f"Миграция сущностей для компании {company.company_id}...")
         
         await self._set_company_context(company)
+        
+        # Если нужно мигрировать все публичные сущности из кода
+        if copy_all_public:
+            logger.info("Миграция всех публичных (is_public=True) тулов и агентов из кода...")
+            await self._migrate_all_public_entities()
         
         if flows:
             logger.info(f"Мигрируем {len(flows)} flow...")
@@ -813,6 +811,56 @@ class Migrator:
         
         logger.info(f"✅ Миграция для компании {company.company_id} завершена успешно")
 
+    async def _migrate_all_public_entities(self):
+        """
+        Сканирует код и мигрирует все публичные (is_public=True) flows, агенты и тулы.
+        """
+        migrated_flows = 0
+        migrated_agents = 0
+        migrated_tools = 0
+        
+        # Мигрируем публичные flows
+        logger.info("Сканирование flows из кода...")
+        flow_configs = await self._find_flow_configs()
+        for flow_config in flow_configs:
+            if getattr(flow_config, "is_public", False):
+                try:
+                    await self._migrate_single_flow_with_deps(flow_config.flow_id, with_dependencies=True)
+                    migrated_flows += 1
+                    logger.debug(f"  Мигрирован публичный flow: {flow_config.flow_id}")
+                except Exception as e:
+                    logger.warning(f"Не удалось мигрировать flow {flow_config.flow_id}: {e}")
+        
+        # Мигрируем публичные агенты
+        logger.info("Сканирование агентов из кода...")
+        agent_classes = await self._find_agent_classes()
+        for agent_class in agent_classes:
+            is_public = getattr(agent_class, "is_public", True)
+            if is_public:
+                agent_id = f"{agent_class.__module__}.{agent_class.__name__}"
+                try:
+                    await self._migrate_agent_from_code(agent_id, with_tools=False)
+                    migrated_agents += 1
+                    logger.debug(f"  Мигрирован публичный агент: {agent_id}")
+                except Exception as e:
+                    logger.warning(f"Не удалось мигрировать агент {agent_id}: {e}")
+        
+        # Мигрируем публичные тулы
+        logger.info("Сканирование тулов из кода...")
+        tool_functions = await self._find_tool_functions("app.tools")
+        for tool_obj, modname in tool_functions:
+            is_public = getattr(tool_obj, "_platform_is_public", True)
+            if is_public:
+                tool_id = f"{modname}.{tool_obj.name}"
+                try:
+                    await self._migrate_tool_from_code(tool_id)
+                    migrated_tools += 1
+                    logger.debug(f"  Мигрирован публичный тул: {tool_id}")
+                except Exception as e:
+                    logger.warning(f"Не удалось мигрировать тул {tool_id}: {e}")
+        
+        logger.info(f"✅ Мигрировано {migrated_flows} публичных flows, {migrated_agents} публичных агентов и {migrated_tools} публичных тулов")
+
     async def migrate_single_flow(self, flow_config: FlowConfig):
         """
         Мигрирует один флоу.
@@ -828,6 +876,33 @@ class Migrator:
 
         await self.storage.set_flow_config(flow_config)
         logger.info(f"Флоу {flow_config.flow_id} успешно мигрирован")
+
+    async def _find_flow_configs(self) -> List[FlowConfig]:
+        """Находит все FlowConfig объекты в app.flows и app.custom_flows"""
+        flow_configs = []
+        
+        for package_name in ["app.flows", "app.custom_flows"]:
+            try:
+                package = importlib.import_module(package_name)
+                
+                for importer, modname, ispkg in pkgutil.walk_packages(
+                    package.__path__, package.__name__ + "."
+                ):
+                    try:
+                        module = importlib.import_module(modname)
+                        
+                        # Ищем переменные типа FlowConfig
+                        for name, obj in inspect.getmembers(module):
+                            if isinstance(obj, FlowConfig):
+                                logger.debug(f"  Найден FlowConfig: {name} в {modname}")
+                                flow_configs.append(obj)
+                    except Exception as e:
+                        logger.warning(f"Не удалось загрузить модуль {modname}: {e}")
+            except Exception as e:
+                logger.warning(f"Не удалось загрузить пакет {package_name}: {e}")
+        
+        logger.info(f"Найдено {len(flow_configs)} FlowConfig объектов в коде")
+        return flow_configs
 
     async def _find_tool_functions(self, package_name: str):
         """Находит все @tool функции в пакете (рекурсивно)"""

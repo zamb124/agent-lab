@@ -46,15 +46,20 @@ async def get_flow_variables(flow_id: str, storage: StorageDep) -> VariablesResp
     - Переменные flow
     - Локальные переменные агента
     """
-    # Получаем flow config
-    flow_config = await storage.get_flow_config(flow_id)
-    if not flow_config:
-        raise HTTPException(status_code=404, detail="Flow not found")
-    
-    # Получаем agent config
-    agent_config = None
-    if flow_config.entry_point_agent:
-        agent_config = await storage.get_agent_config(flow_config.entry_point_agent)
+    # Для нового flow возвращаем пустые переменные (только системные и компании/пользователя)
+    if flow_id == 'new':
+        flow_config = None
+        agent_config = None
+    else:
+        # Получаем flow config
+        flow_config = await storage.get_flow_config(flow_id)
+        if not flow_config:
+            raise HTTPException(status_code=404, detail="Flow not found")
+        
+        # Получаем agent config
+        agent_config = None
+        if flow_config.entry_point_agent:
+            agent_config = await storage.get_agent_config(flow_config.entry_point_agent)
     
     # Резолвим все переменные
     context = get_context()
