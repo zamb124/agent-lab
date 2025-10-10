@@ -51,6 +51,17 @@ services:
     restart: unless-stopped
     command: python run_worker.py
 
+  # SGR Deep Research Service
+  sgr:
+    build:
+      context: ./sgr-service
+      dockerfile: Dockerfile
+    ports:
+      - "${SGR_PORT:-8010}:8010"
+    env_file:
+      - .env.sgr
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   app_logs:
