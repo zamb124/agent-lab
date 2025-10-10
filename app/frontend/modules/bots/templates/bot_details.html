@@ -406,10 +406,9 @@
                     </div>
                     {% endif %}
                     
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i>
+                    <div class="alert alert-primary bg-opacity-10 border-primary">
                         <div class="mb-2">
-                            <strong>Webhook URL:</strong><br>
+                            <i class="bi bi-info-circle me-2"></i><strong>Webhook URL:</strong><br>
                             <small class="text-muted">Настройте этот URL в Meta for Developers</small>
                         </div>
                         <div class="input-group mb-2">
@@ -421,7 +420,7 @@
                                 <i class="bi bi-clipboard"></i>
                             </button>
                         </div>
-                        <button class="btn btn-outline-primary btn-sm" onclick="registerWhatsApp('{{ bot.flow_id }}')">
+                        <button class="btn btn-primary btn-sm" onclick="registerWhatsApp('{{ bot.flow_id }}')">
                             <i class="bi bi-link-45deg"></i> Проверить регистрацию
                         </button>
                     </div>
