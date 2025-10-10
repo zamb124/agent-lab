@@ -19,6 +19,7 @@ from .models import (
 )
 from .base_provider import BaseAuthProvider
 from .providers.yandex import YandexProvider
+from .providers.google import GoogleProvider
 from ..core.config import settings
 from ..core.storage import Storage
 
@@ -40,6 +41,7 @@ class AuthService:
         """Инициализирует доступные провайдеры на основе конфигурации"""
         provider_classes: Dict[AuthProvider, Type[BaseAuthProvider]] = {
             AuthProvider.YANDEX: YandexProvider,
+            AuthProvider.GOOGLE: GoogleProvider,
         }
 
         for provider_name, provider_class in provider_classes.items():

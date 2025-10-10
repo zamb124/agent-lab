@@ -18,6 +18,15 @@
         "userinfo_url": "https://login.yandex.ru/info",
         "scope": "login:email login:avatar",
         "enabled": true
+      },
+      "google": {
+        "client_id": "your-google-client-id.apps.googleusercontent.com",
+        "client_secret": "your-google-client-secret",
+        "auth_url": "https://accounts.google.com/o/oauth2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "userinfo_url": "https://openidconnect.googleapis.com/v1/userinfo",
+        "scope": "openid email profile",
+        "enabled": false
       }
     }
   },
