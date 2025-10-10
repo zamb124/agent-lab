@@ -215,6 +215,10 @@
                     База знаний бота
                 </h4>
                 
+                <div class="panel-description" style="padding-left: 20px;">
+                    <p>База знаний позволяет боту использовать документы и файлы для ответов на вопросы. Загружайте инструкции, FAQ, описания продуктов — бот будет автоматически искать релевантную информацию и использовать её в диалоге. Поддерживаются PDF, TXT, DOCX и другие форматы.</p>
+                </div>
+                
                 <div class="rag-settings-section">
                     <div class="form-group">
                             <label>Скоуп хранения</label>
@@ -300,34 +304,39 @@
                 </div>
                 
                 {% for platform, config in bot.platforms.items() %}
-                <div class="platform-settings">
-                    <div class="platform-header">
-                        <h5>
-                            {% if platform == 'telegram' %}
-                                <i class="bi bi-telegram"></i> Telegram
-                            {% elif platform == 'api' %}
-                                <i class="bi bi-code-slash"></i> API
-                            {% elif platform == 'web' %}
-                                <i class="bi bi-globe"></i> Web
-                            {% elif platform == 'whatsapp' %}
-                                <i class="bi bi-whatsapp"></i> WhatsApp
-                            {% elif platform == 'amocrm' %}
-                                <i class="bi bi-building"></i> AmoCRM
-                            {% elif platform == 'retailcrm' %}
-                                <i class="bi bi-shop"></i> RetailCRM
-                            {% elif platform == 'discord' %}
-                                <i class="bi bi-discord"></i> Discord
-                            {% elif platform == 'slack' %}
-                                <i class="bi bi-slack"></i> Slack
-                            {% elif platform == 'viber' %}
-                                <i class="bi bi-heart-fill"></i> Viber
-                            {% elif platform == 'vk' %}
-                                <i class="bi bi-circle-fill"></i> VK
-                            {% else %}
-                                <i class="bi bi-gear"></i> {{ platform }}
-                            {% endif %}
-                        </h5>
-                        <div class="platform-actions">
+                <div class="platform-settings" data-platform="{{ platform }}">
+                    <div class="platform-header" onclick="togglePlatformCollapse('{{ platform }}')">
+                        <div class="platform-header-left">
+                            <button class="platform-collapse-btn" type="button">
+                                <i class="bi bi-chevron-down"></i>
+                            </button>
+                            <h5>
+                                {% if platform == 'telegram' %}
+                                    <i class="bi bi-telegram"></i> Telegram
+                                {% elif platform == 'api' %}
+                                    <i class="bi bi-code-slash"></i> API
+                                {% elif platform == 'web' %}
+                                    <i class="bi bi-globe"></i> Web
+                                {% elif platform == 'whatsapp' %}
+                                    <i class="bi bi-whatsapp"></i> WhatsApp
+                                {% elif platform == 'amocrm' %}
+                                    <i class="bi bi-building"></i> AmoCRM
+                                {% elif platform == 'retailcrm' %}
+                                    <i class="bi bi-shop"></i> RetailCRM
+                                {% elif platform == 'discord' %}
+                                    <i class="bi bi-discord"></i> Discord
+                                {% elif platform == 'slack' %}
+                                    <i class="bi bi-slack"></i> Slack
+                                {% elif platform == 'viber' %}
+                                    <i class="bi bi-heart-fill"></i> Viber
+                                {% elif platform == 'vk' %}
+                                    <i class="bi bi-circle-fill"></i> VK
+                                {% else %}
+                                    <i class="bi bi-gear"></i> {{ platform }}
+                                {% endif %}
+                            </h5>
+                        </div>
+                        <div class="platform-actions" onclick="event.stopPropagation()">
                             <button class="btn btn-outline-danger btn-sm" 
                                     onclick="removePlatform('{{ bot.flow_id }}', '{{ platform }}')">
                                 <i class="bi bi-trash"></i>
@@ -335,6 +344,7 @@
                         </div>
                     </div>
                     
+                    <div class="platform-content">
                     {% if platform == 'telegram' %}
                     <div class="form-group">
                         <label>Токен бота</label>
@@ -418,10 +428,145 @@
                     
                     {% elif platform == 'api' %}
                     <div class="api-info">
-                        <p>API endpoint для этого бота:</p>
-                        <code>POST /api/v1/flows/{{ bot.flow_id }}/message</code>
+                        <div class="api-section">
+                            <h6><i class="bi bi-link-45deg"></i> API Endpoint</h6>
+                            <div class="input-group mb-3">
+                                <input type="text" 
+                                       class="form-control font-monospace" 
+                                       id="api-endpoint-{{ bot.flow_id }}" 
+                                       value="https://{{ request.headers.get('host') }}/api/v1/flows/{{ bot.flow_id }}/message" 
+                                       readonly>
+                                <button class="btn btn-outline-secondary" 
+                                        onclick="copyToClipboard('api-endpoint-{{ bot.flow_id }}')">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="api-section">
+                            <h6><i class="bi bi-code-square"></i> Пример curl запроса</h6>
+                            <div class="code-block-wrapper">
+                                <pre class="code-block" id="api-curl-example-{{ bot.flow_id }}">curl -X POST "https://{{ request.headers.get('host') }}/api/v1/flows/{{ bot.flow_id }}/message" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_TOKEN" \
+  -d '{
+    "user_id": "user123",
+    "session_id": "session456",
+    "text": "Привет!"
+  }'</pre>
+                                <button class="btn btn-sm btn-outline-secondary copy-code-btn" 
+                                        onclick="copyToClipboard('api-curl-example-{{ bot.flow_id }}')">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="api-section">
+                            <h6><i class="bi bi-braces"></i> Пример тела запроса</h6>
+                            <div class="code-block-wrapper">
+                                <pre class="code-block" id="api-request-example-{{ bot.flow_id }}">{
+  "user_id": "user123",
+  "session_id": "session456",
+  "text": "Привет!",
+  "metadata": {
+    "source": "web",
+    "user_name": "John Doe"
+  }
+}</pre>
+                                <button class="btn btn-sm btn-outline-secondary copy-code-btn" 
+                                        onclick="copyToClipboard('api-request-example-{{ bot.flow_id }}')">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="api-section">
+                            <h6><i class="bi bi-play-circle"></i> Протестировать API</h6>
+                            <div class="api-test-form">
+                                <div class="form-group">
+                                    <label>User ID</label>
+                                    <input type="text" 
+                                           class="form-control" 
+                                           id="api-test-user-id-{{ bot.flow_id }}" 
+                                           value="test_user_{{ bot.flow_id }}" 
+                                           placeholder="user123">
+                                    <small class="form-text">Идентификатор пользователя</small>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>Session ID <span class="text-muted">(опционально)</span></label>
+                                    <input type="text" 
+                                           class="form-control" 
+                                           id="api-test-session-id-{{ bot.flow_id }}" 
+                                           placeholder="session456">
+                                    <small class="form-text">Оставьте пустым для новой сессии</small>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>Сообщение</label>
+                                    <textarea class="form-control" 
+                                              id="api-test-message-{{ bot.flow_id }}" 
+                                              rows="3" 
+                                              placeholder="Введите тестовое сообщение...">Привет!</textarea>
+                                    <small class="form-text">Текст сообщения для отправки боту</small>
+                                </div>
+                                
+                                <button class="btn btn-primary" 
+                                        onclick="testApiEndpoint('{{ bot.flow_id }}')">
+                                    <i class="bi bi-send"></i> Отправить тестовое сообщение
+                                </button>
+                                
+                                <div id="api-test-result-{{ bot.flow_id }}" class="api-test-result" style="display: none;">
+                                    <h6><i class="bi bi-reply"></i> Ответ от API</h6>
+                                    <div class="result-content">
+                                        <pre id="api-test-result-content-{{ bot.flow_id }}"></pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="api-section">
+                            <h6><i class="bi bi-info-circle"></i> Параметры запроса</h6>
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Поле</th>
+                                        <th>Тип</th>
+                                        <th>Обязательное</th>
+                                        <th>Описание</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>user_id</code></td>
+                                        <td>string</td>
+                                        <td>✓</td>
+                                        <td>Уникальный идентификатор пользователя</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>session_id</code></td>
+                                        <td>string</td>
+                                        <td>-</td>
+                                        <td>ID сессии (если не указан, создается новая)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>text</code></td>
+                                        <td>string</td>
+                                        <td>✓</td>
+                                        <td>Текст сообщения</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>metadata</code></td>
+                                        <td>object</td>
+                                        <td>-</td>
+                                        <td>Дополнительные метаданные</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                     {% endif %}
+                    </div>
                 </div>
                 {% endfor %}
             </div>

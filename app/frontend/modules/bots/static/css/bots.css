@@ -782,6 +782,39 @@ body.sidebar-collapsed .bot-modal {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 1rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.platform-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1;
+}
+
+.platform-collapse-btn {
+    background: none;
+    border: none;
+    padding: 0.25rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+}
+
+.platform-collapse-btn:hover {
+    color: var(--accent-primary);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+}
+
+.platform-collapse-btn i {
+    transition: transform var(--transition-normal);
 }
 
 .platform-header h5 {
@@ -792,6 +825,19 @@ body.sidebar-collapsed .bot-modal {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+}
+
+.platform-content {
+    overflow: hidden;
+    transition: max-height var(--transition-normal) ease;
+}
+
+.platform-settings.collapsed .platform-content {
+    max-height: 0 !important;
+}
+
+.platform-settings.collapsed .platform-header {
+    margin-bottom: 0;
 }
 
 .switch {
@@ -877,6 +923,166 @@ input:checked + .slider:before {
     border-radius: var(--radius-sm);
     color: var(--accent-primary);
     font-weight: 500;
+}
+
+.api-section {
+    margin-bottom: 1.5rem;
+}
+
+.api-section:last-child {
+    margin-bottom: 0;
+}
+
+.api-section h6 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.api-section h6 i {
+    color: var(--accent-primary);
+}
+
+.code-block-wrapper {
+    position: relative;
+    margin-bottom: 1rem;
+}
+
+.code-block {
+    background: var(--bg-card);
+    border: 1px solid var(--border-secondary);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+    margin: 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.copy-code-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    opacity: 0.7;
+    transition: opacity var(--transition-fast);
+}
+
+.copy-code-btn:hover {
+    opacity: 1;
+}
+
+.api-test-form {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+}
+
+.api-test-form .form-group {
+    margin-bottom: 1rem;
+}
+
+.api-test-form .form-group:last-of-type {
+    margin-bottom: 1rem;
+}
+
+.api-test-form label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 0.375rem;
+    display: block;
+}
+
+.api-test-form .text-muted {
+    color: var(--text-tertiary);
+    font-size: 0.75rem;
+}
+
+.api-test-form .form-text {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+    display: block;
+}
+
+.api-test-result {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-secondary);
+}
+
+.api-test-result h6 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.api-test-result .result-content {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem;
+}
+
+.api-test-result pre {
+    margin: 0;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.api-test-result pre.success {
+    color: var(--success-text);
+}
+
+.api-test-result pre.error {
+    color: var(--danger-text);
+}
+
+.api-section table {
+    width: 100%;
+    font-size: 0.875rem;
+}
+
+.api-section table th {
+    background: var(--bg-tertiary);
+    font-weight: 600;
+    color: var(--text-primary);
+    padding: 0.5rem;
+    text-align: left;
+}
+
+.api-section table td {
+    padding: 0.5rem;
+    border-top: 1px solid var(--border-secondary);
+    color: var(--text-secondary);
+}
+
+.api-section table code {
+    background: var(--bg-tertiary);
+    padding: 0.125rem 0.375rem;
+    border-radius: 3px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.8125rem;
+    color: var(--accent-primary);
 }
 
 .code-editor {
