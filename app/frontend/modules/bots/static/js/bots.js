@@ -1479,7 +1479,85 @@ import { showNotification } from '/static/js/components/notification.js';
         }, 500);
     };
 
+    async function addSearchToolToAgent(flowId) {
+        try {
+            const storage = await (await fetch('/frontend/api/flows/' + encodeURIComponent(flowId))).json();
+            const entryPoint = storage.entry_point_agent;
+            
+            if (!entryPoint) return;
+            
+            const agentResponse = await fetch(`/frontend/api/agents/${encodeURIComponent(entryPoint)}`);
+            if (!agentResponse.ok) return;
+            
+            const agentData = await agentResponse.json();
+            const currentTools = agentData.tools || [];
+            
+            const searchToolId = 'app.tools.rag_tools.search_knowledge_base';
+            const listToolId = 'app.tools.rag_tools.list_documents_in_knowledge_base';
+            
+            const hasSearchTool = currentTools.some(t => t.tool_id === searchToolId);
+            const hasListTool = currentTools.some(t => t.tool_id === listToolId);
+            
+            if (hasSearchTool && hasListTool) return;
+            
+            const toolsToAdd = [];
+            
+            if (!hasSearchTool) {
+                toolsToAdd.push({
+                    tool_id: searchToolId,
+                    params: {},
+                    code_mode: "code_reference",
+                    is_public: true
+                });
+            }
+            
+            if (!hasListTool) {
+                toolsToAdd.push({
+                    tool_id: listToolId,
+                    params: {},
+                    code_mode: "code_reference",
+                    is_public: true
+                });
+            }
+            
+            if (toolsToAdd.length === 0) return;
+            
+            const updatedTools = [...currentTools, ...toolsToAdd];
+            
+            await fetch(`/frontend/api/agents/${encodeURIComponent(entryPoint)}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.app.authToken}`
+                },
+                body: JSON.stringify({
+                    tools: updatedTools
+                })
+            });
+            
+            const toolsSelector = document.getElementById('bot-tools-selector');
+            if (toolsSelector) {
+                toolsSelector.dataset.loaded = '';
+                loadBotTools();
+            }
+            
+        } catch (error) {
+            console.error('Ошибка автодобавления тула поиска:', error);
+        }
+    }
+
     window.uploadDocumentToKnowledgeBase = async function(flowId) {
+        if (flowId === 'new') {
+            showNotification('Сначала сохраните бота, затем загрузите документы', 'warning');
+            
+            const saveButton = document.querySelector('.settings-actions .btn-primary');
+            if (saveButton) {
+                saveButton.classList.add('pulse-animation');
+                setTimeout(() => saveButton.classList.remove('pulse-animation'), 2000);
+            }
+            return;
+        }
+        
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.pdf,.txt,.docx,.html,.md,.csv';
@@ -1506,6 +1584,8 @@ import { showNotification } from '/static/js/components/notification.js';
                 
                 const result = await response.json();
                 showNotification('Документ успешно загружен и добавлен в базу знаний', 'success');
+                
+                await addSearchToolToAgent(flowId);
                 
                 await loadKnowledgeBaseDocuments(flowId);
                 

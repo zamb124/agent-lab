@@ -6,9 +6,9 @@
 import logging
 from typing import Optional
 from urllib.parse import quote
-from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 
+from app.core.tool_decorator import tool
 from app.core.rag.factory import get_default_rag_provider
 from app.core.rag.namespace_manager import get_or_create_namespace
 from app.core.context import get_context
@@ -34,7 +34,7 @@ def _get_rag_config_from_context(context):
     return AgentRAGConfig(enabled=True, namespace_scope="flow", search_scopes=["flow", "company"])
 
 
-@tool
+@tool(is_public=True, title="Поиск в базе знаний")
 async def search_knowledge_base(
     query: str,
     limit: int = 5,
@@ -186,7 +186,7 @@ async def upload_document_to_knowledge_base(
     )
 
 
-@tool
+@tool(is_public=True, title="Список документов")
 async def list_documents_in_knowledge_base(
     config: RunnableConfig = None
 ) -> str:
