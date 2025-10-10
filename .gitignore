@@ -2,6 +2,16 @@
 *__pycache__*
 artifacts/*
 .env
+.env.sgr
 .venv
+
+# SGR Deep Research
+sgr-service/.venv/
+sgr-service/venv/
+sgr-service/reports/
+sgr-service/logs/
+sgr-service/config.yaml
+sgr-service/__pycache__/
+
 /backend/app/custom_flows/fashn_buyer/add_token.py
 
