@@ -2,8 +2,9 @@
 Фабрика для создания Flow экземпляров и работы с историей выполнения.
 """
 
+import asyncio
 import logging
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 from datetime import datetime, timezone
 
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
@@ -217,7 +218,7 @@ class FlowFactory:
         
         session_keys = await self.storage.list_by_prefix("session:", limit=1000)
         
-        sessions = []
+        filtered_sessions = []
         for key in session_keys:
             session_json = await self.storage.get(key)
             if not session_json:
@@ -238,33 +239,40 @@ class FlowFactory:
             if date_to and session.created_at and session.created_at > date_to:
                 continue
             
-            message_count = await self._get_session_message_count(session.session_id)
-            first_message = await self._get_first_user_message(session.session_id)
+            filtered_sessions.append(session)
+        
+        logger.info(f"🔍 Отфильтровано {len(filtered_sessions)} сессий, начинаем параллельную обработку")
+        
+        user_cache: Dict[str, Optional[str]] = {}
+        flow_cache: Dict[str, Optional[str]] = {}
+        
+        async def process_session(session: Any) -> SessionListItem:
+            message_count, first_message = await self._get_session_info(session.session_id)
             
             flow_name = None
             if session.flow_id:
-                flow_config = await self.storage.get_flow_config(session.flow_id)
-                if flow_config and hasattr(flow_config, 'name'):
-                    flow_name = flow_config.name
+                if session.flow_id not in flow_cache:
+                    flow_config = await self.storage.get_flow_config(session.flow_id)
+                    flow_cache[session.flow_id] = flow_config.name if flow_config and hasattr(flow_config, 'name') else None
+                flow_name = flow_cache[session.flow_id]
             
             user_name = None
             if session.user_id:
-                try:
-                    
-                    user_key = f"user:{session.user_id}"
-                    logger.info(f"🔍 Загружаем пользователя по ключу: {user_key}")
-                    user_json = await self.storage.get(user_key, force_global=True)
-                    logger.info(f"🔍 Результат загрузки: {bool(user_json)}, длина: {len(user_json) if user_json else 0}")
-                    if user_json:
-                        user = User.model_validate_json(user_json)
-                        user_name = user.name
-                        logger.info(f"✅ Загружено имя пользователя {session.user_id}: {user_name}")
-                    else:
-                        logger.warning(f"⚠️ Пользователь {session.user_id} не найден в БД")
-                except Exception as e:
-                    logger.error(f"❌ Ошибка загрузки пользователя {session.user_id}: {e}")
+                if session.user_id not in user_cache:
+                    try:
+                        user_key = f"user:{session.user_id}"
+                        user_json = await self.storage.get(user_key, force_global=True)
+                        if user_json:
+                            user = User.model_validate_json(user_json)
+                            user_cache[session.user_id] = user.name
+                        else:
+                            user_cache[session.user_id] = None
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка загрузки пользователя {session.user_id}: {e}")
+                        user_cache[session.user_id] = None
+                user_name = user_cache[session.user_id]
             
-            session_item = SessionListItem(
+            return SessionListItem(
                 session_id=session.session_id,
                 flow_id=session.flow_id,
                 flow_name=flow_name,
@@ -278,12 +286,14 @@ class FlowFactory:
                 last_activity=session.last_activity,
                 metadata=session.metadata
             )
-            sessions.append(session_item)
         
-        sessions.sort(key=lambda s: s.last_activity or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        sessions = await asyncio.gather(*[process_session(session) for session in filtered_sessions])
         
-        total = len(sessions)
-        paginated_sessions = sessions[offset:offset + limit]
+        sessions_list = list(sessions)
+        sessions_list.sort(key=lambda s: s.last_activity or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        
+        total = len(sessions_list)
+        paginated_sessions = sessions_list[offset:offset + limit]
         
         filters = {
             "platform": platform,
@@ -403,70 +413,44 @@ class FlowFactory:
         
         return unique_messages
 
-    async def _get_session_message_count(self, session_id: str) -> int:
+    async def _get_session_info(self, session_id: str) -> tuple[int, Optional[str]]:
         """
-        Получает количество сообщений в сессии.
+        Получает информацию о сессии: количество сообщений и первое сообщение пользователя.
+        Оптимизирован для получения обеих данных за один проход.
         
         Args:
             session_id: ID сессии
             
         Returns:
-            Количество сообщений
+            Tuple (количество сообщений, первое сообщение пользователя)
         """
-        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-        from app.core.config import get_settings
-        
         settings = get_settings()
         config = {"configurable": {"thread_id": session_id}}
         
         message_count = 0
-        checkpointer_cm = AsyncPostgresSaver.from_conn_string(settings.database.checkpointer_url)
-        async with checkpointer_cm as checkpointer:
-            async for checkpoint_tuple in checkpointer.alist(config, limit=10):
-                if checkpoint_tuple and checkpoint_tuple.checkpoint:
-                    channel_values = checkpoint_tuple.checkpoint.get("channel_values", {})
-                    messages = channel_values.get("messages", [])
-                    message_count = max(message_count, len(messages))
-        
-            return message_count
-
-    async def _get_first_user_message(self, session_id: str) -> Optional[str]:
-        """
-        Получает первое сообщение пользователя в сессии.
-        
-        Args:
-            session_id: ID сессии
-            
-        Returns:
-            Текст первого сообщения пользователя или None
-        """
-        settings = get_settings()
-        config = {"configurable": {"thread_id": session_id}}
+        first_message = None
+        oldest_checkpoint = None
         
         checkpointer_cm = AsyncPostgresSaver.from_conn_string(settings.database.checkpointer_url)
         async with checkpointer_cm as checkpointer:
-            all_checkpoints = []
-            async for checkpoint_tuple in checkpointer.alist(config, limit=100):
-                if checkpoint_tuple and checkpoint_tuple.checkpoint:
-                    all_checkpoints.append(checkpoint_tuple)
+            async for checkpoint_tuple in checkpointer.alist(config, limit=20):
+                if not checkpoint_tuple or not checkpoint_tuple.checkpoint:
+                    continue
+                
+                channel_values = checkpoint_tuple.checkpoint.get("channel_values", {})
+                messages = channel_values.get("messages", [])
+                message_count = max(message_count, len(messages))
+                
+                oldest_checkpoint = checkpoint_tuple
             
-            logger.info(f"🔍 Для сессии {session_id} найдено {len(all_checkpoints)} checkpoint'ов")
-            
-            if all_checkpoints:
-                for checkpoint in reversed(all_checkpoints):
-                    channel_values = checkpoint.checkpoint.get("channel_values", {})
-                    messages = channel_values.get("messages", [])
-                    
-                    if messages:
-                        logger.info(f"🔍 Найден checkpoint с {len(messages)} сообщениями")
-                        
-                        for msg in messages:
-                            if isinstance(msg, HumanMessage):
-                                content = msg.content or ""
-                                logger.info(f"✅ Найдено первое сообщение: {content[:60]}")
-                                return content[:60] if len(content) > 60 else content
-                        
+            if oldest_checkpoint:
+                channel_values = oldest_checkpoint.checkpoint.get("channel_values", {})
+                messages = channel_values.get("messages", [])
+                
+                for msg in messages:
+                    if isinstance(msg, HumanMessage):
+                        content = msg.content or ""
+                        first_message = content[:60] if len(content) > 60 else content
                         break
         
-        logger.warning(f"⚠️ Первое сообщение для сессии {session_id} не найдено")
-        return None
+        return message_count, first_message
