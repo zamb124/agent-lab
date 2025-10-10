@@ -109,14 +109,69 @@ class WebSocketManager:
         """Запустить polling задачу для сессии"""
         polling_key = f"{connection_type}:{session_id}"
         
-        # Если уже есть задача - остановим её
         if polling_key in self.polling_tasks:
-            self.polling_tasks[polling_key].cancel()
+            old_task = self.polling_tasks[polling_key]
+            if not old_task.done():
+                logger.warning(f"⚠️ Останавливаем старую polling задачу для {polling_key}")
+                old_task.cancel()
         
-        # Создаем новую задачу
         task = asyncio.create_task(polling_coroutine)
         self.polling_tasks[polling_key] = task
-        logger.info(f"Polling запущен для {polling_key}")
+        
+        def task_done_callback(t):
+            try:
+                if t.cancelled():
+                    logger.info(f"🔄 Polling задача отменена: {polling_key}")
+                elif t.exception():
+                    logger.error(f"❌ Polling задача завершилась с ошибкой для {polling_key}: {t.exception()}", exc_info=True)
+                else:
+                    logger.info(f"✅ Polling задача завершена успешно: {polling_key}")
+            except Exception as e:
+                logger.error(f"❌ Ошибка в callback polling задачи {polling_key}: {e}")
+        
+        task.add_done_callback(task_done_callback)
+        logger.info(f"🚀 Polling запущен для {polling_key}")
+    
+    def is_polling_active(self, session_id: str, connection_type: ConnectionType = "chat") -> bool:
+        """Проверить активна ли polling задача для сессии"""
+        polling_key = f"{connection_type}:{session_id}"
+        if polling_key not in self.polling_tasks:
+            return False
+        
+        task = self.polling_tasks[polling_key]
+        return not task.done()
+    
+    def get_polling_status(self, session_id: str, connection_type: ConnectionType = "chat") -> dict:
+        """Получить статус polling задачи"""
+        polling_key = f"{connection_type}:{session_id}"
+        has_connection = session_id in self.connections[connection_type]
+        has_task = polling_key in self.polling_tasks
+        
+        status = {
+            "session_id": session_id,
+            "connection_type": connection_type,
+            "has_connection": has_connection,
+            "has_polling_task": has_task,
+            "polling_active": False,
+            "polling_status": "no_task"
+        }
+        
+        if has_task:
+            task = self.polling_tasks[polling_key]
+            if task.done():
+                status["polling_active"] = False
+                if task.cancelled():
+                    status["polling_status"] = "cancelled"
+                elif task.exception():
+                    status["polling_status"] = "error"
+                    status["error"] = str(task.exception())
+                else:
+                    status["polling_status"] = "completed"
+            else:
+                status["polling_active"] = True
+                status["polling_status"] = "running"
+        
+        return status
     
     async def switch_session(
         self,
@@ -128,13 +183,9 @@ class WebSocketManager:
         if old_session_id in self.connections[connection_type]:
             websocket = self.connections[connection_type][old_session_id]
             
-            # Удаляем старое соединение
             del self.connections[connection_type][old_session_id]
-            
-            # Добавляем под новым ID
             self.connections[connection_type][new_session_id] = websocket
             
-            # Останавливаем старый polling
             old_key = f"{connection_type}:{old_session_id}"
             if old_key in self.polling_tasks:
                 self.polling_tasks[old_key].cancel()

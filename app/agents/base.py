@@ -256,50 +256,43 @@ class BaseAgent(ABC):
 
         async def agent_func(input: str) -> str:
             """Функция-обертка для вызова агента как инструмента"""
-            logger.info(
-                f"🛠️ Вызов субагента {self.config.name} с входными данными: {input}"
-            )
+            logger.info(f"🔧 [AGENT AS TOOL START] {self.config.name}")
+            logger.info(f"   Input: {input}")
 
             try:
-                # КРИТИЧНО: Вызываем субагент БЕЗ config для правильной работы interrupt
                 result = await self.ainvoke({"messages": [HumanMessage(content=input)]})
 
-                # ВАЖНО: Проверяем есть ли interrupt в результате
                 if isinstance(result, dict) and "__interrupt__" in result:
-                    # Субагент запросил пользовательский ввод - пробрасываем interrupt дальше
                     interrupt_value = result["__interrupt__"]
                     if isinstance(interrupt_value, list):
-                        # Если interrupt как массив символов, соединяем в строку
                         interrupt_text = "".join(interrupt_value)
                     else:
                         interrupt_text = str(interrupt_value)
 
                     logger.info(
-                        f"🟢 Субагент {self.config.name} запросил ввод пользователя, пробрасываем GraphInterrupt дальше"
+                        f"⏸️  [AGENT AS TOOL INTERRUPT] {self.config.name} запросил ввод пользователя"
                     )
                     raise GraphInterrupt(interrupt_text)
 
-                # Извлекаем ответ из результата
                 if result.get("messages"):
                     last_message = result["messages"][-1]
                     content = getattr(last_message, "content", "")
-                    logger.info(
-                        f"✅ Субагент {self.config.name} завершен: {content[:100]}..."
-                    )
+                    logger.info(f"✅ [AGENT AS TOOL SUCCESS] {self.config.name}")
+                    logger.info(f"   Result: {content[:200]}...")
                     return content
                 else:
+                    logger.info(f"✅ [AGENT AS TOOL SUCCESS] {self.config.name}")
                     return "Агент выполнен успешно"
 
             except Exception as e:
-                # GraphInterrupt от субагента должен пробрасываться дальше
                 if isinstance(e, GraphInterrupt):
                     logger.info(
-                        f"🟢 Субагент {self.config.name} запросил ввод пользователя, пробрасываем GraphInterrupt дальше"
+                        f"⏸️  [AGENT AS TOOL INTERRUPT] {self.config.name} пробрасывает GraphInterrupt"
                     )
-                    raise e  # Пробрасываем прерывание дальше в родительский граф
+                    raise e
                 else:
                     error_msg = f"Ошибка выполнения субагента {self.config.name}: {e}"
-                    logger.error(f"❌ {error_msg}", exc_info=True)
+                    logger.error(f"❌ [AGENT AS TOOL ERROR] {self.config.name}: {e}", exc_info=True)
                     return error_msg
 
         tool_name = name or self.config.agent_id.replace(".", "_")

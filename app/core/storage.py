@@ -112,7 +112,8 @@ class Storage:
             
         global_prefixes = [
             'company:', 'subdomain:', 
-            'auth_session:', 'auth_state:'
+            'auth_session:', 'auth_state:',
+            'web_notification:', 'media_group:'
         ]
         
         if any(key.startswith(prefix) for prefix in global_prefixes):

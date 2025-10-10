@@ -2,8 +2,6 @@
 Стандартные инструменты для всех агентов.
 """
 
-import logging
-from langgraph.errors import GraphInterrupt
 from langgraph.types import interrupt
 
 from app.core.tool_decorator import tool
@@ -20,23 +18,9 @@ def ask_user(question: str) -> str:
     Returns:
         Ответ пользователя в формате "QUESTION: вопрос\nANSWER: ответ"
     """
-    logger = logging.getLogger(__name__)
-
-    logger.info(f"🔵 ask_user tool вызван с вопросом: {question}")
-    logger.info(f"🔵 Вызываем interrupt() с вопросом: {question}")
-
-    try:
-        result = interrupt(question)
-        logger.info(f"🟢 ask_user получил ответ: {result}")
-
-        # КРИТИЧНО: Возвращаем в формате, который понимает агент
-        formatted_result = f"QUESTION: {question}\nANSWER: {result}"
-        logger.info(f"📝 Форматированный результат: {formatted_result}")
-        return formatted_result
-
-    except GraphInterrupt as e:
-        logger.error(f"🔴 Ошибка в ask_user tool: {e}")
-        raise
+    result = interrupt(question)
+    formatted_result = f"QUESTION: {question}\nANSWER: {result}"
+    return formatted_result
 
 
 # Импортируем сессионные тулы

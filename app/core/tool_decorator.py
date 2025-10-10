@@ -6,9 +6,13 @@
 - Метаданные для платформы
 """
 
+import asyncio
 import functools
+import logging
 from typing import Optional, Callable, Any, Dict, List
 from langchain_core.tools import tool as langchain_tool
+
+logger = logging.getLogger(__name__)
 
 
 def tool(
@@ -64,7 +68,49 @@ def tool(
     """
     
     def decorator(func: Callable) -> Callable:
-        # Применяем стандартный langchain @tool декоратор
+        # Создаем обертку с логированием
+
+        
+        is_async = asyncio.iscoroutinefunction(func)
+        
+        if is_async:
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                tool_name = name or func.__name__
+                logger.info(f"🔧 [TOOL START] {tool_name}")
+                logger.info(f"   Args: {args}")
+                logger.info(f"   Kwargs: {kwargs}")
+                
+                try:
+                    result = await func(*args, **kwargs)
+                    logger.info(f"✅ [TOOL SUCCESS] {tool_name}")
+                    logger.info(f"   Result: {str(result)[:200]}...")
+                    return result
+                except Exception as e:
+                    logger.error(f"❌ [TOOL ERROR] {tool_name}: {e}", exc_info=True)
+                    raise
+            
+            wrapped_func = async_wrapper
+        else:
+            @functools.wraps(func)
+            def sync_wrapper(*args, **kwargs):
+                tool_name = name or func.__name__
+                logger.info(f"🔧 [TOOL START] {tool_name}")
+                logger.info(f"   Args: {args}")
+                logger.info(f"   Kwargs: {kwargs}")
+                
+                try:
+                    result = func(*args, **kwargs)
+                    logger.info(f"✅ [TOOL SUCCESS] {tool_name}")
+                    logger.info(f"   Result: {str(result)[:200]}...")
+                    return result
+                except Exception as e:
+                    logger.error(f"❌ [TOOL ERROR] {tool_name}: {e}", exc_info=True)
+                    raise
+            
+            wrapped_func = sync_wrapper
+        
+        # Применяем стандартный langchain @tool декоратор к обернутой функции
         # Фильтруем None значения
         langchain_kwargs = {}
         if name is not None:
@@ -76,7 +122,7 @@ def tool(
             langchain_kwargs['args_schema'] = args_schema
         langchain_kwargs['infer_schema'] = infer_schema
         
-        langchain_decorated = langchain_tool(**langchain_kwargs)(func)
+        langchain_decorated = langchain_tool(**langchain_kwargs)(wrapped_func)
         
         # Добавляем метаданные платформы к инструменту
         langchain_decorated._platform_title = title or func.__name__
