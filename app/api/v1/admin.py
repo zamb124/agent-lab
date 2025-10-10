@@ -18,9 +18,44 @@ from app.core.file_processor import FileProcessor
 from app.core.context import get_context
 from app.core.migrator import Migrator
 from app.core.config import get_settings
+from app.identity.auth_service import auth_service
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.get("/me")
+async def get_current_user():
+    """
+    Возвращает информацию о текущем пользователе из контекста.
+    Middleware уже установил контекст с авторизованным пользователем.
+    """
+    context = get_context()
+    user = context.user
+    
+    email = None
+    avatar_url = None
+    provider_value = None
+    
+    if context.session_id:
+        session = await auth_service._get_session(context.session_id)
+        provider_value = session.provider.value if session else None
+        
+        if session:
+            provider_info = await auth_service.get_user_provider_info(user.user_id, session.provider)
+            if provider_info:
+                email = provider_info.get("email")
+                avatar_url = provider_info.get("avatar_url")
+
+    return {
+        "user_id": user.user_id,
+        "email": email,
+        "name": user.name,
+        "avatar_url": avatar_url,
+        "provider": provider_value,
+        "status": user.status.value,
+    }
 
 
 @router.get("/agents", response_model=List[str])

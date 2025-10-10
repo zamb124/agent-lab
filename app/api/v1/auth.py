@@ -3,7 +3,7 @@ API эндпоинты для авторизации.
 """
 
 import logging
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from app.core.config import settings
 
@@ -49,10 +49,8 @@ async def start_auth(provider_name: str, redirect_uri: str = None):
         )
 
     if redirect_uri is None:
-        if settings.server.env == "local":
-            redirect_uri = f"http://{settings.server.domain}:{settings.server.port}/auth/callback/{provider_name}"
-        else:
-            redirect_uri = f"https://{settings.server.domain}/auth/callback/{provider_name}"
+        redirect_uri = f"https://agents-lab.ru/auth/callback/{provider_name}"
+
 
     try:
         auth_url = await auth_service.start_auth(provider, redirect_uri)
@@ -141,42 +139,6 @@ async def auth_callback(
 
     logger.info(f"✅ Успешная авторизация пользователя {result.user.user_id}")
     return response
-
-
-@router.get("/me")
-async def get_current_user(session_id: str = None):
-    """
-    Возвращает информацию о текущем пользователе.
-
-    Args:
-        session_id: ID сессии (можно передать в query или cookie)
-    """
-    if not session_id:
-        raise HTTPException(status_code=401, detail="Не авторизован")
-
-    user = await auth_service.get_user_by_session(session_id)
-    if not user:
-        raise HTTPException(status_code=401, detail="Сессия недействительна")
-
-    session = await auth_service._get_session(session_id)
-    provider_value = session.provider.value if session else None
-
-    email = None
-    avatar_url = None
-    if session:
-        provider_info = await auth_service.get_user_provider_info(user.user_id, session.provider)
-        if provider_info:
-            email = provider_info.get("email")
-            avatar_url = provider_info.get("avatar_url")
-
-    return {
-        "user_id": user.user_id,
-        "email": email,
-        "name": user.name,
-        "avatar_url": avatar_url,
-        "provider": provider_value,
-        "status": user.status.value,
-    }
 
 
 @router.post("/logout")

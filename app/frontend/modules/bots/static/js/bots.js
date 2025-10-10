@@ -517,7 +517,10 @@ import { showNotification } from '/static/js/components/notification.js';
             
             flowData.flow_id = flowId;
             flowData.entry_point_agent = `${agentName}Agent`;
-            flowData.platforms = {};
+            flowData.platforms = {
+                web: {},
+                api: {}
+            };
         }
         
         const promptValue = promptEditor ? promptEditor.getValue() : null;
@@ -653,6 +656,7 @@ import { showNotification } from '/static/js/components/notification.js';
                 });
             } else {
                 showNotification('Настройки бота сохранены', 'success');
+                await expandBot(actualBotId);
             }
             
         } catch (error) {

@@ -136,10 +136,11 @@
         position: fixed;
         bottom: 80px;
         right: 20px;
-        width: 420px; /* Увеличили ширину для длинных названий */
-        max-width: calc(100vw - 40px); /* Не выходим за границы экрана */
-        height: 520px; /* Увеличили высоту чтобы не обрезалось */
-        max-height: calc(100vh - 100px); /* Уменьшили отступ снизу */
+        width: auto;
+        min-width: 420px;
+        max-width: min(50vw, calc(100vw - 40px));
+        height: 520px;
+        max-height: calc(100vh - 100px);
         border: 1px solid var(--chat-border);
         border-radius: var(--radius-md, 8px);
         background: var(--chat-bg);
@@ -147,39 +148,45 @@
         z-index: 1040;
         display: flex;
         flex-direction: column;
-        box-sizing: border-box; /* Включаем padding и border в размеры */
+        box-sizing: border-box;
     }
 
     .chat-widget-header {
         background: var(--chat-header-bg) !important;
         color: var(--chat-header-text) !important;
         border-bottom: 1px solid var(--chat-border);
-        border-radius: var(--radius-md, 8px) var(--radius-md, 8px) 0 0; /* Скругляем только верхние углы */
-        min-height: 60px; /* Минимальная высота заголовка */
-        flex-shrink: 0; /* Заголовок не сжимается */
-        cursor: move; /* Курсор для перетаскивания */
-        user-select: none; /* Запрещаем выделение текста при перетаскивании */
+        border-radius: var(--radius-md, 8px) var(--radius-md, 8px) 0 0;
+        min-height: 60px;
+        flex-shrink: 0;
+        cursor: move;
+        user-select: none;
+        width: 100%;
     }
     
-    /* Предотвращаем перенос заголовка и иконок */
     .chat-widget-header .d-flex {
         flex-wrap: nowrap !important;
-        min-width: 0; /* Позволяет flex элементам сжиматься */
+        white-space: nowrap;
+        gap: 8px;
     }
     
     .chat-widget-header #chat-widget-title {
         white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        min-width: 0;
-        flex: 1;
-        margin-right: 8px;
+        min-width: max-content;
+        flex-shrink: 0;
+    }
+    
+    .chat-widget-header > .d-flex > div:last-child {
+        display: flex;
+        flex-wrap: nowrap !important;
+        gap: 4px;
+        flex-shrink: 0;
     }
     
     .chat-widget-header .btn {
         color: var(--chat-header-text) !important;
         border: none !important;
         background: transparent !important;
+        flex-shrink: 0;
     }
     
     .chat-widget-header .btn:hover {

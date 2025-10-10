@@ -441,7 +441,24 @@ class ChatManager {
         }
 
         this.currentAgent = agent_id;
+        
+        const existingSession = this.agentSessions[agent_id];
+        console.log('🔍 Проверка существующей сессии:', {
+            agent_id,
+            existingSession,
+            providedSessionId: session_id,
+            allSessions: this.agentSessions
+        });
+        
+        const isExistingSession = existingSession && !session_id;
+        
         this.currentSession = session_id || this.getOrCreateSessionForAgent(agent_id);
+        
+        console.log('📋 Итоговая сессия:', {
+            currentSession: this.currentSession,
+            isExistingSession,
+            willLoadHistory: isExistingSession
+        });
 
         await this.updateChatHeader();
         this.updateAgentsPanel();
@@ -449,6 +466,13 @@ class ChatManager {
         this.showChat();
 
         this.connectWebSocket();
+
+        if (isExistingSession) {
+            console.log('📜 Загружаем историю для существующей сессии:', this.currentSession);
+            await this.loadSessionHistory(this.currentSession);
+        } else {
+            console.log('🆕 Новая сессия или передан session_id, история не загружается');
+        }
 
         if (initial_message) {
             setTimeout(() => {
@@ -486,36 +510,40 @@ class ChatManager {
         try {
             console.log('📜 Загрузка истории для сессии:', session_id);
             
-            const response = await fetch(`/api/v1/history/sessions/${session_id}/messages?limit=100`);
+            let userId = 'unknown';
+            try {
+                const userResponse = await fetch('/api/v1/admin/me');
+                if (userResponse.ok) {
+                    const userData = await userResponse.json();
+                    userId = userData.user_id;
+                    console.log('✅ Получен user_id:', userId);
+                } else {
+                    console.warn('⚠️ Не удалось получить user_id, используем unknown');
+                }
+            } catch (e) {
+                console.warn('⚠️ Ошибка получения user_id:', e);
+            }
+            
+            const flowId = this.currentAgent || 'unknown';
+            
+            const fullSessionId = `web:${userId}:${flowId}:${session_id}`;
+            console.log('🔍 Полный session_id для истории:', fullSessionId);
+            
+            const encodedSessionId = encodeURIComponent(fullSessionId);
+            const response = await fetch(`/api/v1/history/sessions/${encodedSessionId}/messages?limit=100`);
             
             if (!response.ok) {
-                throw new Error(`Ошибка загрузки истории: ${response.status}`);
+                console.warn(`⚠️ API вернул ${response.status}, пробуем загрузить с простым session_id`);
+                const simpleResponse = await fetch(`/api/v1/history/sessions/${encodeURIComponent(session_id)}/messages?limit=100`);
+                if (!simpleResponse.ok) {
+                    throw new Error(`Ошибка загрузки истории: ${response.status}`);
+                }
+                return await this.processHistory(await simpleResponse.json());
             }
 
             const history = await response.json();
+            await this.processHistory(history);
             
-            this.clearChatMessages();
-
-            if (history.messages && history.messages.length > 0) {
-                for (const msg of history.messages) {
-                    if (msg.role === 'user') {
-                        this.addUserMessage(msg.content, msg.timestamp, `history_${msg.timestamp}`);
-                    } else if (msg.role === 'assistant') {
-                        if (msg.content) {
-                            this.addAgentMessage({
-                                content: msg.content,
-                                timestamp: msg.timestamp,
-                                message_type: 'text',
-                                message_id: `history_${msg.timestamp}`
-                            });
-                        }
-                    }
-                }
-                
-                console.log(`✅ Загружено ${history.messages.length} сообщений из истории`);
-            } else {
-                console.log('📭 История сессии пуста');
-            }
         } catch (error) {
             console.error('❌ Ошибка загрузки истории сессии:', error);
             this.addAgentMessage({
@@ -523,6 +551,31 @@ class ChatManager {
                 timestamp: new Date().toISOString(),
                 message_type: 'text'
             });
+        }
+    }
+    
+    async processHistory(history) {
+        this.clearChatMessages();
+
+        if (history.messages && history.messages.length > 0) {
+            for (const msg of history.messages) {
+                if (msg.role === 'user') {
+                    this.addUserMessage(msg.content, msg.timestamp, `history_${msg.timestamp}`);
+                } else if (msg.role === 'assistant') {
+                    if (msg.content) {
+                        this.addAgentMessage({
+                            content: msg.content,
+                            timestamp: msg.timestamp,
+                            message_type: 'text',
+                            message_id: `history_${msg.timestamp}`
+                        });
+                    }
+                }
+            }
+            
+            console.log(`✅ Загружено ${history.messages.length} сообщений из истории`);
+        } else {
+            console.log('📭 История сессии пуста');
         }
     }
 
