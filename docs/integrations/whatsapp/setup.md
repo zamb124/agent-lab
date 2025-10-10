@@ -161,92 +161,7 @@ platforms={
 
 ## Регистрация flow в WhatsApp
 
-### Выбор подхода к Webhook
-
-Платформа поддерживает **два подхода**:
-
-#### 🌐 Глобальный Webhook (РЕКОМЕНДУЕТСЯ)
-
-**Один webhook для всех flows** - настраивается один раз, flow резолвится автоматически по `phone_number_id`.
-
-**Преимущества:**
-- ✅ Настраиваешь **один раз** в Meta
-- ✅ Добавление новых flows **не требует** изменения webhook
-- ✅ Упрощенное масштабирование
-- ✅ Автоматический резолвинг flow
-
-**Недостатки:**
-- ❌ Один `phone_number_id` = один flow (нельзя роутить на разные flows)
-
-**Webhook URL:**
-```
-https://your-domain.ru/api/v1/webhook/whatsapp
-```
-
-#### 🎯 Per-Flow Webhook (альтернатива)
-
-**Отдельный webhook для каждого flow** - явное указание flow в URL.
-
-**Преимущества:**
-- ✅ Четкая изоляция flows
-- ✅ Можно несколько flows на один номер (с разными entry points)
-
-**Недостатки:**
-- ❌ Нужно настраивать webhook для каждого flow в Meta
-- ❌ При добавлении flow - обновлять webhook
-
-**Webhook URL:**
-```
-https://your-domain.ru/api/v1/webhook/whatsapp/company:xxx:flow:my_flow_id
-```
-
----
-
-### Вариант А: Глобальный Webhook (рекомендуется)
-
-#### 1. Настройка webhook в Meta for Developers
-
-1. Откройте ваше приложение в Meta for Developers
-2. Перейдите в `WhatsApp > Configuration`
-3. В разделе **Webhook**:
-
-   **Callback URL:**
-   ```
-   https://your-domain.ru/api/v1/webhook/whatsapp
-   ```
-
-   **Verify Token:**
-   ```
-   my_secure_verify_token_abc123xyz
-   ```
-   (любой verify_token из любого flow с WhatsApp)
-
-4. Нажмите **Verify and Save**
-
-5. В **Webhook Fields** включите:
-   - ✅ **messages** (входящие сообщения)
-   - ✅ **message_template_status** (статусы template)
-
-#### 2. Как это работает
-
-Когда приходит сообщение:
-1. Webhook извлекает `phone_number_id` из payload
-2. Ищет flow где `platforms.whatsapp.phone_number_id` == этот ID
-3. Автоматически роутит на найденный flow
-4. Обрабатывает сообщение
-
-**Логи:**
-```
-📨 Глобальный webhook: phone_number_id=111111111111111
-✅ Резолвнут flow: support_bot для phone_number_id=111111111111111
-📋 Задача создана для flow support_bot
-```
-
----
-
-### Вариант Б: Per-Flow Webhook
-
-#### 1. Регистрация через API
+### 1. Регистрация через API
 
 ```bash
 curl -X POST "https://your-company.agents-lab.ru/api/v1/admin/whatsapp/register/my_flow_id"
@@ -269,7 +184,7 @@ curl -X POST "https://your-company.agents-lab.ru/api/v1/admin/whatsapp/register/
 
 Сохраните `webhook_url` - он понадобится в следующем шаге!
 
-#### 2. Настройка webhook в Meta for Developers
+### 2. Настройка webhook в Meta for Developers
 
 1. Откройте ваше приложение в Meta for Developers
 2. Перейдите в `WhatsApp > Configuration`
@@ -291,20 +206,6 @@ curl -X POST "https://your-company.agents-lab.ru/api/v1/admin/whatsapp/register/
 5. В **Webhook Fields** включите:
    - ✅ **messages** (входящие сообщения)
    - ✅ **message_template_status** (статусы template)
-
----
-
-### Рекомендация
-
-**Используйте Глобальный Webhook** если:
-- У вас несколько flows
-- Планируете добавлять новые flows
-- Хотите упростить настройку
-
-**Используйте Per-Flow Webhook** если:
-- Нужна строгая изоляция
-- Один phone_number обслуживает несколько flows
-- Требуется гибкий роутинг
 
 ### 3. Проверка регистрации
 

@@ -1,6 +1,6 @@
 ---
 description: "Правила работы с базой данных"
-alwaysApply: true
+alwaysApply: false
 ---
 # Правила работы с базой данных
 

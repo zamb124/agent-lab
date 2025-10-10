@@ -55,11 +55,13 @@ async def whatsapp_global_webhook_verify(
             expected_verify_token = whatsapp_config.get("verify_token", "")
             expected_verify_token = await variables_service.resolve(expected_verify_token)
             
+            logger.info(f"🔍 Проверка flow {flow_id}: ожидаем '{expected_verify_token}', получили '{hub_verify_token}'")
+            
             if hub_verify_token == expected_verify_token:
                 logger.info(f"✅ Глобальный webhook верифицирован (совпадение с flow {flow_id})")
                 return int(hub_challenge)
     
-    logger.error("❌ Verify token не совпал ни с одним активным flow")
+    logger.error(f"❌ Verify token '{hub_verify_token}' не совпал ни с одним активным flow")
     raise HTTPException(status_code=403, detail="Invalid verify_token")
 
 
