@@ -1,0 +1,52 @@
+{
+  "fields": {
+    "user": {
+      "title": "User",
+      "description": "User performing the request"
+    },
+    "session_id": {
+      "title": "Session ID",
+      "description": "Identifier session"
+    },
+    "platform": {
+      "title": "Platform",
+      "description": "Platform from which request came"
+    },
+    "active_company": {
+      "title": "Active Company",
+      "description": "Current active company of the user"
+    },
+    "user_companies": {
+      "title": "User Companies",
+      "description": "All available companies of the user"
+    },
+    "metadata": {
+      "title": "Metadata",
+      "description": "Additional context metadata"
+    },
+    "language": {
+      "title": "User Language",
+      "description": "Preferred interface language of the user"
+    },
+    "flow_variables": {
+      "title": "Flow Variables",
+      "description": "Variables available in flow and agents"
+    },
+    "company_variables": {
+      "title": "Company Variables",
+      "description": "Company variables for use in prompts"
+    },
+    "state": {
+      "title": "Agent State",
+      "description": "Reference to current agent state (available in tools)"
+    },
+    "flow_config": {
+      "title": "[TODO: models.context.fields.flow_config.title]",
+      "description": "[TODO: models.context.fields.flow_config.description]"
+    },
+    "agent_config": {
+      "title": "[TODO: models.context.fields.agent_config.title]",
+      "description": "[TODO: models.context.fields.agent_config.description]"
+    }
+  }
+}

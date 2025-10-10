@@ -1,0 +1,36 @@
+{
+  "fields": {
+    "session_id": {
+      "title": "Session ID",
+      "description": "Unique session identifier"
+    },
+    "platform": {
+      "title": "Platform",
+      "description": "Platform (telegram, api, web)"
+    },
+    "user_id": {
+      "title": "User ID",
+      "description": "User identifier"
+    },
+    "flow_id": {
+      "title": "Flow ID",
+      "description": "Flow identifier"
+    },
+    "status": {
+      "title": "Status",
+      "description": "Session status"
+    },
+    "metadata": {
+      "title": "Metadata",
+      "description": "Additional session metadata"
+    },
+    "created_at": {
+      "title": "Created",
+      "description": "Session creation time"
+    },
+    "last_activity": {
+      "title": "Last Activity",
+      "description": "Last activity time"
+    }
+  }
+}

@@ -118,34 +118,80 @@ class TranslationManager:
             directory.mkdir(parents=True, exist_ok=True)
     
     async def _load_translations(self):
-        """Загружает переводы из файлов в кеш"""
+        """Загружает переводы из модульных файлов в кеш"""
         translations_path = self.translations_dir / "translations"
         
         for language in Language:
-            file_path = translations_path / f"{language.value}.json"
+            lang_dir = translations_path / language.value
             
-            if file_path.exists():
+            # Проверяем модульную структуру
+            if lang_dir.exists() and lang_dir.is_dir():
                 try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                    
-                    # Извлекаем переводы (все кроме meta)
-                    translations = {}
-                    self._extract_nested_translations(data, translations, prefix="")
-                    
-                    # Убираем meta ключи
-                    translations = {k: v for k, v in translations.items() if not k.startswith("meta.")}
-                    
+                    translations = await self._load_modular_translations(lang_dir)
                     self._translations_cache[language] = translations
-                    
-                    logger.debug(f"Загружено {len(translations)} переводов для языка {language.value}")
-                    
+                    logger.debug(f"Загружено {len(translations)} переводов для языка {language.value} (модульная структура)")
                 except Exception as e:
-                    logger.error(f"Ошибка загрузки переводов для {language.value}: {e}")
+                    logger.error(f"Ошибка загрузки модульных переводов для {language.value}: {e}")
                     self._translations_cache[language] = {}
             else:
-                logger.warning(f"Файл переводов для {language.value} не найден: {file_path}")
-                self._translations_cache[language] = {}
+                # Fallback на старую монолитную структуру
+                old_file_path = translations_path / f"{language.value}.json"
+                if old_file_path.exists():
+                    try:
+                        with open(old_file_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                        
+                        translations = {}
+                        self._extract_nested_translations(data, translations, prefix="")
+                        translations = {k: v for k, v in translations.items() if not k.startswith("meta.")}
+                        
+                        self._translations_cache[language] = translations
+                        logger.debug(f"Загружено {len(translations)} переводов для языка {language.value} (монолитная структура)")
+                    except Exception as e:
+                        logger.error(f"Ошибка загрузки переводов для {language.value}: {e}")
+                        self._translations_cache[language] = {}
+                else:
+                    logger.warning(f"Переводы для {language.value} не найдены")
+                    self._translations_cache[language] = {}
+    
+    async def _load_modular_translations(self, lang_dir: Path) -> Dict[str, str]:
+        """Загружает переводы из модульной структуры"""
+        translations = {}
+        
+        # Загружаем модули верхнего уровня (*.json файлы в корне директории языка)
+        for json_file in lang_dir.glob("*.json"):
+            # Пропускаем служебные файлы
+            if json_file.name.startswith("_"):
+                continue
+            
+            module_name = json_file.stem
+            try:
+                with open(json_file, 'r', encoding='utf-8') as f:
+                    module_data = json.load(f)
+                
+                # Добавляем переводы с префиксом модуля
+                self._extract_nested_translations(module_data, translations, prefix=module_name)
+            except Exception as e:
+                logger.warning(f"Ошибка загрузки модуля {json_file}: {e}")
+        
+        # Загружаем models/* (поддиректория)
+        models_dir = lang_dir / "models"
+        if models_dir.exists() and models_dir.is_dir():
+            for json_file in models_dir.glob("*.json"):
+                if json_file.name.startswith("_"):
+                    continue
+                
+                model_name = json_file.stem
+                try:
+                    with open(json_file, 'r', encoding='utf-8') as f:
+                        model_data = json.load(f)
+                    
+                    # Добавляем переводы с префиксом models.model_name
+                    self._extract_nested_translations(model_data, translations, prefix=f"models.{model_name}")
+                except Exception as e:
+                    logger.warning(f"Ошибка загрузки модели {json_file}: {e}")
+        
+        return translations
     
     def _extract_nested_translations(self, data: dict, result: dict, prefix: str = ""):
         """Рекурсивно извлекает переводы из вложенной структуры"""
@@ -348,63 +394,134 @@ class TranslationManager:
         translations_path = self.translations_dir / "translations"
         
         for language in Language:
-            file_path = translations_path / f"{language.value}.json"
+            lang_dir = translations_path / language.value
             
-            # Загружаем существующий файл или создаем новый
-            if file_path.exists():
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
+            # Определяем используется ли модульная структура
+            if lang_dir.exists() and lang_dir.is_dir():
+                await self._update_modular_translations(lang_dir, language)
             else:
-                data = {
-                    "meta": {
-                        "language": language.value,
-                        "version": "1.0.0",
-                        "last_updated": datetime.now().isoformat(),
-                        "completeness": 0,
-                        "total_keys": 0,
-                        "translated_keys": 0
-                    }
-                }
-            
-            # Добавляем новые ключи
-            updated = False
-            for key, translation_key in self._discovered_keys.items():
-                if not self._key_exists_in_data(key, data):
-                    # Определяем значение по умолчанию
-                    if language == Language.RU:
-                        # Для русского используем значение по умолчанию
-                        default_value = translation_key.default_value
-                    else:
-                        # Для других языков помечаем как требующие перевода
-                        default_value = f"[TODO: {key}]"
-                    
-                    self._set_nested_key(data, key, default_value)
-                    updated = True
-            
-            if updated:
-                # Обновляем метаданные
-                data["meta"]["last_updated"] = datetime.now().isoformat()
-                
-                # Подсчитываем статистику
-                all_translations = {}
-                self._extract_nested_translations(data, all_translations)
-                all_translations = {k: v for k, v in all_translations.items() if not k.startswith("meta.")}
-                
-                total_keys = len(all_translations)
-                translated_keys = sum(1 for v in all_translations.values() if not str(v).startswith("[TODO:"))
-                
-                data["meta"]["total_keys"] = total_keys
-                data["meta"]["translated_keys"] = translated_keys
-                data["meta"]["completeness"] = (translated_keys / total_keys * 100) if total_keys > 0 else 0
-                
-                # Сохраняем файл
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-                
-                logger.info(f"✅ Обновлен файл переводов: {language.value}.json ({translated_keys}/{total_keys} переводов)")
+                # Fallback на монолитную структуру
+                await self._update_monolithic_translations(translations_path, language)
         
         # Перезагружаем кеш
         await self._load_translations()
+    
+    async def _update_modular_translations(self, lang_dir: Path, language: Language):
+        """Обновляет переводы в модульной структуре"""
+        # Группируем ключи по модулям
+        modules_data = {}
+        
+        for key, translation_key in self._discovered_keys.items():
+            # Определяем модуль по ключу
+            parts = key.split('.')
+            if len(parts) < 2:
+                module_name = "misc"
+                relative_key = key
+            elif parts[0] == "models":
+                # models.agent.fields.name -> models/agent.json, key: fields.name
+                if len(parts) < 2:
+                    continue
+                module_name = f"models/{parts[1]}"
+                relative_key = '.'.join(parts[2:]) if len(parts) > 2 else parts[1]
+            else:
+                # common.save -> common.json, key: save
+                module_name = parts[0]
+                relative_key = '.'.join(parts[1:])
+            
+            if module_name not in modules_data:
+                modules_data[module_name] = {}
+            
+            # Определяем значение
+            if language == Language.RU:
+                value = translation_key.default_value
+            else:
+                value = f"[TODO: {key}]"
+            
+            modules_data[module_name][relative_key] = value
+        
+        # Обновляем файлы модулей
+        for module_path, keys_data in modules_data.items():
+            if "/" in module_path:
+                # Это models/
+                subdir, module_name = module_path.split("/")
+                module_dir = lang_dir / subdir
+                module_dir.mkdir(exist_ok=True)
+                file_path = module_dir / f"{module_name}.json"
+            else:
+                file_path = lang_dir / f"{module_path}.json"
+            
+            # Загружаем существующий модуль
+            if file_path.exists():
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    module_data = json.load(f)
+            else:
+                module_data = {}
+            
+            # Добавляем новые ключи
+            updated = False
+            for relative_key, value in keys_data.items():
+                if not self._key_exists_in_data(relative_key, module_data):
+                    self._set_nested_key(module_data, relative_key, value)
+                    updated = True
+            
+            if updated:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(module_data, f, ensure_ascii=False, indent=2)
+                logger.info(f"  ✅ Обновлен модуль: {file_path.relative_to(lang_dir.parent)}")
+    
+    async def _update_monolithic_translations(self, translations_path: Path, language: Language):
+        """Обновляет переводы в монолитной структуре (для обратной совместимости)"""
+        file_path = translations_path / f"{language.value}.json"
+        
+        # Загружаем существующий файл или создаем новый
+        if file_path.exists():
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        else:
+            data = {
+                "meta": {
+                    "language": language.value,
+                    "version": "1.0.0",
+                    "last_updated": datetime.now().isoformat(),
+                    "completeness": 0,
+                    "total_keys": 0,
+                    "translated_keys": 0
+                }
+            }
+        
+        # Добавляем новые ключи
+        updated = False
+        for key, translation_key in self._discovered_keys.items():
+            if not self._key_exists_in_data(key, data):
+                if language == Language.RU:
+                    default_value = translation_key.default_value
+                else:
+                    default_value = f"[TODO: {key}]"
+                
+                self._set_nested_key(data, key, default_value)
+                updated = True
+        
+        if updated:
+            # Обновляем метаданные
+            data["meta"]["last_updated"] = datetime.now().isoformat()
+            
+            # Подсчитываем статистику
+            all_translations = {}
+            self._extract_nested_translations(data, all_translations)
+            all_translations = {k: v for k, v in all_translations.items() if not k.startswith("meta.")}
+            
+            total_keys = len(all_translations)
+            translated_keys = sum(1 for v in all_translations.values() if not str(v).startswith("[TODO:"))
+            
+            data["meta"]["total_keys"] = total_keys
+            data["meta"]["translated_keys"] = translated_keys
+            data["meta"]["completeness"] = (translated_keys / total_keys * 100) if total_keys > 0 else 0
+            
+            # Сохраняем файл
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            
+            logger.info(f"✅ Обновлен файл переводов: {language.value}.json ({translated_keys}/{total_keys} переводов)")
     
     def _key_exists_in_data(self, key: str, data: dict) -> bool:
         """Проверяет существование ключа в данных"""

@@ -1,0 +1,10 @@
+{
+  "fields": {
+    "amount": {
+      "description": "[TODO: models.createpaymentrequest.fields.amount.description]"
+    },
+    "provider": {
+      "description": "[TODO: models.createpaymentrequest.fields.provider.description]"
+    }
+  }
+}

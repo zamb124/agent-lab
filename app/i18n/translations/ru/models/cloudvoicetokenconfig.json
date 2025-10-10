@@ -1,0 +1,28 @@
+{
+  "fields": {
+    "client_id": {
+      "title": "Client ID",
+      "description": "Идентификатор клиента Cloud Voice API"
+    },
+    "access_token": {
+      "title": "Access Token",
+      "description": "Токен доступа к API"
+    },
+    "refresh_token": {
+      "title": "Refresh Token",
+      "description": "Токен для обновления access_token"
+    },
+    "expires_at": {
+      "title": "Время истечения",
+      "description": "Время когда истекает access_token"
+    },
+    "created_at": {
+      "title": "Время создания",
+      "description": "Время создания токена"
+    },
+    "updated_at": {
+      "title": "Время обновления",
+      "description": "Время последнего обновления токена"
+    }
+  }
+}

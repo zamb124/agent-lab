@@ -187,7 +187,7 @@ class TestGetCurrentLanguageFunction:
             platform="template",
             active_company=None,
             user_companies=[],
-            language=Language.ES
+            language=Language.EN
         )
         mock_get_context.return_value = mock_context
         
@@ -196,7 +196,7 @@ class TestGetCurrentLanguageFunction:
         get_current_language = templates.env.globals['get_current_language']
         
         result = get_current_language()
-        assert result == "es"
+        assert result == "en"
     
     @patch('app.frontend.core.template_loader.get_context')
     def test_get_current_language_no_context(self, mock_get_context):

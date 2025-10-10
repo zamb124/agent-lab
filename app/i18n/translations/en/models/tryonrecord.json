@@ -1,0 +1,37 @@
+{
+  "fields": {
+    "id": {
+      "description": "Unique try-on ID"
+    },
+    "user_id": {
+      "description": "User ID"
+    },
+    "created_at": {
+      "description": "Creation time in ISO format"
+    },
+    "model_file_id": {
+      "description": "User photo file ID"
+    },
+    "model_url": {
+      "description": "User photo URL"
+    },
+    "product_file_id": {
+      "description": "Product image file ID"
+    },
+    "product_image_url": {
+      "description": "Product image URL"
+    },
+    "product_url": {
+      "description": "Original product URL from website"
+    },
+    "result_urls": {
+      "description": "Try-on result URLs"
+    },
+    "parameters": {
+      "description": "Try-on parameters"
+    },
+    "metadata": {
+      "description": "Additional data"
+    }
+  }
+}

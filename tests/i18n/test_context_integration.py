@@ -100,14 +100,14 @@ class TestContextLanguageIntegration:
             platform="test",
             active_company=company,
             user_companies=[company],
-            language=Language.ES
+            language=Language.EN
         )
         
         # Проверяем сериализацию/десериализацию
         context_dict = context.model_dump()
         restored_context = Context.model_validate(context_dict)
         
-        assert restored_context.language == Language.ES
+        assert restored_context.language == Language.EN
 
 
 class TestAuthMiddlewareLanguageDetection:
@@ -141,11 +141,11 @@ class TestAuthMiddlewareLanguageDetection:
             'accept-language': ''
         }.get(key, default)
         request.cookies.get.side_effect = lambda key, default=None: {
-            'language': 'es'
+            'language': 'en'
         }.get(key, default)
         
         language = self.middleware._detect_user_language(request)
-        assert language == Language.ES
+        assert language == Language.EN
     
     def test_detect_user_language_from_browser_accept_language(self):
         """Проверяем определение языка из браузерного заголовка accept-language"""
@@ -206,7 +206,7 @@ class TestAuthMiddlewareLanguageDetection:
             'accept-language': 'es-ES,es;q=0.9'
         }.get(key, default)
         request.cookies.get.side_effect = lambda key, default=None: {
-            'language': 'es'
+            'language': 'en'
         }.get(key, default)
         
         language = self.middleware._detect_user_language(request)
@@ -250,7 +250,7 @@ class TestAuthMiddlewareContextCreation:
     @pytest.mark.asyncio
     async def test_create_api_context_with_language(self, mock_get_companies, mock_detect_lang):
         """Проверяем создание API контекста с языком"""
-        mock_detect_lang.return_value = Language.ES
+        mock_detect_lang.return_value = Language.EN
         mock_get_companies.return_value = [self.test_company]
         
         # Мокаем пользователя
@@ -279,7 +279,7 @@ class TestAuthMiddlewareContextCreation:
             with patch.object(self.middleware, '_update_user_active_company', new_callable=AsyncMock):
                 context = await self.middleware._create_api_context(request, self.test_company)
         
-        assert context.language == Language.ES
+        assert context.language == Language.EN
         assert context.platform == "api"
         mock_detect_lang.assert_called_once_with(request)
     
@@ -331,7 +331,7 @@ class TestAuthMiddlewareContextCreation:
             mock_auth_service.return_value = mock_auth_instance
             
             with patch.object(self.middleware, '_update_user_active_company', new_callable=AsyncMock):
-                context = await self.middleware._create_frontend_context(request, self.test_company)
+                context = await self.middleware._create_frontend_context(request, self.test_company, has_subdomain=True)
         
         assert context.language == Language.RU
         assert context.platform == "frontend"
@@ -387,11 +387,11 @@ class TestLanguageDetectionEdgeCases:
             'accept-language': ''
         }.get(key, default)
         request.cookies.get.side_effect = lambda key, default=None: {
-            'language': 'ES'  # Верхний регистр
+            'language': 'EN'  # Верхний регистр
         }.get(key, default)
         
         language = self.middleware._detect_user_language(request)
-        assert language == Language.ES
+        assert language == Language.EN
 
 
 # Импорт asyncio для async функций в тестах

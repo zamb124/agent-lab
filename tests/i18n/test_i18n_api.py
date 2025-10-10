@@ -62,7 +62,7 @@ class TestTranslationsEndpoint:
         mock_manager.get_translations.return_value = {}
         mock_get_manager.return_value = mock_manager
         
-        response = client.get("/api/i18n/translations/es")
+        response = client.get("/api/i18n/translations/en")
         
         assert response.status_code == 200
         assert response.json() == {}
@@ -167,7 +167,7 @@ class TestStatsEndpoint:
         """Проверяем успешное получение статистики"""
         # Подготавливаем тестовую статистику
         test_stats = TranslationStats(
-            total_languages=3,
+            total_languages=2,
             total_keys=100,
             languages_stats={
                 Language.RU: TranslationFile(
@@ -179,11 +179,6 @@ class TestStatsEndpoint:
                     language=Language.EN,
                     total_keys=100,
                     translated_keys=75
-                ),
-                Language.ES: TranslationFile(
-                    language=Language.ES,
-                    total_keys=100,
-                    translated_keys=50
                 )
             }
         )
@@ -196,9 +191,9 @@ class TestStatsEndpoint:
         
         assert response.status_code == 200
         data = response.json()
-        assert data["total_languages"] == 3
+        assert data["total_languages"] == 2
         assert data["total_keys"] == 100
-        assert len(data["languages_stats"]) == 3
+        assert len(data["languages_stats"]) == 2
         
         # Проверяем статистику по языкам
         ru_stats = data["languages_stats"]["ru"]
@@ -321,8 +316,7 @@ class TestSupportedLanguagesEndpoint:
         mock_manager = Mock()
         mock_manager.get_translations.return_value = {
             "languages.ru": "Русский",
-            "languages.en": "English",
-            "languages.es": "Español"
+            "languages.en": "English"
         }
         mock_get_manager.return_value = mock_manager
         
@@ -332,8 +326,7 @@ class TestSupportedLanguagesEndpoint:
         data = response.json()
         assert data["ru"] == "Русский"
         assert data["en"] == "English"
-        assert data["es"] == "Español"
-        assert len(data) == 3
+        assert len(data) == 2
     
     @patch('app.frontend.api.i18n.get_translation_manager')
     def test_get_supported_languages_fallback(self, mock_get_manager):
@@ -349,7 +342,7 @@ class TestSupportedLanguagesEndpoint:
         # Должны вернуться коды языков в верхнем регистре как fallback
         assert data["ru"] == "RU"
         assert data["en"] == "EN"
-        assert data["es"] == "ES"
+        assert data["en"] == "EN"
 
 
 class TestCurrentLanguageEndpoint:

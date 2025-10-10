@@ -1,0 +1,68 @@
+{
+  "fields": {
+    "file_id": {
+      "title": "ID файла",
+      "description": "Уникальный ID файла в системе"
+    },
+    "provider": {
+      "title": "Провайдер",
+      "description": "Провайдер S3 (aws, yandex, minio, etc.)"
+    },
+    "original_name": {
+      "title": "Оригинальное имя",
+      "description": "Оригинальное имя файла"
+    },
+    "s3_key": {
+      "title": "Ключ S3",
+      "description": "Ключ файла в S3"
+    },
+    "s3_bucket": {
+      "title": "Bucket S3",
+      "description": "Bucket в S3"
+    },
+    "s3_endpoint": {
+      "title": "Endpoint S3",
+      "description": "Endpoint URL провайдера"
+    },
+    "content_type": {
+      "title": "Тип содержимого",
+      "description": "MIME тип файла"
+    },
+    "file_size": {
+      "title": "Размер файла",
+      "description": "Размер файла в байтах"
+    },
+    "checksum": {
+      "title": "Контрольная сумма",
+      "description": "MD5 или другая контрольная сумма"
+    },
+    "status": {
+      "title": "Статус",
+      "description": "Статус файла"
+    },
+    "uploaded_by": {
+      "title": "Загрузил",
+      "description": "ID пользователя который загрузил"
+    },
+    "metadata": {
+      "title": "Метаданные",
+      "description": "Дополнительные метаданные файла"
+    },
+    "tags": {
+      "title": "Теги",
+      "description": "Теги для категоризации"
+    },
+    "is_public": {
+      "title": "Публичный",
+      "description": "Доступен ли файл без авторизации"
+    },
+    "created_at": {
+      "title": "Создан",
+      "description": "Время создания файла"
+    },
+    "updated_at": {
+      "title": "Обновлен",
+      "description": "Время обновления файла"
+    }
+  }
+}

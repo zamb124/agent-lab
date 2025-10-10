@@ -1,0 +1,34 @@
+{
+  "fields": {
+    "provider": {
+      "title": "Provider",
+      "description": "LLM provider (openai, anthropic, yandex, etc.)"
+    },
+    "model": {
+      "title": "Model",
+      "description": "Model name",
+      "placeholder": "gpt-4, claude-3-sonnet, yandexgpt"
+    },
+    "temperature": {
+      "title": "Temperature",
+      "description": "Temperature for generation (0.0-1.0)"
+    },
+    "max_tokens": {
+      "title": "Maximum Tokens",
+      "description": "Maximum number of tokens in response"
+    },
+    "api_key": {
+      "title": "API Key",
+      "description": "API key for provider"
+    },
+    "base_url": {
+      "title": "Base URL",
+      "description": "Base URL for API",
+      "placeholder": "https://api.openai.com/v1"
+    },
+    "additional_params": {
+      "title": "Additional Parameters",
+      "description": "Additional parameters for LLM"
+    }
+  }
+}

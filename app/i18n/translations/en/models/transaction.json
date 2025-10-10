@@ -1,0 +1,48 @@
+{
+  "fields": {
+    "transaction_id": {
+      "title": "[TODO: models.transaction.fields.transaction_id.title]",
+      "description": "[TODO: models.transaction.fields.transaction_id.description]"
+    },
+    "company_id": {
+      "title": "[TODO: models.transaction.fields.company_id.title]",
+      "description": "[TODO: models.transaction.fields.company_id.description]"
+    },
+    "user_id": {
+      "title": "[TODO: models.transaction.fields.user_id.title]",
+      "description": "[TODO: models.transaction.fields.user_id.description]"
+    },
+    "amount": {
+      "title": "[TODO: models.transaction.fields.amount.title]",
+      "description": "[TODO: models.transaction.fields.amount.description]"
+    },
+    "status": {
+      "title": "[TODO: models.transaction.fields.status.title]",
+      "description": "[TODO: models.transaction.fields.status.description]"
+    },
+    "payment_provider": {
+      "title": "[TODO: models.transaction.fields.payment_provider.title]",
+      "description": "[TODO: models.transaction.fields.payment_provider.description]"
+    },
+    "external_payment_id": {
+      "title": "[TODO: models.transaction.fields.external_payment_id.title]",
+      "description": "[TODO: models.transaction.fields.external_payment_id.description]"
+    },
+    "payment_url": {
+      "title": "[TODO: models.transaction.fields.payment_url.title]",
+      "description": "[TODO: models.transaction.fields.payment_url.description]"
+    },
+    "created_at": {
+      "title": "[TODO: models.transaction.fields.created_at.title]",
+      "description": "[TODO: models.transaction.fields.created_at.description]"
+    },
+    "completed_at": {
+      "title": "[TODO: models.transaction.fields.completed_at.title]",
+      "description": "[TODO: models.transaction.fields.completed_at.description]"
+    },
+    "metadata": {
+      "title": "[TODO: models.transaction.fields.metadata.title]",
+      "description": "[TODO: models.transaction.fields.metadata.description]"
+    }
+  }
+}

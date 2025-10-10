@@ -1,0 +1,34 @@
+{
+  "fields": {
+    "provider": {
+      "title": "Провайдер",
+      "description": "Провайдер LLM (openai, anthropic, yandex, etc.)"
+    },
+    "model": {
+      "title": "Модель",
+      "description": "Название модели",
+      "placeholder": "gpt-4, claude-3-sonnet, yandexgpt"
+    },
+    "temperature": {
+      "title": "Температура",
+      "description": "Температура для генерации (0.0-1.0)"
+    },
+    "max_tokens": {
+      "title": "Максимум токенов",
+      "description": "Максимальное количество токенов в ответе"
+    },
+    "api_key": {
+      "title": "API ключ",
+      "description": "API ключ для провайдера"
+    },
+    "base_url": {
+      "title": "Базовый URL",
+      "description": "Базовый URL для API",
+      "placeholder": "https://api.openai.com/v1"
+    },
+    "additional_params": {
+      "title": "Дополнительные параметры",
+      "description": "Дополнительные параметры для LLM"
+    }
+  }
+}

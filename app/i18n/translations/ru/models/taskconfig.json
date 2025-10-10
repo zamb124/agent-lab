@@ -1,0 +1,44 @@
+{
+  "fields": {
+    "task_id": {
+      "title": "ID задачи",
+      "description": "Уникальный идентификатор задачи"
+    },
+    "flow_id": {
+      "title": "ID флоу",
+      "description": "Идентификатор флоу для задачи"
+    },
+    "context": {
+      "title": "Контекст",
+      "description": "Контекст выполнения задачи"
+    },
+    "status": {
+      "title": "Статус",
+      "description": "Статус выполнения задачи"
+    },
+    "input_data": {
+      "title": "Входные данные",
+      "description": "Входные данные для задачи"
+    },
+    "output_data": {
+      "title": "Выходные данные",
+      "description": "Результат выполнения задачи"
+    },
+    "error_message": {
+      "title": "Сообщение об ошибке",
+      "description": "Сообщение об ошибке при выполнении"
+    },
+    "created_at": {
+      "title": "Создано",
+      "description": "Время создания задачи"
+    },
+    "started_at": {
+      "title": "Запущено",
+      "description": "Время начала выполнения"
+    },
+    "completed_at": {
+      "title": "Завершено",
+      "description": "Время завершения выполнения"
+    }
+  }
+}

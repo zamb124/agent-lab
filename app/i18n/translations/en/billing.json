@@ -1,0 +1,58 @@
+{
+  "title": "Tariffs and Payment",
+  "current_plan": {
+    "title": "Current Plan",
+    "company": "Company",
+    "balance": "Balance",
+    "monthly_limit": "Monthly Limit",
+    "no_limit": "No Limit"
+  },
+  "tariff_plans": {
+    "free": {
+      "name": "Free"
+    },
+    "basic": {
+      "name": "Basic"
+    },
+    "premium": {
+      "name": "Premium"
+    },
+    "enterprise": {
+      "name": "Enterprise"
+    }
+  },
+  "budget_usage": {
+    "title": "Budget Usage",
+    "add_funds": "Add Funds",
+    "spent_this_month": "Spent This Month",
+    "used": "used",
+    "billing_period": "Billing Period"
+  },
+  "usage_stats": {
+    "title": "Usage Statistics",
+    "total_calls": "Total Calls",
+    "total_cost": "Total Cost"
+  },
+  "resources": {
+    "title": "Resource Details",
+    "resource": "Resource",
+    "calls": "Calls",
+    "cost": "Cost",
+    "no_data": "Resource usage data not yet available"
+  },
+  "users": {
+    "title": "User Details",
+    "user": "User",
+    "calls": "Calls",
+    "cost": "Cost",
+    "no_data": "User data not yet available"
+  },
+  "payment_modal": {
+    "title": "Top Up Balance",
+    "coming_soon": "Payment functionality will be available in future versions.",
+    "integrations_info": "In the future, integration with payment systems (Stripe, YooKassa and others) will be here.",
+    "card_payment": "Bank Card Payment",
+    "secure_transaction": "Secure Transaction",
+    "auto_receipt": "Automatic Receipt Issuance"
+  }
+}
