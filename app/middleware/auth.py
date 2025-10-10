@@ -500,6 +500,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         """Создает контекст для frontend запросов на основе куки"""
         # Получаем session_id из куки
         session_id = request.cookies.get("session_id")
+        
+        logger.info(f"🍪 Проверка cookies: session_id={'найден' if session_id else 'НЕ найден'}, все cookies={list(request.cookies.keys())}")
 
         if not session_id:
             raise HTTPException(status_code=401, detail="Unauthorized")

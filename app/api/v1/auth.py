@@ -51,7 +51,6 @@ async def start_auth(provider_name: str, redirect_uri: str = None):
     if redirect_uri is None:
         redirect_uri = f"https://agents-lab.ru/auth/callback/{provider_name}"
 
-
     try:
         auth_url = await auth_service.start_auth(provider, redirect_uri)
         return RedirectResponse(url=auth_url)
@@ -97,6 +96,7 @@ async def auth_callback(
     if redirect_uri is None:
         redirect_uri = f"https://agents-lab.ru/auth/callback/{provider_name}"
 
+    logger.info(f"🔑 Обработка callback от {provider_name}, redirect_uri={redirect_uri}")
 
     auth_request = AuthRequest(
         provider=provider, code=code, state=state, redirect_uri=redirect_uri
@@ -104,6 +104,8 @@ async def auth_callback(
 
     # Завершаем авторизацию
     result = await auth_service.complete_auth(auth_request)
+    
+    logger.info(f"🔑 Результат авторизации: success={result.success}, error={result.error_message}")
 
     if not result.success:
         logger.error(f"Ошибка завершения авторизации: {result.error_message}")
@@ -114,11 +116,13 @@ async def auth_callback(
     # Настройки куки в зависимости от окружения
     is_production = settings.server.env == "production"
 
-    # Для локальной разработки НЕ устанавливаем домен - куки будут работать везде
+    # Устанавливаем домен чтобы cookies работали на всех субдоменах
     if settings.server.env == "local":
-        domain = None
+        domain = ".localhost"
     else:
         domain = f".{settings.server.domain}"
+
+    logger.info(f"🍪 Устанавливаем cookies: session_id={result.session.session_id}, domain={domain}, secure={is_production}")
 
     response.set_cookie(
         key="session_id",
