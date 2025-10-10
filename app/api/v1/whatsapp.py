@@ -38,28 +38,40 @@ async def whatsapp_global_webhook_verify(
     from app.services.variables_service import get_variables_service
     variables_service = get_variables_service()
     
+    flows_checked = 0
+    flows_with_whatsapp = 0
+    
     for key in all_keys:
         if ":flow:" in key:
             flow_id = key.split(":flow:")[1] if ":flow:" in key else None
             if not flow_id:
                 continue
+            
+            flows_checked += 1
+            logger.info(f"🔍 Проверяем flow: {flow_id}")
                 
             flow_config = await storage.get_flow_config(flow_id)
             if not flow_config:
+                logger.warning(f"⚠️ Flow {flow_id} не найден в БД")
                 continue
                 
             whatsapp_config = flow_config.platforms.get("whatsapp")
             if not whatsapp_config:
+                logger.info(f"ℹ️ Flow {flow_id} не имеет WhatsApp платформы")
                 continue
+            
+            flows_with_whatsapp += 1
             
             expected_verify_token = whatsapp_config.get("verify_token", "")
             expected_verify_token = await variables_service.resolve(expected_verify_token)
             
-            logger.info(f"🔍 Проверка flow {flow_id}: ожидаем '{expected_verify_token}', получили '{hub_verify_token}'")
+            logger.info(f"🔍 Flow {flow_id}: ожидаем '{expected_verify_token}', получили '{hub_verify_token}'")
             
             if hub_verify_token == expected_verify_token:
                 logger.info(f"✅ Глобальный webhook верифицирован (совпадение с flow {flow_id})")
                 return int(hub_challenge)
+    
+    logger.error(f"❌ Verify token '{hub_verify_token}' не совпал. Проверено flows: {flows_checked}, с WhatsApp: {flows_with_whatsapp}")
     
     logger.error(f"❌ Verify token '{hub_verify_token}' не совпал ни с одним активным flow")
     raise HTTPException(status_code=403, detail="Invalid verify_token")
