@@ -12,6 +12,10 @@
         </div>
         <div class="header-right">
             {% if not bot.is_new %}
+            <a href="/builder?flow={{ bot.flow_id }}" class="btn btn-outline btn-sm" title="Открыть в визуальном редакторе">
+                <i class="bi bi-diagram-3"></i>
+                Builder
+            </a>
             <button class="btn btn-outline btn-sm" onclick="openBotChat('{{ bot.flow_id }}', '{{ bot.name }}')">
                 <i class="bi bi-chat-dots"></i>
                 Тестировать
@@ -25,6 +29,9 @@
             {% endif %}
             <button class="btn-icon" onclick="toggleBotModalFullscreen()" title="На весь экран">
                 <i class="bi bi-fullscreen"></i>
+            </button>
+            <button class="btn-icon" onclick="saveBotSettings('{{ bot.flow_id }}')" title="Сохранить">
+                <i class="bi bi-floppy"></i>
             </button>
             <button class="btn-icon" onclick="closeBotModal()" title="Закрыть">
                 <i class="bi bi-x-lg"></i>
@@ -57,22 +64,28 @@
         <div class="control-group">
             <label class="control-label">Платформы</label>
             <div class="control-value platforms-list">
-                {% for platform in bot.platforms.keys() %}
-                <span class="platform-badge platform-{{ platform }}">
-                    {% if platform == 'telegram' %}
-                        <i class="bi bi-telegram"></i>
-                    {% elif platform == 'whatsapp' %}
-                        <i class="bi bi-whatsapp"></i>
-                    {% elif platform == 'api' %}
-                        <i class="bi bi-code-slash"></i>
-                    {% elif platform == 'web' %}
-                        <i class="bi bi-globe"></i>
-                    {% elif platform == 'amocrm' %}
-                        <i class="bi bi-building"></i>
-                    {% endif %}
-                    {{ platform }}
-                </span>
-                {% endfor %}
+                {% if bot.platforms and bot.platforms|length > 0 %}
+                    {% for platform in bot.platforms.keys() %}
+                    <span class="platform-badge platform-{{ platform }}">
+                        {% if platform == 'telegram' %}
+                            <i class="bi bi-telegram"></i>
+                        {% elif platform == 'whatsapp' %}
+                            <i class="bi bi-whatsapp"></i>
+                        {% elif platform == 'api' %}
+                            <i class="bi bi-code-slash"></i>
+                        {% elif platform == 'web' %}
+                            <i class="bi bi-globe"></i>
+                        {% elif platform == 'amocrm' %}
+                            <i class="bi bi-building"></i>
+                        {% endif %}
+                        {{ platform }}
+                    </span>
+                    {% endfor %}
+                {% else %}
+                    <button class="btn-icon" onclick="addPlatform('{{ bot.flow_id }}')" title="Добавить платформу">
+                        <i class="bi bi-plus-circle"></i>
+                    </button>
+                {% endif %}
             </div>
         </div>
         {% endif %}
@@ -426,22 +439,6 @@
                 </div>
                 {% endif %}
             </div>
-            
-            <div class="settings-actions">
-                <button class="btn btn-secondary" onclick="closeBotModal()">
-                    <i class="bi bi-x"></i>
-                    Отмена
-                </button>
-                <button class="btn btn-primary" onclick="saveBotSettings('{{ bot.flow_id }}')">
-                    {% if bot.is_new %}
-                        <i class="bi bi-plus-circle"></i>
-                        Создать бота
-                    {% else %}
-                        <i class="bi bi-save"></i>
-                        Сохранить изменения
-                    {% endif %}
-                </button>
-            </div>
         </div>
     </div>
 </div>
@@ -451,9 +448,14 @@
     <div class="modal-content">
         <div class="modal-header">
             <h3>Добавить платформу</h3>
-            <button class="btn-close" onclick="closeAddPlatformModal()" title="Закрыть">
-                <i class="bi bi-x-lg"></i>
-            </button>
+            <div class="modal-header-actions">
+                <button class="btn-icon" onclick="savePlatform('{{ bot.flow_id }}')" title="Сохранить">
+                    <i class="bi bi-floppy"></i>
+                </button>
+                <button class="btn-close" onclick="closeAddPlatformModal()" title="Закрыть">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
         </div>
         <div class="modal-body">
             <div class="form-group">
@@ -542,15 +544,6 @@
                     </button>
                 </div>
             </div>
-        </div>
-        <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeAddPlatformModal()">
-                Отмена
-            </button>
-            <button class="btn btn-primary" onclick="savePlatform('{{ bot.flow_id }}')">
-                <i class="bi bi-plus-circle"></i>
-                Добавить
-            </button>
         </div>
     </div>
 </div>

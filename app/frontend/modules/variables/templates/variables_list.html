@@ -22,11 +22,12 @@
     <div class="variables-grid">
         <!-- Карточка создания новой переменной -->
         <div class="variable-grid-item">
-            <div class="card variable-card variable-card-add h-100" onclick="openAddVariableModal()" style="cursor: pointer;">
-                <div class="card-body p-3 d-flex align-items-center justify-content-center gap-3" style="min-height: 120px;">
-                    <i class="bi bi-plus-circle" style="font-size: 2.5rem; color: var(--primary-color); opacity: 0.7;"></i>
-                    <div class="text-center">
-                        <small class="text-muted">Создать<br>переменную</small>
+            <div class="variable-card variable-card-create" onclick="openAddVariableModal()" style="cursor: pointer;">
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 0.75rem;">
+                    <i class="bi bi-plus-circle" style="font-size: 2.5rem; color: var(--accent-primary); opacity: 0.7;"></i>
+                    <div style="text-align: center;">
+                        <div style="margin: 0; color: var(--text-primary); font-size: 0.875rem; font-weight: 600;">Создать переменную</div>
+                        <small style="color: var(--text-muted); font-size: 0.75rem;">Добавить новую переменную</small>
                     </div>
                 </div>
             </div>
@@ -34,49 +35,50 @@
         
         {% for key, var_data in variables.items() %}
         <div class="variable-grid-item">
-            <div class="card variable-card h-100">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <div class="d-flex align-items-center gap-2 flex-grow-1">
-                            {% if var_data.secret %}
-                            <i class="bi bi-shield-lock text-warning" style="font-size: 1.1rem;"></i>
-                            {% else %}
-                            <i class="bi bi-tag text-primary" style="font-size: 1.1rem;"></i>
-                            {% endif %}
-                            
-                            {% if var_data.groups and var_data.groups|length > 0 %}
-                            <div class="d-flex gap-1 flex-wrap">
-                                {% for group in var_data.groups %}
-                                <span class="badge bg-secondary" style="font-size: 0.6rem; padding: 0.15rem 0.4rem;">{{ group }}</span>
-                                {% endfor %}
-                            </div>
-                            {% endif %}
-                        </div>
-                        <div class="d-flex gap-1">
-                            <button class="btn-icon" onclick="editVariable('{{ key }}', '{{ var_data.value }}', {{ 'true' if var_data.secret else 'false' }})" title="Изменить">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button class="btn-icon text-danger" onclick="deleteVariable('{{ key }}')" title="Удалить">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-2">
-                        <code class="d-block text-truncate" style="font-size: 0.8rem; font-weight: 600;" title="{{ key }}">{{ key }}</code>
-                    </div>
-                    
-                    <div class="variable-value-compact">
+            <div class="variable-card">
+                <div class="variable-card-header">
+                    <div class="variable-card-icon">
                         {% if var_data.secret %}
-                        <div class="d-flex align-items-center gap-1">
-                            <input type="password" readonly value="••••••••••••" class="form-control form-control-sm" id="var-{{ key }}" data-secret-key="{{ key }}" style="font-size: 0.8rem; font-family: monospace;">
-                            <button class="btn btn-sm btn-outline-secondary" type="button" onclick="toggleSecret('{{ key }}', this)" style="padding: 0.2rem 0.4rem;">
-                                <i class="bi bi-eye" style="font-size: 0.8rem;"></i>
+                        <i class="bi bi-shield-lock"></i>
+                        {% else %}
+                        <i class="bi bi-tag"></i>
+                        {% endif %}
+                    </div>
+                    <div class="variable-card-info">
+                        {% if var_data.groups and var_data.groups|length > 0 %}
+                        <div class="variable-groups">
+                            {% for group in var_data.groups %}
+                            <span class="variable-group-badge">{{ group }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="variable-card-actions">
+                        <button class="btn-icon" onclick="editVariable('{{ key }}', '{{ var_data.value }}', {{ 'true' if var_data.secret else 'false' }})" title="Изменить">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn-icon btn-icon-danger" onclick="deleteVariable('{{ key }}')" title="Удалить">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="variable-card-body">
+                    <div class="variable-key">
+                        <code title="{{ key }}">{{ key }}</code>
+                    </div>
+                    
+                    <div class="variable-value">
+                        {% if var_data.secret %}
+                        <div class="variable-secret-group">
+                            <input type="password" readonly value="••••••••••••" class="form-control form-control-sm" id="var-{{ key }}" data-secret-key="{{ key }}">
+                            <button class="btn-icon" type="button" onclick="toggleSecret('{{ key }}', this)" title="Показать/скрыть">
+                                <i class="bi bi-eye"></i>
                             </button>
                         </div>
                         {% else %}
-                        <div class="p-1 bg-light rounded">
-                            <code class="text-muted d-block text-truncate" style="font-size: 0.8rem;" title="{{ var_data.value }}">{{ var_data.value }}</code>
+                        <div class="variable-value-display">
+                            <code title="{{ var_data.value }}">{{ var_data.value }}</code>
                         </div>
                         {% endif %}
                     </div>
@@ -97,47 +99,187 @@
     .variable-card {
         transition: all var(--transition-normal);
         border: 1px solid var(--border-primary);
-        background: var(--bg-secondary);
-        height: 100%;
+        background: var(--bg-card);
+        border-radius: var(--radius-lg);
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        min-height: 150px;
     }
     
     .variable-card:hover {
-        border-color: var(--border-secondary);
-        box-shadow: var(--shadow-md);
-        transform: translateY(-2px);
-    }
-    
-    .variable-card-add {
-        border: 1px dashed var(--border-secondary);
-        background: var(--bg-tertiary);
-        transition: all var(--transition-normal);
-    }
-    
-    .variable-card-add:hover {
         border-color: var(--accent-primary);
         box-shadow: var(--shadow-md);
         transform: translateY(-2px);
     }
     
-    .variable-card-add:hover i {
-        opacity: 1 !important;
-        color: var(--accent-primary);
+    .variable-card-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
     }
     
-    .variable-value-compact {
+    .variable-card-icon {
+        width: 32px;
+        height: 32px;
+        background: var(--accent-primary);
+        border-radius: var(--radius-md);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    
+    .variable-card-icon i {
+        font-size: 1rem;
+        color: white;
+    }
+    
+    .variable-card-info {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .variable-groups {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+    }
+    
+    .variable-group-badge {
+        display: inline-flex;
+        padding: 0.125rem 0.375rem;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-secondary);
+        border-radius: var(--radius-sm);
+        font-size: 0.625rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+    }
+    
+    .variable-card-actions {
+        display: flex;
+        gap: 0.25rem;
+    }
+    
+    .variable-card-body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .variable-key {
         font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .variable-key code {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--text-primary);
+        background: none;
+        padding: 0;
+    }
+    
+    .variable-value {
+        font-size: 0.75rem;
+    }
+    
+    .variable-secret-group {
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+    }
+    
+    .variable-secret-group input {
+        flex: 1;
+        font-family: monospace;
+        font-size: 0.75rem;
+    }
+    
+    .variable-value-display {
+        padding: 0.375rem 0.5rem;
+        background: var(--bg-secondary);
+        border-radius: var(--radius-sm);
+    }
+    
+    .variable-value-display code {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--text-muted);
+        background: none;
+        padding: 0;
+        font-size: 0.75rem;
+    }
+    
+    .btn-icon-danger {
+        color: var(--accent-danger);
+    }
+    
+    .btn-icon-danger:hover {
+        color: white;
+        background: var(--accent-danger);
+        border-color: var(--accent-danger);
+    }
+    
+    .variable-card-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem;
+        min-height: 250px;
+    }
+    
+    .variable-card-empty i {
+        font-size: 4rem;
+        opacity: 0.7;
+        margin-bottom: 1rem;
+    }
+    
+    .variable-card-empty h3 {
+        margin: 0 0 0.5rem 0;
+        color: var(--text-primary);
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+    
+    .variable-card-empty p {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+        text-align: center;
+    }
+    
+    .variable-card-create {
+        border: 1px dashed var(--border-secondary);
+        padding: 0;
+    }
+    
+    .variable-card-create:hover {
+        border-color: var(--accent-primary);
+        box-shadow: var(--shadow-md);
+        transform: translateY(-2px);
+    }
+    
+    .variable-card-create:hover i {
+        opacity: 1 !important;
+        color: var(--accent-primary);
     }
     </style>
     {% else %}
     <div class="variables-grid">
         <!-- Карточка создания первой переменной -->
         <div class="variable-grid-item" style="grid-column: 1 / -1;">
-            <div class="card variable-card variable-card-add h-100" onclick="openAddVariableModal()" style="cursor: pointer;">
-                <div class="card-body p-5 d-flex flex-column align-items-center justify-content-center">
-                    <i class="bi bi-plus-circle" style="font-size: 4rem; color: var(--primary-color); opacity: 0.7;"></i>
-                    <h3 class="mt-3">Нет переменных</h3>
-                    <p class="text-muted">Создайте первую переменную для использования в ботах и агентах</p>
-                </div>
+            <div class="variable-card variable-card-create variable-card-empty" onclick="openAddVariableModal()" style="cursor: pointer;">
+                <i class="bi bi-plus-circle"></i>
+                <h3>Нет переменных</h3>
+                <p>Создайте первую переменную для использования в ботах и агентах</p>
             </div>
         </div>
     </div>
@@ -154,9 +296,14 @@
     <div class="modal-content" style="max-width: 500px;" onclick="event.stopPropagation()">
         <div class="modal-header">
             <h3 id="variable-modal-title">Добавить переменную</h3>
-            <button class="btn-close" onclick="closeVariableModal()" title="Закрыть">
-                <i class="bi bi-x-lg"></i>
-            </button>
+            <div class="modal-header-actions">
+                <button class="btn-icon" onclick="saveVariable()" title="Сохранить">
+                    <i class="bi bi-floppy"></i>
+                </button>
+                <button class="btn-close" onclick="closeVariableModal()" title="Закрыть">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
         </div>
         <div class="modal-body">
             <div class="mb-3">
@@ -193,10 +340,6 @@
                         Пометить как секрет (скрывать значение)
                     </label>
                 </div>
-        </div>
-        <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" onclick="closeVariableModal()">Отмена</button>
-            <button type="button" class="btn btn-primary" onclick="saveVariable()">Сохранить</button>
         </div>
     </div>
 </div>
@@ -257,18 +400,140 @@ function renderGroupedView(variables, container) {
         <style>
         .variables-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1rem;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.25rem;
+            width: 100%;
         }
-        @media (min-width: 768px) {
-            .variables-grid {
-                grid-template-columns: repeat(3, 1fr);
-            }
+        
+        .variable-card {
+            transition: all var(--transition-normal);
+            border: 1px solid var(--border-primary);
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            min-height: 150px;
         }
-        @media (min-width: 1400px) {
-            .variables-grid {
-                grid-template-columns: repeat(5, 1fr);
-            }
+        
+        .variable-card:hover {
+            border-color: var(--accent-primary);
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
+        }
+        
+        .variable-card-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+        }
+        
+        .variable-card-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--accent-primary);
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        
+        .variable-card-icon i {
+            font-size: 1rem;
+            color: white;
+        }
+        
+        .variable-card-info {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .variable-groups {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+        }
+        
+        .variable-group-badge {
+            display: inline-flex;
+            padding: 0.125rem 0.375rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-secondary);
+            border-radius: var(--radius-sm);
+            font-size: 0.625rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+        
+        .variable-card-actions {
+            display: flex;
+            gap: 0.25rem;
+        }
+        
+        .variable-card-body {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        
+        .variable-key {
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .variable-key code {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--text-primary);
+            background: none;
+            padding: 0;
+        }
+        
+        .variable-value {
+            font-size: 0.75rem;
+        }
+        
+        .variable-secret-group {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+        
+        .variable-secret-group input {
+            flex: 1;
+            font-family: monospace;
+            font-size: 0.75rem;
+        }
+        
+        .variable-value-display {
+            padding: 0.375rem 0.5rem;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-sm);
+        }
+        
+        .variable-value-display code {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--text-muted);
+            background: none;
+            padding: 0;
+            font-size: 0.75rem;
+        }
+        
+        .btn-icon-danger {
+            color: var(--accent-danger);
+        }
+        
+        .btn-icon-danger:hover {
+            color: white;
+            background: var(--accent-danger);
+            border-color: var(--accent-danger);
         }
         </style>
     `;
@@ -281,10 +546,10 @@ function renderGroupedView(variables, container) {
         
         if (groupVars.length > 0) {
             html += `
-                <div class="mb-4">
-                    <h5 class="mb-3">
-                        <span class="badge bg-primary">${group}</span>
-                        <span class="text-muted ms-2">(${groupVars.length})</span>
+                <div style="margin-bottom: 2rem;">
+                    <h5 style="margin-bottom: 1rem; color: var(--text-primary); font-size: 1rem; font-weight: 600;">
+                        <span style="display: inline-flex; padding: 0.25rem 0.625rem; background: var(--accent-primary); border-radius: var(--radius-md); font-size: 0.75rem; color: white;">${group}</span>
+                        <span style="color: var(--text-muted); margin-left: 0.5rem;">(${groupVars.length})</span>
                     </h5>
                     <div class="variables-grid">
             `;
@@ -303,10 +568,10 @@ function renderGroupedView(variables, container) {
     // Переменные без групп
     if (ungrouped.length > 0) {
         html += `
-            <div class="mb-4">
-                <h5 class="mb-3">
-                    <span class="text-muted">Без группы</span>
-                    <span class="text-muted ms-2">(${ungrouped.length})</span>
+            <div style="margin-bottom: 2rem;">
+                <h5 style="margin-bottom: 1rem; color: var(--text-muted); font-size: 1rem; font-weight: 600;">
+                    <span>Без группы</span>
+                    <span style="margin-left: 0.5rem;">(${ungrouped.length})</span>
                 </h5>
                 <div class="variables-grid">
         `;
@@ -327,46 +592,48 @@ function renderGroupedView(variables, container) {
 function renderVariableCard(key, data) {
     const isSecret = data.secret;
     const icon = isSecret ? 
-        '<i class="bi bi-shield-lock text-warning" style="font-size: 1.1rem;"></i>' :
-        '<i class="bi bi-tag text-primary" style="font-size: 1.1rem;"></i>';
+        '<i class="bi bi-shield-lock"></i>' :
+        '<i class="bi bi-tag"></i>';
     
     const groups = data.groups && data.groups.length > 0 ? 
-        data.groups.map(g => `<span class="badge bg-secondary" style="font-size: 0.6rem; padding: 0.15rem 0.4rem;">${g}</span>`).join(' ') :
+        data.groups.map(g => `<span class="variable-group-badge">${g}</span>`).join('') :
         '';
     
     const valueDisplay = isSecret ?
-        `<div class="d-flex align-items-center gap-1">
-            <input type="password" readonly value="••••••••••••" class="form-control form-control-sm" id="var-${key}" style="font-size: 0.8rem; font-family: monospace;">
-            <button class="btn btn-sm btn-outline-secondary" type="button" onclick="toggleSecret('${key}', this)" style="padding: 0.2rem 0.4rem;">
-                <i class="bi bi-eye" style="font-size: 0.8rem;"></i>
+        `<div class="variable-secret-group">
+            <input type="password" readonly value="••••••••••••" class="form-control form-control-sm" id="var-${key}" data-secret-key="${key}">
+            <button class="btn-icon" type="button" onclick="toggleSecret('${key}', this)" title="Показать/скрыть">
+                <i class="bi bi-eye"></i>
             </button>
         </div>` :
-        `<div class="p-1 bg-light rounded">
-            <code class="text-muted d-block text-truncate" style="font-size: 0.8rem;" title="${data.value}">${data.value}</code>
+        `<div class="variable-value-display">
+            <code title="${data.value}">${data.value}</code>
         </div>`;
     
     return `
         <div class="variable-grid-item">
-            <div class="card variable-card h-100">
-                <div class="card-body p-3">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <div class="d-flex align-items-center gap-2 flex-grow-1">
-                            ${icon}
-                            ${groups ? `<div class="d-flex gap-1 flex-wrap">${groups}</div>` : ''}
-                        </div>
-                        <div class="d-flex gap-1">
-                            <button class="btn-icon" onclick="event.stopPropagation();editVariable('${key}', '${data.value}', ${isSecret})" title="Изменить" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 0.2rem; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; font-size: 0.9rem;">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button class="btn-icon text-danger" onclick="event.stopPropagation();deleteVariable('${key}')" title="Удалить" style="background: none; border: none; cursor: pointer; padding: 0.2rem; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; font-size: 0.9rem;">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
+            <div class="variable-card">
+                <div class="variable-card-header">
+                    <div class="variable-card-icon">
+                        ${icon}
                     </div>
-                    <div class="mb-2">
-                        <code class="d-block text-truncate" style="font-size: 0.8rem; font-weight: 600;" title="${key}">${key}</code>
+                    <div class="variable-card-info">
+                        ${groups ? `<div class="variable-groups">${groups}</div>` : ''}
                     </div>
-                    <div class="variable-value-compact">
+                    <div class="variable-card-actions">
+                        <button class="btn-icon" onclick="event.stopPropagation();editVariable('${key}', '${data.value}', ${isSecret})" title="Изменить">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn-icon btn-icon-danger" onclick="event.stopPropagation();deleteVariable('${key}')" title="Удалить">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="variable-card-body">
+                    <div class="variable-key">
+                        <code title="${key}">${key}</code>
+                    </div>
+                    <div class="variable-value">
                         ${valueDisplay}
                     </div>
                 </div>
