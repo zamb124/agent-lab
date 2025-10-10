@@ -295,6 +295,10 @@
                     </button>
                 </div>
                 
+                <div class="panel-description" style="padding-left: 20px;">
+                    <p>Платформы — это каналы общения бота с пользователями. Вы можете подключить бота к Telegram, WhatsApp, Web чату или использовать через REST API. Каждая платформа имеет свои настройки подключения и может работать независимо.</p>
+                </div>
+                
                 {% for platform, config in bot.platforms.items() %}
                 <div class="platform-settings">
                     <div class="platform-header">
