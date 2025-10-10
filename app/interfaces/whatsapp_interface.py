@@ -90,6 +90,8 @@ class WhatsAppInterface(BaseInterface):
         message_id = wa_message.get("id")
         timestamp = wa_message.get("timestamp")
         message_type = wa_message.get("type")
+        
+        logger.info(f"📞 WhatsApp webhook: получен номер '{from_number}' (тип: {type(from_number).__name__})")
 
         # Профиль отправителя
         profile_name = "User"
@@ -351,6 +353,8 @@ class WhatsAppInterface(BaseInterface):
     ):
         """Отправляет текстовое сообщение с поддержкой форматирования"""
         
+        logger.info(f"📤 WhatsApp отправка на номер: '{phone_number}' (тип: {type(phone_number).__name__})")
+        
         # Конвертируем Markdown в WhatsApp форматирование
         formatted_text = self._convert_markdown_to_whatsapp(text)
         
@@ -389,6 +393,29 @@ class WhatsAppInterface(BaseInterface):
             else:
                 logger.error(f"❌ Ошибка отправки в WhatsApp: {response.status_code}")
                 logger.error(f"❌ Ответ API: {response.text}")
+                
+                if response.status_code == 400 and phone_number.startswith("7"):
+                    try:
+                        error_data = response.json()
+                        error_code = error_data.get("error", {}).get("code")
+                        
+                        if error_code == 131030:
+                            logger.warning(f"⚠️ Номер не в списке, пробуем с префиксом 78: {phone_number}")
+                            alternative_number = "78" + phone_number[1:]
+                            payload["to"] = alternative_number
+                            
+                            retry_response = await client.post(url, json=payload, headers=headers)
+                            
+                            if retry_response.status_code == 200:
+                                result = retry_response.json()
+                                message_id = result.get("messages", [{}])[0].get("id")
+                                logger.info(f"✅ WhatsApp сообщение отправлено (через 78): {message_id} → {alternative_number}")
+                                return
+                            else:
+                                logger.error(f"❌ Retry с {alternative_number} тоже не удался: {retry_response.status_code}")
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка retry логики: {e}")
+                
                 raise httpx.HTTPStatusError(
                     f"WhatsApp API ошибка отправки текста: {response.status_code} - {response.text[:200]}",
                     request=response.request,
