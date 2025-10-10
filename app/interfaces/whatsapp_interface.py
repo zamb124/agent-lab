@@ -383,7 +383,7 @@ class WhatsAppInterface(BaseInterface):
             response = await client.post(url, json=payload, headers=headers)
             
             if response.status_code == 200:
-                result = await response.json()
+                result = response.json()
                 message_id = result.get("messages", [{}])[0].get("id")
                 logger.info(f"✅ WhatsApp сообщение отправлено: {message_id} → {phone_number}")
             else:
@@ -485,7 +485,7 @@ class WhatsAppInterface(BaseInterface):
             response = await client.post(url, json=payload, headers=headers)
             
             if response.status_code == 200:
-                result = await response.json()
+                result = response.json()
                 message_id = result.get("messages", [{}])[0].get("id")
                 logger.info(f"✅ WhatsApp интерактивное сообщение отправлено: {message_id}")
             else:
@@ -683,7 +683,7 @@ class WhatsAppInterface(BaseInterface):
                     response=response
                 )
 
-            data = await response.json()
+            data = response.json()
             media_url = data.get("url")
             
             if not media_url:
