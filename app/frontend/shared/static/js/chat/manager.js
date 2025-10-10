@@ -524,21 +524,24 @@ class ChatManager {
                 console.warn('⚠️ Ошибка получения user_id:', e);
             }
             
-            const flowId = this.currentAgent || 'unknown';
-            
-            const fullSessionId = `web:${userId}:${flowId}:${session_id}`;
-            console.log('🔍 Полный session_id для истории:', fullSessionId);
+            // Проверяем формат session_id
+            let fullSessionId;
+            if (session_id.startsWith('web:') || session_id.startsWith('telegram:') || session_id.startsWith('whatsapp:')) {
+                // session_id уже полный
+                fullSessionId = session_id;
+                console.log('✅ session_id уже полный:', fullSessionId);
+            } else {
+                // Добавляем префикс
+                const flowId = this.currentAgent || 'unknown';
+                fullSessionId = `web:${userId}:${flowId}:${session_id}`;
+                console.log('🔍 Сформирован полный session_id:', fullSessionId);
+            }
             
             const encodedSessionId = encodeURIComponent(fullSessionId);
             const response = await fetch(`/api/v1/history/sessions/${encodedSessionId}/messages?limit=100`);
             
             if (!response.ok) {
-                console.warn(`⚠️ API вернул ${response.status}, пробуем загрузить с простым session_id`);
-                const simpleResponse = await fetch(`/api/v1/history/sessions/${encodeURIComponent(session_id)}/messages?limit=100`);
-                if (!simpleResponse.ok) {
-                    throw new Error(`Ошибка загрузки истории: ${response.status}`);
-                }
-                return await this.processHistory(await simpleResponse.json());
+                throw new Error(`Ошибка загрузки истории: ${response.status}`);
             }
 
             const history = await response.json();
