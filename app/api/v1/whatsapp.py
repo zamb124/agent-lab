@@ -33,20 +33,25 @@ async def whatsapp_webhook_verify(
         hub_verify_token: Токен для верификации
         hub_challenge: Значение которое нужно вернуть
     """
-    # Извлекаем flow_id из ключа
-    if ":flow:" in flow_key:
-        flow_id = flow_key.split(":flow:")[1]
-    else:
-        flow_id = flow_key
+    # Парсим flow_key: company:{company_id}:flow:{flow_id}
+    parts = flow_key.split(":")
+    if len(parts) != 4 or parts[0] != "company" or parts[2] != "flow":
+        raise HTTPException(status_code=400, detail=f"Invalid flow_key format: {flow_key}")
     
-    logger.info(f"🔍 WhatsApp webhook verification для flow: {flow_id}")
+    company_id = parts[1]
+    flow_id = parts[3]
+    
+    logger.info(f"🔍 WhatsApp webhook verification: flow={flow_id}, company={company_id}")
     
     storage = Storage()
-    flow_config = await storage.get_flow_config(flow_id)
-
-    if not flow_config:
-        logger.error(f"Flow {flow_id} не найден в БД")
+    flow_data = await storage.get(flow_key, force_global=True)
+    
+    if not flow_data:
+        logger.error(f"Flow {flow_id} не найден в БД по ключу {flow_key}")
         raise HTTPException(status_code=404, detail=f"Flow {flow_id} not found")
+    
+    from app.models import FlowConfig
+    flow_config = FlowConfig.model_validate_json(flow_data)
 
     whatsapp_config = flow_config.platforms.get("whatsapp")
     if not whatsapp_config:
@@ -88,19 +93,26 @@ async def whatsapp_webhook(flow_key: str, request: Request):
         flow_key: Полный ключ flow включая company
         request: FastAPI Request с webhook payload
     """
-    # Извлекаем flow_id из ключа
-    if ":flow:" in flow_key:
-        flow_id = flow_key.split(":flow:")[1]
-    else:
-        flow_id = flow_key
+    # Парсим flow_key: company:{company_id}:flow:{flow_id}
+    parts = flow_key.split(":")
+    if len(parts) != 4 or parts[0] != "company" or parts[2] != "flow":
+        raise HTTPException(status_code=400, detail=f"Invalid flow_key format: {flow_key}")
+    
+    company_id = parts[1]
+    flow_id = parts[3]
+    
+    logger.info(f"📨 WhatsApp webhook: flow={flow_id}, company={company_id}")
     
     storage = Storage()
-    flow_config = await storage.get_flow_config(flow_id)
-
-    if not flow_config:
-        logger.error(f"Flow {flow_id} не найден в БД")
+    flow_data = await storage.get(flow_key, force_global=True)
+    
+    if not flow_data:
+        logger.error(f"Flow {flow_id} не найден в БД по ключу {flow_key}")
         raise HTTPException(status_code=404, detail=f"Flow {flow_id} not found")
-
+    
+    from app.models import FlowConfig
+    flow_config = FlowConfig.model_validate_json(flow_data)
+    
     whatsapp_config = flow_config.platforms.get("whatsapp")
     if not whatsapp_config:
         logger.error(f"Flow {flow_id} не поддерживает WhatsApp")
