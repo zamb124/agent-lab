@@ -116,7 +116,7 @@ class GraphNode(BaseModel):
         widget_attrs={"rows": 10, "class": "code-editor"},
     )
     prompt: Optional[str] = Field(
-        default=None,
+        default='.',
         title="Промпт",
         description="Промпт для ReAct нод",
         widget_attrs={"rows": 5},
