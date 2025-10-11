@@ -24,7 +24,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - CONFIG_FILE=${CONFIG_FILE:-conf.json}
+        - CONFIG_FILE=${CONFIG_FILE:-deploy/conf.json}
     ports:
       - "${APP_PORT:-8001}:8001"
     environment:
@@ -44,7 +44,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - CONFIG_FILE=${CONFIG_FILE:-conf.json}
+        - CONFIG_FILE=${CONFIG_FILE:-deploy/conf.json}
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-local}
     volumes: []
