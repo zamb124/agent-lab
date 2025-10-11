@@ -1,29 +1,48 @@
-# Простые команды для Agents Lab
+.PHONY: build up rebuild down logs clean help
 
-# Сборка образов
 build:
 	docker-compose build
 
-# Запустить
 up:
 	docker-compose up -d
 
-# Перезапустить с пересборкой
 rebuild:
 	docker-compose up -d --build
 
-# Остановить
 down:
 	docker-compose down
 
-# Логи
 logs:
 	docker-compose logs -f
 
-# Очистить все
 clean:
 	docker-compose down -v
 
-# Тесты
-test:
-	python run_tests.py
+help:
+	@echo "Основные команды:"
+	@echo "  make build         - Собрать образы"
+	@echo "  make up           - Запустить все сервисы"
+	@echo "  make down         - Остановить все сервисы"
+	@echo "  make logs         - Показать логи всех сервисов"
+	@echo "  make clean        - Удалить все (включая volumes)"
+	@echo ""
+	@echo "Отдельные сервисы:"
+	@echo "  make db-up        - Запустить БД"
+	@echo "  make db-logs      - Логи БД"
+	@echo "  make app-up       - Запустить app"
+	@echo "  make app-logs     - Логи app"
+	@echo "  make worker-up    - Запустить worker"
+	@echo "  make worker-logs  - Логи worker"
+	@echo "  make sgr-up       - Запустить sgr"
+	@echo "  make sgr-logs     - Логи sgr"
+	@echo ""
+	@echo "Тесты:"
+	@echo "  make test              - Запустить тесты (без интеграционных, 4 воркера)"
+	@echo "  make test-all          - Запустить все тесты (включая интеграционные)"
+	@echo "  make test WORKERS=8    - Указать число воркеров"
+
+include mk/db.mk
+include mk/app.mk
+include mk/worker.mk
+include mk/sgr.mk
+include mk/test.mk

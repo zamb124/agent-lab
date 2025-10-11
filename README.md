@@ -8,23 +8,51 @@ Agent Lab - LangGraph Platform
 
 ## Быстрый старт
 
-1. **Настройка конфигурации**
-   ```bash
-   cp conf.example conf.json
-   ```
-   Отредактируйте `conf.json` под ваши нужды. Подробнее: [docs/configuration.md](docs/configuration.md)
+### Docker (рекомендуется)
 
-2. **Запуск системы**
-   ```bash
-   # Установка зависимостей
-   uv sync
-   
-   # Запуск с Docker (рекомендуется)
-   docker-compose up -d
-   
-   # Или локально
-   uv run python run.py
-   ```
+```bash
+# Скопировать конфигурацию
+cp conf.example conf.json
+
+# Собрать и запустить все сервисы
+make build
+make up
+
+# Проверить логи
+make logs
+
+# Остановить
+make down
+```
+
+### Отдельные сервисы
+
+```bash
+make db-up       # Запустить только БД
+make app-up      # Запустить приложение
+make worker-up   # Запустить worker
+make sgr-up      # Запустить SGR сервис
+```
+
+### Тесты
+
+```bash
+make test        # Запуск тестов (без интеграционных)
+make test-all    # Все тесты (включая интеграционные)
+```
+
+### Локальная разработка
+
+```bash
+# Установка зависимостей
+uv sync
+
+# Запуск локально
+uv run python run.py
+```
+
+Подробнее о командах: [docs/makefile.md](docs/makefile.md)  
+Конфигурация: [docs/configuration.md](docs/configuration.md)
 
 ## Актуальная Файловая Структура Проекта
 
@@ -35,6 +63,12 @@ Agent Lab - LangGraph Platform
 ├── docker-compose.yml      # Оркестрация сервисов
 ├── Dockerfile             # Docker образ
 ├── Makefile               # Команды для разработки
+├── mk/                    # Модульные Makefile
+│   ├── db.mk             # Команды для БД
+│   ├── app.mk            # Команды для приложения
+│   ├── worker.mk         # Команды для worker
+│   ├── sgr.mk            # Команды для SGR
+│   └── test.mk           # Команды для тестов
 ├── pyproject.toml         # Зависимости проекта (UV)
 ├── pytest.ini            # Настройки тестов
 ├── uv.lock               # Блокировка зависимостей
@@ -61,6 +95,7 @@ Agent Lab - LangGraph Platform
 │   ├── api.md          # API Reference
 │   ├── billing.md      # Биллинг
 │   ├── configuration.md # Конфигурация
+│   ├── makefile.md     # Команды Makefile
 │   ├── frontend.md     # Веб-интерфейс
 │   ├── clients.md      # Клиенты
 │   ├── deployment.md   # Развертывание
