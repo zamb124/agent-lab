@@ -3,6 +3,7 @@
 Обеспечивает сохранение состояния агентов между вызовами.
 """
 
+import asyncio
 import logging
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from app.core.config import get_settings
@@ -38,47 +39,63 @@ class CheckpointerManager:
             def __init__(self, conn_string, serde=None):
                 self.conn_string = conn_string
                 self.serde = serde
-                self._checkpointer = None
+                self._connection = None
+                self._context_manager = None
+                self._lock = asyncio.Lock()
 
-            async def _get_checkpointer(self):
-                """Создает checkpointer для операций"""
-                if self.serde:
-                    checkpointer_cm = AsyncPostgresSaver.from_conn_string(
-                        self.conn_string, serde=self.serde
-                    )
-                else:
-                    checkpointer_cm = AsyncPostgresSaver.from_conn_string(
-                        self.conn_string
-                    )
-
-                return checkpointer_cm
+            async def _get_connection(self):
+                """Получает или создает переиспользуемое соединение"""
+                async with self._lock:
+                    # Проверяем что соединение существует и активно
+                    if self._connection is not None:
+                        # Проверяем статус соединения
+                        try:
+                            if hasattr(self._connection, 'conn') and hasattr(self._connection.conn, 'closed'):
+                                if self._connection.conn.closed:
+                                    logger.debug("⚠️ Соединение закрыто, пересоздаем...")
+                                    self._connection = None
+                                    self._context_manager = None
+                        except:
+                            # Если проверка не удалась, пересоздадим соединение
+                            self._connection = None
+                            self._context_manager = None
+                    
+                    if self._connection is None:
+                        if self.serde:
+                            self._context_manager = AsyncPostgresSaver.from_conn_string(
+                                self.conn_string, serde=self.serde
+                            )
+                        else:
+                            self._context_manager = AsyncPostgresSaver.from_conn_string(
+                                self.conn_string
+                            )
+                        
+                        self._connection = await self._context_manager.__aenter__()
+                        logger.debug("✅ Создано переиспользуемое соединение с PostgreSQL checkpointer")
+                    
+                    return self._connection
 
             async def setup(self):
                 """Создает таблицы checkpointer'а в БД"""
-                checkpointer_cm = await self._get_checkpointer()
-                async with checkpointer_cm as cp:
-                    await cp.setup()
+                cp = await self._get_connection()
+                await cp.setup()
 
             async def aget_tuple(self, config):
-                checkpointer_cm = await self._get_checkpointer()
-                async with checkpointer_cm as cp:
-                    return await cp.aget_tuple(config)
+                cp = await self._get_connection()
+                return await cp.aget_tuple(config)
 
             async def aput(self, config, checkpoint, metadata, new_versions):
-                checkpointer_cm = await self._get_checkpointer()
-                async with checkpointer_cm as cp:
-                    return await cp.aput(config, checkpoint, metadata, new_versions)
+                cp = await self._get_connection()
+                return await cp.aput(config, checkpoint, metadata, new_versions)
 
             async def alist(self, config, *, limit=None, before=None):
-                checkpointer_cm = await self._get_checkpointer()
-                async with checkpointer_cm as cp:
-                    return cp.alist(config, limit=limit, before=before)
+                cp = await self._get_connection()
+                return cp.alist(config, limit=limit, before=before)
 
             async def adelete_thread(self, thread_id):
-                checkpointer_cm = await self._get_checkpointer()
-                async with checkpointer_cm as cp:
-                    if hasattr(cp, "adelete_thread"):
-                        return await cp.adelete_thread(thread_id)
+                cp = await self._get_connection()
+                if hasattr(cp, "adelete_thread"):
+                    return await cp.adelete_thread(thread_id)
 
             def get_next_version(self, current, channel):
                 """Синхронный метод для получения следующей версии"""
@@ -88,10 +105,22 @@ class CheckpointerManager:
 
             async def aput_writes(self, config, writes, task_id):
                 """Сохранение writes"""
-                checkpointer_cm = await self._get_checkpointer()
-                async with checkpointer_cm as cp:
-                    if hasattr(cp, "aput_writes"):
-                        return await cp.aput_writes(config, writes, task_id)
+                cp = await self._get_connection()
+                if hasattr(cp, "aput_writes"):
+                    return await cp.aput_writes(config, writes, task_id)
+
+            async def close(self):
+                """Закрывает соединение"""
+                async with self._lock:
+                    if self._connection is not None and self._context_manager is not None:
+                        try:
+                            await self._context_manager.__aexit__(None, None, None)
+                            logger.info("✅ PostgreSQL checkpointer connection закрыт")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Ошибка при закрытии checkpointer connection: {e}")
+                        finally:
+                            self._connection = None
+                            self._context_manager = None
 
             @property
             def config_specs(self):
@@ -142,7 +171,8 @@ async def close_checkpointer() -> None:
 
     if _checkpointer is not None:
         try:
-            # Для простых checkpointer'ов закрытие не требуется
+            if hasattr(_checkpointer, 'close'):
+                await _checkpointer.close()
             logger.info("✅ Checkpointer закрыт")
         except Exception as e:
             logger.error(f"❌ Ошибка закрытия checkpointer: {e}")

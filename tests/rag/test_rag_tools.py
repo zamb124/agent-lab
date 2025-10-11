@@ -211,17 +211,25 @@ class TestUploadDocumentToKnowledgeBase:
     @pytest.mark.asyncio
     async def test_upload_success(self, mock_context, mock_rag_provider):
         """Тест успешной загрузки"""
-        mock_get_ns = AsyncMock(return_value="mock_ns_id")
-        file_record = {
-            "s3_key": "uploads/document.pdf",
-            "original_name": "document.pdf"
-        }
+        from app.models.core_models import FileRecord
         
-        mock_storage = AsyncMock()
-        mock_storage.get = AsyncMock(return_value=json.dumps(file_record))
+        mock_get_ns = AsyncMock(return_value="mock_ns_id")
+        
+        mock_file_record = FileRecord(
+            file_id="file_123",
+            provider="yandex",
+            original_name="document.pdf",
+            s3_key="uploads/document.pdf",
+            s3_bucket="test-bucket",
+            content_type="application/pdf",
+            file_size=1024
+        )
+        
+        mock_file_processor = AsyncMock()
+        mock_file_processor.get_file_record = AsyncMock(return_value=mock_file_record)
         
         with patch("app.tools.rag_tools.get_context", return_value=mock_context):
-            with patch("app.core.storage.Storage", return_value=mock_storage):
+            with patch("app.tools.rag_tools.get_default_file_processor", return_value=mock_file_processor):
                 with patch("app.tools.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
                     with patch("app.tools.rag_tools.get_or_create_namespace", new=mock_get_ns):
                         result = await upload_document_to_knowledge_base.ainvoke(
@@ -242,6 +250,7 @@ class TestUploadDocumentToKnowledgeBase:
     async def test_upload_to_company_scope(self, mock_context, mock_rag_provider):
         """Тест загрузки в скоуп компании"""
         from app.models.rag_models import AgentRAGConfig
+        from app.models.core_models import FileRecord
         
         mock_get_ns = AsyncMock(return_value="mock_ns_id")
         mock_context.flow_config.flow_id = "test_flow"
@@ -251,12 +260,21 @@ class TestUploadDocumentToKnowledgeBase:
             search_scopes=["company"]
         )
         
-        file_record = {"s3_key": "doc.pdf", "original_name": "doc.pdf"}
-        mock_storage = AsyncMock()
-        mock_storage.get = AsyncMock(return_value=json.dumps(file_record))
+        mock_file_record = FileRecord(
+            file_id="file_123",
+            provider="yandex",
+            original_name="doc.pdf",
+            s3_key="doc.pdf",
+            s3_bucket="test-bucket",
+            content_type="application/pdf",
+            file_size=1024
+        )
+        
+        mock_file_processor = AsyncMock()
+        mock_file_processor.get_file_record = AsyncMock(return_value=mock_file_record)
         
         with patch("app.tools.rag_tools.get_context", return_value=mock_context):
-            with patch("app.core.storage.Storage", return_value=mock_storage):
+            with patch("app.tools.rag_tools.get_default_file_processor", return_value=mock_file_processor):
                 with patch("app.tools.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
                     with patch("app.tools.rag_tools.get_or_create_namespace", new=mock_get_ns):
                         result = await upload_document_to_knowledge_base.ainvoke(

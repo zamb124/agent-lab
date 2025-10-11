@@ -324,25 +324,48 @@ class TestAuthService:
             
             # Мокаем Storage
             auth_service.storage = AsyncMock()
+            auth_service.storage.set = AsyncMock(return_value=True)
+            auth_service.storage.delete = AsyncMock(return_value=True)
             
-            # Мокаем состояние авторизации
-            auth_service.storage.get.return_value = json.dumps({
-                "provider": "yandex",
-                "redirect_uri": "http://localhost:8001/auth/callback",
-                "created_at": "2025-09-12T10:00:00Z"
-            })
-            
-            # Мокаем отсутствие существующего пользователя
+            # Настраиваем последовательность вызовов get()
             auth_service.storage.get.side_effect = [
-                # Первый вызов - получение auth state
+                # 1. Проверка кеша OAuth кода (первый запрос - кеша нет)
+                None,
+                # 2. Получение auth state
                 json.dumps({
                     "provider": "yandex",
                     "redirect_uri": "http://localhost:8001/auth/callback",
                     "created_at": "2025-09-12T10:00:00Z"
                 }),
-                # Второй вызов - поиск пользователя (не найден)
-                None
             ]
+            
+            # Мокаем методы работы с пользователями
+            from app.identity.models import User, AuthSession
+            from datetime import datetime, timezone
+            
+            test_user = User(
+                user_id="user_123",
+                name="Тест Пользователь",
+                companies={},
+                active_company_id=""
+            )
+            
+            test_session = AuthSession(
+                session_id="session_123",
+                user_id="user_123",
+                provider=AuthProvider.YANDEX,
+                access_token="access_token",
+                refresh_token="refresh_token",
+                expires_at=datetime.now(timezone.utc).isoformat()
+            )
+            
+            auth_service._get_or_create_user = AsyncMock(return_value=test_user)
+            auth_service._create_session = AsyncMock(return_value=test_session)
+            auth_service._get_auth_state = AsyncMock(return_value={
+                "provider": "yandex",
+                "redirect_uri": "http://localhost:8001/auth/callback"
+            })
+            auth_service._cleanup_auth_state = AsyncMock()
             
             # Мокаем провайдер
             mock_provider = AsyncMock()
@@ -369,8 +392,10 @@ class TestAuthService:
             # Проверяем результат
             assert result.success == True
             assert result.user is not None
+            assert result.user.user_id == "user_123"
             assert result.user.name == "Тест Пользователь"
             assert result.session is not None
+            assert result.session.session_id == "session_123"
             assert result.session.provider == AuthProvider.YANDEX
             assert result.session.access_token == "access_token"
     

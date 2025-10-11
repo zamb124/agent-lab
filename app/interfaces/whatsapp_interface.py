@@ -597,7 +597,7 @@ class WhatsAppInterface(BaseInterface):
             response = await client.post(url, headers=headers, files=files)
             
             if response.status_code == 200:
-                result = await response.json()
+                result = response.json()
                 media_id = result.get("id")
                 if not media_id:
                     raise ValueError("WhatsApp API не вернул media_id после загрузки")

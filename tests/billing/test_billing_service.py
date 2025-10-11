@@ -212,7 +212,9 @@ class TestBillingService:
         assert updated_company.current_month_spent == initial_spent + 0.5
         
         # Проверяем что создалась запись
-        usage_keys = await storage.list_by_prefix("usage:", force_global=True)
+        # Формат ключа: usage:{company_id}:{resource_name}:{usage_id}
+        search_prefix = f"usage:{test_company.company_id}:weather_api:"
+        usage_keys = await storage.list_by_prefix(search_prefix, force_global=True)
         usage_records = []
         for key in usage_keys:
             data = await storage.get(key, force_global=True)
@@ -221,14 +223,10 @@ class TestBillingService:
                     usage_records.append(UsageRecord.model_validate_json(data))
                 except Exception:
                     continue
-        found_record = None
-        for record in usage_records:
-            if (record.company_id == test_company.company_id and 
-                record.resource_name == "weather_api"):
-                found_record = record
-                break
         
-        assert found_record is not None, "Запись использования не найдена"
+        assert len(usage_records) > 0, f"Записи использования не найдены по префиксу {search_prefix}"
+        found_record = usage_records[0]
+        
         assert found_record.cost == 0.5
         assert found_record.usage_type == UsageType.TOOL_CALL
         assert found_record.metadata.get("test") == "data"
