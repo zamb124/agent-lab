@@ -67,6 +67,7 @@ class TaskProcessor:
 
     async def _process_pending_tasks(self):
         """Обработка задач в статусе pending"""
+        logger.debug(f"🔍 Ищем pending задачи (limit={settings.worker.max_workers})...")
         tasks = await self.storage.get_pending_tasks(limit=settings.worker.max_workers)
 
         if not tasks:
@@ -74,6 +75,8 @@ class TaskProcessor:
             return
 
         logger.info(f"📋 Найдено {len(tasks)} задач для обработки")
+        for task in tasks:
+            logger.info(f"  - {task.task_id}: flow={task.flow_id}, status={task.status}, session={task.session_id}")
 
         # Обрабатываем задачи параллельно
         await asyncio.gather(

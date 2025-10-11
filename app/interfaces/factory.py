@@ -64,7 +64,7 @@ class InterfaceFactory:
             # Получаем токен через новый способ (поддерживает @var:key)
             bot_token = await TelegramInterface.get_bot_token_for_flow(flow_id, telegram_config)
             if not bot_token:
-                logger.error(f"Не найден токен для flow {flow_id}")
+                logger.info(f"⏭️ Flow {flow_id} не имеет telegram токена, пропускаем")
                 return None
 
             return TelegramInterface(bot_token, telegram_config)
@@ -122,7 +122,7 @@ class InterfaceFactory:
                 flow_id, whatsapp_config
             )
             if not access_token:
-                logger.error(f"Не найден токен для flow {flow_id}")
+                logger.info(f"⏭️ Flow {flow_id} не имеет whatsapp токена, пропускаем")
                 return None
 
             return WhatsAppInterface(access_token, whatsapp_config)

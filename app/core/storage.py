@@ -198,8 +198,11 @@ class Storage:
         Returns:
             True, если сохранение успешно
         """
+        logger.info(f"🟣 Storage.set ВХОД: key={key}")
         final_key, company_id = self._get_company_key(key, force_global)
         table_name = self._get_table_name(key, company_id)
+        logger.info(f"🟣 Storage.set: final_key={final_key}, table={table_name}")
+        
         
         if db_session:
             return await self._set_with_session(final_key, value, ttl, table_name, db_session)
@@ -208,6 +211,7 @@ class Storage:
         async with session_factory() as session:
             result = await self._set_with_session(final_key, value, ttl, table_name, session)
             await session.commit()
+            logger.info(f"✅ Storage.set закоммичен: key={final_key}, table={table_name}")
             return result
 
     async def _set_with_session(
@@ -215,6 +219,9 @@ class Storage:
     ) -> bool:
         """Сохраняет значение с использованием переданной сессии"""
         json_value = json.loads(value)
+        
+        # Логируем все записи
+        logger.info(f"💾 Storage.set: key={key}, table={table_name}")
 
         expired_at = None
         if ttl is not None:
@@ -287,7 +294,7 @@ class Storage:
                 "updated_at": now
             })
 
-        logger.debug(f"Сохранено: {key} в таблицу {table_name}")
+        logger.info(f"✅ Storage.set выполнен: key={key}")
         return True
 
     async def delete(self, key: str, db_session=None, force_global: bool = False) -> bool:
@@ -535,6 +542,20 @@ class Storage:
         Это специальный метод для воркера.
         """
         async with AsyncSessionLocal() as session:
+            # Сначала получаем все ключи с task: во ВСЕХ компаниях
+            all_tasks_result = await session.execute(
+                select(StorageModel.key, StorageModel.value)
+                .where(StorageModel.key.like("%task:%"))
+                .limit(limit * 10)
+            )
+            all_tasks = list(all_tasks_result)
+            logger.info(f"🔍 Найдено {len(all_tasks)} задач с паттерном '%task:%'")
+            
+            if all_tasks:
+                for row in all_tasks[:5]:
+                    status = row.value.get("status") if isinstance(row.value, dict) else "???"
+                    logger.info(f"  - key={row.key}, status={status}")
+            
             # Запрос с фильтрацией по JSON полю status - ищем во ВСЕХ компаниях
             result = await session.execute(
                 select(StorageModel.key, StorageModel.value)
@@ -544,11 +565,15 @@ class Storage:
             )
 
             tasks = []
-            for row in result:
+            rows = list(result)
+            logger.info(f"🔍 Найдено {len(rows)} pending задач")
+            
+            for row in rows:
                 try:
                     task_data = json.dumps(row.value)
                     task = TaskConfig.model_validate_json(task_data)
                     tasks.append(task)
+                    logger.info(f"✅ Распарсена задача {task.task_id} (key={row.key})")
                 except Exception as e:
                     logger.error(f"Ошибка парсинга задачи {row.key}: {e}")
                     continue

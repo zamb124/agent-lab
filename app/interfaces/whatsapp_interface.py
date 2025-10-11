@@ -100,6 +100,35 @@ class WhatsAppInterface(BaseInterface):
 
         user_id = f"whatsapp:{from_number}"
         
+        # Проверяем доступ пользователя
+        is_allowed, error_message = self.check_user_access(from_number, profile_name)
+        if not is_allowed:
+            logger.warning(f"🚫 Доступ запрещен для пользователя {profile_name} ({from_number}) в flow {flow_id}")
+            
+            # Получаем или создаем сессию для отправки сообщения об ошибке
+            temp_session_id = await self.get_or_create_session(
+                user_id=from_number,
+                flow_id=flow_id,
+                metadata={
+                    "phone_number": from_number,
+                    "profile_name": profile_name,
+                },
+            )
+            
+            access_denied_message = Message(
+                user_id=user_id,
+                session_id=temp_session_id,
+                content=error_message,
+                flow_id=flow_id,
+                platform="whatsapp",
+                metadata={
+                    "phone_number": from_number,
+                    "message_id": message_id,
+                },
+            )
+            await self.send_message(access_denied_message)
+            return None
+        
         # Получаем или создаем сессию
         session_id = await self.get_or_create_session(
             user_id=from_number,
