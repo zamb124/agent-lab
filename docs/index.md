@@ -70,7 +70,13 @@
 
 ## 📚 Полезные ссылки
 
+**Для пользователей:**
 - [Начало работы](user_docs/getting_started.md) - первый бот за 5 минут
+- [Управление ботами](user_docs/bots_management.md) - создание и настройка
+- [Платформы](user_docs/platforms.md) - Telegram, WhatsApp, Web, AmoCRM, API
+- [Возможности](user_docs/features.md) - файлы, речь, виртуальная примерка, RAG
+
+**Для разработчиков:**
 - [API документация](api.md) - интеграция и разработка
 - [Архитектура](architecture.md) - как устроена система
 - [Интеграции](integrations/amocrm/README.md) - подключение внешних сервисов  
