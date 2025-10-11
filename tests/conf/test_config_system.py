@@ -135,7 +135,21 @@ class TestSettingsIntegration:
             test_config = {
                 "server": {"port": 9001, "debug": True},
                 "auth": {"enabled": False},
-                "llm": {"default_provider": "anthropic"}
+                "llm": {"default_provider": "anthropic"},
+                "s3": {
+                    "enabled": True,
+                    "default_bucket": "vkbucket",
+                    "buckets": {
+                        "vkbucket": {
+                            "provider": "vkcloud",
+                            "enabled": True
+                        }
+                    }
+                },
+                "rag": {
+                    "enabled": True,
+                    "default_provider": "agentset"
+                }
             }
             json.dump(test_config, f)
             temp_path = f.name
@@ -162,6 +176,9 @@ class TestSettingsIntegration:
         finally:
             # Восстанавливаем оригинальную функцию
             config_utils.get_config_paths = original_get_config_paths
+            # Сбрасываем синглтон - следующий get_settings() создаст новый с правильным конфигом
+            config._settings_instance = None
+            # Важно! После сброса НЕ вызываем reload - новый settings создастся при следующем обращении
             os.unlink(temp_path)
     
     def test_env_override_json(self):
