@@ -31,6 +31,14 @@
     "last_activity": {
       "title": "Last Activity",
       "description": "Last activity time"
+    },
+    "message_count": {
+      "title": "[TODO: models.sessionconfig.fields.message_count.title]",
+      "description": "[TODO: models.sessionconfig.fields.message_count.description]"
+    },
+    "first_message": {
+      "title": "[TODO: models.sessionconfig.fields.first_message.title]",
+      "description": "[TODO: models.sessionconfig.fields.first_message.description]"
     }
   }
 }

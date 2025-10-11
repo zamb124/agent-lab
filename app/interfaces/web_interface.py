@@ -50,14 +50,22 @@ class WebInterface(BaseInterface):
         """
         message_text = raw_data.get("message", "")
         agent_id = raw_data.get("agent_id")
-        js_session_id = raw_data.get("session_id")  # Простой UUID от JavaScript
+        js_session_id = raw_data.get("session_id")  # Может быть UUID или полный session_id
         user_id = raw_data.get("user_id", "web_user")
         files_data = raw_data.get("files", [])
 
-        # Формируем правильный session_id: web:user_id:flow_id:uuid
+        # Формируем правильный session_id
         context = get_context()
         real_user_id = context.user.user_id if context else user_id
-        session_id = f"web:{real_user_id}:{flow_id}:{js_session_id}"
+        
+        # Проверяем: если session_id уже полный (содержит префикс платформы), используем как есть
+        if js_session_id and (js_session_id.startswith('web:') or js_session_id.startswith('telegram:') or js_session_id.startswith('whatsapp:')):
+            session_id = js_session_id
+            logger.debug(f"✅ Используем полный session_id: {session_id}")
+        else:
+            # Формируем полный session_id: web:user_id:flow_id:uuid
+            session_id = f"web:{real_user_id}:{flow_id}:{js_session_id}"
+            logger.debug(f"🔧 Сформирован session_id: {session_id}")
 
         # Если нет ни текста, ни файлов - пропускаем
         if not message_text and not files_data:
