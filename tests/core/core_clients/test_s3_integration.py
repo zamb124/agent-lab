@@ -397,8 +397,8 @@ class TestS3WithDatabase:
             # 7. Генерируем публичный URL
             public_url = file_record.url
             assert public_url is not None
-            assert client.bucket_name in public_url
-            assert s3_key in public_url
+            # URL может быть прямым S3 или прокси через API
+            assert (client.bucket_name in public_url or "/api/v1/files/download/" in public_url)
             print(f"✅ 6. Публичный URL: {public_url}")
             
         finally:
@@ -487,8 +487,10 @@ class TestS3Configuration:
             print(f"✅ Бакет {bucket_name}: provider={bucket_config.provider}, enabled={bucket_config.enabled}")
     
     def test_file_record_url_generation(self):
-        """Тест генерации URL для разных провайдеров"""
-        # Yandex
+        """Тест генерации URL для файлов через платформу"""
+        # FileRecord.url всегда генерирует прокси URL через /api/v1/files/download/{file_id}
+        # Это безопаснее чем прямые S3 URL
+        
         yandex_file = FileRecord(
             file_id="yandex_test",
             provider="yandex",
@@ -501,10 +503,10 @@ class TestS3Configuration:
         )
         
         yandex_url = yandex_file.url
-        assert yandex_url == "https://storage.yandexcloud.net/my-bucket/files/test.txt"
-        print(f"✅ Yandex URL: {yandex_url}")
+        # URL должен быть прокси через нашу платформу
+        assert "/api/v1/files/download/yandex_test" in yandex_url
+        print(f"✅ Yandex URL (прокси): {yandex_url}")
         
-        # AWS
         aws_file = FileRecord(
             file_id="aws_test",
             provider="aws",
@@ -517,10 +519,10 @@ class TestS3Configuration:
         )
         
         aws_url = aws_file.url
-        assert aws_url == "https://s3.amazonaws.com/my-aws-bucket/files/test.txt"
-        print(f"✅ AWS URL: {aws_url}")
+        # URL должен быть прокси через нашу платформу
+        assert "/api/v1/files/download/aws_test" in aws_url
+        print(f"✅ AWS URL (прокси): {aws_url}")
         
-        # MinIO
         minio_file = FileRecord(
             file_id="minio_test",
             provider="minio",
@@ -533,5 +535,6 @@ class TestS3Configuration:
         )
         
         minio_url = minio_file.url
-        assert minio_url == "http://localhost:9000/my-minio-bucket/files/test.txt"
-        print(f"✅ MinIO URL: {minio_url}")
+        # URL должен быть прокси через нашу платформу
+        assert "/api/v1/files/download/minio_test" in minio_url
+        print(f"✅ MinIO URL (прокси): {minio_url}")

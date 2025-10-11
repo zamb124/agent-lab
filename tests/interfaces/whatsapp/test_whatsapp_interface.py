@@ -330,7 +330,7 @@ class TestWhatsAppInterfaceSendMessage:
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = AsyncMock(return_value={"messages": [{"id": "wamid.sent123"}]})
+        mock_response.json = MagicMock(return_value={"messages": [{"id": "wamid.sent123"}]})
         
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
@@ -376,7 +376,7 @@ class TestWhatsAppInterfaceSendMessage:
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = AsyncMock(return_value={"messages": [{"id": "wamid.interactive123"}]})
+        mock_response.json = MagicMock(return_value={"messages": [{"id": "wamid.interactive123"}]})
         
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
@@ -407,7 +407,7 @@ class TestWhatsAppInterfaceSendMessage:
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = AsyncMock(return_value={"messages": [{"id": "wamid.list123"}]})
+        mock_response.json = MagicMock(return_value={"messages": [{"id": "wamid.list123"}]})
         
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
@@ -430,7 +430,7 @@ class TestWhatsAppInterfaceSendMessage:
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = AsyncMock(return_value={"messages": [{"id": "wamid.fmt123"}]})
+        mock_response.json = MagicMock(return_value={"messages": [{"id": "wamid.fmt123"}]})
         
         sent_payload = None
         
@@ -460,7 +460,7 @@ class TestWhatsAppInterfaceMediaProcessing:
         """Тест успешного получения URL медиа"""
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = AsyncMock(return_value={
+        mock_response.json = MagicMock(return_value={
             "url": "https://lookaside.fbsbx.com/whatsapp_business/attachments/media_123",
             "mime_type": "image/jpeg",
             "file_size": 12345
@@ -495,7 +495,7 @@ class TestWhatsAppInterfaceMediaProcessing:
         """Тест когда API не вернул URL"""
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = AsyncMock(return_value={})  # Нет URL!
+        mock_response.json = MagicMock(return_value={})  # Нет URL!
         
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_response)
@@ -513,7 +513,7 @@ class TestWhatsAppInterfaceMediaProcessing:
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = AsyncMock(return_value={"id": "uploaded_media_999"})
+        mock_response.json = MagicMock(return_value={"id": "uploaded_media_999"})
         
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
@@ -547,7 +547,7 @@ class TestWhatsAppInterfaceMediaProcessing:
         """Тест когда API не вернул media_id"""
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = AsyncMock(return_value={})  # Нет id!
+        mock_response.json = MagicMock(return_value={})  # Нет id!
         
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
@@ -705,7 +705,7 @@ class TestWhatsAppInterfaceRegistration:
         
         mock_phone_response = AsyncMock()
         mock_phone_response.status_code = 200
-        mock_phone_response.json = AsyncMock(return_value={
+        mock_phone_response.json = MagicMock(return_value={
             "id": "111111111111111",
             "display_phone_number": "+1234567890",
             "verified_name": "Test Company"
@@ -943,7 +943,7 @@ class TestWhatsAppInterfaceSendAudio:
         
         mock_api_response = AsyncMock()
         mock_api_response.status_code = 200
-        mock_api_response.json = AsyncMock(return_value={"messages": [{"id": "wamid.audio"}]})
+        mock_api_response.json = MagicMock(return_value={"messages": [{"id": "wamid.audio"}]})
         
         with patch('app.interfaces.whatsapp_interface.get_default_audio_processor', return_value=mock_audio_processor):
             with patch.object(whatsapp_interface, '_upload_media', return_value="uploaded_media_456"):

@@ -36,10 +36,10 @@ class BaseAgent(ABC):
     llm_config: Optional[Dict[str, Any]] = None
     history_from: Union[str, List[str], None] = None
 
-    def __init__(self, agent_config: AgentConfig):
+    def __init__(self, agent_config: Optional[AgentConfig] = None):
         self.config = agent_config
-        self._compiled_graph = None  # Кэш для скомпилированного графа
-        self._tools = None  # Tools устанавливаются через set_tools()
+        self._compiled_graph = None
+        self._tools = None
 
     async def get_tools(self) -> List[Any]:
         """

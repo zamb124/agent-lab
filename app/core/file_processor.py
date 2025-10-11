@@ -304,6 +304,7 @@ class FileProcessor:
     def extract_file_info_from_message(message: str) -> list[Dict[str, str]]:
         """
         Извлекает информацию о файлах из сообщения агента.
+        Поддерживает оба формата: старый с [FILE] и новый с эмодзи.
 
         Args:
             message: Сообщение которое может содержать файлы
@@ -311,20 +312,29 @@ class FileProcessor:
         Returns:
             Список словарей с информацией о файлах
         """
-        # Паттерн для поиска файлов в сообщении
-        pattern = r"\[FILE\]\s*📎 Файл: ([^(]+) \(ID: ([^,]+), URL: ([^,]+), тип: ([^,]+), размер: ([^)]+)\)\s*\[/FILE\]"
-
         files = []
-        for match in re.finditer(pattern, message):
-            files.append(
-                {
-                    "name": match.group(1).strip(),
-                    "file_id": match.group(2).strip(),
-                    "url": match.group(3).strip(),
-                    "content_type": match.group(4).strip(),
-                    "size": match.group(5).strip(),
-                }
-            )
+        
+        # Новый формат: 📎 Файл: name (ID: id, [Скачать](url), Тип: type, Размер: size)
+        new_pattern = r"📎 Файл: ([^(]+) \(ID: ([^,]+), \[Скачать\]\(([^)]+)\), Тип: ([^,]+), Размер: ([^)]+)\)"
+        for match in re.finditer(new_pattern, message):
+            files.append({
+                "name": match.group(1).strip(),
+                "file_id": match.group(2).strip(),
+                "url": match.group(3).strip(),
+                "content_type": match.group(4).strip(),
+                "size": match.group(5).strip(),
+            })
+        
+        # Старый формат: [FILE] 📎 Файл: name (ID: id, URL: url, тип: type, размер: size) [/FILE]
+        old_pattern = r"\[FILE\]\s*📎 Файл: ([^(]+) \(ID: ([^,]+), URL: ([^,]+), тип: ([^,]+), размер: ([^)]+)\)\s*\[/FILE\]"
+        for match in re.finditer(old_pattern, message):
+            files.append({
+                "name": match.group(1).strip(),
+                "file_id": match.group(2).strip(),
+                "url": match.group(3).strip(),
+                "content_type": match.group(4).strip(),
+                "size": match.group(5).strip(),
+            })
 
         return files
 

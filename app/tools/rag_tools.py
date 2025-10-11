@@ -23,7 +23,7 @@ def _get_rag_config_from_context(context):
     """
     Получает RAG конфигурацию из context.
     Приоритет: agent > flow (агент может переопределить настройки flow)
-    Если конфига нет - возвращает дефолтный
+    Если конфига нет - возвращает None (RAG отключен)
     """
     if context.agent_config and context.agent_config.rag_config:
         return context.agent_config.rag_config
@@ -31,7 +31,7 @@ def _get_rag_config_from_context(context):
     if context.flow_config and context.flow_config.rag_config:
         return context.flow_config.rag_config
     
-    return AgentRAGConfig(enabled=True, namespace_scope="flow", search_scopes=["flow", "company"])
+    return None
 
 
 @tool(is_public=True, title="Поиск в базе знаний")
