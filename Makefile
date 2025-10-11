@@ -37,9 +37,8 @@ help:
 	@echo "  make sgr-logs     - Логи sgr"
 	@echo ""
 	@echo "Тесты:"
-	@echo "  make test              - Запустить тесты (без интеграционных, 4 воркера)"
-	@echo "  make test-all          - Запустить все тесты (включая интеграционные)"
-	@echo "  make test WORKERS=8    - Указать число воркеров"
+	@echo "  make test              - Запустить тесты (по умолчанию 4 воркера)"
+	@echo "  make test WORKERS=8    - Запустить тесты с указанным числом воркеров"
 
 include mk/db.mk
 include mk/app.mk
