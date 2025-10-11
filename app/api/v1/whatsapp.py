@@ -266,7 +266,7 @@ async def send_template_message(
         response = await client.post(url, json=payload, headers=headers)
         
         if response.status_code == 200:
-            result = await response.json()
+            result = response.json()
             logger.info(f"✅ Template сообщение отправлено: {phone_number}")
             return {
                 "success": True,
@@ -316,7 +316,7 @@ async def get_phone_info(flow_id: str):
         response = await client.get(url, headers=headers)
         
         if response.status_code == 200:
-            phone_data = await response.json()
+            phone_data = response.json()
             return {
                 "success": True,
                 "phone_data": phone_data

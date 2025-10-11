@@ -5,7 +5,7 @@
 
 import hashlib
 import logging
-import aiohttp
+import httpx
 from urllib.parse import urlencode
 from typing import Dict, Any, Optional, Literal, List
 from pydantic import Field
@@ -254,20 +254,21 @@ class YooMoneyProvider(BasePaymentProvider):
         }
         
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
                     f"{self.config.api_url}/operation-history",
                     data=params,
                     headers=headers
-                ) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        logger.info(f"Получено операций из YooMoney API: {len(data.get('operations', []))}")
-                        return data.get("operations", [])
-                    else:
-                        error_text = await response.text()
-                        logger.error(f"Ошибка получения истории операций: {response.status}, {error_text}")
-                        return []
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    logger.info(f"Получено операций из YooMoney API: {len(data.get('operations', []))}")
+                    return data.get("operations", [])
+                else:
+                    error_text = response.text
+                    logger.error(f"Ошибка получения истории операций: {response.status_code}, {error_text}")
+                    return []
         except Exception as e:
             logger.error(f"Ошибка запроса к YooMoney API: {e}")
             return []
