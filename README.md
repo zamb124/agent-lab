@@ -4,7 +4,7 @@ Agent Lab - LangGraph Platform
 
 **Философия**: Database-First — конфигурация в базе данных является единственным источником правды. Код определяет только поведение, но не структуру.
 
-**Документация**: [docs/](docs/) | [Архитектура](docs/architecture.md) | [API](docs/api.md) | [Биллинг](docs/billing.md) | [Интернационализация](docs/internationalization.md)
+**Документация**: [docs/](docs/) | [Архитектура](docs/architecture.md) | [Конфигурация](docs/configuration.md) | [API](docs/api.md) | [Makefile](docs/makefile.md) | [Биллинг](docs/billing.md) | [Интернационализация](docs/internationalization.md)
 
 ## Быстрый старт
 

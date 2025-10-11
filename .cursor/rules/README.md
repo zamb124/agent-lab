@@ -21,6 +21,8 @@
 
 Эти правила применяются только для релевантных файлов:
 
+- **configuration.mdc** - Работа с конфигурацией (ENV переменные, приоритеты)
+- **makefile.mdc** - Работа с Makefile (команды, модули)
 - **frontend.mdc** - Фронтенд (рекурсивный рендеринг, HTMX, модули)
 - **testing.mdc** - Тестирование (реальная БД, фикстуры, изоляция)
 
@@ -52,6 +54,8 @@
 
 Каждое правило основано на документации:
 - `architecture.mdc` ← `docs/architecture.md`
+- `configuration.mdc` ← `docs/configuration.md`
+- `makefile.mdc` ← `docs/makefile.md`
 - `langgraph.mdc` ← `docs/architecture.md` + LangGraph docs
 - `database.mdc` ← `docs/architecture.md`
 - `frontend.mdc` ← `docs/frontend.md`

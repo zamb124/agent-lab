@@ -27,6 +27,8 @@ services:
       - "${APP_PORT:-8001}:8001"
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-local}
+      - DATABASE__URL=postgresql+asyncpg://agent_user:agent_password@postgres:5432/agent_platform
+      - DATABASE__CHECKPOINTER_URL=postgresql://agent_user:agent_password@postgres:5432/agent_platform
     volumes:
       - app_logs:/app/logs
     depends_on:
@@ -43,6 +45,8 @@ services:
       dockerfile: Dockerfile
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-local}
+      - DATABASE__URL=postgresql+asyncpg://agent_user:agent_password@postgres:5432/agent_platform
+      - DATABASE__CHECKPOINTER_URL=postgresql://agent_user:agent_password@postgres:5432/agent_platform
     volumes: []
     depends_on:
       postgres:

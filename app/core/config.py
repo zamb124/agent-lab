@@ -5,9 +5,10 @@
 
 import logging
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple, Type
 from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+from pydantic.fields import FieldInfo
 
 from .config_utils import load_merged_config
 
@@ -286,13 +287,16 @@ class Settings(BaseSettings):
     rag: RAGConfig = Field(default_factory=RAGConfig)
 
     def __init__(self, **data):
-        # Загружаем JSON конфигурацию и объединяем с переданными данными
+        # Загружаем JSON конфигурацию
         json_config = load_merged_config()
-
-        # JSON имеет более низкий приоритет чем переданные данные и env переменные
-        final_data = {**json_config, **data}
-
-        super().__init__(**final_data)
+        
+        # Объединяем: JSON имеет низкий приоритет, data - высокий
+        # НО! super().__init__ читает env переменные которые имеют еще более высокий приоритет
+        # Поэтому передаем только JSON, а env переменные Pydantic прочитает сам
+        merged_data = {**json_config, **data}
+        
+        # BaseSettings автоматически применит env переменные поверх merged_data
+        super().__init__(**merged_data)
 
     class Config:
         env_file = [

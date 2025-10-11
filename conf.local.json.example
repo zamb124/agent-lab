@@ -1,0 +1,19 @@
+{
+  "comment": "Пример conf.local.json для локальной разработки",
+  "comment2": "Этот файл переопределяет значения из conf.json",
+  "comment3": "Скопируй в conf.local.json и настрой под себя",
+  
+  "server": {
+    "port": 8002,
+    "debug": true
+  },
+  
+  "database": {
+    "url": "postgresql+asyncpg://dev:dev@localhost:5433/dev_db"
+  },
+  
+  "llm": {
+    "default_provider": "ollama"
+  }
+}
+

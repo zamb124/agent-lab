@@ -98,9 +98,46 @@ def get_config_paths() -> list[Path]:
     return config_paths
 
 
+def remove_env_overridden_values(config: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
+    """
+    Удаляет из конфигурации значения, которые переопределены через env переменные.
+    Это нужно чтобы env переменные имели приоритет над JSON конфигурацией.
+    
+    Args:
+        config: Словарь конфигурации
+        prefix: Префикс для построения имени env переменной (для рекурсии)
+    
+    Returns:
+        Конфигурация без значений переопределенных через env
+    """
+    result = {}
+    
+    for key, value in config.items():
+        # Формируем имя env переменной (DATABASE__URL для database.url)
+        env_key = f"{prefix}__{key}".upper() if prefix else key.upper()
+        
+        # Проверяем есть ли env переменная
+        if os.getenv(env_key) is not None:
+            # Если есть env переменная - пропускаем это значение из JSON
+            logger.debug(f"Пропускаем {key} из JSON, используется env переменная {env_key}")
+            continue
+        
+        # Если значение - словарь, проверяем рекурсивно
+        if isinstance(value, dict):
+            nested_result = remove_env_overridden_values(value, env_key)
+            # Добавляем только если остались какие-то значения
+            if nested_result:
+                result[key] = nested_result
+        else:
+            result[key] = value
+    
+    return result
+
+
 def load_merged_config() -> Dict[str, Any]:
     """
     Загружает и объединяет все файлы конфигурации.
+    Удаляет значения, переопределенные через env переменные.
 
     Returns:
         Итоговая объединенная конфигурация
@@ -114,6 +151,9 @@ def load_merged_config() -> Dict[str, Any]:
             merged_config = merge_configs(merged_config, config)
             logger.debug(f"Применена конфигурация из {config_path}")
 
+    # Удаляем значения переопределенные через env переменные
+    merged_config = remove_env_overridden_values(merged_config)
+    
     return merged_config
 
 
