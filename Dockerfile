@@ -1,8 +1,5 @@
 FROM python:3.12-slim
 
-# Build аргумент для выбора конфига
-ARG CONFIG_FILE=conf.json
-
 # Устанавливаем системные зависимости
 RUN apt-get update && apt-get install -y \
     gcc \
@@ -24,7 +21,7 @@ COPY docs/ ./docs/
 COPY app/ ./app/
 COPY run.py ./
 COPY run_worker.py ./
-COPY ${CONFIG_FILE} ./conf.json
+COPY conf.json ./
 
 # Устанавливаем зависимости
 RUN uv pip install --system -e .
