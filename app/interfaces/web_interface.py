@@ -58,6 +58,31 @@ class WebInterface(BaseInterface):
         context = get_context()
         real_user_id = context.user.user_id if context else user_id
         
+        # Получаем email пользователя (если доступен в контексте)
+        user_email = context.user.email if context and hasattr(context.user, 'email') else None
+        
+        # Проверяем доступ пользователя
+        is_allowed, error_message = self.check_user_access(real_user_id, user_email)
+        if not is_allowed:
+            logger.warning(f"🚫 Доступ запрещен для пользователя {real_user_id} ({user_email}) в flow {flow_id}")
+            
+            # Формируем временный session_id для ошибки
+            temp_session_id = f"web:{real_user_id}:{flow_id}:{uuid.uuid4().hex[:8]}"
+            
+            access_denied_message = Message(
+                user_id=real_user_id,
+                session_id=temp_session_id,
+                content=error_message,
+                flow_id=flow_id,
+                platform="web",
+                metadata={
+                    "web_chat": True,
+                    "is_access_denied": True,
+                },
+            )
+            await self.send_message(access_denied_message)
+            return None
+        
         # Проверяем: если session_id уже полный (содержит префикс платформы), используем как есть
         if js_session_id and (js_session_id.startswith('web:') or js_session_id.startswith('telegram:') or js_session_id.startswith('whatsapp:')):
             session_id = js_session_id

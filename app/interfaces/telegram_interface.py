@@ -40,7 +40,23 @@ class TelegramInterface(BaseInterface):
             tg_message = raw_data["message"]
             user_id = str(tg_message["from"]["id"])
             chat_id = str(tg_message["chat"]["id"])
+            username = tg_message["from"].get("username")
             text = tg_message.get("text", "") or tg_message.get("caption", "")
+            
+            # Проверяем доступ пользователя
+            is_allowed, error_message = self.check_user_access(user_id, username)
+            if not is_allowed:
+                logger.warning(f"🚫 Доступ запрещен для пользователя {username or user_id} в flow {flow_id}")
+                access_denied_message = Message(
+                    user_id=user_id,
+                    session_id="access_denied",
+                    content=error_message,
+                    flow_id=flow_id,
+                    platform="telegram",
+                    metadata={"chat_id": chat_id},
+                )
+                await self.send_message(access_denied_message)
+                return None
 
             # Обрабатываем файлы если есть
             files_data = await self._extract_files_from_message(tg_message)

@@ -47,6 +47,36 @@ class BaseInterface(ABC):
         self.platform_name = self.__class__.__name__.replace("Interface", "").lower()
         self.storage = Storage()
 
+    def check_user_access(self, user_identifier: str, username: str = None) -> Tuple[bool, Optional[str]]:
+        """
+        Проверяет доступ пользователя к flow на основе allowed_users в platform_config.
+        
+        Args:
+            user_identifier: ID пользователя (например, chat_id в Telegram)
+            username: Username пользователя (например, @shvedivik без @)
+            
+        Returns:
+            Tuple[allowed, error_message]: (True, None) если доступ разрешен, 
+                                           (False, "сообщение") если запрещен
+        """
+        allowed_users = self.platform_config.get("allowed_users", [])
+        
+        # Если список не задан или пустой - доступ всем
+        if not allowed_users or len(allowed_users) == 0:
+            return True, None
+        
+        # Проверяем user_identifier и username в списке разрешенных
+        user_id_str = str(user_identifier)
+        
+        # Поддерживаем как username, так и user_id
+        is_allowed = user_id_str in allowed_users or (username and username in allowed_users)
+        
+        if is_allowed:
+            return True, None
+        else:
+            error_msg = f"❌ У вас нет доступа к этому боту.\n\nВаш идентификатор: {username or user_id_str}"
+            return False, error_msg
+
     @abstractmethod
     async def handle_message(
         self, raw_data: Dict[str, Any], flow_id: str
@@ -281,7 +311,23 @@ class BaseInterface(ABC):
             created_at=datetime.now(timezone.utc),
         )
 
-        await storage.set(f"task:{task_id}", task_config.model_dump_json())
+        task_key = f"task:{task_id}"
+        logger.info(f"📋 Создаем задачу {task_id} для flow {flow_id}")
+        logger.info(f"  - Исходный ключ: {task_key}")
+        logger.info(f"  - Статус: {task_config.status}")
+        logger.info(f"  - Компания в контексте: {company_id}")
+        
+        logger.info(f"🔵 ПЕРЕД storage.set: key={task_key}")
+        await storage.set(task_key, task_config.model_dump_json())
+        logger.info(f"🟢 ПОСЛЕ storage.set: key={task_key}")
+        
+        # Проверяем что задача реально сохранилась
+        saved_task = await storage.get(task_key)
+        if saved_task:
+            logger.info(f"✅ Задача {task_id} сохранена и проверена в БД")
+        else:
+            logger.error(f"❌ Задача {task_id} НЕ найдена после сохранения!")
+        
         logger.info(f"📋 Создана задача {task_id} для flow {flow_id}")
 
         return task_id
