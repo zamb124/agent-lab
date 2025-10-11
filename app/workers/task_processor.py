@@ -182,6 +182,9 @@ class TaskProcessor:
                 logger.info(f"🔄 Сохраняем задачу с interrupt: {task.task_id}")
                 await self.storage.set_task_config(task)
                 logger.info(f"🔄 Задача с interrupt сохранена: {task.task_id}")
+                
+                # Обновляем статистику сессии
+                await self._update_session_stats(task.session_id, user_msg)
 
                 # КРИТИЧНО: Переводим сессию в WAITING_INPUT чтобы разблокировать новые сообщения
                 await self._set_session_waiting_input(task.session_id, task.context.platform)
@@ -207,6 +210,9 @@ class TaskProcessor:
 
             await self.storage.set_task_config(task)
             logger.info(f"✅ {task.task_id} завершена")
+            
+            # ВАЖНО: Обновляем статистику сессии (Database-First)
+            await self._update_session_stats(task.session_id, user_message)
 
             # Возвращаем сессию в статус ACTIVE
             await self._set_session_active(task.session_id, task.context.platform)
@@ -231,6 +237,10 @@ class TaskProcessor:
                 "interrupt_data": str(interrupt),
             }
             await self.storage.set_task_config(task)
+            
+            # Обновляем статистику сессии
+            await self._update_session_stats(task.session_id, user_message)
+            
             await self._set_session_waiting_input(task.session_id, task.context.platform)
             await self._send_result_via_interface(task, str(interrupt.value))
             return
@@ -307,6 +317,27 @@ class TaskProcessor:
             logger.info(f"🔄 Сессия {session_id} переведена в WAITING_INPUT")
         else:
             logger.warning(f"Сессия {session_id} не найдена для перевода в WAITING_INPUT")
+    
+    async def _update_session_stats(self, session_id: str, user_message: str):
+        """Обновляет статистику сессии: message_count и first_message"""
+        session_key = f"session:{session_id}"
+        session_data = await self.storage.get(session_key)
+        
+        if session_data:
+            session_config = SessionConfig.model_validate_json(session_data)
+            
+            # Увеличиваем на +2: пользовательское сообщение + ответ агента
+            session_config.message_count += 2
+            
+            # Устанавливаем первое сообщение если еще не установлено
+            if not session_config.first_message and user_message:
+                preview = user_message[:100] if len(user_message) > 100 else user_message
+                session_config.first_message = preview
+            
+            await self.storage.set(session_key, session_config.model_dump_json())
+            logger.debug(f"📊 Статистика сессии обновлена: {session_config.message_count} сообщений")
+        else:
+            logger.warning(f"⚠️ Сессия {session_id} не найдена для обновления статистики")
 
     async def _send_error_message_to_user(self, task, error_message: str):
         """Отправляет сообщение об ошибке пользователю"""

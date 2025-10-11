@@ -172,6 +172,21 @@ class FlowFactory:
             f"✅ Загружено {len(all_messages)} сообщений из {checkpoint_count} checkpoint'ов для {session_id}"
         )
         
+        # Обновляем статистику для старых сессий (Database-First: актуализация данных)
+        if session_config and session_config.message_count == 0 and len(all_messages) > 0:
+            session_config.message_count = len(all_messages)
+            
+            # Ищем первое сообщение пользователя
+            if not session_config.first_message:
+                for msg in all_messages:
+                    if msg.role.value == "user" and msg.content:
+                        preview = msg.content[:100] if len(msg.content) > 100 else msg.content
+                        session_config.first_message = preview
+                        break
+            
+            await self.storage.set_session_config(session_config)
+            logger.info(f"📊 Обновлена статистика старой сессии: {len(all_messages)} сообщений")
+        
         return MessageHistoryResponse(
             session_id=session_id,
             thread_id=session_id,
@@ -247,7 +262,7 @@ class FlowFactory:
         flow_cache: Dict[str, Optional[str]] = {}
         
         async def process_session(session: Any) -> SessionListItem:
-            message_count, first_message = await self._get_session_info(session.session_id)
+            # Database-First: все данные берем из SessionConfig (БД), не обращаемся к checkpointer
             
             flow_name = None
             if session.flow_id:
@@ -280,8 +295,8 @@ class FlowFactory:
                 user_id=session.user_id,
                 user_name=user_name,
                 status=session.status.value,
-                message_count=message_count,
-                first_message=first_message,
+                message_count=session.message_count,
+                first_message=session.first_message,
                 created_at=session.created_at,
                 last_activity=session.last_activity,
                 metadata=session.metadata

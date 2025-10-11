@@ -694,6 +694,16 @@ class SessionConfig(BaseModel):
         description="Время последней активности",
         readonly=True,
     )
+    message_count: int = Field(
+        default=0,
+        title="Количество сообщений",
+        description="Общее количество сообщений в сессии",
+    )
+    first_message: Optional[str] = Field(
+        default=None,
+        title="Первое сообщение",
+        description="Первое сообщение пользователя (превью)",
+    )
 
     @property
     def session_key(self) -> str:
