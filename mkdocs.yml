@@ -8,40 +8,57 @@ theme:
   name: material
   language: ru
   palette:
-    - scheme: default
-      primary: indigo
-      accent: indigo
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Переключить на светлую тему
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: purple
       toggle:
         icon: material/brightness-7
         name: Переключить на тёмную тему
-    - scheme: slate
-      primary: indigo
-      accent: indigo
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: purple
       toggle:
         icon: material/brightness-4
-        name: Переключить на светлую тему
+        name: Переключить на автоматическую тему
   features:
     - navigation.instant
+    - navigation.instant.progress
     - navigation.tracking
     - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
     - navigation.expand
     - navigation.top
     - navigation.path
+    - navigation.indexes
     - search.suggest
     - search.highlight
     - search.share
     - content.code.copy
     - content.code.annotate
+    - content.tooltips
+    - toc.follow
   icon:
     repo: fontawesome/brands/github
   logo: logo.png
   favicon: logo.png
+  font:
+    text: Inter
+    code: JetBrains Mono
 
 extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/your-repo/agent-lab
+
+extra_javascript:
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
 
 markdown_extensions:
   - pymdownx.highlight:
@@ -50,7 +67,11 @@ markdown_extensions:
       pygments_lang_class: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - admonition
   - pymdownx.details
   - pymdownx.tabbed:
@@ -115,10 +136,10 @@ nav:
       - Управление ботами: user_docs/bots_management.md
       - Платформы: user_docs/platforms.md
       - Возможности: user_docs/features.md
-      - Сценарии использования: user_docs/use_cases.md
   
   - API и интеграции:
       - API документация: api.md
+      - API Reference: api_reference.md
       - Интеграции:
           - AmoCRM:
               - Обзор: integrations/amocrm/README.md

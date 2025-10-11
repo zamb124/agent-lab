@@ -16,7 +16,13 @@ from app.models import TaskStatus
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(
+    tags=["Боты и сообщения"],
+    responses={
+        404: {"description": "Бот или задача не найдены"},
+        500: {"description": "Внутренняя ошибка сервера"}
+    }
+)
 
 
 class MessageFile(BaseModel):
@@ -67,17 +73,33 @@ class TaskResponse(BaseModel):
     completed_at: Optional[str] = None
 
 
-@router.post("/{flow_id}/message", response_model=FlowMessageResponse)
+@router.post("/{flow_id}/message", response_model=FlowMessageResponse, summary="Отправить сообщение боту")
 async def send_message_to_flow(flow_id: str, request: FlowMessageRequest):
     """
-    Отправляет сообщение в флоу.
+    Отправляет текстовое сообщение боту для обработки.
+    
+    Создает задачу на обработку сообщения. Бот обрабатывает запрос асинхронно.
+    Для получения ответа используйте polling endpoint GET /{flow_id}/task/{task_id}.
+    
+    **Процесс:**
+    1. Отправляете сообщение → получаете task_id
+    2. Периодически запрашиваете статус задачи
+    3. Когда status = "completed" → получаете ответ бота
+    
+    **Сессии:**
+    - Если session_id не указан - создается новая сессия
+    - Для продолжения диалога передавайте тот же session_id
+    
+    **Файлы:**
+    - Можно прикрепить файлы (base64 encoded)
+    - Бот получит доступ к содержимому файлов
 
     Args:
-        flow_id: ID флоу
-        request: Данные сообщения
+        flow_id: ID бота (например: "my_support_bot")
+        request: Данные сообщения с текстом, файлами и метаданными
 
     Returns:
-        Информация о созданной задаче
+        task_id для polling и session_id для продолжения диалога
     """
     # Проверяем что флоу существует и поддерживает API
     storage = Storage()
@@ -152,17 +174,31 @@ async def send_message_to_flow(flow_id: str, request: FlowMessageRequest):
     )
 
 
-@router.get("/{flow_id}/task/{task_id}", response_model=TaskResponse)
+@router.get("/{flow_id}/task/{task_id}", response_model=TaskResponse, summary="Получить результат задачи")
 async def get_task_result(flow_id: str, task_id: str):
     """
-    Получает результат выполнения задачи (polling).
+    Получает статус и результат обработки сообщения (polling).
+    
+    **Статусы задачи:**
+    - `pending` - ожидает обработки
+    - `processing` - обрабатывается ботом
+    - `completed` - выполнена, результат в поле result
+    - `waiting_for_input` - бот ожидает ответа пользователя (вопрос в result.question)
+    - `failed` - ошибка, детали в error_message
+    
+    **Polling:**
+    Рекомендуем запрашивать статус каждые 1-2 секунды до получения completed или failed.
+    
+    **Когда бот задает вопрос:**
+    Если status = "waiting_for_input", в result.question будет вопрос бота.
+    Отправьте ответ через POST /{flow_id}/message с тем же session_id.
 
     Args:
-        flow_id: ID флоу
-        task_id: ID задачи
+        flow_id: ID бота
+        task_id: ID задачи полученный при отправке сообщения
 
     Returns:
-        Результат задачи
+        Статус задачи и результат (если completed)
     """
     try:
         storage = Storage()
@@ -213,18 +249,25 @@ async def get_task_result(flow_id: str, task_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{flow_id}/session/{session_id}/history")
+@router.get("/{flow_id}/session/{session_id}/history", summary="История диалога")
 async def get_session_history(flow_id: str, session_id: str, limit: int = 50):
     """
-    Получает историю сессии.
+    Получает историю сообщений в сессии (диалоге).
+    
+    Возвращает все сообщения пользователя и бота в хронологическом порядке.
+    
+    Полезно для:
+    - Отображения истории диалога в UI
+    - Анализа взаимодействий
+    - Восстановления контекста
 
     Args:
-        flow_id: ID флоу
-        session_id: ID сессии
-        limit: Максимальное количество сообщений
+        flow_id: ID бота
+        session_id: ID сессии (диалога)
+        limit: Максимальное количество сообщений (по умолчанию 50)
 
     Returns:
-        История сессии
+        Массив сообщений с ролями, текстом и временными метками
     """
     try:
         # Здесь можно реализовать получение истории из checkpointer
@@ -241,17 +284,24 @@ async def get_session_history(flow_id: str, session_id: str, limit: int = 50):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/{flow_id}/session/{session_id}")
+@router.delete("/{flow_id}/session/{session_id}", summary="Очистить сессию")
 async def clear_session(flow_id: str, session_id: str):
     """
-    Очищает сессию.
+    Деактивирует сессию (завершает диалог).
+    
+    После очистки сессии:
+    - История сохраняется
+    - Новое сообщение с тем же session_id создаст новый диалог
+    - Контекст сбрасывается
+    
+    Используйте когда пользователь завершил диалог или начинает новую тему.
 
     Args:
-        flow_id: ID флоу
-        session_id: ID сессии
+        flow_id: ID бота
+        session_id: ID сессии для деактивации
 
     Returns:
-        Результат операции
+        Подтверждение успешной операции
     """
     try:
         # Деактивируем сессию
@@ -284,16 +334,18 @@ async def clear_session(flow_id: str, session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{flow_id}/info")
+@router.get("/{flow_id}/info", summary="Информация о боте")
 async def get_flow_info(flow_id: str):
     """
-    Получает информацию о флоу.
+    Получает информацию о боте: название, описание, поддерживаемые платформы.
+    
+    Используйте этот endpoint чтобы проверить доступность бота перед отправкой сообщений.
 
     Args:
-        flow_id: ID флоу
+        flow_id: ID бота
 
     Returns:
-        Информация о флоу
+        Название, описание, список платформ, entry point агент
     """
     try:
         storage = Storage()
@@ -321,13 +373,15 @@ async def get_flow_info(flow_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/")
+@router.get("/", summary="Список доступных ботов")
 async def list_flows():
     """
-    Получает список всех флоу с поддержкой API.
+    Получает список всех ботов доступных через API.
+    
+    Возвращает только ботов с включенной платформой API.
 
     Returns:
-        Список флоу
+        Массив ботов с их ID, названиями и описаниями
     """
     try:
         storage = Storage()

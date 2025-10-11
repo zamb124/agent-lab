@@ -13,14 +13,35 @@ from app.core.context import get_context
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(
+    tags=["Файлы и медиа"],
+    responses={
+        404: {"description": "Файл не найден"},
+        403: {"description": "Нет доступа к файлу"},
+        500: {"description": "Внутренняя ошибка сервера"}
+    }
+)
 
 
-@router.get("/download/{file_id}")
+@router.get("/download/{file_id}", summary="Скачать файл")
 async def download_file(file_id: str):
     """
-    Скачивание файла через платформу с проверкой доступа.
-    Работает как для обычных файлов, так и для аудиофайлов.
+    Скачивание файла или аудио с проверкой прав доступа.
+    
+    **Поддерживаемые типы:**
+    - Обычные файлы (документы, изображения)
+    - Аудиофайлы (с распознанной речью)
+    
+    **Безопасность:**
+    - Проверка прав доступа
+    - Публичные файлы доступны всем
+    - Приватные файлы только владельцу
+    
+    Args:
+        file_id: ID файла в системе (получается при загрузке или из сообщения бота)
+        
+    Returns:
+        Файл для скачивания (streaming)
     """
     try:
         # Определяем тип файла по префиксу
@@ -111,11 +132,26 @@ async def download_file(file_id: str):
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
 
-@router.get("/info/{file_id}")
+@router.get("/info/{file_id}", summary="Информация о файле")
 async def get_file_info(file_id: str):
     """
-    Получение информации о файле.
-    Работает как для обычных файлов, так и для аудиофайлов.
+    Получает метаданные файла без скачивания.
+    
+    **Возвращает:**
+    - Название файла
+    - Размер
+    - Тип (MIME type)
+    - Дата загрузки
+    - Теги
+    - Для аудио: распознанный текст и уверенность
+    
+    Полезно для отображения информации о файле перед скачиванием.
+
+    Args:
+        file_id: ID файла
+        
+    Returns:
+        Метаданные файла
     """
     try:
         # Получаем текущего пользователя из контекста
@@ -179,10 +215,31 @@ async def get_file_info(file_id: str):
 
 # ============ АУДИО API ============
 
-@router.post("/audio/upload")
+@router.post("/audio/upload", summary="Загрузить аудио")
 async def upload_audio(file: UploadFile = File(...), auto_recognize: bool = True):
     """
-    Загрузка аудиофайла с автоматическим распознаванием речи
+    Загружает аудиофайл и опционально распознает речь.
+    
+    **Поддерживаемые форматы:**
+    - MP3
+    - WAV
+    - OGG
+    - M4A
+    
+    **Автоматическое распознавание:**
+    Если auto_recognize=true (по умолчанию):
+    - Речь распознается автоматически
+    - Результат в поле recognition_text
+    - Уверенность в recognition_confidence
+    
+    **Максимальный размер:** 50MB
+    
+    Args:
+        file: Аудиофайл для загрузки
+        auto_recognize: Автоматически распознать речь (по умолчанию true)
+        
+    Returns:
+        audio_id, статус, распознанный текст (если auto_recognize=true)
     """
     try:
         # Получаем текущего пользователя из контекста
@@ -226,10 +283,23 @@ async def upload_audio(file: UploadFile = File(...), auto_recognize: bool = True
         raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
 
-@router.post("/audio/{audio_id}/recognize")
+@router.post("/audio/{audio_id}/recognize", summary="Распознать речь")
 async def recognize_audio(audio_id: str):
     """
-    Принудительное распознавание речи в аудиофайле
+    Запускает распознавание речи для уже загруженного аудио.
+    
+    Используйте если загрузили аудио с auto_recognize=false и теперь хотите распознать.
+    
+    **Результат:**
+    - recognition_text - распознанный текст
+    - recognition_confidence - уверенность (0-1)
+    - recognition_qid - ID запроса для отладки
+    
+    Args:
+        audio_id: ID аудиофайла
+        
+    Returns:
+        Распознанный текст и метаданные
     """
     try:
         # Получаем текущего пользователя из контекста

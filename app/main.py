@@ -260,51 +260,53 @@ async def utf8_response_middleware(request: Request, call_next):
 
 # Подключение роутеров
 
-# API v1
-app.include_router(webhooks.router, prefix="/api/v1", tags=["webhooks"])
-app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
-app.include_router(telegram.router, prefix="/api/v1", tags=["telegram"])
-app.include_router(whatsapp.router, prefix="/api/v1", tags=["whatsapp"])
-app.include_router(tokens.router, prefix="/api/v1", tags=["tokens"])
-app.include_router(auth.router, prefix="/auth", tags=["auth"])
-app.include_router(flows.router, prefix="/api/v1/flows", tags=["flows"])
-app.include_router(fashn.router, prefix="/api/v1/fashn", tags=["fashn"])
-app.include_router(files.router, prefix="/api/v1/files", tags=["files"])
-app.include_router(leads.router, prefix="/api/v1", tags=["leads"])
-app.include_router(history.router, tags=["history"])
-app.include_router(payments.router, prefix="/api/v1", tags=["payments"])
-app.include_router(admin_payments.router, prefix="/api/v1", tags=["admin-payments"])
-app.include_router(variables.router, prefix="/api/v1", tags=["variables"])
-app.include_router(knowledge_base.router, prefix="/api/v1", tags=["knowledge-base"])
+# API v1 - Публичное Platform API
+app.include_router(flows.router, prefix="/api/v1/flows")
+app.include_router(files.router, prefix="/api/v1/files")
+app.include_router(payments.router, prefix="/api/v1")
+app.include_router(fashn.router, prefix="/api/v1/fashn")
+app.include_router(knowledge_base.router, prefix="/api/v1")
+app.include_router(leads.router, prefix="/api/v1")
+app.include_router(history.router)
 
-# Frontend API (JSON CRUD)
-app.include_router(frontend_models.router, tags=["frontend-models"])  # Убираем дублирующий prefix
-app.include_router(frontend_flows.router, prefix="/frontend/api", tags=["frontend-flows"])
-app.include_router(frontend_agents.router, prefix="/frontend/api", tags=["frontend-agents"])
-app.include_router(frontend_tools.router, prefix="/frontend/api", tags=["frontend-tools"])
-app.include_router(frontend_variables.router, prefix="/frontend/api", tags=["frontend-variables"])
-app.include_router(frontend_i18n.router, prefix="/frontend/api/i18n", tags=["frontend-i18n"])
+# API v1 - Внутреннее API (скрыто от публичной документации)
+app.include_router(webhooks.router, prefix="/api/v1", tags=["webhooks"], include_in_schema=False)
+app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"], include_in_schema=False)
+app.include_router(telegram.router, prefix="/api/v1", tags=["telegram"], include_in_schema=False)
+app.include_router(whatsapp.router, prefix="/api/v1", tags=["whatsapp"], include_in_schema=False)
+app.include_router(tokens.router, prefix="/api/v1", tags=["tokens"], include_in_schema=False)
+app.include_router(auth.router, prefix="/auth", tags=["auth"], include_in_schema=False)
+app.include_router(admin_payments.router, prefix="/api/v1", tags=["admin-payments"], include_in_schema=False)
+app.include_router(variables.router, prefix="/api/v1", tags=["variables"], include_in_schema=False)
 
-# Frontend Pages (HTML)
-app.include_router(public_pages.router, tags=["public-pages"])
-app.include_router(auth_pages.router, tags=["auth-pages"])
-app.include_router(dashboard_pages.router, tags=["dashboard-pages"])
+# Frontend API (JSON CRUD) - скрыто от публичной документации
+app.include_router(frontend_models.router, tags=["frontend-models"], include_in_schema=False)
+app.include_router(frontend_flows.router, prefix="/frontend/api", tags=["frontend-flows"], include_in_schema=False)
+app.include_router(frontend_agents.router, prefix="/frontend/api", tags=["frontend-agents"], include_in_schema=False)
+app.include_router(frontend_tools.router, prefix="/frontend/api", tags=["frontend-tools"], include_in_schema=False)
+app.include_router(frontend_variables.router, prefix="/frontend/api", tags=["frontend-variables"], include_in_schema=False)
+app.include_router(frontend_i18n.router, prefix="/frontend/api/i18n", tags=["frontend-i18n"], include_in_schema=False)
 
-# Frontend Modules
-app.include_router(chat_module.router, tags=["chat-module"])
-app.include_router(chats_module, tags=["chats-module"])
-app.include_router(builder_module.router, tags=["builder-module"])
-app.include_router(billing_module, tags=["billing-module"])
-app.include_router(admin_module, tags=["admin-module"])
-app.include_router(history_module, tags=["history-module"])
-app.include_router(bots_module, tags=["bots-module"])
-app.include_router(variables_module, tags=["variables-module"])
+# Frontend Pages (HTML) - скрыто от публичной документации
+app.include_router(public_pages.router, tags=["public-pages"], include_in_schema=False)
+app.include_router(auth_pages.router, tags=["auth-pages"], include_in_schema=False)
+app.include_router(dashboard_pages.router, tags=["dashboard-pages"], include_in_schema=False)
 
-# WebSockets
-app.include_router(websocket_notifications.router, tags=["websocket-notifications"])
-app.include_router(websocket_chat.router, prefix="/frontend/chat", tags=["websocket-chat"])
-app.include_router(websocket_status_api.router, tags=["websocket-status"])
-app.include_router(amocrm_router, prefix="/api/amocrm", tags=["amocrm"])
+# Frontend Modules - скрыто от публичной документации
+app.include_router(chat_module.router, tags=["chat-module"], include_in_schema=False)
+app.include_router(chats_module, tags=["chats-module"], include_in_schema=False)
+app.include_router(builder_module.router, tags=["builder-module"], include_in_schema=False)
+app.include_router(billing_module, tags=["billing-module"], include_in_schema=False)
+app.include_router(admin_module, tags=["admin-module"], include_in_schema=False)
+app.include_router(history_module, tags=["history-module"], include_in_schema=False)
+app.include_router(bots_module, tags=["bots-module"], include_in_schema=False)
+app.include_router(variables_module, tags=["variables-module"], include_in_schema=False)
+
+# WebSockets - скрыто от публичной документации
+app.include_router(websocket_notifications.router, tags=["websocket-notifications"], include_in_schema=False)
+app.include_router(websocket_chat.router, prefix="/frontend/chat", tags=["websocket-chat"], include_in_schema=False)
+app.include_router(websocket_status_api.router, tags=["websocket-status"], include_in_schema=False)
+app.include_router(amocrm_router, prefix="/api/amocrm", tags=["amocrm"], include_in_schema=False)
 
 # Модульные статические файлы (монтируем ПЕРВЫМИ - более специфичные маршруты)
 modules_dir = Path(__file__).parent / "frontend" / "modules"
@@ -325,16 +327,28 @@ if docs_dir.exists():
     logger.info(f"📚 Документация MkDocs доступна на /docs")
 
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 async def root(request: Request):
     """Корневой эндпоинт - главная страница"""
     from app.frontend.pages.public import landing_page
     return await landing_page(request)
 
 
-@app.get("/health")
+@app.get("/health", summary="Проверка работоспособности", tags=["Система"])
 async def health():
-    """Проверка состояния сервиса"""
+    """
+    Проверяет работоспособность сервиса.
+    
+    **Возвращает статус:**
+    - status: "healthy" если всё работает
+    - database: состояние подключения к БД
+    - checkpointer: состояние LangGraph checkpointer
+    
+    Используйте для мониторинга и health checks.
+    
+    Returns:
+        Статус всех компонентов системы
+    """
     return {"status": "healthy", "database": "connected", "checkpointer": "initialized"}
 
 
