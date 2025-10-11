@@ -132,8 +132,8 @@ async def test_full_payment_flow_with_db(
     payment_url = result["payment_url"]
     
     # Проверяем что платеж создался
-    # transaction_id имеет формат: {company_id}:txn_{uuid} или просто txn_{uuid}
-    assert ":txn_" in transaction_id or transaction_id.startswith("txn_")
+    # transaction_id имеет формат: {company_id}:txn_{uuid}
+    assert ":txn_" in transaction_id
     assert "yoomoney.ru" in payment_url
     assert result["amount"] == 1500.0
     

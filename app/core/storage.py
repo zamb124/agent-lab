@@ -459,17 +459,29 @@ class Storage:
         sessions = []
         for key in keys:
             session_json = await self.get(key)
-            if session_json:
-                session = SessionConfig.model_validate_json(session_json)
-                # Фильтруем по платформе, пользователю и flow
-                if (
-                    session.platform == platform
-                    and session.user_id == user_id
-                    and session.flow_id == flow_id
-                    and session.status
-                    in [SessionStatus.ACTIVE, SessionStatus.PROCESSING]
-                ):
-                    sessions.append(session)
+            if not session_json:
+                continue
+                
+            # Проверяем что это SessionConfig по наличию обязательных полей
+            import json
+            data = json.loads(session_json)
+            
+            if not isinstance(data, dict):
+                continue
+            if not all(field in data for field in ['session_id', 'platform', 'user_id']):
+                logger.debug(f"Ключ {key} не содержит обязательные поля SessionConfig, пропускаем")
+                continue
+                
+            session = SessionConfig.model_validate_json(session_json)
+            # Фильтруем по платформе, пользователю и flow
+            if (
+                session.platform == platform
+                and session.user_id == user_id
+                and session.flow_id == flow_id
+                and session.status
+                in [SessionStatus.ACTIVE, SessionStatus.PROCESSING]
+            ):
+                sessions.append(session)
 
         return sessions
 

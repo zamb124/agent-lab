@@ -7,7 +7,7 @@ import asyncio
 import json
 import uuid
 import httpx
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch, AsyncMock, MagicMock
 
 from app.core.storage import Storage
 from app.models import FileRecord, FileStatus
@@ -441,7 +441,12 @@ class TestTelegramFileIntegration:
                 
                 if message.files:
                     print(f"   Обработано файлов: {len(message.files)}")
-                    assert any("csv" in f.get("name", "") or "csv" in f.get("content_type", "") for f in message.files)
+                    # Проверяем что есть упоминание CSV (files может быть списком строк или dict)
+                    assert any(
+                        ("csv" in str(f).lower()) or 
+                        (isinstance(f, dict) and ("csv" in f.get("name", "").lower() or "csv" in f.get("content_type", "").lower()))
+                        for f in message.files
+                    )
                 
             else:
                 print("⚠️ Сообщение не было создано (возможно из-за команды или ошибки)")

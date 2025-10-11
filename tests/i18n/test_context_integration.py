@@ -324,6 +324,7 @@ class TestAuthMiddlewareContextCreation:
         request.cookies.get.side_effect = lambda key, default=None: {
             "session_id": "frontend_session"
         }.get(key, default)
+        request.cookies.keys.return_value = ["session_id"]
         
         with patch('app.middleware.auth.AuthService') as mock_auth_service:
             mock_auth_instance = Mock()

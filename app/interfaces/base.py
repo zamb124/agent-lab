@@ -166,6 +166,14 @@ class BaseInterface(ABC):
         logger.info(f"🔍 Данные сессии найдены: {bool(session_data)}")
 
         if session_data:
+            # Проверяем что это действительно SessionConfig
+            import json
+            data = json.loads(session_data)
+            if not isinstance(data, dict) or not all(field in data for field in ['session_id', 'platform', 'user_id']):
+                logger.warning(f"Данные в {session_key} не являются SessionConfig")
+                session_data = None
+            
+        if session_data:
             session_config = SessionConfig.model_validate_json(session_data)
             logger.info(f"🔍 Текущий статус сессии: {session_config.status}")
 

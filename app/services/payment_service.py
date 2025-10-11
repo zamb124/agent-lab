@@ -248,6 +248,25 @@ class PaymentService:
     
     async def get_transaction(self, transaction_id: str) -> Optional[Transaction]:
         """Получает транзакцию по ID"""
+        # transaction_id может быть в формате:
+        # 1. {company_id}:txn_{uuid} - современный формат
+        # 2. txn_{uuid} - старый формат для обратной совместимости
+        
+        if ":" in transaction_id:
+            # Современный формат: извлекаем company_id
+            company_id = transaction_id.split(":")[0]
+            
+            # Пробуем все доступные типы провайдеров из enum
+            from ..models.payment_models import PaymentProviderType
+            
+            for provider_type in PaymentProviderType:
+                key = f"payment:{company_id}:{provider_type.value}:{transaction_id}"
+                data = await self.storage.get(key, force_global=True)
+                if data:
+                    logger.debug(f"Транзакция найдена по ключу: {key}")
+                    return Transaction.model_validate_json(data)
+        
+        # Старый формат или не найдена - делаем полный перебор
         prefix = f"payment:"
         keys = await self.storage.list_by_prefix(prefix, force_global=True)
         
@@ -255,8 +274,10 @@ class PaymentService:
             if key.endswith(f":{transaction_id}"):
                 data = await self.storage.get(key, force_global=True)
                 if data:
+                    logger.debug(f"Транзакция найдена по ключу: {key}")
                     return Transaction.model_validate_json(data)
         
+        logger.debug(f"Транзакция {transaction_id} не найдена")
         return None
     
     async def get_company_transactions(
@@ -304,11 +325,15 @@ class PaymentService:
         
         key = f"payment:{transaction.company_id}:{provider_type}:{transaction.transaction_id}"
         
-        await self.storage.set(
+        logger.debug(f"Сохраняем транзакцию по ключу: {key}")
+        
+        success = await self.storage.set(
             key,
             transaction.model_dump_json(),
             force_global=True
         )
+        
+        logger.debug(f"Результат сохранения транзакции: {success}")
         
         logger.debug(f"💾 Транзакция сохранена с ключом: {key}")
     

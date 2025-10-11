@@ -228,7 +228,7 @@ class TestWhatsAppFullIntegration:
         
         mock_send_response = AsyncMock()
         mock_send_response.status_code = 200
-        mock_send_response.json.return_value = {"messages": [{"id": "wamid.buttons_sent"}]}
+        mock_send_response.json = MagicMock(return_value={"messages": [{"id": "wamid.buttons_sent"}]})
         
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_send_response)
@@ -349,7 +349,7 @@ class TestWhatsAppFullIntegration:
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"messages": [{"id": "wamid.response"}]}
+        mock_response.json = MagicMock(return_value={"messages": [{"id": "wamid.response"}]})
         
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_response)
@@ -433,7 +433,7 @@ class TestWhatsAppFullIntegration:
         
         mock_api_response = AsyncMock()
         mock_api_response.status_code = 200
-        mock_api_response.json.return_value = {"messages": [{"id": "wamid.audio_out"}]}
+        mock_api_response.json = MagicMock(return_value={"messages": [{"id": "wamid.audio_out"}]})
         
         with patch('app.core.audio_processor.get_default_audio_processor', return_value=mock_audio_processor):
             with patch.object(interface, '_upload_media', return_value="uploaded_audio_999"):
@@ -817,7 +817,7 @@ class TestWhatsAppInteractiveMessages:
             
             mock_resp = AsyncMock()
             mock_resp.status_code = 200
-            mock_resp.json.return_value = {"messages": [{"id": "wamid.btns"}]}
+            mock_resp.json = MagicMock(return_value={"messages": [{"id": "wamid.btns"}]})
             return mock_resp
         
         with patch('httpx.AsyncClient') as mock_client:
@@ -852,7 +852,7 @@ class TestWhatsAppInteractiveMessages:
             
             mock_resp = AsyncMock()
             mock_resp.status_code = 200
-            mock_resp.json.return_value = {"messages": [{"id": "wamid.list"}]}
+            mock_resp.json = MagicMock(return_value={"messages": [{"id": "wamid.list"}]})
             return mock_resp
         
         with patch('httpx.AsyncClient') as mock_client:

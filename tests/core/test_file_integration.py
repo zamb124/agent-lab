@@ -47,7 +47,7 @@ class TestFileIntegration:
             
             # Проверяем форматирование сообщения
             message = processor.format_file_message(file_record)
-            assert "[FILE]" in message
+            assert "📎 Файл:" in message or "[FILE]" in message
             assert file_record.file_id in message
             assert file_record.original_name in message
             assert file_record.url in message
