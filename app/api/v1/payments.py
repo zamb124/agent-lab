@@ -17,20 +17,40 @@ from app.models.payment_models import (
 )
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/payments", tags=["payments"])
+router = APIRouter(
+    prefix="/payments",
+    tags=["Платежи и баланс"],
+    responses={
+        404: {"description": "Транзакция не найдена"},
+        500: {"description": "Ошибка платежной системы"}
+    }
+)
 
 
-@router.post("/create", response_model=CreatePaymentResponse)
+@router.post("/create", response_model=CreatePaymentResponse, summary="Создать платеж")
 async def create_payment(request: CreatePaymentRequest, context: ContextDep):
     """
-    Создает транзакцию пополнения и генерирует URL для оплаты.
+    Создает транзакцию пополнения баланса и генерирует платежную ссылку.
     
-    Процесс:
-    1. Создается транзакция со статусом PENDING
-    2. Генерируется платежная ссылка через провайдер
-    3. Пользователь переходит по ссылке и оплачивает
-    4. Провайдер отправляет webhook с подтверждением
-    5. Баланс пополняется автоматически
+    **Процесс оплаты:**
+    1. Отправляете запрос с суммой → получаете payment_url
+    2. Перенаправляете пользователя на payment_url
+    3. Пользователь оплачивает через платежную систему
+    4. Платежная система отправляет webhook с подтверждением
+    5. Баланс компании пополняется автоматически
+    
+    **Поддерживаемые провайдеры:**
+    - YooMoney (Юмани)
+    - ЮKassa
+    
+    **Минимальная сумма:** 100₽  
+    **Максимальная сумма:** 1,000,000₽
+    
+    Args:
+        request: Сумма пополнения и опциональный провайдер
+        
+    Returns:
+        transaction_id и payment_url для перенаправления пользователя
     """
     
     user = context.user

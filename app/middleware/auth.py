@@ -39,6 +39,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             or request.url.path.startswith("/.well-known/")
             or request.url.path.startswith("/favicon.ico")
             or request.url.path.startswith("/api/v1/payments/webhook/")
+            or request.url.path == "/health"
         ):
             return await call_next(request)
         
@@ -200,8 +201,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         elif path.startswith("/auth/"):
             logger.info("🔐 OAuth контекст")
             return await self._create_anonymous_context(request, requested_company)
-        elif path.startswith("/docs/") or path in ("/docs", "/api/docs", "/api/redoc", "/api/openapi.json"):
+        elif path.startswith("/docs/") or path in ("/docs", "/api/docs", "/api/redoc"):
             logger.info("📚 Docs контекст")
+            return await self._create_anonymous_context(request, requested_company)
+        elif path == "/api/openapi.json":
+            logger.info("📋 OpenAPI spec контекст")
             return await self._create_anonymous_context(request, requested_company)
         elif path == "/":
             logger.info("🏠 Корневой путь - проверяем авторизацию")

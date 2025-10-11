@@ -23,7 +23,13 @@ from ...core.context import get_context
 from ...core.storage import Storage
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(
+    tags=["Виртуальная примерка"],
+    responses={
+        400: {"description": "Неверные параметры или некорректные изображения"},
+        500: {"description": "Ошибка сервиса примерки"}
+    }
+)
 
 
 class TryOnRequest(BaseModel):
@@ -300,10 +306,27 @@ async def process_nano_banana_try_on(request: TryOnRequest, model_record, produc
         raise HTTPException(status_code=500, detail=f"Ошибка генерации: {str(e)}")
 
 
-@router.post("/try-on", response_model=TryOnResponse)
+@router.post("/try-on", response_model=TryOnResponse, summary="Виртуальная примерка")
 async def virtual_try_on_api(request: TryOnRequest):
     """
-    Виртуальная примерка одежды и аксессуаров.
+    Создает изображение с виртуальной примеркой одежды или аксессуаров.
+    
+    **Что можно примерять:**
+    - Одежда (футболки, платья, свитера, пиджаки)
+    - Аксессуары (сумки, рюкзаки, клатчи)
+    
+    **Параметры:**
+    - model_image_url - фото модели (пользователя)
+    - product_image_url - фото товара
+    - model_height_cm - рост модели (обязательно)
+    - Дополнительные параметры для точной настройки
+    
+    **Вариации:**
+    Можно создать до 3 вариаций изображения для выбора лучшего результата.
+    
+    **Движки:**
+    - nano_banana (рекомендуется) - быстрее и качественнее
+    - fashn - оригинальный движок
 
     Эмулирует работу агента:
     1. Скачивает изображения по URL

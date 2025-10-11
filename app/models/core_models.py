@@ -36,6 +36,16 @@ class HistorySource(str):
             return v
         raise ValueError("history_from должен быть строкой, списком строк или None")
 
+    @classmethod
+    def __get_pydantic_json_schema__(cls, core_schema, handler):
+        return {
+            "anyOf": [
+                {"type": "string"},
+                {"type": "array", "items": {"type": "string"}},
+                {"type": "null"}
+            ]
+        }
+
     def __repr__(self):
         return f"HistorySource({super().__repr__()})"
 

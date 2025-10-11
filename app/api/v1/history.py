@@ -12,35 +12,56 @@ from app.models.history_models import MessageHistoryResponse, SessionListRespons
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/history", tags=["history"])
+router = APIRouter(
+    prefix="/api/v1/history",
+    tags=["История и аналитика"],
+    responses={
+        404: {"description": "Сессия не найдена"},
+        500: {"description": "Ошибка получения данных"}
+    }
+)
 
 
-@router.get("/sessions", response_model=SessionListResponse)
+@router.get("/sessions", response_model=SessionListResponse, summary="Список диалогов")
 async def get_sessions(
-    platform: Optional[str] = Query(None, description="Фильтр по платформе"),
-    flow_id: Optional[str] = Query(None, description="Фильтр по flow"),
+    platform: Optional[str] = Query(None, description="Фильтр по платформе (web, telegram, whatsapp, api)"),
+    flow_id: Optional[str] = Query(None, description="Фильтр по боту"),
     user_id: Optional[str] = Query(None, description="Фильтр по пользователю"),
-    status: Optional[str] = Query(None, description="Фильтр по статусу"),
-    date_from: Optional[datetime] = Query(None, description="Фильтр от даты"),
-    date_to: Optional[datetime] = Query(None, description="Фильтр до даты"),
+    status: Optional[str] = Query(None, description="Фильтр по статусу (active, inactive)"),
+    date_from: Optional[datetime] = Query(None, description="Начало периода (ISO 8601)"),
+    date_to: Optional[datetime] = Query(None, description="Конец периода (ISO 8601)"),
     limit: int = Query(50, description="Максимальное количество результатов", ge=1, le=500),
     offset: int = Query(0, description="Смещение для пагинации", ge=0),
 ):
     """
-    Получает список сессий с фильтрацией.
+    Получает список всех диалогов (сессий) с возможностью фильтрации.
+    
+    **Фильтры:**
+    Все фильтры опциональные, можно комбинировать:
+    - По платформе (web, telegram, whatsapp, api)
+    - По конкретному боту
+    - По пользователю
+    - По статусу (active/inactive)
+    - По периоду времени
+    
+    **Пагинация:**
+    Используйте limit и offset для постраничной навигации.
+    
+    **Для аналитики:**
+    Этот endpoint позволяет получить статистику использования ботов.
     
     Args:
-        platform: Платформа (web, telegram, api)
-        flow_id: ID потока
+        platform: Платформа (web, telegram, whatsapp, api)
+        flow_id: ID бота
         user_id: ID пользователя
-        status: Статус сессии
-        date_from: Дата начала периода
-        date_to: Дата окончания периода
-        limit: Количество результатов
+        status: Статус сессии (active, inactive)
+        date_from: Начало периода
+        date_to: Конец периода
+        limit: Количество результатов (максимум 500)
         offset: Смещение для пагинации
         
     Returns:
-        Список сессий с метаданными
+        Массив сессий с количеством сообщений, первым сообщением, временными метками
     """
     logger.info(
         f"📋 API: Запрос списка сессий (platform={platform}, flow={flow_id}, limit={limit}, offset={offset})"

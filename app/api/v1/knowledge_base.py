@@ -14,7 +14,14 @@ from app.core.file_processor import FileProcessor
 from app.models.rag_models import RAGDocument
 from app.tools.rag_tools import upload_document_to_knowledge_base
 
-router = APIRouter(prefix="/knowledge-base", tags=["knowledge-base"])
+router = APIRouter(
+    prefix="/knowledge-base",
+    tags=["База знаний (RAG)"],
+    responses={
+        404: {"description": "Документ или бот не найден"},
+        500: {"description": "Ошибка индексации"}
+    }
+)
 logger = logging.getLogger(__name__)
 
 
@@ -31,14 +38,36 @@ class DocumentListResponse(BaseModel):
     total: int
 
 
-@router.post("/flows/{flow_id}/documents", response_model=UploadDocumentResponse)
+@router.post("/flows/{flow_id}/documents", response_model=UploadDocumentResponse, summary="Загрузить документ")
 async def upload_document_to_flow(
     flow_id: str,
     file: UploadFile = File(...)
 ):
     """
-    Загружает документ в базу знаний flow.
-    Использует FileProcessor + upload_document_to_knowledge_base tool.
+    Загружает документ в базу знаний бота для использования в RAG.
+    
+    **Поддерживаемые форматы:**
+    - PDF
+    - DOCX, DOC
+    - TXT, MD
+    - HTML
+    - CSV
+    
+    **Процесс:**
+    1. Документ загружается и сохраняется
+    2. Текст извлекается и разбивается на фрагменты
+    3. Создаются векторные embeddings
+    4. Индексируется в векторной БД
+    5. Бот может искать информацию в этом документе
+    
+    **Максимальный размер:** 10MB
+
+    Args:
+        flow_id: ID бота
+        file: Файл документа для загрузки
+        
+    Returns:
+        document_id и статус обработки
     """
     context = get_context()
     

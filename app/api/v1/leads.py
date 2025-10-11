@@ -13,7 +13,13 @@ import json
 from app.core.storage import Storage
 from app.core.config import settings
 
-router = APIRouter()
+router = APIRouter(
+    tags=["Лиды и заявки"],
+    responses={
+        400: {"description": "Неверные данные в заявке"},
+        500: {"description": "Ошибка создания лида"}
+    }
+)
 
 
 class LeadRequest(BaseModel):
@@ -28,9 +34,31 @@ class LeadResponse(BaseModel):
     status: str = "created"
 
 
-@router.post("/lead", response_model=LeadResponse)
+@router.post("/lead", response_model=LeadResponse, summary="Создать лид")
 async def create_lead(lead: LeadRequest):
-    """Создание нового лида"""
+    """
+    Создает лид (заявку) из формы обратной связи.
+    
+    Используется для сбора заявок с сайта, лендингов, форм обратной связи.
+    
+    **Что происходит:**
+    1. Лид сохраняется в системе
+    2. Опционально: отправляется в CRM (AmoCRM)
+    3. Опционально: уведомление менеджерам
+    
+    **Обязательные поля:**
+    - message - текст заявки/вопроса
+    - email - контактный email
+    
+    **Опциональные:**
+    - phone - телефон
+
+    Args:
+        lead: Данные заявки (сообщение, email, телефон)
+        
+    Returns:
+        lead_id и статус создания
+    """
     
     try:
         # Генерируем ID для лида
