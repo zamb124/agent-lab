@@ -3,7 +3,6 @@
 Управляет всеми провайдерами и пользователями.
 """
 
-import asyncio
 import json
 import logging
 import uuid
@@ -113,13 +112,12 @@ class AuthService:
             Результат авторизации
         """
         code_key = f"oauth_code:{auth_request.provider.value}:{auth_request.code}"
-        lock_key = f"{code_key}:lock"
         
         try:
             # Проверяем, не использован ли уже этот код
             cached_result = await self.storage.get(code_key)
             if cached_result:
-                logger.info(f"⚠️ Повторный запрос с тем же OAuth кодом - возвращаем кешированный результат")
+                logger.info(f"⚠️ OAuth код уже использован - возвращаем кешированный результат")
                 result_data = json.loads(cached_result)
                 
                 user = await self._get_user(result_data["user_id"])
@@ -127,35 +125,6 @@ class AuthService:
                 
                 if user and session:
                     return AuthResult(success=True, user=user, session=session)
-                else:
-                    logger.warning(f"⚠️ Не удалось восстановить пользователя/сессию из кеша")
-            
-            # Пытаемся установить блокировку (защита от race condition)
-            lock_acquired = await self.storage.set(lock_key, "processing", ttl=30, nx=True)
-            
-            if not lock_acquired:
-                # Другой запрос уже обрабатывает этот код - ждем результат
-                logger.info(f"⏳ Код уже обрабатывается другим запросом, ожидаем...")
-                
-                # Ждем до 10 секунд появления результата в кеше
-                for _ in range(20):
-                    await asyncio.sleep(0.5)
-                    cached_result = await self.storage.get(code_key)
-                    if cached_result:
-                        logger.info(f"✅ Получен результат от параллельного запроса")
-                        result_data = json.loads(cached_result)
-                        
-                        user = await self._get_user(result_data["user_id"])
-                        session = await self._get_session(result_data["session_id"])
-                        
-                        if user and session:
-                            return AuthResult(success=True, user=user, session=session)
-                
-                # Если результат так и не появился - возвращаем ошибку
-                return AuthResult(
-                    success=False, 
-                    error_message="Не удалось дождаться результата авторизации"
-                )
             
             # Проверяем state
             auth_state = await self._get_auth_state(auth_request.state)
@@ -171,11 +140,28 @@ class AuthService:
                     error_message=f"Провайдер {auth_request.provider.value} недоступен",
                 )
 
-            # Обмениваем код на токены
-            access_token, refresh_token = await provider.exchange_code_for_token(
-                auth_request.code,
-                auth_request.redirect_uri or auth_state["redirect_uri"],
-            )
+            try:
+                # Обмениваем код на токены
+                access_token, refresh_token = await provider.exchange_code_for_token(
+                    auth_request.code,
+                    auth_request.redirect_uri or auth_state["redirect_uri"],
+                )
+            except ValueError as e:
+                # Если код уже использован - пробуем вернуть кешированный результат
+                error_text = str(e).lower()
+                if "expired" in error_text or "invalid" in error_text:
+                    logger.warning(f"⚠️ Код уже использован или истек, проверяем кеш")
+                    cached_result = await self.storage.get(code_key)
+                    if cached_result:
+                        logger.info(f"✅ Найден кешированный результат")
+                        result_data = json.loads(cached_result)
+                        
+                        user = await self._get_user(result_data["user_id"])
+                        session = await self._get_session(result_data["session_id"])
+                        
+                        if user and session:
+                            return AuthResult(success=True, user=user, session=session)
+                raise
 
             # Получаем информацию о пользователе
             user_info = await provider.get_user_info(access_token)
@@ -203,9 +189,6 @@ class AuthService:
         except Exception as e:
             logger.error(f"❌ Ошибка авторизации: {e}")
             return AuthResult(success=False, error_message=str(e))
-        finally:
-            # Всегда удаляем блокировку
-            await self.storage.delete(lock_key)
 
     async def get_user_by_session(self, session_id: str) -> Optional[User]:
         """Получает пользователя по ID сессии"""
