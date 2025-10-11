@@ -183,7 +183,7 @@ class Storage:
         return None
 
     async def set(
-        self, key: str, value: str, ttl: Optional[int] = None, db_session=None, force_global: bool = False, nx: bool = False
+        self, key: str, value: str, ttl: Optional[int] = None, db_session=None, force_global: bool = False
     ) -> bool:
         """
         Сохраняет значение по ключу с опциональным TTL.
@@ -194,25 +194,24 @@ class Storage:
             ttl: Время жизни в секундах (по умолчанию 5 дней = 432000 сек)
             db_session: Сессия БД (если не передана, создается новая)
             force_global: Принудительно использовать глобальный ключ без префикса компании
-            nx: Set if Not eXists - устанавливает только если ключ не существует (для блокировок)
 
         Returns:
-            True, если сохранение успешно; False если nx=True и ключ уже существует
+            True, если сохранение успешно
         """
         final_key, company_id = self._get_company_key(key, force_global)
         table_name = self._get_table_name(key, company_id)
         
         if db_session:
-            return await self._set_with_session(final_key, value, ttl, table_name, db_session, nx)
+            return await self._set_with_session(final_key, value, ttl, table_name, db_session)
 
         session_factory = self.session_factory or AsyncSessionLocal
         async with session_factory() as session:
-            result = await self._set_with_session(final_key, value, ttl, table_name, session, nx)
+            result = await self._set_with_session(final_key, value, ttl, table_name, session)
             await session.commit()
             return result
 
     async def _set_with_session(
-        self, key: str, value: str, ttl: Optional[int], table_name: str, session, nx: bool = False
+        self, key: str, value: str, ttl: Optional[int], table_name: str, session
     ) -> bool:
         """Сохраняет значение с использованием переданной сессии"""
         json_value = json.loads(value)
@@ -232,117 +231,61 @@ class Storage:
                 expired_at = datetime.now(timezone.utc) + timedelta(days=5)
 
         if table_name == "storage":
-            if nx:
-                # Режим NX - вставка только если ключа не существует
-                from sqlalchemy import select
-                existing = await session.execute(
-                    select(StorageModel).where(StorageModel.key == key)
-                )
-                if existing.scalar_one_or_none():
-                    return False
-                
-                stmt = insert(StorageModel).values(
-                    key=key, value=json_value, expired_at=expired_at
-                )
-            else:
-                # Обычный режим - вставка с обновлением при конфликте
-                stmt = insert(StorageModel).values(
-                    key=key, value=json_value, expired_at=expired_at
-                )
-                stmt = stmt.on_conflict_do_update(
-                    index_elements=["key"],
-                    set_=dict(
-                        value=stmt.excluded.value,
-                        updated_at=stmt.excluded.updated_at,
-                        expired_at=stmt.excluded.expired_at,
-                    ),
-                )
+            stmt = insert(StorageModel).values(
+                key=key, value=json_value, expired_at=expired_at
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["key"],
+                set_=dict(
+                    value=stmt.excluded.value,
+                    updated_at=stmt.excluded.updated_at,
+                    expired_at=stmt.excluded.expired_at,
+                ),
+            )
             await session.execute(stmt)
         elif table_name == "users":
-            if nx:
-                from sqlalchemy import select
-                existing = await session.execute(
-                    select(UsersModel).where(UsersModel.key == key)
-                )
-                if existing.scalar_one_or_none():
-                    return False
-                
-                stmt = insert(UsersModel).values(
-                    key=key, value=json_value, expired_at=expired_at
-                )
-            else:
-                stmt = insert(UsersModel).values(
-                    key=key, value=json_value, expired_at=expired_at
-                )
-                stmt = stmt.on_conflict_do_update(
-                    index_elements=["key"],
-                    set_=dict(
-                        value=stmt.excluded.value,
-                        updated_at=stmt.excluded.updated_at,
-                        expired_at=stmt.excluded.expired_at,
-                    ),
-                )
+            stmt = insert(UsersModel).values(
+                key=key, value=json_value, expired_at=expired_at
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["key"],
+                set_=dict(
+                    value=stmt.excluded.value,
+                    updated_at=stmt.excluded.updated_at,
+                    expired_at=stmt.excluded.expired_at,
+                ),
+            )
             await session.execute(stmt)
         elif table_name == "variables":
-            if nx:
-                from sqlalchemy import select
-                existing = await session.execute(
-                    select(VariablesModel).where(VariablesModel.key == key)
-                )
-                if existing.scalar_one_or_none():
-                    return False
-                
-                stmt = insert(VariablesModel).values(
-                    key=key, value=json_value, expired_at=expired_at
-                )
-            else:
-                stmt = insert(VariablesModel).values(
-                    key=key, value=json_value, expired_at=expired_at
-                )
-                stmt = stmt.on_conflict_do_update(
-                    index_elements=["key"],
-                    set_=dict(
-                        value=stmt.excluded.value,
-                        updated_at=stmt.excluded.updated_at,
-                        expired_at=stmt.excluded.expired_at,
-                    ),
-                )
+            stmt = insert(VariablesModel).values(
+                key=key, value=json_value, expired_at=expired_at
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["key"],
+                set_=dict(
+                    value=stmt.excluded.value,
+                    updated_at=stmt.excluded.updated_at,
+                    expired_at=stmt.excluded.expired_at,
+                ),
+            )
             await session.execute(stmt)
         else:
-            if nx:
-                query = text(f"""
-                    INSERT INTO {table_name} (key, value, expired_at, created_at, updated_at)
-                    VALUES (:key, :value, :expired_at, :created_at, :updated_at)
-                    ON CONFLICT (key) DO NOTHING
-                    RETURNING key
-                """)
-                now = datetime.now(timezone.utc)
-                result = await session.execute(query, {
-                    "key": key,
-                    "value": json.dumps(json_value),
-                    "expired_at": expired_at,
-                    "created_at": now,
-                    "updated_at": now
-                })
-                if not result.fetchone():
-                    return False
-            else:
-                query = text(f"""
-                    INSERT INTO {table_name} (key, value, expired_at, created_at, updated_at)
-                    VALUES (:key, :value, :expired_at, :created_at, :updated_at)
-                    ON CONFLICT (key) DO UPDATE SET
-                        value = EXCLUDED.value,
-                        updated_at = EXCLUDED.updated_at,
-                        expired_at = EXCLUDED.expired_at
-                """)
-                now = datetime.now(timezone.utc)
-                await session.execute(query, {
-                    "key": key,
-                    "value": json.dumps(json_value),
-                    "expired_at": expired_at,
-                    "created_at": now,
-                    "updated_at": now
-                })
+            query = text(f"""
+                INSERT INTO {table_name} (key, value, expired_at, created_at, updated_at)
+                VALUES (:key, :value, :expired_at, :created_at, :updated_at)
+                ON CONFLICT (key) DO UPDATE SET
+                    value = EXCLUDED.value,
+                    updated_at = EXCLUDED.updated_at,
+                    expired_at = EXCLUDED.expired_at
+            """)
+            now = datetime.now(timezone.utc)
+            await session.execute(query, {
+                "key": key,
+                "value": json.dumps(json_value),
+                "expired_at": expired_at,
+                "created_at": now,
+                "updated_at": now
+            })
 
         logger.debug(f"Сохранено: {key} в таблицу {table_name}")
         return True
