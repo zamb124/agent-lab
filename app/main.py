@@ -227,9 +227,9 @@ app = FastAPI(
     version="0.1.0",
     debug=settings.server.debug,
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json",
 )
 
 # Proxy headers middleware (для правильной работы за nginx)
@@ -317,6 +317,12 @@ for module_path in sorted(modules_dir.iterdir()):
 # Основные статические файлы (монтируем после модульных)
 static_dir = Path(__file__).parent / "frontend" / "shared" / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+# Документация MkDocs (если собрана)
+docs_dir = Path(__file__).parent.parent / "site"
+if docs_dir.exists():
+    app.mount("/docs", StaticFiles(directory=str(docs_dir), html=True), name="docs")
+    logger.info(f"📚 Документация MkDocs доступна на /docs")
 
 
 @app.get("/")

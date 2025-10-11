@@ -14,6 +14,9 @@ WORKDIR /app
 
 # Копируем файлы проекта (context = .)
 COPY pyproject.toml ./
+COPY mkdocs.yml ./
+COPY README.md ./
+COPY docs/ ./docs/
 COPY app/ ./app/
 COPY run.py ./
 COPY run_worker.py ./
@@ -21,6 +24,9 @@ COPY conf.json ./
 
 # Устанавливаем зависимости
 RUN uv pip install --system -e .
+
+# Собираем документацию
+RUN uv run mkdocs build --clean
 
 # Открываем порт
 EXPOSE 8001

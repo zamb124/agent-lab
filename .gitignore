@@ -15,3 +15,6 @@ sgr-service/__pycache__/
 
 /backend/app/custom_flows/fashn_buyer/add_token.py
 
+# MkDocs
+site/
+

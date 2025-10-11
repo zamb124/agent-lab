@@ -36,6 +36,11 @@ help:
 	@echo "  make sgr-up       - Запустить sgr"
 	@echo "  make sgr-logs     - Логи sgr"
 	@echo ""
+	@echo "Документация:"
+	@echo "  make docs-build   - Собрать документацию"
+	@echo "  make docs-serve   - Запустить dev-сервер документации (http://127.0.0.1:8000)"
+	@echo "  make docs-clean   - Удалить собранную документацию"
+	@echo ""
 	@echo "Тесты:"
 	@echo "  make test              - Запустить тесты (по умолчанию 4 воркера)"
 	@echo "  make test WORKERS=8    - Запустить тесты с указанным числом воркеров"
@@ -45,3 +50,20 @@ include mk/app.mk
 include mk/worker.mk
 include mk/sgr.mk
 include mk/test.mk
+
+# Документация
+.PHONY: docs-build docs-serve docs-clean
+
+docs-build:
+	@echo "📚 Сборка документации..."
+	uv run mkdocs build --clean
+	@echo "✅ Документация собрана в site/"
+
+docs-serve:
+	@echo "📚 Запуск dev-сервера документации на http://127.0.0.1:8000"
+	uv run mkdocs serve
+
+docs-clean:
+	@echo "🧹 Очистка документации..."
+	rm -rf site/
+	@echo "✅ Директория site/ удалена"

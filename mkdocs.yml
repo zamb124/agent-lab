@@ -1,0 +1,148 @@
+site_name: Agent Lab
+site_description: Документация платформы Agent Lab - создание и управление ИИ-агентами на базе LangGraph
+site_url: http://localhost:8001
+
+docs_dir: docs
+
+theme:
+  name: material
+  language: ru
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Переключить на тёмную тему
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Переключить на светлую тему
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.path
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+  logo: logo.png
+  favicon: logo.png
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/your-repo/agent-lab
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - attr_list
+  - md_in_html
+  - tables
+
+plugins:
+  - search:
+      lang: 
+        - ru
+        - en
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: ru
+          default: true
+          name: Русский
+          build: true
+        - locale: en
+          name: English
+          build: true
+          nav_translations:
+            Главная: Home
+            Для пользователей: For Users
+            Обзор платформы: Platform Overview
+            Начало работы: Getting Started
+            Управление ботами: Bots Management
+            Платформы: Platforms
+            Возможности: Features
+            Сценарии использования: Use Cases
+            API и интеграции: API & Integrations
+            API документация: API Documentation
+            Интеграции: Integrations
+            Обзор: Overview
+            Домены: Domains
+            Установка: Setup
+            Использование: Usage
+            План: Plan
+            Для разработчиков: For Developers
+            Архитектура: Architecture
+            Конфигурация: Configuration
+            Разработка: Development
+            Фронтенд: Frontend
+            Клиенты: Clients
+            Функциональность: Features
+            Биллинг: Billing
+            Платежи: Payments
+            Интернационализация: Internationalization
+            Переменные: Variables
+
+nav:
+  - Главная: index.md
+  
+  - Для пользователей:
+      - Обзор платформы: user_docs/overview.md
+      - Начало работы: user_docs/getting_started.md
+      - Управление ботами: user_docs/bots_management.md
+      - Платформы: user_docs/platforms.md
+      - Возможности: user_docs/features.md
+      - Сценарии использования: user_docs/use_cases.md
+  
+  - API и интеграции:
+      - API документация: api.md
+      - Интеграции:
+          - AmoCRM:
+              - Обзор: integrations/amocrm/README.md
+              - Домены: integrations/amocrm/DOMAIN.md
+          - WhatsApp:
+              - Обзор: integrations/whatsapp/README.md
+              - Установка: integrations/whatsapp/setup.md
+              - Использование: integrations/whatsapp/usage.md
+              - План: integrations/whatsapp/integration_plan.md
+          - SGR: sgr_integration.md
+          - YooMoney: yoomoney_oauth.md
+  
+  - Для разработчиков:
+      - Архитектура: architecture.md
+      - Конфигурация: configuration.md
+      - Deployment: deployment.md
+      - Разработка:
+          - Фронтенд: frontend.md
+          - Makefile: makefile.md
+          - Клиенты: clients.md
+      - Функциональность:
+          - Биллинг: billing.md
+          - Платежи: payments.md
+          - Интернационализация: internationalization.md
+          - Переменные: variables.md
+          - State & Variables: state_and_variables.md
+
