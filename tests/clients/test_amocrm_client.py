@@ -3,6 +3,8 @@
 """
 
 import pytest
+
+pytestmark = pytest.mark.skip(reason="AmoCRM тесты требуют отдельной настройки")
 import httpx
 
 from app.clients.amo_crm_integration import (

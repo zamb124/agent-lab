@@ -104,8 +104,24 @@ class TestEndToEndRAGWorkflow:
             ]
         })
         
+        # Создаем мок FileRecord
+        from app.models import FileRecord, FileStatus
+        mock_file_record = FileRecord(
+            file_id="file_123",
+            provider="vkcloud",
+            original_name="test.pdf",
+            s3_key="test.pdf",
+            s3_bucket="vkbucket",
+            content_type="application/pdf",
+            file_size=1024,
+            status=FileStatus.UPLOADED
+        )
+        
+        mock_file_processor = AsyncMock()
+        mock_file_processor.get_file_record = AsyncMock(return_value=mock_file_record)
+        
         with patch("app.tools.rag_tools.get_context", return_value=mock_context):
-            with patch("app.core.storage.Storage", return_value=mock_storage):
+            with patch("app.tools.rag_tools.get_default_file_processor", return_value=mock_file_processor):
                 with patch("app.tools.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
                     with patch("app.tools.rag_tools.get_or_create_namespace", new=mock_get_ns):
                         upload_result = await upload_document_to_knowledge_base.ainvoke(
@@ -158,8 +174,20 @@ class TestEndToEndRAGWorkflow:
         mock_agent_config.rag_config = None
         mock_context.agent_config = mock_agent_config
         
-        mock_storage = AsyncMock()
-        mock_storage.get = AsyncMock(return_value='{"s3_key": "doc.pdf", "original_name": "doc.pdf"}')
+        from app.models import FileRecord, FileStatus
+        mock_file_record = FileRecord(
+            file_id="file_123",
+            provider="vkcloud",
+            original_name="doc.pdf",
+            s3_key="doc.pdf",
+            s3_bucket="vkbucket",
+            content_type="application/pdf",
+            file_size=1024,
+            status=FileStatus.UPLOADED
+        )
+        
+        mock_file_processor = AsyncMock()
+        mock_file_processor.get_file_record = AsyncMock(return_value=mock_file_record)
         
         mock_rag_provider = AsyncMock()
         mock_rag_provider.upload_document_from_s3 = AsyncMock(return_value=RAGDocument(
@@ -170,7 +198,7 @@ class TestEndToEndRAGWorkflow:
         ))
         
         with patch("app.tools.rag_tools.get_context", return_value=mock_context):
-            with patch("app.core.storage.Storage", return_value=mock_storage):
+            with patch("app.tools.rag_tools.get_default_file_processor", return_value=mock_file_processor):
                 with patch("app.tools.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
                     with patch("app.tools.rag_tools.get_or_create_namespace", new=mock_get_ns):
                         result = await upload_document_to_knowledge_base.ainvoke(
@@ -208,8 +236,20 @@ class TestEndToEndRAGWorkflow:
         mock_agent_config.rag_config = None
         mock_context.agent_config = mock_agent_config
         
-        mock_storage = AsyncMock()
-        mock_storage.get = AsyncMock(return_value='{"s3_key": "doc.pdf", "original_name": "doc.pdf"}')
+        from app.models import FileRecord, FileStatus
+        mock_file_record = FileRecord(
+            file_id="file_123",
+            provider="vkcloud",
+            original_name="doc.pdf",
+            s3_key="doc.pdf",
+            s3_bucket="vkbucket",
+            content_type="application/pdf",
+            file_size=1024,
+            status=FileStatus.UPLOADED
+        )
+        
+        mock_file_processor = AsyncMock()
+        mock_file_processor.get_file_record = AsyncMock(return_value=mock_file_record)
         
         mock_rag_provider = AsyncMock()
         mock_rag_provider.upload_document_from_s3 = AsyncMock(return_value=RAGDocument(
@@ -222,7 +262,7 @@ class TestEndToEndRAGWorkflow:
         mock_get_ns = AsyncMock(return_value="mock_ns_id")
         
         with patch("app.tools.rag_tools.get_context", return_value=mock_context):
-            with patch("app.core.storage.Storage", return_value=mock_storage):
+            with patch("app.tools.rag_tools.get_default_file_processor", return_value=mock_file_processor):
                 with patch("app.tools.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
                     with patch("app.tools.rag_tools.get_or_create_namespace", new=mock_get_ns):
                         result = await upload_document_to_knowledge_base.ainvoke(
