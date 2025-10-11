@@ -21,8 +21,8 @@ else:
     print(f"❌ .env файл не найден: {env_file}")
 
 # Настройка переменных окружения для тестов
-os.environ["DATABASE__URL"] = "postgresql+asyncpg://agent_user:agent_password@localhost:5436/agent_platform"
-os.environ["DATABASE__CHECKPOINTER_URL"] = "postgresql://agent_user:agent_password@localhost:5436/agent_platform"
+os.environ["DATABASE__URL"] = "postgresql+asyncpg://agent_user:agent_password@localhost:5432/agent_platform"
+os.environ["DATABASE__CHECKPOINTER_URL"] = "postgresql://agent_user:agent_password@localhost:5432/agent_platform"
 os.environ["SERVER__DEBUG"] = "true"
 # Используем mock LLM по умолчанию для всех тестов
 os.environ["LLM__DEFAULT_PROVIDER"] = "mock"
