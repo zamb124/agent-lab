@@ -200,8 +200,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         elif path.startswith("/auth/"):
             logger.info("🔐 OAuth контекст")
             return await self._create_anonymous_context(request, requested_company)
-        elif path in ("/docs", "/redoc", "/openapi.json") and settings.server.env == "local":
-            logger.info("🔍 Docs контекст")
+        elif path.startswith("/docs/") or path in ("/docs", "/api/docs", "/api/redoc", "/api/openapi.json"):
+            logger.info("📚 Docs контекст")
             return await self._create_anonymous_context(request, requested_company)
         elif path == "/":
             logger.info("🏠 Корневой путь - проверяем авторизацию")
