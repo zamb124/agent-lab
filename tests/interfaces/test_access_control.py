@@ -3,12 +3,11 @@
 Проверяет работу allowed_users для всех интерфейсов: Telegram, WhatsApp, Web.
 """
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
 from app.interfaces.telegram_interface import TelegramInterface
 from app.interfaces.whatsapp_interface import WhatsAppInterface
 from app.interfaces.web_interface import WebInterface
-from app.interfaces.base import Message
 
 
 class TestTelegramAccessControl:

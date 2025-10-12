@@ -12,7 +12,7 @@ def main():
     
     try:
         # Запускаем pytest с архитектурными тестами
-        result = subprocess.run([
+        subprocess.run([
             sys.executable, "-m", "pytest", 
             "tests/arch/", 
             "-v", 

@@ -1,0 +1,28 @@
+{
+  "fields": {
+    "name": {
+      "title": "[TODO: models.flowauthor.fields.name.title]",
+      "description": "[TODO: models.flowauthor.fields.name.description]"
+    },
+    "email": {
+      "title": "[TODO: models.flowauthor.fields.email.title]",
+      "description": "[TODO: models.flowauthor.fields.email.description]"
+    },
+    "website": {
+      "title": "[TODO: models.flowauthor.fields.website.title]",
+      "description": "[TODO: models.flowauthor.fields.website.description]"
+    },
+    "github": {
+      "title": "[TODO: models.flowauthor.fields.github.title]",
+      "description": "[TODO: models.flowauthor.fields.github.description]"
+    },
+    "linkedin": {
+      "title": "[TODO: models.flowauthor.fields.linkedin.title]",
+      "description": "[TODO: models.flowauthor.fields.linkedin.description]"
+    },
+    "twitter": {
+      "title": "[TODO: models.flowauthor.fields.twitter.title]",
+      "description": "[TODO: models.flowauthor.fields.twitter.description]"
+    }
+  }
+}

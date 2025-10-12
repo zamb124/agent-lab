@@ -5,7 +5,6 @@
 from typing import Any, Dict, Optional, Union, List, get_origin, get_args
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
-import pydantic
 import re
 import inspect
 from app.frontend.core.template_loader import render_template, template_exists
@@ -746,7 +745,7 @@ class FrontendMixin:
                             title = translated_title
                         else:
                             title = field_info.title or field_name.replace("_", " ").title()
-                    except Exception as e:
+                    except Exception:
                         title = field_info.title or field_name.replace("_", " ").title()
                 else:
                     title = field_info.title or field_name.replace("_", " ").title()

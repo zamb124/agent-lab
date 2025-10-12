@@ -25,6 +25,8 @@ async def _test_flows_migration_from_code():
     migrator = Migrator()
     await migrator.run_full_migration()
     
+    await migrator._set_system_context()
+    
     storage = Storage()
     
     # 2. ПРОВЕРКА WEATHER_FLOW

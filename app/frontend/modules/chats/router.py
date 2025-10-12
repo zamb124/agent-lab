@@ -5,7 +5,6 @@
 from fastapi import APIRouter, Request, Query
 from fastapi.responses import HTMLResponse
 from typing import Optional
-from datetime import datetime
 
 from app.frontend.core.template_loader import get_templates
 from app.frontend.core.utils import render_with_dashboard

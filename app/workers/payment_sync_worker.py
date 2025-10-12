@@ -4,7 +4,6 @@
 
 import asyncio
 import logging
-from datetime import datetime
 
 from ..services.payment_sync_service import PaymentSyncService
 

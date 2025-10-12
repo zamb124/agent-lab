@@ -2,11 +2,8 @@
 Тесты для API endpoints интернационализации
 """
 
-import pytest
-import json
 from unittest.mock import Mock, patch, AsyncMock
 from fastapi.testclient import TestClient
-from fastapi import HTTPException
 
 from app.frontend.api.i18n import router
 from app.models.i18n_models import Language, TranslationStats, TranslationFile

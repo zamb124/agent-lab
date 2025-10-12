@@ -3,7 +3,7 @@
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from app.core.rag.base_provider import BaseRAGProvider
 from app.core.rag.factory import get_rag_provider, RAG_PROVIDERS

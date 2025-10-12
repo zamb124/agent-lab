@@ -4,7 +4,6 @@
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-import json
 
 from app.tools.rag_tools import (
     search_knowledge_base,
@@ -211,7 +210,7 @@ class TestUploadDocumentToKnowledgeBase:
     @pytest.mark.asyncio
     async def test_upload_success(self, mock_context, mock_rag_provider):
         """Тест успешной загрузки"""
-        from app.models.core_models import FileRecord
+        from app.models.file_models import FileRecord
         
         mock_get_ns = AsyncMock(return_value="mock_ns_id")
         
@@ -250,7 +249,7 @@ class TestUploadDocumentToKnowledgeBase:
     async def test_upload_to_company_scope(self, mock_context, mock_rag_provider):
         """Тест загрузки в скоуп компании"""
         from app.models.rag_models import AgentRAGConfig
-        from app.models.core_models import FileRecord
+        from app.models.file_models import FileRecord
         
         mock_get_ns = AsyncMock(return_value="mock_ns_id")
         mock_context.flow_config.flow_id = "test_flow"

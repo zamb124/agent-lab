@@ -7,6 +7,7 @@
 3. Перемиграция сущностей для отката к базовому состоянию
 """
 import pytest
+import pytest_asyncio
 import asyncio
 from datetime import datetime, timezone
 
@@ -16,6 +17,13 @@ from app.core.context import set_context, clear_context
 from app.identity.models import Company, User, AuthProvider, UserStatus
 from app.models.context_models import Context
 from app.models import AgentType
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def cleanup_after_test():
+    """Автоматическая очистка после каждого теста"""
+    yield
+    clear_context()
 
 
 async def _create_test_company():
@@ -28,6 +36,8 @@ async def _create_test_company():
         created_at=datetime.now(timezone.utc)
     )
     
+    await _cleanup_test_company(company)
+    
     storage = Storage()
     await storage.set(f"company:{company.company_id}", company.model_dump_json(), force_global=True)
     
@@ -35,26 +45,60 @@ async def _create_test_company():
 
 
 async def _cleanup_test_company(company: Company):
-    """Удаляет тестовую компанию"""
+    """Удаляет тестовую компанию и все её данные"""
     storage = Storage()
+    
+    user = User(
+        user_id="test_cleanup",
+        provider=AuthProvider.YANDEX,
+        provider_user_id="test",
+        email="test@test.com",
+        name="Test Cleanup",
+        status=UserStatus.ACTIVE,
+        groups=["admin"],
+        companies={company.company_id: ["admin"]},
+        active_company_id=company.company_id
+    )
+    
+    context = Context(
+        user=user,
+        platform="test",
+        active_company=company,
+        user_companies=[company]
+    )
+    set_context(context)
+    
+    prefixes = [
+        "flow:",
+        "agent:",
+        "tool:",
+        "session:",
+        f"company:{company.company_id}:",
+    ]
+    
+    for prefix in prefixes:
+        keys = await storage.list_by_prefix(prefix)
+        for key in keys:
+            await storage.delete(key, force_global=True)
+    
     await storage.delete(f"company:{company.company_id}", force_global=True)
+    clear_context()
 
 
 @pytest.mark.asyncio
 async def test_migrate_defaults_for_company():
     """
-    Тест 1: Миграция базовых сущностей для новой компании.
+    Тест 1: Миграция только публичных tools для новой компании.
     
     Проверяет что при вызове migrate_defaults_for_company():
-    - Мигрируется базовый flow из config
-    - Мигрируется entry_point_agent
-    - Мигрируются все зависимости
+    - Мигрируются ТОЛЬКО публичные tools (is_public=True)
+    - Flows НЕ мигрируются (устанавливаются через Store)
+    - Агенты НЕ мигрируются
     """
     test_company = await _create_test_company()
     migrator = Migrator()
     storage = Storage()
     
-    # Устанавливаем контекст компании
     user = User(
         user_id="test_user",
         provider=AuthProvider.YANDEX,
@@ -75,37 +119,25 @@ async def test_migrate_defaults_for_company():
     )
     set_context(context)
     
-    # Выполняем миграцию
     await migrator.migrate_defaults_for_company(test_company)
     
-    # Проверяем что все дефолтные flows мигрировались
+    # Проверяем что flows НЕ мигрировались
     simple_flow_config = await storage.get_flow_config("app.flows.simple_flow.simple_flow_config")
-    assert simple_flow_config is not None, "test_flow должен быть мигрирован"
-    assert simple_flow_config.flow_id == "app.flows.simple_flow.simple_flow_config"
+    assert simple_flow_config is None, "Flows НЕ должны автоматически мигрироваться"
     
     weather_flow_config = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
-    assert weather_flow_config is not None, "weather_flow должен быть мигрирован"
+    assert weather_flow_config is None, "Flows НЕ должны автоматически мигрироваться"
     
-    # Проверяем что entry_point агенты мигрировались
-    test_agent = await storage.get_agent_config("app.flows.simple_flow.SimpleFlowAgent")
-    assert test_agent is not None, "SimpleFlowAgent должен быть мигрирован"
-    assert test_agent.type == AgentType.STATEGRAPH, "SimpleFlowAgent должен быть StateGraph"
-    
+    # Проверяем что агенты НЕ мигрировались
     weather_agent = await storage.get_agent_config("app.agents.weather.agent.WeatherAgent")
-    assert weather_agent is not None, "WeatherAgent должен быть мигрирован"
-    assert weather_agent.type == AgentType.REACT, "WeatherAgent должен быть ReAct"
+    assert weather_agent is None, "Агенты НЕ должны автоматически мигрироваться"
     
-    # Проверяем что дефолтные агенты мигрировались
-    calc_agent = await storage.get_agent_config("app.agents.calculator.agent.CalculatorAgent")
-    assert calc_agent is not None, "CalculatorAgent должен быть мигрирован"
-    assert calc_agent.type == AgentType.REACT, "CalculatorAgent должен быть ReAct"
-    
-    # Проверяем что дефолтные tools мигрировались
+    # Проверяем что публичные tools мигрировались
     tool1_data = await storage.get("tool:app.tools.calc_tools.calculate")
-    assert tool1_data is not None, "calculate tool должен быть мигрирован"
+    assert tool1_data is not None, "Публичные tools должны быть мигрированы"
     
     tool2_data = await storage.get("tool:app.tools.calc_tools.get_math_help")
-    assert tool2_data is not None, "get_math_help tool должен быть мигрирован"
+    assert tool2_data is not None, "Публичные tools должны быть мигрированы"
     
     print("✅ Тест migrate_defaults_for_company пройден!")
     clear_context()
@@ -806,8 +838,6 @@ async def test_api_remigrate_endpoints():
     
     Проверяет что API endpoints работают корректно.
     """
-    from fastapi.testclient import TestClient
-    from app.main import app as fastapi_app
     
     test_company = await _create_test_company()
     migrator = Migrator()

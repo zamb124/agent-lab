@@ -2,8 +2,7 @@
 Тесты функций интернационализации для Jinja2 шаблонов
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from jinja2 import Environment
 
 from app.frontend.core.template_loader import TemplateLoader
@@ -29,7 +28,7 @@ class TestTemplateI18nFunctions:
         mock_get_manager.return_value = mock_manager
         
         # Создаем простой Jinja2 environment для тестов
-        env = Environment()
+        Environment()
         
         # Импортируем и добавляем функцию t
         loader = TemplateLoader()

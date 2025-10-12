@@ -6,9 +6,7 @@ import logging
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 import httpx
-from fastapi.responses import Response
 from app.core.file_processor import get_default_file_processor
-from app.core.audio_processor import get_default_audio_processor
 from app.core.context import get_context
 
 logger = logging.getLogger(__name__)

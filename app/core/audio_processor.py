@@ -280,7 +280,7 @@ class AudioProcessor:
             else:
                 # Неподдерживаемый формат
                 logger.warning(f"⚠️ Формат {audio_record.content_type} не поддерживается Cloud Voice для распознавания.")
-                logger.info(f"💡 Поддерживаемые форматы: audio/wave, audio/ogg; codecs=opus")
+                logger.info("💡 Поддерживаемые форматы: audio/wave, audio/ogg; codecs=opus")
                 return
 
             # Логируем что отправляем

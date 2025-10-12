@@ -97,32 +97,31 @@ class SmartFlowAgent(BaseAgent):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.graph = self.build_graph()
+        self.compiled_graph = None
 
-        # Создаем StateGraph
-        self.graph = StateGraph(RouterState)
+    def build_graph(self):
+        """Создает и возвращает граф"""
+        graph = StateGraph(RouterState)
 
-        # Добавляем ноды
-        self.graph.add_node("router", router_function)
-        self.graph.add_node("calculator", calculator_node)
-        self.graph.add_node("weather", weather_node)
-        self.graph.add_node("explainer", explainer_node)
+        graph.add_node("router", router_function)
+        graph.add_node("calculator", calculator_node)
+        graph.add_node("weather", weather_node)
+        graph.add_node("explainer", explainer_node)
 
-        # Добавляем edges
-        self.graph.add_edge(START, "router")
+        graph.add_edge(START, "router")
 
-        # Conditional edges от router
-        self.graph.add_conditional_edges(
+        graph.add_conditional_edges(
             "router",
             router_condition,
             {"calculator": "calculator", "weather": "weather"},
         )
 
-        # К explainer
-        self.graph.add_edge("calculator", "explainer")
-        self.graph.add_edge("weather", "explainer")
-        self.graph.add_edge("explainer", END)
+        graph.add_edge("calculator", "explainer")
+        graph.add_edge("weather", "explainer")
+        graph.add_edge("explainer", END)
 
-        self.compiled_graph = None
+        return graph
 
     async def ainvoke(self, input_data, config=None):
         """Стандартный LangGraph ainvoke"""

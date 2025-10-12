@@ -559,7 +559,6 @@ class TelegramInterface(BaseInterface):
         if not token_value:
             raise ValueError(f"No token configured for flow {flow_id}")
         
-        from app.services.variables_service import get_variables_service
         
         variables_service = get_variables_service()
         resolved_token = await variables_service.resolve(token_value)
@@ -601,7 +600,6 @@ class TelegramInterface(BaseInterface):
         6. Устанавливает команды бота
         """
         from app.core.config import settings
-        from app.services.variables_service import get_variables_service
         
         # Резолвим username если это ссылка
         variables_service = get_variables_service()
@@ -634,7 +632,7 @@ class TelegramInterface(BaseInterface):
                 # Обновляем только username, не трогая остальные поля (token и т.д.)
                 flow_config.platforms["telegram"]["username"] = actual_username
                 await storage.set_flow_config(flow_config)
-                logger.info(f"✅ Username обновлен в FlowConfig")
+                logger.info("✅ Username обновлен в FlowConfig")
         
         # Устанавливаем команды
         interface = cls(token, platform_config)

@@ -11,7 +11,7 @@ from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, System
 
 from app.core.storage import Storage
 from app.flows.flow import Flow
-from app.identity.models import User
+from app.identity.models import User, Company
 from app.models.history_models import (
     MessageItem,
     MessageRole,
@@ -21,6 +21,10 @@ from app.models.history_models import (
     SessionListItem,
     SessionListResponse,
 )
+from app.models import FlowConfig, ToolReference
+from app.core.context import get_context
+from app.core.migrator import Migrator
+from app.services.variables_service import VariablesService
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from app.core.config import get_settings
 logger = logging.getLogger(__name__)
@@ -469,3 +473,148 @@ class FlowFactory:
                         break
         
         return message_count, first_message
+    
+    async def install_flow(self, flow_id: str) -> Dict[str, Any]:
+        """
+        Устанавливает flow из Store для текущей компании.
+        
+        Использует существующую логику Migrator.migrate_for_company
+        для миграции flow с зависимостями из системной компании.
+        
+        Args:
+            flow_id: ID flow для установки (например, "app.flows.weather_flow.weather_flow_config")
+            
+        Returns:
+            Информация об установке
+        """
+        context = get_context()
+        company_id = context.active_company.company_id
+        user_id = context.user.user_id
+        
+        logger.info(f"Установка flow {flow_id} для компании {company_id}")
+        
+        company_data = await self.storage.get(f"company:{company_id}", force_global=True)
+        if not company_data:
+            raise ValueError(f"Компания {company_id} не найдена")
+        
+        company = Company.model_validate_json(company_data)
+        
+        migrator = Migrator()
+        await migrator.migrate_for_company(
+            company=company,
+            flows=[flow_id],
+            with_dependencies=True
+        )
+        
+        flow_config = await self.storage.get_flow_config(flow_id)
+        if flow_config and flow_config.install_hook:
+            await self._execute_hook(flow_config.install_hook, flow_config, company_id)
+        
+        additional_url = None
+        if flow_config and flow_config.after_install_hook:
+            additional_url = await self._execute_after_install_hook(flow_config.after_install_hook)
+        
+        logger.info(f"Flow {flow_id} успешно установлен в компанию {company_id}")
+        
+        return {
+            "flow_id": flow_id,
+            "company_id": company_id,
+            "installed_at": datetime.now(timezone.utc).isoformat(),
+            "installed_by": user_id,
+            "additional_url": additional_url
+        }
+    
+    async def uninstall_flow(self, flow_id: str) -> None:
+        """
+        Удаляет flow из текущей компании.
+        
+        Выполняет uninstall hook если есть, удаляет агентов и сам flow.
+        
+        Args:
+            flow_id: ID flow для удаления
+        """
+        context = get_context()
+        company_id = context.active_company.company_id
+        
+        logger.info(f"Удаление flow {flow_id} из компании {company_id}")
+        
+        flow_config = await self.storage.get_flow_config(flow_id)
+        if not flow_config:
+            raise ValueError(f"Flow {flow_id} не установлен в компании {company_id}")
+        
+        if flow_config.uninstall_hook:
+            await self._execute_hook(flow_config.uninstall_hook, flow_config, company_id)
+        
+        await self._delete_flow_agents(flow_config.entry_point_agent)
+        
+        await self.storage.delete(f"flow:{flow_id}")
+        
+        logger.info(f"Flow {flow_id} успешно удален из компании {company_id}")
+    
+    async def _execute_hook(
+        self,
+        hook_ref: ToolReference,
+        flow_config: FlowConfig,
+        company_id: str
+    ) -> None:
+        """Выполняет hook из ToolReference через exec()"""
+        
+        if not hook_ref or not hook_ref.inline_code:
+            return
+        
+        namespace = {
+            "FlowConfig": FlowConfig,
+            "logger": logger,
+            "Storage": Storage,
+            "VariablesService": VariablesService,
+            "datetime": datetime,
+        }
+        
+        exec(hook_ref.inline_code, namespace)
+        
+        hook_func = namespace.get("install") or namespace.get("uninstall")
+        if hook_func and callable(hook_func):
+            await hook_func(flow_config, company_id)
+            logger.info(f"Выполнен hook {hook_ref.tool_id}")
+    
+    async def _execute_after_install_hook(self, hook_ref: ToolReference) -> str | None:
+        """
+        Выполняет after_install_hook из ToolReference через exec().
+        
+        Args:
+            hook_ref: Ссылка на hook
+            
+        Returns:
+            URL для открытия в новом окне или None
+        """
+        if not hook_ref or not hook_ref.inline_code:
+            return None
+        
+        namespace = {
+            "logger": logger,
+            "FlowConfig": FlowConfig,
+        }
+        
+        exec(hook_ref.inline_code, namespace)
+        
+        after_install_func = namespace.get("after_install")
+        if after_install_func and callable(after_install_func):
+            result = await after_install_func()
+            if isinstance(result, str) and result.strip():
+                logger.info(f"after_install_hook вернул URL: {result.strip()}")
+                return result.strip()
+        
+        return None
+    
+    async def _delete_flow_agents(self, agent_id: str) -> None:
+        """Удаляет агента и его субагентов рекурсивно"""
+        agent_config = await self.storage.get_agent_config(agent_id)
+        if not agent_config:
+            return
+        
+        for tool_ref in agent_config.tools:
+            if tool_ref.type == "agent":
+                await self._delete_flow_agents(tool_ref.reference)
+        
+        await self.storage.delete(f"agent:{agent_id}")
+        logger.info(f"Агент {agent_id} удален")

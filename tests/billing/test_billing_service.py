@@ -7,7 +7,6 @@ import pytest
 import pytest_asyncio
 import asyncio
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 import sys
 
@@ -18,7 +17,7 @@ sys.path.insert(0, str(backend_path))
 from app.services.billing_service import BillingService
 from app.core.storage import Storage
 from app.identity.models import User, Company
-from app.models.billing_models import UsageRecord, UsageType, TariffPlan
+from app.models.billing_models import UsageRecord, UsageType
 from app.core.context import set_context
 from app.models.context_models import Context
 
@@ -110,13 +109,13 @@ class TestBillingService:
         can_use, reason = await billing_service.can_use_resource(
             test_user, test_company, "weather_api"
         )
-        assert can_use == True, f"Должен быть доступ к weather_api: {reason}"
+        assert can_use, f"Должен быть доступ к weather_api: {reason}"
         
         # Проверяем ограниченный ресурс
         can_use, reason = await billing_service.can_use_resource(
             test_user, test_company, "openai_gpt_4"
         )
-        assert can_use == True, f"Должен быть доступ к gpt-4 на basic плане: {reason}"
+        assert can_use, f"Должен быть доступ к gpt-4 на basic плане: {reason}"
         
     @pytest.mark.asyncio
     async def test_can_use_resource_free_plan(self, billing_service, test_user, test_company):
@@ -130,14 +129,14 @@ class TestBillingService:
         can_use, reason = await billing_service.can_use_resource(
             test_user, test_company, "openai:gpt-4"
         )
-        assert can_use == True, f"С балансом GPT-4 должен быть доступен: {reason}"
+        assert can_use, f"С балансом GPT-4 должен быть доступен: {reason}"
         
         # Без баланса - недоступен
         test_company.balance = 0.0
         can_use, reason = await billing_service.can_use_resource(
             test_user, test_company, "openai:gpt-4"
         )
-        assert can_use == False, "Без баланса должен быть недоступен"
+        assert not can_use, "Без баланса должен быть недоступен"
         assert "баланс" in reason.lower()
     
     @pytest.mark.asyncio
@@ -158,11 +157,11 @@ class TestBillingService:
         )
         
         if cost > 5.0:  # Если превысит лимит (95 + cost > 100)
-            assert can_use == False, f"Должен быть превышен месячный лимит: cost={cost}, reason={reason}"
+            assert not can_use, f"Должен быть превышен месячный лимит: cost={cost}, reason={reason}"
             assert "месячный лимит" in reason.lower()
         else:
             # Если не превысит - должно быть доступно
-            assert can_use == True, f"Должно быть доступно: {reason}"
+            assert can_use, f"Должно быть доступно: {reason}"
         
         # Очистка (уже не нужна)
         for i in range(10):
@@ -373,7 +372,7 @@ async def test_billing_service_integration():
         
         # Проверяем доступ к ресурсам
         can_use, reason = await billing_service.can_use_resource(user, company, "openai_gpt_4")
-        assert can_use == True, f"Должен быть доступ к GPT-4 на premium: {reason}"
+        assert can_use, f"Должен быть доступ к GPT-4 на premium: {reason}"
         print("✅ Проверка доступа к GPT-4: OK")
         
         # Записываем использование

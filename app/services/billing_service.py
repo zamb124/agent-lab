@@ -11,8 +11,7 @@ from typing import Optional, Dict, Any
 from ..core.storage import Storage
 from ..core.context import get_context
 from ..identity.models import User, Company
-from ..models.billing_models import UsageRecord, UsageType, TariffPlan, TARIFF_PRICES
-from ..identity.models import User
+from ..models.billing_models import UsageRecord, UsageType, TARIFF_PRICES
 logger = logging.getLogger(__name__)
 
 
@@ -34,7 +33,7 @@ class BillingService:
         # 2. Проверяем баланс компании (если ресурс платный)
         if resource_cost > 0:
             if company.balance <= 0:
-                return False, f"На балансе компании недостаточно средств. Пополните баланс."
+                return False, "На балансе компании недостаточно средств. Пополните баланс."
             
             if company.balance < resource_cost:
                 return False, f"Недостаточно средств на балансе: {company.balance:.2f}₽, требуется: {resource_cost:.2f}₽"

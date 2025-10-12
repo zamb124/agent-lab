@@ -3,7 +3,7 @@
 """
 
 from enum import Enum
-from typing import Dict, Any, Optional, List
+from typing import Dict, Optional, List
 from datetime import datetime
 from pydantic import BaseModel, Field
 

@@ -4,7 +4,6 @@ API endpoints для платежей и пополнения баланса.
 
 import logging
 from fastapi import APIRouter, HTTPException, Request
-from typing import Optional
 
 from app.frontend.dependencies import ContextDep
 from app.core.clients.payment_providers.factory import PaymentProviderFactory
@@ -12,8 +11,7 @@ from app.services.payment_service import PaymentService
 from app.models.payment_models import (
     CreatePaymentRequest,
     CreatePaymentResponse,
-    TransactionResponse,
-    PaymentStatus
+    TransactionResponse
 )
 
 logger = logging.getLogger(__name__)

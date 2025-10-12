@@ -12,15 +12,14 @@ Cloud Voice клиент для работы с VK Cloud Voice API.
 """
 
 import logging
-import time
-from typing import Optional, Dict, Any, List, Union, AsyncGenerator
+from typing import Optional, Dict, Any, Union
 from pathlib import Path
 import httpx
 from datetime import datetime, timedelta, timezone
 
 from ..config import settings
 from ..storage import Storage
-from ...models.core_models import CloudVoiceTokenConfig
+from ...models.file_models import CloudVoiceTokenConfig
 
 logger = logging.getLogger(__name__)
 
@@ -563,7 +562,7 @@ async def get_default_cloud_voice_client() -> Optional[CloudVoiceClient]:
     global _default_cloud_voice_client
 
     if _default_cloud_voice_client is None:
-        logger.info(f"🔍 Cloud Voice клиент не инициализирован, проверяем конфигурацию...")
+        logger.info("🔍 Cloud Voice клиент не инициализирован, проверяем конфигурацию...")
         logger.info(f"🔍 hasattr(settings, 'cloud_voice'): {hasattr(settings, 'cloud_voice')}")
         
         if hasattr(settings, "cloud_voice"):

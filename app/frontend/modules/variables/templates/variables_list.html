@@ -4,26 +4,30 @@
 </h1>
 
 <div class="header-right" hx-swap-oob="true">
+    <button class="btn btn-primary btn-sm" onclick="openAddVariableModal()" data-tooltip="Создать переменную">
+        <i class="bi bi-plus-lg"></i>
+    </button>
     <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="Переключить тему">
         <i class="bi bi-sun"></i>
     </button>
 </div>
 
-<div class="container-fluid py-4" id="variables-container">
+<div class="container-fluid py-4 page-with-empty-state" id="variables-container">
+    {% if variables %}
     <div class="mb-4 d-flex justify-content-between align-items-center">
         <p class="text-muted mb-0">Управление секретами и переменными компании. Используйте <code>@var:key</code> для ссылок в конфигурации.</p>
         <button class="btn btn-sm btn-outline-secondary" id="group-by-tags-btn" onclick="toggleGrouping()">
             <i class="bi bi-grid"></i> Группировать по тегам
         </button>
     </div>
+    {% endif %}
 
     <div id="variables-content">
     {% if variables %}
     <div class="variables-grid">
-        <!-- Карточка создания новой переменной -->
         <div class="variable-grid-item">
             <div class="variable-card variable-card-create" onclick="openAddVariableModal()" style="cursor: pointer;">
-                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 0.75rem;">
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 0.75rem; padding-top: 1.5rem;">
                     <i class="bi bi-plus-circle" style="font-size: 2.5rem; color: var(--accent-primary); opacity: 0.7;"></i>
                     <div style="text-align: center;">
                         <div style="margin: 0; color: var(--text-primary); font-size: 0.875rem; font-weight: 600;">Создать переменную</div>
@@ -272,20 +276,19 @@
         color: var(--accent-primary);
     }
     </style>
-    {% else %}
-    <div class="variables-grid">
-        <!-- Карточка создания первой переменной -->
-        <div class="variable-grid-item" style="grid-column: 1 / -1;">
-            <div class="variable-card variable-card-create variable-card-empty" onclick="openAddVariableModal()" style="cursor: pointer;">
-                <i class="bi bi-plus-circle"></i>
-                <h3>Нет переменных</h3>
-                <p>Создайте первую переменную для использования в ботах и агентах</p>
-            </div>
-        </div>
-    </div>
     {% endif %}
     </div>
 </div>
+
+{% if not variables %}
+<div class="empty-state-centered">
+    <button class="empty-state-add-btn" onclick="openAddVariableModal()">
+        <i class="bi bi-plus-circle"></i>
+    </button>
+    <h3>Нет переменных</h3>
+    <p>Создайте первую переменную для использования в ботах и агентах</p>
+</div>
+{% endif %}
 
 <script type="application/json" id="variables-data">
 {{ variables|tojson|safe }}

@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional, List
 import json
 from datetime import datetime, timezone
 
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from app.interfaces.base import BaseInterface, Message
 from app.core.storage import Storage
 from app.clients.amo_crm_integration import get_amocrm_client

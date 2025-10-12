@@ -26,5 +26,10 @@
   "button": "[TODO: button]",
   "business_account_id": "[TODO: business_account_id]",
   "display_name": "[TODO: display_name]",
-  "host": "[TODO: host]"
+  "host": "[TODO: host]",
+  "allowed_users": "[TODO: allowed_users]",
+  "avatar": "[TODO: avatar]",
+  "url": "[TODO: url]",
+  "website": "[TODO: website]",
+  "github": "[TODO: github]"
 }

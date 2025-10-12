@@ -24,10 +24,9 @@ TODO: Add tests
 import json
 import logging
 from typing import Optional
-from datetime import datetime
 from langchain_core.tools import tool
 
-from ..clients.amo_crm_integration import get_amocrm_client, register_subdomain
+from ..clients.amo_crm_integration import get_amocrm_client
 
 logger = logging.getLogger(__name__)
 

@@ -26,5 +26,10 @@
   "button": "",
   "business_account_id": "",
   "display_name": "",
-  "host": ""
+  "host": "",
+  "allowed_users": "",
+  "avatar": "",
+  "url": "",
+  "website": "",
+  "github": ""
 }

@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 from ..core.storage import Storage
-from ..core.clients.payment_providers.factory import PaymentProviderFactory
 from ..core.clients.payment_providers.base_provider import (
     BasePaymentProvider,
     PaymentRequest,
@@ -21,7 +20,6 @@ from ..models.payment_models import (
     PaymentProviderType
 )
 from ..identity.models import Company, User
-from ..models.payment_models import Transaction, PaymentProviderType
 logger = logging.getLogger(__name__)
 
 
@@ -267,7 +265,7 @@ class PaymentService:
                     return Transaction.model_validate_json(data)
         
         # Старый формат или не найдена - делаем полный перебор
-        prefix = f"payment:"
+        prefix = "payment:"
         keys = await self.storage.list_by_prefix(prefix, force_global=True)
         
         for key in keys:

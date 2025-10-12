@@ -3,12 +3,11 @@
 """
 
 import pytest
-from unittest.mock import Mock
 from pydantic import BaseModel
 
 from app.core.clients.payment_providers.factory import PaymentProviderFactory
 from app.core.clients.payment_providers.yoomoney_provider import YooMoneyProvider, YooMoneyConfig
-from app.core.clients.payment_providers.yukassa_provider import YuKassaProvider, YuKassaConfig
+from app.core.clients.payment_providers.yukassa_provider import YuKassaConfig
 
 
 class MockSettings(BaseModel):

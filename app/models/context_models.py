@@ -12,8 +12,7 @@ from app.identity.models import User, Company
 from app.models.i18n_models import Language
 
 if TYPE_CHECKING:
-    from app.core.state import State
-    from app.models.core_models import FlowConfig, AgentConfig
+    pass
 
 
 class Context(BaseModel):

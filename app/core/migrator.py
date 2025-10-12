@@ -7,35 +7,22 @@ import logging
 import importlib
 import inspect
 import pkgutil
-import traceback
-from pathlib import Path
-from typing import List, Any, Type, Optional
-from datetime import datetime, timezone
+from typing import List, Type, Optional
 
 import app.agents
 import app.flows
 import app.custom_flows
 
 from app.core.storage import Storage
-from app.core.config import settings
 from app.models import (
     AgentConfig,
     FlowConfig,
     ToolReference,
-    AgentType,
-    LLMConfig,
-    CodeMode,
-    GraphDefinition,
-    GraphNode,
-    GraphEdge,
-    NodeType,
-    ConditionType,
 )
 from app.agents.base import BaseAgent
 from app.identity.models import Company, User, AuthProvider, UserStatus
 from app.core.context import set_context
 from app.models.context_models import Context
-from app.services.variables_service import get_variables_service
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +34,20 @@ class Migrator:
         self.storage = Storage()
 
     async def run_full_migration(self):
-        """Запускает полную миграцию агентов, флоу и инструментов"""
-        logger.info("Запуск полной миграции...")
+        """
+        Запускает полную миграцию для системной компании.
+        
+        Мигрирует ВСЕ flows, агентов и tools (игнорирует is_public).
+        """
+        logger.info("Запуск полной миграции для системной компании...")
 
         await self._ensure_system_company()
+        await self._set_system_context()
         
-        await self._migrate_tools()
-        await self._migrate_agents()
-        await self._migrate_flows()
+        await self._migrate_all_tools()
+        await self._migrate_all_agents()
+        await self._migrate_all_flows()
+        
         logger.info("Полная миграция завершена успешно")
 
     async def _ensure_system_company(self):
@@ -80,86 +73,69 @@ class Migrator:
         
         logger.info("✅ Создана системная компания: system")
 
-    async def _migrate_tools(self):
-        """Мигрирует @tool функции из кода в БД"""
-        logger.info("Миграция инструментов...")
-
-        # Устанавливаем контекст системной компании для миграции
-        await self._set_system_context()
-
-        # Список пакетов для сканирования
-        packages_to_scan = ["app.tools"]
+    async def _migrate_all_tools(self):
+        """
+        Мигрирует ВСЕ @tool функции из кода в текущую компанию.
         
-        # Добавляем custom_flows для поиска кастомных инструментов
-        packages_to_scan.append("app.custom_flows")
+        Сканирует код и вызывает ToolReference.migrate для каждого.
+        """
+        logger.info("Миграция всех tools...")
+
+        packages_to_scan = ["app.tools", "app.custom_flows"]
 
         all_tool_functions = []
-        
-        # Сканируем все пакеты
         for package_name in packages_to_scan:
             tool_functions = await self._find_tool_functions(package_name)
             all_tool_functions.extend(tool_functions)
-            logger.info(f"Найдено {len(tool_functions)} tool функций в {package_name}")
 
-        logger.info(f"Всего найдено {len(all_tool_functions)} tool функций для миграции")
+        logger.info(f"Найдено {len(all_tool_functions)} tool функций")
 
         migrated_count = 0
         for tool_obj, module_name in all_tool_functions:
-            logger.info(f"Мигрируем tool: {tool_obj.name} из {module_name}")
-            tool_ref = await self._create_tool_reference_from_function(
-                tool_obj, module_name
-            )
-            await self.storage.set(
-                f"tool:{tool_ref.tool_id}", tool_ref.model_dump_json()
-            )
-            logger.info(f"Инструмент {tool_ref.tool_id} успешно мигрирован в системную компанию")
+            tool_ref = await ToolReference.migrate(source=tool_obj, migrator=self)
+            logger.info(f"Tool {tool_ref.tool_id} мигрирован")
             migrated_count += 1
 
-        logger.info(f"Мигрировано {migrated_count} инструментов")
+        logger.info(f"Мигрировано {migrated_count} tools")
 
-    async def _migrate_agents(self):
-        """Мигрирует агентов из кода в БД"""
-        logger.info("Миграция агентов...")
+    async def _migrate_all_agents(self):
+        """
+        Мигрирует ВСЕ агентов из кода в текущую компанию с зависимостями.
+        
+        Сканирует код и вызывает AgentConfig.migrate для каждого.
+        Рекурсивно мигрирует все tools агента.
+        """
+        logger.info("Миграция всех агентов...")
 
-        # Устанавливаем контекст системной компании для миграции
-        await self._set_system_context()
-
-        # Находим все классы-наследники BaseAgent
         agent_classes = await self._find_agent_classes()
 
         migrated_count = 0
         for agent_class in agent_classes:
-            config = await self._create_agent_config_from_class(agent_class)
-            await self.storage.set_agent_config(config)
-            logger.info(f"Агент {config.agent_id} успешно мигрирован в системную компанию")
+            agent_id = f"{agent_class.__module__}.{agent_class.__name__}"
+            await AgentConfig.migrate(agent_id, migrator=self, with_tools=True)
+            logger.info(f"Агент {agent_id} мигрирован")
             migrated_count += 1
 
-        logger.info(f"Мигрировано агентов: {migrated_count}")
+        logger.info(f"Мигрировано {migrated_count} агентов")
 
-    async def _migrate_flows(self):
-        """Мигрирует флоу из кода в БД"""
-        logger.info("Миграция флоу...")
+    async def _migrate_all_flows(self):
+        """
+        Мигрирует ВСЕ flows из кода в текущую компанию с зависимостями.
+        
+        Сканирует код и вызывает FlowConfig.migrate для каждого.
+        Рекурсивно мигрирует entry_point_agent и все его зависимости.
+        """
+        logger.info("Миграция всех flows...")
 
-        # Устанавливаем контекст системной компании для миграции
-        await self._set_system_context()
-
-        # Находим все FlowConfig объекты в коде
-        flow_configs = await self._find_flow_configs()
+        flow_ids = await self._find_flow_ids()
 
         migrated_count = 0
-        for config in flow_configs:
-            # Обновляем метаданные
-            config.source = "migration"
-            now = datetime.now(timezone.utc)
-            config.updated_at = now
-            if not config.created_at:
-                config.created_at = now
-
-            await self.storage.set_flow_config(config)
-            logger.info(f"Флоу {config.flow_id} успешно мигрирован в системную компанию")
+        for flow_id in flow_ids:
+            await FlowConfig.migrate(flow_id, migrator=self, with_dependencies=True)
+            logger.info(f"Flow {flow_id} мигрирован")
             migrated_count += 1
 
-        logger.info(f"Мигрировано флоу: {migrated_count}")
+        logger.info(f"Мигрировано {migrated_count} flows")
 
     async def _set_system_context(self):
         """Устанавливает контекст системной компании для миграции"""
@@ -244,529 +220,104 @@ class Migrator:
 
         return agent_classes
 
-    async def _find_flow_configs(self) -> List[FlowConfig]:
-        """Находит все FlowConfig объекты в коде"""
-        flow_configs = []
-
-        # Список модулей для сканирования
-        modules_to_scan = []
+    async def _find_flow_ids(self) -> List[str]:
+        """
+        Находит все FlowConfig объекты в коде и возвращает их ID.
         
-        # 1. Сканируем app.flows
-        modules_to_scan.append(app.flows)
+        Returns:
+            Список flow_id (например, ["app.flows.weather_flow.weather_flow_config"])
+        """
+        flow_ids = []
 
-        # 2. Сканируем app.custom_flows
-        modules_to_scan.append(app.custom_flows)
+        modules_to_scan = [app.flows, app.custom_flows]
 
-        # Обходим все модули
         for base_module in modules_to_scan:
-            # Рекурсивно обходим все подмодули
             for importer, modname, ispkg in pkgutil.walk_packages(
                 base_module.__path__, base_module.__name__ + "."
             ):
                 module = importlib.import_module(modname)
 
-                # Ищем объекты типа FlowConfig
                 for name, obj in inspect.getmembers(module):
                     if isinstance(obj, FlowConfig):
-                        # Создаем новый FlowConfig с правильным flow_id (путь к переменной)
-                        new_flow_id = f"{modname}.{name}"
-                        
-                        # Создаем новый объект с обновленным flow_id
-                        new_config = FlowConfig(
-                            flow_id=new_flow_id,
-                            name=obj.name,
-                            description=obj.description,
-                            entry_point_agent=obj.entry_point_agent,
-                            platforms=obj.platforms,
-                            timeout=obj.timeout,
-                            max_retries=obj.max_retries,
-                            variables=obj.variables,
-                            is_public=getattr(obj, "is_public", False),
-                            source=obj.source,
-                            created_at=obj.created_at,
-                            updated_at=obj.updated_at
-                        )
-                        
-                        flow_configs.append(new_config)
-                        logger.info(f"✅ Найден FlowConfig: {modname}.{name} -> {new_flow_id}")
+                        flow_id = f"{modname}.{name}"
+                        flow_ids.append(flow_id)
+                        logger.debug(f"Найден FlowConfig: {flow_id}")
 
-        return flow_configs
+        return flow_ids
 
-    async def _create_agent_config_from_class(
-        self, agent_class: Type[BaseAgent]
-    ) -> AgentConfig:
-        """Создает AgentConfig из класса агента"""
-
-        # Извлекаем статические атрибуты
-        name = getattr(agent_class, "name", agent_class.__name__)
-        title = getattr(agent_class, "title", None)
-
-        # Используем полный путь к классу как agent_id для возможности импорта
-        agent_id = f"{agent_class.__module__}.{agent_class.__name__}"
-        description = getattr(agent_class, "description", None)
-        prompt = getattr(agent_class, "prompt", None)
-        raw_tools = getattr(agent_class, "tools", [])
-        raw_llm_config = getattr(agent_class, "llm_config", None)
-        history_from = getattr(agent_class, "history_from", None)
-        is_public = getattr(agent_class, "is_public", False)
-
-        # Проверяем статический graph_definition
-        graph_definition = getattr(agent_class, "graph_definition", None)
-
-        # Если нет статического graph_definition, пробуем анализировать экземпляр
-        if not graph_definition:
-            graph_definition = await self._analyze_agent_graph(agent_class)
-
-        # Определяем тип агента
-        agent_type = AgentType.STATEGRAPH if graph_definition else AgentType.REACT
-
-        # Конвертируем инструменты в ToolReference
-        tool_references = self._convert_tools_to_references(raw_tools)
-
-        # Конвертируем LLM конфигурацию
-        llm_config = None
-        if raw_llm_config:
-            if isinstance(raw_llm_config, dict):
-                llm_config = LLMConfig(**raw_llm_config)
-            elif isinstance(raw_llm_config, LLMConfig):
-                llm_config = raw_llm_config
-        
-
-        # Создаем конфигурацию
-        config = AgentConfig(
-            agent_id=agent_id,
-            name=name,
-            title=title,
-            description=description,
-            type=agent_type,
-            function_class=f"{agent_class.__module__}.{agent_class.__name__}",  # Полный путь к классу для импорта
-            prompt=prompt,
-            graph_definition=graph_definition,
-            tools=tool_references,
-            llm_config=llm_config,
-            history_from=history_from,
-            is_public=is_public,
-            source="migration",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-        )
-
-        return config
-
-    async def _analyze_agent_graph(self, agent_class: Type[BaseAgent]):
-        """Анализирует LangGraph агента и создает GraphDefinition"""
-        logger.info(f"🔍 Анализируем граф агента {agent_class.__name__}")
-
-        # Проверяем статический graph_definition в классе
-        if (
-            hasattr(agent_class, "graph_definition")
-            and agent_class.graph_definition
-        ):
-            logger.info("🔍 Найден статический graph_definition в классе")
-            return agent_class.graph_definition
-
-        # Создаем экземпляр агента для анализа
-        temp_config = AgentConfig(
-            agent_id=f"{agent_class.__module__}.{agent_class.__name__}",
-            name="temp",
-            description="temp",
-            type=AgentType.REACT,
-        )
-
-        agent_instance = agent_class(temp_config)
-        logger.info(f"🔍 Экземпляр создан: {type(agent_instance)}")
-
-        # Проверяем есть ли у него LangGraph граф
-        if hasattr(agent_instance, "graph") and hasattr(
-            agent_instance.graph, "nodes"
-        ):
-            logger.info(f"🔍 Найден StateGraph: {type(agent_instance.graph)}")
-            logger.info(
-                f"🔍 Найдены nodes: {list(agent_instance.graph.nodes.keys())}"
-            )
-            logger.info(f"🔍 Найдены edges: {dict(agent_instance.graph.edges)}")
-            return await self._extract_stategraph_definition(agent_instance.graph)
-        else:
-            logger.info(
-                f"🔍 Агент {agent_class.__name__} - простой ReAct агент (нет StateGraph)"
-            )
-
-        return None
-
-    def _determine_node_type(self, node_func) -> NodeType:
+    async def get_public_flows(self) -> List[tuple[str, FlowConfig]]:
         """
-        Определяет тип ноды по её содержимому.
+        Находит все публичные FlowConfig объекты в коде.
         
-        Args:
-            node_func: Функция или объект, прикрепленный к ноде
-            
         Returns:
-            NodeType: Тип ноды
+            Список кортежей (full_flow_id, FlowConfig) с is_public=True
         """
-        # Проверяем является ли это обычной функцией
-        if inspect.isfunction(node_func) or inspect.iscoroutinefunction(node_func):
-            return NodeType.FUNCTION_NODE
-        
-        # Проверяем является ли это методом (bound method)
-        if inspect.ismethod(node_func):
-            # Если это метод агента (класс наследует BaseAgent)
-            if hasattr(node_func, '__self__'):
-                obj = node_func.__self__
-                if isinstance(obj, BaseAgent):
-                    return NodeType.AGENT_NODE
-            # Иначе это обычный метод-функция
-            return NodeType.FUNCTION_NODE
-        
-        # Проверяем является ли это StructuredTool или инструментом
-        if hasattr(node_func, 'name') and hasattr(node_func, 'func'):
-            return NodeType.TOOL_NODE
-        
-        # Проверяем является ли это callable объектом (может быть агент)
-        if callable(node_func):
-            # Если у объекта есть характерные атрибуты агента
-            if hasattr(node_func, 'config') or isinstance(node_func, BaseAgent):
-                return NodeType.AGENT_NODE
-            # Иначе это какой-то callable - считаем функцией
-            return NodeType.FUNCTION_NODE
-        
-        # По умолчанию считаем функцией
-        logger.warning(f"⚠️ Не удалось точно определить тип ноды {type(node_func)}, используем FUNCTION_NODE")
-        return NodeType.FUNCTION_NODE
+        public_flows = []
 
-    async def _extract_stategraph_definition(self, stategraph):
-        """Извлекает GraphDefinition из StateGraph (до компиляции)"""
+        modules_to_scan = [app.flows, app.custom_flows]
 
-        nodes = []
-        edges = []
-
-        logger.info(f"🔍 Анализируем StateGraph с {len(stategraph.nodes)} нодами")
-
-        # Извлекаем ноды
-        for node_id, node_spec in stategraph.nodes.items():
-            # Извлекаем функцию из StateNodeSpec
-            # В LangGraph 0.2.x ноды обернуты в StateNodeSpec с RunnableCallable внутри
-            node_func = node_spec
-            
-            # Извлекаем runnable из StateNodeSpec
-            if hasattr(node_spec, 'runnable'):
-                runnable = node_spec.runnable
-                # Извлекаем функцию из RunnableCallable
-                if hasattr(runnable, 'afunc') and runnable.afunc:
-                    # Для async функций
-                    node_func = runnable.afunc
-                elif hasattr(runnable, 'func') and runnable.func:
-                    # Для sync функций
-                    node_func = runnable.func
-                else:
-                    # Если не нашли func/afunc, используем сам runnable
-                    node_func = runnable
-            elif hasattr(node_spec, '__wrapped__'):
-                # Если есть обертка (старые версии LangGraph)
-                node_func = node_spec.__wrapped__
-            elif hasattr(node_spec, 'func'):
-                # Альтернативный способ (старые версии)
-                node_func = node_spec.func
-            
-            # Определяем тип ноды по её содержимому
-            node_type = self._determine_node_type(node_func)
-            
-            # Извлекаем параметры в зависимости от типа
-            function_path = None
-            function_class = None
-            
-            if node_type == NodeType.FUNCTION_NODE:
-                # Для функций сохраняем путь к функции
-                if hasattr(node_func, '__module__') and hasattr(node_func, '__name__'):
-                    function_path = f"{node_func.__module__}.{node_func.__name__}"
-            elif node_type == NodeType.AGENT_NODE:
-                # Для агентов сохраняем класс агента
-                if hasattr(node_func, '__self__'):
-                    agent_class = node_func.__self__.__class__
-                    function_class = f"{agent_class.__module__}.{agent_class.__name__}"
-
-            nodes.append(
-                GraphNode(
-                    id=node_id,
-                    type=node_type,
-                    function_path=function_path,
-                    function_class=function_class,
-                    params={}
-                )
-            )
-
-        # Извлекаем обычные ребра
-        for source, target in stategraph.edges:
-            # Преобразуем служебные названия
-            if source == "__start__":
-                source = "START"
-            if target == "__end__":
-                target = "END"
-
-            edges.append(GraphEdge(source=source, target=target))
-
-        # Извлекаем conditional edges из branches
-        if hasattr(stategraph, 'branches') and stategraph.branches:
-            for source, branches_dict in stategraph.branches.items():
-                source_name = "START" if source == "__start__" else source
-                
-                # branches_dict это dict {condition_func_name: BranchSpec}
-                for cond_name, branch_spec in branches_dict.items():
-                    # Извлекаем путь к функции условия
-                    condition_path = None
-                    if hasattr(branch_spec, 'path'):
-                        cond_runnable = branch_spec.path
-                        # Извлекаем функцию из RunnableCallable
-                        cond_func = None
-                        if hasattr(cond_runnable, 'afunc') and cond_runnable.afunc:
-                            cond_func = cond_runnable.afunc
-                        elif hasattr(cond_runnable, 'func') and cond_runnable.func:
-                            cond_func = cond_runnable.func
-                        
-                        if cond_func and hasattr(cond_func, '__module__') and hasattr(cond_func, '__name__'):
-                            condition_path = f"{cond_func.__module__}.{cond_func.__name__}"
-                    
-                    # Извлекаем целевые ноды из ends
-                    if hasattr(branch_spec, 'ends') and branch_spec.ends:
-                        # ends это dict {значение: target_node}
-                        for target in set(branch_spec.ends.values()):
-                            target_name = "END" if target == "__end__" else target
-                            
-                            edges.append(
-                                GraphEdge(
-                                    source=source_name,
-                                    target=target_name,
-                                    condition=condition_path,
-                                    condition_type=ConditionType.ROUTER,
-                                )
-                            )
-
-        return GraphDefinition(nodes=nodes, edges=edges, entry_point="START")
-
-    async def _extract_compiled_graph_definition(self, compiled_graph):
-        """Извлекает GraphDefinition из CompiledStateGraph"""
-
-        nodes = []
-        edges = []
-
-        logger.info(
-            f"🔍 Анализируем CompiledStateGraph с {len(compiled_graph.nodes)} нодами"
-        )
-
-        # Извлекаем ноды из compiled_graph
-        for node_id, node_obj in compiled_graph.nodes.items():
-            if node_id == "__start__":  # Пропускаем служебную ноду
-                continue
-
-            # Определяем тип ноды по названию
-            if "function" in node_id or node_id.endswith("_function"):
-                node_type = NodeType.FUNCTION_NODE
-            else:
-                node_type = NodeType.AGENT_NODE
-
-            nodes.append(
-                GraphNode(
-                    id=node_id, type=node_type, params={"compiled_node": str(node_obj)}
-                )
-            )
-
-        # Извлекаем ребра из channels (упрощенно)
-        # В CompiledStateGraph ребра представлены через каналы
-        for channel_name in compiled_graph.channels.keys():
-            if channel_name.startswith("branch:to:"):
-                target = channel_name.replace("branch:to:", "")
-                if target in compiled_graph.nodes and target != "__start__":
-                    # Это conditional edge, источник определяем по логике
-                    source = (
-                        "router"  # В нашем случае router делает conditional routing
-                    )
-                    edges.append(
-                        GraphEdge(
-                            source=source,
-                            target=target,
-                            condition_type=ConditionType.ROUTER,
-                        )
-                    )
-
-        # Добавляем основные ребра (упрощенно на основе нашей архитектуры)
-        edges.extend(
-            [
-                GraphEdge(source="START", target="router"),
-                GraphEdge(source="calculator", target="explainer"),
-                GraphEdge(source="weather", target="explainer"),
-            ]
-        )
-
-        return GraphDefinition(nodes=nodes, edges=edges, entry_point="START")
-
-    async def _extract_graph_definition(self, langgraph_graph):
-        """Извлекает GraphDefinition из LangGraph StateGraph"""
-
-        nodes = []
-        edges = []
-
-        # Извлекаем ноды
-        for node_id, node_func in langgraph_graph._nodes.items():
-            # Определяем тип ноды
-            if hasattr(node_func, "__name__"):
-                if "function" in node_func.__name__ or node_func.__name__.endswith(
-                    "_function"
-                ):
-                    node_type = NodeType.FUNCTION_NODE
-                else:
-                    node_type = NodeType.AGENT_NODE
-            else:
-                node_type = NodeType.AGENT_NODE
-
-            nodes.append(
-                GraphNode(
-                    id=node_id,
-                    type=node_type,
-                    params={
-                        "function": f"{node_func.__module__}.{node_func.__name__}"
-                        if hasattr(node_func, "__name__")
-                        else "unknown"
-                    },
-                )
-            )
-
-        # Извлекаем обычные ребра
-        for source, targets in langgraph_graph._edges.items():
-            if isinstance(targets, list):
-                for target in targets:
-                    edges.append(GraphEdge(source=source, target=target))
-            else:
-                edges.append(GraphEdge(source=source, target=targets))
-
-        # Извлекаем conditional edges
-        for source, condition_info in langgraph_graph._conditional_edges.items():
-            for target in condition_info.get("mapping", {}).values():
-                edges.append(
-                    GraphEdge(
-                        source=source,
-                        target=target,
-                        condition_type=ConditionType.ROUTER,
-                    )
-                )
-
-        # Определяем entry point
-        entry_point = "START"
-        if hasattr(langgraph_graph, "_entry_point") and langgraph_graph._entry_point:
-            entry_point = langgraph_graph._entry_point
-
-        return GraphDefinition(nodes=nodes, edges=edges, entry_point=entry_point)
-
-    def _convert_tools_to_references(self, raw_tools: List[Any]) -> List[ToolReference]:
-        """
-        Преобразует сырой список инструментов в список ToolReference.
-        Это сердце умного мигратора.
-        """
-        references = []
-
-        for tool in raw_tools:
-            if inspect.isfunction(tool) or inspect.ismethod(tool):
-                full_path = f"{tool.__module__}.{tool.__name__}"
-                references.append(ToolReference(tool_id=full_path))
-
-            elif inspect.isclass(tool):
-                full_path = f"{tool.__module__}.{tool.__name__}"
-                references.append(ToolReference(tool_id=full_path))
-
-            elif isinstance(tool, str) and tool.startswith("mcp:"):
-                references.append(ToolReference(tool_id=tool))
-
-            elif isinstance(tool, str) and tool.startswith("agent:"):
-                references.append(ToolReference(tool_id=tool))
-
-            elif hasattr(tool, "__class__") and issubclass(
-                tool.__class__, BaseAgent
+        for base_module in modules_to_scan:
+            for importer, modname, ispkg in pkgutil.walk_packages(
+                base_module.__path__, base_module.__name__ + "."
             ):
-                agent_class = tool.__class__
-                full_path = f"{agent_class.__module__}.{agent_class.__name__}"
-                references.append(ToolReference(tool_id=full_path))
+                module = importlib.import_module(modname)
 
-            elif hasattr(tool, "name") and hasattr(tool, "func"):
-                if (
-                    tool.func
-                    and hasattr(tool.func, "__module__")
-                    and hasattr(tool.func, "__name__")
-                ):
-                    full_path = f"{tool.func.__module__}.{tool.func.__name__}"
-                    references.append(ToolReference(tool_id=full_path))
-                elif hasattr(tool, "coroutine") and tool.coroutine:
-                    full_path = (
-                        f"{tool.coroutine.__module__}.{tool.coroutine.__name__}"
-                    )
-                    references.append(ToolReference(tool_id=full_path))
-                else:
-                    raise ValueError(f"Не удалось извлечь путь к функции инструмента {tool.name}")
+                for name, obj in inspect.getmembers(module):
+                    if isinstance(obj, FlowConfig):
+                        if getattr(obj, 'is_public', False):
+                            full_flow_id = f"{modname}.{name}"
+                            public_flows.append((full_flow_id, obj))
+                            logger.debug(f"Найден публичный FlowConfig: {full_flow_id}")
 
-            else:
-                raise ValueError(f"Неизвестный тип инструмента при миграции: {type(tool)}")
+        return public_flows
 
-        return references
-
-    async def migrate_single_agent(self, agent_class_path: str):
-        """
-        Мигрирует один агент по пути к классу.
-
-        Args:
-            agent_class_path: Путь к классу агента (например, "app.agents.my_agent.MyAgent")
-        """
-        await self._migrate_agent_from_code(agent_class_path, with_tools=False)
 
     async def remigrate_flow(self, flow_id: str, company: Company):
-        """
-        Перемигрирует (обновляет) flow в указанной компании.
-        Полезно после изменения кода flow.
-        
-        Args:
-            flow_id: Путь к FlowConfig (например, "app.flows.test_flow.test_flow_config")
-            company: Компания для которой выполняется перемиграция
-        """
+        """Перемигрирует flow в указанной компании"""
         logger.info(f"Перемиграция flow {flow_id} для компании {company.company_id}...")
         await self._set_company_context(company)
-        await self._migrate_single_flow_with_deps(flow_id, with_dependencies=False)
+        await FlowConfig.migrate(flow_id, migrator=self, with_dependencies=False)
 
     async def remigrate_agent(self, agent_id: str, company: Company):
-        """
-        Перемигрирует (обновляет) агента в указанной компании.
-        Полезно после изменения кода агента.
-        
-        Args:
-            agent_id: Путь к классу агента (например, "app.agents.calculator.CalculatorAgent")
-            company: Компания для которой выполняется перемиграция
-        """
+        """Перемигрирует агента в указанной компании"""
         logger.info(f"Перемиграция агента {agent_id} для компании {company.company_id}...")
         await self._set_company_context(company)
-        await self._migrate_agent_from_code(agent_id, with_tools=False)
+        await AgentConfig.migrate(agent_id, migrator=self, with_tools=False)
 
     async def remigrate_tool(self, tool_id: str, company: Company):
-        """
-        Перемигрирует (обновляет) tool в указанной компании.
-        Полезно после изменения кода tool.
-        
-        Args:
-            tool_id: Путь к функции tool (например, "app.tools.calc_tools.calculate")
-            company: Компания для которой выполняется перемиграция
-        """
+        """Перемигрирует tool в указанной компании"""
         logger.info(f"Перемиграция tool {tool_id} для компании {company.company_id}...")
         await self._set_company_context(company)
-        await self._migrate_tool_from_code(tool_id)
+        await ToolReference.migrate(tool_id, migrator=self)
 
     async def migrate_defaults_for_company(self, company: Company):
         """
-        Мигрирует все публичные (is_public=True) сущности для новой компании.
-        Сканирует код и находит все flows, агенты и тулы с is_public=True.
+        Мигрирует ТОЛЬКО публичные tools для новой компании.
+        
+        Flows НЕ мигрируются - устанавливаются через Store.
         
         Args:
-            company: Компания для которой выполняется миграция
+            company: Компания для миграции
         """
-        logger.info(f"Миграция всех публичных сущностей для компании {company.company_id}...")
+        logger.info(f"Миграция публичных tools для {company.company_id}...")
         
-        await self.migrate_for_company(
-            company=company,
-            copy_all_public=True
-        )
+        await self._set_company_context(company)
+
+        packages_to_scan = ["app.tools", "app.custom_flows"]
+        all_tool_functions = []
+        
+        for package_name in packages_to_scan:
+            tool_functions = await self._find_tool_functions(package_name)
+            all_tool_functions.extend(tool_functions)
+
+        migrated_count = 0
+        for tool_obj, module_name in all_tool_functions:
+            is_public = getattr(tool_obj, '_platform_is_public', False)
+            if is_public:
+                await ToolReference.migrate(source=tool_obj, migrator=self)
+                migrated_count += 1
+
+        logger.info(f"Мигрировано {migrated_count} публичных tools")
 
     async def migrate_for_company(
         self,
@@ -774,148 +325,38 @@ class Migrator:
         flows: Optional[List[str]] = None,
         agents: Optional[List[str]] = None,
         tools: Optional[List[str]] = None,
-        with_dependencies: bool = True,
-        copy_all_public: bool = False
+        with_dependencies: bool = True
     ):
         """
-        Мигрирует выбранные сущности из кода в указанную компанию.
+        Мигрирует выбранные сущности в компанию (установка из Store).
+        
+        Используется для установки конкретных flows/agents/tools.
+        Игнорирует is_public - мигрирует всё что указано.
         
         Args:
             company: Целевая компания
-            flows: Список flow для миграции (например, ["app.flows.test_flow.flow"])
-            agents: Список агентов для миграции (например, ["app.agents.calculator.CalculatorAgent"])
-            tools: Список tools для миграции (например, ["app.tools.calc_tools.calculate"])
-            with_dependencies: Мигрировать ли зависимости автоматически
-            copy_all_public: Копировать ли все публичные (is_public=True) сущности из системной компании
+            flows: Список flow_id для миграции
+            agents: Список agent_id для миграции  
+            tools: Список tool_id для миграции
+            with_dependencies: Мигрировать ли зависимости рекурсивно
         """
-        logger.info(f"Миграция сущностей для компании {company.company_id}...")
+        logger.info(f"Миграция выбранных сущностей для {company.company_id}...")
         
         await self._set_company_context(company)
         
-        # Если нужно мигрировать все публичные сущности из кода
-        if copy_all_public:
-            logger.info("Миграция всех публичных (is_public=True) тулов и агентов из кода...")
-            await self._migrate_all_public_entities()
-        
         if flows:
-            logger.info(f"Мигрируем {len(flows)} flow...")
             for flow_id in flows:
-                await self._migrate_single_flow_with_deps(flow_id, with_dependencies)
+                await FlowConfig.migrate(flow_id, migrator=self, with_dependencies=with_dependencies)
         
         if agents:
-            logger.info(f"Мигрируем {len(agents)} агентов...")
             for agent_id in agents:
-                await self._migrate_agent_from_code(agent_id, with_tools=with_dependencies)
+                await AgentConfig.migrate(agent_id, migrator=self, with_tools=with_dependencies)
         
         if tools:
-            logger.info(f"Мигрируем {len(tools)} tools...")
             for tool_id in tools:
-                await self._migrate_tool_from_code(tool_id)
+                await ToolReference.migrate(tool_id, migrator=self)
         
-        logger.info(f"✅ Миграция для компании {company.company_id} завершена успешно")
-
-    async def _migrate_all_public_entities(self):
-        """
-        Сканирует код и мигрирует все публичные (is_public=True) flows, агенты и тулы.
-        """
-        migrated_flows = 0
-        migrated_agents = 0
-        migrated_tools = 0
-        
-        # Мигрируем публичные flows
-        logger.info("Сканирование flows из кода...")
-        flow_configs = await self._find_flow_configs()
-        for flow_config in flow_configs:
-            if getattr(flow_config, "is_public", False):
-                try:
-                    await self._migrate_single_flow_with_deps(flow_config.flow_id, with_dependencies=True)
-                    migrated_flows += 1
-                    logger.debug(f"  Мигрирован публичный flow: {flow_config.flow_id}")
-                except Exception as e:
-                    logger.warning(f"Не удалось мигрировать flow {flow_config.flow_id}: {e}")
-        
-        # Мигрируем публичные агенты
-        logger.info("Сканирование агентов из кода...")
-        agent_classes = await self._find_agent_classes()
-        for agent_class in agent_classes:
-            is_public = getattr(agent_class, "is_public", True)
-            if is_public:
-                agent_id = f"{agent_class.__module__}.{agent_class.__name__}"
-                try:
-                    await self._migrate_agent_from_code(agent_id, with_tools=False)
-                    migrated_agents += 1
-                    logger.debug(f"  Мигрирован публичный агент: {agent_id}")
-                except Exception as e:
-                    logger.warning(f"Не удалось мигрировать агент {agent_id}: {e}")
-        
-        # Мигрируем публичные тулы
-        logger.info("Сканирование тулов из кода...")
-        tool_functions = await self._find_tool_functions("app.tools")
-        for tool_obj, modname in tool_functions:
-            is_public = getattr(tool_obj, "_platform_is_public", True)
-            if is_public:
-                tool_id = f"{modname}.{tool_obj.name}"
-                try:
-                    await self._migrate_tool_from_code(tool_id)
-                    migrated_tools += 1
-                    logger.debug(f"  Мигрирован публичный тул: {tool_id}")
-                except Exception as e:
-                    logger.warning(f"Не удалось мигрировать тул {tool_id}: {e}")
-        
-        logger.info(f"✅ Мигрировано {migrated_flows} публичных flows, {migrated_agents} публичных агентов и {migrated_tools} публичных тулов")
-
-    async def migrate_single_flow(self, flow_config: FlowConfig):
-        """
-        Мигрирует один флоу.
-
-        Args:
-            flow_config: Конфигурация флоу
-        """
-        flow_config.source = "migration"
-        now = datetime.now(timezone.utc)
-        flow_config.updated_at = now
-        if not flow_config.created_at:
-            flow_config.created_at = now
-
-        await self.storage.set_flow_config(flow_config)
-        logger.info(f"Флоу {flow_config.flow_id} успешно мигрирован")
-        
-        variables_service = get_variables_service()
-        
-        if flow_config.variables:
-            await variables_service.resolve(flow_config.variables, auto_create=True)
-            logger.info(f"Переменные flow {flow_config.flow_id} обработаны (создано недостающие @var:key)")
-        
-        if flow_config.platforms:
-            await variables_service.resolve(flow_config.platforms, auto_create=True)
-            logger.info(f"Настройки платформ flow {flow_config.flow_id} обработаны (создано недостающие @var:key)")
-
-    async def _find_flow_configs(self) -> List[FlowConfig]:
-        """Находит все FlowConfig объекты в app.flows и app.custom_flows"""
-        flow_configs = []
-        
-        for package_name in ["app.flows", "app.custom_flows"]:
-            try:
-                package = importlib.import_module(package_name)
-                
-                for importer, modname, ispkg in pkgutil.walk_packages(
-                    package.__path__, package.__name__ + "."
-                ):
-                    try:
-                        module = importlib.import_module(modname)
-                        
-                        # Ищем переменные типа FlowConfig
-                        for name, obj in inspect.getmembers(module):
-                            if isinstance(obj, FlowConfig):
-                                logger.debug(f"  Найден FlowConfig: {name} в {modname}")
-                                flow_configs.append(obj)
-                    except Exception as e:
-                        logger.warning(f"Не удалось загрузить модуль {modname}: {e}")
-            except Exception as e:
-                logger.warning(f"Не удалось загрузить пакет {package_name}: {e}")
-        
-        logger.info(f"Найдено {len(flow_configs)} FlowConfig объектов в коде")
-        return flow_configs
+        logger.info("✅ Миграция завершена")
 
     async def _find_tool_functions(self, package_name: str):
         """Находит все @tool функции в пакете (рекурсивно)"""
@@ -969,206 +410,3 @@ class Migrator:
         logger.info(f"🔧 Итого найдено {len(tool_functions)} @tool функций")
         return tool_functions
 
-    async def _migrate_single_flow_with_deps(
-        self,
-        flow_id: str,
-        with_dependencies: bool = True
-    ):
-        """
-        Мигрирует flow из кода с его зависимостями.
-        
-        Args:
-            flow_id: Путь к FlowConfig (например, "app.flows.test_flow.test_flow_config")
-            with_dependencies: Мигрировать ли entry_point_agent и его tools
-        """
-        if not flow_id:
-            raise ValueError("flow_id не может быть пустым")
-        
-        if "." not in flow_id:
-            raise ValueError(f"flow_id должен быть полным путем к переменной (например app.flows.simple_flow.simple_flow_config), получен: {flow_id}")
-        
-        module_path, var_name = flow_id.rsplit(".", 1)
-        module = importlib.import_module(module_path)
-        flow_config_orig = getattr(module, var_name)
-        
-        if not isinstance(flow_config_orig, FlowConfig):
-            raise ValueError(f"Объект {flow_id} не является FlowConfig")
-        
-        # Создаем новый FlowConfig с правильным flow_id (полный путь к переменной)
-        flow_config = FlowConfig(
-            flow_id=flow_id,
-            name=flow_config_orig.name,
-            description=flow_config_orig.description,
-            entry_point_agent=flow_config_orig.entry_point_agent,
-            platforms=flow_config_orig.platforms,
-            timeout=flow_config_orig.timeout,
-            max_retries=flow_config_orig.max_retries,
-            variables=flow_config_orig.variables,
-            is_public=getattr(flow_config_orig, "is_public", False),
-            source=flow_config_orig.source,
-            created_at=flow_config_orig.created_at,
-            updated_at=flow_config_orig.updated_at
-        )
-        
-        await self.migrate_single_flow(flow_config)
-        
-        if with_dependencies and flow_config.entry_point_agent:
-            logger.info(f"Мигрируем зависимости flow {flow_id}: entry_point_agent={flow_config.entry_point_agent}")
-            await self._migrate_agent_from_code(
-                flow_config.entry_point_agent,
-                with_tools=True
-            )
-
-    async def _migrate_agent_from_code(
-        self,
-        agent_id: str,
-        with_tools: bool = True,
-        visited: Optional[set] = None
-    ):
-        """
-        Мигрирует агента из кода со всеми его tools рекурсивно.
-        
-        Args:
-            agent_id: Путь к классу агента (например, "app.agents.calculator.CalculatorAgent")
-            with_tools: Мигрировать ли tools агента
-            visited: Набор уже посещенных агентов для избежания циклов
-        """
-        if visited is None:
-            visited = set()
-        
-        if agent_id in visited:
-            logger.info(f"Агент {agent_id} уже был мигрирован, пропускаем")
-            return
-        
-        visited.add(agent_id)
-        
-        module_path, class_name = agent_id.rsplit(".", 1)
-        module = importlib.import_module(module_path)
-        agent_class = getattr(module, class_name)
-        
-        if not inspect.isclass(agent_class) or not issubclass(agent_class, BaseAgent):
-            raise ValueError(f"Класс {agent_id} не является наследником BaseAgent")
-        
-        config = await self._create_agent_config_from_class(agent_class)
-        await self.storage.set_agent_config(config)
-        logger.info(f"Агент {agent_id} успешно мигрирован")
-        
-        if with_tools:
-            raw_tools = getattr(agent_class, "tools", [])
-            
-            for tool in raw_tools:
-                if inspect.isclass(tool) and issubclass(tool, BaseAgent):
-                    sub_agent_id = f"{tool.__module__}.{tool.__name__}"
-                    await self._migrate_agent_from_code(sub_agent_id, with_tools=True, visited=visited)
-                else:
-                    await self._migrate_tool_from_code(tool)
-
-    async def _migrate_tool_from_code(self, tool_identifier: Any):
-        """
-        Мигрирует один tool из кода в текущую компанию.
-        
-        Args:
-            tool_identifier: Может быть:
-                - Строка "app.tools.calc_tools.calculate" (путь к функции)
-                - Строка "agent:app.agents.weather.agent.TravelInfoAgent" (ссылка на агента)
-                - Функция/StructuredTool объект
-                - Класс агента
-        """
-        # Проверяем является ли это ссылкой на агента
-        if isinstance(tool_identifier, str) and tool_identifier.startswith("agent:"):
-            agent_id = tool_identifier.replace("agent:", "")
-            logger.info(f"Обнаружен субагент {agent_id}, мигрируем как агента")
-            await self._migrate_agent_from_code(agent_id, with_tools=True)
-            return
-        
-        # Проверяем является ли это классом агента
-        if inspect.isclass(tool_identifier) and issubclass(tool_identifier, BaseAgent):
-            agent_id = f"{tool_identifier.__module__}.{tool_identifier.__name__}"
-            logger.info(f"Обнаружен класс агента {agent_id}, мигрируем как агента")
-            await self._migrate_agent_from_code(agent_id, with_tools=True)
-            return
-        
-        # Загружаем tool если это строка
-        if isinstance(tool_identifier, str):
-            module_path, func_name = tool_identifier.rsplit(".", 1)
-            module = importlib.import_module(module_path)
-            tool_obj = getattr(module, func_name)
-        else:
-            tool_obj = tool_identifier
-        
-        if not (hasattr(tool_obj, "name") and hasattr(tool_obj, "description")):
-            raise ValueError(f"Объект {tool_identifier} не является tool")
-        
-        module_name = tool_obj.func.__module__ if hasattr(tool_obj, "func") and tool_obj.func else (
-            tool_obj.coroutine.__module__ if hasattr(tool_obj, "coroutine") and tool_obj.coroutine else "unknown"
-        )
-        
-        tool_ref = await self._create_tool_reference_from_function(tool_obj, module_name)
-        await self.storage.set(f"tool:{tool_ref.tool_id}", tool_ref.model_dump_json())
-        
-        logger.info(f"Tool {tool_ref.tool_id} успешно мигрирован")
-
-    async def _create_tool_reference_from_function(
-        self, tool_obj, module_name: str
-    ) -> ToolReference:
-        """Создает ToolReference из StructuredTool объекта"""
-
-        # Получаем исходный код оригинальной функции
-        # Для sync тулов используем func, для async - coroutine
-        target_func = None
-        if hasattr(tool_obj, "func") and tool_obj.func is not None:
-            target_func = tool_obj.func
-        elif hasattr(tool_obj, "coroutine") and tool_obj.coroutine is not None:
-            target_func = tool_obj.coroutine
-
-        if target_func is None:
-            raise ValueError(
-                f"Не удалось найти исходную функцию для тула {tool_obj.name}"
-            )
-
-        source_code = inspect.getsource(target_func)
-
-        # Создаем function_path - используем имя переменной в модуле
-        function_path = f"{module_name}.{tool_obj.name}"
-
-        # Извлекаем параметры из args_schema
-        params = {}
-        if hasattr(tool_obj, "args_schema") and tool_obj.args_schema:
-            # Получаем поля из Pydantic модели
-            if hasattr(tool_obj.args_schema, "model_fields"):
-                for (
-                    field_name,
-                    field_info,
-                ) in tool_obj.args_schema.model_fields.items():
-                    params[field_name] = {
-                        "type": str(field_info.annotation)
-                        if field_info.annotation
-                        else "str",
-                        "description": field_info.description or "",
-                        "required": field_info.is_required()
-                        if hasattr(field_info, "is_required")
-                        else True,
-                    }
-
-        # Извлекаем метаданные платформы из декоратора
-        platform_title = getattr(tool_obj, '_platform_title', None)
-        platform_cost = getattr(tool_obj, '_platform_cost', 0.0)
-        platform_billing_name = getattr(tool_obj, '_platform_billing_name', None)
-        platform_free_for_plans = getattr(tool_obj, '_platform_free_for_plans', [])
-        platform_is_public = getattr(tool_obj, '_platform_is_public', False)
-        
-        return ToolReference(
-            tool_id=function_path,
-            title=platform_title,
-            code_mode=CodeMode.CODE_REFERENCE,
-            function_path=function_path,
-            inline_code=source_code,  # Сохраняем код для возможности INLINE режима
-            description=tool_obj.description or f"Инструмент {tool_obj.name}",
-            params=params,
-            # Метаданные платформы
-            cost=platform_cost,
-            billing_name=platform_billing_name,
-            free_for_plans=platform_free_for_plans,
-            tariff_limits={},  # Будут заполняться через UI или конфиг
-            is_public=platform_is_public,
-        )

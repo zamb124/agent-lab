@@ -46,7 +46,7 @@ async def bots_list(request: Request):
                     "entry_point": flow_config.entry_point_agent,
                 }
                 bots.append(bot_info)
-        except Exception as e:
+        except Exception:
             continue
     
     return templates.TemplateResponse(

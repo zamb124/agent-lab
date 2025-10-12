@@ -7,12 +7,12 @@ import asyncio
 import tempfile
 import json
 from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import patch
 
 from app.core.translation_manager import TranslationManager, get_translation_manager, t
 from app.models.i18n_models import Language, I18nConfig
 from app.models.context_models import Context
-from app.identity.models import User, Company, AuthProvider, UserStatus
+from app.identity.models import User, AuthProvider, UserStatus
 
 
 class TestFullI18nWorkflow:

@@ -5,8 +5,6 @@
 только через БД API без написания кода.
 """
 import pytest
-import asyncio
-import os
 from pathlib import Path
 import sys
 
@@ -27,8 +25,7 @@ from langchain_core.messages import HumanMessage
 async def test_mock_llm_direct():
     """Тестируем мок LLM напрямую"""
     
-    from app.core.llm_factory import get_llm, get_global_mock_llm
-    from app.models import LLMConfig
+    from app.core.llm_factory import get_llm
     from langchain_core.messages import HumanMessage
     
     # Создаем мок
@@ -158,7 +155,6 @@ async def test_execute_db_react_agent(save_test_company):
     """Создание и выполнение ReAct агента из БД"""
     
     from app.core.llm_factory import get_global_mock_llm, get_llm
-    from app.models import LLMConfig
     
     # Создаем мок чтобы инициализировать глобальную переменную
     get_llm("mock", "mock-gpt-4")
@@ -214,7 +210,6 @@ async def test_react_agent_tools(save_test_company):
     """Создание и тест что ReAct агент правильно использует инструменты"""
     
     from app.core.llm_factory import get_global_mock_llm, get_llm
-    from app.models import LLMConfig
     
     # Создаем мок чтобы инициализировать глобальную переменную
     get_llm("mock", "mock-gpt-4")

@@ -8,13 +8,66 @@
 3. Вложенные структуры
 """
 
-from app.models import FlowConfig
+import logging
+from app.models import FlowConfig, FlowAuthor
+from app.services.variables_service import VariablesService
+from app.agents.weather.agent import WeatherAgent
+
+logger = logging.getLogger(__name__)
+
+async def install(flow_config: FlowConfig, company_id: str):
+    """
+    Хук установки Weather Flow.
+    Создает дефолтные переменные для компании.
+    """
+    variables_service = VariablesService()
+    
+    await variables_service.set_var(
+        key="default_city",
+        value="Москва",
+        description="Город по умолчанию для погоды"
+    )
+    
+    logger.info(f"Weather Flow установлен для компании {company_id}")
+    return flow_config
+
+async def uninstall(flow_config: FlowConfig, company_id: str):
+    """
+    Хук удаления Weather Flow.
+    Удаляет созданные переменные.
+    """
+    variables_service = VariablesService()
+    
+    await variables_service.delete_var("default_city")
+    
+    logger.info(f"Weather Flow удален из компании {company_id}")
+
+async def after_install():
+    """
+    Хук выполняемый после установки flow.
+    Может вернуть URL для открытия в новом окне браузера.
+    
+    Returns:
+        str | None: URL для открытия в новом окне или None
+    """
+    logger.info("🎉 Weather Flow успешно установлен!")
+    return "https://openweathermap.org/api"
 
 weather_flow_config = FlowConfig(
     name="Weather Flow",
     description="Простой флоу для получения информации о погоде",
-    entry_point_agent="app.agents.weather.agent.WeatherAgent",
+    entry_point_agent=WeatherAgent,
     
+    is_public=True,
+    image_path="app/flows/weather_flow.jpg",
+    author=FlowAuthor(
+        name="Viktor Shved",
+        email="viktor@shved.com",
+        website="https://shved.com",
+        github="https://github.com/viktorshved",
+        linkedin="https://linkedin.com/in/viktorshved",
+        twitter="https://twitter.com/viktorshved"
+    ),
     # Пример platforms с разными вариантами
     platforms={
         "api": {},
@@ -83,7 +136,9 @@ weather_flow_config = FlowConfig(
             "@var:company_city"  # Ссылка внутри list
         ]
     },
-    is_public=True,
+    install_hook=install,
+    after_install_hook=after_install,
+    uninstall_hook=uninstall
 )
 
 # Для использования переменных в промптах агента:

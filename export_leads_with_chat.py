@@ -60,7 +60,7 @@ async def get_all_leads(
             logger.info(f"Страница {page}: получено {len(leads)} сделок (всего: {len(all_leads)})")
             page += 1
 
-        except Exception as e:
+        except Exception:
             logger.error(f"Ошибка при получении сделок на странице {page}", exc_info=True)
             break
 
@@ -176,13 +176,13 @@ async def export_leads_with_chat_history(
             encoding='utf-8'
         )
 
-        logger.info(f"\n✅ Экспорт успешно завершен!")
+        logger.info("\n✅ Экспорт успешно завершен!")
         logger.info(f"📁 Результаты сохранены в: {output_path.absolute()}")
         logger.info(f"📊 Экспортировано сделок: {len(all_leads)}")
         logger.info(f"💾 Размер файла: {output_path.stat().st_size / 1024 / 1024:.2f} МБ")
 
-    except Exception as e:
-        logger.error(f"❌ Ошибка при экспорте данных", exc_info=True)
+    except Exception:
+        logger.error("❌ Ошибка при экспорте данных", exc_info=True)
         raise
 
     finally:

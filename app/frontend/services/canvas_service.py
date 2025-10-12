@@ -149,6 +149,6 @@ class CanvasService:
         flow.canvas_data = canvas_data
         await self.storage.set_flow_config(flow)
         
-        logger.info(f"✅ Данные канваса сохранены в FlowConfig")
+        logger.info("✅ Данные канваса сохранены в FlowConfig")
         
         await self.update_agents_from_canvas(canvas_data)

@@ -86,11 +86,11 @@ async def test_source_node_in_history(save_test_company):
         include_checkpoints=True
     )
     
-    print(f"\n📊 Статистика истории:")
+    print("\n📊 Статистика истории:")
     print(f"  - Всего сообщений: {history.total_messages}")
     print(f"  - Всего checkpoints: {history.total_checkpoints}")
     
-    print(f"\n📋 Детали сообщений с source_node:")
+    print("\n📋 Детали сообщений с source_node:")
     for i, message in enumerate(history.messages, 1):
         source_info = f" [Node: {message.source_node}]" if message.source_node else " [Node: не указан]"
         print(f"  {i}. {message.role.value}{source_info}")
@@ -99,7 +99,7 @@ async def test_source_node_in_history(save_test_company):
             print(f"     Содержимое: {content_preview}")
     
     if history.checkpoints:
-        print(f"\n🔖 Детали checkpoints:")
+        print("\n🔖 Детали checkpoints:")
         for i, checkpoint in enumerate(history.checkpoints, 1):
             source_info = f" [Source: {checkpoint.source_node}]" if checkpoint.source_node else " [Source: не указан]"
             print(f"  {i}. Checkpoint #{checkpoint.step}{source_info}")
@@ -116,11 +116,11 @@ async def test_source_node_in_history(save_test_company):
     
     # Source_node трекинг - опциональная feature, проверяем но не требуем
     if has_source_nodes or has_checkpoint_sources:
-        print(f"\n✅ Source_node трекинг работает!")
+        print("\n✅ Source_node трекинг работает!")
     else:
-        print(f"\n⚠️  Source_node не найден - feature может быть не активирована")
+        print("\n⚠️  Source_node не найден - feature может быть не активирована")
     
-    print(f"\n✅ Тест отслеживания source_node пройден успешно!")
+    print("\n✅ Тест отслеживания source_node пройден успешно!")
 
 
 @pytest.mark.asyncio
@@ -195,7 +195,7 @@ async def test_checkpoint_metadata_structure(save_test_company):
         include_checkpoints=True
     )
     
-    print(f"\n🔍 Анализ metadata в checkpoints:")
+    print("\n🔍 Анализ metadata в checkpoints:")
     for checkpoint in history.checkpoints:
         print(f"\n  Checkpoint #{checkpoint.step}:")
         print(f"    - source_node: {checkpoint.source_node}")
@@ -211,4 +211,4 @@ async def test_checkpoint_metadata_structure(save_test_company):
                     value_str = str(value)[:100] + "..." if len(str(value)) > 100 else str(value)
                     print(f"      • {key}: {value_str}")
     
-    print(f"\n✅ Тест структуры metadata пройден успешно!")
+    print("\n✅ Тест структуры metadata пройден успешно!")

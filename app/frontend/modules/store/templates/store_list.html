@@ -1,0 +1,65 @@
+<div class="store-grid">
+    {% if flows %}
+        {% for flow in flows %}
+        <div class="store-card {% if flow.installed %}installed{% endif %}" data-flow-id="{{ flow.flow_id }}" onclick="openFlowDetails('{{ flow.flow_id }}')">
+            {% if flow.installed %}
+            <span class="store-card-badge installed">
+                <i class="bi bi-check-circle-fill"></i>
+                Установлено
+            </span>
+            {% endif %}
+            <div class="store-card-image">
+                <img src="{{ flow.image_url }}" alt="{{ flow.name }}" loading="lazy">
+            </div>
+            <div class="store-card-body">
+                <h3 class="store-card-title">{{ flow.name }}</h3>
+                <p class="store-card-description">{{ flow.description }}</p>
+                
+                {% if flow.platforms and flow.platforms|length > 0 %}
+                <div class="store-card-platforms">
+                    <span class="platforms-label">
+                        <i class="bi bi-box"></i>
+                        Платформы:
+                    </span>
+                    <div class="platform-tags">
+                        {% for platform in flow.platforms %}
+                        <span class="platform-tag platform-{{ platform }}">
+                            {% if platform == 'telegram' %}
+                                <i class="bi bi-telegram"></i> Telegram
+                            {% elif platform == 'whatsapp' %}
+                                <i class="bi bi-whatsapp"></i> WhatsApp
+                            {% elif platform == 'api' %}
+                                <i class="bi bi-code-slash"></i> API
+                            {% elif platform == 'web' %}
+                                <i class="bi bi-globe"></i> Web
+                            {% elif platform == 'amocrm' %}
+                                <i class="bi bi-building"></i> AmoCRM
+                            {% else %}
+                                <i class="bi bi-gear"></i> {{ platform }}
+                            {% endif %}
+                        </span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if flow.author %}
+                <div class="store-card-author">
+                    <i class="bi bi-person-circle"></i>
+                    <span>{{ flow.author.get('name', 'Неизвестный автор') }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="bi bi-shop display-1"></i>
+            </div>
+            <h3 data-i18n="store.empty_state.title">Магазин пуст</h3>
+            <p data-i18n="store.empty_state.description">Нет доступных flows для установки</p>
+        </div>
+    {% endif %}
+</div>
+

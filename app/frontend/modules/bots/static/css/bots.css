@@ -2,7 +2,7 @@
     padding: 0;
     margin: 0;
     position: relative;
-    min-height: 500px;
+    min-height: calc(100vh - var(--header-height) - 2rem);
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
@@ -35,6 +35,19 @@
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 1.25rem;
     width: 100%;
+}
+
+.bot-card-create {
+    border: 1px dashed var(--border-secondary);
+}
+
+.bot-card-create:hover {
+    border-color: var(--accent-primary);
+}
+
+.bot-card-create:hover i {
+    opacity: 1 !important;
+    color: var(--accent-primary);
 }
 
 .bot-card {
@@ -262,25 +275,6 @@
     display: inline-block;
 }
 
-.empty-state {
-    text-align: center;
-    padding: 4rem 2rem;
-}
-
-.empty-state-icon {
-    margin-bottom: 1.5rem;
-    color: var(--text-muted);
-}
-
-.empty-state h3 {
-    color: var(--text-primary);
-    margin-bottom: 0.5rem;
-}
-
-.empty-state p {
-    color: var(--text-secondary);
-    margin-bottom: 1.5rem;
-}
 
 .bot-modal {
     position: fixed;
@@ -1624,7 +1618,6 @@ input:checked + .slider:before {
 }
 
 .loading-state,
-.empty-state,
 .error-state {
     text-align: center;
     padding: 60px 20px;
@@ -1632,18 +1625,11 @@ input:checked + .slider:before {
 }
 
 .loading-state i,
-.empty-state i,
 .error-state i {
     font-size: 3rem;
     display: block;
     margin-bottom: 0.9375rem;
     opacity: 0.5;
-}
-
-.empty-state p:first-of-type {
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 0.5rem;
 }
 
 .checkbox-group {
@@ -1816,5 +1802,223 @@ input:checked + .slider:before {
 
 #bot-expanded-modal {
     z-index: 1020;
+}
+
+/* Мобильное меню действий */
+.btn-mobile-only {
+    display: none;
+}
+
+.btn-desktop-only {
+    display: flex;
+}
+
+.mobile-actions-menu {
+    position: relative;
+}
+
+.mobile-actions-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    background: var(--bg-card);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    min-width: 200px;
+    z-index: 1000;
+    overflow: hidden;
+}
+
+.mobile-actions-dropdown.show {
+    display: block;
+    animation: slideDown 0.2s ease-out;
+}
+
+.mobile-action-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    text-decoration: none;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    font-size: 0.9375rem;
+}
+
+.mobile-action-item:hover {
+    background: var(--bg-secondary);
+}
+
+.mobile-action-item i {
+    font-size: 1.125rem;
+    color: var(--text-secondary);
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Адаптация для мобильных устройств */
+@media (max-width: 768px) {
+    /* Показываем мобильное меню, скрываем десктопные кнопки */
+    .btn-mobile-only {
+        display: block;
+    }
+    
+    .btn-desktop-only {
+        display: none !important;
+    }
+    
+    /* Скрываем ID flow и агента в шапке */
+    .header-controls-row .control-group:has(code) {
+        display: none !important;
+    }
+    
+    /* Делаем вкладки скроллируемыми горизонтально */
+    .settings-tabs {
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        flex-wrap: nowrap;
+        padding: 0 0.75rem;
+    }
+    
+    .settings-tabs::-webkit-scrollbar {
+        display: none;
+    }
+    
+    .settings-tab {
+        flex-shrink: 0;
+        padding: 0.75rem 1rem;
+        white-space: nowrap;
+    }
+    
+    /* Сокращаем лейблы полей */
+    .form-group label {
+        font-size: 0.8125rem;
+        word-break: keep-all;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .form-row-main .form-group label {
+        max-width: 100%;
+    }
+    
+    /* Адаптация шапки для мобильных */
+    .header-top-row {
+        padding: 0.75rem 1rem;
+    }
+    
+    .header-left h2 {
+        font-size: 1.125rem;
+    }
+    
+    .header-controls-row {
+        padding: 0.5rem 1rem;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    /* Адаптация редактора промпта */
+    .bot-details-content {
+        padding: 0.75rem;
+    }
+    
+    .settings-panel {
+        padding: 0;
+    }
+    
+    .main-settings-header {
+        padding: 0;
+    }
+    
+    .form-row-main {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    
+    .form-row-main .form-group {
+        width: 100%;
+    }
+    
+    /* Уменьшаем отступы */
+    .platforms-header,
+    .panel-description {
+        padding-left: 0 !important;
+    }
+    
+    .settings-actions {
+        padding: 0.75rem;
+    }
+    
+    /* Платформы */
+    .platform-settings {
+        margin-bottom: 0.75rem;
+    }
+    
+    .platform-header {
+        padding: 0.75rem;
+    }
+    
+    .platform-content {
+        padding: 0.75rem;
+    }
+    
+    /* Модалка на весь экран на мобильных */
+    .bot-modal-content {
+        border-radius: 0;
+        max-width: 100%;
+        height: 100vh;
+    }
+    
+    #bot-expanded-modal {
+        padding: 0;
+    }
+}
+
+/* Адаптация для очень маленьких экранов */
+@media (max-width: 480px) {
+    .header-left h2 {
+        font-size: 1rem;
+    }
+    
+    .header-left h2 i {
+        font-size: 1.125rem;
+    }
+    
+    .settings-tab {
+        font-size: 0.875rem;
+        padding: 0.625rem 0.875rem;
+    }
+    
+    .settings-tab i {
+        font-size: 0.875rem;
+    }
+    
+    .form-group label {
+        font-size: 0.75rem;
+    }
+    
+    .btn-icon {
+        width: 32px;
+        height: 32px;
+        font-size: 0.875rem;
+    }
 }
 

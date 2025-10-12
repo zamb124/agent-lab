@@ -3,12 +3,10 @@
 """
 import pytest
 import pytest_asyncio
-import asyncio
 import os
-import sys
 import re
 from pathlib import Path
-from typing import Callable, Dict, Any, Optional
+from typing import Callable, Dict, Optional
 from unittest.mock import MagicMock
 
 # Загружаем .env файл для тестов

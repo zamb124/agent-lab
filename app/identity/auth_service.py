@@ -117,7 +117,7 @@ class AuthService:
             # Проверяем, не использован ли уже этот код
             cached_result = await self.storage.get(code_key)
             if cached_result:
-                logger.info(f"⚠️ OAuth код уже использован - возвращаем кешированный результат")
+                logger.info("⚠️ OAuth код уже использован - возвращаем кешированный результат")
                 result_data = json.loads(cached_result)
                 
                 user = await self._get_user(result_data["user_id"])
@@ -150,10 +150,10 @@ class AuthService:
                 # Если код уже использован - пробуем вернуть кешированный результат
                 error_text = str(e).lower()
                 if "expired" in error_text or "invalid" in error_text:
-                    logger.warning(f"⚠️ Код уже использован или истек, проверяем кеш")
+                    logger.warning("⚠️ Код уже использован или истек, проверяем кеш")
                     cached_result = await self.storage.get(code_key)
                     if cached_result:
-                        logger.info(f"✅ Найден кешированный результат")
+                        logger.info("✅ Найден кешированный результат")
                         result_data = json.loads(cached_result)
                         
                         user = await self._get_user(result_data["user_id"])

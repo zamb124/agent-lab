@@ -4,7 +4,7 @@ API для работы с переменными.
 
 import logging
 from fastapi import APIRouter, HTTPException
-from typing import List, Dict, Any
+from typing import List, Any
 from pydantic import BaseModel
 
 from app.frontend.dependencies import StorageDep
@@ -237,7 +237,7 @@ async def get_flow_variables(flow_id: str, storage: StorageDep) -> VariablesResp
         for key, value in agent_config.local_variables.items():
             local_vars.append(Variable(
                 name=key,
-                description=f"Локальная переменная агента",
+                description="Локальная переменная агента",
                 category="local",
                 value=value,
                 editable=True

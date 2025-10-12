@@ -3,13 +3,10 @@
 Полный путь: WhatsApp webhook -> Interface -> TaskProcessor -> Agent -> Response.
 """
 import pytest
-import asyncio
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.interfaces.whatsapp_interface import WhatsAppInterface
 from app.interfaces.base import Message
-from app.models import FlowConfig, FileRecord, FileStatus
 
 
 @pytest.mark.asyncio
@@ -65,7 +62,7 @@ class TestWhatsAppFullIntegration:
         assert message.user_id == "whatsapp:9111111111111"
         assert message.metadata["profile_name"] == "Integration Test User"
         
-        print(f"✅ Полный флоу текстового сообщения работает")
+        print("✅ Полный флоу текстового сообщения работает")
         print(f"   User: {message.user_id}")
         print(f"   Content: {message.content}")
         print(f"   Session: {message.session_id}")
@@ -111,7 +108,7 @@ class TestWhatsAppFullIntegration:
         assert message is not None
         assert "Beautiful sunset" in message.content
         assert "📷" in message.content
-        print(f"✅ Изображение обработано и добавлено в сообщение")
+        print("✅ Изображение обработано и добавлено в сообщение")
     
     async def test_whatsapp_audio_message_with_recognition(self):
         """Тест обработки голосового сообщения с распознаванием"""
@@ -157,7 +154,7 @@ class TestWhatsAppFullIntegration:
         assert message is not None
         assert "🎤" in message.content
         assert "Распознано" in message.content
-        print(f"✅ Голосовое сообщение обработано с распознаванием")
+        print("✅ Голосовое сообщение обработано с распознаванием")
     
     async def test_whatsapp_command_processing(self):
         """Тест обработки команд через webhook"""
@@ -201,7 +198,7 @@ class TestWhatsAppFullIntegration:
         # Но отправляет ответ на команду
         assert len(mock_sent_messages) == 1
         assert "команд" in mock_sent_messages[0].content.lower()
-        print(f"✅ Команда обработана и ответ отправлен")
+        print("✅ Команда обработана и ответ отправлен")
     
     async def test_whatsapp_button_interaction_flow(self):
         """Тест интерактивного флоу с кнопками"""
@@ -236,7 +233,7 @@ class TestWhatsAppFullIntegration:
             # Отправляем кнопки
             await interface.send_message(outgoing_message)
         
-        print(f"✅ Кнопки отправлены пользователю")
+        print("✅ Кнопки отправлены пользователю")
         
         # Шаг 2: Пользователь нажимает кнопку
         button_click_webhook = {
@@ -273,9 +270,9 @@ class TestWhatsAppFullIntegration:
         assert message.content == "Москва"
         assert message.user_id == "whatsapp:9555555555555"
         
-        print(f"✅ Полный интерактивный флоу работает:")
-        print(f"   1. Кнопки отправлены")
-        print(f"   2. Нажатие кнопки получено")
+        print("✅ Полный интерактивный флоу работает:")
+        print("   1. Кнопки отправлены")
+        print("   2. Нажатие кнопки получено")
         print(f"   3. Контент извлечен: {message.content}")
     
     async def test_whatsapp_multimodal_message(self):
@@ -327,7 +324,7 @@ class TestWhatsAppFullIntegration:
         assert "📷" in message.content
         assert "weather_map.jpg" in message.content
         
-        print(f"✅ Мультимодальное сообщение (текст + изображение) обработано")
+        print("✅ Мультимодальное сообщение (текст + изображение) обработано")
         print(f"   Content preview: {message.content[:100]}...")
         
         # Бот отвечает с кнопками
@@ -356,7 +353,7 @@ class TestWhatsAppFullIntegration:
             
             await interface.send_message(outgoing_message)
         
-        print(f"✅ Ответ с кнопками отправлен")
+        print("✅ Ответ с кнопками отправлен")
     
     async def test_whatsapp_voice_to_voice_flow(self):
         """Тест голосового диалога: голос -> распознавание -> голосовой ответ"""
@@ -405,8 +402,8 @@ class TestWhatsAppFullIntegration:
         assert "Распознано" in incoming_message.content
         assert "Какая погода в Санкт-Петербурге?" in incoming_message.content
         
-        print(f"✅ Голосовое сообщение распознано")
-        print(f"   Recognized text: Какая погода в Санкт-Петербурге?")
+        print("✅ Голосовое сообщение распознано")
+        print("   Recognized text: Какая погода в Санкт-Петербурге?")
         
         # Бот отвечает голосом
         outgoing_with_audio = Message(
@@ -442,8 +439,8 @@ class TestWhatsAppFullIntegration:
                     
                     await interface.send_message(outgoing_with_audio)
         
-        print(f"✅ Голосовой ответ отправлен")
-        print(f"   Voice-to-Voice диалог работает!")
+        print("✅ Голосовой ответ отправлен")
+        print("   Voice-to-Voice диалог работает!")
     
     async def test_whatsapp_document_upload_flow(self):
         """Тест загрузки и обработки документа"""
@@ -493,7 +490,7 @@ class TestWhatsAppFullIntegration:
         assert "quarterly_report.pdf" in message.content
         assert "📎" in message.content
         
-        print(f"✅ Документ обработан для анализа агентом")
+        print("✅ Документ обработан для анализа агентом")
     
     async def test_whatsapp_location_sharing(self):
         """Тест получения локации от пользователя"""
@@ -536,7 +533,7 @@ class TestWhatsAppFullIntegration:
         assert "55.7558" in message.content
         assert "37.6173" in message.content
         
-        print(f"✅ Локация обработана с координатами и названием")
+        print("✅ Локация обработана с координатами и названием")
     
     async def test_whatsapp_media_group_simulation(self):
         """Тест получения нескольких медиафайлов подряд"""
@@ -603,7 +600,7 @@ class TestWhatsAppFullIntegration:
         assert len(messages_received) == 2
         assert all(msg is not None for msg in messages_received)
         
-        print(f"✅ Несколько медиафайлов обработаны как отдельные сообщения")
+        print("✅ Несколько медиафайлов обработаны как отдельные сообщения")
         print(f"   Получено сообщений: {len(messages_received)}")
 
 
@@ -617,7 +614,7 @@ class TestWhatsAppErrorHandling:
         platform_config = {"phone_number_id": "111111111111111"}
         interface = WhatsAppInterface("test_token", platform_config)
         
-        message = Message(
+        Message(
             user_id="whatsapp:9111111111111",
             session_id="test_session",
             content="Test message",
@@ -640,7 +637,7 @@ class TestWhatsAppErrorHandling:
             with pytest.raises(Exception):
                 await interface._send_text_message("9111111111111", "Test", {})
         
-        print(f"✅ Rate limit ошибка обрабатывается исключением")
+        print("✅ Rate limit ошибка обрабатывается исключением")
     
     @pytest.mark.asyncio
     async def test_invalid_phone_number_error(self):
@@ -660,7 +657,7 @@ class TestWhatsAppErrorHandling:
             with pytest.raises(Exception):
                 await interface._send_text_message("invalid_phone", "Test", {})
         
-        print(f"✅ Ошибка невалидного номера обрабатывается")
+        print("✅ Ошибка невалидного номера обрабатывается")
     
     @pytest.mark.asyncio
     async def test_media_download_error(self):
@@ -680,7 +677,7 @@ class TestWhatsAppErrorHandling:
             with pytest.raises(Exception):
                 await interface._get_media_url("expired_media_id")
         
-        print(f"✅ Ошибка истекшего медиа обрабатывается")
+        print("✅ Ошибка истекшего медиа обрабатывается")
 
 
 class TestWhatsAppCompatibilityWithTelegram:
@@ -728,8 +725,8 @@ class TestWhatsAppCompatibilityWithTelegram:
         
         assert message.platform == "whatsapp"
         
-        print(f"✅ Message формат совместим с Telegram")
-        print(f"   Все поля присутствуют и корректны")
+        print("✅ Message формат совместим с Telegram")
+        print("   Все поля присутствуют и корректны")
     
     @pytest.mark.asyncio
     async def test_commands_compatibility(self):
@@ -789,7 +786,7 @@ class TestWhatsAppCompatibilityWithTelegram:
         assert "*Important:*" in whatsapp_text
         assert "_+15°C_" in whatsapp_text
         
-        print(f"✅ Markdown форматирование совместимо")
+        print("✅ Markdown форматирование совместимо")
         print(f"   Telegram: {telegram_style_text}")
         print(f"   WhatsApp: {whatsapp_text}")
 
@@ -830,7 +827,7 @@ class TestWhatsAppInteractiveMessages:
         assert sent_payload["interactive"]["type"] == "button"
         assert len(sent_payload["interactive"]["action"]["buttons"]) == 2
         
-        print(f"✅ Reply buttons (2 кнопки) отправлены корректно")
+        print("✅ Reply buttons (2 кнопки) отправлены корректно")
     
     @pytest.mark.asyncio
     async def test_send_list_message(self):
@@ -865,7 +862,7 @@ class TestWhatsAppInteractiveMessages:
         assert sent_payload["interactive"]["type"] == "list"
         assert len(sent_payload["interactive"]["action"]["sections"][0]["rows"]) == 5
         
-        print(f"✅ List message (5 кнопок) отправлен корректно")
+        print("✅ List message (5 кнопок) отправлен корректно")
 
 
 if __name__ == "__main__":

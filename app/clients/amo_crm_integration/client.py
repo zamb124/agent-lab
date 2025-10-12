@@ -198,7 +198,7 @@ class AmoCRMClient:
                 data = response.json()
 
                 access_token = data["response"]["chats"]["session"]["access_token"]
-                refresh_token = data["response"]["chats"]["session"]["refresh_token"]
+                data["response"]["chats"]["session"]["refresh_token"]
 
 
                 expiry_time = datetime.now() + timedelta(minutes=cache_ttl_minutes)
@@ -289,7 +289,7 @@ class AmoCRMClient:
         try:
             amojo_token = await self.get_amojo_token()
 
-            url = f"https://amojo.amocrm.ru/v2/typing"
+            url = "https://amojo.amocrm.ru/v2/typing"
             params = {"stand": "v16"}
             headers = {
                 "Accept": "*/*",

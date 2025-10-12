@@ -5,7 +5,6 @@
 вызывают другие флоу, и все это работает из БД.
 """
 import pytest
-import asyncio
 from pathlib import Path
 import sys
 

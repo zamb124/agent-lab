@@ -3,12 +3,11 @@
 """
 import pytest
 import json
-import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.identity.models import (
     AuthProvider, User, AuthSession, ProviderUserInfo, 
-    AuthRequest, AuthResult, UserStatus
+    AuthRequest, UserStatus
 )
 from app.identity.base_provider import BaseAuthProvider
 from app.identity.providers.yandex import YandexProvider
@@ -101,7 +100,7 @@ class TestYandexProvider:
         assert provider.client_id == "test-client-id"
         assert provider.client_secret == "test-secret"
         assert provider.auth_url == "https://oauth.yandex.ru/authorize"
-        assert provider.validate_config() == True
+        assert provider.validate_config()
     
     def test_yandex_authorization_url(self):
         """Тест генерации URL авторизации Yandex"""
@@ -219,7 +218,7 @@ class TestAuthService:
     async def test_auth_service_initialization_with_config(self):
         """Тест инициализации AuthService"""
         # Создаем тестовую конфигурацию
-        from app.core.config import Settings, AuthConfig, AuthProviderConfig
+        from app.core.config import AuthConfig, AuthProviderConfig
         
         test_auth_config = AuthConfig(
             enabled=True,
@@ -390,7 +389,7 @@ class TestAuthService:
             result = await auth_service.complete_auth(auth_request)
             
             # Проверяем результат
-            assert result.success == True
+            assert result.success
             assert result.user is not None
             assert result.user.user_id == "user_123"
             assert result.user.name == "Тест Пользователь"
@@ -437,7 +436,7 @@ class TestAuthService:
             result = await auth_service.complete_auth(auth_request)
             
             # Проверяем что авторизация не удалась
-            assert result.success == False
+            assert not result.success
             assert "Недействительный state" in result.error_message
             assert result.user is None
             assert result.session is None
@@ -485,7 +484,7 @@ class TestAuthService:
         # Тестируем logout
         result = await auth_service.logout("test_session")
         
-        assert result == True
+        assert result
         auth_service.storage.delete.assert_called_once_with("auth_session:test_session")
 
 
@@ -520,7 +519,7 @@ class TestBaseProvider:
                 )
         
         provider = TestProvider(AuthProvider.YANDEX, valid_config)
-        assert provider.validate_config() == True
+        assert provider.validate_config()
         
         # Некорректная конфигурация (отключена)
         invalid_config = AuthProviderConfig(
@@ -533,7 +532,7 @@ class TestBaseProvider:
         )
         
         provider_disabled = TestProvider(AuthProvider.YANDEX, invalid_config)
-        assert provider_disabled.validate_config() == False
+        assert not provider_disabled.validate_config()
         
         # Некорректная конфигурация (отсутствует client_id)
         incomplete_config = AuthProviderConfig(
@@ -546,7 +545,7 @@ class TestBaseProvider:
         )
         
         provider_incomplete = TestProvider(AuthProvider.YANDEX, incomplete_config)
-        assert provider_incomplete.validate_config() == False
+        assert not provider_incomplete.validate_config()
     
     def test_build_auth_params(self):
         """Тест построения параметров авторизации"""

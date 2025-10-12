@@ -76,10 +76,7 @@ class TestRealRAGIntegration:
             list_documents_in_knowledge_base
         )
         from app.core.storage import Storage
-        from app.models import FlowConfig
         from app.models.rag_models import AgentRAGConfig
-        from app.core.context import get_context, set_context
-        from app.models.context_models import Context, User, Company
         from unittest.mock import MagicMock, AsyncMock
         import json
         
@@ -99,7 +96,7 @@ class TestRealRAGIntegration:
         storage = Storage()
         
         try:
-            print(f"\n📁 Загружаем PDF в S3...")
+            print("\n📁 Загружаем PDF в S3...")
             upload_success = await s3_client.upload_file(
                 file_path=str(test_pdf_path),
                 key=s3_key,
@@ -108,7 +105,7 @@ class TestRealRAGIntegration:
             assert upload_success
             print(f"✅ PDF загружен в S3: {s3_key}")
             
-            print(f"\n💾 Создаем FileRecord в БД...")
+            print("\n💾 Создаем FileRecord в БД...")
             file_record = {
                 "file_id": file_id,
                 "s3_key": s3_key,
@@ -123,7 +120,7 @@ class TestRealRAGIntegration:
             await storage.set(f"s3:vkcloud:{file_id}", json.dumps(file_record))
             print(f"✅ FileRecord создан: {file_id}")
             
-            print(f"\n📦 Создаем namespace в Agentset...")
+            print("\n📦 Создаем namespace в Agentset...")
             rag_provider = get_rag_provider("agentset")
             
             company_id = f"company_{timestamp}"
@@ -133,7 +130,7 @@ class TestRealRAGIntegration:
             print(f"✅ Namespace создан: {namespace.namespace_id}")
             print(f"   Имя: {namespace.name}")
             
-            print(f"\n🔧 Настраиваем контекст...")
+            print("\n🔧 Настраиваем контекст...")
             from unittest.mock import patch
             
             mock_context = MagicMock()
@@ -157,7 +154,7 @@ class TestRealRAGIntegration:
             async def mock_get_or_create_ns(scope_type, scope_id):
                 return namespace.namespace_id
             
-            print(f"\n📤 Вызываем upload_document_to_knowledge_base tool...")
+            print("\n📤 Вызываем upload_document_to_knowledge_base tool...")
             print(f"   Реальный namespace ID: {namespace.namespace_id}")
             
             with patch("app.tools.rag_tools.get_context", return_value=mock_context):
@@ -170,26 +167,26 @@ class TestRealRAGIntegration:
                         config={}
                     )
             
-            print(f"✅ Результат загрузки:")
+            print("✅ Результат загрузки:")
             print(f"   {upload_result[:200]}...")
             
             assert "успешно добавлен" in upload_result
             assert "welcome_to_sber.pdf" in upload_result or "Welcome" in upload_result
             
-            print(f"\n📋 Вызываем list_documents_in_knowledge_base tool...")
+            print("\n📋 Вызываем list_documents_in_knowledge_base tool...")
             with patch("app.tools.rag_tools.get_context", return_value=mock_context):
                 with patch("app.tools.rag_tools.get_or_create_namespace", new=AsyncMock(side_effect=mock_get_or_create_ns)):
                     list_result = await list_documents_in_knowledge_base.ainvoke({}, config={})
             
-            print(f"✅ Список документов:")
+            print("✅ Список документов:")
             print(f"   {list_result[:300]}...")
             
             assert "базе знаний" in list_result.lower()
             
-            print(f"\n⏳ Ждем обработки документа (30 сек)...")
+            print("\n⏳ Ждем обработки документа (30 сек)...")
             await asyncio.sleep(30)
             
-            print(f"\n🔍 Вызываем search_knowledge_base tool...")
+            print("\n🔍 Вызываем search_knowledge_base tool...")
             with patch("app.tools.rag_tools.get_context", return_value=mock_context):
                 with patch("app.tools.rag_tools.get_or_create_namespace", new=AsyncMock(side_effect=mock_get_or_create_ns)):
                     search_result = await search_knowledge_base.ainvoke(
@@ -197,15 +194,15 @@ class TestRealRAGIntegration:
                         config={}
                     )
             
-            print(f"✅ Результат поиска:")
+            print("✅ Результат поиска:")
             print(f"   {search_result[:500]}...")
             
             if "найдено" in search_result.lower() or "результат" in search_result.lower():
-                print(f"\n🎉 Полный интеграционный тест через tools успешно завершен!")
+                print("\n🎉 Полный интеграционный тест через tools успешно завершен!")
                 assert True
             else:
-                print(f"\n⚠️  Документ еще обрабатывается")
-                print(f"     Но все tools (upload, list, search) работают корректно!")
+                print("\n⚠️  Документ еще обрабатывается")
+                print("     Но все tools (upload, list, search) работают корректно!")
                 assert "знаний" in search_result.lower() or "настроен" in search_result.lower()
             
         except Exception as e:
@@ -213,11 +210,11 @@ class TestRealRAGIntegration:
             raise
         
         finally:
-            print(f"\n🧹 Очистка ресурсов (оставляем файлы в S3 для ручной очистки)...")
+            print("\n🧹 Очистка ресурсов (оставляем файлы в S3 для ручной очистки)...")
             
             try:
                 await storage.delete(f"file:{file_id}")
-                print(f"✅ FileRecord удален из БД")
+                print("✅ FileRecord удален из БД")
             except Exception as e:
                 print(f"⚠️  Ошибка удаления FileRecord: {e}")
     

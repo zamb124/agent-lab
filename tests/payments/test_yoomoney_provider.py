@@ -7,7 +7,7 @@ import hashlib
 from urllib.parse import parse_qs, urlparse
 
 from app.core.clients.payment_providers.yoomoney_provider import YooMoneyProvider, YooMoneyConfig
-from app.core.clients.payment_providers.base_provider import PaymentRequest, WebhookVerificationResult
+from app.core.clients.payment_providers.base_provider import PaymentRequest
 
 
 @pytest.fixture

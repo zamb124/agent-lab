@@ -93,13 +93,13 @@ class GoogleProvider(BaseAuthProvider):
             if not provider_user_id:
                 logger.error(f"Google не вернул provider_user_id (sub/id). Данные: {user_data}")
                 raise ValueError(
-                    f"Google не предоставил обязательные данные пользователя (provider_user_id отсутствует)"
+                    "Google не предоставил обязательные данные пользователя (provider_user_id отсутствует)"
                 )
             
             if not email:
                 logger.error(f"Google не вернул email. Данные: {user_data}")
                 raise ValueError(
-                    f"Google не предоставил обязательные данные пользователя (email отсутствует)"
+                    "Google не предоставил обязательные данные пользователя (email отсутствует)"
                 )
             
             logger.info(f"✅ Данные пользователя Google получены: {email}")

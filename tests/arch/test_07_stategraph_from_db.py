@@ -193,7 +193,7 @@ async def finish_function(state):
     
     # Очищаем checkpoints от предыдущих запусков
     from app.core.checkpointer import get_checkpointer
-    checkpointer = await get_checkpointer()
+    await get_checkpointer()
     # Создаем конфигурации для очистки
     config_a = {"configurable": {"thread_id": "test_path_a"}}
     config_b = {"configurable": {"thread_id": "test_path_b"}}
@@ -217,7 +217,7 @@ async def finish_function(state):
     assert "[ROUTER]" in messages_a[1].content
     assert "путь A" in messages_a[2].content or "process_a" in messages_a[1].content.lower()
     assert "завершен успешно" in messages_a[-1].content
-    print(f"✅ Путь A отработал корректно")
+    print("✅ Путь A отработал корректно")
     
     # Тест 2: Путь B (без "a" в тексте)
     print("\n=== Тест 2: Путь B ===")
@@ -237,10 +237,10 @@ async def finish_function(state):
     assert "[ROUTER]" in messages_b[1].content
     assert "путь B" in messages_b[2].content or "process_b" in messages_b[1].content.lower()
     assert "завершен успешно" in messages_b[-1].content
-    print(f"✅ Путь B отработал корректно")
+    print("✅ Путь B отработал корректно")
     
     print("\n✅ Все тесты пройдены! StateGraph из БД работает корректно")
     
     # Очистка
-    await storage.delete(f"agent:test_stategraph_from_db")
+    await storage.delete("agent:test_stategraph_from_db")
     print("✅ Тестовый агент удален из БД")
