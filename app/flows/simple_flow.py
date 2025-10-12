@@ -53,7 +53,6 @@ class SimpleFlowAgent(BaseAgent):
 
 # Test Flow конфигурация
 simple_flow_config = FlowConfig(
-    flow_id="test_flow",
     name="Test Flow",
     description="Простой тестовый флоу без LLM",
     entry_point_agent="app.flows.simple_flow.SimpleFlowAgent",

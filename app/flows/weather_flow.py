@@ -28,7 +28,7 @@ weather_flow_config = FlowConfig(
         # Вариант 2: Ссылка на переменную компании (рекомендуется)
         "telegram": {
             "username": "@var:agent_lab_whether_bot",
-            "token": "@var:agent_lab_whether_bot_telegram_bot_token"
+                "token": "@var:agent_lab_whether_bot_telegram_bot_token"
         },
         
         # Вариант 3: Смешанное использование

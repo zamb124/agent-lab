@@ -337,6 +337,11 @@
                             </h5>
                         </div>
                         <div class="platform-actions" onclick="event.stopPropagation()">
+                            <button class="btn btn-outline-primary btn-sm" 
+                                    onclick="editPlatform('{{ bot.flow_id }}', '{{ platform }}')"
+                                    title="Редактировать">
+                                <i class="bi bi-pencil"></i>
+                            </button>
                             <button class="btn btn-outline-danger btn-sm" 
                                     onclick="removePlatform('{{ bot.flow_id }}', '{{ platform }}')">
                                 <i class="bi bi-trash"></i>
@@ -565,6 +570,23 @@
                         </div>
                     </div>
                     {% endif %}
+                    
+                    {% if config.get('allowed_users') %}
+                    <div class="form-group">
+                        <label>Разрешенные пользователи</label>
+                        <div class="allowed-users-display">
+                            {% for user in config.allowed_users %}
+                            <span class="badge bg-primary">{{ user }}</span>
+                            {% endfor %}
+                        </div>
+                        <small class="form-text">Доступ к боту разрешен только указанным пользователям</small>
+                    </div>
+                    {% else %}
+                    <div class="form-group">
+                        <label>Разрешенные пользователи</label>
+                        <p class="text-muted mb-0">Доступ разрешен всем пользователям</p>
+                    </div>
+                    {% endif %}
                     </div>
                 </div>
                 {% endfor %}
@@ -671,6 +693,24 @@
                     <label>Username/ID</label>
                     <input type="text" class="form-control" id="platform-username" 
                            placeholder="Имя пользователя или ID">
+                </div>
+
+                <div class="form-group">
+                    <label>Разрешенные пользователи</label>
+                    <div id="allowed-users-container">
+                        <div class="allowed-user-row">
+                            <input type="text" class="form-control" placeholder="User ID или username" 
+                                   onchange="updateAllowedUser(this)">
+                            <button class="btn btn-outline-danger btn-sm" onclick="removeAllowedUserRow(this)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button class="btn btn-outline-primary btn-sm" onclick="addAllowedUserRow()">
+                        <i class="bi bi-plus"></i>
+                        Добавить пользователя
+                    </button>
+                    <small class="form-text">Если список пустой - доступ разрешен всем. Можно указывать user_id или username</small>
                 </div>
 
                 <div class="form-group">

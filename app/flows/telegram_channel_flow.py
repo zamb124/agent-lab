@@ -6,7 +6,6 @@ from app.models import FlowConfig
 
 # Telegram Channel Flow конфигурация
 telegram_channel_flow_config = FlowConfig(
-    flow_id="telegram_channel_manager",
     name="Telegram Channel Manager",
     description="Управление публикациями в Telegram канале @my_osom_tg_kanal",
     entry_point_agent="app.agents.telegram_channel.agent.TelegramChannelAgent",

@@ -30,6 +30,31 @@ class ChatManager {
         this.maxReconnectAttempts = 5;
     }
 
+    isMobileDevice() {
+        return window.innerWidth <= 768;
+    }
+
+    handleResize() {
+        if (!this.isVisible) return;
+        
+        const widget = document.getElementById('chat-widget');
+        const fullscreenBtn = document.getElementById('chat-widget-fullscreen');
+        const minimizeBtn = document.getElementById('chat-widget-minimize');
+        
+        if (!widget) return;
+        
+        if (this.isMobileDevice()) {
+            widget.classList.add('fullscreen');
+            widget.classList.remove('minimized');
+            
+            if (fullscreenBtn) fullscreenBtn.style.display = 'none';
+            if (minimizeBtn) minimizeBtn.style.display = 'none';
+        } else {
+            if (fullscreenBtn) fullscreenBtn.style.display = '';
+            if (minimizeBtn) minimizeBtn.style.display = '';
+        }
+    }
+
     loadAgentSessions() {
         try {
             const saved = localStorage.getItem('chat_agent_sessions');
@@ -192,8 +217,44 @@ class ChatManager {
 
         await this.updateChatHeader();
         this.updateAgentsPanel();
+        this.updateInputState();
 
         console.log(`✅ Переключились на агента ${agent_id}, сессия: ${this.currentSession}`);
+    }
+
+    updateInputState() {
+        const input = document.getElementById('chat-widget-input');
+        const sendBtn = document.getElementById('chat-widget-send');
+        const attachBtn = document.getElementById('chat-widget-attach');
+        const voiceBtn = document.getElementById('chat-widget-voice');
+        
+        if (!input) return;
+        
+        // Проверяем, это сессия другой платформы?
+        const isReadOnly = this.currentSession && 
+                          this.currentSession.includes(':') && 
+                          !this.currentSession.startsWith('web:');
+        
+        if (isReadOnly) {
+            const platform = this.currentSession.split(':')[0];
+            input.disabled = true;
+            input.placeholder = `Сессия платформы "${platform}" (только просмотр)`;
+            
+            if (sendBtn) sendBtn.disabled = true;
+            if (attachBtn) attachBtn.disabled = true;
+            if (voiceBtn) voiceBtn.disabled = true;
+            
+            console.log(`🔒 Поле ввода заблокировано для платформы ${platform}`);
+        } else {
+            input.disabled = false;
+            input.placeholder = 'Введите сообщение...';
+            
+            if (sendBtn) sendBtn.disabled = false;
+            if (attachBtn) attachBtn.disabled = false;
+            if (voiceBtn) voiceBtn.disabled = false;
+            
+            console.log('🔓 Поле ввода разблокировано');
+        }
     }
 
     toggleAgentsPanel() {
@@ -314,6 +375,8 @@ class ChatManager {
         agentsBtn?.addEventListener('click', () => this.toggleAgentsPanel());
         infoBtn?.addEventListener('click', () => this.showFlowInfo());
         
+        window.addEventListener('resize', () => this.handleResize());
+        
         const connectionStatus = document.getElementById('chat-connection-status');
         connectionStatus?.addEventListener('click', () => {
             console.log('🔗 Клик на индикатор соединения, isConnected:', this.isConnected);
@@ -360,6 +423,8 @@ class ChatManager {
 
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
+                if (this.isMobileDevice()) return;
+                
                 const widget = document.getElementById('chat-widget');
                 if (widget && widget.classList.contains('fullscreen')) {
                     this.toggleFullscreen();
@@ -386,6 +451,8 @@ class ChatManager {
             if (e.target.closest('button')) return;
             
             if (widget.classList.contains('fullscreen')) return;
+            
+            if (this.isMobileDevice()) return;
             
             isDragging = true;
             
@@ -462,6 +529,7 @@ class ChatManager {
 
         await this.updateChatHeader();
         this.updateAgentsPanel();
+        this.updateInputState();
 
         this.showChat();
 
@@ -498,6 +566,7 @@ class ChatManager {
 
         await this.updateChatHeader();
         this.updateAgentsPanel();
+        this.updateInputState();
 
         this.showChat();
 
@@ -526,12 +595,12 @@ class ChatManager {
             
             // Проверяем формат session_id
             let fullSessionId;
-            if (session_id.startsWith('web:') || session_id.startsWith('telegram:') || session_id.startsWith('whatsapp:')) {
-                // session_id уже полный
+            if (session_id.includes(':')) {
+                // session_id уже полный (содержит платформу)
                 fullSessionId = session_id;
                 console.log('✅ session_id уже полный:', fullSessionId);
             } else {
-                // Добавляем префикс
+                // Добавляем префикс web
                 const flowId = this.currentAgent || 'unknown';
                 fullSessionId = `web:${userId}:${flowId}:${session_id}`;
                 console.log('🔍 Сформирован полный session_id:', fullSessionId);
@@ -585,11 +654,23 @@ class ChatManager {
     showChat() {
         const widget = document.getElementById('chat-widget');
         const toggle = document.getElementById('chat-widget-toggle');
+        const fullscreenBtn = document.getElementById('chat-widget-fullscreen');
+        const minimizeBtn = document.getElementById('chat-widget-minimize');
         
         if (widget) {
             widget.style.display = 'flex';
             widget.classList.remove('minimized');
             this.isVisible = true;
+            
+            if (this.isMobileDevice()) {
+                widget.classList.add('fullscreen');
+                
+                if (fullscreenBtn) fullscreenBtn.style.display = 'none';
+                if (minimizeBtn) minimizeBtn.style.display = 'none';
+            } else {
+                if (fullscreenBtn) fullscreenBtn.style.display = '';
+                if (minimizeBtn) minimizeBtn.style.display = '';
+            }
         }
         
         if (toggle) {
@@ -606,6 +687,10 @@ class ChatManager {
     }
 
     minimizeChat() {
+        if (this.isMobileDevice()) {
+            return;
+        }
+        
         const widget = document.getElementById('chat-widget');
         if (widget) {
             widget.classList.toggle('minimized');
@@ -629,6 +714,10 @@ class ChatManager {
     }
 
     toggleFullscreen() {
+        if (this.isMobileDevice()) {
+            return;
+        }
+        
         const widget = document.getElementById('chat-widget');
         const fullscreenBtn = document.getElementById('chat-widget-fullscreen');
         const fullscreenIcon = fullscreenBtn?.querySelector('i');
@@ -808,6 +897,20 @@ class ChatManager {
         console.log(`📎 Итого сконвертировано ${filesData.length} из ${this.selectedFiles.length} файлов`);
 
         if (this.isConnected && filesData.length > 0) {
+            // Проверяем: если текущая сессия не web: - запрещаем отправку
+            if (this.currentSession && this.currentSession.includes(':') && !this.currentSession.startsWith('web:')) {
+                const platform = this.currentSession.split(':')[0];
+                console.warn(`⚠️ Попытка отправить файлы в сессию платформы ${platform}: ${this.currentSession}`);
+                
+                if (this.app && this.app.showNotification) {
+                    this.app.showNotification(
+                        `Нельзя отправлять сообщения в сессию платформы "${platform}". Это сессия только для просмотра.`, 
+                        'warning'
+                    );
+                }
+                return;
+            }
+            
             const wsMessage = {
                 type: 'USER_MESSAGE',
                 data: {
@@ -1035,17 +1138,34 @@ class ChatManager {
     }
 
     sendUserMessage(message) {
-        if (this.isConnected) {
-            const wsMessage = {
-                type: 'USER_MESSAGE',
-                data: {
-                    message: message,
-                    agent_id: this.currentAgent,
-                    session_id: this.currentSession
-                }
-            };
-            this.websocket.send(JSON.stringify(wsMessage));
+        if (!this.isConnected) {
+            console.error('❌ WebSocket не подключен');
+            return;
         }
+
+        // Проверяем: если текущая сессия не web: - запрещаем отправку
+        if (this.currentSession && this.currentSession.includes(':') && !this.currentSession.startsWith('web:')) {
+            const platform = this.currentSession.split(':')[0];
+            console.warn(`⚠️ Попытка отправить сообщение в сессию платформы ${platform}: ${this.currentSession}`);
+            
+            if (this.app && this.app.showNotification) {
+                this.app.showNotification(
+                    `Нельзя отправлять сообщения в сессию платформы "${platform}". Это сессия только для просмотра.`, 
+                    'warning'
+                );
+            }
+            return;
+        }
+
+        const wsMessage = {
+            type: 'USER_MESSAGE',
+            data: {
+                message: message,
+                agent_id: this.currentAgent,
+                session_id: this.currentSession
+            }
+        };
+        this.websocket.send(JSON.stringify(wsMessage));
     }
 
     addUserMessage(message, timestamp = null, messageId = null) {

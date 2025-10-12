@@ -35,6 +35,7 @@ from app.agents.base import BaseAgent
 from app.identity.models import Company, User, AuthProvider, UserStatus
 from app.core.context import set_context
 from app.models.context_models import Context
+from app.services.variables_service import get_variables_service
 
 logger = logging.getLogger(__name__)
 
@@ -279,6 +280,8 @@ class Migrator:
                             platforms=obj.platforms,
                             timeout=obj.timeout,
                             max_retries=obj.max_retries,
+                            variables=obj.variables,
+                            is_public=getattr(obj, "is_public", False),
                             source=obj.source,
                             created_at=obj.created_at,
                             updated_at=obj.updated_at
@@ -876,6 +879,16 @@ class Migrator:
 
         await self.storage.set_flow_config(flow_config)
         logger.info(f"Флоу {flow_config.flow_id} успешно мигрирован")
+        
+        variables_service = get_variables_service()
+        
+        if flow_config.variables:
+            await variables_service.resolve(flow_config.variables, auto_create=True)
+            logger.info(f"Переменные flow {flow_config.flow_id} обработаны (создано недостающие @var:key)")
+        
+        if flow_config.platforms:
+            await variables_service.resolve(flow_config.platforms, auto_create=True)
+            logger.info(f"Настройки платформ flow {flow_config.flow_id} обработаны (создано недостающие @var:key)")
 
     async def _find_flow_configs(self) -> List[FlowConfig]:
         """Находит все FlowConfig объекты в app.flows и app.custom_flows"""
@@ -968,6 +981,12 @@ class Migrator:
             flow_id: Путь к FlowConfig (например, "app.flows.test_flow.test_flow_config")
             with_dependencies: Мигрировать ли entry_point_agent и его tools
         """
+        if not flow_id:
+            raise ValueError("flow_id не может быть пустым")
+        
+        if "." not in flow_id:
+            raise ValueError(f"flow_id должен быть полным путем к переменной (например app.flows.simple_flow.simple_flow_config), получен: {flow_id}")
+        
         module_path, var_name = flow_id.rsplit(".", 1)
         module = importlib.import_module(module_path)
         flow_config_orig = getattr(module, var_name)
@@ -985,6 +1004,7 @@ class Migrator:
             timeout=flow_config_orig.timeout,
             max_retries=flow_config_orig.max_retries,
             variables=flow_config_orig.variables,
+            is_public=getattr(flow_config_orig, "is_public", False),
             source=flow_config_orig.source,
             created_at=flow_config_orig.created_at,
             updated_at=flow_config_orig.updated_at

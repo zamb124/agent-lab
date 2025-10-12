@@ -1243,6 +1243,36 @@ input:checked + .slider:before {
     font-size: 0.875rem;
 }
 
+.allowed-user-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    align-items: center;
+}
+
+.allowed-user-row input {
+    flex: 1;
+}
+
+.allowed-user-row .btn {
+    flex-shrink: 0;
+    padding: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.allowed-users-display {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.allowed-users-display .badge {
+    font-size: 0.875rem;
+    padding: 0.5rem 0.75rem;
+    font-weight: 500;
+}
+
 /* Выпадающий список платформ */
 #platform-type-select {
     width: 100%;
