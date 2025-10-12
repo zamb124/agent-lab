@@ -83,10 +83,16 @@ class WebInterface(BaseInterface):
             await self.send_message(access_denied_message)
             return None
         
-        # Проверяем: если session_id уже полный (содержит префикс платформы), используем как есть
-        if js_session_id and (js_session_id.startswith('web:') or js_session_id.startswith('telegram:') or js_session_id.startswith('whatsapp:')):
+        # Проверяем: если session_id уже полный с префиксом web:, используем как есть
+        if js_session_id and js_session_id.startswith('web:'):
             session_id = js_session_id
             logger.debug(f"✅ Используем полный session_id: {session_id}")
+        elif js_session_id and (js_session_id.startswith('telegram:') or js_session_id.startswith('whatsapp:') or js_session_id.startswith('api:')):
+            # Игнорируем session_id от других платформ - создаем новый для web
+            logger.warning(f"⚠️ Получен session_id от другой платформы: {js_session_id[:50]}, создаем новый для web")
+            import uuid
+            session_id = f"web:{real_user_id}:{flow_id}:{uuid.uuid4().hex[:8]}"
+            logger.debug(f"🔧 Создан новый session_id для web: {session_id}")
         else:
             # Формируем полный session_id: web:user_id:flow_id:uuid
             session_id = f"web:{real_user_id}:{flow_id}:{js_session_id}"

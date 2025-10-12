@@ -43,7 +43,6 @@ class LayoutManager {
     }
     
     setupMobileMenu() {
-        // Мобильное меню
         const toggleBtn = document.querySelector('.mobile-menu-toggle');
         const sidebar = document.querySelector('.sidebar');
         const overlay = document.querySelector('.sidebar-overlay');
@@ -53,56 +52,54 @@ class LayoutManager {
         if (toggleBtn && sidebar) {
             toggleBtn.addEventListener('click', () => {
                 console.log('🔄 Клик по мобильному меню');
-                
-                const isOpen = sidebar.classList.contains('open');
-                
-                if (isOpen) {
-                    // Закрываем меню
-                    sidebar.classList.remove('open');
-                    sidebar.style.setProperty('transform', 'translateX(-100%)', 'important');
-                    overlay?.classList.remove('active');
-                } else {
-                    // Открываем меню
-                    sidebar.classList.add('open');
-                    sidebar.style.setProperty('transform', 'translateX(0)', 'important');
-                    overlay?.classList.add('active');
-                }
-                
-                console.log('🔍 Меню', isOpen ? 'закрыто' : 'открыто');
+                this.toggleMobileMenu();
             });
         }
         
         if (overlay) {
             overlay.addEventListener('click', () => {
+                console.log('🔄 Клик по overlay - закрываем меню');
                 this.closeMobileMenu();
             });
         }
         
-        // Закрываем меню при клике на навигационные ссылки
         const navLinks = document.querySelectorAll('.sidebar-nav-link');
         navLinks.forEach(link => {
             link.addEventListener('click', () => {
                 if (this.isMobile) {
-                    this.closeMobileMenu();
+                    console.log('🔄 Клик по пункту меню на мобильном - закрываем sidebar');
+                    setTimeout(() => this.closeMobileMenu(), 100);
                 }
             });
+        });
+        
+        document.addEventListener('click', (e) => {
+            if (!this.isMobile) return;
+            
+            const sidebar = document.querySelector('.sidebar');
+            if (!sidebar || !sidebar.classList.contains('open')) return;
+            
+            const clickedInsideSidebar = sidebar.contains(e.target);
+            const clickedToggleBtn = e.target.closest('.mobile-menu-toggle');
+            
+            if (!clickedInsideSidebar && !clickedToggleBtn) {
+                console.log('🔄 Клик вне sidebar на мобильном - закрываем');
+                this.closeMobileMenu();
+            }
         });
     }
     
     setupNavigation() {
-        // Активные ссылки в сайдбаре
         const sidebarLinks = document.querySelectorAll('.sidebar-nav-link');
         
         sidebarLinks.forEach(link => {
             link.addEventListener('click', (e) => {
-                // Убираем активный класс у всех ссылок
                 sidebarLinks.forEach(l => l.classList.remove('active'));
-                // Добавляем активный класс к текущей ссылке
                 e.currentTarget.classList.add('active');
                 
-                // На мобильных закрываем меню после клика
                 if (this.isMobile) {
-                    this.closeMobileMenu();
+                    console.log('🔄 Клик по навигационной ссылке на мобильном - закрываем sidebar');
+                    setTimeout(() => this.closeMobileMenu(), 100);
                 }
             });
         });
@@ -148,23 +145,9 @@ class LayoutManager {
         }
     }
     
-    closeMobileMenu() {
-        const sidebar = document.querySelector('.sidebar');
-        const overlay = document.querySelector('.sidebar-overlay');
-        
-        if (sidebar) {
-            sidebar.classList.remove('open');
-            sidebar.style.setProperty('transform', 'translateX(-100%)', 'important');
-        }
-        if (overlay) {
-            overlay.classList.remove('active');
-        }
-    }
-    
     toggleSidebar() {
         console.log('🔄 toggleSidebar вызван, isMobile:', this.isMobile);
         if (this.isMobile) {
-            // На мобильных не сворачиваем, а открываем/закрываем
             console.log('📱 Мобильное устройство - пропускаем');
             return;
         }
@@ -215,8 +198,15 @@ class LayoutManager {
         const sidebar = document.querySelector('.sidebar');
         const overlay = document.querySelector('.sidebar-overlay');
         
-        sidebar?.classList.remove('open');
-        overlay?.classList.remove('active');
+        if (sidebar) {
+            sidebar.classList.remove('open');
+            sidebar.style.setProperty('transform', 'translateX(-100%)', 'important');
+        }
+        if (overlay) {
+            overlay.classList.remove('active');
+        }
+        
+        console.log('✅ Мобильное меню закрыто');
     }
     
     saveSidebarState() {

@@ -677,10 +677,10 @@ import { showNotification } from '/static/js/components/notification.js';
             return;
         }
         
-        // Сначала сбрасываем форму для чистого состояния
         resetPlatformForm();
+        modal.dataset.editMode = 'false';
+        modal.dataset.editPlatform = '';
         
-        // Загружаем доступные переменные для токена
         try {
             const response = await fetch('/api/v1/admin/variables', {
                 headers: {
@@ -692,7 +692,6 @@ import { showNotification } from '/static/js/components/notification.js';
                 const select = document.getElementById('platform-token-select');
                 
                 if (select) {
-                    // Очищаем и заполняем dropdown
                     select.innerHTML = '<option value="">-- Выберите переменную --</option>';
                     Object.entries(varsData).forEach(([key, varInfo]) => {
                         const desc = varInfo.description ? ` - ${varInfo.description}` : '';
@@ -707,12 +706,10 @@ import { showNotification } from '/static/js/components/notification.js';
             console.error('Ошибка загрузки переменных:', err);
         }
         
-        // Перемещаем модальное окно в body если оно не там
         if (modal.parentElement !== document.body) {
             document.body.appendChild(modal);
         }
         
-        // Показываем модалку
         modal.style.display = 'flex';
         modal.style.position = 'fixed';
         modal.style.top = '0';
@@ -721,11 +718,164 @@ import { showNotification } from '/static/js/components/notification.js';
         modal.style.height = '100%';
         modal.style.zIndex = '9999';
         
-        // Блокируем прокрутку body
         document.body.style.overflow = 'hidden';
+        
+        const modalHeader = modal.querySelector('.modal-header h3');
+        if (modalHeader) {
+            modalHeader.textContent = 'Добавить платформу';
+        }
         
         console.log('🔧 Модалка открыта, parent:', modal.parentElement.tagName);
     };
+
+    window.editPlatform = async function(botId, platformType) {
+        try {
+            const response = await fetch(`/frontend/api/flows/${botId}`, {
+                headers: {
+                    'Authorization': `Bearer ${window.app.authToken}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Не удалось загрузить настройки flow');
+            }
+            
+            const flowData = await response.json();
+            const platformConfig = flowData.platforms[platformType];
+            
+            if (!platformConfig) {
+                throw new Error('Платформа не найдена');
+            }
+            
+            await addPlatform(botId);
+            
+            const modal = document.getElementById('add-platform-modal');
+            modal.dataset.editMode = 'true';
+            modal.dataset.editPlatform = platformType;
+            
+            const modalHeader = modal.querySelector('.modal-header h3');
+            if (modalHeader) {
+                modalHeader.textContent = 'Редактировать платформу';
+            }
+            
+            const platformIcons = {
+                'telegram': 'bi-telegram',
+                'whatsapp': 'bi-whatsapp',
+                'web': 'bi-globe',
+                'api': 'bi-code-slash',
+                'amocrm': 'bi-building'
+            };
+            
+            const platformNames = {
+                'telegram': 'Telegram',
+                'whatsapp': 'WhatsApp',
+                'web': 'Web Chat',
+                'api': 'REST API',
+                'amocrm': 'AmoCRM'
+            };
+            
+            selectPlatform(platformType, platformIcons[platformType] || 'bi-gear', platformNames[platformType] || platformType);
+            
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            fillPlatformFormData(platformConfig, platformType);
+            
+            console.log('✏️ Платформа открыта для редактирования:', platformType);
+            
+        } catch (error) {
+            console.error('Ошибка загрузки данных платформы:', error);
+            showNotification('Не удалось загрузить настройки платформы: ' + error.message, 'danger');
+        }
+    };
+    
+    function fillPlatformFormData(platformConfig, platformType) {
+        if (platformConfig.allowed_users && Array.isArray(platformConfig.allowed_users)) {
+            const container = document.getElementById('allowed-users-container');
+            if (container) {
+                container.innerHTML = '';
+                platformConfig.allowed_users.forEach(user => {
+                    const row = document.createElement('div');
+                    row.className = 'allowed-user-row';
+                    row.innerHTML = `
+                        <input type="text" class="form-control" placeholder="User ID или username" 
+                               value="${user}" onchange="updateAllowedUser(this)">
+                        <button class="btn btn-outline-danger btn-sm" onclick="removeAllowedUserRow(this)">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    `;
+                    container.appendChild(row);
+                });
+                
+                if (platformConfig.allowed_users.length === 0) {
+                    addAllowedUserRow();
+                }
+            }
+        }
+        
+        if (platformType === 'whatsapp') {
+            if (platformConfig.phone_number_id) {
+                const phoneInput = document.getElementById('whatsapp-phone-number-id');
+                if (phoneInput) phoneInput.value = platformConfig.phone_number_id;
+            }
+            
+            if (platformConfig.access_token) {
+                if (platformConfig.access_token.startsWith('@var:')) {
+                    document.getElementById('wa-token-type-var').checked = true;
+                    toggleWhatsAppTokenInput();
+                    const select = document.getElementById('whatsapp-access-token-select');
+                    if (select) select.value = platformConfig.access_token;
+                } else {
+                    document.getElementById('wa-token-type-hardcoded').checked = true;
+                    toggleWhatsAppTokenInput();
+                    const input = document.getElementById('whatsapp-access-token');
+                    if (input) input.value = platformConfig.access_token;
+                }
+            }
+            
+            if (platformConfig.verify_token) {
+                if (platformConfig.verify_token.startsWith('@var:')) {
+                    document.getElementById('wa-verify-type-var').checked = true;
+                    toggleWhatsAppVerifyInput();
+                    const select = document.getElementById('whatsapp-verify-token-select');
+                    if (select) select.value = platformConfig.verify_token;
+                } else {
+                    document.getElementById('wa-verify-type-hardcoded').checked = true;
+                    toggleWhatsAppVerifyInput();
+                    const input = document.getElementById('whatsapp-verify-token');
+                    if (input) input.value = platformConfig.verify_token;
+                }
+            }
+            
+            if (platformConfig.business_account_id) {
+                const input = document.getElementById('whatsapp-business-account-id');
+                if (input) input.value = platformConfig.business_account_id;
+            }
+            
+            if (platformConfig.display_name) {
+                const input = document.getElementById('whatsapp-display-name');
+                if (input) input.value = platformConfig.display_name;
+            }
+        } else {
+            if (platformConfig.username) {
+                const usernameInput = document.getElementById('platform-username');
+                if (usernameInput) usernameInput.value = platformConfig.username;
+            }
+            
+            if (platformConfig.token) {
+                if (platformConfig.token.startsWith('@var:')) {
+                    document.getElementById('token-type-var').checked = true;
+                    toggleTokenInput();
+                    const select = document.getElementById('platform-token-select');
+                    if (select) select.value = platformConfig.token;
+                } else {
+                    document.getElementById('token-type-hardcoded').checked = true;
+                    toggleTokenInput();
+                    const input = document.getElementById('platform-token');
+                    if (input) input.value = platformConfig.token;
+                }
+            }
+        }
+    }
     
     window.toggleTokenInput = function() {
         const varGroup = document.getElementById('token-var-select-group');
@@ -1080,26 +1230,63 @@ import { showNotification } from '/static/js/components/notification.js';
     };
 
     window.updateVariableName = function(input) {
-        // Можно добавить валидацию ключа
         console.log('Variable name updated:', input.value);
     };
 
     window.updateVariableValue = function(input) {
-        // Можно добавить валидацию значения
         console.log('Variable value updated:', input.value);
     };
 
+    window.addAllowedUserRow = function() {
+        const container = document.getElementById('allowed-users-container');
+        const row = document.createElement('div');
+        row.className = 'allowed-user-row';
+        row.innerHTML = `
+            <input type="text" class="form-control" placeholder="User ID или username" 
+                   onchange="updateAllowedUser(this)">
+            <button class="btn btn-outline-danger btn-sm" onclick="removeAllowedUserRow(this)">
+                <i class="bi bi-trash"></i>
+            </button>
+        `;
+        container.appendChild(row);
+    };
+
+    window.removeAllowedUserRow = function(button) {
+        const container = document.getElementById('allowed-users-container');
+        const rows = container.querySelectorAll('.allowed-user-row');
+        if (rows.length > 1) {
+            button.closest('.allowed-user-row').remove();
+        } else {
+            button.closest('.allowed-user-row').querySelector('input').value = '';
+        }
+    };
+
+    window.updateAllowedUser = function(input) {
+        console.log('Allowed user updated:', input.value);
+    };
+
+    function collectAllowedUsers() {
+        const allowedUsers = [];
+        const rows = document.querySelectorAll('#allowed-users-container .allowed-user-row');
+        
+        rows.forEach(row => {
+            const input = row.querySelector('input');
+            if (input && input.value.trim()) {
+                allowedUsers.push(input.value.trim());
+            }
+        });
+        
+        return allowedUsers;
+    }
+
     function resetPlatformForm() {
-        // Сбрасываем выбранную платформу
         selectedPlatformType = '';
         
-        // Сбрасываем отображение dropdown
         const selectText = document.querySelector('.select-text');
         if (selectText) {
             selectText.innerHTML = 'Выберите платформу';
         }
         
-        // Закрываем dropdown если открыт
         const dropdown = document.getElementById('platform-dropdown');
         if (dropdown) {
             dropdown.classList.remove('show');
@@ -1110,7 +1297,6 @@ import { showNotification } from '/static/js/components/notification.js';
             selectValue.classList.remove('active');
         }
         
-        // Очищаем стандартные поля
         const tokenField = document.getElementById('platform-token');
         const usernameField = document.getElementById('platform-username');
         
@@ -1125,22 +1311,19 @@ import { showNotification } from '/static/js/components/notification.js';
             usernameField.closest('.form-group').style.display = 'block';
         }
         
-        // Скрываем секцию настроек
         const configSection = document.getElementById('platform-config-section');
         if (configSection) {
             configSection.style.display = 'none';
         }
         
-        // Удаляем WhatsApp контейнер если был создан
         const whatsappContainer = document.getElementById('whatsapp-fields-container');
         if (whatsappContainer) {
             whatsappContainer.remove();
         }
         
-        // Очищаем кастомные переменные, оставляя только одну строку
-        const container = document.getElementById('custom-variables');
-        if (container) {
-            const rows = container.querySelectorAll('.variable-row');
+        const customVarsContainer = document.getElementById('custom-variables');
+        if (customVarsContainer) {
+            const rows = customVarsContainer.querySelectorAll('.variable-row');
             rows.forEach((row, index) => {
                 if (index > 0) {
                     row.remove();
@@ -1149,10 +1332,26 @@ import { showNotification } from '/static/js/components/notification.js';
                 }
             });
         }
+        
+        const allowedUsersContainer = document.getElementById('allowed-users-container');
+        if (allowedUsersContainer) {
+            const rows = allowedUsersContainer.querySelectorAll('.allowed-user-row');
+            rows.forEach((row, index) => {
+                if (index > 0) {
+                    row.remove();
+                } else {
+                    row.querySelector('input').value = '';
+                }
+            });
+        }
     }
 
     window.savePlatform = async function(botId) {
-        const platformType = selectedPlatformType;
+        const modal = document.getElementById('add-platform-modal');
+        const isEditMode = modal && modal.dataset.editMode === 'true';
+        const editPlatformType = modal ? modal.dataset.editPlatform : '';
+        
+        const platformType = isEditMode ? editPlatformType : selectedPlatformType;
         
         if (!platformType) {
             showNotification('Выберите тип платформы', 'warning');
@@ -1163,8 +1362,14 @@ import { showNotification } from '/static/js/components/notification.js';
         let savedToken = null;
         let savedUsername = null;
         
+        const allowedUsers = collectAllowedUsers();
+        if (allowedUsers.length > 0) {
+            platformConfig.allowed_users = allowedUsers;
+        }
+        
         if (platformType === 'whatsapp') {
-            platformConfig = collectWhatsAppConfig();
+            const whatsappConfig = collectWhatsAppConfig();
+            platformConfig = { ...platformConfig, ...whatsappConfig };
             
             if (!platformConfig.phone_number_id) {
                 showNotification('Phone Number ID обязателен для WhatsApp', 'warning');
