@@ -18,10 +18,6 @@ telegram_channel_flow_config = FlowConfig(
         },
         "web": {}
     },
-    variables={
-        "channel_id": "@my_osom_tg_kanal",
-        "bot_token": "8412993684:AAGtwAUMO3OT8xCXHvGei2eUIqFK01gYfs8"
-    },
-    is_public=False,
+    is_public=True,
 )
 
