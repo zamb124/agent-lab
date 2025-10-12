@@ -152,7 +152,7 @@ class AgentFactory:
             # Проверяем code_mode из БД
             if db_tool_ref.code_mode == CodeMode.INLINE_CODE:
                 # Для INLINE_CODE инструментов используем ToolFactory
-                logger.debug(f"🔥 Используем ToolFactory для INLINE_CODE инструмента")
+                logger.debug("🔥 Используем ToolFactory для INLINE_CODE инструмента")
                 tool_factory = ToolFactory()
                 return await tool_factory._create_single_tool(db_tool_ref)
             
@@ -171,7 +171,7 @@ class AgentFactory:
                 module = importlib.import_module(module_path)
                 logger.debug(f"🔥 Модуль загружен: {module}")
                 importlib.reload(module)  # Перезагружаем для получения свежего кода
-                logger.debug(f"🔥 Модуль перезагружен")
+                logger.debug("🔥 Модуль перезагружен")
                 tool_function = getattr(module, func_name)
                 logger.debug(f"🔥 Функция получена: {tool_function}")
                 logger.debug(f"🔥 Тип функции: {type(tool_function)}")

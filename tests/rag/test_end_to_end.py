@@ -4,12 +4,10 @@ End-to-end тесты RAG системы с flow и агентами.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch, ANY
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.flows.knowledge_bot_flow import knowledge_bot_flow
-from app.models import AgentConfig, FlowConfig
 from app.models.rag_models import AgentRAGConfig, RAGSearchResult, RAGDocument
-from unittest.mock import AsyncMock
 
 
 class TestFlowToAgentRAGConfig:

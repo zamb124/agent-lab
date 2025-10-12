@@ -4,13 +4,12 @@ API для работы с системой интернационализаци
 
 import logging
 from typing import Dict, Any
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.models.i18n_models import Language, TranslationStats
 from app.core.translation_manager import get_translation_manager
 from app.core.context import get_context
-from app.models.context_models import Context
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +63,7 @@ async def set_user_language(request: Request, data: Dict[str, Any]) -> JSONRespo
         
         # Валидируем язык
         try:
-            lang_enum = Language(language)
+            Language(language)
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Неподдерживаемый язык: {language}")
         

@@ -234,12 +234,12 @@ async def process_nano_banana_try_on(request: TryOnRequest, model_record, produc
         prompt = f"СТРОГО ЗАПРЕЩЕНО СОЗДАВАТЬ НОВЫХ ЛЮДЕЙ! ЗАДАЧА: Взять СУЩЕСТВУЮЩЕГО человека с первого изображения и добавить на него товар. {images_info} АБСОЛЮТНЫЕ ТРЕБОВАНИЯ: ПЕРВОЕ изображение содержит БАЗОВОГО ЧЕЛОВЕКА - это основа, НЕ МЕНЯЙ ЕГО ВООБЩЕ! Используй ТОЧНО ЭТУ МОДЕЛЬ как есть - ту же позу, то же тело, тот же фон, ту же одежду. ЗАПРЕЩЕНО: создавать нового человека, менять лицо, менять позу, менять фон, менять тело модели. РАЗРЕШЕНО: только добавить товар с других изображений на СУЩЕСТВУЮЩУЮ модель. ПОШАГОВО: 1. Возьми ТОЧНУЮ копию человека с изображения №1. 2. НЕ МЕНЯЙ ничего в этом человеке. 3. Добавь товар ({request.item_kind}) с изображений №2+ в позиции {request.placement}. 4. Товар должен выглядеть точно как на исходных изображениях. КРИТИЧНО: Результат должен быть ТОТ ЖЕ человек с изображения №1 + товар с изображений №2+. НЕ создавай нового человека, НЕ меняй существующего человека, НЕ улучшай фото - только добавь товар! Размеры: модель {request.model_height_cm} см, товар {width_info} и {height_info}. ФИНАЛЬНЫЙ РЕЗУЛЬТАТ: ТОЧНО тот же человек с первого изображения + товар с других изображений, без изменения модели."
         
         # Логируем детали для отладки
-        logger.info(f"=== ДЕТАЛЬНАЯ ОТЛАДКА ПОРЯДКА ИЗОБРАЖЕНИЙ ===")
-        logger.info(f"Исходные данные:")
+        logger.info("=== ДЕТАЛЬНАЯ ОТЛАДКА ПОРЯДКА ИЗОБРАЖЕНИЙ ===")
+        logger.info("Исходные данные:")
         logger.info(f"  model_file_id (должен быть [0]): {model_file_id}")
         logger.info(f"  product_file_id (должен быть [1]): {product_file_id}")
         
-        logger.info(f"Итоговый массив reference_file_ids:")
+        logger.info("Итоговый массив reference_file_ids:")
         for i, file_id in enumerate(reference_file_ids):
             role = "МОДЕЛЬ (человек)" if i == 0 else f"ТОВАР {i}"
             logger.info(f"  [{i}] {role}: {file_id}")
@@ -249,7 +249,7 @@ async def process_nano_banana_try_on(request: TryOnRequest, model_record, produc
         
         # КРИТИЧЕСКАЯ ПРОВЕРКА: убедимся что модель действительно первая
         if len(reference_file_ids) > 0 and reference_file_ids[0] != model_file_id:
-            logger.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА: Модель НЕ на первом месте!")
+            logger.error("❌ КРИТИЧЕСКАЯ ОШИБКА: Модель НЕ на первом месте!")
             logger.error(f"   Ожидалось: {model_file_id}")
             logger.error(f"   Получили: {reference_file_ids[0]}")
             raise HTTPException(status_code=500, detail="Ошибка порядка изображений: модель не на первом месте")
@@ -722,7 +722,6 @@ async def get_history_panel():
             
             # Получаем данные о товаре если есть product_url
             product_info = None
-            product_link = "Product"
             if record.get('product_url'):
                 try:
                     # Вызываем функцию парсинга напрямую, без HTTP запроса
@@ -733,10 +732,9 @@ async def get_history_panel():
                     
                     # Короткая ссылка на товар
                     parsed_url = urlparse(record['product_url'])
-                    product_link = parsed_url.path.split('/')[-1][:8] + "..."
+                    parsed_url.path.split('/')[-1][:8] + "..."
                 except Exception as e:
                     logger.warning(f"Не удалось получить данные товара для {record.get('product_url')}: {e}")
-                    product_link = "Product"
                     product_info = None
             
             # Формируем HTML для товара

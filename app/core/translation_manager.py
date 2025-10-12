@@ -8,12 +8,11 @@ import re
 import ast
 import logging
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Optional
 from datetime import datetime
 import asyncio
 from app.models.i18n_models import (
-    Language, TranslationKey, Translation, TranslationSet, 
-    TranslationFile, TranslationStats, I18nConfig
+    Language, TranslationKey, TranslationFile, TranslationStats, I18nConfig
 )
 from app.core.context import get_context
 
@@ -331,7 +330,7 @@ class TranslationManager:
                 if key and key not in self._discovered_keys:
                     self._discovered_keys[key] = TranslationKey(
                         key=key,
-                        context=f"HTML template function call",
+                        context="HTML template function call",
                         source_file=str(file_path),
                         default_value="",  # Пустое значение по умолчанию, чтобы не заменять существующие переводы
                         category="templates"
@@ -375,7 +374,7 @@ class TranslationManager:
                     if key and key not in self._discovered_keys:
                         self._discovered_keys[key] = TranslationKey(
                             key=key,
-                            context=f"JavaScript function call",
+                            context="JavaScript function call",
                             source_file=str(file_path),
                             default_value=key,
                             category="frontend"

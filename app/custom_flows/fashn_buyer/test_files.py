@@ -35,7 +35,7 @@ async def test_file_search():
             if file_record:
                 logger.info(f"✅ FileProcessor нашел файл: {file_record.original_name}")
             else:
-                logger.info(f"❌ FileProcessor НЕ нашел файл")
+                logger.info("❌ FileProcessor НЕ нашел файл")
         except Exception as e:
             logger.error(f"❌ Ошибка FileProcessor: {e}")
         

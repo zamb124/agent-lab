@@ -7,10 +7,8 @@
 """
 
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List
 from fastapi.templating import Jinja2Templates
-from starlette.requests import Request
-from starlette.responses import Response
 from app.core.context import get_context
 from app.core.translation_manager import get_translation_manager
 

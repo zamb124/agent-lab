@@ -3,7 +3,6 @@
 """
 
 import hashlib
-import pytest
 
 
 def test_real_signature_debug():
@@ -124,7 +123,7 @@ def test_real_signature_debug():
     print("\n🧪 ДОПОЛНИТЕЛЬНЫЕ ТЕСТЫ:")
     
     # Основной формат но с разными кодировками
-    base_string = f"card-incoming&813176438229065084&97.00&643&2025-10-07T18:20:38Z&&false&CRc/NiG28QXh0bc7xXmwsMKC&txn_cf55a781f5cb42c7"
+    base_string = "card-incoming&813176438229065084&97.00&643&2025-10-07T18:20:38Z&&false&CRc/NiG28QXh0bc7xXmwsMKC&txn_cf55a781f5cb42c7"
     
     encodings = ['utf-8', 'ascii', 'latin1']
     for enc in encodings:
@@ -160,17 +159,6 @@ def test_signature_variants():
     # Согласно документации YooMoney разные типы уведомлений могут использовать разные поля:
     # https://yoomoney.ru/docs/wallet/using-api/notification-p2p-incoming
     
-    webhook_data = {
-        'notification_type': 'card-incoming',
-        'amount': '97.00',
-        'withdraw_amount': '100.00',
-        'datetime': '2025-10-07T18:14:26Z',
-        'sender': '',
-        'codepro': 'false', 
-        'label': 'txn_db4a943d560e488a',
-        'operation_id': '813176066791917096',
-        'currency': '643'
-    }
     
     expected_hash = '949cf99277c287e7184a9d4246ca0fb189cccfcd'
     secret = "CRc/NiG28QXh0bc7xXmwsMKC"
@@ -190,7 +178,7 @@ def test_signature_variants():
         f"card-incoming&813176066791917096&97.00&643&2025-10-07T18:14:26Z&false&{secret}&txn_db4a943d560e488a"
     ]
     
-    print(f"🎯 Ищем правильный формат для card-incoming")
+    print("🎯 Ищем правильный формат для card-incoming")
     print(f"Expected hash: {expected_hash}")
     print()
     

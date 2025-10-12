@@ -134,7 +134,7 @@ class YooMoneyProvider(BasePaymentProvider):
                     status="test"
                 )
             else:
-                logger.error(f"❌ Тестовое уведомление - неверная подпись!")
+                logger.error("❌ Тестовое уведомление - неверная подпись!")
                 return WebhookVerificationResult(
                     is_valid=False,
                     error_message="Invalid test notification signature"
@@ -201,8 +201,8 @@ class YooMoneyProvider(BasePaymentProvider):
         Статус известен только через HTTP-уведомления.
         """
         logger.warning(
-            f"YooMoney Quickpay не поддерживает проверку статуса. "
-            f"Используйте только HTTP-уведомления."
+            "YooMoney Quickpay не поддерживает проверку статуса. "
+            "Используйте только HTTP-уведомления."
         )
         return "unknown"
     

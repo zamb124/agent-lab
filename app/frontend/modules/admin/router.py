@@ -9,7 +9,6 @@ from app.core.context import get_context
 from app.core.storage import Storage
 from app.identity.models import Company
 from app.models.billing_models import TariffPlan
-from typing import List
 
 router = APIRouter(prefix="/frontend/admin", tags=["admin-pages"])
 templates = get_templates()
@@ -61,7 +60,7 @@ async def admin_companies(request: Request):
                 try:
                     company = Company.model_validate_json(company_data)
                     companies.append(company)
-                except Exception as e:
+                except Exception:
                     continue
     
     # Сортируем по дате создания

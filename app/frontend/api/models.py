@@ -2,7 +2,6 @@
 Простое API для работы с моделями через HTMX + JSON
 """
 
-import ast
 import json
 import uuid
 import logging
@@ -20,7 +19,6 @@ from app.frontend.websockets.notifications import notify_model_updated
 from app.frontend.core.utils import is_htmx_request
 
 # ПРИНУДИТЕЛЬНЫЙ импорт field_extensions для применения monkey patches
-import app.frontend.field_extensions
 
 logger = logging.getLogger(__name__)
 

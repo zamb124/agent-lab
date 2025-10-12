@@ -2,12 +2,9 @@
 Тесты интеграции файловой системы.
 """
 import pytest
-import asyncio
-import uuid
 
 from app.core.file_processor import FileProcessor
 from app.interfaces.telegram_interface import TelegramInterface
-from app.models import FileRecord, FileStatus
 
 
 @pytest.mark.asyncio

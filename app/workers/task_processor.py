@@ -46,7 +46,7 @@ class TaskProcessor:
 
         self.running = True
         logger.info(f"✅ Воркер готов к работе (интервал опроса: {settings.worker.task_poll_interval}сек)")
-        logger.info(f"🔍 Начинаем цикл обработки задач...")
+        logger.info("🔍 Начинаем цикл обработки задач...")
 
         iteration = 0
         while self.running:
@@ -138,10 +138,10 @@ class TaskProcessor:
             has_pending = state.next and len(state.next) > 0
             
             if has_pending:
-                logger.info(f"🔄 Возобновляем выполнение")
+                logger.info("🔄 Возобновляем выполнение")
                 result = await compiled_graph.ainvoke(Command(resume=user_message), config)
             else:
-                logger.info(f"🆕 Новый запрос")
+                logger.info("🆕 Новый запрос")
                 initial_state = {
                     "messages": [HumanMessage(content=user_message)],
                     **input_data_with_context,
@@ -351,7 +351,7 @@ class TaskProcessor:
         interface = await factory.create_interface(task.platform, config)
 
         if interface is None:
-            logger.error(f"❌ Не удалось создать интерфейс для отправки ошибки")
+            logger.error("❌ Не удалось создать интерфейс для отправки ошибки")
             return
 
         error_response = Message(
@@ -364,7 +364,7 @@ class TaskProcessor:
         )
 
         await interface.send_message(error_response)
-        logger.info(f"✅ Отправлено сообщение об ошибке пользователю")
+        logger.info("✅ Отправлено сообщение об ошибке пользователю")
 
     async def _send_result_via_interface(self, task, result):
         """Отправляет результат через соответствующий интерфейс платформы"""

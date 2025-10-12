@@ -6,7 +6,6 @@ import asyncio
 import logging
 from typing import Optional
 from langchain_core.language_models import BaseLLM, BaseChatModel
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatResult, ChatGeneration
 

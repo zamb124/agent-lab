@@ -2,12 +2,9 @@
 Тесты расширений полей Pydantic для интернационализации
 """
 
-import pytest
-from unittest.mock import Mock, patch
 from pydantic import BaseModel
 
-from app.frontend.field_extensions import Field, FrontendFieldInfo
-from app.models.i18n_models import Language
+from app.frontend.field_extensions import Field
 
 
 class TestFrontendFieldInfoI18n:

@@ -100,9 +100,9 @@ class TestTelegramFileIntegration:
                 # Проверяем что webhook обработался успешно
                 assert response.status_code == 200
                 result = await response.json()
-                assert result["ok"] == True
+                assert result["ok"]
                 
-                print(f"✅ Telegram webhook обработан успешно")
+                print("✅ Telegram webhook обработан успешно")
         
         # Даем время на обработку
         await asyncio.sleep(0.1)
@@ -114,7 +114,7 @@ class TestTelegramFileIntegration:
         # Простой способ - проверим несколько возможных ключей
         file_found = False
         for i in range(10):  # Проверяем последние 10 возможных файлов
-            test_key = f"s3:yandex:file_{uuid.uuid4().hex[:12]}"
+            f"s3:yandex:file_{uuid.uuid4().hex[:12]}"
             # В реальности мы бы искали по pattern, но для теста проверим существование задачи
             
         # Альтернативный способ - проверим что создалась задача
@@ -138,7 +138,7 @@ class TestTelegramFileIntegration:
             print("⚠️ Конкретная задача с файлом не найдена, но это может быть нормально")
             print("   (файл мог быть обработан, но задача уже выполнена)")
         
-        print(f"✅ Интеграционный тест Telegram + файлы завершен")
+        print("✅ Интеграционный тест Telegram + файлы завершен")
     
     async def test_telegram_webhook_with_photo(self):
         """Тест отправки фото через Telegram webhook"""
@@ -234,11 +234,11 @@ class TestTelegramFileIntegration:
                 # Проверяем что webhook обработался успешно
                 assert response.status_code == 200
                 result = await response.json()
-                assert result["ok"] == True
+                assert result["ok"]
                 
-                print(f"✅ Telegram webhook с фото обработан успешно")
+                print("✅ Telegram webhook с фото обработан успешно")
         
-        print(f"✅ Интеграционный тест Telegram + фото завершен")
+        print("✅ Интеграционный тест Telegram + фото завершен")
     
     async def test_file_message_format_for_agent(self):
         """Тест форматирования сообщения с файлом для агента"""
@@ -263,7 +263,7 @@ class TestTelegramFileIntegration:
         processor = FileProcessor()
         formatted_message = processor.format_file_message(file_record)
         
-        print(f"✅ Сообщение для агента:")
+        print("✅ Сообщение для агента:")
         print(formatted_message)
         
         # Проверяем что сообщение содержит все нужные данные
@@ -283,7 +283,7 @@ class TestTelegramFileIntegration:
         assert file_info["file_id"] == "test_file_123"
         assert file_info["content_type"] == "application/pdf"
         
-        print(f"✅ Информация о файле корректно извлекается обратно")
+        print("✅ Информация о файле корректно извлекается обратно")
         
         await processor.close()
     
@@ -313,7 +313,7 @@ class TestTelegramFileIntegration:
         # Комбинируем текст и файл (как это делает Telegram интерфейс)
         combined_message = f"{user_text}\n\n{file_message}"
         
-        print(f"✅ Комбинированное сообщение для агента:")
+        print("✅ Комбинированное сообщение для агента:")
         print(combined_message)
         print()
         
@@ -333,7 +333,7 @@ class TestTelegramFileIntegration:
         assert len(extracted_files) == 1
         
         file_info = extracted_files[0]
-        print(f"✅ Агент может извлечь:")
+        print("✅ Агент может извлечь:")
         print(f"   Имя файла: {file_info['name']}")
         print(f"   ID для скачивания: {file_info['file_id']}")
         print(f"   URL: {file_info['url']}")
@@ -428,7 +428,7 @@ class TestTelegramFileIntegration:
             message = await interface.handle_message(telegram_update, "test_flow")
             
             if message:
-                print(f"✅ Сообщение обработано:")
+                print("✅ Сообщение обработано:")
                 print(f"   User ID: {message.user_id}")
                 print(f"   Content: {message.content[:100]}...")
                 print(f"   Files: {len(message.files or [])}")
@@ -452,4 +452,4 @@ class TestTelegramFileIntegration:
             else:
                 print("⚠️ Сообщение не было создано (возможно из-за команды или ошибки)")
         
-        print(f"✅ Полный тест Telegram файлового флоу завершен")
+        print("✅ Полный тест Telegram файлового флоу завершен")

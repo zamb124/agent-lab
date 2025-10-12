@@ -4,12 +4,11 @@
 
 import pytest
 import asyncio
-import json
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
+from unittest.mock import Mock, patch
 from app.core.translation_manager import TranslationManager, get_translation_manager, t
-from app.models.i18n_models import Language, TranslationKey, I18nConfig
+from app.models.i18n_models import Language, I18nConfig
 
 
 class TestTranslationManagerSingleton:

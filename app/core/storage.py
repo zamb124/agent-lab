@@ -5,7 +5,7 @@ Storage - простой key-value storage для всех сущностей п
 
 import logging
 import json
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, delete, Table, MetaData, text
 from sqlalchemy.dialects.postgresql import insert
@@ -152,7 +152,7 @@ class Storage:
 
     async def _get_with_session(self, key: str, table_name: str, session) -> Optional[str]:
         """Получает значение с использованием переданной сессии"""
-        table_model = self._get_table_model(table_name)
+        self._get_table_model(table_name)
         
         if table_name == "storage":
             result = await session.execute(

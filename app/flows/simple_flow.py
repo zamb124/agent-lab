@@ -32,19 +32,19 @@ class SimpleFlowAgent(BaseAgent):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # Создаем простой граф
-        self.graph = StateGraph(TestState)
-
-        # Добавляем единственную ноду
-        self.graph.add_node("test_response", test_response_node)
-
-        # Простой маршрут: START → test_response → END
-        self.graph.set_entry_point("test_response")
-        self.graph.add_edge("test_response", END)
-
-        # Компилируем граф БЕЗ checkpointer (не нужен для простого теста)
+        self.graph = self.build_graph()
         self.compiled_graph = self.graph.compile()
+
+    def build_graph(self):
+        """Создает и возвращает граф"""
+        graph = StateGraph(TestState)
+        
+        graph.add_node("test_response", test_response_node)
+        
+        graph.set_entry_point("test_response")
+        graph.add_edge("test_response", END)
+        
+        return graph
 
     async def ainvoke(self, input_data, config=None):
         """Стандартный LangGraph ainvoke"""

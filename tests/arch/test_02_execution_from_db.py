@@ -24,6 +24,7 @@ async def test_weather_flow_execution():
     from app.core.migrator import Migrator
     migrator = Migrator()
     await migrator.run_full_migration()
+    await migrator._set_system_context()
     
     flow_factory = FlowFactory()
     weather_flow = await flow_factory.get_flow("app.flows.weather_flow.weather_flow_config")
@@ -52,10 +53,10 @@ async def test_smart_flow_math_execution():
     from app.core.migrator import Migrator
     migrator = Migrator()
     await migrator.run_full_migration()
+    await migrator._set_system_context()
 
     # Настраиваем мок для математических вычислений
     from app.core.llm_factory import get_global_mock_llm, get_llm
-    from app.models import LLMConfig
     
     get_llm("mock", "mock-gpt-4")
     
@@ -113,6 +114,7 @@ async def test_smart_flow_weather_execution():
     from app.core.migrator import Migrator
     migrator = Migrator()
     await migrator.run_full_migration()
+    await migrator._set_system_context()
     
     flow_factory = FlowFactory()
     smart_flow = await flow_factory.get_flow("app.flows.smart_flow.smart_flow_config")
@@ -142,10 +144,10 @@ async def test_flow_isolation():
     from app.core.migrator import Migrator
     migrator = Migrator()
     await migrator.run_full_migration()
+    await migrator._set_system_context()
 
     # Настраиваем мок для простых вычислений
     from app.core.llm_factory import get_global_mock_llm, get_llm
-    from app.models import LLMConfig
     
     get_llm("mock", "mock-gpt-4")
     

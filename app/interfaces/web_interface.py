@@ -90,7 +90,6 @@ class WebInterface(BaseInterface):
         elif js_session_id and (js_session_id.startswith('telegram:') or js_session_id.startswith('whatsapp:') or js_session_id.startswith('api:')):
             # Игнорируем session_id от других платформ - создаем новый для web
             logger.warning(f"⚠️ Получен session_id от другой платформы: {js_session_id[:50]}, создаем новый для web")
-            import uuid
             session_id = f"web:{real_user_id}:{flow_id}:{uuid.uuid4().hex[:8]}"
             logger.debug(f"🔧 Создан новый session_id для web: {session_id}")
         else:

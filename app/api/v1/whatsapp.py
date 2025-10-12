@@ -73,7 +73,7 @@ async def whatsapp_webhook_verify(
         raise HTTPException(status_code=403, detail="Invalid hub.mode")
 
     if hub_verify_token != expected_verify_token:
-        logger.error(f"❌ Неверный verify_token")
+        logger.error("❌ Неверный verify_token")
         raise HTTPException(status_code=403, detail="Invalid verify_token")
 
     logger.info(f"✅ WhatsApp webhook верифицирован для flow {flow_id}")

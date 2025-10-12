@@ -28,7 +28,7 @@ import json
 import time
 from pathlib import Path
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from backend.app.clients.amo_crm_integration import get_amocrm_client
 
 

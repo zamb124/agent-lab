@@ -5,7 +5,7 @@
 import pytest
 from app.services.billing_service import BillingService
 from app.identity.models import User, Company, AuthProvider, UserStatus
-from app.models.billing_models import TariffPlan, UsageType
+from app.models.billing_models import TariffPlan
 
 
 @pytest.fixture
@@ -196,7 +196,7 @@ async def test_monthly_limit():
     can_use, reason = await billing_service.can_use_resource(test_user, limited_company, "openai:gpt-4")
     
     if cost > 5.0:
-        assert not can_use, f"Должно блокироваться при превышении месячного лимита"
+        assert not can_use, "Должно блокироваться при превышении месячного лимита"
         assert "лимит" in reason.lower(), f"Причина должна упоминать лимит: {reason}"
 
 

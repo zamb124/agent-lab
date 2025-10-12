@@ -83,7 +83,7 @@ class NanoBananaClient:
             # Добавляем референсные изображения если есть
             if reference_file_ids:
                 logger.info(f"📎 Используем {len(reference_file_ids)} референсных файлов")
-                logger.info(f"📎 Порядок file_ids в nano_banana_client:")
+                logger.info("📎 Порядок file_ids в nano_banana_client:")
                 for i, file_id in enumerate(reference_file_ids):
                     logger.info(f"   [{i}] {file_id}")
                 

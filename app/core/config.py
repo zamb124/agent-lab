@@ -5,10 +5,9 @@
 
 import logging
 import os
-from typing import Optional, Dict, Any, Tuple, Type
+from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
-from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
-from pydantic.fields import FieldInfo
+from pydantic_settings import BaseSettings
 
 from .config_utils import load_merged_config
 

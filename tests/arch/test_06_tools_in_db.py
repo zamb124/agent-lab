@@ -6,7 +6,6 @@
 2. Добавление tool из БД к агенту в коде через ссылку
 """
 import pytest
-import asyncio
 from pathlib import Path
 import sys
 import uuid
@@ -17,7 +16,6 @@ sys.path.insert(0, str(backend_path))
 
 from app.core.storage import Storage
 from app.core.migrator import Migrator
-from app.core.agent_factory import AgentFactory
 from app.core.flow_factory import FlowFactory
 from app.models import (
     AgentConfig, AgentType, CodeMode, FlowConfig,
@@ -129,7 +127,6 @@ async def test_code_agent_with_db_tool(save_test_company):
     
     # Настраиваем мок для магических заклинаний
     from app.core.llm_factory import get_global_mock_llm, get_llm
-    from app.models import LLMConfig
     
     get_llm("mock", "mock-gpt-4")
     
@@ -226,7 +223,6 @@ async def test_code_reference_tool(save_test_company):
     
     # Настраиваем мок для вычислений
     from app.core.llm_factory import get_global_mock_llm, get_llm
-    from app.models import LLMConfig
     
     get_llm("mock", "mock-gpt-4")
     
@@ -298,7 +294,6 @@ async def test_db_agent_with_code_tool(save_test_company):
     
     # Настраиваем мок для вычислений
     from app.core.llm_factory import get_global_mock_llm, get_llm
-    from app.models import LLMConfig
     
     get_llm("mock", "mock-gpt-4")
     
@@ -313,7 +308,7 @@ async def test_db_agent_with_code_tool(save_test_company):
     
     # 1. Сначала мигрируем tools из кода в БД
     migrator = Migrator()
-    await migrator._migrate_tools()
+    await migrator._migrate_all_tools()
     
     # 2. Создаем агента в БД который ссылается на мигрированный tool
     storage = Storage()

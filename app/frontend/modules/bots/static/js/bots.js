@@ -194,7 +194,6 @@ import { showNotification } from '/static/js/components/notification.js';
         modal.style.display = 'none';
         if (listView) listView.style.display = 'block';
         
-        // Уничтожаем prompt editor
         if (promptEditor) {
             promptEditor.destroy();
             promptEditor = null;
@@ -203,6 +202,29 @@ import { showNotification } from '/static/js/components/notification.js';
         currentBotModal = null;
         currentBotChat = null;
     };
+
+    window.toggleMobileActionsMenu = function() {
+        const dropdown = document.getElementById('mobile-actions-dropdown');
+        if (dropdown) {
+            dropdown.classList.toggle('show');
+        }
+    };
+
+    window.closeMobileActionsMenu = function() {
+        const dropdown = document.getElementById('mobile-actions-dropdown');
+        if (dropdown) {
+            dropdown.classList.remove('show');
+        }
+    };
+    
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('mobile-actions-dropdown');
+        const menu = document.querySelector('.mobile-actions-menu');
+        
+        if (dropdown && dropdown.classList.contains('show') && menu && !menu.contains(e.target)) {
+            dropdown.classList.remove('show');
+        }
+    });
     
     let llmProvidersData = null;
 

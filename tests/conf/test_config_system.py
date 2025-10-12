@@ -78,7 +78,7 @@ class TestConfigUtils:
         }
         
         assert get_nested_value(config, "auth.providers.yandex.client_id") == "test-id"
-        assert get_nested_value(config, "auth.enabled", False) == False
+        assert not get_nested_value(config, "auth.enabled", False)
         assert get_nested_value(config, "nonexistent.path", "default") == "default"
     
     def test_set_nested_value(self):
@@ -173,8 +173,8 @@ class TestSettingsIntegration:
             
             # Проверяем что настройки загрузились из JSON
             assert settings.server.port == 9001
-            assert settings.server.debug == True
-            assert settings.auth.enabled == False
+            assert settings.server.debug
+            assert not settings.auth.enabled
             assert settings.llm.default_provider == "anthropic"
             
         finally:
@@ -258,13 +258,13 @@ class TestAuthConfiguration:
             assert yandex_config.client_id == "test-client-id"
             assert yandex_config.client_secret == "test-secret"
             assert yandex_config.auth_url == "https://oauth.yandex.ru/authorize"
-            assert yandex_config.enabled == True
+            assert yandex_config.enabled
             
             # Очистка
             config_utils.get_config_paths = original_get_config_paths
             os.unlink(temp_path)
             
-        except Exception as e:
+        except Exception:
             # Очистка в случае ошибки
             if 'original_get_config_paths' in locals():
                 config_utils.get_config_paths = original_get_config_paths
@@ -283,7 +283,7 @@ class TestAuthConfiguration:
         assert "yandex" in json_config["auth"]["providers"]
         
         yandex_json = json_config["auth"]["providers"]["yandex"]
-        assert yandex_json["enabled"] == True
+        assert yandex_json["enabled"]
         assert yandex_json["client_id"] == "16c6d45b72114d2bbcabe3f81875c23d"
         
         # Тестируем создание провайдера напрямую
@@ -294,7 +294,7 @@ class TestAuthConfiguration:
         yandex_provider = YandexProvider(provider_config)
         
         assert yandex_provider.client_id == "16c6d45b72114d2bbcabe3f81875c23d"
-        assert yandex_provider.validate_config() == True
+        assert yandex_provider.validate_config()
 
 
 class TestLLMConfiguration:
@@ -349,7 +349,7 @@ class TestLLMConfiguration:
             openai_config = test_settings.llm.providers["openai"]
             assert openai_config.base_url == "https://api.openai.com/v1"
             assert openai_config.default_model == "gpt-4"
-            assert openai_config.enabled == True
+            assert openai_config.enabled
             # Models мерджится с conf.json, проверяем что OpenAI провайдер вообще работает
             assert isinstance(openai_config.models, dict)
             
@@ -360,7 +360,7 @@ class TestLLMConfiguration:
                 os.environ["LLM__DEFAULT_PROVIDER"] = original_llm_provider
             os.unlink(temp_path)
             
-        except Exception as e:
+        except Exception:
             # Очистка в случае ошибки
             if 'original_get_config_paths' in locals():
                 config_utils.get_config_paths = original_get_config_paths
@@ -512,7 +512,7 @@ class TestConfigStructure:
             server_json = json_config["server"]
             assert server_json["port"] == 8001
             assert server_json["env"] == "local"
-            assert server_json["debug"] == True
+            assert server_json["debug"]
             
             # Проверяем что Settings правильно применяет JSON
             # Используем данные из JSON а не глобальный settings который может быть переопределен

@@ -3,8 +3,8 @@
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock, AsyncMock
-from fastapi import Request, HTTPException
+from unittest.mock import Mock, patch, AsyncMock
+from fastapi import Request
 
 from app.models.context_models import Context
 from app.models.i18n_models import Language
@@ -396,4 +396,3 @@ class TestLanguageDetectionEdgeCases:
 
 
 # Импорт asyncio для async функций в тестах
-import asyncio

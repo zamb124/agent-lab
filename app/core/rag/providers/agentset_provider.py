@@ -6,13 +6,12 @@ RAG провайдер на базе Agentset.ai.
 
 import httpx
 import logging
-import tempfile
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from ..base_provider import BaseRAGProvider
 from app.models.rag_models import RAGDocument, RAGSearchResult, RAGNamespace
-from ...core_clients.s3_client import S3Client, get_default_s3_client
+from ...core_clients.s3_client import get_default_s3_client
 
 logger = logging.getLogger(__name__)
 

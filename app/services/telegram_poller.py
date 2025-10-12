@@ -6,12 +6,10 @@ Telegram Long Polling для локальной разработки.
 import logging
 import asyncio
 import traceback
-import json
 from typing import Dict, List
 import httpx
 
 from app.core.storage import Storage
-from app.interfaces.telegram_interface import TelegramInterface
 from app.core.config import settings
 from app.models import FlowConfig
 

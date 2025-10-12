@@ -5,7 +5,7 @@ API для работы с историей выполнения flow
 import logging
 from typing import Optional
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
 from app.core.flow_factory import FlowFactory
 from app.models.history_models import MessageHistoryResponse, SessionListResponse

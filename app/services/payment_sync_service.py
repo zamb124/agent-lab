@@ -5,12 +5,12 @@
 
 import logging
 import json
-from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Any
+from datetime import datetime, timezone
+from typing import Dict, Any
 
 from ..core.storage import Storage
 from ..core.clients.payment_providers.factory import PaymentProviderFactory
-from ..models.payment_models import Transaction, PaymentStatus
+from ..models.payment_models import PaymentStatus
 from .payment_service import PaymentService
 
 logger = logging.getLogger(__name__)

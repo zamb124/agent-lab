@@ -4,10 +4,10 @@
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 from datetime import datetime, timezone
 from app.identity.auth_service import AuthService
-from app.identity.models import AuthProvider, AuthRequest, AuthResult, ProviderUserInfo, User, AuthSession
+from app.identity.models import AuthProvider, AuthRequest, ProviderUserInfo, User, AuthSession
 
 
 @pytest.mark.asyncio

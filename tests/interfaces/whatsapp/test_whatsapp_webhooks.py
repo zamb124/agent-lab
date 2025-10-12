@@ -3,13 +3,11 @@
 Проверка всех API endpoints в app/api/v1/whatsapp.py.
 """
 import pytest
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 
 from app.api.v1.whatsapp import router
-from app.core.storage import Storage
 from app.models import FlowConfig
 
 
@@ -69,7 +67,7 @@ class TestWebhookVerification:
         
         assert response.status_code == 200
         assert response.text == "12345"
-        print(f"✅ Webhook верификация успешна")
+        print("✅ Webhook верификация успешна")
     
     def test_webhook_verify_wrong_token(self, client, mock_flow_config):
         """Тест верификации с неверным токеном"""
@@ -90,7 +88,7 @@ class TestWebhookVerification:
                 )
         
         assert response.status_code == 403
-        print(f"✅ Верификация отклонена при неверном токене")
+        print("✅ Верификация отклонена при неверном токене")
     
     def test_webhook_verify_wrong_mode(self, client, mock_flow_config):
         """Тест верификации с неверным режимом"""
@@ -106,7 +104,7 @@ class TestWebhookVerification:
             )
         
         assert response.status_code == 403
-        print(f"✅ Верификация отклонена при неверном режиме")
+        print("✅ Верификация отклонена при неверном режиме")
     
     def test_webhook_verify_flow_not_found(self, client):
         """Тест верификации для несуществующего flow"""
@@ -122,7 +120,7 @@ class TestWebhookVerification:
             )
         
         assert response.status_code == 404
-        print(f"✅ 404 для несуществующего flow")
+        print("✅ 404 для несуществующего flow")
     
     def test_webhook_verify_no_whatsapp_platform(self, client):
         """Тест верификации для flow без WhatsApp платформы"""
@@ -144,7 +142,7 @@ class TestWebhookVerification:
             )
         
         assert response.status_code == 400
-        print(f"✅ 400 для flow без WhatsApp платформы")
+        print("✅ 400 для flow без WhatsApp платформы")
 
 
 class TestWebhookHandler:
@@ -195,7 +193,7 @@ class TestWebhookHandler:
         
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
-        print(f"✅ Webhook обработан успешно")
+        print("✅ Webhook обработан успешно")
     
     def test_webhook_handle_status_only(self, client, mock_flow_config):
         """Тест webhook только со статусом (без сообщения)"""
@@ -229,7 +227,7 @@ class TestWebhookHandler:
                     )
         
         assert response.status_code == 200
-        print(f"✅ Webhook со статусом обработан (задача не создается)")
+        print("✅ Webhook со статусом обработан (задача не создается)")
     
     def test_webhook_flow_not_found(self, client):
         """Тест webhook для несуществующего flow"""
@@ -240,7 +238,7 @@ class TestWebhookHandler:
             )
         
         assert response.status_code == 404
-        print(f"✅ 404 для несуществующего flow в webhook POST")
+        print("✅ 404 для несуществующего flow в webhook POST")
 
 
 class TestAdminRegisterFlow:
@@ -265,7 +263,7 @@ class TestAdminRegisterFlow:
         data = response.json()
         assert data["success"] is True
         assert data["flow_id"] == "test_whatsapp_flow"
-        print(f"✅ Регистрация flow успешна через API")
+        print("✅ Регистрация flow успешна через API")
     
     def test_register_flow_not_found(self, client):
         """Тест регистрации несуществующего flow"""
@@ -274,7 +272,7 @@ class TestAdminRegisterFlow:
             response = client.post("/api/v1/admin/whatsapp/register/nonexistent_flow")
         
         assert response.status_code == 404
-        print(f"✅ 404 при регистрации несуществующего flow")
+        print("✅ 404 при регистрации несуществующего flow")
     
     def test_register_flow_no_whatsapp_platform(self, client):
         """Тест регистрации flow без WhatsApp платформы"""
@@ -290,7 +288,7 @@ class TestAdminRegisterFlow:
         
         assert response.status_code == 400
         assert "does not have WhatsApp" in response.json()["detail"]
-        print(f"✅ 400 при отсутствии WhatsApp платформы")
+        print("✅ 400 при отсутствии WhatsApp платформы")
 
 
 class TestAdminSendTemplate:
@@ -324,7 +322,7 @@ class TestAdminSendTemplate:
         data = response.json()
         assert data["success"] is True
         assert "message_id" in data
-        print(f"✅ Template отправлен успешно")
+        print("✅ Template отправлен успешно")
     
     def test_send_template_api_error(self, client, mock_flow_config):
         """Тест ошибки WhatsApp API при отправке template"""
@@ -348,7 +346,7 @@ class TestAdminSendTemplate:
         
         assert response.status_code == 400
         assert "Template not approved" in response.json()["detail"]
-        print(f"✅ Ошибка API корректно обработана")
+        print("✅ Ошибка API корректно обработана")
 
 
 class TestAdminPhoneInfo:
@@ -379,7 +377,7 @@ class TestAdminPhoneInfo:
         data = response.json()
         assert data["success"] is True
         assert data["phone_data"]["display_phone_number"] == "+1234567890"
-        print(f"✅ Информация о номере получена")
+        print("✅ Информация о номере получена")
     
     def test_get_phone_info_api_error(self, client, mock_flow_config):
         """Тест ошибки API при получении информации"""
@@ -396,7 +394,7 @@ class TestAdminPhoneInfo:
                     response = client.get("/api/v1/admin/whatsapp/phone_info/test_whatsapp_flow")
         
         assert response.status_code == 401
-        print(f"✅ Ошибка API корректно возвращается")
+        print("✅ Ошибка API корректно возвращается")
 
 
 class TestWebhookFullFlow:
@@ -440,7 +438,7 @@ class TestWebhookFullFlow:
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
         
-        print(f"✅ Полный webhook flow обработан успешно")
+        print("✅ Полный webhook flow обработан успешно")
 
 
 class TestWebhookEdgeCases:
@@ -462,7 +460,7 @@ class TestWebhookEdgeCases:
                 )
         
         assert response.status_code == 200
-        print(f"✅ Пустой entry обработан без ошибок")
+        print("✅ Пустой entry обработан без ошибок")
     
     def test_webhook_malformed_json(self, client):
         """Тест webhook с невалидным JSON"""
@@ -475,7 +473,7 @@ class TestWebhookEdgeCases:
         
         # FastAPI может вернуть 404 если flow не найден до парсинга JSON
         assert response.status_code in [400, 404, 422]
-        print(f"✅ Невалидный JSON корректно отклонен")
+        print("✅ Невалидный JSON корректно отклонен")
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ from app.models.core_models import ToolReference, CodeMode
 from app.services.billing_service import BillingService
 from app.core.storage import Storage
 from app.identity.models import User, Company
-from app.models.billing_models import UsageRecord, UsageType
+from app.models.billing_models import UsageRecord
 from app.core.context import set_context
 from app.models.context_models import Context
 
@@ -136,7 +136,7 @@ class TestToolDecorator:
         assert hasattr(expensive_test_tool, '_platform_cost')
         assert expensive_test_tool._platform_cost == 0.5
         assert expensive_test_tool._platform_billing_name == "test_expensive_tool"
-        assert expensive_test_tool._is_platform_tool == True
+        assert expensive_test_tool._is_platform_tool
         
         # Проверяем бесплатный инструмент
         assert hasattr(free_test_tool, '_platform_cost')
@@ -205,7 +205,6 @@ class TestToolFactory:
         # Создаем и выполняем инструмент
         tool = await tool_factory._create_single_tool(tool_ref)
         
-        initial_spent = test_company.current_month_spent
         
         # Выполняем инструмент (биллинг работает через обертку func)
         result = tool.invoke({"input_text": "billing test"})
@@ -235,7 +234,6 @@ class TestToolFactory:
         
         tool = await tool_factory._create_single_tool(tool_ref)
         
-        initial_spent = test_company.current_month_spent
         
         # Выполняем бесплатный инструмент (асинхронно)
         result = await tool.ainvoke({"input_text": "free test"})
@@ -294,7 +292,6 @@ class TestToolFactory:
         
         tool = await tool_factory._create_single_tool(tool_ref)
         
-        initial_spent = test_company.current_month_spent
         
         # Выполняем инструмент
         result = tool.invoke({"input_text": "premium free test"})

@@ -8,7 +8,6 @@
 И все это работает вместе.
 """
 import pytest
-import asyncio
 from pathlib import Path
 import sys
 
@@ -32,6 +31,7 @@ async def test_create_hybrid_stategraph():
     from app.core.migrator import Migrator
     migrator = Migrator()
     await migrator.run_full_migration()
+    await migrator._set_system_context()
     
     storage = Storage()
         

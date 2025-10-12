@@ -11,9 +11,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.core.config import settings
@@ -39,6 +37,7 @@ from app.frontend.modules.admin.router import router as admin_module
 from app.frontend.modules.history.router import router as history_module
 from app.frontend.modules.bots.router import router as bots_module
 from app.frontend.modules.variables.router import router as variables_module
+from app.frontend.modules.store.router import router as store_module
 from app.frontend.websockets import notifications as websocket_notifications
 from app.frontend.websockets import chat as websocket_chat
 from app.frontend.api import websocket_status as websocket_status_api
@@ -301,6 +300,7 @@ app.include_router(admin_module, tags=["admin-module"], include_in_schema=False)
 app.include_router(history_module, tags=["history-module"], include_in_schema=False)
 app.include_router(bots_module, tags=["bots-module"], include_in_schema=False)
 app.include_router(variables_module, tags=["variables-module"], include_in_schema=False)
+app.include_router(store_module, tags=["store-module"], include_in_schema=False)
 
 # WebSockets - скрыто от публичной документации
 app.include_router(websocket_notifications.router, tags=["websocket-notifications"], include_in_schema=False)
@@ -324,7 +324,7 @@ app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 docs_dir = Path(__file__).parent.parent / "site"
 if docs_dir.exists():
     app.mount("/docs", StaticFiles(directory=str(docs_dir), html=True), name="docs")
-    logger.info(f"📚 Документация MkDocs доступна на /docs")
+    logger.info("📚 Документация MkDocs доступна на /docs")
 
 
 @app.get("/", include_in_schema=False)

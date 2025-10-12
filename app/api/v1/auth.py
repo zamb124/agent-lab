@@ -3,7 +3,7 @@ API эндпоинты для авторизации.
 """
 
 import logging
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
 from app.core.config import settings
 

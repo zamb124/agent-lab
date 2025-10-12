@@ -6,11 +6,10 @@ import logging
 from typing import Any, Dict, List, Optional
 import google.generativeai as genai
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain_core.tools import BaseTool
 from pydantic import Field
-import json
 
 logger = logging.getLogger(__name__)
 

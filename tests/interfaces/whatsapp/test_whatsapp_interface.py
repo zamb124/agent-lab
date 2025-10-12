@@ -3,13 +3,10 @@ Unit тесты для WhatsAppInterface.
 Полное покрытие всех методов с проверками на ошибки.
 """
 import pytest
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
 
 from app.interfaces.whatsapp_interface import WhatsAppInterface
 from app.interfaces.base import Message
-from app.models import FlowConfig
 
 
 @pytest.fixture
@@ -76,7 +73,7 @@ class TestWhatsAppInterfaceHandleMessage:
         assert message.metadata["phone_number"] == "9111111111111"
         assert message.metadata["profile_name"] == "John Doe"
         assert message.metadata["message_type"] == "text"
-        print(f"✅ Текстовое сообщение обработано корректно")
+        print("✅ Текстовое сообщение обработано корректно")
     
     @pytest.mark.asyncio
     async def test_handle_empty_webhook(self, whatsapp_interface):
@@ -86,7 +83,7 @@ class TestWhatsAppInterfaceHandleMessage:
         message = await whatsapp_interface.handle_message(webhook_data, "test_flow")
         
         assert message is None
-        print(f"✅ Пустой webhook корректно обработан (None)")
+        print("✅ Пустой webhook корректно обработан (None)")
     
     @pytest.mark.asyncio
     async def test_handle_status_update(self, whatsapp_interface):
@@ -117,7 +114,7 @@ class TestWhatsAppInterfaceHandleMessage:
         message = await whatsapp_interface.handle_message(webhook_data, "test_flow")
         
         assert message is None
-        print(f"✅ Статус доставки обработан (не создает Message)")
+        print("✅ Статус доставки обработан (не создает Message)")
     
     @pytest.mark.asyncio
     async def test_handle_image_message(self, whatsapp_interface):
@@ -159,7 +156,7 @@ class TestWhatsAppInterfaceHandleMessage:
         assert message is not None
         assert "Check this photo" in message.content
         assert message.metadata["message_type"] == "image"
-        print(f"✅ Изображение обработано корректно")
+        print("✅ Изображение обработано корректно")
     
     @pytest.mark.asyncio
     async def test_handle_audio_message(self, whatsapp_interface):
@@ -199,7 +196,7 @@ class TestWhatsAppInterfaceHandleMessage:
         
         assert message is not None
         assert "🎤 Audio recognized" in message.content or message.files
-        print(f"✅ Аудио сообщение обработано корректно")
+        print("✅ Аудио сообщение обработано корректно")
     
     @pytest.mark.asyncio
     async def test_handle_command_message(self, whatsapp_interface):
@@ -233,7 +230,7 @@ class TestWhatsAppInterfaceHandleMessage:
         assert message is None
         # Но отправляет ответ на команду
         assert mock_send.called
-        print(f"✅ Команда обработана корректно")
+        print("✅ Команда обработана корректно")
     
     @pytest.mark.asyncio
     async def test_handle_location_message(self, whatsapp_interface):
@@ -273,7 +270,7 @@ class TestWhatsAppInterfaceHandleMessage:
         assert "Moscow, Russia" in message.content
         assert "55.7558" in message.content
         assert "37.6173" in message.content
-        print(f"✅ Локация обработана корректно")
+        print("✅ Локация обработана корректно")
     
     @pytest.mark.asyncio
     async def test_handle_button_reply(self, whatsapp_interface):
@@ -310,7 +307,7 @@ class TestWhatsAppInterfaceHandleMessage:
         
         assert message is not None
         assert message.content == "Узнать погоду"
-        print(f"✅ Button reply обработан корректно")
+        print("✅ Button reply обработан корректно")
 
 
 class TestWhatsAppInterfaceSendMessage:
@@ -337,7 +334,7 @@ class TestWhatsAppInterfaceSendMessage:
             
             await whatsapp_interface.send_message(message)
         
-        print(f"✅ Текстовое сообщение отправлено")
+        print("✅ Текстовое сообщение отправлено")
     
     @pytest.mark.asyncio
     async def test_send_message_without_phone_number(self, whatsapp_interface):
@@ -354,7 +351,7 @@ class TestWhatsAppInterfaceSendMessage:
         with pytest.raises(ValueError, match="phone_number обязателен"):
             await whatsapp_interface.send_message(message)
         
-        print(f"✅ Исключение при отсутствии phone_number")
+        print("✅ Исключение при отсутствии phone_number")
     
     @pytest.mark.asyncio
     async def test_send_message_with_buttons(self, whatsapp_interface):
@@ -383,7 +380,7 @@ class TestWhatsAppInterfaceSendMessage:
             
             await whatsapp_interface.send_message(message)
         
-        print(f"✅ Интерактивное сообщение с кнопками отправлено")
+        print("✅ Интерактивное сообщение с кнопками отправлено")
     
     @pytest.mark.asyncio
     async def test_send_message_with_many_buttons_list(self, whatsapp_interface):
@@ -414,7 +411,7 @@ class TestWhatsAppInterfaceSendMessage:
             
             await whatsapp_interface.send_message(message)
         
-        print(f"✅ List message (5 кнопок) отправлен")
+        print("✅ List message (5 кнопок) отправлен")
     
     @pytest.mark.asyncio
     async def test_send_message_with_markdown_formatting(self, whatsapp_interface):
@@ -449,7 +446,7 @@ class TestWhatsAppInterfaceSendMessage:
         text_sent = sent_payload["text"]["body"]
         assert "*Bold text*" in text_sent  # **bold** -> *bold*
         assert "_italic text_" in text_sent
-        print(f"✅ Markdown корректно конвертирован в WhatsApp формат")
+        print("✅ Markdown корректно конвертирован в WhatsApp формат")
 
 
 class TestWhatsAppInterfaceMediaProcessing:
@@ -472,7 +469,7 @@ class TestWhatsAppInterfaceMediaProcessing:
             url = await whatsapp_interface._get_media_url("media_123")
         
         assert url == "https://lookaside.fbsbx.com/whatsapp_business/attachments/media_123"
-        print(f"✅ Media URL получен успешно")
+        print("✅ Media URL получен успешно")
     
     @pytest.mark.asyncio
     async def test_get_media_url_api_error(self, whatsapp_interface):
@@ -488,7 +485,7 @@ class TestWhatsAppInterfaceMediaProcessing:
             with pytest.raises(Exception):
                 await whatsapp_interface._get_media_url("invalid_media_id")
         
-        print(f"✅ Исключение при ошибке API получения медиа")
+        print("✅ Исключение при ошибке API получения медиа")
     
     @pytest.mark.asyncio
     async def test_get_media_url_no_url_in_response(self, whatsapp_interface):
@@ -503,7 +500,7 @@ class TestWhatsAppInterfaceMediaProcessing:
             with pytest.raises(ValueError, match="не вернул URL"):
                 await whatsapp_interface._get_media_url("media_no_url")
         
-        print(f"✅ Исключение когда API не вернул URL")
+        print("✅ Исключение когда API не вернул URL")
     
     @pytest.mark.asyncio
     async def test_upload_media_success(self, whatsapp_interface):
@@ -521,7 +518,7 @@ class TestWhatsAppInterfaceMediaProcessing:
             media_id = await whatsapp_interface._upload_media(media_data, mime_type)
         
         assert media_id == "uploaded_media_999"
-        print(f"✅ Медиа успешно загружено в WhatsApp")
+        print("✅ Медиа успешно загружено в WhatsApp")
     
     @pytest.mark.asyncio
     async def test_upload_media_api_error(self, whatsapp_interface):
@@ -540,7 +537,7 @@ class TestWhatsAppInterfaceMediaProcessing:
             with pytest.raises(Exception):
                 await whatsapp_interface._upload_media(media_data, mime_type)
         
-        print(f"✅ Исключение при ошибке загрузки медиа")
+        print("✅ Исключение при ошибке загрузки медиа")
     
     @pytest.mark.asyncio
     async def test_upload_media_no_id_in_response(self, whatsapp_interface):
@@ -555,7 +552,7 @@ class TestWhatsAppInterfaceMediaProcessing:
             with pytest.raises(ValueError, match="не вернул media_id"):
                 await whatsapp_interface._upload_media(b"data", "audio/ogg")
         
-        print(f"✅ Исключение когда API не вернул media_id")
+        print("✅ Исключение когда API не вернул media_id")
 
 
 class TestWhatsAppInterfaceTypingNotification:
@@ -570,7 +567,7 @@ class TestWhatsAppInterfaceTypingNotification:
         await whatsapp_interface.send_typing_notification(session_id, True)
         await whatsapp_interface.send_typing_notification(session_id, False)
         
-        print(f"✅ Typing notification обработан")
+        print("✅ Typing notification обработан")
     
     @pytest.mark.asyncio
     async def test_typing_notification_invalid_session(self, whatsapp_interface):
@@ -580,7 +577,7 @@ class TestWhatsAppInterfaceTypingNotification:
         # Должен логировать warning и не падать
         await whatsapp_interface.send_typing_notification(invalid_session_id, True)
         
-        print(f"✅ Некорректный session_id обработан без падения")
+        print("✅ Некорректный session_id обработан без падения")
 
 
 class TestWhatsAppInterfaceFormatting:
@@ -600,7 +597,7 @@ class TestWhatsAppInterfaceFormatting:
         result = whatsapp_interface._convert_markdown_to_whatsapp("**Bold** and __italic__")
         assert result == "*Bold* and _italic_"
         
-        print(f"✅ Markdown корректно конвертируется")
+        print("✅ Markdown корректно конвертируется")
 
 
 class TestWhatsAppInterfaceCredentials:
@@ -621,7 +618,7 @@ class TestWhatsAppInterfaceCredentials:
             token = await WhatsAppInterface.get_access_token_for_flow("test_flow", platform_config)
         
         assert token == "resolved_token_123"
-        print(f"✅ Access token резолвнут через переменную")
+        print("✅ Access token резолвнут через переменную")
     
     @pytest.mark.asyncio
     async def test_get_access_token_hardcoded(self):
@@ -638,7 +635,7 @@ class TestWhatsAppInterfaceCredentials:
             token = await WhatsAppInterface.get_access_token_for_flow("test_flow", platform_config)
         
         assert token == "hardcoded_token_xyz"
-        print(f"✅ Хардкоженный токен получен")
+        print("✅ Хардкоженный токен получен")
     
     @pytest.mark.asyncio
     async def test_get_access_token_missing(self):
@@ -648,7 +645,7 @@ class TestWhatsAppInterfaceCredentials:
         with pytest.raises(ValueError, match="No access_token"):
             await WhatsAppInterface.get_access_token_for_flow("test_flow", platform_config)
         
-        print(f"✅ Исключение при отсутствии access_token")
+        print("✅ Исключение при отсутствии access_token")
     
     @pytest.mark.asyncio
     async def test_verify_webhook_token(self):
@@ -659,7 +656,7 @@ class TestWhatsAppInterfaceCredentials:
         result = await WhatsAppInterface.verify_webhook_token("test123", "wrong")
         assert result is False
         
-        print(f"✅ Verify token проверяется корректно")
+        print("✅ Verify token проверяется корректно")
     
     @pytest.mark.asyncio
     async def test_verify_webhook_signature(self):
@@ -685,7 +682,7 @@ class TestWhatsAppInterfaceCredentials:
         result = await WhatsAppInterface.verify_webhook_signature(payload, signature_with_prefix, app_secret)
         assert result is True
         
-        print(f"✅ Webhook signature верифицируется корректно")
+        print("✅ Webhook signature верифицируется корректно")
 
 
 class TestWhatsAppInterfaceRegistration:
@@ -722,7 +719,7 @@ class TestWhatsAppInterfaceRegistration:
         assert result["success"] is True
         assert result["platform"] == "whatsapp"
         assert "phone_number" in result
-        print(f"✅ Регистрация flow успешна")
+        print("✅ Регистрация flow успешна")
     
     @pytest.mark.asyncio
     async def test_register_flow_invalid_credentials(self):
@@ -744,7 +741,7 @@ class TestWhatsAppInterfaceRegistration:
             with pytest.raises(Exception):
                 await WhatsAppInterface.register(flow_id, "Bot", platform_config)
         
-        print(f"✅ Исключение при невалидных credentials")
+        print("✅ Исключение при невалидных credentials")
     
     @pytest.mark.asyncio
     async def test_register_missing_phone_number_id(self):
@@ -762,7 +759,7 @@ class TestWhatsAppInterfaceRegistration:
             with pytest.raises(ValueError, match="phone_number_id not found"):
                 await WhatsAppInterface.register("test_flow", "Bot", platform_config)
         
-        print(f"✅ Исключение при отсутствии phone_number_id")
+        print("✅ Исключение при отсутствии phone_number_id")
 
 
 class TestWhatsAppInterfaceExtractMessageContent:
@@ -780,7 +777,7 @@ class TestWhatsAppInterfaceExtractMessageContent:
         
         assert content == "Hello WhatsApp!"
         assert files == []
-        print(f"✅ Текст извлечен корректно")
+        print("✅ Текст извлечен корректно")
     
     @pytest.mark.asyncio
     async def test_extract_video_message(self, whatsapp_interface):
@@ -800,7 +797,7 @@ class TestWhatsAppInterfaceExtractMessageContent:
         assert len(files) == 1
         assert files[0]["type"] == "video"
         assert files[0]["media_id"] == "video_123"
-        print(f"✅ Видео с caption извлечено корректно")
+        print("✅ Видео с caption извлечено корректно")
     
     @pytest.mark.asyncio
     async def test_extract_document_message(self, whatsapp_interface):
@@ -821,7 +818,7 @@ class TestWhatsAppInterfaceExtractMessageContent:
         assert len(files) == 1
         assert files[0]["type"] == "document"
         assert files[0]["filename"] == "report.pdf"
-        print(f"✅ Документ извлечен корректно")
+        print("✅ Документ извлечен корректно")
     
     @pytest.mark.asyncio
     async def test_extract_contacts_message(self, whatsapp_interface):
@@ -839,7 +836,7 @@ class TestWhatsAppInterfaceExtractMessageContent:
         assert "👤 Контакты" in content
         assert "John Smith" in content
         assert "+1234567890" in content
-        print(f"✅ Контакты извлечены корректно")
+        print("✅ Контакты извлечены корректно")
 
 
 class TestWhatsAppInterfaceProcessFiles:
@@ -865,7 +862,7 @@ class TestWhatsAppInterfaceProcessFiles:
         
         assert result == mock_file_record
         mock_file_processor.process_file_from_url.assert_called_once()
-        print(f"✅ Файл обработан через FileProcessor")
+        print("✅ Файл обработан через FileProcessor")
     
     @pytest.mark.asyncio
     async def test_process_single_file_no_media_id(self, whatsapp_interface):
@@ -878,7 +875,7 @@ class TestWhatsAppInterfaceProcessFiles:
         with pytest.raises(ValueError, match="media_id обязателен"):
             await whatsapp_interface._process_single_file(file_data, "user123", AsyncMock())
         
-        print(f"✅ Исключение при отсутствии media_id")
+        print("✅ Исключение при отсутствии media_id")
     
     @pytest.mark.asyncio
     async def test_process_single_audio_file(self, whatsapp_interface):
@@ -903,7 +900,7 @@ class TestWhatsAppInterfaceProcessFiles:
         # Проверяем что auto_recognize=True
         call_kwargs = mock_audio_processor.process_audio_from_url.call_args.kwargs
         assert call_kwargs["auto_recognize"] is True
-        print(f"✅ Аудио обработано через AudioProcessor с распознаванием")
+        print("✅ Аудио обработано через AudioProcessor с распознаванием")
     
     @pytest.mark.asyncio
     async def test_process_audio_file_no_media_id(self, whatsapp_interface):
@@ -916,7 +913,7 @@ class TestWhatsAppInterfaceProcessFiles:
         with pytest.raises(ValueError, match="media_id обязателен"):
             await whatsapp_interface._process_single_audio_file(audio_data, "user123", AsyncMock())
         
-        print(f"✅ Исключение при отсутствии media_id в аудио")
+        print("✅ Исключение при отсутствии media_id в аудио")
 
 
 class TestWhatsAppInterfaceSendAudio:
@@ -952,7 +949,7 @@ class TestWhatsAppInterfaceSendAudio:
                     
                     await whatsapp_interface._send_audio_message(phone_number, audio_info, metadata)
         
-        print(f"✅ Аудио сообщение отправлено успешно")
+        print("✅ Аудио сообщение отправлено успешно")
     
     @pytest.mark.asyncio
     async def test_send_audio_message_not_found(self, whatsapp_interface):
@@ -966,7 +963,7 @@ class TestWhatsAppInterfaceSendAudio:
             with pytest.raises(ValueError, match="не найден в системе"):
                 await whatsapp_interface._send_audio_message("9111111111111", audio_info, {})
         
-        print(f"✅ Исключение при отсутствии аудио в системе")
+        print("✅ Исключение при отсутствии аудио в системе")
     
     @pytest.mark.asyncio
     async def test_send_audio_s3_download_failed(self, whatsapp_interface):
@@ -988,7 +985,7 @@ class TestWhatsAppInterfaceSendAudio:
             with pytest.raises(ValueError, match="Не удалось скачать аудиофайл.*из S3"):
                 await whatsapp_interface._send_audio_message("9111111111111", audio_info, {})
         
-        print(f"✅ Исключение при ошибке скачивания из S3")
+        print("✅ Исключение при ошибке скачивания из S3")
     
     @pytest.mark.asyncio
     async def test_send_audio_upload_failed(self, whatsapp_interface):
@@ -1012,7 +1009,7 @@ class TestWhatsAppInterfaceSendAudio:
                 with pytest.raises(ValueError, match="Не удалось загрузить аудио в WhatsApp API"):
                     await whatsapp_interface._send_audio_message("9111111111111", audio_info, {})
         
-        print(f"✅ Исключение при ошибке загрузки в WhatsApp API")
+        print("✅ Исключение при ошибке загрузки в WhatsApp API")
 
 
 class TestWhatsAppInterfaceStatusUpdates:
@@ -1030,7 +1027,7 @@ class TestWhatsAppInterfaceStatusUpdates:
         
         # Не должно бросать исключений
         await whatsapp_interface._handle_status_update(statuses)
-        print(f"✅ Статус delivered обработан")
+        print("✅ Статус delivered обработан")
     
     @pytest.mark.asyncio
     async def test_handle_failed_status(self, whatsapp_interface):
@@ -1049,7 +1046,7 @@ class TestWhatsAppInterfaceStatusUpdates:
         
         # Не должно бросать исключений, только логирование
         await whatsapp_interface._handle_status_update(statuses)
-        print(f"✅ Статус failed с ошибками обработан")
+        print("✅ Статус failed с ошибками обработан")
 
 
 class TestWhatsAppInterfaceCommands:
@@ -1061,7 +1058,7 @@ class TestWhatsAppInterfaceCommands:
         result = await whatsapp_interface.setup_commands()
         
         assert result is True
-        print(f"✅ setup_commands возвращает True (команды обрабатываются автоматически)")
+        print("✅ setup_commands возвращает True (команды обрабатываются автоматически)")
 
 
 if __name__ == "__main__":

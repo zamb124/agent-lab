@@ -6,17 +6,23 @@ Pydantic модели для конфигурации агентов и флоу
 from __future__ import annotations
 
 from pydantic import BaseModel, field_validator
-from typing import Optional, List, Dict, Any, Literal, TYPE_CHECKING
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from enum import Enum
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 import json
+import inspect
+import hashlib
+import logging
+from pathlib import Path
 from ..core.config import settings
 from ..fields import Field
 
 from .rag_models import AgentRAGConfig
 
 if TYPE_CHECKING:
-    from .context_models import Context
+    pass
+
+logger = logging.getLogger(__name__)
 
 
 class HistorySource(str):
@@ -208,6 +214,182 @@ class GraphDefinition(BaseModel):
         title="Точка входа",
         description="ID ноды, с которой начинается выполнение графа",
     )
+    
+    @classmethod
+    async def migrate(cls, source) -> Optional["GraphDefinition"]:
+        """
+        Создает GraphDefinition из различных источников.
+        
+        Поддерживает:
+        - Класс BaseAgent → анализирует build_graph() и создает GraphDefinition
+        - StateGraph объект → извлекает ноды и ребра
+        - None → возвращает None (ReAct агент)
+        
+        Args:
+            source: Класс агента или StateGraph объект
+            
+        Returns:
+            GraphDefinition или None
+        """
+        
+        if source is None:
+            return None
+        
+        if hasattr(source, 'nodes') and hasattr(source, 'edges'):
+            return await cls._migrate_from_stategraph(source)
+        
+        if inspect.isclass(source):
+            return await cls._migrate_from_agent_class(source)
+        
+        return None
+    
+    @classmethod
+    async def _migrate_from_agent_class(cls, agent_class) -> Optional["GraphDefinition"]:
+        """Извлекает GraphDefinition из класса агента"""
+        logger.info(f"🔍 Анализируем граф агента {agent_class.__name__}")
+        
+        if hasattr(agent_class, "graph_definition") and agent_class.graph_definition:
+            logger.info("🔍 Найден статический graph_definition в классе")
+            return agent_class.graph_definition
+        
+        temp_config = AgentConfig(
+            agent_id=f"{agent_class.__module__}.{agent_class.__name__}",
+            name="temp",
+            description="temp",
+            type=AgentType.REACT,
+        )
+        
+        try:
+            agent_instance = agent_class(temp_config)
+            
+            if not hasattr(agent_instance, "build_graph"):
+                logger.info(f"🔍 Агент {agent_class.__name__} - простой ReAct агент (нет StateGraph)")
+                return None
+            
+            langgraph_graph = agent_instance.build_graph()
+            
+            if not langgraph_graph:
+                logger.info(f"🔍 build_graph() вернул None для {agent_class.__name__}")
+                return None
+            
+            logger.info(f"🔍 Найден StateGraph: {type(langgraph_graph)}")
+            
+            if hasattr(langgraph_graph, "nodes"):
+                logger.info(f"🔍 Найдены nodes: {list(langgraph_graph.nodes.keys())}")
+            
+            if hasattr(langgraph_graph, "edges"):
+                logger.info(f"🔍 Найдены edges: {langgraph_graph.edges}")
+            
+            return await cls._migrate_from_stategraph(langgraph_graph)
+            
+        except Exception as e:
+            logger.warning(f"Не удалось проанализировать граф {agent_class.__name__}: {e}")
+            return None
+    
+    @classmethod
+    async def _migrate_from_stategraph(cls, stategraph) -> "GraphDefinition":
+        """
+        Извлекает GraphDefinition из LangGraph StateGraph.
+        
+        Args:
+            stategraph: StateGraph объект из LangGraph
+            
+        Returns:
+            GraphDefinition с нодами и ребрами
+        """
+        nodes = []
+        edges = []
+        
+        logger.info(f"🔍 Анализируем StateGraph с {len(stategraph.nodes)} нодами")
+        
+        for node_id, node_spec in stategraph.nodes.items():
+            node_func = node_spec
+            
+            if hasattr(node_spec, 'runnable'):
+                runnable = node_spec.runnable
+                if hasattr(runnable, 'afunc') and runnable.afunc:
+                    node_func = runnable.afunc
+                elif hasattr(runnable, 'func') and runnable.func:
+                    node_func = runnable.func
+                else:
+                    node_func = runnable
+            elif hasattr(node_spec, '__wrapped__'):
+                node_func = node_spec.__wrapped__
+            elif hasattr(node_spec, 'func'):
+                node_func = node_spec.func
+            
+            node_type = cls._determine_node_type(node_func)
+            
+            function_path = None
+            function_class = None
+            
+            if node_type == NodeType.FUNCTION_NODE:
+                if hasattr(node_func, '__module__') and hasattr(node_func, '__name__'):
+                    function_path = f"{node_func.__module__}.{node_func.__name__}"
+            elif node_type == NodeType.AGENT_NODE:
+                if hasattr(node_func, '__self__'):
+                    agent_class = node_func.__self__.__class__
+                    function_class = f"{agent_class.__module__}.{agent_class.__name__}"
+            
+            nodes.append(
+                GraphNode(
+                    id=node_id,
+                    type=node_type,
+                    function_path=function_path,
+                    function_class=function_class,
+                    params={}
+                )
+            )
+        
+        for source, target in stategraph.edges:
+            if source == "__start__":
+                source = "START"
+            if target == "__end__":
+                target = "END"
+            
+            edges.append(GraphEdge(source=source, target=target))
+        
+        if hasattr(stategraph, 'branches') and stategraph.branches:
+            for source, branches_dict in stategraph.branches.items():
+                source_name = "START" if source == "__start__" else source
+                
+                for cond_name, branch_spec in branches_dict.items():
+                    condition_path = None
+                    if hasattr(branch_spec, 'path'):
+                        cond_runnable = branch_spec.path
+                        cond_func = None
+                        if hasattr(cond_runnable, 'afunc') and cond_runnable.afunc:
+                            cond_func = cond_runnable.afunc
+                        elif hasattr(cond_runnable, 'func') and cond_runnable.func:
+                            cond_func = cond_runnable.func
+                        
+                        if cond_func and hasattr(cond_func, '__module__') and hasattr(cond_func, '__name__'):
+                            condition_path = f"{cond_func.__module__}.{cond_func.__name__}"
+                    
+                    if hasattr(branch_spec, 'ends') and branch_spec.ends:
+                        for target in set(branch_spec.ends.values()):
+                            target_name = "END" if target == "__end__" else target
+                            
+                            edges.append(
+                                GraphEdge(
+                                    source=source_name,
+                                    target=target_name,
+                                    condition=condition_path,
+                                    condition_type=ConditionType.ROUTER,
+                                )
+                            )
+        
+        return cls(nodes=nodes, edges=edges, entry_point="START")
+    
+    @staticmethod
+    def _determine_node_type(node_func) -> NodeType:
+        """Определяет тип ноды по функции"""
+        if hasattr(node_func, '__name__'):
+            if "_function" in node_func.__name__ or node_func.__name__.endswith("_function"):
+                return NodeType.FUNCTION_NODE
+            else:
+                return NodeType.AGENT_NODE
+        return NodeType.AGENT_NODE
 
 
 class ToolReference(BuilderEntity):
@@ -290,6 +472,130 @@ class ToolReference(BuilderEntity):
         title="Публичный",
         description="Доступен ли инструмент в публичном редакторе ботов"
     )
+    
+    @classmethod
+    async def migrate(cls, source, migrator=None) -> "ToolReference":
+        """
+        Мигрирует tool из кода в БД.
+        
+        Поддерживает:
+        - Строка (tool_id) → загружает из кода и мигрирует
+        - Функция/StructuredTool → создает ToolReference
+        
+        Args:
+            source: tool_id (строка) или функция/StructuredTool
+            migrator: Экземпляр Migrator (нужен только для сохранения в БД)
+            
+        Returns:
+            ToolReference
+        """
+        if isinstance(source, str):
+            if "." not in source:
+                raise ValueError(f"tool_id должен быть полным путем к функции: {source}")
+            
+            module_path, func_name = source.rsplit(".", 1)
+            module = __import__(module_path, fromlist=[func_name])
+            tool_obj = getattr(module, func_name)
+            module_name_for_ref = module_path
+        else:
+            tool_obj = source
+            target_func = None
+            if hasattr(source, 'func') and source.func is not None:
+                target_func = source.func
+            elif hasattr(source, 'coroutine') and source.coroutine is not None:
+                target_func = source.coroutine
+            else:
+                target_func = source
+            
+            module_name_for_ref = target_func.__module__ if hasattr(target_func, '__module__') else None
+        
+        tool_ref = cls._from_function(func=tool_obj, module_name=module_name_for_ref)
+        
+        if migrator:
+            await migrator.storage.set(f"tool:{tool_ref.tool_id}", tool_ref.model_dump_json())
+        
+        return tool_ref
+    
+    @classmethod
+    def _from_function(
+        cls, 
+        func: callable, 
+        module_name: Optional[str] = None,
+        tool_id: Optional[str] = None, 
+        description: Optional[str] = None
+    ) -> "ToolReference":
+        """
+        Создает ToolReference из StructuredTool или обычной функции.
+        
+        Универсальный метод для преобразования функций в ToolReference.
+        Используется в validators FlowConfig и в Migrator.
+        
+        Args:
+            func: StructuredTool объект или обычная функция
+            module_name: Имя модуля (для StructuredTool)
+            tool_id: ID инструмента (опционально, для обычных функций)
+            description: Описание (опционально, для обычных функций)
+            
+        Returns:
+            ToolReference с кодом функции
+        """
+        is_structured_tool = hasattr(func, "func") or hasattr(func, "coroutine")
+        
+        if is_structured_tool:
+            target_func = None
+            if hasattr(func, "func") and func.func is not None:
+                target_func = func.func
+            elif hasattr(func, "coroutine") and func.coroutine is not None:
+                target_func = func.coroutine
+
+            if target_func is None:
+                raise ValueError(f"Не удалось найти исходную функцию для тула {func.name}")
+
+            source_code = inspect.getsource(target_func)
+            function_path = f"{module_name}.{func.name}"
+
+            params = {}
+            if hasattr(func, "args_schema") and func.args_schema:
+                if hasattr(func.args_schema, "model_fields"):
+                    for field_name, field_info in func.args_schema.model_fields.items():
+                        params[field_name] = {
+                            "type": str(field_info.annotation) if field_info.annotation else "str",
+                            "description": field_info.description or "",
+                            "required": field_info.is_required() if hasattr(field_info, "is_required") else True,
+                        }
+
+            platform_title = getattr(func, '_platform_title', None)
+            platform_cost = getattr(func, '_platform_cost', 0.0)
+            platform_billing_name = getattr(func, '_platform_billing_name', None)
+            platform_free_for_plans = getattr(func, '_platform_free_for_plans', [])
+            platform_is_public = getattr(func, '_platform_is_public', False)
+            
+            return cls(
+                tool_id=function_path,
+                title=platform_title,
+                code_mode=CodeMode.CODE_REFERENCE,
+                function_path=function_path,
+                inline_code=source_code,
+                description=func.description or f"Инструмент {func.name}",
+                params=params,
+                cost=platform_cost,
+                billing_name=platform_billing_name,
+                free_for_plans=platform_free_for_plans,
+                tariff_limits={},
+                is_public=platform_is_public,
+            )
+        else:
+            if not callable(func):
+                raise ValueError(f"Объект {func} не является функцией или StructuredTool")
+            
+            source_code = inspect.getsource(func)
+            
+            return cls(
+                tool_id=tool_id or f"{func.__module__}.{func.__name__}",
+                code_mode=CodeMode.INLINE_CODE,
+                inline_code=source_code,
+                description=description or f"Функция {func.__name__}"
+            )
 
 
 class LLMConfig(BaseModel):
@@ -443,6 +749,192 @@ class AgentConfig(BuilderEntity):
         title="Публичный",
         description="Доступен ли агент как инструмент в публичном редакторе ботов"
     )
+    
+    @field_validator('tools', mode='before')
+    @classmethod
+    def convert_tools_to_references(cls, v):
+        """
+        Преобразует список tools в ToolReference.
+        
+        Поддерживает:
+        - Функции → ToolReference с tool_id=путь
+        - Классы → ToolReference с tool_id=путь
+        - Строки (mcp:, agent:) → ToolReference как есть
+        - StructuredTool → ToolReference с извлечением кода
+        - BaseAgent экземпляры → ToolReference с tool_id=путь к классу
+        - Уже ToolReference → как есть
+        """
+        if not v:
+            return []
+        
+        references = []
+        
+        for tool in v:
+            if isinstance(tool, ToolReference):
+                references.append(tool)
+            
+            elif inspect.isfunction(tool) or inspect.ismethod(tool):
+                full_path = f"{tool.__module__}.{tool.__name__}"
+                references.append(ToolReference(tool_id=full_path))
+            
+            elif inspect.isclass(tool):
+                full_path = f"{tool.__module__}.{tool.__name__}"
+                references.append(ToolReference(tool_id=full_path))
+            
+            elif isinstance(tool, str) and (tool.startswith("mcp:") or tool.startswith("agent:")):
+                references.append(ToolReference(tool_id=tool))
+            
+            elif hasattr(tool, "__class__"):
+                from app.agents.base import BaseAgent
+                if issubclass(tool.__class__, BaseAgent):
+                    agent_class = tool.__class__
+                    full_path = f"{agent_class.__module__}.{agent_class.__name__}"
+                    references.append(ToolReference(tool_id=full_path))
+                elif hasattr(tool, "name") and (hasattr(tool, "func") or hasattr(tool, "coroutine")):
+                    if tool.func and hasattr(tool.func, "__module__"):
+                        full_path = f"{tool.func.__module__}.{tool.func.__name__}"
+                        references.append(ToolReference(tool_id=full_path))
+                    elif hasattr(tool, "coroutine") and tool.coroutine:
+                        full_path = f"{tool.coroutine.__module__}.{tool.coroutine.__name__}"
+                        references.append(ToolReference(tool_id=full_path))
+                    else:
+                        raise ValueError(f"Неизвестный тип инструмента: {type(tool)}")
+            else:
+                raise ValueError(f"Неизвестный тип инструмента: {type(tool)}")
+        
+        return references
+    
+    @classmethod
+    async def migrate(cls, agent_id: str, migrator, with_tools: bool = True) -> "AgentConfig":
+        """
+        Мигрирует агента из кода в БД с зависимостями.
+        
+        1. Загружает класс агента из кода по agent_id
+        2. Создает AgentConfig через from_class
+        3. Сохраняет в БД
+        4. Если with_tools=True, рекурсивно мигрирует все tools
+        5. Возвращает AgentConfig
+        
+        Args:
+            agent_id: Путь к классу (например, "app.agents.calculator.agent.CalculatorAgent")
+            migrator: Экземпляр Migrator для доступа к вспомогательным методам
+            with_tools: Мигрировать ли tools агента рекурсивно
+            
+        Returns:
+            Мигрированный AgentConfig
+        """
+        if not agent_id or "." not in agent_id:
+            raise ValueError(f"agent_id должен быть полным путем к классу: {agent_id}")
+        
+        module_path, class_name = agent_id.rsplit(".", 1)
+        module = __import__(module_path, fromlist=[class_name])
+        agent_class = getattr(module, class_name)
+        
+        agent_config = await cls.from_class(agent_class=agent_class)
+        
+        await migrator.storage.set_agent_config(agent_config)
+        
+        if with_tools:
+            for tool_ref in agent_config.tools:
+                tool_id = tool_ref.tool_id
+                
+                if tool_id.startswith("agent:"):
+                    await cls.migrate(tool_id.replace("agent:", ""), migrator, with_tools=True)
+                elif "." in tool_id and not tool_id.startswith("mcp:"):
+                    if ".agent." in tool_id or ".Agent" in tool_id:
+                        await cls.migrate(tool_id, migrator, with_tools=True)
+                    else:
+                        await ToolReference.migrate(tool_id, migrator)
+        
+        return agent_config
+    
+    @classmethod
+    async def from_class(cls, agent_class):
+        """
+        Создает AgentConfig из класса BaseAgent.
+        
+        Извлекает все атрибуты класса и создает AgentConfig.
+        Рекурсивно вызывает GraphDefinition.migrate для анализа графа.
+        
+        Args:
+            agent_class: Класс наследник BaseAgent
+            
+        Returns:
+            AgentConfig созданный из класса
+        """
+        name = getattr(agent_class, "name", agent_class.__name__)
+        title = getattr(agent_class, "title", None)
+        agent_id = f"{agent_class.__module__}.{agent_class.__name__}"
+        description = getattr(agent_class, "description", None)
+        prompt = getattr(agent_class, "prompt", None)
+        raw_tools = getattr(agent_class, "tools", [])
+        raw_llm_config = getattr(agent_class, "llm_config", None)
+        history_from = getattr(agent_class, "history_from", None)
+        is_public = getattr(agent_class, "is_public", False)
+        
+        graph_definition = await GraphDefinition.migrate(agent_class)
+        
+        agent_type = AgentType.STATEGRAPH if graph_definition else AgentType.REACT
+        
+        llm_config = None
+        if raw_llm_config:
+            if isinstance(raw_llm_config, dict):
+                llm_config = LLMConfig(**raw_llm_config)
+            elif isinstance(raw_llm_config, LLMConfig):
+                llm_config = raw_llm_config
+        
+        return cls(
+            agent_id=agent_id,
+            name=name,
+            title=title,
+            description=description,
+            type=agent_type,
+            function_class=f"{agent_class.__module__}.{agent_class.__name__}",
+            prompt=prompt,
+            graph_definition=graph_definition,
+            tools=raw_tools,
+            llm_config=llm_config,
+            history_from=history_from,
+            is_public=is_public,
+            source="migration",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+
+class FlowAuthor(BaseModel):
+    """Информация об авторе flow"""
+    
+    name: str = Field(
+        default="Agent Lab",
+        title="Имя",
+        description="Имя автора или организации"
+    )
+    email: Optional[str] = Field(
+        default=None,
+        title="Email",
+        description="Email для связи"
+    )
+    website: Optional[str] = Field(
+        default=None,
+        title="Сайт",
+        description="Веб-сайт автора"
+    )
+    github: Optional[str] = Field(
+        default=None,
+        title="GitHub",
+        description="GitHub профиль или репозиторий"
+    )
+    linkedin: Optional[str] = Field(
+        default=None,
+        title="LinkedIn",
+        description="LinkedIn профиль"
+    )
+    twitter: Optional[str] = Field(
+        default=None,
+        title="Twitter",
+        description="Twitter профиль"
+    )
 
 
 class FlowConfig(BuilderEntity):
@@ -450,6 +942,7 @@ class FlowConfig(BuilderEntity):
 
     class Config:
         storage_prefix = "flow"
+        arbitrary_types_allowed = True
 
     flow_id: Optional[str] = Field(
         default=None,
@@ -469,9 +962,9 @@ class FlowConfig(BuilderEntity):
     )
 
     # Точка входа - агент который обрабатывает запросы
-    entry_point_agent: str = Field(
+    entry_point_agent: Any = Field(
         title="Агент точки входа",
-        description="ID агента который обрабатывает запросы",
+        description="ID агента или класс агента который обрабатывает запросы",
         placeholder="app.agents.calculator.agent.CalculatorAgent",
     )
 
@@ -518,6 +1011,44 @@ class FlowConfig(BuilderEntity):
         default=False,
         title="Публичный",
         description="Доступен ли flow для копирования в новые компании"
+    )
+    
+    # Store поля
+    author: Optional[FlowAuthor] = Field(
+        default_factory=lambda: FlowAuthor(),
+        title="Автор",
+        description="Информация об авторе flow"
+    )
+    
+    image_path: Optional[str] = Field(
+        default=None,
+        title="Путь к картинке",
+        description="Путь к картинке flow в проекте (для миграции)"
+    )
+    
+    image_file_id: Optional[str] = Field(
+        default=None,
+        title="ID файла картинки",
+        description="ID файла в S3 после загрузки",
+        exclude_from_form=True
+    )
+    
+    install_hook: Optional[ToolReference] = Field(
+        default=None,
+        title="Хук установки",
+        description="ToolReference для установки flow"
+    )
+    
+    after_install_hook: Optional[ToolReference] = Field(
+        default=None,
+        title="Хук после установки",
+        description="ToolReference который выполняется после установки. Может вернуть URL для открытия в новом окне"
+    )
+    
+    uninstall_hook: Optional[ToolReference] = Field(
+        default=None,
+        title="Хук удаления",
+        description="ToolReference для удаления flow"
     )
 
     # Данные канваса Builder
@@ -567,356 +1098,218 @@ class FlowConfig(BuilderEntity):
                 auto_index_messages=False
             )
         return v
-
-
-class TaskStatus(str, Enum):
-    """Статусы задач"""
-
-    PENDING = "pending"
-    PROCESSING = "processing"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-    WAITING_FOR_INPUT = "waiting_for_input"
-
-
-class TaskConfig(BaseModel):
-    """Конфигурация задачи"""
-
-    class Config:
-        storage_prefix = "task"
-
-    task_id: str = Field(
-        title="ID задачи", description="Уникальный идентификатор задачи", readonly=True
-    )
-    flow_id: str = Field(title="ID флоу", description="Идентификатор флоу для задачи")
-    context: Any = Field(
-        title="Контекст",
-        description="Контекст выполнения задачи",
-    )
-    status: TaskStatus = Field(
-        default=TaskStatus.PENDING,
-        title="Статус",
-        description="Статус выполнения задачи",
-    )
-    input_data: Dict[str, Any] = Field(
-        default_factory=dict,
-        title="Входные данные",
-        description="Входные данные для задачи",
-    )
-    output_data: Optional[Dict[str, Any]] = Field(
-        default=None,
-        title="Выходные данные",
-        description="Результат выполнения задачи",
-        readonly=True,
-    )
-    error_message: Optional[str] = Field(
-        default=None,
-        title="Сообщение об ошибке",
-        description="Сообщение об ошибке при выполнении",
-        readonly=True,
-    )
-    created_at: Optional[datetime] = Field(
-        default=None,
-        title="Создано",
-        description="Время создания задачи",
-        readonly=True,
-    )
-    started_at: Optional[datetime] = Field(
-        default=None,
-        title="Запущено",
-        description="Время начала выполнения",
-        readonly=True,
-    )
-    completed_at: Optional[datetime] = Field(
-        default=None,
-        title="Завершено",
-        description="Время завершения выполнения",
-        readonly=True,
-    )
     
-    @field_validator('context', mode='before')
+    @field_validator('entry_point_agent', mode='before')
     @classmethod
-    def validate_context(cls, v):
-        """Преобразует dict в Context если нужно"""
-        if v is None or not isinstance(v, dict):
+    def convert_entry_point_agent(cls, v):
+        """
+        Преобразует класс агента в строку с путем.
+        
+        Поддерживает:
+        - Класс агента → строка с путем "module.ClassName"
+        - Строка → как есть
+        """
+        if v is None:
+            raise ValueError("entry_point_agent обязателен")
+        
+        if isinstance(v, str):
             return v
-        from .context_models import Context
-        return Context(**v)
-
-    # Свойства для обратной совместимости
-    @property
-    def user_id(self) -> str:
-        return self.context.user.user_id
-
-    @property
-    def session_id(self) -> str:
-        return self.context.session_id or ""
-
-    @property
-    def platform(self) -> str:
-        return self.context.platform
-
-
-class SessionStatus(str, Enum):
-    """Статусы сессии"""
-
-    ACTIVE = "active"
-    PROCESSING = "processing"  # Агент обрабатывает запрос
-    WAITING_INPUT = "waiting_input"  # Ждет ответа на interrupt
-    INACTIVE = "inactive"
-    EXPIRED = "expired"
-
-
-class SessionConfig(BaseModel):
-    """Конфигурация сессии"""
-
-    session_id: str = Field(
-        title="ID сессии", description="Уникальный идентификатор сессии", readonly=True
-    )
-    platform: str = Field(
-        title="Платформа",
-        description="Платформа (telegram, api, web)",
-    )
-    user_id: str = Field(
-        title="ID пользователя", description="Идентификатор пользователя"
-    )
-    flow_id: str = Field(title="ID флоу", description="Идентификатор флоу")
-    status: SessionStatus = Field(
-        default=SessionStatus.ACTIVE,
-        title="Статус",
-        description="Статус сессии",
-    )
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        title="Метаданные",
-        description="Дополнительные метаданные сессии",
-    )
-    created_at: Optional[datetime] = Field(
-        default=None,
-        title="Создано",
-        description="Время создания сессии",
-        readonly=True,
-    )
-    last_activity: Optional[datetime] = Field(
-        default=None,
-        title="Последняя активность",
-        description="Время последней активности",
-        readonly=True,
-    )
-    message_count: int = Field(
-        default=0,
-        title="Количество сообщений",
-        description="Общее количество сообщений в сессии",
-    )
-    first_message: Optional[str] = Field(
-        default=None,
-        title="Первое сообщение",
-        description="Первое сообщение пользователя (превью)",
-    )
-
-    @property
-    def session_key(self) -> str:
-        key = self.session_id.split("_")[-1]
-        return f"session:{self.platform}:{self.user_id}:{self.flow_id}:{key}"
-
-
-class CloudVoiceTokenConfig(BaseModel):
-    """Конфигурация токенов Cloud Voice API"""
-    
-    client_id: str = Field(
-        title="Client ID",
-        description="Идентификатор клиента Cloud Voice API"
-    )
-    access_token: str = Field(
-        title="Access Token",
-        description="Токен доступа к API"
-    )
-    refresh_token: str = Field(
-        title="Refresh Token", 
-        description="Токен для обновления access_token"
-    )
-    expires_at: datetime = Field(
-        title="Время истечения",
-        description="Время когда истекает access_token"
-    )
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        title="Время создания",
-        description="Время создания токена"
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        title="Время обновления",
-        description="Время последнего обновления токена"
-    )
-    
-    def is_expired(self) -> bool:
-        """Проверяет истек ли access_token"""
-        return datetime.now(timezone.utc) >= self.expires_at
-    
-    def is_refresh_expired(self, refresh_ttl_days: int = 30) -> bool:
-        """Проверяет истек ли refresh_token (по умолчанию 30 дней)"""
-        refresh_expires_at = self.created_at + timedelta(days=refresh_ttl_days)
-        return datetime.now(timezone.utc) >= refresh_expires_at
-
-
-class FileStatus(str, Enum):
-    """Статус файла"""
-
-    UPLOADING = "uploading"
-    UPLOADED = "uploaded"
-    FAILED = "failed"
-    DELETED = "deleted"
-
-
-class FileRecord(BaseModel):
-    """Запись о файле в системе"""
-
-    file_id: str = Field(
-        title="ID файла", description="Уникальный ID файла в системе", readonly=True
-    )
-    provider: str = Field(
-        title="Провайдер",
-        description="Провайдер S3 (aws, yandex, minio, etc.)",
-    )
-    original_name: str = Field(
-        title="Оригинальное имя", description="Оригинальное имя файла"
-    )
-    s3_key: str = Field(title="Ключ S3", description="Ключ файла в S3", readonly=True)
-    s3_bucket: str = Field(title="Bucket S3", description="Bucket в S3", readonly=True)
-    s3_endpoint: Optional[str] = Field(
-        default=None,
-        title="Endpoint S3",
-        description="Endpoint URL провайдера",
-        readonly=True,
-    )
-    content_type: str = Field(
-        title="Тип содержимого", description="MIME тип файла", readonly=True
-    )
-    file_size: int = Field(
-        title="Размер файла", description="Размер файла в байтах", readonly=True
-    )
-    checksum: Optional[str] = Field(
-        default=None,
-        title="Контрольная сумма",
-        description="MD5 или другая контрольная сумма",
-        readonly=True,
-    )
-    status: FileStatus = Field(
-        default=FileStatus.UPLOADING,
-        title="Статус",
-        description="Статус файла",
-        readonly=True,
-    )
-    uploaded_by: Optional[str] = Field(
-        default=None,
-        title="Загрузил",
-        description="ID пользователя который загрузил",
-        readonly=True,
-    )
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict,
-        title="Метаданные",
-        description="Дополнительные метаданные файла",
-    )
-    tags: List[str] = Field(
-        default_factory=list,
-        title="Теги",
-        description="Теги для категоризации",
-    )
-    is_public: bool = Field(
-        default=False,
-        title="Публичный",
-        description="Доступен ли файл без авторизации",
-    )
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        title="Создан",
-        description="Время создания файла",
-        readonly=True,
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        title="Обновлен",
-        description="Время обновления файла",
-        readonly=True,
-    )
-
-    @property
-    def key(self) -> str:
-        """Ключ для хранения в БД"""
-        return f"s3:{self.provider}:{self.file_id}"
-
-    @property
-    def url(self) -> Optional[str]:
-        """URL для скачивания файла через нашу платформу"""
-        if not self.file_id:
-            return None
-
-        from ..core.context import get_context
-        context = get_context()
-        subdomain = context.active_company.subdomain
         
-        # На проде используется nginx/reverse proxy на стандартных портах
-        if settings.server.env == "local":
-            # Локально добавляем порт
-            base_url = f"http://{subdomain}.{settings.server.domain}:{settings.server.port}"
+        if inspect.isclass(v):
+            return f"{v.__module__}.{v.__name__}"
+        
+        if hasattr(v, "__class__"):
+            return f"{v.__class__.__module__}.{v.__class__.__name__}"
+        
+        return v
+    
+    @field_validator('install_hook', 'after_install_hook', 'uninstall_hook', mode='before')
+    @classmethod
+    def convert_hook_to_tool_reference(cls, v, info):
+        """
+        Преобразует функцию в ToolReference используя ToolReference.migrate.
+        
+        Если передана функция - создает ToolReference.
+        Если передан ToolReference - возвращает как есть.
+        """
+        if v is None:
+            return None
+        
+        if isinstance(v, ToolReference):
+            return v
+        
+        if callable(v):
+            hook_type = info.field_name.replace('_hook', '')
+            return ToolReference._from_function(
+                func=v,
+                tool_id=f"hook.{hook_type}.{v.__name__}",
+                description=f"Хук {hook_type} flow"
+            )
+        
+        return v
+    
+    @classmethod
+    async def migrate(cls, flow_id: str, migrator, with_dependencies: bool = True) -> "FlowConfig":
+        """
+        Мигрирует flow из кода в БД с зависимостями.
+        
+        1. Загружает FlowConfig объект из кода по flow_id
+        2. Создает FlowConfig через from_flow_config_object
+        3. Загружает картинку в S3 если есть
+        4. Сохраняет в БД
+        5. Если with_dependencies=True, рекурсивно мигрирует entry_point_agent
+        6. Возвращает FlowConfig
+        
+        Args:
+            flow_id: Путь к переменной (например, "app.flows.weather_flow.weather_flow_config")
+            migrator: Экземпляр Migrator для доступа к вспомогательным методам
+            with_dependencies: Мигрировать ли entry_point_agent и его зависимости
+            
+        Returns:
+            Мигрированный FlowConfig
+        """
+        if not flow_id or "." not in flow_id:
+            raise ValueError(f"flow_id должен быть полным путем к переменной: {flow_id}")
+        
+        module_path, var_name = flow_id.rsplit(".", 1)
+        module = __import__(module_path, fromlist=[var_name])
+        flow_config_orig = getattr(module, var_name)
+        
+        if not isinstance(flow_config_orig, cls):
+            raise ValueError(f"Объект {flow_id} не является FlowConfig")
+        
+        existing_flow = await migrator.storage.get_flow_config(flow_id)
+        
+        flow_config = cls.from_flow_config_object(flow_config_orig, flow_id)
+        
+        if flow_config.image_path:
+            flow_config = await cls._upload_image_to_s3(flow_config)
+        
+        flow_config.source = "migration"
+        now = datetime.now(timezone.utc)
+        flow_config.updated_at = now
+        if existing_flow and existing_flow.created_at:
+            flow_config.created_at = existing_flow.created_at
+        elif not flow_config.created_at:
+            flow_config.created_at = now
+        
+        await migrator.storage.set_flow_config(flow_config)
+        
+        from ..services.variables_service import get_variables_service
+        variables_service = get_variables_service()
+        
+        if flow_config.variables:
+            await variables_service.resolve(flow_config.variables, auto_create=True)
+        
+        if flow_config.platforms:
+            await variables_service.resolve(flow_config.platforms, auto_create=True)
+        
+        if with_dependencies and flow_config.entry_point_agent:
+            await AgentConfig.migrate(
+                flow_config.entry_point_agent,
+                migrator,
+                with_tools=True
+            )
+        
+        return flow_config
+    
+    @classmethod
+    async def _upload_image_to_s3(cls, flow_config: "FlowConfig") -> "FlowConfig":
+        """
+        Загружает картинку flow в S3.
+        
+        Args:
+            flow_config: FlowConfig с установленным image_path
+            
+        Returns:
+            FlowConfig с установленным image_file_id
+        """
+        if not flow_config.image_path:
+            return flow_config
+        
+        image_path = Path(flow_config.image_path)
+        
+        if not image_path.exists():
+            logger.warning(f"Картинка не найдена: {flow_config.image_path}")
+            return flow_config
+        
+        if not settings.s3.enabled:
+            logger.warning("S3 не настроен, пропускаем загрузку картинки")
+            return flow_config
+        
+        if not flow_config.flow_id:
+            logger.warning("flow_id не установлен, пропускаем загрузку картинки")
+            return flow_config
+        
+        from ..core.core_clients.s3_client import S3ClientFactory
+        s3_client = S3ClientFactory.create_client_for_bucket(settings.s3.default_bucket)
+        
+        flow_hash = hashlib.md5(flow_config.flow_id.encode()).hexdigest()[:8]
+        extension = image_path.suffix
+        s3_key = f"flows/{flow_hash}/image{extension}"
+        
+        content_types = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".gif": "image/gif",
+            ".webp": "image/webp"
+        }
+        content_type = content_types.get(extension.lower(), "application/octet-stream")
+        
+        success = await s3_client.upload_file(
+            file_path=str(image_path),
+            key=s3_key,
+            content_type=content_type,
+            metadata={
+                "flow_id": flow_config.flow_id,
+                "type": "flow_image"
+            }
+        )
+        
+        if success:
+            flow_config.image_file_id = s3_key
+            logger.info(f"Картинка загружена в S3: {s3_key}")
         else:
-            # На проде порт не нужен (nginx на 80/443)
-            protocol = "https" if settings.server.env in ["production", "testing"] else "http"
-            base_url = f"{protocol}://{subdomain}.{settings.server.domain}"
+            logger.warning(f"Не удалось загрузить картинку для {flow_config.flow_id}")
         
-        return f"{base_url}/api/v1/files/download/{self.file_id}"
-
-    @property
-    def direct_s3_url(self) -> Optional[str]:
-        """Прямая ссылка на S3 (для внутреннего использования)"""
-        if not self.s3_bucket or not self.s3_key or not self.s3_endpoint:
-            return None
-
-        base_url = self.s3_endpoint.rstrip("/")
-        return f"{base_url}/{self.s3_bucket}/{self.s3_key}"
-
-
-class AudioRecord(FileRecord):
-    """Запись об аудиофайле в системе - наследуется от FileRecord"""
+        await s3_client.close()
+        
+        return flow_config
     
-    duration: Optional[float] = Field(
-        default=None,
-        title="Длительность", 
-        description="Длительность аудио в секундах",
-        readonly=True
-    )
-    
-    # Результаты распознавания речи
-    recognition_text: Optional[str] = Field(
-        default=None,
-        title="Распознанный текст",
-        description="Результат распознавания речи",
-        readonly=True
-    )
-    recognition_confidence: Optional[float] = Field(
-        default=None,
-        title="Уверенность распознавания",
-        description="Уверенность распознавания от 0.0 до 1.0",
-        readonly=True
-    )
-    recognition_qid: Optional[str] = Field(
-        default=None,
-        title="QID Cloud Voice",
-        description="ID запроса к Cloud Voice API",
-        readonly=True
-    )
-
-    @property
-    def audio_id(self) -> str:
-        """Алиас для file_id для обратной совместимости"""
-        return self.file_id
-    
-    @property
-    def key(self) -> str:
-        """Ключ для хранения в БД"""
-        return f"audio:{self.provider}:{self.file_id}"
-
-
+    @classmethod
+    def from_flow_config_object(cls, obj: "FlowConfig", flow_id: str) -> "FlowConfig":
+        """
+        Создает новый FlowConfig из существующего объекта с установкой flow_id.
+        
+        Используется в Migrator для преобразования FlowConfig из кода
+        с установкой правильного flow_id (полный путь к переменной).
+        
+        Args:
+            obj: Исходный FlowConfig объект из кода
+            flow_id: Полный путь к переменной (например, "app.flows.weather_flow.weather_flow_config")
+            
+        Returns:
+            Новый FlowConfig с установленным flow_id
+        """
+        return cls(
+            flow_id=flow_id,
+            name=obj.name,
+            description=obj.description,
+            entry_point_agent=obj.entry_point_agent,
+            platforms=obj.platforms,
+            timeout=obj.timeout,
+            max_retries=obj.max_retries,
+            variables=obj.variables,
+            is_public=getattr(obj, "is_public", False),
+            author=getattr(obj, "author", None),
+            image_path=getattr(obj, "image_path", None),
+            install_hook=getattr(obj, "install_hook", None),
+            after_install_hook=getattr(obj, "after_install_hook", None),
+            uninstall_hook=getattr(obj, "uninstall_hook", None),
+            rag_config=getattr(obj, "rag_config", None),
+            canvas_data=getattr(obj, "canvas_data", None),
+            source=obj.source,
+            created_at=obj.created_at,
+            updated_at=obj.updated_at
+        )

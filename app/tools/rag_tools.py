@@ -12,9 +12,7 @@ from app.core.tool_decorator import tool
 from app.core.rag.factory import get_default_rag_provider
 from app.core.rag.namespace_manager import get_or_create_namespace
 from app.core.context import get_context
-from app.core.storage import Storage
 from app.core.file_processor import get_default_file_processor
-from app.models.rag_models import AgentRAGConfig
 
 logger = logging.getLogger(__name__)
 

@@ -7,14 +7,11 @@ import pytest
 import pytest_asyncio
 import uuid
 import hashlib
-from unittest.mock import Mock
-from datetime import datetime, timezone
 
 from app.services.payment_service import PaymentService
 from app.core.storage import Storage
 from app.core.clients.payment_providers.yoomoney_provider import YooMoneyProvider, YooMoneyConfig
-from app.core.clients.payment_providers.factory import PaymentProviderFactory
-from app.models.payment_models import Transaction, PaymentStatus, PaymentProviderType
+from app.models.payment_models import PaymentStatus, PaymentProviderType
 from app.identity.models import Company, User
 
 

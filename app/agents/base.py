@@ -16,7 +16,7 @@ from app.models import AgentConfig, AgentType
 from app.core.llm_factory import get_llm
 from app.core.checkpointer import get_checkpointer
 from app.core.container import get_container
-from app.core.state import State, get_default_state
+from app.core.state import State
 from app.core.variables import VariableResolver, set_state_in_context
 from langgraph.errors import GraphInterrupt
 from langchain_core.messages import HumanMessage

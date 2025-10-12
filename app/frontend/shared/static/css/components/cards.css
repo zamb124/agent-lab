@@ -44,3 +44,58 @@
     background: var(--bg-secondary);
 }
 
+/* Empty State - единый стиль для пустых страниц */
+.page-with-empty-state {
+    position: relative;
+    min-height: calc(100vh - var(--header-height) - 2rem);
+}
+
+.empty-state-centered {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 1.5rem;
+    z-index: 1;
+}
+
+.empty-state-add-btn {
+    width: 80px;
+    height: 80px;
+    border: none;
+    background: transparent;
+    color: var(--accent-primary);
+    font-size: 5rem;
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.7;
+}
+
+.empty-state-add-btn:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+.empty-state-centered h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.empty-state-centered p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 1rem;
+    max-width: 400px;
+}
+

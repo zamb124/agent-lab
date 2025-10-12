@@ -4,11 +4,12 @@ API для работы с флоу в Builder.
 
 import logging
 from fastapi import APIRouter, HTTPException
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Any
 import uuid
 
 from app.models import FlowConfig
 from app.frontend.dependencies import StorageDep, CanvasServiceDep
+from app.core.migrator import Migrator
 
 logger = logging.getLogger(__name__)
 
@@ -227,3 +228,64 @@ async def delete_flow(flow_id: str, storage: StorageDep):
     
     await storage.delete_flow_config(flow_id)
     return {"message": "Flow deleted successfully"}
+
+
+@router.post("/{flow_id:path}/install")
+async def install_flow(flow_id: str, storage: StorageDep):
+    """
+    Установить flow из Store.
+    Запускает install() и after_install_hook если они определены в flow.
+    """
+    from app.core.flow_factory import FlowFactory
+    
+    migrator = Migrator()
+    migrator.storage = storage
+    
+    flows_with_ids = await migrator.get_public_flows()
+    
+    flow_config = None
+    for full_flow_id, flow in flows_with_ids:
+        if full_flow_id == flow_id:
+            flow_config = flow
+            break
+    
+    if not flow_config:
+        raise HTTPException(status_code=404, detail="Flow не найден в коде")
+    
+    flow_factory = FlowFactory()
+    result = await flow_factory.install_flow(flow_id)
+    
+    logger.info(f"✅ Flow {flow_id} успешно установлен")
+    logger.info(f"📋 Result from install_flow: {result}")
+    
+    response_data = {
+        "message": f"Flow '{flow_config.name}' успешно установлен",
+        "flow_id": result["flow_id"],
+        "additional_url": result.get("additional_url")
+    }
+    logger.info(f"📤 Returning response: {response_data}")
+    
+    return response_data
+
+
+@router.post("/{flow_id:path}/uninstall")
+async def uninstall_flow(flow_id: str, storage: StorageDep):
+    """
+    Удалить установленный flow.
+    Запускает uninstall() хук если он определен в flow.
+    """
+    flow = await storage.get_flow_config(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow не найден")
+    
+    await storage.delete_flow_config(flow_id)
+    
+    if flow.entry_point_agent:
+        await storage.delete_agent_config(flow.entry_point_agent)
+    
+    logger.info(f"✅ Flow {flow_id} успешно удалён")
+    
+    return {
+        "message": f"Flow '{flow.name}' успешно удалён",
+        "flow_id": flow_id
+    }

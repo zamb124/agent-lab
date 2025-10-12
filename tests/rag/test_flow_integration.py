@@ -3,11 +3,9 @@
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.flows.knowledge_bot_flow import knowledge_bot_flow
 from app.agents.knowledge_bot.agent import KnowledgeBotAgent
-from app.models import AgentConfig
 from app.models.rag_models import AgentRAGConfig
 
 

@@ -4,14 +4,11 @@ WhatsApp Interface - адаптер для WhatsApp Business Cloud API.
 """
 
 import logging
-import asyncio
 import re
 import hashlib
 import hmac
 from typing import Dict, Any, Optional, List
-from datetime import datetime
 import httpx
-import json
 from app.interfaces.base import BaseInterface, Message
 from app.core.storage import Storage
 from app.core.config import settings
@@ -841,7 +838,6 @@ class WhatsAppInterface(BaseInterface):
         3. Устанавливает webhook (для production)
         4. Возвращает информацию о регистрации
         """
-        from app.core.config import settings
         
         storage = Storage()
         
@@ -852,7 +848,7 @@ class WhatsAppInterface(BaseInterface):
         
         phone_number_id = platform_config.get("phone_number_id")
         if not phone_number_id:
-            raise ValueError(f"phone_number_id not found in platform_config")
+            raise ValueError("phone_number_id not found in platform_config")
         
         # Проверяем токен через API
         graph_api_url = platform_config.get("graph_api_url", "https://graph.facebook.com")

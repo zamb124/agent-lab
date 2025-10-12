@@ -10,20 +10,16 @@
 
 import pytest
 import pytest_asyncio
-from datetime import datetime
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 
-from app.core.state import State, get_default_state
-from app.core.variables import VariableResolver, get_state, set_state_in_context
+from app.core.variables import VariableResolver, get_state
 from app.core.storage import Storage
 from app.core.agent_factory import AgentFactory
-from app.core.flow_factory import FlowFactory
 from app.core.checkpointer import init_checkpointer
 from app.models import (
     AgentConfig,
     AgentType,
-    FlowConfig,
     GraphDefinition,
     GraphNode,
     GraphEdge,
@@ -34,7 +30,7 @@ from app.models import (
 )
 from app.models.context_models import Context
 from app.identity.models import User, Company
-from app.core.context import set_context, get_context
+from app.core.context import set_context
 
 
 @pytest_asyncio.fixture
@@ -195,7 +191,7 @@ async def test_02_react_agent_with_variables(setup_storage, test_context):
     agent = await agent_factory.get_agent("test_react_agent_vars")
     
     # Компилируем граф и проверяем что промпт отрендерен
-    graph = await agent.compile_graph()
+    await agent.compile_graph()
     
     # Проверяем что переменные подставились (проверяем через VariableResolver)
     rendered_prompt = VariableResolver.render_template(
@@ -344,7 +340,7 @@ async def test_04_state_access_from_tool(setup_storage, test_context):
         return f"Записано: {data}, Предыдущее: {previous_data}"
     
     # Сохраняем тул в БД
-    tool_ref = ToolReference(
+    ToolReference(
         tool_id="test_tool_with_state_access",
         code_mode=CodeMode.INLINE_CODE,
         inline_code="""
@@ -474,7 +470,6 @@ async def test_05_session_tools_integration(setup_storage, test_context):
     Тест 5: Интеграция с сессионными тулами.
     Проверяем что session_set и session_get работают правильно.
     """
-    from app.tools.session_tools import session_set, session_get, session_has
     
     storage = setup_storage
     
@@ -553,7 +548,6 @@ async def test_06_variable_priority(setup_storage, test_context):
     Тест 6: Приоритет переменных.
     Проверяем что локальные переменные агента перекрывают переменные flow.
     """
-    storage = setup_storage
     
     # В context уже есть flow_variables с bot_name="Тест Бот"
     # Создадим агента с локальной переменной bot_name

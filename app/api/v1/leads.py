@@ -113,7 +113,7 @@ async def send_telegram_notification(lead_data: dict):
             
         message_parts.extend([
             "",
-            f"💬 <b>Сообщение:</b>",
+            "💬 <b>Сообщение:</b>",
             lead_data['message'],
             "",
             f"🆔 <b>ID лида:</b> {lead_data['id']}",

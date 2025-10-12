@@ -7,14 +7,8 @@ import uuid
 from datetime import datetime, timezone
 
 from app.core.flow_factory import FlowFactory
-from app.core.agent_factory import AgentFactory
 from app.core.storage import Storage
 from app.models import (
-    FlowConfig,
-    AgentConfig,
-    AgentType,
-    ToolReference,
-    LLMConfig,
     MessageRole,
 )
 from langchain_core.messages import HumanMessage
@@ -30,6 +24,7 @@ async def test_flow_history_from_smart_flow(save_test_company):
     from app.core.migrator import Migrator
     migrator = Migrator()
     await migrator.run_full_migration()
+    await migrator._set_system_context()
     
     flow_factory = FlowFactory()
     
@@ -54,7 +49,7 @@ async def test_flow_history_from_smart_flow(save_test_company):
     )
     await storage.set_session_config(session)
     
-    print(f"🔄 Выполняем flow с вопросом о математике...")
+    print("🔄 Выполняем flow с вопросом о математике...")
     result = await flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 15 + 27")]},
         config=config
@@ -66,14 +61,14 @@ async def test_flow_history_from_smart_flow(save_test_company):
     for i, msg in enumerate(messages):
         print(f"  {i}: [{type(msg).__name__}] {msg.content[:80]}")
     
-    print(f"\n🔄 Получаем историю через FlowFactory...")
+    print("\n🔄 Получаем историю через FlowFactory...")
     history = await flow_factory.get_flow_history(
         session_id=thread_id,
         limit=100,
         include_checkpoints=False
     )
     
-    print(f"✅ История получена:")
+    print("✅ История получена:")
     print(f"  - Сессия: {history.session_id}")
     print(f"  - Flow: {history.flow_id}")
     print(f"  - Всего сообщений: {history.total_messages}")
@@ -86,7 +81,7 @@ async def test_flow_history_from_smart_flow(save_test_company):
     assert history.session_id == thread_id
     assert history.flow_id == flow_id
     
-    print(f"\n📋 Сообщения в истории:")
+    print("\n📋 Сообщения в истории:")
     for i, msg in enumerate(history.messages):
         tool_info = ""
         if msg.tool_calls:
@@ -97,7 +92,7 @@ async def test_flow_history_from_smart_flow(save_test_company):
     assistant_messages = [m for m in history.messages if m.role == MessageRole.ASSISTANT]
     tool_messages = [m for m in history.messages if m.role == MessageRole.TOOL]
     
-    print(f"\n📊 Статистика сообщений:")
+    print("\n📊 Статистика сообщений:")
     print(f"  - Пользователь: {len(user_messages)}")
     print(f"  - Ассистент: {len(assistant_messages)}")
     print(f"  - Инструменты: {len(tool_messages)}")
@@ -105,7 +100,7 @@ async def test_flow_history_from_smart_flow(save_test_company):
     assert len(user_messages) >= 1, "Должно быть хотя бы одно сообщение пользователя"
     assert len(assistant_messages) >= 1, "Должно быть хотя бы одно сообщение ассистента"
     
-    print(f"✅ Тест истории выполнения пройден")
+    print("✅ Тест истории выполнения пройден")
 
 
 @pytest.mark.asyncio
@@ -118,6 +113,7 @@ async def test_flow_history_with_checkpoints(save_test_company):
     from app.core.migrator import Migrator
     migrator = Migrator()
     await migrator.run_full_migration()
+    await migrator._set_system_context()
     
     flow_factory = FlowFactory()
     
@@ -140,22 +136,22 @@ async def test_flow_history_with_checkpoints(save_test_company):
     )
     await storage.set_session_config(session)
     
-    print(f"🔄 Выполняем weather_flow...")
-    result = await flow.ainvoke(
+    print("🔄 Выполняем weather_flow...")
+    await flow.ainvoke(
         {"messages": [HumanMessage(content="Какая погода в Москве?")]},
         config=config
     )
     
-    print(f"✅ Flow выполнен")
+    print("✅ Flow выполнен")
     
-    print(f"\n🔄 Получаем историю с checkpoints...")
+    print("\n🔄 Получаем историю с checkpoints...")
     history = await flow_factory.get_flow_history(
         session_id=thread_id,
         limit=100,
         include_checkpoints=True
     )
     
-    print(f"✅ История получена:")
+    print("✅ История получена:")
     print(f"  - Всего сообщений: {history.total_messages}")
     print(f"  - Всего checkpoints: {history.total_checkpoints}")
     print(f"  - Checkpoints в ответе: {len(history.checkpoints)}")
@@ -163,7 +159,7 @@ async def test_flow_history_with_checkpoints(save_test_company):
     assert history.total_checkpoints > 0
     assert len(history.checkpoints) > 0, "Checkpoints должны быть включены в ответ"
     
-    print(f"\n📋 Детали checkpoints:")
+    print("\n📋 Детали checkpoints:")
     for i, cp in enumerate(history.checkpoints):
         print(f"  Checkpoint {i}:")
         print(f"    - ID: {cp.checkpoint_id}")
@@ -171,7 +167,7 @@ async def test_flow_history_with_checkpoints(save_test_company):
         print(f"    - Сообщений: {len(cp.messages)}")
         print(f"    - Timestamp: {cp.timestamp}")
     
-    print(f"✅ Тест с checkpoints пройден")
+    print("✅ Тест с checkpoints пройден")
 
 
 @pytest.mark.asyncio
@@ -184,6 +180,7 @@ async def test_flow_sessions_list(save_test_company):
     from app.core.migrator import Migrator
     migrator = Migrator()
     await migrator.run_full_migration()
+    await migrator._set_system_context()
     
     flow_factory = FlowFactory()
     storage = Storage()
@@ -197,7 +194,7 @@ async def test_flow_sessions_list(save_test_company):
     config_1 = {"configurable": {"thread_id": thread_id_1}}
     config_2 = {"configurable": {"thread_id": thread_id_2}}
     
-    print(f"🔄 Создаем 2 сессии...")
+    print("🔄 Создаем 2 сессии...")
     
     from app.models import SessionConfig, SessionStatus
     
@@ -233,9 +230,9 @@ async def test_flow_sessions_list(save_test_company):
         config=config_2
     )
     
-    print(f"✅ Сессии созданы")
+    print("✅ Сессии созданы")
     
-    print(f"\n🔄 Получаем список всех сессий...")
+    print("\n🔄 Получаем список всех сессий...")
     sessions_all = await flow_factory.get_flow_sessions(
         limit=100,
         offset=0
@@ -246,7 +243,7 @@ async def test_flow_sessions_list(save_test_company):
     
     assert sessions_all.total >= 2, "Должно быть как минимум 2 сессии"
     
-    print(f"\n🔄 Фильтруем по flow_id...")
+    print("\n🔄 Фильтруем по flow_id...")
     sessions_filtered = await flow_factory.get_flow_sessions(
         flow_id=flow_id,
         limit=100,
@@ -260,7 +257,7 @@ async def test_flow_sessions_list(save_test_company):
     
     assert len(test_sessions) >= 2, "Должны найтись обе тестовые сессии"
     
-    print(f"\n🔄 Фильтруем по платформе web...")
+    print("\n🔄 Фильтруем по платформе web...")
     sessions_web = await flow_factory.get_flow_sessions(
         platform="web",
         limit=100,
@@ -272,7 +269,7 @@ async def test_flow_sessions_list(save_test_company):
     web_test_session = [s for s in sessions_web.sessions if s.session_id == thread_id_1]
     assert len(web_test_session) == 1, "Должна найтись web сессия"
     
-    print(f"\n📋 Детали сессий:")
+    print("\n📋 Детали сессий:")
     for session in test_sessions:
         print(f"  - {session.session_id}:")
         print(f"    Platform: {session.platform}")
@@ -281,7 +278,7 @@ async def test_flow_sessions_list(save_test_company):
         print(f"    Messages: {session.message_count}")
         print(f"    Created: {session.created_at}")
     
-    print(f"✅ Тест списка сессий пройден")
+    print("✅ Тест списка сессий пройден")
 
 
 @pytest.mark.asyncio
@@ -294,6 +291,7 @@ async def test_flow_history_tool_calls(save_test_company):
     from app.core.migrator import Migrator
     migrator = Migrator()
     await migrator.run_full_migration()
+    await migrator._set_system_context()
     
     flow_factory = FlowFactory()
     
@@ -316,15 +314,15 @@ async def test_flow_history_tool_calls(save_test_company):
     )
     await storage.set_session_config(session)
     
-    print(f"🔄 Выполняем flow с запросом который вызовет калькулятор...")
-    result = await flow.ainvoke(
+    print("🔄 Выполняем flow с запросом который вызовет калькулятор...")
+    await flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 123 * 456")]},
         config=config
     )
     
-    print(f"✅ Flow выполнен")
+    print("✅ Flow выполнен")
     
-    print(f"\n🔄 Получаем историю...")
+    print("\n🔄 Получаем историю...")
     history = await flow_factory.get_flow_history(
         session_id=thread_id,
         limit=100,
@@ -358,7 +356,7 @@ async def test_flow_history_tool_calls(save_test_company):
             print(f"  Tool message {i}: {msg.content[:100]}")
             print(f"    Metadata: {msg.metadata}")
     
-    print(f"✅ Тест вызовов инструментов пройден")
+    print("✅ Тест вызовов инструментов пройден")
 
 
 @pytest.mark.asyncio  
@@ -371,26 +369,26 @@ async def test_flow_history_pagination(save_test_company):
     
     flow_factory = FlowFactory()
     
-    print(f"🔄 Получаем первую страницу (limit=2, offset=0)...")
+    print("🔄 Получаем первую страницу (limit=2, offset=0)...")
     page_1 = await flow_factory.get_flow_sessions(
         limit=2,
         offset=0
     )
     
-    print(f"✅ Страница 1:")
+    print("✅ Страница 1:")
     print(f"  - Всего сессий: {page_1.total}")
     print(f"  - Возвращено: {len(page_1.sessions)}")
     print(f"  - Limit: {page_1.limit}")
     print(f"  - Offset: {page_1.offset}")
     
     if page_1.total > 2:
-        print(f"\n🔄 Получаем вторую страницу (limit=2, offset=2)...")
+        print("\n🔄 Получаем вторую страницу (limit=2, offset=2)...")
         page_2 = await flow_factory.get_flow_sessions(
             limit=2,
             offset=2
         )
         
-        print(f"✅ Страница 2:")
+        print("✅ Страница 2:")
         print(f"  - Возвращено: {len(page_2.sessions)}")
         
         assert page_2.total == page_1.total, "Общее количество должно совпадать"
@@ -399,9 +397,9 @@ async def test_flow_history_pagination(save_test_company):
             assert page_1.sessions[0].session_id != page_2.sessions[0].session_id, \
                 "Сессии на разных страницах должны отличаться"
     else:
-        print(f"⚠️ Недостаточно сессий для проверки пагинации")
+        print("⚠️ Недостаточно сессий для проверки пагинации")
     
-    print(f"✅ Тест пагинации пройден")
+    print("✅ Тест пагинации пройден")
 
 
 if __name__ == "__main__":

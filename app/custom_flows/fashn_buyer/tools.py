@@ -4,20 +4,16 @@
 
 import logging
 import json
-import uuid
 from datetime import datetime
-from typing import Optional, List, Dict, Any
 from langchain_core.tools import tool
 
 from app.core.storage import Storage
-from app.core.file_processor import FileProcessor, get_default_file_processor
-from app.models.core_models import FileRecord
+from app.core.file_processor import get_default_file_processor
 from app.core.context import get_context
 from .models import (
     FashnIssueCard, 
     ItemPhoto, 
     Defect, 
-    DefectType, 
     ItemCondition,
     IssueStatus,
     IssueComment,
@@ -97,7 +93,7 @@ async def save_fashn_issue_card(
     logger.info(f"🔍 save_fashn_issue_card получил telegram_user_id из контекста: {telegram_user_id}")
     
     storage = Storage()
-    file_processor = await get_default_file_processor()
+    await get_default_file_processor()
         
     # Парсим фотографии
     logger.info(f"Парсим фотографии JSON: {photos_json}")

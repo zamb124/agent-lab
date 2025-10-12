@@ -16,7 +16,7 @@ from app.core.flow_factory import FlowFactory
 from app.core.container import get_container
 from app.core.context import get_context
 from app.services.billing_service import BillingService
-from app.models.billing_models import UsageType, TARIFF_LIMITS
+from app.models.billing_models import UsageType
 
 logger = logging.getLogger(__name__)
 
@@ -102,13 +102,13 @@ class ToolFactory:
             
             if not tool_function:
                 # Если функция не найдена, создаем простую заглушку
-                logger.warning(f"⚠️ Функция не найдена в inline коде, создаем заглушку")
+                logger.warning("⚠️ Функция не найдена в inline коде, создаем заглушку")
                 async def stub_function(*args, **kwargs):
                     return "Результат"
                 tool_function = stub_function
             
             # Создаем StructuredTool из функции
-            logger.debug(f"🔥 Создаем StructuredTool из функции")
+            logger.debug("🔥 Создаем StructuredTool из функции")
             tool_name = ref.tool_id.replace(".", "_")
             return StructuredTool.from_function(
                 coroutine=tool_function if asyncio.iscoroutinefunction(tool_function) else None,
@@ -205,7 +205,6 @@ class ToolFactory:
     def _wrap_tool_with_billing(self, tool, tool_ref: ToolReference):
         """Оборачивает инструмент в биллинг логику"""
         
-        billing_name = tool_ref.billing_name or tool_ref.tool_id
         
         # Получаем оригинальную функцию
         if hasattr(tool, 'coroutine') and tool.coroutine:

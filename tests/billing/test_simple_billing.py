@@ -2,7 +2,6 @@
 Простой тест системы биллинга.
 """
 
-import pytest
 from pathlib import Path
 import sys
 
@@ -13,10 +12,7 @@ sys.path.insert(0, str(backend_path))
 
 def test_billing_models_import():
     """Тест что модели биллинга импортируются без ошибок"""
-    from app.models.billing_models import UsageRecord, TariffPlan, TARIFF_PRICES
-    from app.services.billing_service import BillingService
-    from app.core.tool_decorator import tool
-    from app.core.llm_billing_wrapper import ChatOpenAIWithBilling
+    from app.models.billing_models import TariffPlan, TARIFF_PRICES
     
     assert TariffPlan.FREE == "free"
     assert TariffPlan.BASIC == "basic"
@@ -44,7 +40,7 @@ def test_tool_decorator():
     assert hasattr(test_function, '_platform_cost')
     assert test_function._platform_cost == 0.5
     assert test_function._platform_billing_name == "test_tool"
-    assert test_function._is_platform_tool == True
+    assert test_function._is_platform_tool
     
     # Проверяем что функция работает
     result = test_function.invoke({"text": "hello"})
