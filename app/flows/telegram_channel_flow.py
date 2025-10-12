@@ -18,6 +18,9 @@ telegram_channel_flow_config = FlowConfig(
         },
         "web": {}
     },
+    variables={
+        "channel_id": "@my_osom_tg_kanal",
+    },
     is_public=True,
 )
 
