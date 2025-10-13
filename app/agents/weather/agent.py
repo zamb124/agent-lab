@@ -19,7 +19,7 @@ class TravelInfoAgent(BaseAgent):
     description = "Определяет куда пользователь хочет поехать в путешествие"
     is_public = True
 
-    llm_config = {"provider": "gemini", "model": "gemini-2.0-flash-exp", "temperature": 0.3}
+    llm_config = {"model": "google/gemini-2.0-flash", "temperature": 0.3}
 
     prompt = """
 Ты специалист по определению направлений путешествий.
@@ -56,8 +56,7 @@ class WeatherAgent(BaseAgent):
     )
 
     llm_config = {
-        "provider": "openai",
-        "model": "gpt-4o",
+        "model": "anthropic/claude-sonnet-4.5",
         "temperature": 0.3
     }
     

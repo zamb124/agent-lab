@@ -625,58 +625,26 @@ async def reload_telegram_bots():
 
 @router.get("/llm/providers")
 async def get_llm_providers():
-    """Получить список доступных LLM провайдеров и их моделей"""
+    """Получить список доступных LLM моделей через OpenRouter"""
     settings = get_settings()
     
-    providers_data = {}
-    for provider_name, provider_config in settings.llm.providers.items():
-        if not provider_config.enabled:
-            continue
-            
-        providers_data[provider_name] = {
-            "name": provider_name,
-            "default_model": provider_config.default_model,
+    if not settings.llm.openrouter.enabled:
+        return {
+            "default_model": settings.llm.default_model,
             "models": []
         }
     
-    # Добавляем модели для каждого провайдера
-    model_definitions = {
-        "openai": [
-            {"value": "", "label": "По умолчанию"},
-            {"value": "gpt-4", "label": "GPT-4"},
-            {"value": "gpt-4-turbo", "label": "GPT-4 Turbo"},
-            {"value": "gpt-3.5-turbo", "label": "GPT-3.5 Turbo"},
-            {"value": "gpt-4o", "label": "GPT-4o"},
-            {"value": "gpt-4o-mini", "label": "GPT-4o Mini"},
-        ],
-        "gemini": [
-            {"value": "", "label": "По умолчанию"},
-            {"value": "gemini-1.5-pro", "label": "Gemini 1.5 Pro"},
-            {"value": "gemini-1.5-flash", "label": "Gemini 1.5 Flash"},
-            {"value": "gemini-pro", "label": "Gemini Pro"},
-        ],
-        "yandex": [
-            {"value": "", "label": "По умолчанию"},
-            {"value": "yandexgpt/latest", "label": "YandexGPT Latest"},
-            {"value": "yandexgpt-lite/latest", "label": "YandexGPT Lite"},
-        ],
-        "anthropic": [
-            {"value": "", "label": "По умолчанию"},
-            {"value": "claude-3-opus-20240229", "label": "Claude 3 Opus"},
-            {"value": "claude-3-sonnet-20240229", "label": "Claude 3 Sonnet"},
-            {"value": "claude-3-haiku-20240307", "label": "Claude 3 Haiku"},
-        ]
-    }
-    
-    for provider_name in providers_data:
-        if provider_name in model_definitions:
-            providers_data[provider_name]["models"] = model_definitions[provider_name]
-        else:
-            providers_data[provider_name]["models"] = [{"value": "", "label": "По умолчанию"}]
+    # Собираем список моделей из конфигурации
+    models_list = []
+    for model_id, model_config in settings.llm.models.items():
+        models_list.append({
+            "value": model_id,
+            "label": f"{model_id} - {model_config.description}" if model_config.description else model_id
+        })
     
     return {
-        "default_provider": settings.llm.default_provider,
-        "providers": providers_data
+        "default_model": settings.llm.default_model,
+        "models": models_list
     }
 
 

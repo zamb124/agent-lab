@@ -51,86 +51,23 @@ class UsageRecord(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
-# Тарифные цены (переопределения базовых цен)
-# -1 = бесплатно, None = использовать базовую цену
+# Тарифные цены: множители к базовой цене
 TARIFF_PRICES = {
     TariffPlan.FREE: {
-        # OpenAI - полная цена
-        "openai": {},  # Используем базовые цены
-        
-        # Gemini - полная цена
-        "gemini": {},
-        
-        # Yandex - полная цена
-        "yandex": {},
-        
-        # Anthropic - полная цена
-        "anthropic": {},
-        
-        # Инструменты - полная цена
-        "tools": {},
+        "llm": {"*": 1.5},
+        "tools": {"*": 1.5},
     },
     TariffPlan.BASIC: {
-        # OpenAI - скидка 20%
-        "openai": {
-            "gpt-4": 0.8,  # Множитель к базовой цене
-            "gpt-4o": 0.8,
-            "gpt-3.5-turbo": 0.8,
-        },
-        
-        # Gemini - скидка 20%
-        "gemini": {
-            "*": 0.8,  # Для всех моделей
-        },
-        
-        # Yandex - скидка 20%
-        "yandex": {
-            "*": 0.8,
-        },
-        
-        # Anthropic - скидка 20%
-        "anthropic": {
-            "*": 0.8,
-        },
-        
-        # Инструменты - скидка 30%
-        "tools": {
-            "*": 0.7,
-        },
+        "llm": {"*": 1.25},
+        "tools": {"*": 1.25},
     },
     TariffPlan.PREMIUM: {
-        # OpenAI - скидка 50%
-        "openai": {
-            "*": 0.5,
-        },
-        
-        # Gemini - скидка 50%
-        "gemini": {
-            "*": 0.5,
-        },
-        
-        # Yandex - скидка 50%
-        "yandex": {
-            "*": 0.5,
-        },
-        
-        # Anthropic - скидка 50%
-        "anthropic": {
-            "*": 0.5,
-        },
-        
-        # Инструменты - скидка 70%
-        "tools": {
-            "*": 0.3,
-        },
+        "llm": {"*": 1.1},
+        "tools": {"*": 1.1},
     },
     TariffPlan.ENTERPRISE: {
-        # Все бесплатно
-        "openai": {"*": 0.0},
-        "gemini": {"*": 0.0},
-        "yandex": {"*": 0.0},
-        "anthropic": {"*": 0.0},
-        "tools": {"*": 0.0},
+        "llm": {"*": 1.1},
+        "tools": {"*": 1.1},
     }
 }
 

@@ -35,127 +35,95 @@
     "checkpointer_url": "postgresql://username:password@host:port/database_name"
   },
   "llm": {
-    "default_provider": "mock",
-    "providers": {
-      "openai": {
-        "api_key": "sk-your-openai-api-key-here",
-        "base_url": "https://api.openai.com/v1",
-        "default_model": "gpt-4",
-        "default_temperature": 0.2,
-        "timeout": 30,
-        "max_retries": 3,
-        "enabled": false,
-        "models": {
-          "gpt-4": {
-            "max_tokens": 4000,
-            "cost_per_token": 0.00003
-          },
-          "gpt-4o": {
-            "max_tokens": 4000,
-            "cost_per_token": 0.000015
-          },
-          "gpt-3.5-turbo": {
-            "max_tokens": 4000,
-            "cost_per_token": 0.000002
-          }
-        }
+    "openrouter": {
+      "api_key": "sk-or-v1-your-openrouter-api-key",
+      "base_url": "https://openrouter.ai/api/v1",
+      "site_url": "https://agents-lab.ru",
+      "site_name": "Agent Lab",
+      "timeout": 60,
+      "max_retries": 3,
+      "enabled": true
+    },
+    "models": {
+      "anthropic/claude-sonnet-4.5": {
+        "max_tokens": 8192,
+        "temperature": 0.2,
+        "description": "Самая мощная модель Anthropic, лучшая для сложных задач",
+        "input_cost_per_token": 0.0003,
+        "output_cost_per_token": 0.0015
       },
-      "anthropic": {
-        "api_key": "your-anthropic-api-key-here",
-        "base_url": "https://api.anthropic.com",
-        "default_model": "claude-3-sonnet-20240229",
-        "default_temperature": 0.2,
-        "timeout": 30,
-        "max_retries": 3,
-        "enabled": false,
-        "models": {
-          "claude-3-sonnet-20240229": {
-            "max_tokens": 4000,
-            "cost_per_token": 0.000015
-          }
-        }
+      "anthropic/claude-sonnet-4": {
+        "max_tokens": 8192,
+        "temperature": 0.2,
+        "description": "Предыдущая версия Claude Sonnet",
+        "input_cost_per_token": 0.0003,
+        "output_cost_per_token": 0.0015
       },
-      "yandex": {
-        "api_key": "your-yandex-gpt-api-key-here",
-        "base_url": "https://llm.api.cloud.yandex.net",
-        "default_model": "yandexgpt/latest",
-        "default_temperature": 0.2,
-        "timeout": 30,
-        "max_retries": 3,
-        "enabled": false,
-        "models": {
-          "yandexgpt/latest": {
-            "max_tokens": 8000,
-            "cost_per_token": 0.000001
-          }
-        }
+      "google/gemini-2.5-pro": {
+        "max_tokens": 8192,
+        "temperature": 0.2,
+        "description": "Топовая модель Google, огромный контекст",
+        "input_cost_per_token": 0.000125,
+        "output_cost_per_token": 0.001
       },
-      "ollama": {
-        "api_key": null,
-        "base_url": "http://localhost:11434",
-        "default_model": "llama2",
-        "default_temperature": 0.2,
-        "timeout": 60,
-        "max_retries": 2,
-        "enabled": false,
-        "models": {
-          "llama2": {
-            "max_tokens": 4000,
-            "cost_per_token": 0.0
-          },
-          "codellama": {
-            "max_tokens": 4000,
-            "cost_per_token": 0.0
-          }
-        }
+      "google/gemini-2.5-flash": {
+        "max_tokens": 8192,
+        "temperature": 0.2,
+        "description": "Быстрая версия Gemini 2.5",
+        "input_cost_per_token": 0.00003,
+        "output_cost_per_token": 0.00025
       },
-      "gemini": {
-        "api_key": "your-gemini-api-key-here",
-        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "default_model": "gemini-2.0-flash-exp",
-        "default_temperature": 0.2,
-        "timeout": 30,
-        "max_retries": 3,
-        "enabled": false,
-        "models": {
-          "gemini-2.0-flash-exp": {
-            "max_tokens": 8192,
-            "cost_per_token": 0.0001
-          },
-          "gemini-2.5-pro": {
-            "max_tokens": 2000000,
-            "cost_per_token": 0.0002
-          },
-          "gemini-1.5-flash": {
-            "max_tokens": 1000000,
-            "cost_per_token": 0.000015
-          },
-          "gemini-1.5-pro": {
-            "max_tokens": 2000000,
-            "cost_per_token": 0.00015
-          },
-          "gemini-2.5-flash-image-preview": {
-            "max_tokens": 8192,
-            "cost_per_token": 0.0001
-          }
-        }
+      "google/gemini-2.0-flash": {
+        "max_tokens": 8192,
+        "temperature": 0.2,
+        "description": "Gemini 2.0 Flash - очень быстрая",
+        "input_cost_per_token": 0.00001,
+        "output_cost_per_token": 0.00004
       },
-      "mock": {
-        "api_key": null,
-        "base_url": null,
-        "default_model": "mock-gpt",
-        "default_temperature": 0.2,
-        "timeout": 30,
-        "max_retries": 3,
-        "enabled": true,
-        "models": {
-          "mock-gpt": {
-            "max_tokens": 4000,
-            "cost_per_token": 0.0
-          }
-        }
+      "x-ai/grok-code-fast-1": {
+        "max_tokens": 8192,
+        "temperature": 0.2,
+        "description": "Grok для кода - очень быстрая",
+        "input_cost_per_token": 0.00002,
+        "output_cost_per_token": 0.00015
+      },
+      "x-ai/grok-4-fast": {
+        "max_tokens": 8192,
+        "temperature": 0.2,
+        "description": "Grok 4 Fast - быстрая версия",
+        "input_cost_per_token": 0.00002,
+        "output_cost_per_token": 0.00005
+      },
+      "deepseek/deepseek-v3-0324": {
+        "max_tokens": 8192,
+        "temperature": 0.2,
+        "description": "DeepSeek V3 - отличная для кода",
+        "input_cost_per_token": 0.000024,
+        "output_cost_per_token": 0.000084
+      },
+      "openai/gpt-4o": {
+        "max_tokens": 4096,
+        "temperature": 0.2,
+        "description": "GPT-4 Optimized - быстрая версия GPT-4",
+        "input_cost_per_token": 0.00025,
+        "output_cost_per_token": 0.001
+      },
+      "openai/gpt-oss-20b": {
+        "max_tokens": 8192,
+        "temperature": 0.2,
+        "description": "GPT OSS 20B - открытая модель OpenAI",
+        "input_cost_per_token": 0.000003,
+        "output_cost_per_token": 0.000014
+      },
+      "openai/gpt-oss-120b": {
+        "max_tokens": 8192,
+        "temperature": 0.2,
+        "description": "GPT OSS 120B - большая открытая модель OpenAI",
+        "input_cost_per_token": 0.000004,
+        "output_cost_per_token": 0.00004
       }
-    }
+    },
+    "default_model": "anthropic/claude-sonnet-4.5"
   },
   "worker": {
     "max_workers": 6,

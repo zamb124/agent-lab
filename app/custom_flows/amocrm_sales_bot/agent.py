@@ -15,8 +15,7 @@ class AmocrmSalesBot(BaseAgent):
     description = "Продажный менеджер для работы с клиентами и ведения сделок в AmoCRM"
 
     llm_config = {
-        "provider": "gemini",
-        "model": "gemini-2.0-flash-exp",
+        "model": "google/gemini-2.0-flash",
         "temperature": 0.3
     }
 

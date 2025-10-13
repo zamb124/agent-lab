@@ -14,8 +14,7 @@ class TelegramChannelAgent(BaseAgent):
     description = "Помогает создавать и публиковать посты в Telegram канал"
     
     llm_config = {
-        "provider": "openai",
-        "model": "gpt-4o",
+        "model": "anthropic/claude-sonnet-4.5",
         "temperature": 0.3
     }
 

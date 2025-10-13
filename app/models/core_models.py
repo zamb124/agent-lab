@@ -599,18 +599,13 @@ class ToolReference(BuilderEntity):
 
 
 class LLMConfig(BaseModel):
-    """Конфигурация LLM"""
+    """Конфигурация LLM для агента"""
 
-    provider: str = Field(
-        default="openai",
-        title="Провайдер",
-        description="Провайдер LLM (openai, anthropic, yandex, etc.)",
-    )
     model: str = Field(
-        default="gpt-4",
+        default="anthropic/claude-sonnet-4.5",
         title="Модель",
-        description="Название модели",
-        placeholder="gpt-4, claude-3-sonnet, yandexgpt",
+        description="ID модели в формате provider/model (через OpenRouter)",
+        placeholder="anthropic/claude-sonnet-4.5, google/gemini-2.5-flash, openai/gpt-4o",
     )
     temperature: float = Field(
         default=0.2,
@@ -624,22 +619,6 @@ class LLMConfig(BaseModel):
         title="Максимум токенов",
         description="Максимальное количество токенов в ответе",
         ge=1,
-    )
-    api_key: Optional[str] = Field(
-        default=None,
-        title="API ключ",
-        description="API ключ для провайдера",
-    )
-    base_url: Optional[str] = Field(
-        default=None,
-        title="Базовый URL",
-        description="Базовый URL для API",
-        placeholder="https://api.openai.com/v1",
-    )
-    additional_params: Dict[str, Any] = Field(
-        default_factory=dict,
-        title="Дополнительные параметры",
-        description="Дополнительные параметры для LLM",
     )
 
 
