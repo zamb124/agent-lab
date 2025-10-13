@@ -90,17 +90,19 @@ async def test_premium_discount():
     )
     
     # Получаем цены для одного и того же ресурса
-    free_cost = await billing_service.get_resource_cost_for_company(free_company, "openai:gpt-4")
-    premium_cost = await billing_service.get_resource_cost_for_company(premium_company, "openai:gpt-4")
+    free_cost = await billing_service.get_resource_cost_for_company(free_company, "llm:gpt-4")
+    premium_cost = await billing_service.get_resource_cost_for_company(premium_company, "llm:gpt-4")
     
-    # На premium должно быть дешевле
+    # На premium должно быть дешевле (FREE: 1.5x, PREMIUM: 1.1x)
     assert premium_cost < free_cost, f"PREMIUM должен быть дешевле: premium={premium_cost}, free={free_cost}"
-    assert premium_cost == free_cost * 0.5, f"PREMIUM дает скидку 50%: {premium_cost} != {free_cost * 0.5}"
+    # FREE: 0.001 * 1.5 = 0.0015, PREMIUM: 0.001 * 1.1 = 0.0011
+    assert premium_cost == pytest.approx(free_cost * (1.1 / 1.5), rel=0.01), \
+        f"PREMIUM: {premium_cost} != FREE * (1.1/1.5): {free_cost * (1.1 / 1.5)}"
 
 
 @pytest.mark.asyncio
-async def test_enterprise_free():
-    """Тест: ENTERPRISE тариф - все бесплатно"""
+async def test_enterprise_discount():
+    """Тест: ENTERPRISE тариф - максимальная скидка (множитель 1.1x)"""
     
     billing_service = BillingService()
     
@@ -108,16 +110,28 @@ async def test_enterprise_free():
         company_id="enterprise",
         subdomain="enterprise",
         name="Enterprise",
-        tariff_plan=TariffPlan.ENTERPRISE,
-        balance=0.0
+        balance=1000.0,
+        tariff_plan=TariffPlan.ENTERPRISE
     )
     
-    # Проверяем что все ресурсы бесплатны
-    gpt4_cost = await billing_service.get_resource_cost_for_company(enterprise_company, "openai:gpt-4")
-    tool_cost = await billing_service.get_resource_cost_for_company(enterprise_company, "tool:weather_api")
+    free_company = Company(
+        company_id="free",
+        subdomain="free",
+        name="Free",
+        balance=1000.0,
+        tariff_plan=TariffPlan.FREE
+    )
     
-    assert gpt4_cost == 0.0, f"На ENTERPRISE GPT-4 должен быть бесплатным: {gpt4_cost}"
-    assert tool_cost == 0.0, f"На ENTERPRISE тулы должны быть бесплатными: {tool_cost}"
+    # Проверяем что ресурсы дешевле чем на FREE (ENTERPRISE: 1.1x vs FREE: 1.5x)
+    gpt4_cost_enterprise = await billing_service.get_resource_cost_for_company(enterprise_company, "llm:gpt-4")
+    gpt4_cost_free = await billing_service.get_resource_cost_for_company(free_company, "llm:gpt-4")
+    tool_cost_enterprise = await billing_service.get_resource_cost_for_company(enterprise_company, "tool:weather_api")
+    tool_cost_free = await billing_service.get_resource_cost_for_company(free_company, "tool:weather_api")
+    
+    assert gpt4_cost_enterprise < gpt4_cost_free, \
+        f"На ENTERPRISE GPT-4 должен быть дешевле: {gpt4_cost_enterprise} vs {gpt4_cost_free}"
+    assert tool_cost_enterprise < tool_cost_free, \
+        f"На ENTERPRISE тулы должны быть дешевле: {tool_cost_enterprise} vs {tool_cost_free}"
 
 
 @pytest.mark.asyncio
@@ -145,7 +159,7 @@ async def test_balance_check():
     )
     
     # Должно блокироваться
-    can_use, reason = await billing_service.can_use_resource(test_user, no_balance_company, "openai:gpt-4")
+    can_use, reason = await billing_service.can_use_resource(test_user, no_balance_company, "llm:gpt-4")
     assert not can_use, "Без баланса должно блокироваться"
     assert "баланс" in reason.lower(), f"Причина должна упоминать баланс: {reason}"
     
@@ -159,7 +173,7 @@ async def test_balance_check():
     )
     
     # Должно быть доступно
-    can_use, reason = await billing_service.can_use_resource(test_user, with_balance_company, "openai:gpt-4")
+    can_use, reason = await billing_service.can_use_resource(test_user, with_balance_company, "llm:gpt-4")
     assert can_use, f"С балансом должно быть доступно: {reason}"
 
 
@@ -190,10 +204,10 @@ async def test_monthly_limit():
     )
     
     # Получаем стоимость ресурса
-    cost = await billing_service.get_resource_cost_for_company(limited_company, "openai:gpt-4")
+    cost = await billing_service.get_resource_cost_for_company(limited_company, "llm:gpt-4")
     
     # Если стоимость превысит лимит - должно блокироваться
-    can_use, reason = await billing_service.can_use_resource(test_user, limited_company, "openai:gpt-4")
+    can_use, reason = await billing_service.can_use_resource(test_user, limited_company, "llm:gpt-4")
     
     if cost > 5.0:
         assert not can_use, "Должно блокироваться при превышении месячного лимита"

@@ -31,8 +31,7 @@ class ResearchAgent(BaseAgent):
     is_public = True
     
     llm_config = {
-        "provider": "openai",
-        "model": "gpt-4o-mini",
+        "model": "google/gemini-2.5-flash",
         "temperature": 0.3
     }
     

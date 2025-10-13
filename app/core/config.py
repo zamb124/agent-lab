@@ -46,26 +46,34 @@ class DatabaseConfig(BaseModel):
     )
 
 
-class LLMProviderConfig(BaseModel):
-    """Конфигурация одного LLM провайдера"""
+class OpenRouterConfig(BaseModel):
+    """Конфигурация OpenRouter"""
 
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    default_model: str = "gpt-4"
-    default_temperature: float = 0.2
-    timeout: int = 30
+    api_key: str
+    base_url: str = "https://openrouter.ai/api/v1"
+    site_url: str = "https://agents-lab.ru"
+    site_name: str = "Agent Lab"
+    timeout: int = 60
     max_retries: int = 3
     enabled: bool = True
-    models: Dict[str, Dict[str, Any]] = Field(
-        default_factory=dict
-    )  # Специфичные настройки для моделей
+
+
+class ModelConfig(BaseModel):
+    """Конфигурация отдельной модели"""
+
+    max_tokens: Optional[int] = None
+    temperature: float = 0.2
+    description: Optional[str] = None
+    input_cost_per_token: float = 0.00001  # ₽ за токен (input)
+    output_cost_per_token: float = 0.00001  # ₽ за токен (output)
 
 
 class LLMConfig(BaseModel):
-    """Конфигурация всех LLM провайдеров"""
+    """Конфигурация LLM через OpenRouter"""
 
-    default_provider: str = "openai"
-    providers: Dict[str, LLMProviderConfig] = Field(default_factory=dict)
+    openrouter: OpenRouterConfig
+    models: Dict[str, ModelConfig] = Field(default_factory=dict)
+    default_model: str = "anthropic/claude-sonnet-4.5"
 
 
 class ServerConfig(BaseModel):

@@ -112,7 +112,6 @@ class BaseAgent(ABC):
                 llm_kwargs["max_tokens"] = self.config.llm_config.max_tokens
 
             llm = get_llm(
-                provider=self.config.llm_config.provider,
                 model=self.config.llm_config.model,
                 **llm_kwargs,
             )

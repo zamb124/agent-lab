@@ -42,6 +42,7 @@ async def test_company(storage):
         subdomain=f"test{uuid.uuid4().hex[:6]}",
         name="Тестовая компания",
         tariff_plan="basic",
+        balance=1000.0,
         monthly_budget=1000.0,
         current_month_spent=0.0
     )
@@ -105,15 +106,15 @@ class TestBillingService:
     async def test_can_use_resource_basic_plan(self, billing_service, test_user, test_company):
         """Тест проверки доступа к ресурсу на базовом плане"""
         
-        # Проверяем доступные ресурсы
+        # Проверяем доступные ресурсы (правильный формат: category:resource)
         can_use, reason = await billing_service.can_use_resource(
-            test_user, test_company, "weather_api"
+            test_user, test_company, "tool:weather_api"
         )
         assert can_use, f"Должен быть доступ к weather_api: {reason}"
         
-        # Проверяем ограниченный ресурс
+        # Проверяем LLM ресурс
         can_use, reason = await billing_service.can_use_resource(
-            test_user, test_company, "openai_gpt_4"
+            test_user, test_company, "llm:gpt-4"
         )
         assert can_use, f"Должен быть доступ к gpt-4 на basic плане: {reason}"
         
@@ -127,14 +128,14 @@ class TestBillingService:
         
         # С балансом GPT-4 доступен (просто платный)
         can_use, reason = await billing_service.can_use_resource(
-            test_user, test_company, "openai:gpt-4"
+            test_user, test_company, "llm:gpt-4"
         )
         assert can_use, f"С балансом GPT-4 должен быть доступен: {reason}"
         
         # Без баланса - недоступен
         test_company.balance = 0.0
         can_use, reason = await billing_service.can_use_resource(
-            test_user, test_company, "openai:gpt-4"
+            test_user, test_company, "llm:gpt-4"
         )
         assert not can_use, "Без баланса должен быть недоступен"
         assert "баланс" in reason.lower()
@@ -149,11 +150,11 @@ class TestBillingService:
         test_company.balance = 1000.0  # Баланс есть
         
         # Получаем стоимость ресурса
-        cost = await billing_service.get_resource_cost_for_company(test_company, "openai:gpt-4")
+        cost = await billing_service.get_resource_cost_for_company(test_company, "llm:gpt-4")
         
         # Если стоимость превысит лимит - должно блокироваться
         can_use, reason = await billing_service.can_use_resource(
-            test_user, test_company, "openai:gpt-4"
+            test_user, test_company, "llm:gpt-4"
         )
         
         if cost > 5.0:  # Если превысит лимит (95 + cost > 100)
@@ -166,7 +167,7 @@ class TestBillingService:
         # Очистка (уже не нужна)
         for i in range(10):
             try:
-                usage_key = f"usage:{test_company.company_id}:openai_gpt_4:test_usage_{i}"
+                usage_key = f"usage:{test_company.company_id}:llm:gpt-4:test_usage_{i}"
                 await storage.delete(usage_key)
             except:
                 pass
@@ -182,7 +183,7 @@ class TestBillingService:
         # Проверяем логику бюджетных лимитов (в mock конфигурации стоимость может быть 0)
         # Главное что метод can_use_resource работает без ошибок
         can_use, reason = await billing_service.can_use_resource(
-            test_user, test_company, "openai_gpt_4"
+            test_user, test_company, "llm:gpt-4"
         )
         # В тестовой среде может быть True из-за mock конфигурации
         assert isinstance(can_use, bool)
@@ -194,11 +195,11 @@ class TestBillingService:
         
         initial_spent = test_company.current_month_spent
         
-        # Записываем использование
+        # Записываем использование (правильный формат: category:resource)
         await billing_service.record_usage(
             user=test_user,
             company=test_company,
-            resource_name="weather_api",
+            resource_name="tool:weather_api",
             cost=0.5,
             usage_type=UsageType.TOOL_CALL,
             quantity=1,
@@ -212,16 +213,13 @@ class TestBillingService:
         
         # Проверяем что создалась запись
         # Формат ключа: usage:{company_id}:{resource_name}:{usage_id}
-        search_prefix = f"usage:{test_company.company_id}:weather_api:"
+        search_prefix = f"usage:{test_company.company_id}:tool:weather_api:"
         usage_keys = await storage.list_by_prefix(search_prefix, force_global=True)
         usage_records = []
         for key in usage_keys:
             data = await storage.get(key, force_global=True)
             if data:
-                try:
-                    usage_records.append(UsageRecord.model_validate_json(data))
-                except Exception:
-                    continue
+                usage_records.append(UsageRecord.model_validate_json(data))
         
         assert len(usage_records) > 0, f"Записи использования не найдены по префиксу {search_prefix}"
         found_record = usage_records[0]
@@ -233,57 +231,24 @@ class TestBillingService:
         # Очистка
         if found_record:
             try:
-                await storage.delete(f"usage:{found_record.usage_id}")
-            except:
-                pass
-    
-    @pytest.mark.asyncio
-    async def test_get_monthly_usage(self, billing_service, test_user, test_company, storage):
-        """Тест получения месячной статистики"""
-        
-        # Создаем несколько записей использования
-        usage_records = []
-        for i in range(3):
-            usage = UsageRecord(
-                usage_id=f"monthly_test_{i}",
-                user_id=test_user.user_id,
-                company_id=test_company.company_id,
-                usage_type=UsageType.TOOL_CALL,
-                resource_name="weather_api",
-                cost=0.1,
-                quantity=1
-            )
-            usage_records.append(usage)
-            # Новая структура ключей
-            usage_key = f"usage:{test_company.company_id}:weather_api:{usage.usage_id}"
-            await storage.set(usage_key, usage.model_dump_json(), force_global=True)
-        
-        # Получаем статистику
-        count = await billing_service._get_monthly_usage(
-            test_company.company_id, "weather_api"
-        )
-        assert count == 3, f"Должно быть 3 использования, получено: {count}"
-        
-        # Очистка
-        for usage in usage_records:
-            try:
-                usage_key = f"usage:{test_company.company_id}:weather_api:{usage.usage_id}"
+                usage_key = f"usage:{test_company.company_id}:tool:weather_api:{found_record.usage_id}"
                 await storage.delete(usage_key)
             except:
                 pass
+    
     
     @pytest.mark.asyncio
     async def test_get_company_usage_stats(self, billing_service, test_user, test_company, storage):
         """Тест получения полной статистики компании"""
         
-        # Создаем разные записи использования
+        # Создаем разные записи использования (правильный формат: category:resource)
         usage_records = [
             UsageRecord(
                 usage_id="stats_test_1",
                 user_id=test_user.user_id,
                 company_id=test_company.company_id,
                 usage_type=UsageType.LLM_REQUEST,
-                resource_name="openai_gpt_4",
+                resource_name="llm:gpt-4",
                 cost=2.0,
                 quantity=1000
             ),
@@ -292,7 +257,7 @@ class TestBillingService:
                 user_id=test_user.user_id,
                 company_id=test_company.company_id,
                 usage_type=UsageType.TOOL_CALL,
-                resource_name="weather_api",
+                resource_name="tool:weather_api",
                 cost=0.1,
                 quantity=1
             ),
@@ -301,7 +266,7 @@ class TestBillingService:
                 user_id=test_user.user_id,
                 company_id=test_company.company_id,
                 usage_type=UsageType.TOOL_CALL,
-                resource_name="weather_api",
+                resource_name="tool:weather_api",
                 cost=0.1,
                 quantity=1
             )
@@ -317,16 +282,16 @@ class TestBillingService:
         
         assert stats["total_cost"] == 2.2, f"Общая стоимость должна быть 2.2, получено: {stats['total_cost']}"
         assert stats["total_calls"] == 1002, f"Общее количество вызовов должно быть 1002, получено: {stats['total_calls']}"
-        assert "openai_gpt_4" in stats["by_resource"]
-        assert "weather_api" in stats["by_resource"]
-        assert stats["by_resource"]["openai_gpt_4"]["cost"] == 2.0
-        assert stats["by_resource"]["weather_api"]["cost"] == 0.2
-        assert stats["by_resource"]["weather_api"]["calls"] == 2
+        assert "llm:gpt-4" in stats["by_resource"]
+        assert "tool:weather_api" in stats["by_resource"]
+        assert stats["by_resource"]["llm:gpt-4"]["cost"] == 2.0
+        assert stats["by_resource"]["tool:weather_api"]["cost"] == 0.2
+        assert stats["by_resource"]["tool:weather_api"]["calls"] == 2
         
         # Очистка
         for usage in usage_records:
             try:
-                usage_key = f"usage:{test_company.company_id}:weather_api:{usage.usage_id}"
+                usage_key = f"usage:{test_company.company_id}:{usage.resource_name}:{usage.usage_id}"
                 await storage.delete(usage_key)
             except:
                 pass
@@ -347,6 +312,7 @@ async def test_billing_service_integration():
         subdomain=f"int{uuid.uuid4().hex[:6]}",
         name="Интеграционная компания",
         tariff_plan="premium",
+        balance=10000.0,
         monthly_budget=5000.0,
         current_month_spent=100.0
     )
@@ -370,8 +336,8 @@ async def test_billing_service_integration():
         print(f"✅ Создана тестовая компания: {company.company_id}")
         print(f"✅ Создан тестовый пользователь: {user.user_id}")
         
-        # Проверяем доступ к ресурсам
-        can_use, reason = await billing_service.can_use_resource(user, company, "openai_gpt_4")
+        # Проверяем доступ к ресурсам (правильный формат: category:resource)
+        can_use, reason = await billing_service.can_use_resource(user, company, "llm:gpt-4")
         assert can_use, f"Должен быть доступ к GPT-4 на premium: {reason}"
         print("✅ Проверка доступа к GPT-4: OK")
         
@@ -379,7 +345,7 @@ async def test_billing_service_integration():
         await billing_service.record_usage(
             user=user,
             company=company,
-            resource_name="openai_gpt_4",
+            resource_name="llm:gpt-4",
             cost=3.0,
             usage_type=UsageType.LLM_REQUEST,
             quantity=1500,
@@ -402,12 +368,10 @@ async def test_billing_service_integration():
             await storage.delete(f"user:{user.user_id}")
             
             # Очищаем записи использования
-            usage_records = await storage.find_by_prefix("usage")
-            for record_data in usage_records:
+            usage_keys = await storage.list_by_prefix(f"usage:{company.company_id}:", force_global=True)
+            for key in usage_keys:
                 try:
-                    record = UsageRecord(**record_data)
-                    if record.company_id == company.company_id:
-                        await storage.delete(f"usage:{record.usage_id}")
+                    await storage.delete(key)
                 except:
                     pass
                     

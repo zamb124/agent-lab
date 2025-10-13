@@ -13,8 +13,7 @@ class FashnBuyerAgent(BaseAgent):
     description = "Собирает полную информацию о брендовых вещах для закупки"
     
     llm_config = {
-        "provider": "openai", 
-        "model": "gpt-4o", 
+        "model": "openai/gpt-4o", 
         "temperature": 0.3
     }
 

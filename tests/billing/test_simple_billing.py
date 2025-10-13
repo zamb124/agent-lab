@@ -20,9 +20,12 @@ def test_billing_models_import():
     assert TariffPlan.ENTERPRISE == "enterprise"
     
     # Проверяем что тарифные цены настроены
-    assert "openai" in TARIFF_PRICES[TariffPlan.FREE]
-    assert "openai" in TARIFF_PRICES[TariffPlan.PREMIUM]
-    assert TARIFF_PRICES[TariffPlan.PREMIUM]["openai"]["*"] == 0.5  # Скидка 50%
+    assert "llm" in TARIFF_PRICES[TariffPlan.FREE]
+    assert "tools" in TARIFF_PRICES[TariffPlan.FREE]
+    assert TARIFF_PRICES[TariffPlan.FREE]["llm"]["*"] == 1.5  # Самый дорогой
+    assert TARIFF_PRICES[TariffPlan.BASIC]["llm"]["*"] == 1.25
+    assert TARIFF_PRICES[TariffPlan.PREMIUM]["llm"]["*"] == 1.1  # Скидка
+    assert TARIFF_PRICES[TariffPlan.ENTERPRISE]["llm"]["*"] == 1.1
     
     print("✅ Все модели биллинга импортируются корректно")
 
