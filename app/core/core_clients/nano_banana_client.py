@@ -100,7 +100,7 @@ class NanoBananaClient:
                 
                 logger.info(f"📎 Итого в content_parts: {len(content_parts)} элементов (1 промпт + {len(reference_data)} изображений)")
             
-            logger.info(f"🎨 Генерируем {num_images} изображений с промптом: {prompt}")
+            logger.info(f"🎨 Генерируем {num_images} изображений (промпт: {len(prompt)} символов)")
             
             generated_file_ids = []
             
@@ -123,7 +123,6 @@ class NanoBananaClient:
                 
                 if response.candidates and len(response.candidates) > 0:
                     candidate = response.candidates[0]
-                    logger.info(f"   candidate attributes: {dir(candidate)}")
                     logger.info(f"   hasattr(candidate, 'content'): {hasattr(candidate, 'content')}")
                     
                     if hasattr(candidate, 'finish_reason'):
@@ -132,10 +131,9 @@ class NanoBananaClient:
                     if hasattr(candidate, 'safety_ratings'):
                         logger.info(f"   safety_ratings: {candidate.safety_ratings}")
                     
-                    if hasattr(candidate, 'content'):
-                        logger.info(f"   content: {candidate.content}")
-                        if candidate.content:
-                            logger.info(f"   content.parts: {candidate.content.parts if hasattr(candidate.content, 'parts') else 'No parts'}")
+                    if hasattr(candidate, 'content') and candidate.content:
+                        parts_count = len(candidate.content.parts) if hasattr(candidate.content, 'parts') else 0
+                        logger.info(f"   content.parts count: {parts_count}")
                     
                     if hasattr(candidate, 'content') and candidate.content and hasattr(candidate.content, 'parts') and candidate.content.parts:
                         # Ищем только первое изображение в ответе
@@ -153,6 +151,8 @@ class NanoBananaClient:
                                     
                                     # Сохраняем только короткую версию промпта (первые 150 символов) чтобы не превысить лимит S3 метаданных
                                     prompt_preview = prompt[:150] if len(prompt) > 150 else prompt
+                                    # Очищаем от переносов строк для HTTP заголовков
+                                    prompt_preview = prompt_preview.replace('\n', ' ').replace('\r', ' ')
                                     
                                     file_record = await file_processor.process_file_from_bytes(
                                         data=image_data,

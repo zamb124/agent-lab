@@ -218,20 +218,68 @@ async def process_nano_banana_try_on(request: TryOnRequest, model_record, produc
                     additional_product_records.append(additional_record)
                     reference_file_ids.append(additional_file_id)
         
-        # Создаем более строгий промпт для photo editing (не generation!)
-        images_info = f"PHOTO EDITING (NOT GENERATION!). You have {len(reference_file_ids)} images: Image #1 = BASE - person photo, DO NOT TOUCH! Copy exactly! "
-        
-        if len(reference_file_ids) > 2:
-            images_info += f"Images #2-#{len(reference_file_ids)} = SAME {request.item_kind.upper()} shown from DIFFERENT ANGLES (front/side/back views of ONE product). These are NOT separate products - it's ONE {request.item_kind} photographed from multiple angles to show all details. Study all angles to understand product completely, then add ONLY ONE {request.item_kind} to the person. "
-        else:
-            images_info += f"Image #2 = {request.item_kind.upper()} to overlay (ONE product). "
-        
-        # Определяем размеры товара
-        width_info = f"ширина {request.product_width_cm} см"
-        height_info = f"высота {request.product_height_cm} см" if request.product_height_cm > 0 else "высота пропорциональная"
-        
-        # КРИТИЧЕСКИ ВАЖНЫЙ промпт с детальными инструкциями по естественному размещению
-        prompt = f"PHOTO EDITING TASK - NOT IMAGE GENERATION! {images_info} YOUR ONLY JOB: Take image #1 and add product overlay from images #2+. THIS IS EDITING, NOT CREATING NEW IMAGE! STRICT REQUIREMENTS: Image #1 contains the EXACT person, background, setting you must keep - DO NOT generate new person, new background, or new scene. Think of this as Photoshop: you open image #1, create new layer, paste product from image #2+, adjust placement. Result = image #1 with product added, nothing else changed. FORBIDDEN: Creating new person. Creating new background. Generating new scene. Changing the person from image #1. TASK: Add ONE {request.item_kind} from images #2+ onto EXACT UNMODIFIED copy of image #1. IMPORTANT: If you see multiple product images, they show THE SAME PRODUCT from different angles - add only ONE product, using all views to understand its complete appearance. CRITICAL RULES: 1. COPY image #1 exactly (pixel-perfect, no modifications to person/background/pose). EXCEPTION: If product placement is impossible or looks extremely unnatural with current pose, you may make MINIMAL pose adjustments (e.g., slightly turn hand, adjust arm angle by 5-10 degrees) ONLY to naturally hold/wear the product. Keep face, body position, background, lighting unchanged. Use this exception ONLY when absolutely necessary. 2. PRODUCT SIZE - CRITICAL! Person height: {request.model_height_cm}cm, Product size: {width_info} {height_info}. Calculate REALISTIC product size relative to person. MANDATORY: You MUST add the product - it's required! DO NOT shrink product to fit - maintain true-to-life proportions! If product is large (backpack/bag), it should look appropriately sized on person. If product doesn't fit completely in frame at correct size - show partial view (crop edges) rather than shrinking. Product MUST be visible in natural position even if only partially shown. Better to show product at CORRECT SCALE partially visible than full product at WRONG SCALE or no product at all. Real-world size accuracy is MORE IMPORTANT than showing entire product. NEVER skip adding product - always add it naturally, fully or partially visible. 3. PRODUCT ACCURACY - Use EXACT product from image #2+: Keep ALL details identical: color, pattern, texture, shape, hardware, logos, stitching. DO NOT modify product appearance, simplify details, or change colors. Product must be PHOTOREALISTIC copy from reference image #2+. 4. ANALYZE POSE carefully: - Where are hands? (visible/hidden, free/busy, position) - Arm position? (along body/bent/extended) - Body angle? (front/side/turned) - Is person walking/standing/sitting? 5. SMART PRODUCT PLACEMENT for {request.item_kind}: HANDS FREE + VISIBLE → Person ACTIVELY HOLDS product in hand(s) naturally (like carrying a shopping bag). ARM ALONG BODY → Product hangs on shoulder/crossbody with strap visible. HANDS IN POCKETS → Product on shoulder, strap over shoulder clearly visible. WALKING/MOVEMENT → Product in motion (slight tilt/swing) naturally. The product MUST interact with person's body realistically - touching hand/shoulder/body, strap visible, natural grip. 6. VISIBILITY: Product positioned for MAXIMUM visibility in frame, clearly showing its details, pattern, and shape from reference. 7. REALISM: Product casts appropriate shadow, follows body movement, proper perspective matching the photo angle. FORBIDDEN: Changing person's face, body position, background, lighting. Floating products. Unnatural placement. Modifying product appearance from reference image. Simplifying or changing product details. Major pose changes. Shrinking product to unrealistic size. OUTPUT: 98-99.5% original image #1 + 0.5-2% ONE EXACT product from images #2+ placed naturally with minimal pose adjustment if needed. Add ONLY ONE item, not multiple. Product looks identical to reference, person looks like they're genuinely using/carrying the single item."
+        prompt = f"""PHOTO EDITING TASK - NOT IMAGE GENERATION!
+
+**CONTEXT & INPUTS:**
+You are provided with {len(reference_file_ids)} images:
+- Image #1: BASE - Person photo. This image MUST remain the primary canvas. DO NOT alter the person's identity, face, body, clothing, hair, background, or lighting from this base image.
+- Images #2-{len(reference_file_ids)}: REFERENCE - {request.item_kind.upper()} product(s). If multiple, these are DIFFERENT ANGLES of the *SAME SINGLE PRODUCT*. Study all angles to fully understand the product's 3D form, texture, and details.
+
+**YOUR SOLE OBJECTIVE:**
+Integrate ONE {request.item_kind} from the reference images onto the person in Image #1. This is a sophisticated photo editing task, akin to a professional retoucher adding a product in Photoshop, NOT generating a new scene.
+
+**CRITICAL REQUIREMENTS FOR NATURAL & REALISTIC INTEGRATION:**
+
+1.  **PERSON & SCENE INTEGRITY (ABSOLUTE):**
+    *   **DO NOT GENERATE:** No new person, no new background, no new scene.
+    *   **PRESERVE:** The exact person (face, body, clothing, identity), background, and lighting from Image #1 must be maintained.
+    *   **ALLOWED MINOR ADJUSTMENTS (ONLY FOR PRODUCT INTERACTION):**
+        *   Slight camera angle rotation (5-15 degrees) to optimize product visibility.
+        *   Subtle body angle/turn of the person to naturally showcase the product (e.g., turning a shoulder for a bag).
+        *   Realistic modification of hand/arm position to VISIBLY HOLD, WEAR, or CARRY the product. Fingers MUST visibly grip straps, hands MUST support bottoms, straps MUST go over shoulders naturally.
+    *   **FORBIDDEN:** Changing facial features, identity, clothing, hair, background, or dramatic lighting shifts. Floating products without physical contact. Hands "holding" without visible, convincing grip. Products "on" a person without visible means of attachment (e.g., straps, support).
+
+2.  **PRODUCT SIZE & PROPORTIONS (PARAMOUNT):**
+    *   **PERSON HEIGHT:** {request.model_height_cm} cm.
+    *   **PRODUCT DIMENSIONS:** Width: {request.product_width_cm} cm. Height: {request.product_height_cm} cm (if > 0, otherwise proportional).
+    *   **MANDATORY REALISM:** Calculate and apply the product's size **REALISTICALLY** relative to the person's height. The product MUST appear true-to-life in scale.
+    *   **NO SHRINKING TO FIT:** If the product is large (e.g., a backpack or large bag) and its correct scale means it won't entirely fit within the frame, **DO NOT shrink it**. Instead, show a partial view (crop edges) at the correct, realistic scale.
+    *   **PRIORITY:** Real-world size accuracy is **MORE IMPORTANT** than showing the entire product. Always add the product, even if partially visible, at its correct scale. NEVER omit the product.
+
+3.  **PRODUCT ACCURACY & DETAILS (EXACT COPY):**
+    *   **IDENTICAL REPLICATION:** Use the EXACT product from Image #2+. Maintain ALL details: color, pattern, texture, shape, hardware, logos, stitching.
+    *   **NO MODIFICATION:** DO NOT alter the product's appearance, simplify details, or change colors. The product must be a PHOTOREALISTIC, pixel-perfect copy from the reference.
+
+4.  **SMART & NATURAL PLACEMENT (PROFESSIONAL TOUCH):**
+    *   **ANALYZE POSE:** Carefully assess the person's pose in Image #1:
+        *   Hand positions (visible/hidden, free/busy, gripping).
+        *   Arm angles (along body, bent, extended).
+        *   Body orientation (front, side, turned).
+        *   Activity (walking, standing, sitting).
+    *   **LOGICAL INTERACTION:**
+        *   **Hands Free & Visible:** Person actively holds the product naturally (e.g., carrying a shopping bag).
+        *   **Arm Along Body:** Product hangs on shoulder/crossbody with the strap clearly visible and interacting with the body.
+        *   **Hands in Pockets:** Product on shoulder, strap over shoulder, clearly visible and supported.
+        *   **Walking/Movement:** Product shows natural motion (slight tilt/swing) consistent with movement.
+    *   **PHYSICAL INTERACTION:** The product MUST physically interact with the person's body realistically – touching hand/shoulder/body, straps visible, natural grip.
+
+5.  **VISIBILITY & REALISM:**
+    *   **MAXIMUM VISIBILITY:** Position the product for maximum visibility within the frame, clearly showcasing its details, pattern, and shape from the reference.
+    *   **ENVIRONMENTAL INTEGRATION:** The product must cast appropriate shadows, follow body contours, and maintain proper perspective matching the original photo's angle and lighting.
+
+**FORBIDDEN ACTIONS (REITERATED):**
+*   Changing the person's face, identity, body position, clothing, hair.
+*   Changing the background or lighting dramatically.
+*   Products floating unnaturally without contact.
+*   Unnatural or unrealistic product placement.
+*   Modifying the product's appearance, simplifying details, or changing colors from the reference image.
+*   Major pose changes that alter the person's identity or scene.
+*   Shrinking the product to an unrealistic size to fit the frame.
+*   Omitting the product entirely.
+
+**EXPECTED OUTPUT:**
+A single, high-quality edited image that is 98-99.5% identical to the original Image #1, with 0.5-2% being ONE EXACT product from the reference images, placed naturally and realistically. The product must look identical to the reference, and the person must appear to be genuinely using or carrying the single item, as if captured by a professional photographer.
+"""
         
         # Логируем детали для отладки
         logger.info("=== ДЕТАЛЬНАЯ ОТЛАДКА ПОРЯДКА ИЗОБРАЖЕНИЙ ===")
