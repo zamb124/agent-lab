@@ -499,13 +499,14 @@ from app.core.variables import get_state
 
 @tool
 def mark_visited_a(agent_name: str) -> str:
+    \"\"\"Отмечает что агент был вызван\"\"\"
     state = get_state()
     state["store"][f"{agent_name}_visited"] = True
     state["store"][f"{agent_name}_timestamp"] = "2025-10-13 15:30:00"
     return f"{agent_name} отметился"
 """,
         )],
-        llm_config=LLMConfig(provider="mock", model="mock-gpt-4", temperature=0.1),
+        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1),
     )
     
     agent_b = AgentConfig(
@@ -532,13 +533,14 @@ from app.core.variables import get_state
 
 @tool
 def mark_visited_b(agent_name: str) -> str:
+    \"\"\"Отмечает что агент был вызван\"\"\"
     state = get_state()
     state["store"][f"{agent_name}_visited"] = True
     state["store"][f"{agent_name}_timestamp"] = "2025-10-13 15:31:00"
     return f"{agent_name} отметился"
 """,
         )],
-        llm_config=LLMConfig(provider="mock", model="mock-gpt-4", temperature=0.1),
+        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1),
     )
     
     agent_c = AgentConfig(
@@ -559,7 +561,7 @@ STORE (должны быть данные от A и B):
 Ответь: "Agent C видит: A={store.agent_a_visited}, B={store.agent_b_visited}"
 """,
         tools=[],
-        llm_config=LLMConfig(provider="mock", model="mock-gpt-4", temperature=0.1),
+        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1),
     )
     
     # Координатор вызывает всех по порядку
@@ -582,7 +584,7 @@ STORE (должны быть данные от A и B):
             "agent:test_agent_b",
             "agent:test_agent_c"
         ],
-        llm_config=LLMConfig(provider="mock", model="mock-gpt-4", temperature=0.1),
+        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1),
     )
     
     await storage.set_agent_config(agent_a)
@@ -656,7 +658,7 @@ async def test_05_initial_store_from_flow_config(setup_storage, test_context):
             "welcome_shown": False,
             "language": "ru"
         },
-        llm_config=LLMConfig(provider="mock", model="mock-gpt-4", temperature=0.1),
+        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1),
     )
     
     await storage.set_agent_config(agent_config)
@@ -747,7 +749,7 @@ def update_settings(timeout: int, theme: str) -> str:
             },
             "counter": 0
         },
-        llm_config=LLMConfig(provider="mock", model="mock-gpt-4", temperature=0.1),
+        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1),
     )
     
     await storage.set_agent_config(agent_config)

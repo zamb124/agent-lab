@@ -613,8 +613,9 @@ class FlowFactory:
             return
         
         for tool_ref in agent_config.tools:
-            if tool_ref.type == "agent":
-                await self._delete_flow_agents(tool_ref.reference)
+            if tool_ref.tool_id.startswith("agent:"):
+                sub_agent_id = tool_ref.tool_id.replace("agent:", "")
+                await self._delete_flow_agents(sub_agent_id)
         
         await self.storage.delete(f"agent:{agent_id}")
         logger.info(f"Агент {agent_id} удален")
