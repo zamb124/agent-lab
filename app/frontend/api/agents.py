@@ -92,7 +92,8 @@ async def update_agent(
     # Обновляем только разрешенные поля
     allowed_fields = {
         "name", "description", "type", "prompt", "code_mode", 
-        "function_class", "inline_code", "tools", "llm_config", "history_from"
+        "function_class", "inline_code", "tools", "llm_config", "history_from",
+        "local_variables", "store"
     }
     for field, value in updates.items():
         if field in allowed_fields:

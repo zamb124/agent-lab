@@ -25,6 +25,7 @@ class PromptEditor {
         this.userVariables = [];
         this.flowVariables = [];
         this.localVariables = [];
+        this.sessionStore = [];
         
         this.editor = null;
         
@@ -157,6 +158,24 @@ class PromptEditor {
                                     </div>
                                     <div class="category-items" data-category="flow"></div>
                                 </div>
+                                
+                                <!-- Session Store -->
+                                <div class="variable-category">
+                                    <div class="category-header">
+                                        <span class="category-title">
+                                            <i class="bi bi-database"></i> Session Store
+                                        </span>
+                                        <div class="category-actions">
+                                            <button class="btn-add-variable" data-type="store" title="Добавить">
+                                                <i class="bi bi-plus-circle"></i>
+                                            </button>
+                                            <button class="btn-toggle-category" title="Свернуть/Развернуть">
+                                                <i class="bi bi-chevron-down"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="category-items" data-category="store"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -203,6 +222,7 @@ class PromptEditor {
             this.userVariables = data.user || [];
             this.flowVariables = data.flow || [];
             this.localVariables = data.local || [];
+            this.sessionStore = data.store || [];
             
             // Пользовательские variables НЕ добавляются в company
             // Они доступны только через Flow переменные с @var:key
@@ -228,7 +248,8 @@ class PromptEditor {
                 company: this.companyVariables.length,
                 user: this.userVariables.length,
                 flow: this.flowVariables.length,
-                local: this.localVariables.length
+                local: this.localVariables.length,
+                store: this.sessionStore.length
             });
             console.log('🔍 DEBUG: flowVariables:', this.flowVariables);
             
@@ -358,7 +379,8 @@ class PromptEditor {
             ...this.companyVariables,
             ...this.userVariables,
             ...this.flowVariables,
-            ...this.localVariables
+            ...this.localVariables,
+            ...this.sessionStore
         ];
         
         const filtered = allVariables.filter(v => 
@@ -533,7 +555,8 @@ class PromptEditor {
             ...this.companyVariables,
             ...this.userVariables,
             ...this.flowVariables,
-            ...this.localVariables
+            ...this.localVariables,
+            ...this.sessionStore
         ];
         
         // Создаем map для быстрого поиска
@@ -573,6 +596,7 @@ class PromptEditor {
         this.renderVariableCategory('company', this.companyVariables);
         this.renderVariableCategory('user', this.userVariables);
         this.renderVariableCategory('flow', this.flowVariables);
+        this.renderVariableCategory('store', this.sessionStore);
         // local не показываем в /bots, только в админке агентов
     }
     
@@ -930,7 +954,8 @@ class PromptEditor {
             ...this.companyVariables,
             ...this.userVariables,
             ...this.flowVariables,
-            ...this.localVariables
+            ...this.localVariables,
+            ...this.sessionStore
         ];
         
         allVariables.forEach(v => {
@@ -953,9 +978,9 @@ class PromptEditor {
         const modal = document.createElement('div');
         modal.className = 'prompt-variable-modal';
         
-        // Для flow переменных - выбор из company variables
+        // Для flow и store переменных - выбор из company variables
         let valueInput = '';
-        if (type === 'flow') {
+        if (type === 'flow' || type === 'store') {
             // Используем availableCompanyVars вместо companyVariables
             const vars = window.availableCompanyVars || [];
             const companyVarsOptions = vars.map(v => {
@@ -1010,7 +1035,7 @@ class PromptEditor {
             <div class="modal-overlay" onclick="this.parentElement.remove()"></div>
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5>Добавить ${type === 'flow' ? 'Flow' : 'локальную'} переменную</h5>
+                    <h5>Добавить ${type === 'flow' ? 'Flow' : type === 'store' ? 'Session Store' : 'локальную'} переменную</h5>
                     <button class="btn-close" onclick="this.closest('.prompt-variable-modal').remove()">
                         <i class="bi bi-x"></i>
                     </button>
@@ -1070,8 +1095,8 @@ class PromptEditor {
         const name = modal.querySelector('#variable-name').value.trim();
         
         let value = '';
-        if (type === 'flow') {
-            // Для flow переменных проверяем тип
+        if (type === 'flow' || type === 'store') {
+            // Для flow и store переменных проверяем тип
             const varRadio = modal.querySelector('#value-type-var');
             if (varRadio && varRadio.checked) {
                 // Ссылка на company variable
@@ -1105,7 +1130,7 @@ class PromptEditor {
         
         // Описание берем из company variable если это ссылка
         let description = '';
-        if (type === 'flow' && value.startsWith('@var:')) {
+        if ((type === 'flow' || type === 'store') && value.startsWith('@var:')) {
             const varKey = value.substring(5);
             const vars = window.availableCompanyVars || [];
             const companyVar = vars.find(v => v.name === varKey);
@@ -1121,6 +1146,8 @@ class PromptEditor {
         
         if (type === 'flow') {
             this.flowVariables.push(variable);
+        } else if (type === 'store') {
+            this.sessionStore.push(variable);
         } else {
             this.localVariables.push(variable);
         }
@@ -1164,6 +1191,8 @@ class PromptEditor {
         
         if (category === 'flow') {
             this.flowVariables = this.flowVariables.filter(v => v.name !== varName);
+        } else if (category === 'store') {
+            this.sessionStore = this.sessionStore.filter(v => v.name !== varName);
         } else if (category === 'local') {
             this.localVariables = this.localVariables.filter(v => v.name !== varName);
         }
@@ -1196,6 +1225,19 @@ class PromptEditor {
     }
     
     /**
+     * Получить session store переменные как объект для сохранения
+     * Возвращает ОРИГИНАЛЬНЫЕ значения (@var:key), а не резолвнутые
+     */
+    getSessionStore() {
+        const store = {};
+        this.sessionStore.forEach(v => {
+            // v.value уже содержит оригинальное значение (@var:key или хардкод)
+            store[v.name] = v.value;
+        });
+        return store;
+    }
+    
+    /**
      * Установить значение редактора
      */
     setValue(value) {
@@ -1212,6 +1254,8 @@ class PromptEditor {
             return this.flowVariables;
         } else if (type === 'local') {
             return this.localVariables;
+        } else if (type === 'store') {
+            return this.sessionStore;
         }
         return [];
     }
@@ -1222,6 +1266,8 @@ class PromptEditor {
     setVariables(type, variables) {
         if (type === 'flow') {
             this.flowVariables = variables;
+        } else if (type === 'store') {
+            this.sessionStore = variables;
         } else if (type === 'local') {
             this.localVariables = variables;
         }

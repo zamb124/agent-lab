@@ -18,6 +18,7 @@ from app.core.checkpointer import get_checkpointer
 from app.core.container import get_container
 from app.core.state import State
 from app.core.variables import VariableResolver, set_state_in_context
+from app.core.state_modifier import render_state_variables
 from langgraph.errors import GraphInterrupt
 from langchain_core.messages import HumanMessage
 
@@ -119,20 +120,50 @@ class BaseAgent(ABC):
             llm = get_llm()
         tools = await self.get_tools()
 
-        # Рендерим промпт с подстановкой переменных
+        # ЭТАП 1: Рендерим статические переменные (company_name, current_date и т.д.)
         local_vars = self.config.local_variables if hasattr(self.config, 'local_variables') else {}
-        rendered_prompt = VariableResolver.render_template(
+        static_rendered_prompt = VariableResolver.render_template(
             self.config.prompt,
             local_vars=local_vars
         )
-        logger.info(f"📝 Промпт отрендерен с переменными для {self.config.agent_id}")
+        logger.info(f"📝 Статические переменные подставлены для {self.config.agent_id}")
 
-        # Создаем ReAct агента с State и checkpointer
+        # ЭТАП 2: Создаем функцию prompt для динамических переменных из state
+        def dynamic_prompt(state: State) -> str:
+            """Динамический промпт, который рендерится перед каждым вызовом LLM"""
+            # Создаем контекст для подстановки
+            context = {
+                "store": state.get("store", {}),
+                "user_id": state.get("user_id", ""),
+                "session_id": state.get("session_id", ""),
+                "task_id": state.get("task_id", ""),
+                "remaining_steps": state.get("remaining_steps", 0),
+            }
+            
+            # Добавляем все ключи из store на верхний уровень для удобства
+            store = state.get("store", {})
+            if isinstance(store, dict):
+                for key, value in store.items():
+                    if key not in context:
+                        context[key] = value
+            
+            # Рендерим store переменные
+            rendered = render_state_variables(
+                static_rendered_prompt,
+                context=context,
+                full_state=state
+            )
+            
+            return rendered
+        
+        logger.info(f"🔄 Dynamic prompt создан для {self.config.agent_id}")
+
+        # Создаем ReAct агента с State, checkpointer и dynamic prompt
         checkpointer = await get_checkpointer()
         graph = create_react_agent(
             model=llm,
             tools=tools,
-            prompt=rendered_prompt,
+            prompt=dynamic_prompt,
             checkpointer=checkpointer,
             state_schema=State
         )
@@ -166,8 +197,15 @@ class BaseAgent(ABC):
         """
         run_config = config or {}
 
-        # Инициализируем state если это первый вызов
-        if "store" not in input_data:
+        # Инициализируем store начальными значениями из конфигурации агента
+        if "store" not in input_data and self.config.store:
+            input_data["store"] = self.config.store.copy()
+        elif "store" in input_data and self.config.store:
+            # Если store уже есть, добавляем только отсутствующие ключи из конфигурации
+            for key, value in self.config.store.items():
+                if key not in input_data["store"]:
+                    input_data["store"][key] = value
+        elif "store" not in input_data:
             input_data["store"] = {}
         
         if "remaining_steps" not in input_data:

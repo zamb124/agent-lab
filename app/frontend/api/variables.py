@@ -32,6 +32,7 @@ class VariablesResponse(BaseModel):
     user: List[Variable]
     flow: List[Variable]
     local: List[Variable]
+    store: List[Variable]
 
 
 @router.get("/flow/{flow_id}", response_model=VariablesResponse)
@@ -45,6 +46,7 @@ async def get_flow_variables(flow_id: str, storage: StorageDep) -> VariablesResp
     - Переменные пользователя
     - Переменные flow
     - Локальные переменные агента
+    - Session Store переменные агента
     """
     # Для нового flow возвращаем пустые переменные (только системные и компании/пользователя)
     if flow_id == 'new':
@@ -243,10 +245,23 @@ async def get_flow_variables(flow_id: str, storage: StorageDep) -> VariablesResp
                 editable=True
             ))
     
+    # Session Store переменные агента
+    store_vars = []
+    if agent_config and hasattr(agent_config, 'store') and agent_config.store:
+        for key, value in agent_config.store.items():
+            store_vars.append(Variable(
+                name=key,
+                description="Session Store переменная",
+                category="store",
+                value=value,
+                editable=True
+            ))
+    
     return VariablesResponse(
         system=system_vars,
         company=company_vars,
         user=user_vars,
         flow=flow_vars,
-        local=local_vars
+        local=local_vars,
+        store=store_vars
     )
