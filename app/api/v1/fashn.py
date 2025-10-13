@@ -8,7 +8,8 @@ import re
 import logging
 import httpx
 import json
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from typing import Optional, List
 from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException
@@ -230,8 +231,8 @@ async def process_nano_banana_try_on(request: TryOnRequest, model_record, produc
         width_info = f"ширина {request.product_width_cm} см"
         height_info = f"высота {request.product_height_cm} см" if request.product_height_cm > 0 else "высота пропорциональная"
         
-        # КРИТИЧЕСКИ ВАЖНЫЙ промпт с инструкциями по оптимальному размещению товара
-        prompt = f"PHOTO EDITING TASK (NOT GENERATION!). EXACT COPY + PRODUCT PLACEMENT. {images_info} STEP-BY-STEP INSTRUCTIONS: 1. Take image #1 AS IS (exact copy, pixel-by-pixel). 2. Analyze the person's pose in image #1: look at hands, arms, body position. 3. Place the {request.item_kind} from image #2+ in the MOST NATURAL and VISIBLE way: If hands are visible and free → person HOLDS the product in hands. If arms are along body → product on shoulder/crossbody. If hands are in pockets → product on shoulder. Make it look like the person is actually using/holding the product. 4. Product should be CLEARLY VISIBLE and look natural, not floating. 5. Keep EVERYTHING from image #1: same person, same pose, same face, same background, same clothes, same lighting, same angle. DO NOT: change person, change pose, change face, change background, improve photo, modify anything except adding product. Size reference: person {request.model_height_cm}cm, product {width_info} {height_info}. CRITICAL: 99% original image #1 + product placed naturally to maximize visibility and natural interaction. Think: How would a real person hold/wear this item in this exact pose?"
+        # КРИТИЧЕСКИ ВАЖНЫЙ промпт с детальными инструкциями по естественному размещению
+        prompt = f"PHOTO EDITING TASK - PRODUCT OVERLAY ON EXISTING PHOTO. {images_info} TASK: Add {request.item_kind} from image #2+ onto EXACT copy of image #1. CRITICAL RULES: 1. COPY image #1 exactly (pixel-perfect, no modifications to person/background/pose). 2. PRODUCT ACCURACY - Use EXACT product from image #2+: Keep ALL details identical: color, pattern, texture, shape, hardware, logos, stitching. DO NOT modify product appearance, simplify details, or change colors. Product must be PHOTOREALISTIC copy from reference image #2+. 3. ANALYZE POSE carefully: - Where are hands? (visible/hidden, free/busy, position) - Arm position? (along body/bent/extended) - Body angle? (front/side/turned) - Is person walking/standing/sitting? 4. SMART PRODUCT PLACEMENT for {request.item_kind}: HANDS FREE + VISIBLE → Person ACTIVELY HOLDS product in hand(s) naturally (like carrying a shopping bag). ARM ALONG BODY → Product hangs on shoulder/crossbody with strap visible. HANDS IN POCKETS → Product on shoulder, strap over shoulder clearly visible. WALKING/MOVEMENT → Product in motion (slight tilt/swing) naturally. The product MUST interact with person's body realistically - touching hand/shoulder/body, strap visible, natural grip. 5. VISIBILITY: Product positioned for MAXIMUM visibility in frame, clearly showing its details, pattern, and shape from reference. 6. REALISM: Product casts appropriate shadow, follows body movement, proper perspective matching the photo angle. FORBIDDEN: Changing person's pose, face, body, background, lighting. Floating products. Unnatural placement. Modifying product appearance from reference image. Simplifying or changing product details. Size: person {request.model_height_cm}cm, product {width_info} {height_info}. OUTPUT: 99.5% original image #1 + 0.5% EXACT product from image #2+ placed naturally. Product looks identical to reference, person looks like they're genuinely using/carrying the item."
         
         # Логируем детали для отладки
         logger.info("=== ДЕТАЛЬНАЯ ОТЛАДКА ПОРЯДКА ИЗОБРАЖЕНИЙ ===")
@@ -291,6 +292,47 @@ async def process_nano_banana_try_on(request: TryOnRequest, model_record, produc
         
         # Формируем ответ в том же формате что и FASHN
         job_ids = [f"nano_banana_{i}" for i in range(len(file_urls))]
+        
+        # Сохраняем запись в историю
+        context = get_context()
+        if context and context.user:
+            user_id = context.user.user_id
+            try_on_uuid = uuid.uuid4().hex
+            try_on_id = f"try_on:{user_id}:{try_on_uuid}"
+            
+            model_url = model_record.direct_s3_url or model_record.url
+            product_url_value = product_record.direct_s3_url or product_record.url
+            
+            try_on_record = {
+                "id": try_on_id,
+                "user_id": user_id,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "model_file_id": model_record.key,
+                "model_url": model_url,
+                "product_file_id": product_record.key,
+                "product_image_url": product_url_value,
+                "product_url": request.product_url,
+                "result_urls": file_urls,
+                "parameters": {
+                    "model_height_cm": request.model_height_cm,
+                    "product_width_cm": request.product_width_cm,
+                    "product_height_cm": request.product_height_cm,
+                    "item_kind": request.item_kind,
+                    "placement": request.placement,
+                    "offset_x_pct": request.offset_x_pct,
+                    "offset_y_pct": request.offset_y_pct,
+                    "visible_top_pct": request.visible_top_pct,
+                    "visible_bottom_pct": request.visible_bottom_pct,
+                    "scale_bias": request.scale_bias,
+                    "variations": request.variations
+                }
+            }
+            
+            storage = Storage()
+            await storage.set(try_on_id, json.dumps(try_on_record))
+            logger.info(f"✅ Примерка сохранена в историю: {try_on_id}")
+        else:
+            logger.warning("⚠️ Нет контекста пользователя, история не сохранена")
         
         return TryOnResponse(
             status="ok",
@@ -649,6 +691,7 @@ async def get_history_panel():
     # Получаем пользователя из контекста
     context = get_context()
     if not context or not context.user:
+        logger.warning("История примерок: нет контекста пользователя")
         return HTMLResponse("""
             <div class="history-panel-content active">
                 <div class="history-panel-header">
@@ -666,13 +709,19 @@ async def get_history_panel():
         """)
     
     user_id = context.user.user_id
+    logger.info(f"📜 Запрос истории примерок для пользователя: {user_id}")
     
     try:
         storage = Storage()
         
         # Получаем все ключи примерок для пользователя
         prefix = f"try_on:{user_id}:"
+        logger.info(f"🔍 Ищем ключи по префиксу: {prefix}")
         keys = await storage.list_by_prefix(prefix, limit=100)
+        logger.info(f"📊 Найдено ключей: {len(keys) if keys else 0}")
+        
+        if keys:
+            logger.info(f"🔑 Первые 3 ключа: {keys[:3]}")
         
         if not keys:
             return HTMLResponse("""

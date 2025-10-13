@@ -788,6 +788,10 @@ function openFullscreen(imageSrc) {
     }
 }
 
+// Делаем функции глобально доступными для onclick атрибутов
+window.closeHistoryPanel = closeHistoryPanel;
+window.openFullscreen = openFullscreen;
+
 // HTMX событие для показа панели после загрузки
 document.addEventListener('htmx:afterSwap', function(event) {
     if (event.target.id === 'historyPanel') {
