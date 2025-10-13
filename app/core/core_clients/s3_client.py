@@ -4,6 +4,7 @@ S3 клиент для работы с объектным хранилищем.
 Автоматически сохраняет записи о файлах в БД.
 """
 
+import asyncio
 import logging
 from typing import Optional, Dict, Any, List, Union
 from pathlib import Path
@@ -52,41 +53,50 @@ class S3Client:
         self.track_files = track_files
         self._session = None
         self._client = None
-        self._storage = None  # Storage будет передаваться через dependency injection
+        self._storage = None
+        self._client_lock: Optional[asyncio.Lock] = None
+
+    def _get_client_lock(self) -> asyncio.Lock:
+        """Получает или создает лок для клиента"""
+        if self._client_lock is None:
+            self._client_lock = asyncio.Lock()
+        return self._client_lock
 
     async def _get_client(self):
-        """Получает или создает S3 клиент"""
+        """Получает или создает S3 клиент (потокобезопасно)"""
         if self._client is None:
-            if self._session is None:
-                self._session = aioboto3.Session()
+            lock = self._get_client_lock()
+            async with lock:
+                if self._client is None:
+                    if self._session is None:
+                        self._session = aioboto3.Session()
 
-            # Настройки для разных провайдеров
-            client_config = {}
-            if self.provider_name == "vkcloud":
-                # VK Cloud требует старую версию подписи
-                client_config["config"] = Config(signature_version="s3")
+                    client_config = {}
+                    if self.provider_name == "vkcloud":
+                        client_config["config"] = Config(signature_version="s3")
 
-            # aioboto3 клиент нужно использовать как контекстный менеджер
-            self._client = await self._session.client(
-                "s3",
-                endpoint_url=self.endpoint_url,
-                aws_access_key_id=self.access_key_id,
-                aws_secret_access_key=self.secret_access_key,
-                region_name=self.region_name,
-                **client_config,
-            ).__aenter__()
+                    self._client = await self._session.client(
+                        "s3",
+                        endpoint_url=self.endpoint_url,
+                        aws_access_key_id=self.access_key_id,
+                        aws_secret_access_key=self.secret_access_key,
+                        region_name=self.region_name,
+                        **client_config,
+                    ).__aenter__()
 
         return self._client
 
     async def close(self):
-        """Закрывает соединения клиента"""
-        if self._client:
-            try:
-                await self._client.__aexit__(None, None, None)
-            except Exception:
-                pass
-            self._client = None
-            self._session = None
+        """Закрывает соединения клиента (потокобезопасно)"""
+        lock = self._get_client_lock()
+        async with lock:
+            if self._client:
+                try:
+                    await self._client.__aexit__(None, None, None)
+                except Exception:
+                    pass
+                self._client = None
+                self._session = None
 
     async def __aenter__(self):
         """Асинхронный контекстный менеджер"""
@@ -656,11 +666,21 @@ class S3ClientFactory:
 
 # Глобальный экземпляр для удобства
 _default_s3_client: Optional[S3Client] = None
+_default_s3_client_lock: Optional[asyncio.Lock] = None
+
+
+def _get_lock() -> asyncio.Lock:
+    """Получает или создает лок для глобального S3 клиента"""
+    global _default_s3_client_lock
+    if _default_s3_client_lock is None:
+        _default_s3_client_lock = asyncio.Lock()
+    return _default_s3_client_lock
 
 
 async def get_default_s3_client() -> Optional[S3Client]:
     """
     Получает дефолтный S3 клиент на основе конфигурации.
+    Потокобезопасно создает клиент при первом обращении.
 
     Returns:
         S3 клиент или None если не настроен
@@ -668,20 +688,22 @@ async def get_default_s3_client() -> Optional[S3Client]:
     global _default_s3_client
 
     if _default_s3_client is None:
-        # Проверяем есть ли конфигурация S3
-        if (
-            hasattr(settings, "s3")
-            and settings.s3.enabled
-            and settings.s3.default_bucket
-        ):
-            _default_s3_client = S3ClientFactory.create_client_for_bucket(
-                settings.s3.default_bucket
-            )
-            logger.info(
-                f"✅ Инициализирован дефолтный S3 клиент для бакета: {settings.s3.default_bucket}"
-            )
-        else:
-            logger.info("ℹ️ S3 не настроен в конфигурации")
+        lock = _get_lock()
+        async with lock:
+            if _default_s3_client is None:
+                if (
+                    hasattr(settings, "s3")
+                    and settings.s3.enabled
+                    and settings.s3.default_bucket
+                ):
+                    _default_s3_client = S3ClientFactory.create_client_for_bucket(
+                        settings.s3.default_bucket
+                    )
+                    logger.info(
+                        f"✅ Инициализирован дефолтный S3 клиент для бакета: {settings.s3.default_bucket}"
+                    )
+                else:
+                    logger.info("ℹ️ S3 не настроен в конфигурации")
 
     return _default_s3_client
 
@@ -690,7 +712,9 @@ async def close_default_s3_client():
     """Закрывает дефолтный S3 клиент"""
     global _default_s3_client
 
-    if _default_s3_client:
-        await _default_s3_client.close()
-        _default_s3_client = None
-        logger.info("✅ Дефолтный S3 клиент закрыт")
+    lock = _get_lock()
+    async with lock:
+        if _default_s3_client:
+            await _default_s3_client.close()
+            _default_s3_client = None
+            logger.info("✅ Дефолтный S3 клиент закрыт")

@@ -16,9 +16,11 @@ logger = logging.getLogger(__name__)
 # Создаем асинхронный движок
 engine = create_async_engine(
     settings.database.url,
-    echo=False,  # Отключаем логирование SQL запросов
-    pool_pre_ping=True,  # Проверка соединений перед использованием
-    pool_recycle=3600,  # Пересоздание соединений каждый час
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+    pool_size=5,
+    max_overflow=10,
 )
 
 # Создаем фабрику сессий

@@ -30,47 +30,9 @@ os.environ["S3__ENABLED"] = "true"
 os.environ["S3__DEFAULT_BUCKET"] = "vkbucket"
 
 
-@pytest.fixture(autouse=True, scope="function")
-def cleanup_async_resources():
-    """Очистка async ресурсов между тестами"""
-    yield
-
-    # Принудительная очистка после каждого теста
-    try:
-        import asyncio
-        import gc
-
-        # Получаем текущий loop
-        try:
-            loop = asyncio.get_running_loop()
-            # Отменяем все pending tasks
-            pending = asyncio.all_tasks(loop)
-            for task in pending:
-                if not task.done():
-                    task.cancel()
-        except RuntimeError:
-            # Нет running loop
-            pass
-
-        # Принудительный garbage collection
-        gc.collect()
-
-        # Очистка SQLAlchemy connections
-        try:
-            from app.db.database import engine
-            if hasattr(engine, 'pool'):
-                engine.pool.dispose()
-        except Exception:
-            pass
 
 
-    except Exception as e:
-        print(f"⚠️ Ошибка очистки ресурсов: {e}")
-
-
-
-
-@pytest.fixture
+@pytest_asyncio.fixture
 async def client():
     """HTTP клиент для тестирования API"""
     import httpx
@@ -144,6 +106,30 @@ async def save_test_company():
     await storage.set(f"subdomain:{test_company.subdomain}", f'"{test_company.company_id}"', force_global=True)
     
     yield test_company
+
+
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def cleanup_db():
+    """Очищает соединения с БД после каждого теста"""
+    yield
+    
+    import gc
+    gc.collect()
+
+
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def migrated_agents():
+    """Мигрирует агенты из кода в БД для каждого теста (автоматически)"""
+    from app.core.migrator import Migrator
+    
+    migrator = Migrator()
+    try:
+        await migrator.run_full_migration()
+        await migrator._set_system_context()
+    except Exception as e:
+        print(f"\n⚠️ Автомиграция не удалась (это нормально): {e}")
+    
+    yield
 
 
 # Переопределяем LLM конфиги агентов на mock для всех тестов (один раз при импорте)
