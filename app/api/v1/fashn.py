@@ -101,16 +101,15 @@ async def download_image(url: str) -> bytes:
                 logger.error(f"Файл {file_id} не найден в базе данных")
                 raise HTTPException(status_code=404, detail=f"Файл {file_id} не найден")
 
-            # Используем прямую ссылку на S3
-            s3_url = file_record.direct_s3_url
-            if not s3_url:
+            # Используем прямой S3 URL из модели
+            if not file_record.direct_s3_url:
                 logger.error(f"Не удалось получить S3 URL для файла {file_id}")
                 raise HTTPException(
                     status_code=500, detail="Не удалось получить ссылку на файл"
                 )
 
-            logger.info(f"Использую прямую S3 ссылку: {s3_url}")
-            url = s3_url  # Заменяем на абсолютную ссылку
+            logger.info(f"Использую прямую S3 ссылку: {file_record.direct_s3_url}")
+            url = file_record.direct_s3_url
 
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -218,20 +217,21 @@ async def process_nano_banana_try_on(request: TryOnRequest, model_record, produc
                     additional_product_records.append(additional_record)
                     reference_file_ids.append(additional_file_id)
         
-        # Создаем промпт без переносов строк для избежания ошибки HTTP заголовков
-        images_info = f"У тебя есть {len(reference_file_ids)} изображений. АНАЛИЗИРУЙ ИХ ПО ПОРЯДКУ: Изображение №1 (первое) = МОДЕЛЬ - человек, которого НЕ МЕНЯЙ! Используй ТОЧНО его! "
+        # Создаем более строгий промпт для photo editing (не generation!)
+        images_info = f"РЕДАКТИРОВАНИЕ ФОТО (НЕ ГЕНЕРАЦИЯ!). У тебя {len(reference_file_ids)} изображения: Изображение №1 = БАЗА - фото человека которое НЕ ТРОГАЙ! Скопируй его точь-в-точь! "
         
-        if len(reference_file_ids) > 2:  # Больше чем модель + основное изображение товара
+        if len(reference_file_ids) > 2:
             for i in range(2, len(reference_file_ids) + 1):
-                images_info += f"Изображение №{i} = ТОВАР ({request.item_kind}) - ракурс {i-1}, изучи детали. "
+                images_info += f"Изображение №{i} = {request.item_kind.upper()} ракурс {i-1}. "
         else:
-            images_info += f"Изображение №2 (второе) = ТОВАР ({request.item_kind}) для добавления на модель. "
+            images_info += f"Изображение №2 = {request.item_kind.upper()} для наложения. "
         
         # Определяем размеры товара
         width_info = f"ширина {request.product_width_cm} см"
         height_info = f"высота {request.product_height_cm} см" if request.product_height_cm > 0 else "высота пропорциональная"
         
-        prompt = f"СТРОГО ЗАПРЕЩЕНО СОЗДАВАТЬ НОВЫХ ЛЮДЕЙ! ЗАДАЧА: Взять СУЩЕСТВУЮЩЕГО человека с первого изображения и добавить на него товар. {images_info} АБСОЛЮТНЫЕ ТРЕБОВАНИЯ: ПЕРВОЕ изображение содержит БАЗОВОГО ЧЕЛОВЕКА - это основа, НЕ МЕНЯЙ ЕГО ВООБЩЕ! Используй ТОЧНО ЭТУ МОДЕЛЬ как есть - ту же позу, то же тело, тот же фон, ту же одежду. ЗАПРЕЩЕНО: создавать нового человека, менять лицо, менять позу, менять фон, менять тело модели. РАЗРЕШЕНО: только добавить товар с других изображений на СУЩЕСТВУЮЩУЮ модель. ПОШАГОВО: 1. Возьми ТОЧНУЮ копию человека с изображения №1. 2. НЕ МЕНЯЙ ничего в этом человеке. 3. Добавь товар ({request.item_kind}) с изображений №2+ в позиции {request.placement}. 4. Товар должен выглядеть точно как на исходных изображениях. КРИТИЧНО: Результат должен быть ТОТ ЖЕ человек с изображения №1 + товар с изображений №2+. НЕ создавай нового человека, НЕ меняй существующего человека, НЕ улучшай фото - только добавь товар! Размеры: модель {request.model_height_cm} см, товар {width_info} и {height_info}. ФИНАЛЬНЫЙ РЕЗУЛЬТАТ: ТОЧНО тот же человек с первого изображения + товар с других изображений, без изменения модели."
+        # КРИТИЧЕСКИ ВАЖНЫЙ промпт с инструкциями по оптимальному размещению товара
+        prompt = f"PHOTO EDITING TASK (NOT GENERATION!). EXACT COPY + PRODUCT PLACEMENT. {images_info} STEP-BY-STEP INSTRUCTIONS: 1. Take image #1 AS IS (exact copy, pixel-by-pixel). 2. Analyze the person's pose in image #1: look at hands, arms, body position. 3. Place the {request.item_kind} from image #2+ in the MOST NATURAL and VISIBLE way: If hands are visible and free → person HOLDS the product in hands. If arms are along body → product on shoulder/crossbody. If hands are in pockets → product on shoulder. Make it look like the person is actually using/holding the product. 4. Product should be CLEARLY VISIBLE and look natural, not floating. 5. Keep EVERYTHING from image #1: same person, same pose, same face, same background, same clothes, same lighting, same angle. DO NOT: change person, change pose, change face, change background, improve photo, modify anything except adding product. Size reference: person {request.model_height_cm}cm, product {width_info} {height_info}. CRITICAL: 99% original image #1 + product placed naturally to maximize visibility and natural interaction. Think: How would a real person hold/wear this item in this exact pose?"
         
         # Логируем детали для отладки
         logger.info("=== ДЕТАЛЬНАЯ ОТЛАДКА ПОРЯДКА ИЗОБРАЖЕНИЙ ===")

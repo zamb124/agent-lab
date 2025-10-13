@@ -144,10 +144,28 @@ class FileRecord(BaseModel):
             return None
 
         from app.core.context import get_context
+        from app.core.config import settings
+        
         context = get_context()
         subdomain = context.active_company.subdomain
+        
+        # Для локального окружения используем localhost
+        if settings.server.env in ("local", "development"):
+            protocol = "http"
+            host = f"localhost:{settings.server.port}"
+            return f"{protocol}://{host}/api/v1/files/download/{self.file_id}"
+        
+        # Для продакшн используем домен с поддоменом
+        return f"https://{subdomain}.{settings.server.domain}/api/v1/files/download/{self.file_id}"
 
-        return f"https://{subdomain}.agents-lab.ru/api/v1/files/download/{self.file_id}"
+    @property
+    def direct_s3_url(self) -> Optional[str]:
+        """Прямой S3 URL для доступа к файлу"""
+        if not self.s3_endpoint or not self.s3_bucket or not self.s3_key:
+            return None
+        
+        endpoint = self.s3_endpoint.rstrip('/')
+        return f"{endpoint}/{self.s3_bucket}/{self.s3_key}"
 
 
 class AudioRecord(FileRecord):

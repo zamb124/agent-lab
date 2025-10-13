@@ -120,13 +120,37 @@ class APIClient {
     }
     
     async upload(url, formData) {
-        return this.request(url, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${this.getAuthToken()}`
-            },
-            body: formData
-        });
+        const fullUrl = this.baseURL + url;
+        const token = this.getAuthToken();
+        
+        const headers = {};
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        try {
+            const response = await fetch(fullUrl, {
+                method: 'POST',
+                headers: headers,
+                body: formData
+            });
+            
+            if (response.status === 401) {
+                this.handleUnauthorized();
+                throw new Error('Unauthorized');
+            }
+            
+            if (!response.ok) {
+                const error = await this.parseError(response);
+                throw error;
+            }
+            
+            return await this.parseResponse(response);
+            
+        } catch (error) {
+            console.error('File upload failed:', error);
+            throw error;
+        }
     }
 }
 
