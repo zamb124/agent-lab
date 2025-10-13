@@ -222,22 +222,24 @@ async def process_nano_banana_try_on(request: TryOnRequest, model_record, produc
 
 **CONTEXT & INPUTS:**
 You are provided with {len(reference_file_ids)} images:
-- Image #1: BASE - Person photo. This image MUST remain the primary canvas. DO NOT alter the person's identity, face, body, clothing, hair, background, or lighting from this base image.
-- Images #2-{len(reference_file_ids)}: REFERENCE - {request.item_kind.upper()} product(s). If multiple, these are DIFFERENT ANGLES of the *SAME SINGLE PRODUCT*. Study all angles to fully understand the product's 3D form, texture, and details.
+- **Image #1: BASE - Person photo (WITHOUT THE TARGET PRODUCT).** This is the primary canvas. It features a person, potentially with their own clothing or accessories, but **NOT** the specific {request.item_kind} you need to add. This image MUST remain the primary canvas. DO NOT alter the person's identity, face, body, clothing, hair, background, or lighting from this base image.
+- **Images #2-{len(reference_file_ids)}: REFERENCE - {request.item_kind.upper()} product(s) and/or person with product.** These images serve as detailed references. If multiple, they show DIFFERENT ANGLES of the *SAME SINGLE TARGET PRODUCT*. They might also include a person wearing/holding a product (either the target product or a similar one) to demonstrate natural interaction. Study all angles and examples to fully understand the target product's 3D form, texture, details, and how it naturally interacts with a person.
 
 **YOUR SOLE OBJECTIVE:**
-Integrate ONE {request.item_kind} from the reference images onto the person in Image #1. This is a sophisticated photo editing task, akin to a professional retoucher adding a product in Photoshop, NOT generating a new scene.
+Integrate ONE {request.item_kind} from the reference images (Images #2+) onto the person in Image #1. This is a sophisticated photo editing task, akin to a professional retoucher adding a product in Photoshop, NOT generating a new scene. The goal is a seamless, natural integration, making it look as if the person in Image #1 was originally photographed with the target product.
 
 **CRITICAL REQUIREMENTS FOR NATURAL & REALISTIC INTEGRATION:**
 
 1.  **PERSON & SCENE INTEGRITY (ABSOLUTE):**
     *   **DO NOT GENERATE:** No new person, no new background, no new scene.
     *   **PRESERVE:** The exact person (face, body, clothing, identity), background, and lighting from Image #1 must be maintained.
+    *   **STRICTLY FORBIDDEN - PERSON REPLACEMENT:** You MUST use the EXACT person from Image #1. DO NOT replace, swap, or substitute the person with anyone from reference images. If reference images show a person with the product, use that ONLY to understand product interaction, NOT to replace the person in Image #1. The person's identity, face, and body from Image #1 are SACRED and UNCHANGEABLE.
     *   **ALLOWED MINOR ADJUSTMENTS (ONLY FOR PRODUCT INTERACTION):**
         *   Slight camera angle rotation (5-15 degrees) to optimize product visibility.
         *   Subtle body angle/turn of the person to naturally showcase the product (e.g., turning a shoulder for a bag).
         *   Realistic modification of hand/arm position to VISIBLY HOLD, WEAR, or CARRY the product. Fingers MUST visibly grip straps, hands MUST support bottoms, straps MUST go over shoulders naturally.
-    *   **FORBIDDEN:** Changing facial features, identity, clothing, hair, background, or dramatic lighting shifts. Floating products without physical contact. Hands "holding" without visible, convincing grip. Products "on" a person without visible means of attachment (e.g., straps, support).
+        *   Minor pose adjustments to accommodate product naturally.
+    *   **FORBIDDEN:** REPLACING or CHANGING the person from Image #1. Changing facial features, identity, clothing, hair, background, or dramatic lighting shifts. Floating products without physical contact. Hands "holding" without visible, convincing grip. Products "on" a person without visible means of attachment (e.g., straps, support).
 
 2.  **PRODUCT SIZE & PROPORTIONS (PARAMOUNT):**
     *   **PERSON HEIGHT:** {request.model_height_cm} cm.
@@ -268,6 +270,7 @@ Integrate ONE {request.item_kind} from the reference images onto the person in I
     *   **ENVIRONMENTAL INTEGRATION:** The product must cast appropriate shadows, follow body contours, and maintain proper perspective matching the original photo's angle and lighting.
 
 **FORBIDDEN ACTIONS (REITERATED):**
+*   **REPLACING or SUBSTITUTING the person from Image #1 with anyone else.**
 *   Changing the person's face, identity, body position, clothing, hair.
 *   Changing the background or lighting dramatically.
 *   Products floating unnaturally without contact.
@@ -276,6 +279,7 @@ Integrate ONE {request.item_kind} from the reference images onto the person in I
 *   Major pose changes that alter the person's identity or scene.
 *   Shrinking the product to an unrealistic size to fit the frame.
 *   Omitting the product entirely.
+*   Adding multiple products.
 
 **EXPECTED OUTPUT:**
 A single, high-quality edited image that is 98-99.5% identical to the original Image #1, with 0.5-2% being ONE EXACT product from the reference images, placed naturally and realistically. The product must look identical to the reference, and the person must appear to be genuinely using or carrying the single item, as if captured by a professional photographer.
