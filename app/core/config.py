@@ -49,7 +49,7 @@ class DatabaseConfig(BaseModel):
 class OpenRouterConfig(BaseModel):
     """Конфигурация OpenRouter"""
 
-    api_key: str
+    api_key: Optional[str] = None
     base_url: str = "https://openrouter.ai/api/v1"
     site_url: str = "https://agents-lab.ru"
     site_name: str = "Agent Lab"
@@ -71,7 +71,7 @@ class ModelConfig(BaseModel):
 class LLMConfig(BaseModel):
     """Конфигурация LLM через OpenRouter"""
 
-    openrouter: OpenRouterConfig
+    openrouter: Optional[OpenRouterConfig] = None
     models: Dict[str, ModelConfig] = Field(default_factory=dict)
     default_model: str = "anthropic/claude-sonnet-4.5"
 

@@ -135,7 +135,7 @@ class TestSettingsIntegration:
             test_config = {
                 "server": {"port": 9001, "debug": True},
                 "auth": {"enabled": False},
-                "llm": {"default_provider": "anthropic"},
+                "llm": {"default_model": "anthropic/claude-sonnet-4.5"},
                 "s3": {
                     "enabled": True,
                     "default_bucket": "vkbucket",
@@ -156,7 +156,7 @@ class TestSettingsIntegration:
         
         try:
             # Сохраняем ENV переменную и временно удаляем
-            original_llm_provider = os.environ.pop("LLM__DEFAULT_PROVIDER", None)
+            original_llm_model = os.environ.pop("LLM__DEFAULT_MODEL", None)
             original_server_debug = os.environ.pop("SERVER__DEBUG", None)
             
             # Мокаем функцию get_config_paths чтобы использовать наш временный файл
@@ -175,14 +175,14 @@ class TestSettingsIntegration:
             assert settings.server.port == 9001
             assert settings.server.debug
             assert not settings.auth.enabled
-            assert settings.llm.default_provider == "anthropic"
+            assert settings.llm.default_model == "anthropic/claude-sonnet-4.5"
             
         finally:
             # Восстанавливаем оригинальную функцию
             config_utils.get_config_paths = original_get_config_paths
             # Восстанавливаем ENV переменные
-            if original_llm_provider:
-                os.environ["LLM__DEFAULT_PROVIDER"] = original_llm_provider
+            if original_llm_model:
+                os.environ["LLM__DEFAULT_MODEL"] = original_llm_model
             if original_server_debug:
                 os.environ["SERVER__DEBUG"] = original_server_debug
             # Сбрасываем синглтон - следующий get_settings() создаст новый с правильным конфигом
@@ -223,6 +223,9 @@ class TestAuthConfiguration:
         # Создаем JSON с auth конфигурацией
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
             test_config = {
+                "llm": {
+                    "default_model": "mock-gpt-4"
+                },
                 "auth": {
                     "enabled": True,
                     "providers": {
@@ -301,23 +304,19 @@ class TestLLMConfiguration:
     """Тесты конфигурации LLM"""
     
     def test_multiple_llm_providers(self):
-        """Тест конфигурации множественных LLM провайдеров"""
+        """Тест конфигурации LLM с несколькими моделями"""
         # Создаем JSON с LLM конфигурацией
         with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
             test_config = {
                 "llm": {
-                    "default_provider": "openai",
-                    "providers": {
-                        "openai": {
-                            "api_key": None,
-                            "base_url": "https://api.openai.com/v1",
-                            "default_model": "gpt-4",
-                            "enabled": True,
-                            "models": {"gpt-4": {}, "gpt-3.5-turbo": {}}
+                    "default_model": "anthropic/claude-sonnet-4.5",
+                    "models": {
+                        "anthropic/claude-sonnet-4.5": {
+                            "max_tokens": 8192,
+                            "temperature": 0.2
                         },
-                        "mock": {
-                            "enabled": True,
-                            "default_model": "mock-gpt"
+                        "mock-gpt-4": {
+                            "temperature": 0.1
                         }
                     }
                 }
@@ -327,7 +326,7 @@ class TestLLMConfiguration:
         
         try:
             # Сохраняем и удаляем ENV переменную
-            original_llm_provider = os.environ.pop("LLM__DEFAULT_PROVIDER", None)
+            original_llm_model = os.environ.pop("LLM__DEFAULT_MODEL", None)
             
             # Мокаем конфигурацию
             from app.core import config_utils
@@ -338,34 +337,31 @@ class TestLLMConfiguration:
             from app.core.config import Settings
             test_settings = Settings()
             
-            # Проверяем что провайдеры загружены
-            assert "openai" in test_settings.llm.providers
-            assert "mock" in test_settings.llm.providers
+            # Проверяем что модели загружены
+            assert "anthropic/claude-sonnet-4.5" in test_settings.llm.models
+            assert "mock-gpt-4" in test_settings.llm.models
             
-            # Проверяем дефолтный провайдер
-            assert test_settings.llm.default_provider == "openai"
+            # Проверяем дефолтную модель
+            assert test_settings.llm.default_model == "anthropic/claude-sonnet-4.5"
             
-            # Проверяем конфигурацию OpenAI
-            openai_config = test_settings.llm.providers["openai"]
-            assert openai_config.base_url == "https://api.openai.com/v1"
-            assert openai_config.default_model == "gpt-4"
-            assert openai_config.enabled
-            # Models мерджится с conf.json, проверяем что OpenAI провайдер вообще работает
-            assert isinstance(openai_config.models, dict)
+            # Проверяем конфигурацию модели
+            claude_config = test_settings.llm.models["anthropic/claude-sonnet-4.5"]
+            assert claude_config.max_tokens == 8192
+            assert claude_config.temperature == 0.2
             
             # Очистка
             config_utils.get_config_paths = original_get_config_paths
             # Восстанавливаем ENV переменную
-            if original_llm_provider:
-                os.environ["LLM__DEFAULT_PROVIDER"] = original_llm_provider
+            if original_llm_model:
+                os.environ["LLM__DEFAULT_MODEL"] = original_llm_model
             os.unlink(temp_path)
             
         except Exception:
             # Очистка в случае ошибки
             if 'original_get_config_paths' in locals():
                 config_utils.get_config_paths = original_get_config_paths
-            if 'original_llm_provider' in locals() and original_llm_provider:
-                os.environ["LLM__DEFAULT_PROVIDER"] = original_llm_provider
+            if 'original_llm_model' in locals() and original_llm_model:
+                os.environ["LLM__DEFAULT_MODEL"] = original_llm_model
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
             raise
@@ -480,21 +476,21 @@ class TestConfigStructure:
         from app.core.config import settings
         
         llm_config = settings.llm
-        assert hasattr(llm_config, 'default_provider')
-        assert hasattr(llm_config, 'providers')
+        assert hasattr(llm_config, 'default_model')
+        assert hasattr(llm_config, 'models')
+        assert hasattr(llm_config, 'openrouter')
         
-        # Проверяем провайдеры LLM
-        assert isinstance(llm_config.providers, dict)
+        # Проверяем что models это dict
+        assert isinstance(llm_config.models, dict)
         
-        for provider_name, provider_config in llm_config.providers.items():
-            assert hasattr(provider_config, 'api_key')
-            assert hasattr(provider_config, 'base_url')
-            assert hasattr(provider_config, 'default_model')
-            assert hasattr(provider_config, 'default_temperature')
-            assert hasattr(provider_config, 'timeout')
-            assert hasattr(provider_config, 'max_retries')
-            assert hasattr(provider_config, 'enabled')
-            assert hasattr(provider_config, 'models')
+        # Проверяем структуру OpenRouter конфигурации если она есть
+        if llm_config.openrouter:
+            openrouter = llm_config.openrouter
+            assert hasattr(openrouter, 'api_key')
+            assert hasattr(openrouter, 'base_url')
+            assert hasattr(openrouter, 'enabled')
+            assert hasattr(openrouter, 'timeout')
+            assert hasattr(openrouter, 'max_retries')
     
     def test_server_config_values(self):
         """Тест значений конфигурации сервера"""

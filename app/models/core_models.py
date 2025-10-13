@@ -753,12 +753,13 @@ class AgentConfig(BuilderEntity):
         Преобразует список tools в ToolReference.
         
         Поддерживает:
+        - dict → создает ToolReference из dict (при загрузке из JSON)
+        - ToolReference → как есть
         - Функции → ToolReference с tool_id=путь
         - Классы → ToolReference с tool_id=путь
         - Строки (mcp:, agent:) → ToolReference как есть
         - StructuredTool → ToolReference с извлечением кода
         - BaseAgent экземпляры → ToolReference с tool_id=путь к классу
-        - Уже ToolReference → как есть
         """
         if not v:
             return []
@@ -766,7 +767,11 @@ class AgentConfig(BuilderEntity):
         references = []
         
         for tool in v:
-            if isinstance(tool, ToolReference):
+            # Если это dict (загрузка из JSON), создаем ToolReference
+            if isinstance(tool, dict):
+                references.append(ToolReference(**tool))
+            
+            elif isinstance(tool, ToolReference):
                 references.append(tool)
             
             elif inspect.isfunction(tool) or inspect.ismethod(tool):
