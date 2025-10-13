@@ -83,26 +83,41 @@ DELETE /api/v1/admin/variables/telegram_bot_token
 
 ## Scope переменных
 
-### Company Variables (системные, статичные):
-- `{company_name}`, `{company_id}`, `{company_subdomain}`
-- `{user_name}`, `{user_id}`  
-- `{current_date}`, `{current_time}`
+### 1. Системные переменные (автоматические):
+- `{company_name}`, `{company_id}`, `{company_subdomain}` - из активной компании
+- `{user_name}`, `{user_id}` - из текущего пользователя
+- `{current_date}`, `{current_time}`, `{current_datetime}` - текущая дата/время
+- `{current_year}`, `{current_month}`, `{current_day}` - компоненты даты
 - Доступны всегда во всех flow
+- Резолвятся при компиляции графа (статические)
 
-### Variables (хранилище секретов):
-- `telegram_bot_token`, `weather_api_key`
+### 2. Company Variables (хранилище секретов):
+- `telegram_bot_token`, `weather_api_key`, `api_endpoint` и т.д.
+- Создаются через UI `/variables` или API
 - НЕ доступны напрямую в промпте
-- Используются через Flow переменные с `@var:key`
+- Используются через `@var:key` ссылки в flow.variables или flow.store
+- Изоляция per-company автоматическая
 
-### Flow переменные:
+### 3. Flow переменные (статические):
 - Объявляются в `FlowConfig.variables`
-- Доступны всем агентам в flow
+- Резолвятся ОДИН РАЗ при компиляции графа
+- Доступны всем агентам в flow через `{variable}`
 - Можно использовать хардкод или `@var:key` ссылки
+- Используй для: конфигурация, константы, настройки
 
-### Local переменные (только в админке агентов):
+### 4. Session Store (динамические):
+- Объявляются в `FlowConfig.store` или `AgentConfig.store` (начальные значения)
+- Резолвятся ДИНАМИЧЕСКИ перед каждым вызовом LLM
+- Доступны через `{store.key}` или `session_get("key")`
+- Автоматически персистятся в БД (PostgreSQL checkpointer)
+- Общие для ВСЕХ агентов в цепочке (широкая память)
+- Используй для: накопление данных, счетчики, флаги, история диалога
+
+### 5. Local переменные (статические, редкие):
 - Объявляются в `AgentConfig.local_variables`
 - Доступны только конкретному агенту
-- Редактируются через `/frontend/models/agent`
+- Перекрывают flow.variables
+- Редактируются через админку агентов `/frontend/models/agent`
 
 ## Использование в конфигурации
 
@@ -177,18 +192,154 @@ AgentConfig(
 )
 ```
 
-### AgentConfig.prompt
+### FlowConfig.store и AgentConfig.store
 
-**Подстановка переменных flow:**
+**Начальные значения для Session Store:**
 ```python
-AgentConfig(
-    prompt="Привет! Я {bot_name}, помогу с {service_type}"
+FlowConfig(
+    flow_id="weather_flow",
+    store={
+        "max_requests_per_session": 10,          # Хардкод
+        "show_welcome": True,                    # Хардкод
+        "api_key": "@var:weather_api_key",       # Ссылка
+        "units": {
+            "temperature": "celsius",            # Вложенные данные
+            "wind": "ms"
+        }
+    }
 )
 
-# В runtime:
-# bot_name = "Weather Bot" (из flow.variables)
-# service_type = "погодой" (из flow.variables)
-# Результат: "Привет! Я Weather Bot, помогу с погодой"
+AgentConfig(
+    agent_id="weather_agent",
+    store={
+        "requests_count": 0,
+        "show_tips": True,
+        "preferred_units": "celsius"
+    }
+)
+```
+
+**Работа с Session Store в промптах и тулах:**
+```python
+# В промпте агента (динамическая подстановка)
+prompt = """
+Запросов в диалоге: {#messages.count}
+Последний город: {?store.last_city|не было}
+Счетчик: {?store.requests_count|0}
+"""
+
+# В туле (изменение store)
+@tool
+def save_city(city: str) -> str:
+    state = get_state()
+    state["store"]["last_city"] = city
+    state["store"]["requests_count"] = state["store"].get("requests_count", 0) + 1
+    return f"Сохранено: {city}"
+
+# Или через session_tools
+session_set("last_city", "Москва")
+session_get("last_city")  # → "Москва"
+```
+
+### AgentConfig.prompt
+
+**Унифицированный синтаксис переменных:**
+```python
+AgentConfig(
+    prompt="""
+    Ты {bot_name} компании {?company_name|Weather Service}.
+    
+    СТАТИЧЕСКИЕ (резолвятся при компиляции):
+    - Email: {?support_email|support@company.com}
+    - Таймаут: {?timeout|30} минут
+    - Настройка: {settings.language}
+    
+    ДИНАМИЧЕСКИЕ (резолвятся перед каждым вызовом LLM):
+    - Последний запрос: {?store.last_city|нет}
+    - Всего запросов: {?store.count|0}
+    - Запросов в диалоге: {#messages.count}
+    
+    {?store.last_city:
+      КОНТЕКСТ: Ранее вы интересовались {store.last_city}.
+    }
+    """
+)
+```
+
+## Унифицированный синтаксис в промптах
+
+Все переменные (статические и динамические) используют единый синтаксис:
+
+### Базовый синтаксис
+
+```python
+{variable}              # Обычная подстановка
+{?variable}             # Опциональная (пустая строка если нет)
+{?variable|default}     # Опциональная со значением по умолчанию
+{dict.nested.key}       # Вложенные данные
+{#special.function}     # Специальные функции (только для state)
+```
+
+### Примеры
+
+```python
+# Обычная подстановка
+"Компания: {company_name}"           → "Компания: ООО Доставка"
+"Город: {store.last_city}"           → "Город: Москва"
+
+# Опциональная (без дефолта)
+"Email: {?user_email}"               → "Email: " (пусто если нет)
+"Склад: {?store.warehouse_name}"     → "Склад: " (пусто если нет)
+
+# Опциональная с дефолтом
+"Email: {?user_email|не указан}"     → "Email: не указан"
+"Таймаут: {?timeout|30} сек"         → "Таймаут: 30 сек"
+"Склад: {?store.warehouse|НЕТ}"      → "Склад: НЕТ"
+
+# Вложенные данные
+"Язык: {settings.language}"          → "Язык: ru"
+"Температура: {store.units.temp}"    → "Температура: celsius"
+
+# Специальные функции (state)
+"Сообщений: {#messages.count}"       → "Сообщений: 5"
+"Ключи: {#store.keys}"               → "Ключи: warehouse_id, courier_id"
+"Пустой: {#store.empty}"             → "Пустой: false"
+```
+
+### Условные блоки
+
+```python
+prompt = """
+{?store.warehouse_id:
+  ✅ Склад определен: {store.warehouse_name} (ID: {store.warehouse_id})
+  Переходим к следующему этапу.
+|
+  ⏳ Склад еще не определен.
+  Используй warehouse_agent для определения склада.
+}
+"""
+```
+
+### Комбинирование статических и динамических
+
+```python
+prompt = """
+Ты {bot_name} компании {company_name}.
+Дата: {current_date}
+
+СТАТИЧЕСКИЕ НАСТРОЙКИ:
+- Email поддержки: {?support_email|support@company.com}
+- Таймаут: {?timeout|30} минут
+
+ДИНАМИЧЕСКИЕ ДАННЫЕ СЕССИИ:
+- Последний запрос: {?store.last_query|нет}
+- Всего запросов: {?store.requests_count|0}
+- Сообщений в истории: {#messages.count}
+
+{?store.last_query:
+  КОНТЕКСТ: Ранее вы спрашивали: "{store.last_query}"
+}
+"""
 ```
 
 ## Где применяются переменные
@@ -227,15 +378,77 @@ AgentConfig.prompt = "Я {bot_name}, работаю {timeout} минут"
 # Автоматически подставляется из context.flow_variables
 ```
 
-### 4. **Runtime state.store (сессионные переменные)**
+### 4. **Session Store (динамические переменные сессии)**
 
+**Автоматическая персистентность:**
 ```python
-# В агенте или туле
-state.store["user_name"] = "Виктор"
-state.store["current_city"] = "Москва"
+# В туле
+@tool
+def save_warehouse(warehouse_id: str, warehouse_name: str) -> str:
+    state = get_state()
+    state["store"]["warehouse_id"] = warehouse_id
+    state["store"]["warehouse_name"] = warehouse_name
+    # ✅ Автоматически сохранится в БД через checkpointer
+    return "Сохранено"
 
-# Доступны в промптах
-prompt = "Привет {user_name} из {current_city}"
+# В следующем вызове (тот же thread_id)
+state["store"]["warehouse_id"]  # → "12345" (восстановлено из БД!)
+```
+
+**Общий store для всех агентов:**
+```python
+# Координатор устанавливает
+state["store"]["user_context"] = {"name": "Виктор", "city": "Москва"}
+
+# Субагент 1 видит и добавляет
+state["store"]["user_context"]  # → {"name": "Виктор", "city": "Москва"}
+state["store"]["warehouse_id"] = "12345"
+
+# Субагент 2 видит ВСЕ
+state["store"]["user_context"]  # → {"name": "Виктор", "city": "Москва"}
+state["store"]["warehouse_id"]  # → "12345"
+state["store"]["courier_id"] = "789"
+
+# Координатор видит результаты ВСЕХ субагентов
+state["store"]  # → {user_context, warehouse_id, courier_id}
+```
+
+**Умное слияние (merge_store):**
+```python
+# Вызов 1
+state["store"] = {
+    "settings": {"language": "ru", "units": "celsius"},
+    "counter": 1
+}
+
+# Вызов 2 (тот же thread_id)
+state["store"]["settings"]["theme"] = "dark"  # Добавляем в вложенный dict
+state["store"]["counter"] = 2                 # Перезаписываем простое значение
+
+# Результат (merge_store):
+{
+    "settings": {
+        "language": "ru",     # ← Осталось из Вызова 1
+        "units": "celsius",   # ← Осталось из Вызова 1
+        "theme": "dark"       # ← Добавлено в Вызове 2
+    },
+    "counter": 2              # ← Перезаписано
+}
+```
+
+**Доступ в промптах:**
+```python
+prompt = """
+СЕССИОННЫЕ ДАННЫЕ:
+- Последний город: {?store.last_city|не было запросов}
+- Склад: {?store.warehouse_name|не определен}
+- Счетчик запросов: {?store.requests_count|0}
+- Сообщений: {#messages.count}
+
+{?store.last_city:
+  Ранее вы интересовались {store.last_city}.
+}
+"""
 ```
 
 ## Приоритет резолюции
@@ -306,14 +519,22 @@ company:acme:var:telegram_bot_token = "456:XYZ..."
 ✅ **API endpoints** - полное CRUD управление (`/api/v1/admin/variables`)  
 ✅ **Резолюция @var:key в platforms** - автоматически в TelegramInterface  
 ✅ **Резолюция FlowConfig.variables** - автоматически в TaskProcessor  
+✅ **Резолюция FlowConfig.store** - автоматически при миграции  
+✅ **Резолюция AgentConfig.store** - автоматически при миграции  
 ✅ **Вложенные структуры** - dict/list с @var:key внутри  
 ✅ **Per-company изоляция** - автоматическая через Storage  
+✅ **Унифицированный синтаксис** - {?var|default} для всех типов переменных  
+✅ **State variables** - динамическая подстановка {store.key} в промптах  
+✅ **Специальные функции** - {#messages.count}, {#store.keys}  
+✅ **Session Store персистентность** - автоматическое сохранение в PostgreSQL  
+✅ **Общий store между агентами** - все агенты в цепочке видят один store  
+✅ **UI для Session Store** - категория "Session Store" в Prompt Editor  
 
 ### Что можно улучшить:
 
-⏳ Подстановка {key} в промптах AgentConfig (сейчас через VariableResolver)  
-⏳ UI для управления переменными  
 ⏳ Миграция старых `token:telegram:{username}` в company variables  
+⏳ Валидация переменных (проверка что @var:key существует)  
+⏳ Предпросмотр резолвнутых значений в UI  
 
 ## Миграция со старого формата
 

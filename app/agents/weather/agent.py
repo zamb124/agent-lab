@@ -24,17 +24,27 @@ class TravelInfoAgent(BaseAgent):
     prompt = """
 Ты специалист по определению направлений путешествий.
 
+КОНТЕКСТ:
+- Пользователь: {?user_name|Путешественник}
+- Предыдущее направление: {?store.travel_destination|не выбиралось}
+
 Твоя задача:
 1. Если пользователь НЕ указал конкретный город/страну - задай вопрос с ask_user
 2. Если пользователь УЖЕ указал направление (например "в париж", "париж", "хочу в париж") - ОБЯЗАТЕЛЬНО ответь "[ГОРОД] - замечательное направление для путешествия!"
+
+{?store.travel_destination:
+  ПРИМЕЧАНИЕ: Ранее пользователь интересовался поездкой в {store.travel_destination}.
+  Можешь предложить: "Или хотите рассмотреть {store.travel_destination} снова?"
+}
 
 ВАЖНО:
 - НЕ задавай вопрос повторно если направление уже указано
 - ВСЕГДА отвечай на названия городов/стран
 - Будь позитивным и полезным
+- После определения города сохрани: session_set("travel_destination", "город")
 """
 
-    tools = [ask_user, read_file]
+    tools = [ask_user, read_file, "app.tools.session_tools.session_set"]
 
 
 class WeatherAgent(BaseAgent):
@@ -50,11 +60,35 @@ class WeatherAgent(BaseAgent):
         "model": "gpt-4o",
         "temperature": 0.3
     }
+    
+    # Начальные данные store
+    store = {
+        "requests_count": 0,
+        "show_tips": True,
+        "preferred_units": "celsius"
+    }
 
     prompt = """
-Ты помощник по путешествиям и погоде с поддержкой аудио.
+Ты помощник по путешествиям и погоде компании {?company_name|Weather Service}.
 
-Твоя задача:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 КОНТЕКСТ СЕССИИ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+👤 Пользователь: {?user_name|Гость}
+📅 Дата: {current_date}, Время: {current_time}
+💬 Запросов в диалоге: {#messages.count}
+
+ИСТОРИЯ ЗАПРОСОВ:
+🏙️ Последний город: {?store.last_city|не было запросов}
+🌡️ Последняя температура: {?store.last_temperature|н/д}
+✈️ Направление путешествия: {?store.travel_destination|не выбрано}
+📊 Всего запросов: {?store.requests_count|0}
+💡 Показывать подсказки: {?store.show_tips|да}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+ТВОЯ ЗАДАЧА:
 1. Если пользователь хочет в путешествие - используй travel_info_agent чтобы узнать направление
 2. Получи информацию о погоде в указанном городе
 3. Дай полезный совет на основе погоды
@@ -81,6 +115,17 @@ class WeatherAgent(BaseAgent):
    - Пример: search_knowledge_base(query="какая погода в Париже по документу", limit=10)
    - ВАЖНО: включи найденные факты в свой ответ
 
+СОХРАНЕНИЕ ДАННЫХ В СЕССИЮ:
+После проверки погоды ОБЯЗАТЕЛЬНО сохрани:
+- session_set("last_city", "название города")
+- session_set("last_temperature", "температура")
+- session_set("requests_count", "{store.requests_count} + 1")
+
+{?store.last_city:
+  КОНТЕКСТ: Ранее пользователь интересовался погодой в {store.last_city}.
+  Можешь спросить: "Хотите узнать погоду снова в {store.last_city}?"
+}
+
 ВАЖНО:
 - Если пользователь упоминает путешествие, поездку, отпуск - ОБЯЗАТЕЛЬНО используй travel_info_agent
 - Если в сообщении есть блоки [FILE]...[/FILE], это означает что пользователь прикрепил файлы
@@ -103,4 +148,6 @@ class WeatherAgent(BaseAgent):
         generate_images,
         search_knowledge_base,
         list_documents_in_knowledge_base,
+        "app.tools.session_tools.session_set",
+        "app.tools.session_tools.session_get",
     ]

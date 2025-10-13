@@ -743,12 +743,29 @@ class AgentConfig(BuilderEntity):
         widget_attrs={"rows": 4, "placeholder": '{"max_attempts": 3, "greeting": "Привет!"}'}
     )
     
+    # Начальные данные store для агента
+    store: Dict[str, Any] = Field(
+        default_factory=dict,
+        title="Session Store",
+        description="Начальные значения для state.store (доступны через {store.key} или session_get)",
+        widget_attrs={"rows": 4, "placeholder": '{"max_attempts": 3, "welcome_shown": false}'}
+    )
+    
     # Публичность агента
     is_public: bool = Field(
         default=False,
         title="Публичный",
         description="Доступен ли агент как инструмент в публичном редакторе ботов"
     )
+    
+    @field_validator('local_variables', 'store', mode='before')
+    @classmethod
+    def parse_json_fields(cls, v):
+        """Автоматически парсит JSON строки в dict"""
+        if isinstance(v, str) and v.strip():
+            import json
+            return json.loads(v)
+        return v if v else {}
     
     @field_validator('tools', mode='before')
     @classmethod
@@ -834,6 +851,16 @@ class AgentConfig(BuilderEntity):
         
         await migrator.storage.set_agent_config(agent_config)
         
+        # Резолвим @var: ссылки в local_variables и store
+        from ..services.variables_service import get_variables_service
+        variables_service = get_variables_service()
+        
+        if agent_config.local_variables:
+            await variables_service.resolve(agent_config.local_variables, auto_create=True)
+        
+        if agent_config.store:
+            await variables_service.resolve(agent_config.store, auto_create=True)
+        
         if with_tools:
             for tool_ref in agent_config.tools:
                 tool_id = tool_ref.tool_id
@@ -871,6 +898,8 @@ class AgentConfig(BuilderEntity):
         raw_llm_config = getattr(agent_class, "llm_config", None)
         history_from = getattr(agent_class, "history_from", None)
         is_public = getattr(agent_class, "is_public", False)
+        local_variables = getattr(agent_class, "local_variables", {})
+        store = getattr(agent_class, "store", {})
         
         graph_definition = await GraphDefinition.migrate(agent_class)
         
@@ -896,6 +925,8 @@ class AgentConfig(BuilderEntity):
             llm_config=llm_config,
             history_from=history_from,
             is_public=is_public,
+            local_variables=local_variables,
+            store=store,
             source="migration",
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
@@ -994,6 +1025,14 @@ class FlowConfig(BuilderEntity):
         widget_attrs={"rows": 6, "placeholder": '{"bot_name": "Помощник", "timeout_minutes": 30}'}
     )
     
+    # Начальные данные store
+    store: Dict[str, Any] = Field(
+        default_factory=dict,
+        title="Начальные данные store",
+        description="Начальные значения для state.store (доступны во всех агентах через {store.key} или session_get)",
+        widget_attrs={"rows": 6, "placeholder": '{"max_attempts": 3, "welcome_shown": false}'}
+    )
+    
     # RAG конфигурация для flow
     rag_config: Optional[AgentRAGConfig] = Field(
         default_factory=lambda: AgentRAGConfig(
@@ -1059,7 +1098,7 @@ class FlowConfig(BuilderEntity):
         exclude_from_form=True,
     )
     
-    @field_validator('platforms', 'canvas_data', 'variables', mode='before')
+    @field_validator('platforms', 'canvas_data', 'variables', 'store', mode='before')
     @classmethod
     def parse_json_fields(cls, v):
         """Автоматически парсит JSON строки в dict"""
@@ -1203,6 +1242,9 @@ class FlowConfig(BuilderEntity):
         
         if flow_config.platforms:
             await variables_service.resolve(flow_config.platforms, auto_create=True)
+        
+        if flow_config.store:
+            await variables_service.resolve(flow_config.store, auto_create=True)
         
         if with_dependencies and flow_config.entry_point_agent:
             await AgentConfig.migrate(

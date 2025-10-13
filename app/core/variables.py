@@ -97,6 +97,8 @@ class VariableResolver:
         
         Поддерживаемые форматы:
         - {variable} - простая подстановка
+        - {?variable} - опциональная (пустая строка если нет)
+        - {?variable|default} - опциональная со значением по умолчанию
         - {dict.key} - доступ к вложенным dict
         - {list[0]} - доступ к элементам list
         - {{variable}} - двойные скобки (Jinja-style)
@@ -118,31 +120,44 @@ class VariableResolver:
         
         import re
         
-        # Подстановка {key.nested} и {key[index]}
-        pattern = r'\{([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*|\[\d+\])*)\}'
+        # Паттерн с поддержкой опциональности и дефолтов
+        # {?variable|default} или {variable} или {dict.key[0]}
+        pattern = r'\{(\?)?([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*|\[\d+\])*?)(\|([^\}]+))?\}'
         
         def replace_var(match):
-            expr = match.group(1)
+            optional = match.group(1) == "?"
+            expr = match.group(2)
+            default = match.group(4)
             
-            try:
-                # Парсим выражение: key.nested или key[0]
-                value = variables
-                parts = re.split(r'\.|\[|\]', expr)
-                parts = [p for p in parts if p]
-                
-                for part in parts:
-                    if part.isdigit():
+            value = variables
+            parts = re.split(r'\.|\[|\]', expr)
+            parts = [p for p in parts if p]
+            
+            found = True
+            for part in parts:
+                if part.isdigit():
+                    if isinstance(value, (list, tuple)) and int(part) < len(value):
                         value = value[int(part)]
                     else:
+                        found = False
+                        break
+                else:
+                    if isinstance(value, dict) and part in value:
                         value = value[part]
-                
-                return str(value)
-            except (KeyError, IndexError, TypeError) as e:
-                if safe:
+                    else:
+                        found = False
+                        break
+            
+            if not found:
+                if optional or default is not None:
+                    return default or ""
+                elif safe:
                     return match.group(0)
                 else:
-                    logger.warning(f"Не удалось резолвить {expr}: {e}")
+                    logger.warning(f"Не удалось резолвить {expr}")
                     return match.group(0)
+            
+            return str(value)
         
         result = re.sub(pattern, replace_var, result)
         

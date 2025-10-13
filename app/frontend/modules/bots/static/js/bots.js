@@ -547,11 +547,17 @@ import { showNotification } from '/static/js/components/notification.js';
         
         const promptValue = promptEditor ? promptEditor.getValue() : null;
         const flowVariables = promptEditor ? promptEditor.getFlowVariables() : null;
+        const sessionStore = promptEditor ? promptEditor.getSessionStore() : null;
         
         console.log('🔍 DEBUG: flowVariables до добавления =', flowVariables);
+        console.log('🔍 DEBUG: sessionStore до добавления =', sessionStore);
         
         if (flowVariables && Object.keys(flowVariables).length > 0) {
             flowData.variables = flowVariables;
+        }
+        
+        if (sessionStore && Object.keys(sessionStore).length > 0) {
+            flowData.store = sessionStore;
         }
         
         const namespaceScope = document.getElementById('rag-namespace-scope')?.value || 'flow';
@@ -647,6 +653,11 @@ import { showNotification } from '/static/js/components/notification.js';
                     if (Object.keys(llmConfig).length > 0) {
                         agentUpdates.llm_config = llmConfig;
                     }
+                }
+                
+                // Сохраняем session store переменные
+                if (sessionStore && Object.keys(sessionStore).length > 0) {
+                    agentUpdates.store = sessionStore;
                 }
                 
                 if (Object.keys(agentUpdates).length > 0) {
