@@ -130,13 +130,16 @@ class NanoBananaClient:
                                     file_processor = await get_default_file_processor()
                                     file_name = f"generated_image_{uuid.uuid4().hex[:8]}.png"
                                     
+                                    # Сохраняем только короткую версию промпта (первые 150 символов) чтобы не превысить лимит S3 метаданных
+                                    prompt_preview = prompt[:150] if len(prompt) > 150 else prompt
+                                    
                                     file_record = await file_processor.process_file_from_bytes(
                                         data=image_data,
                                         original_name=file_name,
                                         content_type=mime_type,
                                         metadata={
                                             "generated_by": "nano_banana",
-                                            "prompt": prompt.encode('utf-8').decode('ascii', 'ignore'),
+                                            "prompt_preview": prompt_preview.encode('utf-8').decode('ascii', 'ignore'),
                                         },
                                         tags=["generated", "nano_banana"],
                                         public=True,
