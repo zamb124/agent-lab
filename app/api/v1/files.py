@@ -78,13 +78,14 @@ async def download_file(file_id: str):
                 ) and not file_record.metadata.get("telegram_upload"):
                     raise HTTPException(status_code=403, detail="Нет доступа к файлу")
 
-        # Получаем прямую ссылку на S3 для стриминга
-        s3_url = file_record.direct_s3_url
-        if not s3_url:
+        # Используем прямой S3 URL из модели
+        if not file_record.direct_s3_url:
             logger.error(f"Не удалось сформировать S3 URL для файла {file_id}")
             raise HTTPException(
                 status_code=500, detail="Не удалось получить ссылку на файл"
             )
+        
+        s3_url = file_record.direct_s3_url
 
         logger.info(f"Попытка скачать файл {file_id} из S3: {s3_url}")
 

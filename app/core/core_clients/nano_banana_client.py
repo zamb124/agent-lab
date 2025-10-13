@@ -108,7 +108,9 @@ class NanoBananaClient:
                 response = model.generate_content(
                     content_parts,
                     generation_config=genai.GenerationConfig(
-                        temperature=0.1,
+                        temperature=0.0,
+                        top_p=0.95,
+                        top_k=20,
                     )
                 )
                 

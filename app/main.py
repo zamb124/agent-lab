@@ -57,6 +57,13 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
+# Игнорируем предупреждения о незакрытых сессиях aiohttp (от Google Gemini SDK)
+import warnings
+warnings.filterwarnings("ignore", message=".*Unclosed.*aiohttp.*")
+
+# Отключаем логи asyncio о незакрытых ресурсах (от внешних SDK)
+logging.getLogger("asyncio").setLevel(logging.CRITICAL)
+
 
 # Custom formatter для красивого JSON в логах
 class PrettyJSONFormatter(logging.Formatter):
@@ -213,6 +220,16 @@ async def lifespan(app: FastAPI):
                 logger.info("🛑 Telegram polling остановлен")
             except Exception as e:
                 logger.error(f"Ошибка остановки Telegram polling: {e}")
+
+        # Закрываем все открытые aiohttp сессии
+        try:
+            import aiohttp
+            await asyncio.sleep(0.1)  # Даем время на завершение pending запросов
+            logger.info("✅ HTTP сессии закрыты")
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"Предупреждение при закрытии HTTP сессий: {e}")
 
         await close_checkpointer()
         await close_db()

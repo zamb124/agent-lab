@@ -16,6 +16,7 @@ class FashnApp {
 
     init() {
         this.setupEventListeners();
+        this.attachProductSelectListeners();
         this.loadProducts();
         this.updateGenerateButton();
         this.initFullscreenViewer();
@@ -182,16 +183,13 @@ class FashnApp {
             
             let selectButtonContent = 'Select for Styling';
             let selectButtonClass = 'select-button';
-            let selectButtonAction = `app.selectProduct('${product.id}')`;
             
             if (isLoading) {
                 selectButtonContent = '<div class="loading-spinner"></div> Loading...';
                 selectButtonClass = 'select-button loading';
-                selectButtonAction = 'void(0)'; // Отключаем клик
             } else if (isError) {
                 selectButtonContent = 'Failed to load';
                 selectButtonClass = 'select-button error';
-                selectButtonAction = 'void(0)'; // Отключаем клик
             }
 
             // Индикатор множественных изображений
@@ -217,13 +215,28 @@ class FashnApp {
                         <div class="product-name">${product.name}</div>
                         <div class="product-price">${product.price}</div>
                         <div class="product-category">${product.category}</div>
-                        <button class="${selectButtonClass}" onclick="${selectButtonAction}" ${isLoading || isError ? 'disabled' : ''}>
+                        <button class="${selectButtonClass}" data-product-id="${product.id}" ${isLoading || isError ? 'disabled' : ''}>
                             ${selectButtonContent}
                         </button>
                     </div>
                 </div>
             `;
         }).join('');
+    }
+
+    attachProductSelectListeners() {
+        const grid = document.getElementById('productsGrid');
+        if (!grid) return;
+        
+        grid.addEventListener('click', (e) => {
+            const button = e.target.closest('.select-button');
+            if (button && !button.disabled) {
+                const productId = button.dataset.productId;
+                if (productId) {
+                    this.selectProduct(productId);
+                }
+            }
+        });
     }
 
     filterProducts(category) {
@@ -238,27 +251,23 @@ class FashnApp {
     }
 
     selectProduct(productId) {
-        // Снимаем выделение с предыдущих товаров
         document.querySelectorAll('.select-button').forEach(btn => {
             btn.classList.remove('selected');
             btn.textContent = 'Select for Styling';
         });
 
-        // Выделяем выбранный товар
-        const selectedButton = document.querySelector(`[onclick="app.selectProduct('${productId}')"]`);
+        const selectedButton = document.querySelector(`[data-product-id="${productId}"]`);
         if (selectedButton) {
             selectedButton.classList.add('selected');
             selectedButton.textContent = 'Selected ✓';
         }
 
-        // Сохраняем выбранный товар
         this.selectedProduct = this.products.find(p => p.id === productId);
         document.getElementById('selectedProduct').value = productId;
         
         this.updateGenerateButton();
         this.hideError();
         
-        // Прокручиваем к фото, если оно загружено
         if (this.userPhotoFile) {
             document.getElementById('photoContainer').scrollIntoView({ 
                 behavior: 'smooth', 
