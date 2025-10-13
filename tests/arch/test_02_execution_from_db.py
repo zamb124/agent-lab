@@ -58,7 +58,7 @@ async def test_smart_flow_math_execution():
     # Настраиваем мок для математических вычислений
     from app.core.llm_factory import get_global_mock_llm, get_llm
     
-    get_llm("mock", "mock-gpt-4")
+    get_llm("mock-gpt-4")
     
     mock_llm = get_global_mock_llm()
     if mock_llm:
@@ -149,7 +149,7 @@ async def test_flow_isolation():
     # Настраиваем мок для простых вычислений
     from app.core.llm_factory import get_global_mock_llm, get_llm
     
-    get_llm("mock", "mock-gpt-4")
+    get_llm("mock-gpt-4")
     
     mock_llm = get_global_mock_llm()
     if mock_llm:

@@ -214,7 +214,7 @@ async def test_execute_hybrid_simple_math():
     
     # Настраиваем мок LLM
     from app.core.llm_factory import get_global_mock_llm, get_llm
-    get_llm("mock", "mock-gpt-4")
+    get_llm("mock-gpt-4")
     mock_llm = get_global_mock_llm()
     if mock_llm:
         mock_llm.set_responses({
@@ -249,7 +249,7 @@ async def test_execute_hybrid_complex_math():
     
     # Настраиваем мок LLM
     from app.core.llm_factory import get_global_mock_llm, get_llm
-    get_llm("mock", "mock-gpt-4")
+    get_llm("mock-gpt-4")
     mock_llm = get_global_mock_llm()
     if mock_llm:
         mock_llm.set_responses({
@@ -284,7 +284,7 @@ async def test_execute_hybrid_weather():
     
     # Настраиваем мок LLM
     from app.core.llm_factory import get_global_mock_llm, get_llm
-    get_llm("mock", "mock-gpt-4")
+    get_llm("mock-gpt-4")
     mock_llm = get_global_mock_llm()
     if mock_llm:
         mock_llm.set_responses({

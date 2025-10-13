@@ -175,8 +175,7 @@ async def test_02_react_agent_with_variables(setup_storage, test_context):
 """,
         tools=[],
         llm_config=LLMConfig(
-            provider="openai",
-            model="gpt-4o-mini",
+            model="mock-gpt-4",
             temperature=0.1,
         ),
         local_variables={
@@ -558,8 +557,7 @@ async def test_06_variable_priority(setup_storage, test_context):
         prompt="Я {bot_name}",
         tools=[],
         llm_config=LLMConfig(
-            provider="openai",
-            model="gpt-4o-mini",
+            model="mock-gpt-4",
             temperature=0.1,
         ),
         local_variables={

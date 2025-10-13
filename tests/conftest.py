@@ -22,8 +22,9 @@ else:
 os.environ["DATABASE__URL"] = "postgresql+asyncpg://agent_user:agent_password@localhost:5432/agent_platform"
 os.environ["DATABASE__CHECKPOINTER_URL"] = "postgresql://agent_user:agent_password@localhost:5432/agent_platform"
 os.environ["SERVER__DEBUG"] = "true"
-# Используем mock LLM по умолчанию для всех тестов
-os.environ["LLM__DEFAULT_PROVIDER"] = "mock"
+# Используем mock модель по умолчанию для всех тестов
+os.environ["LLM__DEFAULT_MODEL"] = "mock-gpt-4"
+os.environ["LLM__OPENROUTER__ENABLED"] = "false"
 # Настройка S3 для тестов с реальными кредами Yandex
 os.environ["S3__ENABLED"] = "true"
 os.environ["S3__DEFAULT_BUCKET"] = "vkbucket"
@@ -146,9 +147,32 @@ async def save_test_company():
 
 
 # Переопределяем LLM конфиги агентов на mock для всех тестов (один раз при импорте)
+from app.models.core_models import LLMConfig
+
+_mock_llm_config = LLMConfig(model="mock-gpt-4", temperature=0.3)
+
 import app.agents.weather.agent as _weather_module
-_weather_module.WeatherAgent.llm_config = {"provider": "mock", "model": "mock-gpt-4", "temperature": 0.3}
-_weather_module.TravelInfoAgent.llm_config = {"provider": "mock", "model": "mock-gpt-4", "temperature": 0.3}
+_weather_module.WeatherAgent.llm_config = _mock_llm_config
+_weather_module.TravelInfoAgent.llm_config = _mock_llm_config
+
+# Переопределяем конфиги для других агентов
+try:
+    import app.agents.calculator.agent as _calc_module
+    _calc_module.CalculatorAgent.llm_config = _mock_llm_config
+except ImportError:
+    pass
+
+try:
+    import app.agents.explainer.agent as _explainer_module
+    _explainer_module.ExplainerAgent.llm_config = _mock_llm_config
+except ImportError:
+    pass
+
+try:
+    import app.agents.router.agent as _router_module
+    _router_module.RouterAgent.llm_config = _mock_llm_config
+except ImportError:
+    pass
 
 
 
