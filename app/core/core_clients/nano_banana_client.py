@@ -105,18 +105,39 @@ class NanoBananaClient:
             generated_file_ids = []
             
             for i in range(num_images):
+                logger.info(f"🎨 Генерация изображения {i+1}/{num_images}")
                 response = model.generate_content(
                     content_parts,
                     generation_config=genai.GenerationConfig(
-                        temperature=0.0,
-                        top_p=0.95,
-                        top_k=20,
+                        temperature=0.1,
+                        top_p=0.92,
+                        top_k=15,
                     )
                 )
                 
+                logger.info(f"📥 Получен ответ от модели")
+                logger.info(f"   response.candidates: {len(response.candidates) if response.candidates else 0}")
+                
+                if hasattr(response, 'prompt_feedback'):
+                    logger.info(f"   prompt_feedback: {response.prompt_feedback}")
+                
                 if response.candidates and len(response.candidates) > 0:
                     candidate = response.candidates[0]
-                    if hasattr(candidate, 'content') and candidate.content.parts:
+                    logger.info(f"   candidate attributes: {dir(candidate)}")
+                    logger.info(f"   hasattr(candidate, 'content'): {hasattr(candidate, 'content')}")
+                    
+                    if hasattr(candidate, 'finish_reason'):
+                        logger.info(f"   finish_reason: {candidate.finish_reason}")
+                    
+                    if hasattr(candidate, 'safety_ratings'):
+                        logger.info(f"   safety_ratings: {candidate.safety_ratings}")
+                    
+                    if hasattr(candidate, 'content'):
+                        logger.info(f"   content: {candidate.content}")
+                        if candidate.content:
+                            logger.info(f"   content.parts: {candidate.content.parts if hasattr(candidate.content, 'parts') else 'No parts'}")
+                    
+                    if hasattr(candidate, 'content') and candidate.content and hasattr(candidate.content, 'parts') and candidate.content.parts:
                         # Ищем только первое изображение в ответе
                         image_found = False
                         for part in candidate.content.parts:
@@ -149,9 +170,16 @@ class NanoBananaClient:
                                     logger.info(f"✅ Сгенерировано изображение: {file_record.file_id}")
                                     image_found = True  # Обрабатываем только первое изображение
                                 else:
-                                    logger.debug(f"Пропускаем часть с mime_type: {mime_type}")
+                                    logger.warning(f"⚠️ Часть с неподходящим mime_type: {mime_type}")
                             elif hasattr(part, 'text'):
-                                logger.debug(f"Пропускаем текстовую часть: {part.text[:100]}...")
+                                logger.info(f"📝 Получен текст от модели: {part.text[:200]}...")
+                        
+                        if not image_found:
+                            logger.error(f"❌ Изображение не найдено в ответе модели для итерации {i+1}")
+                    else:
+                        logger.error(f"❌ Candidate не содержит content или parts")
+                else:
+                    logger.error(f"❌ Нет candidates в ответе модели")
             
             return generated_file_ids
             
