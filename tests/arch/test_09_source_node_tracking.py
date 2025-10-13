@@ -23,7 +23,7 @@ async def test_source_node_in_history(save_test_company):
         description="Агент для получения погоды",
         function_class="app.agents.weather.agent.WeatherAgent",
         prompt="Ты погодный агент. Отвечай о погоде.",
-        llm_config=LLMConfig(provider="mock"),
+        llm_config=LLMConfig(model="mock-gpt-4"),
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -35,7 +35,7 @@ async def test_source_node_in_history(save_test_company):
         description="Агент для вычислений",
         function_class="app.agents.calculator.agent.CalculatorAgent",
         prompt="Ты калькулятор. Вычисляй математические выражения.",
-        llm_config=LLMConfig(provider="mock"),
+        llm_config=LLMConfig(model="mock-gpt-4"),
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -47,7 +47,7 @@ async def test_source_node_in_history(save_test_company):
         description="Агент для объяснений",
         function_class="app.agents.explainer.agent.ExplainerAgent",
         prompt="Ты объяснитель. Объясняй что произошло.",
-        llm_config=LLMConfig(provider="mock"),
+        llm_config=LLMConfig(model="mock-gpt-4"),
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -58,7 +58,7 @@ async def test_source_node_in_history(save_test_company):
         name="Test Source Node Tracking",
         description="Тестовый flow для проверки отслеживания source_node",
         entry_point_agent="app.agents.weather.agent.WeatherAgent",
-        llm_config=LLMConfig(provider="mock"),
+        llm_config=LLMConfig(model="mock-gpt-4"),
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -136,7 +136,7 @@ async def test_checkpoint_metadata_structure(save_test_company):
         description="Агент для вычислений",
         function_class="app.agents.calculator.agent.CalculatorAgent",
         prompt="Ты калькулятор. Вычисляй математические выражения.",
-        llm_config=LLMConfig(provider="mock"),
+        llm_config=LLMConfig(model="mock-gpt-4"),
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -148,7 +148,7 @@ async def test_checkpoint_metadata_structure(save_test_company):
         description="Агент для получения погоды",
         function_class="app.agents.weather.agent.WeatherAgent",
         prompt="Ты погодный агент. Отвечай о погоде.",
-        llm_config=LLMConfig(provider="mock"),
+        llm_config=LLMConfig(model="mock-gpt-4"),
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -160,7 +160,7 @@ async def test_checkpoint_metadata_structure(save_test_company):
         description="Агент для объяснений",
         function_class="app.agents.explainer.agent.ExplainerAgent",
         prompt="Ты объяснитель. Объясняй что произошло.",
-        llm_config=LLMConfig(provider="mock"),
+        llm_config=LLMConfig(model="mock-gpt-4"),
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -171,7 +171,7 @@ async def test_checkpoint_metadata_structure(save_test_company):
         name="Test Metadata Flow",
         description="Тестовый flow для проверки metadata",
         entry_point_agent="app.agents.calculator.agent.CalculatorAgent",
-        llm_config=LLMConfig(provider="mock"),
+        llm_config=LLMConfig(model="mock-gpt-4"),
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
