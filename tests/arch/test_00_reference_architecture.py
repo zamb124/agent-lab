@@ -167,7 +167,8 @@ async def test_00_simple_agent_with_tool(
     flow_factory,
     mock_llm,
     test_helpers,
-    unique_id
+    unique_id,
+    agent_repo
 ):
     """
     Упрощенный эталон: Один агент с одним tool.

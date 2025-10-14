@@ -106,7 +106,7 @@ async def test_execute_db_react_agent(migrated_db, storage, agent_factory, flow_
     """Создание и выполнение ReAct агента из БД"""
     
     # Создаем агента
-    await test_create_db_react_agent(migrated_db, storage, test_helpers)
+    await test_create_db_react_agent(migrated_db, storage, test_helpers, agent_repo)
     
     # Настраиваем mock LLM
     mock_llm.configure(
@@ -155,7 +155,7 @@ async def test_react_agent_tools(migrated_db, storage, agent_factory, mock_llm, 
     """Создание и тест что ReAct агент правильно использует инструменты"""
     
     # Создаем агента
-    await test_create_db_react_agent(migrated_db, storage, test_helpers)
+    await test_create_db_react_agent(migrated_db, storage, test_helpers, agent_repo)
     
     # Настраиваем mock LLM
     mock_llm.configure(

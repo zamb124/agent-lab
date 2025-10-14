@@ -195,7 +195,7 @@ async def test_execute_hybrid_simple_math(migrated_db, storage, flow_factory, mo
     """Создание и выполнение гибридного агента - простая математика (inline код)"""
     
     # Создаем агента
-    await test_create_hybrid_stategraph(migrated_db, storage)
+    await test_create_hybrid_stategraph(migrated_db, storage, agent_repo, flow_repo)
     
     # Настраиваем mock LLM
     mock_llm.configure(
@@ -227,7 +227,7 @@ async def test_execute_hybrid_complex_math(migrated_db, storage, flow_factory, m
     """Создание и выполнение гибридного агента - сложная математика (ссылка на агента)"""
     
     # Создаем агента
-    await test_create_hybrid_stategraph(migrated_db, storage)
+    await test_create_hybrid_stategraph(migrated_db, storage, agent_repo, flow_repo)
     
     # Настраиваем mock LLM
     mock_llm.configure(
@@ -259,7 +259,7 @@ async def test_execute_hybrid_weather(migrated_db, storage, flow_factory, mock_l
     """Создание и выполнение гибридного агента - погода (ссылка на функцию)"""
     
     # Создаем агента
-    await test_create_hybrid_stategraph(migrated_db, storage)
+    await test_create_hybrid_stategraph(migrated_db, storage, agent_repo, flow_repo)
     
     # Настраиваем mock LLM
     mock_llm.configure(
