@@ -232,8 +232,8 @@ async def test_variables_storage_keys(variables_service, storage, test_company, 
     
     await variables_service.set_var("test_key", "test_value", is_secret=False)
     
-    storage_key = f"company:{test_company.company_id}:var:test_key"
-    data = await storage.get(storage_key, force_global=True)
+    storage_key = f"var:test_key"
+    data = await storage.get(storage_key)
     
     assert data is not None
     var_data = json.loads(data)

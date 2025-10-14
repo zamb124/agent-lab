@@ -8,6 +8,7 @@
 """
 
 import pytest
+import pytest_asyncio
 from langchain_core.messages import HumanMessage
 
 from app.core.variables import VariableResolver
@@ -18,15 +19,17 @@ from app.models import (
 )
 
 
-@pytest.fixture
-def test_context_with_vars(test_context):
+@pytest_asyncio.fixture
+async def test_context_with_vars(migrated_db, test_context):
     """Расширяет test_context переменными для этих тестов"""
-    from app.core.context import get_context
+    from app.core.context import get_context, set_context
+    
+    # Переустанавливаем контекст после миграции
+    set_context(test_context)
+    
     ctx = get_context()
-    if ctx.flow_variables is None:
-        ctx.flow_variables = {}
-    if ctx.company_variables is None:
-        ctx.company_variables = {}
+    if not ctx:
+        raise RuntimeError("Контекст не установлен после set_context!")
     
     ctx.flow_variables.update({
         "bot_name": "Тест Бот",

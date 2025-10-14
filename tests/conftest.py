@@ -225,8 +225,8 @@ def test_user(test_company: Company) -> User:
     )
 
 
-@pytest.fixture(autouse=True)
-def test_context(test_user: User, test_company: Company):
+@pytest_asyncio.fixture(autouse=True)
+async def test_context(test_user: User, test_company: Company):
     """Тестовый контекст для каждого теста (автоматически)"""
     context = Context(
         user=test_user,
