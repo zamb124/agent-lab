@@ -1078,6 +1078,22 @@ class ChatManager {
     handleWebSocketMessage(message) {
         console.log('📨 Получено сообщение:', message);
 
+        // Фильтрация по session_id: показываем только сообщения для текущего чата
+        if (message.session_id && this.currentSession) {
+            // Извлекаем UUID из обоих session_id для сравнения
+            const messageSessionUUID = message.session_id.includes(':') 
+                ? message.session_id.split(':').pop() 
+                : message.session_id;
+            const currentSessionUUID = this.currentSession.includes(':') 
+                ? this.currentSession.split(':').pop() 
+                : this.currentSession;
+            
+            if (messageSessionUUID !== currentSessionUUID) {
+                console.log(`⏭️ Пропускаем сообщение для другой сессии: ${message.session_id} (текущая: ${this.currentSession})`);
+                return;
+            }
+        }
+
         switch (message.type) {
             case 'USER_MESSAGE':
                 this.addUserMessage(message.content, message.timestamp, message.message_id);
