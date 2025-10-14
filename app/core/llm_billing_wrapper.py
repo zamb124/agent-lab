@@ -10,7 +10,7 @@ import json
 import httpx
 from typing import Optional, List, Any, Mapping
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.callbacks import CallbackManagerForLLMRun
 
@@ -59,24 +59,45 @@ class ChatOpenAIWithBilling(BaseChatModel):
         openai_messages = []
         
         for message in messages:
-            if isinstance(message, HumanMessage):
-                role = "user"
-            elif isinstance(message, AIMessage):
-                role = "assistant"
-            elif isinstance(message, SystemMessage):
-                role = "system"
-            else:
-                role = "user"
-            
-            # Поддержка multimodal content
-            if isinstance(message.content, list):
+            if isinstance(message, ToolMessage):
                 openai_messages.append({
-                    "role": role,
-                    "content": message.content
+                    "role": "tool",
+                    "content": str(message.content),
+                    "tool_call_id": message.tool_call_id
+                })
+            elif isinstance(message, HumanMessage):
+                openai_messages.append({
+                    "role": "user",
+                    "content": message.content if isinstance(message.content, list) else str(message.content)
+                })
+            elif isinstance(message, AIMessage):
+                msg_dict = {
+                    "role": "assistant",
+                    "content": message.content if isinstance(message.content, list) else str(message.content)
+                }
+                
+                if hasattr(message, 'tool_calls') and message.tool_calls:
+                    msg_dict["tool_calls"] = [
+                        {
+                            "id": tc.get("id", f"call_{tc['name']}"),
+                            "type": "function",
+                            "function": {
+                                "name": tc["name"],
+                                "arguments": json.dumps(tc["args"]) if isinstance(tc["args"], dict) else tc["args"]
+                            }
+                        }
+                        for tc in message.tool_calls
+                    ]
+                
+                openai_messages.append(msg_dict)
+            elif isinstance(message, SystemMessage):
+                openai_messages.append({
+                    "role": "system",
+                    "content": message.content if isinstance(message.content, list) else str(message.content)
                 })
             else:
                 openai_messages.append({
-                    "role": role,
+                    "role": "user",
                     "content": str(message.content)
                 })
         
