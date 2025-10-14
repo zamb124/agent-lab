@@ -81,7 +81,7 @@ async def set_telegram_webhook(flow_id: str, webhook_base_url: str):
     """
     try:
         # Получаем flow config
-    flow_config = await flow_repo.get(flow_id)
+        flow_config = await flow_repo.get(flow_id)
 
         if not flow_config:
             raise HTTPException(status_code=404, detail=f"Flow {flow_id} not found")
