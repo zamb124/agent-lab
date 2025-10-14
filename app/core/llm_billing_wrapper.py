@@ -209,6 +209,9 @@ class ChatOpenAIWithBilling(BaseChatModel):
         if self.default_headers:
             headers.update(self.default_headers)
         
+        # Логируем запрос
+        logger.info(f"LLM запрос:\n{json.dumps(payload, ensure_ascii=False, indent=2)}")
+        
         # HTTP запрос к OpenRouter
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(
@@ -221,6 +224,9 @@ class ChatOpenAIWithBilling(BaseChatModel):
                 raise ValueError(f"OpenRouter API error: {response.status_code} - {response.text}")
             
             data = response.json()
+        
+        # Логируем ответ
+        logger.info(f"LLM ответ:\n{json.dumps(data, ensure_ascii=False, indent=2)}")
         
         # Извлекаем токены
         usage = data.get("usage", {})
