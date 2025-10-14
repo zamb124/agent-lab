@@ -1,4 +1,5 @@
 ---
+description: tests Правила для тестов
 alwaysApply: false
 ---
 # Правила работы с фикстурами тестов
