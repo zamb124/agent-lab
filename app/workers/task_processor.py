@@ -143,11 +143,10 @@ class TaskProcessor:
                 result = await compiled_graph.ainvoke(Command(resume=user_message), config)
             else:
                 logger.info("🆕 Новый запрос")
-                initial_state = {
-                    "messages": [HumanMessage(content=user_message)],
-                    **input_data_with_context,
-                }
-                result = await entry_agent.ainvoke(initial_state, config=config)
+                result = await compiled_graph.ainvoke(
+                    {"messages": [HumanMessage(content=user_message)], **input_data_with_context},
+                    config=config
+                )
 
             # Проверяем на interrupt в результате (как в старой архитектуре)
             logger.info(

@@ -31,6 +31,7 @@ class ReActAgent(BaseAgent):
     async def compile_graph(self) -> Runnable:
         """
         Компилирует ReAct граф на основе конфигурации.
+        Использует кэширование для повторных вызовов.
         
         Returns:
             Скомпилированный граф LangGraph
@@ -38,6 +39,10 @@ class ReActAgent(BaseAgent):
         Raises:
             ValueError: Если не указан prompt в конфигурации
         """
+        if self._compiled_graph is not None:
+            logger.debug(f"Используем кэшированный граф для {self.config.agent_id}")
+            return self._compiled_graph
+            
         logger.info(f"Компиляция ReAct графа для агента: {self.config.agent_id}")
         
         if not self.config.prompt:
@@ -56,6 +61,7 @@ class ReActAgent(BaseAgent):
             state_schema=State
         )
 
+        self._compiled_graph = graph
         logger.info(f"ReAct граф создан для агента {self.config.agent_id}")
         return graph
 
@@ -97,7 +103,7 @@ class ReActAgent(BaseAgent):
         )
         logger.info(f"Статические переменные подставлены для {self.config.agent_id}")
 
-        def dynamic_prompt(state: State) -> str:
+        def dynamic_prompt(state: State) -> list:
             """
             Динамический промпт, который рендерится перед каждым вызовом LLM.
             
@@ -105,7 +111,7 @@ class ReActAgent(BaseAgent):
                 state: Текущее состояние графа
                 
             Returns:
-                Отрендеренный prompt со всеми подставленными переменными
+                Список сообщений: system message + история из state
             """
             context = {
                 "store": state.get("store", {}),
@@ -127,7 +133,7 @@ class ReActAgent(BaseAgent):
                 full_state=state
             )
             
-            return rendered
+            return [{"role": "system", "content": rendered}] + state.get("messages", [])
         
         logger.info(f"Dynamic prompt создан для {self.config.agent_id}")
         return dynamic_prompt
