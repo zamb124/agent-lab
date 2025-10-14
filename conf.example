@@ -121,6 +121,13 @@
         "description": "GPT OSS 120B - большая открытая модель OpenAI",
         "input_cost_per_token": 0.000004,
         "output_cost_per_token": 0.00004
+      },
+      "google/gemini-2.5-flash-image-preview": {
+        "max_tokens": 8192,
+        "temperature": 0.1,
+        "description": "Gemini 2.5 Flash Image Preview (Nano Banana) - генерация изображений",
+        "input_cost_per_token": 0.00003,
+        "output_cost_per_token": 0.00025
       }
     },
     "default_model": "anthropic/claude-sonnet-4.5"
@@ -192,8 +199,7 @@
   },
   "nano_banana": {
     "enabled": false,
-    "api_key": "your-nano-banana-api-key-here",
-    "model_name": "gemini-2.5-flash-image-preview",
+    "model_name": "google/gemini-2.5-flash-image-preview",
     "timeout": 60
   },
   "proxy": {

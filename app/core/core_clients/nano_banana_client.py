@@ -1,16 +1,12 @@
 """
-Nano Banana клиент для генерации изображений через Gemini API.
+Nano Banana клиент для генерации изображений через OpenRouter.
+Использует LLM с multimodal support вместо прямого обращения к Google.
 """
 
 import logging
-import uuid
+import re
+import base64
 from typing import List, Optional
-
-from ..proxy_setup import configure_proxy_from_settings
-
-configure_proxy_from_settings()
-
-import google.generativeai as genai
 
 from ..config import settings
 from ..storage import Storage
@@ -21,42 +17,27 @@ logger = logging.getLogger(__name__)
 
 class NanoBananaClient:
     """
-    Клиент для генерации изображений через Gemini API.
+    Клиент для генерации изображений через OpenRouter.
+    Использует LLM с multimodal support.
     """
     
     def __init__(
         self,
-        api_key: str,
-        model_name: str = "gemini-2.5-flash-image-preview",
+        model_name: str = "google/gemini-2.5-flash-image-preview",
         timeout: int = 60,
     ):
-        self.api_key = api_key
         self.model_name = model_name
         self.timeout = timeout
         self._storage = Storage()
-        
-        genai.configure(api_key=self.api_key)
-        
-    async def _get_file_records(self, file_ids: List[str]) -> List[bytes]:
-        """Получает данные файлов по их ID"""
-        from ..file_processor import get_default_file_processor
-        file_processor = await get_default_file_processor()
-        file_data_list = []
-        
-        for file_id in file_ids:
-            record = await file_processor.get_file_record(file_id)
-            if record:
-                # Загружаем файл из S3
-                s3_client = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
-                file_data = await s3_client.download_bytes(record.s3_key)
-                if file_data:
-                    file_data_list.append(file_data)
-                await s3_client.close()
-            else:
-                logger.warning(f"Файл {file_id} не найден")
-                
-        return file_data_list
-
+        self._llm = None
+    
+    async def _get_llm(self):
+        """Получает LLM с multimodal support"""
+        if self._llm is None:
+            from ..llm_factory import get_llm
+            self._llm = get_llm(model=self.model_name)
+        return self._llm
+    
     async def generate_images(
         self,
         prompt: str,
@@ -64,7 +45,7 @@ class NanoBananaClient:
         num_images: int = 1,
     ) -> List[str]:
         """
-        Генерирует изображения через Gemini API.
+        Генерирует изображения через LLM с multimodal output.
         
         Args:
             prompt: Текстовое описание для генерации
@@ -74,121 +55,63 @@ class NanoBananaClient:
         Returns:
             Список file_id сгенерированных изображений
         """
-        try:
-            model = genai.GenerativeModel(self.model_name)
+        logger.info(f"🎨 Генерация {num_images} изображений через LLM: {prompt[:50]}...")
+        
+        # Формируем multimodal content
+        content = [{"type": "text", "text": prompt}]
+        
+        # Добавляем референсные изображения если есть
+        if reference_file_ids:
+            logger.info(f"📎 Добавляем {len(reference_file_ids)} референсных изображений")
+            from ..file_processor import get_default_file_processor
+            file_processor = await get_default_file_processor()
             
-            # Подготавливаем контент для генерации
-            content_parts = [prompt]
-            
-            # Добавляем референсные изображения если есть
-            if reference_file_ids:
-                logger.info(f"📎 Используем {len(reference_file_ids)} референсных файлов")
-                logger.info("📎 Порядок file_ids в nano_banana_client:")
-                for i, file_id in enumerate(reference_file_ids):
-                    logger.info(f"   [{i}] {file_id}")
-                
-                reference_data = await self._get_file_records(reference_file_ids)
-                logger.info(f"📎 Получено {len(reference_data)} файлов данных")
-                
-                for i, file_data in enumerate(reference_data):
-                    logger.info(f"📎 Добавляем изображение [{i}] в content_parts (размер: {len(file_data)} байт)")
-                    # Добавляем изображение в контент
-                    content_parts.append({
-                        "mime_type": "image/png",  # Предполагаем PNG, можно улучшить определение типа
-                        "data": file_data
-                    })
-                
-                logger.info(f"📎 Итого в content_parts: {len(content_parts)} элементов (1 промпт + {len(reference_data)} изображений)")
-            
-            logger.info(f"🎨 Генерируем {num_images} изображений (промпт: {len(prompt)} символов)")
-            
-            generated_file_ids = []
-            
-            for i in range(num_images):
-                logger.info(f"🎨 Генерация изображения {i+1}/{num_images}")
-                response = model.generate_content(
-                    content_parts,
-                    generation_config=genai.GenerationConfig(
-                        temperature=0.1,
-                        top_p=0.92,
-                        top_k=15,
-                    )
-                )
-                
-                logger.info(f"📥 Получен ответ от модели")
-                logger.info(f"   response.candidates: {len(response.candidates) if response.candidates else 0}")
-                
-                if hasattr(response, 'prompt_feedback'):
-                    logger.info(f"   prompt_feedback: {response.prompt_feedback}")
-                
-                if response.candidates and len(response.candidates) > 0:
-                    candidate = response.candidates[0]
-                    logger.info(f"   hasattr(candidate, 'content'): {hasattr(candidate, 'content')}")
+            for file_id in reference_file_ids:
+                record = await file_processor.get_file_record(file_id)
+                if record:
+                    # Загружаем файл из S3
+                    s3_client = S3ClientFactory.create_client_for_bucket(record.s3_bucket)
+                    file_bytes = await s3_client.download_bytes(record.s3_key)
+                    await s3_client.close()
                     
-                    if hasattr(candidate, 'finish_reason'):
-                        logger.info(f"   finish_reason: {candidate.finish_reason}")
-                    
-                    if hasattr(candidate, 'safety_ratings'):
-                        logger.info(f"   safety_ratings: {candidate.safety_ratings}")
-                    
-                    if hasattr(candidate, 'content') and candidate.content:
-                        parts_count = len(candidate.content.parts) if hasattr(candidate.content, 'parts') else 0
-                        logger.info(f"   content.parts count: {parts_count}")
-                    
-                    if hasattr(candidate, 'content') and candidate.content and hasattr(candidate.content, 'parts') and candidate.content.parts:
-                        # Ищем только первое изображение в ответе
-                        image_found = False
-                        for part in candidate.content.parts:
-                            if hasattr(part, 'inline_data') and not image_found:
-                                # Проверяем, что это действительно изображение
-                                mime_type = part.inline_data.mime_type
-                                if mime_type and mime_type.startswith('image/'):
-                                    image_data = part.inline_data.data
-                                    
-                                    from ..file_processor import get_default_file_processor
-                                    file_processor = await get_default_file_processor()
-                                    file_name = f"generated_image_{uuid.uuid4().hex[:8]}.png"
-                                    
-                                    # Сохраняем только короткую версию промпта (первые 150 символов) чтобы не превысить лимит S3 метаданных
-                                    prompt_preview = prompt[:150] if len(prompt) > 150 else prompt
-                                    # Очищаем от переносов строк для HTTP заголовков
-                                    prompt_preview = prompt_preview.replace('\n', ' ').replace('\r', ' ')
-                                    
-                                    file_record = await file_processor.process_file_from_bytes(
-                                        data=image_data,
-                                        original_name=file_name,
-                                        content_type=mime_type,
-                                        metadata={
-                                            "generated_by": "nano_banana",
-                                            "prompt_preview": prompt_preview.encode('utf-8').decode('ascii', 'ignore'),
-                                        },
-                                        tags=["generated", "nano_banana"],
-                                        public=True,
-                                    )
-                                    
-                                    generated_file_ids.append(file_record.file_id)
-                                    logger.info(f"✅ Сгенерировано изображение: {file_record.file_id}")
-                                    image_found = True  # Обрабатываем только первое изображение
-                                else:
-                                    logger.warning(f"⚠️ Часть с неподходящим mime_type: {mime_type}")
-                            elif hasattr(part, 'text'):
-                                logger.info(f"📝 Получен текст от модели: {part.text[:200]}...")
+                    if file_bytes:
+                        # Конвертируем в base64
+                        base64_data = base64.b64encode(file_bytes).decode('utf-8')
                         
-                        if not image_found:
-                            logger.error(f"❌ Изображение не найдено в ответе модели для итерации {i+1}")
+                        # Добавляем в content
+                        content.append({
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:{record.content_type};base64,{base64_data}"
+                            }
+                        })
+                        logger.info(f"📎 Добавлено изображение {file_id}")
                     else:
-                        logger.error(f"❌ Candidate не содержит content или parts")
+                        logger.warning(f"⚠️ Не удалось загрузить файл {file_id}")
                 else:
-                    logger.error(f"❌ Нет candidates в ответе модели")
-            
-            return generated_file_ids
-            
-        except Exception as e:
-            logger.error(f"❌ Ошибка генерации изображений: {e}")
-            logger.error(f"❌ Тип ошибки: {type(e)}")
-            if hasattr(e, 'response'):
-                logger.error(f"❌ Ответ API: {e.response}")
-            raise
+                    logger.warning(f"⚠️ Файл {file_id} не найден")
+        
+        # Получаем LLM
+        llm = await self._get_llm()
+        
+        # Вызываем LLM (ChatOpenAIWithBilling автоматически обработает images в ответе)
+        response = await llm.ainvoke([{
+            "role": "user",
+            "content": content
+        }])
+        
+        # Парсим file_ids из ответа (ChatOpenAIWithBilling добавил описания файлов)
+        # Формат: 📎 Файл: name (ID: file_id, [Скачать](url), ...)
+        pattern = r'📎 Файл: [^(]+ \(ID: ([^,]+),'
+        file_ids = re.findall(pattern, response.content)
+        
+        if file_ids:
+            logger.info(f"✅ Сгенерировано {len(file_ids)} изображений: {file_ids}")
+        else:
+            logger.warning(f"⚠️ Не удалось найти file_id в ответе LLM")
+            logger.debug(f"Response content: {response.content}")
+        
+        return file_ids
 
 
 class NanoBananaClientFactory:
@@ -199,12 +122,8 @@ class NanoBananaClientFactory:
         """Создает клиент на основе конфигурации"""
         if not hasattr(settings, 'nano_banana') or not settings.nano_banana.enabled:
             raise ValueError("Nano Banana не настроен в конфигурации")
-            
-        if not settings.nano_banana.api_key:
-            raise ValueError("API ключ Nano Banana не настроен")
-            
+        
         return NanoBananaClient(
-            api_key=settings.nano_banana.api_key,
             model_name=settings.nano_banana.model_name,
             timeout=settings.nano_banana.timeout,
         )
@@ -222,7 +141,7 @@ async def get_default_nano_banana_client() -> Optional[NanoBananaClient]:
         try:
             if hasattr(settings, 'nano_banana') and settings.nano_banana.enabled:
                 _default_nano_banana_client = NanoBananaClientFactory.create_client()
-                logger.info("✅ Инициализирован дефолтный Nano Banana клиент")
+                logger.info("✅ Инициализирован дефолтный Nano Banana клиент (через OpenRouter)")
             else:
                 logger.info("ℹ️ Nano Banana не настроен в конфигурации")
         except Exception as e:

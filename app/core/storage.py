@@ -38,6 +38,11 @@ class Storage:
         self._table_cache = {}
         self._metadata = MetaData()
     
+    def _get_session(self):
+        """Создает новую сессию БД"""
+        session_factory = self.session_factory or AsyncSessionLocal
+        return session_factory()
+    
     def _get_table_name(self, key: str, company_id: Optional[str] = None) -> str:
         """
         Определяет имя таблицы на основе префикса ключа и компании.

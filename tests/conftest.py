@@ -113,6 +113,13 @@ async def cleanup_db():
     """Очищает соединения с БД после каждого теста"""
     yield
     
+    try:
+        from app.db.database import engine
+        if engine:
+            await engine.dispose()
+    except Exception:
+        pass
+    
     import gc
     gc.collect()
 
@@ -130,6 +137,13 @@ async def migrated_agents():
         print(f"\n⚠️ Автомиграция не удалась (это нормально): {e}")
     
     yield
+    
+    try:
+        from app.db.database import engine
+        if engine:
+            await engine.dispose()
+    except Exception:
+        pass
 
 
 # Переопределяем LLM конфиги агентов на mock для всех тестов (один раз при импорте)
