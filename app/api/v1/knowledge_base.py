@@ -9,10 +9,11 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
 
 from app.core.context import get_context
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.core.file_processor import FileProcessor
 from app.models.rag_models import RAGDocument
 from app.tools.rag_tools import upload_document_to_knowledge_base
+from app.frontend.dependencies import FlowRepositoryDep
 
 router = APIRouter(
     prefix="/knowledge-base",
@@ -41,7 +42,8 @@ class DocumentListResponse(BaseModel):
 @router.post("/flows/{flow_id}/documents", response_model=UploadDocumentResponse, summary="Загрузить документ")
 async def upload_document_to_flow(
     flow_id: str,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    flow_repo: FlowRepositoryDep = None
 ):
     """
     Загружает документ в базу знаний бота для использования в RAG.
@@ -74,8 +76,7 @@ async def upload_document_to_flow(
     if not context or not context.active_company:
         raise HTTPException(status_code=401, detail="Не авторизован")
     
-    storage = Storage()
-    flow_config = await storage.get_flow_config(flow_id)
+    flow_config = await flow_repo.get(flow_id)
     
     if not flow_config:
         raise HTTPException(status_code=404, detail=f"Flow {flow_id} не найден")
@@ -87,7 +88,7 @@ async def upload_document_to_flow(
             namespace_scope="flow",
             search_scopes=["flow", "company"]
         )
-        await storage.set_flow_config(flow_config)
+        await flow_repo.set(flow_config)
     
     file_content = await file.read()
     
@@ -125,7 +126,7 @@ async def upload_document_to_flow(
 
 
 @router.get("/flows/{flow_id}/documents", response_model=DocumentListResponse)
-async def get_flow_documents(flow_id: str):
+async def get_flow_documents(flow_id: str, flow_repo: FlowRepositoryDep):
     """
     Получает список документов в базе знаний flow.
     Прямой вызов RAG provider для получения списка.
@@ -138,8 +139,7 @@ async def get_flow_documents(flow_id: str):
     if not context or not context.active_company:
         raise HTTPException(status_code=401, detail="Не авторизован")
     
-    storage = Storage()
-    flow_config = await storage.get_flow_config(flow_id)
+    flow_config = await flow_repo.get(flow_id)
     
     if not flow_config:
         raise HTTPException(status_code=404, detail=f"Flow {flow_id} не найден")
@@ -169,7 +169,7 @@ async def get_flow_documents(flow_id: str):
 
 
 @router.delete("/flows/{flow_id}/documents/{document_id}")
-async def delete_flow_document(flow_id: str, document_id: str):
+async def delete_flow_document(flow_id: str, document_id: str, flow_repo: FlowRepositoryDep):
     """Удаляет документ из базы знаний flow"""
     from app.core.rag.factory import get_default_rag_provider
     from app.core.rag.namespace_manager import get_or_create_namespace
@@ -179,8 +179,7 @@ async def delete_flow_document(flow_id: str, document_id: str):
     if not context or not context.active_company:
         raise HTTPException(status_code=401, detail="Не авторизован")
     
-    storage = Storage()
-    flow_config = await storage.get_flow_config(flow_id)
+    flow_config = await flow_repo.get(flow_id)
     
     if not flow_config:
         raise HTTPException(status_code=404, detail=f"Flow {flow_id} не найден")

@@ -8,7 +8,7 @@ import json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.core.storage import Storage
+from app.db.repositories import Storage
 
 logger = logging.getLogger(__name__)
 

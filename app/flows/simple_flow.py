@@ -6,7 +6,7 @@ from typing import TypedDict, List
 from langchain_core.messages import BaseMessage, AIMessage
 from langgraph.graph import StateGraph, END
 
-from app.agents.base import BaseAgent
+from app.agents.stategraph_agent import StateGraphAgent
 from app.models import FlowConfig
 
 
@@ -24,7 +24,7 @@ async def test_response_node(state: TestState) -> TestState:
     return state
 
 
-class SimpleFlowAgent(BaseAgent):
+class SimpleFlowAgent(StateGraphAgent):
     """Простой StateGraph агент без LLM для тестирования"""
 
     name = "Test Flow Agent"

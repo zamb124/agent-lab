@@ -8,8 +8,8 @@ from typing import List, Dict, Any
 import uuid
 
 from app.models import FlowConfig
-from app.frontend.dependencies import StorageDep, CanvasServiceDep
-from app.core.migrator import Migrator
+from app.frontend.dependencies import StorageDep, CanvasServiceDep, FlowRepositoryDep, AgentRepositoryDep
+from app.core.migration import Migrator
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/flows", tags=["builder-flows"])
 
 
 @router.get("/", response_model=List[FlowConfig])
-async def list_flows(storage: StorageDep) -> List[FlowConfig]:
+async def list_flows(storage: StorageDep, flow_repo: FlowRepositoryDep) -> List[FlowConfig]:
     """Получить список всех флоу"""
     # Получаем все ключи с префиксом "flow:"
     flow_keys = await storage.list_by_prefix("flow:")
@@ -26,7 +26,7 @@ async def list_flows(storage: StorageDep) -> List[FlowConfig]:
     for key in flow_keys:
         # Извлекаем flow_id из ключа (убираем префикс компании и "flow:")
         flow_id = key.split(":")[-1]  # Берем последнюю часть после ":"
-        flow = await storage.get_flow_config(flow_id)
+        flow = await flow_repo.get(flow_id)
         if flow:
             flows.append(flow)
     
@@ -36,7 +36,9 @@ async def list_flows(storage: StorageDep) -> List[FlowConfig]:
 @router.post("/", response_model=FlowConfig)
 async def create_flow(
     flow_data: Dict[str, Any],
-    storage: StorageDep = None
+    storage: StorageDep = None,
+    flow_repo: FlowRepositoryDep = None,
+    agent_repo: AgentRepositoryDep = None
 ) -> FlowConfig:
     """Создать новый флоу и сразу сохранить в БД"""
     
@@ -46,7 +48,7 @@ async def create_flow(
     
     entry_point_agent = flow_data.get("entry_point_agent", "")
     
-    if entry_point_agent and not await storage.get_agent_config(entry_point_agent):
+    if entry_point_agent and not await agent_repo.get(entry_point_agent):
         from app.models import AgentConfig, AgentType, CodeMode
         
         agent_config = AgentConfig(
@@ -58,7 +60,7 @@ async def create_flow(
             code_mode=CodeMode.INLINE_CODE,
             source="auto_created"
         )
-        await storage.set_agent_config(agent_config)
+        await agent_repo.set(agent_config)
     
     flow_config = FlowConfig(
         flow_id=flow_id,
@@ -72,15 +74,15 @@ async def create_flow(
         source="ui_created"
     )
     
-    await storage.set_flow_config(flow_config)
+    await flow_repo.set(flow_config)
     
     return flow_config
 
 
 @router.get("/{flow_id:path}/canvas")
-async def get_flow_canvas(flow_id: str, storage: StorageDep) -> Dict[str, Any]:
+async def get_flow_canvas(flow_id: str, storage: StorageDep, flow_repo: FlowRepositoryDep) -> Dict[str, Any]:
     """Получить данные канваса для флоу"""
-    flow = await storage.get_flow_config(flow_id)
+    flow = await flow_repo.get(flow_id)
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
     
@@ -118,9 +120,9 @@ async def update_flow_canvas(
 
 
 @router.get("/{flow_id:path}", response_model=FlowConfig)
-async def get_flow(flow_id: str, storage: StorageDep) -> FlowConfig:
+async def get_flow(flow_id: str, storage: StorageDep, flow_repo: FlowRepositoryDep) -> FlowConfig:
     """Получить флоу по ID"""
-    flow = await storage.get_flow_config(flow_id)
+    flow = await flow_repo.get(flow_id)
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
     return flow
@@ -130,10 +132,11 @@ async def get_flow(flow_id: str, storage: StorageDep) -> FlowConfig:
 async def update_flow(
     flow_id: str,
     updates: Dict[str, Any],
-    storage: StorageDep
+    storage: StorageDep,
+    flow_repo: FlowRepositoryDep
 ) -> FlowConfig:
     """Обновить флоу"""
-    flow = await storage.get_flow_config(flow_id)
+    flow = await flow_repo.get(flow_id)
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
     
@@ -220,18 +223,18 @@ async def update_flow(
 
 
 @router.delete("/{flow_id:path}")
-async def delete_flow(flow_id: str, storage: StorageDep):
+async def delete_flow(flow_id: str, storage: StorageDep, flow_repo: FlowRepositoryDep):
     """Удалить флоу"""
-    flow = await storage.get_flow_config(flow_id)
+    flow = await flow_repo.get(flow_id)
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
     
-    await storage.delete_flow_config(flow_id)
+    await flow_repo.delete(flow_id)
     return {"message": "Flow deleted successfully"}
 
 
 @router.post("/{flow_id:path}/install")
-async def install_flow(flow_id: str, storage: StorageDep):
+async def install_flow(flow_id: str, storage: StorageDep, flow_repo: FlowRepositoryDep):
     """
     Установить flow из Store.
     Запускает install() и after_install_hook если они определены в flow.
@@ -269,16 +272,16 @@ async def install_flow(flow_id: str, storage: StorageDep):
 
 
 @router.post("/{flow_id:path}/uninstall")
-async def uninstall_flow(flow_id: str, storage: StorageDep):
+async def uninstall_flow(flow_id: str, storage: StorageDep, flow_repo: FlowRepositoryDep):
     """
     Удалить установленный flow.
     Запускает uninstall() хук если он определен в flow.
     """
-    flow = await storage.get_flow_config(flow_id)
+    flow = await flow_repo.get(flow_id)
     if not flow:
         raise HTTPException(status_code=404, detail="Flow не найден")
     
-    await storage.delete_flow_config(flow_id)
+    await flow_repo.delete(flow_id)
     
     if flow.entry_point_agent:
         await storage.delete_agent_config(flow.entry_point_agent)

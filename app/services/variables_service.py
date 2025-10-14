@@ -7,7 +7,7 @@ import logging
 import json
 from typing import Optional, Dict, Any
 
-from app.core.storage import Storage
+from app.db.repositories import Storage
 
 logger = logging.getLogger(__name__)
 

@@ -12,12 +12,13 @@ from datetime import datetime, timezone
 
 from app.models import AgentConfig, FlowConfig
 from app.identity.models import Company
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.core.file_processor import FileProcessor
 from app.core.context import get_context
-from app.core.migrator import Migrator
+from app.core.migration import Migrator
 from app.core.config import get_settings
 from app.identity.auth_service import auth_service
+from app.frontend.dependencies import AgentRepositoryDep, FlowRepositoryDep, StorageDep
 
 logger = logging.getLogger(__name__)
 
@@ -58,18 +59,16 @@ async def get_current_user():
 
 
 @router.get("/agents", response_model=List[str])
-async def list_agents():
+async def list_agents(storage: StorageDep):
     """Получить список всех агентов"""
-    storage = Storage()
     keys = await storage.list_by_prefix("agent:", limit=100)
     return [key.replace("agent:", "") for key in keys]
 
 
 @router.get("/agents/{agent_id}")
-async def get_agent(agent_id: str):
+async def get_agent(agent_id: str, agent_repo: AgentRepositoryDep):
     """Получить конфигурацию агента"""
-    storage = Storage()
-    config = await storage.get_agent_config(agent_id)
+    config = await agent_repo.get(agent_id)
     if not config:
         raise HTTPException(status_code=404, detail="Agent not found")
     return config
@@ -94,20 +93,18 @@ async def list_flows():
 
 
 @router.get("/flows/{flow_id}")
-async def get_flow(flow_id: str):
+async def get_flow(flow_id: str, flow_repo: FlowRepositoryDep):
     """Получить конфигурацию флоу"""
-    storage = Storage()
-    config = await storage.get_flow_config(flow_id)
+    config = await flow_repo.get(flow_id)
     if not config:
         raise HTTPException(status_code=404, detail="Flow not found")
     return config
 
 
 @router.post("/flows")
-async def create_flow(config: FlowConfig):
+async def create_flow(config: FlowConfig, flow_repo: FlowRepositoryDep):
     """Создать новый флоу"""
-    storage = Storage()
-    success = await storage.set_flow_config(config)
+    success = await flow_repo.set(config)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to create flow")
     return {"message": "Flow created successfully", "flow_id": config.flow_id}

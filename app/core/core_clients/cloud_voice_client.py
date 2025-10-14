@@ -18,7 +18,7 @@ import httpx
 from datetime import datetime, timedelta, timezone
 
 from ..config import settings
-from ..storage import Storage
+from app.db.repositories import Storage
 from ...models.file_models import CloudVoiceTokenConfig
 
 logger = logging.getLogger(__name__)

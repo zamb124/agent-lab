@@ -10,12 +10,14 @@ from typing import Dict, Any, Optional, Tuple, List
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.models import TaskConfig, TaskStatus, SessionConfig, SessionStatus
 from app.core.file_processor import get_default_file_processor
 from app.core.audio_processor import get_default_audio_processor
 from app.core.context import get_context
 from app.core.audio_processor import AudioProcessor
+from app.core.container import get_container
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,6 +48,10 @@ class BaseInterface(ABC):
         self.platform_config = platform_config
         self.platform_name = self.__class__.__name__.replace("Interface", "").lower()
         self.storage = Storage()
+        container = get_container()
+        self.flow_repository = container.get_flow_repository()
+        self.task_repository = container.get_task_repository()
+        self.session_repository = container.get_session_repository()
 
     def check_user_access(self, user_identifier: str, username: str = None) -> Tuple[bool, Optional[str]]:
         """
@@ -220,7 +226,7 @@ class BaseInterface(ABC):
                     pending_task.input_data["message"] = new_message
                     pending_task.input_data["message_count"] = pending_task.input_data.get("message_count", 1) + 1
 
-                    await storage.set_task_config(pending_task)
+                    await self.task_repository.set(pending_task)
                     logger.info(f"✅ Приклеили сообщение к задаче {pending_task.task_id}")
                     return pending_task.task_id
                 else:
@@ -269,7 +275,7 @@ class BaseInterface(ABC):
         context.session_id = message.session_id or context.session_id
         
         # Загружаем и добавляем flow_config в контекст
-        flow_config = await storage.get_flow_config(flow_id)
+        flow_config = await self.flow_repository.get(flow_id)
         if flow_config:
             context.flow_config = flow_config
             logger.debug(f"Flow config добавлен в контекст: {flow_id}")
@@ -355,7 +361,7 @@ class BaseInterface(ABC):
         if active_session:
             # Обновляем время активности
             active_session.last_activity = datetime.now(timezone.utc).isoformat()
-            await self.storage.set_session_config(active_session)
+            await self.session_repository.set(active_session)
             logger.info(f"📱 Используем активную сессию {active_session.session_id}")
             return active_session.session_id
 
@@ -364,14 +370,14 @@ class BaseInterface(ABC):
 
     async def get_session(self, session_id: str) -> Optional[SessionConfig]:
         """Получает сессию по session_id"""
-        return await self.storage.get_session_config(session_id)
+        return await self.session_repository.get(session_id)
 
     async def _find_active_session(
         self, user_id: str, flow_id: str
     ) -> Optional[SessionConfig]:
         """Ищет активную сессию для пользователя и flow"""
         # Ищем активные сессии для пользователя и flow
-        active_sessions = await self.storage.find_active_sessions(
+        active_sessions = await self.session_repository.find_active(
             platform=self.platform_name, user_id=user_id, flow_id=flow_id
         )
 
@@ -408,7 +414,7 @@ class BaseInterface(ABC):
         )
 
         # Сохраняем в БД через единый метод
-        await self.storage.set_session_config(session_config)
+        await self.session_repository.save(session_config)
 
         logger.info(f"🆕 Создана новая сессия {session_id}")
         return session_id
@@ -496,7 +502,7 @@ class BaseInterface(ABC):
         )
 
         # Находим все активные сессии пользователя
-        all_sessions = await self.storage.find_active_sessions(
+        all_sessions = await self.session_repository.find_active(
             platform=self.platform_name, user_id=user_id, flow_id=flow_id
         )
 

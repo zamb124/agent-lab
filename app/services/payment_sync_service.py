@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timezone
 from typing import Dict, Any
 
-from ..core.storage import Storage
+from app.db.repositories import Storage
 from ..core.clients.payment_providers.factory import PaymentProviderFactory
 from ..models.payment_models import PaymentStatus
 from .payment_service import PaymentService

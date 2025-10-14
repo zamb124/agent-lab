@@ -2,10 +2,10 @@
 Агент-объяснитель для финального резюме.
 """
 
-from app.agents.base import BaseAgent
+from app.agents.react_agent import ReActAgent
 
 
-class ExplainerAgent(BaseAgent):
+class ExplainerAgent(ReActAgent):
     """Агент который объясняет что произошло в процессе"""
 
     name = "explainer_agent"

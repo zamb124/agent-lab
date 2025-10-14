@@ -14,7 +14,7 @@ from ..models import Context
 from ..core.config import settings
 from ..identity.models import User, AuthProvider, UserStatus, Company
 from ..identity.auth_service import AuthService
-from ..core.storage import Storage
+from app.db.repositories import Storage
 from ..models.i18n_models import Language
 logger = logging.getLogger(__name__)
 

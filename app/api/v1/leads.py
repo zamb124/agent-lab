@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
 import json
 
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.core.config import settings
 
 router = APIRouter(

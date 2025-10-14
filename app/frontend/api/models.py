@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from typing import Dict, Any, get_origin, get_args, Union, Optional
 from pydantic import BaseModel
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.frontend.wrappers import ModelListWrapper
 from app.frontend.model_registry import ModelRegistry
 from app.frontend.core.template_loader import render_template, get_templates

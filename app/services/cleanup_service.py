@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone
 from sqlalchemy import select, delete
 
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.core.core_clients.s3_client import S3ClientFactory
 from app.db.database import AsyncSessionLocal
 from app.db.models import Storage as StorageModel

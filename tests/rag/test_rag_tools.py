@@ -199,7 +199,7 @@ class TestUploadDocumentToKnowledgeBase:
         mock_storage.get = AsyncMock(return_value=None)
         
         with patch("app.tools.rag_tools.get_context", return_value=mock_context):
-            with patch("app.core.storage.Storage", return_value=mock_storage):
+            with patch("app.db.repositories.Storage", return_value=mock_storage):
                 result = await upload_document_to_knowledge_base.ainvoke(
                     {"file_id": "nonexistent"},
                     config={}

@@ -9,17 +9,29 @@ alwaysApply: true
 **ВСЕГДА** следуй принципу Database-First:
 - Вся конфигурация агентов, flows и tools хранится в БД
 - Код определяет только поведение, но не структуру
-- Используй `Storage` (`app/core/storage.py`) для всех операций с конфигурацией
-- Фабрики создают объекты из БД: `AgentFactory`, `FlowFactory`, `ToolFactory`
+- Используй **Repository Pattern** для работы с данными:
+  - `Storage` - низкоуровневый key-value доступ
+  - `Repository` - CRUD для конкретных моделей (AgentRepository, FlowRepository, etc)
+  - `Factory` - создание объектов со всеми зависимостями
+- Фабрики используют репозитории для получения конфигурации: `AgentFactory`, `FlowFactory`, `ToolFactory`
 
 <good_example>
 # Создание агента через фабрику из БД
-agent = await agent_factory.create_agent(agent_id)
+agent_factory = get_container().get_agent_factory()
+agent = await agent_factory.get_agent(agent_id)
+
+# Работа с конфигурацией через репозиторий
+agent_repo = get_container().get_agent_repository()
+config = await agent_repo.get(agent_id)
 </good_example>
 
 <bad_example>
 # Не хардкодь конфигурацию в коде
 agent = MyAgent(prompt="...", tools=[...])
+
+# Не используй Storage напрямую для моделей
+storage = Storage()
+data = await storage.get("agent:agent_id")  # Используй репозиторий!
 </bad_example>
 
 ## Асинхронность

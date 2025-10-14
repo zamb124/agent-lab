@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
 
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.flows.flow import Flow
 from app.identity.models import User, Company
 from app.models.history_models import (
@@ -23,10 +23,12 @@ from app.models.history_models import (
 )
 from app.models import FlowConfig, ToolReference
 from app.core.context import get_context
-from app.core.migrator import Migrator
+from app.core.migration import Migrator
 from app.services.variables_service import VariablesService
+from app.core.container import get_container
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from app.core.config import get_settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,6 +37,8 @@ class FlowFactory:
 
     def __init__(self):
         self.storage = Storage()
+        self.flow_repository = get_container().get_flow_repository()
+        self.session_repository = get_container().get_session_repository()
 
     async def get_flow(self, flow_id: str) -> Flow:
         """
@@ -46,7 +50,7 @@ class FlowFactory:
         Returns:
             Экземпляр Flow
         """
-        config = await self.storage.get_flow_config(flow_id)
+        config = await self.flow_repository.get(flow_id)
         if not config:
             raise ValueError(f"Flow {flow_id} не найден в БД")
 
@@ -163,12 +167,12 @@ class FlowFactory:
             created_at = all_messages[0].timestamp if all_messages else None
             last_activity = all_messages[-1].timestamp if all_messages else None
         
-        session_config = await self.storage.get_session_config(session_id)
+        session_config = await self.session_repository.get(session_id)
         flow_id = session_config.flow_id if session_config else None
         
         flow_name = None
         if flow_id:
-            flow_config = await self.storage.get_flow_config(flow_id)
+            flow_config = await self.flow_repository.get(flow_id)
             if flow_config and hasattr(flow_config, 'name'):
                 flow_name = flow_config.name
         
@@ -188,7 +192,7 @@ class FlowFactory:
                         session_config.first_message = preview
                         break
             
-            await self.storage.set_session_config(session_config)
+            await self.session_repository.set(session_config)
             logger.info(f"📊 Обновлена статистика старой сессии: {len(all_messages)} сообщений")
         
         return MessageHistoryResponse(
@@ -271,7 +275,7 @@ class FlowFactory:
             flow_name = None
             if session.flow_id:
                 if session.flow_id not in flow_cache:
-                    flow_config = await self.storage.get_flow_config(session.flow_id)
+                    flow_config = await self.flow_repository.get(session.flow_id)
                     flow_cache[session.flow_id] = flow_config.name if flow_config and hasattr(flow_config, 'name') else None
                 flow_name = flow_cache[session.flow_id]
             
@@ -506,7 +510,7 @@ class FlowFactory:
             with_dependencies=True
         )
         
-        flow_config = await self.storage.get_flow_config(flow_id)
+        flow_config = await self.flow_repository.get(flow_id)
         if flow_config and flow_config.install_hook:
             await self._execute_hook(flow_config.install_hook, flow_config, company_id)
         
@@ -538,7 +542,7 @@ class FlowFactory:
         
         logger.info(f"Удаление flow {flow_id} из компании {company_id}")
         
-        flow_config = await self.storage.get_flow_config(flow_id)
+        flow_config = await self.flow_repository.get(flow_id)
         if not flow_config:
             raise ValueError(f"Flow {flow_id} не установлен в компании {company_id}")
         

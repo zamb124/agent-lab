@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from langchain_core.tools import tool
 
 from ..clients.fashn_client import get_fashn_client
-from ..core.storage import Storage
+from app.db.repositories import Storage
 from ..models import FileRecord
 from ..models.fashn_models import TryOnRecord, TryOnParameters
 from ..core.core_clients.s3_client import get_default_s3_client

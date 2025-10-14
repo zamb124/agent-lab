@@ -25,7 +25,7 @@ async def select_company_page(request: Request):
     """Страница выбора компании"""
     from app.core.config import settings
     from app.core.context import get_context
-    from app.core.storage import Storage
+    from app.db.repositories import Storage
     import json
 
     context = get_context()

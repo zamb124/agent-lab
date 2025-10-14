@@ -13,6 +13,7 @@ from app.core.context import set_context, clear_context
 from app.identity.models import Company, User, AuthProvider, UserStatus
 from app.models.context_models import Context
 from app.models import AgentType
+from app.db.repositories import AgentRepository, FlowRepository
 
 
 @pytest.fixture
@@ -106,7 +107,8 @@ async def test_migrate_defaults_for_company(migrated_db, storage, migrator, test
     await migrator.migrate_defaults_for_company(test_company)
     
     # Проверяем что flows НЕ мигрировались
-    simple_flow_config = await storage.get_flow_config("app.flows.simple_flow.simple_flow_config")
+    flow_repo = FlowRepository(storage)
+    simple_flow_config = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
     assert simple_flow_config is None, "Flows НЕ должны автоматически мигрироваться"
     
     weather_flow_config = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
@@ -855,7 +857,7 @@ async def test_api_remigrate_endpoints(migrated_db, storage, migrator, test_migr
 if __name__ == "__main__":
     # Прямой запуск для отладки
     import asyncio
-    from app.core.storage import Storage
+    from app.db.repositories import Storage
     
     async def run_all_tests():
         from app.identity.models import Company

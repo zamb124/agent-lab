@@ -1,25 +1,14 @@
 """
 Migrator - система миграции агентов и флоу из кода в БД.
-Сканирует папки /flows и /agents, читает Python-объекты и сохраняет в БД.
+Оркестратор процесса миграции, использующий Scanner и Persister.
 """
 
 import logging
-import importlib
-import inspect
-import pkgutil
-from typing import List, Type, Optional
+from typing import List, Optional
 
-import app.agents
-import app.flows
-import app.custom_flows
-
-from app.core.storage import Storage
-from app.models import (
-    AgentConfig,
-    FlowConfig,
-    ToolReference,
-)
-from app.agents.base import BaseAgent
+from app.db.repositories import Storage
+from app.core.migration import CodeScanner, ConfigPersister
+from app.models import AgentConfig, FlowConfig, ToolReference
 from app.identity.models import Company, User, AuthProvider, UserStatus
 from app.core.context import set_context
 from app.models.context_models import Context
@@ -28,10 +17,12 @@ logger = logging.getLogger(__name__)
 
 
 class Migrator:
-    """Мигратор для переноса агентов и флоу из кода в БД"""
+    """Оркестратор миграции агентов и флоу из кода в БД"""
 
     def __init__(self):
         self.storage = Storage()
+        self.scanner = CodeScanner()
+        self.persister = ConfigPersister(self.storage)
 
     async def run_full_migration(self):
         """
@@ -85,7 +76,7 @@ class Migrator:
 
         all_tool_functions = []
         for package_name in packages_to_scan:
-            tool_functions = await self._find_tool_functions(package_name)
+            tool_functions = await self.scanner.find_tool_functions(package_name)
             all_tool_functions.extend(tool_functions)
 
         logger.info(f"Найдено {len(all_tool_functions)} tool функций")
@@ -107,7 +98,7 @@ class Migrator:
         """
         logger.info("Миграция всех агентов...")
 
-        agent_classes = await self._find_agent_classes()
+        agent_classes = await self.scanner.find_agent_classes()
 
         migrated_count = 0
         for agent_class in agent_classes:
@@ -127,7 +118,7 @@ class Migrator:
         """
         logger.info("Миграция всех flows...")
 
-        flow_ids = await self._find_flow_ids()
+        flow_ids = await self.scanner.find_flow_ids()
 
         migrated_count = 0
         for flow_id in flow_ids:
@@ -176,75 +167,6 @@ class Migrator:
         set_context(context)
         logger.info(f"✅ Установлен контекст компании {company.company_id} для миграции")
 
-    async def _find_agent_classes(self) -> List[Type[BaseAgent]]:
-        """Находит все классы-наследники BaseAgent в проекте"""
-        agent_classes = []
-
-        # Сканируем папки где могут быть агенты
-        modules_to_scan = []
-
-        # 1. Сканируем app.agents
-        modules_to_scan.append(app.agents)
-
-        # 2. Сканируем app.flows (для StateGraph агентов)
-        modules_to_scan.append(app.flows)
-
-        # 3. Сканируем app.custom_flows (для кастомных агентов)
-        modules_to_scan.append(app.custom_flows)
-
-        # Обходим все найденные модули
-        for base_module in modules_to_scan:
-            # Рекурсивно обходим все подмодули
-            for importer, modname, ispkg in pkgutil.walk_packages(
-                base_module.__path__, base_module.__name__ + "."
-            ):
-                module = importlib.import_module(modname)
-
-                # Ищем классы-наследники BaseAgent
-                for name, obj in inspect.getmembers(module, inspect.isclass):
-                    if (
-                        issubclass(obj, BaseAgent)
-                        and obj != BaseAgent
-                        and obj.__module__ == modname
-                    ):
-                        agent_classes.append(obj)
-                        logger.info(f"✅ Найден класс агента: {modname}.{name}")
-                    elif issubclass(obj, BaseAgent):
-                        logger.debug(
-                            f"🔍 Пропущен класс BaseAgent: {modname}.{name}"
-                        )
-                    elif obj.__module__ != modname:
-                        logger.debug(
-                            f"🔍 Пропущен класс из другого модуля: {modname}.{name} (модуль: {obj.__module__})"
-                        )
-
-        return agent_classes
-
-    async def _find_flow_ids(self) -> List[str]:
-        """
-        Находит все FlowConfig объекты в коде и возвращает их ID.
-        
-        Returns:
-            Список flow_id (например, ["app.flows.weather_flow.weather_flow_config"])
-        """
-        flow_ids = []
-
-        modules_to_scan = [app.flows, app.custom_flows]
-
-        for base_module in modules_to_scan:
-            for importer, modname, ispkg in pkgutil.walk_packages(
-                base_module.__path__, base_module.__name__ + "."
-            ):
-                module = importlib.import_module(modname)
-
-                for name, obj in inspect.getmembers(module):
-                    if isinstance(obj, FlowConfig):
-                        flow_id = f"{modname}.{name}"
-                        flow_ids.append(flow_id)
-                        logger.debug(f"Найден FlowConfig: {flow_id}")
-
-        return flow_ids
-
     async def get_public_flows(self) -> List[tuple[str, FlowConfig]]:
         """
         Находит все публичные FlowConfig объекты в коде.
@@ -252,24 +174,7 @@ class Migrator:
         Returns:
             Список кортежей (full_flow_id, FlowConfig) с is_public=True
         """
-        public_flows = []
-
-        modules_to_scan = [app.flows, app.custom_flows]
-
-        for base_module in modules_to_scan:
-            for importer, modname, ispkg in pkgutil.walk_packages(
-                base_module.__path__, base_module.__name__ + "."
-            ):
-                module = importlib.import_module(modname)
-
-                for name, obj in inspect.getmembers(module):
-                    if isinstance(obj, FlowConfig):
-                        if getattr(obj, 'is_public', False):
-                            full_flow_id = f"{modname}.{name}"
-                            public_flows.append((full_flow_id, obj))
-                            logger.debug(f"Найден публичный FlowConfig: {full_flow_id}")
-
-        return public_flows
+        return await self.scanner.find_public_flows()
 
 
     async def remigrate_flow(self, flow_id: str, company: Company):
@@ -307,7 +212,7 @@ class Migrator:
         all_tool_functions = []
         
         for package_name in packages_to_scan:
-            tool_functions = await self._find_tool_functions(package_name)
+            tool_functions = await self.scanner.find_tool_functions(package_name)
             all_tool_functions.extend(tool_functions)
 
         migrated_count = 0
@@ -357,56 +262,3 @@ class Migrator:
                 await ToolReference.migrate(tool_id, migrator=self)
         
         logger.info("✅ Миграция завершена")
-
-    async def _find_tool_functions(self, package_name: str):
-        """Находит все @tool функции в пакете (рекурсивно)"""
-        tool_functions = []
-
-        logger.info(f"🔧 Сканируем пакет: {package_name}")
-
-        package = importlib.import_module(package_name)
-        
-        # Используем pkgutil для рекурсивного обхода всех подмодулей
-        for importer, modname, ispkg in pkgutil.walk_packages(
-            package.__path__, package.__name__ + "."
-        ):
-            logger.info(f"🔧 Загружаем модуль: {modname}")
-            module = importlib.import_module(modname)
-
-            # Ищем StructuredTool объекты (результат @tool декоратора)
-            all_members = inspect.getmembers(module)
-            logger.info(f"🔧 Найдено {len(all_members)} объектов в {modname}")
-
-            for name, obj in all_members:
-                # Пропускаем служебные объекты
-                if name.startswith("_") or name in ["tool", "operator", "re"]:
-                    continue
-
-                logger.info(f"🔧 Проверяем объект: {name} ({type(obj).__name__})")
-
-                # Ищем StructuredTool объекты
-                if (
-                    hasattr(obj, "name")
-                    and hasattr(obj, "description")
-                    and (hasattr(obj, "func") or hasattr(obj, "coroutine"))
-                ):
-                    # Это LangChain StructuredTool (результат @tool)
-                    tool_type = (
-                        "async"
-                        if (
-                            hasattr(obj, "func")
-                            and obj.func is None
-                            and hasattr(obj, "coroutine")
-                        )
-                        else "sync"
-                    )
-                    logger.info(
-                        f"🔧 ✅ Найден @tool ({tool_type}): {name} (tool.name={obj.name})"
-                    )
-                    tool_functions.append((obj, modname))
-                else:
-                    logger.info(f"🔧 ❌ НЕ @tool: {name}")
-
-        logger.info(f"🔧 Итого найдено {len(tool_functions)} @tool функций")
-        return tool_functions
-

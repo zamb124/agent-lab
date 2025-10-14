@@ -2,12 +2,12 @@
 Агент-калькулятор для математических вычислений.
 """
 
-from app.agents.base import BaseAgent
+from app.agents.react_agent import ReActAgent
 from app.tools.standard import ask_user
 from app.tools.calc_tools import calculate, get_math_help
 
 
-class CalculatorAgent(BaseAgent):
+class CalculatorAgent(ReActAgent):
     """Агент для математических вычислений"""
 
     name = "calculator_agent"

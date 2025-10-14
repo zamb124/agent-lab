@@ -17,7 +17,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from app.core.config import settings
 from app.core.checkpointer import init_checkpointer, close_checkpointer
 from app.db.database import create_tables, close_db
-from app.core.migrator import Migrator
+from app.core.migration import Migrator
 from app.api.amocrm import router as amocrm_router
 from app.api.v1 import webhooks, admin, telegram, whatsapp, tokens, auth, flows, fashn, files, leads, history, payments, admin_payments, variables, knowledge_base
 from app.frontend.api import models as frontend_models
@@ -99,9 +99,9 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("openai._base_client").setLevel(logging.DEBUG)
 logging.getLogger("openai").setLevel(logging.WARNING)
-logging.getLogger("app.core.migrator").setLevel(logging.WARNING)
+logging.getLogger("app.core.migration.migrator").setLevel(logging.WARNING)
 logging.getLogger("app.core.agent_factory").setLevel(logging.WARNING)
-logging.getLogger("app.core.storage").setLevel(logging.WARNING)
+logging.getLogger("app.db.repositories.storage").setLevel(logging.WARNING)
 
 # Оставляем только ключевые логи
 logging.getLogger("app.agents.base").setLevel(

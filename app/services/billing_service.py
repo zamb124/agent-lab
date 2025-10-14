@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
-from ..core.storage import Storage
+from app.db.repositories import Storage
 from ..core.context import get_context
 from ..identity.models import User, Company
 from ..models.billing_models import UsageRecord, UsageType, TARIFF_PRICES

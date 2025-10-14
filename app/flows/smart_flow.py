@@ -5,7 +5,7 @@ Smart Flow - флоу с роутером, калькулятором, пого�
 from typing import TypedDict, List
 from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph import StateGraph, START, END
-from app.agents.base import BaseAgent
+from app.agents.stategraph_agent import StateGraphAgent
 from app.models import FlowConfig
 from app.core.agent_factory import AgentFactory
 
@@ -89,8 +89,8 @@ async def explainer_node(state: RouterState) -> RouterState:
     return state
 
 
-class SmartFlowAgent(BaseAgent):
-    """StateGraph агент - наследник BaseAgent с чистым LangGraph кодом"""
+class SmartFlowAgent(StateGraphAgent):
+    """StateGraph агент - кастомная реализация с чистым LangGraph кодом"""
 
     name = "Smart Flow Agent"
     description = "StateGraph агент с роутингом между калькулятором и погодой"
@@ -123,12 +123,16 @@ class SmartFlowAgent(BaseAgent):
 
         return graph
 
+    async def compile_graph(self):
+        """Реализация абстрактного метода - компилирует кастомный граф"""
+        from app.core.checkpointer import get_checkpointer
+        checkpointer = await get_checkpointer()
+        return self.graph.compile(checkpointer=checkpointer)
+
     async def ainvoke(self, input_data, config=None):
         """Стандартный LangGraph ainvoke"""
         if self.compiled_graph is None:
-            from app.core.checkpointer import get_checkpointer
-            checkpointer = await get_checkpointer()
-            self.compiled_graph = self.graph.compile(checkpointer=checkpointer)
+            self.compiled_graph = await self.compile_graph()
         
         return await self.compiled_graph.ainvoke(input_data, config)
 

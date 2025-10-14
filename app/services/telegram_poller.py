@@ -9,7 +9,7 @@ import traceback
 from typing import Dict, List
 import httpx
 
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.core.config import settings
 from app.models import FlowConfig
 

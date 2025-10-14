@@ -4,25 +4,64 @@ alwaysApply: false
 ---
 # Правила работы с базой данных
 
-## Storage (Key-Value)
+## Repository Pattern (основной способ)
 
-Используй `Storage` (`app/core/storage.py`) для всех операций с конфигурацией:
+**Используй репозитории** для работы с моделями:
+
+<good_example>
+from app.core.container import get_container
+
+# Получить репозиторий
+agent_repo = get_container().get_agent_repository()
+
+# CRUD операции (единообразный API как в Storage)
+agent = await agent_repo.get("agent_id")
+await agent_repo.set(agent_config)
+await agent_repo.delete("agent_id")
+agents = await agent_repo.list_all(limit=100)
+</good_example>
+
+### В API endpoints используй DI:
+
+<good_example>
+from app.frontend.dependencies import AgentRepositoryDep
+
+@router.get("/{agent_id}")
+async def get_agent(agent_id: str, agent_repo: AgentRepositoryDep):
+    agent = await agent_repo.get(agent_id)
+    return agent
+</good_example>
+
+## Storage (низкоуровневый key-value)
+
+Используй `Storage` напрямую только для:
+- Специфичных ключей без модели (`var:*`, `token:*`)
+- Операций `list_by_prefix` для поиска ключей
+- Временных данных
 
 ### Префиксы ключей:
-- `agent:{agent_id}` - конфигурации агентов
-- `flow:{flow_id}` - конфигурации flows
-- `task:{task_id}` - задачи для обработки
-- `session:{session_id}` - сессии диалогов
+- `agent:{agent_id}` - конфигурации агентов (используй AgentRepository)
+- `flow:{flow_id}` - конфигурации flows (используй FlowRepository)
+- `task:{task_id}` - задачи (используй TaskRepository)
+- `session:{session_id}` - сессии (используй SessionRepository)
+- `tool:{tool_id}` - инструменты (используй ToolRepository)
 - `user:{user_id}` - пользователи
 - `company:{company_id}` - компании
 - `subdomain:{subdomain}` - маппинг поддоменов
+- `var:{key}` - переменные (используй напрямую Storage)
 
 <good_example>
-from app.core.storage import Storage
+from app.core.container import get_container
 
-storage = Storage()
-await storage.set("agent:my_agent", agent_config.model_dump())
-agent_data = await storage.get("agent:my_agent")
+storage = get_container().get_storage()
+
+# Для специфичных ключей
+await storage.set("var:api_key", value)
+var_keys = await storage.list_by_prefix("var:")
+
+# Для моделей используй репозитории
+agent_repo = get_container().get_agent_repository()
+agent = await agent_repo.get("agent_id")
 </good_example>
 
 ## Изоляция по компаниям

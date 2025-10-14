@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from app.frontend.core.template_loader import get_templates
 from app.core.context import get_context
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.identity.models import Company
 from app.models.billing_models import TariffPlan
 

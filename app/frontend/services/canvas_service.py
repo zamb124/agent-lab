@@ -5,7 +5,7 @@
 import logging
 from typing import Dict, Any
 from app.models import FlowConfig, ToolReference
-from app.core.storage import Storage
+from app.db.repositories import Storage
 
 logger = logging.getLogger(__name__)
 
