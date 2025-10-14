@@ -7,86 +7,71 @@
 3. Перемиграция сущностей для отката к базовому состоянию
 """
 import pytest
-import pytest_asyncio
-import asyncio
 from datetime import datetime, timezone
 
-from app.core.migrator import Migrator
-from app.core.storage import Storage
 from app.core.context import set_context, clear_context
 from app.identity.models import Company, User, AuthProvider, UserStatus
 from app.models.context_models import Context
 from app.models import AgentType
 
 
-@pytest_asyncio.fixture(autouse=True)
-async def cleanup_after_test():
-    """Автоматическая очистка после каждого теста"""
-    yield
-    clear_context()
-
-
-async def _create_test_company():
-    """Создает тестовую компанию"""
-    company = Company(
-        company_id="test_company_migration",
-        subdomain="test_migration",
-        name="Test Migration Company",
-        status="active",
-        created_at=datetime.now(timezone.utc)
-    )
+@pytest.fixture
+def test_migration_company(storage):
+    """Создает тестовую компанию для миграции"""
+    async def _create():
+        company = Company(
+            company_id="test_company_migration",
+            subdomain="test_migration",
+            name="Test Migration Company",
+            status="active",
+            created_at=datetime.now(timezone.utc)
+        )
+        
+        await storage.set(f"company:{company.company_id}", company.model_dump_json(), force_global=True)
+        return company
     
-    await _cleanup_test_company(company)
+    async def _cleanup(company):
+        user = User(
+            user_id="test_cleanup",
+            provider=AuthProvider.YANDEX,
+            provider_user_id="test",
+            email="test@test.com",
+            name="Test Cleanup",
+            status=UserStatus.ACTIVE,
+            groups=["admin"],
+            companies={company.company_id: ["admin"]},
+            active_company_id=company.company_id
+        )
+        
+        context = Context(
+            user=user,
+            platform="test",
+            active_company=company,
+            user_companies=[company]
+        )
+        set_context(context)
+        
+        prefixes = [
+            "flow:",
+            "agent:",
+            "tool:",
+            "session:",
+            f"company:{company.company_id}:",
+        ]
+        
+        for prefix in prefixes:
+            keys = await storage.list_by_prefix(prefix)
+            for key in keys:
+                await storage.delete(key, force_global=True)
+        
+        await storage.delete(f"company:{company.company_id}", force_global=True)
+        clear_context()
     
-    storage = Storage()
-    await storage.set(f"company:{company.company_id}", company.model_dump_json(), force_global=True)
-    
-    return company
-
-
-async def _cleanup_test_company(company: Company):
-    """Удаляет тестовую компанию и все её данные"""
-    storage = Storage()
-    
-    user = User(
-        user_id="test_cleanup",
-        provider=AuthProvider.YANDEX,
-        provider_user_id="test",
-        email="test@test.com",
-        name="Test Cleanup",
-        status=UserStatus.ACTIVE,
-        groups=["admin"],
-        companies={company.company_id: ["admin"]},
-        active_company_id=company.company_id
-    )
-    
-    context = Context(
-        user=user,
-        platform="test",
-        active_company=company,
-        user_companies=[company]
-    )
-    set_context(context)
-    
-    prefixes = [
-        "flow:",
-        "agent:",
-        "tool:",
-        "session:",
-        f"company:{company.company_id}:",
-    ]
-    
-    for prefix in prefixes:
-        keys = await storage.list_by_prefix(prefix)
-        for key in keys:
-            await storage.delete(key, force_global=True)
-    
-    await storage.delete(f"company:{company.company_id}", force_global=True)
-    clear_context()
+    return _create, _cleanup
 
 
 @pytest.mark.asyncio
-async def test_migrate_defaults_for_company():
+async def test_migrate_defaults_for_company(migrated_db, storage, migrator, test_migration_company):
     """
     Тест 1: Миграция только публичных tools для новой компании.
     
@@ -95,9 +80,8 @@ async def test_migrate_defaults_for_company():
     - Flows НЕ мигрируются (устанавливаются через Store)
     - Агенты НЕ мигрируются
     """
-    test_company = await _create_test_company()
-    migrator = Migrator()
-    storage = Storage()
+    create_company, cleanup_company = test_migration_company
+    test_company = await create_company()
     
     user = User(
         user_id="test_user",
@@ -141,20 +125,19 @@ async def test_migrate_defaults_for_company():
     
     print("✅ Тест migrate_defaults_for_company пройден!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_migrate_single_flow_for_company():
+async def test_migrate_single_flow_for_company(migrated_db, storage, migrator, test_migration_company):
     """
     Тест 2: Миграция отдельного flow в компанию.
     
     Проверяет что можно мигрировать отдельный flow
     со всеми зависимостями.
     """
-    test_company = await _create_test_company()
-    migrator = Migrator()
-    storage = Storage()
+    create_company, cleanup_company = test_migration_company
+    test_company = await create_company()
     
     # Устанавливаем контекст
     user = User(
@@ -194,20 +177,19 @@ async def test_migrate_single_flow_for_company():
     
     print("✅ Тест migrate_single_flow_for_company пройден!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_migrate_single_agent_for_company():
+async def test_migrate_single_agent_for_company(migrated_db, storage, migrator, test_migration_company):
     """
     Тест 3: Миграция отдельного агента в компанию.
     
     Проверяет что можно мигрировать отдельный агент
     без зависимостей.
     """
-    test_company = await _create_test_company()
-    migrator = Migrator()
-    storage = Storage()
+    create_company, cleanup_company = test_migration_company
+    test_company = await create_company()
     
     # Устанавливаем контекст
     user = User(
@@ -243,20 +225,19 @@ async def test_migrate_single_agent_for_company():
     
     print("✅ Тест migrate_single_agent_for_company пройден!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_remigrate_flow():
+async def test_remigrate_flow(migrated_db, storage, migrator, test_migration_company):
     """
     Тест 4: Перемиграция flow для отката к базовому состоянию.
     
     Проверяет что можно перемигрировать flow и
     откатить изменения к коду.
     """
-    test_company = await _create_test_company()
-    migrator = Migrator()
-    storage = Storage()
+    create_company, cleanup_company = test_migration_company
+    test_company = await create_company()
     
     # Устанавливаем контекст
     user = User(
@@ -309,17 +290,16 @@ async def test_remigrate_flow():
     
     print("✅ Тест remigrate_flow пройден!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_remigrate_agent():
+async def test_remigrate_agent(migrated_db, storage, migrator, test_migration_company):
     """
     Тест 5: Перемиграция агента для отката к базовому состоянию.
     """
-    test_company = await _create_test_company()
-    migrator = Migrator()
-    storage = Storage()
+    create_company, cleanup_company = test_migration_company
+    test_company = await create_company()
     
     # Устанавливаем контекст
     user = User(
@@ -371,20 +351,19 @@ async def test_remigrate_agent():
     
     print("✅ Тест remigrate_agent пройден!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_migrate_with_nested_dependencies():
+async def test_migrate_with_nested_dependencies(migrated_db, storage, migrator, test_migration_company):
     """
     Тест 6: Миграция с вложенными зависимостями.
     
     Проверяет что при миграции flow с зависимостями,
     все субагенты и их tools тоже мигрируются.
     """
-    test_company = await _create_test_company()
-    migrator = Migrator()
-    storage = Storage()
+    create_company, cleanup_company = test_migration_company
+    test_company = await create_company()
     
     # Устанавливаем контекст
     user = User(
@@ -423,19 +402,18 @@ async def test_migrate_with_nested_dependencies():
     
     print("✅ Тест migrate_with_nested_dependencies пройден!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_migrate_single_tool():
+async def test_migrate_single_tool(migrated_db, storage, migrator, test_migration_company):
     """
     Тест 7: Миграция отдельного tool.
     
     Проверяет что можно мигрировать отдельный tool.
     """
-    test_company = await _create_test_company()
-    migrator = Migrator()
-    storage = Storage()
+    create_company, cleanup_company = test_migration_company
+    test_company = await create_company()
     
     # Устанавливаем контекст
     user = User(
@@ -472,17 +450,16 @@ async def test_migrate_single_tool():
     
     print("✅ Тест migrate_single_tool пройден!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_remigrate_tool():
+async def test_remigrate_tool(migrated_db, storage, migrator, test_migration_company):
     """
     Тест 8: Перемиграция tool для отката к базовому состоянию.
     """
-    test_company = await _create_test_company()
-    migrator = Migrator()
-    storage = Storage()
+    create_company, cleanup_company = test_migration_company
+    test_company = await create_company()
     
     # Устанавливаем контекст
     user = User(
@@ -538,20 +515,19 @@ async def test_remigrate_tool():
     
     print("✅ Тест remigrate_tool пройден!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_react_agent_migration():
+async def test_react_agent_migration(migrated_db, storage, migrator, test_migration_company):
     """
     Тест 9: Проверка миграции ReAct агента.
     
     Проверяет что ReAct агенты (WeatherAgent, CalculatorAgent) 
     мигрируются с правильным типом и настройками.
     """
-    test_company = await _create_test_company()
-    migrator = Migrator()
-    storage = Storage()
+    create_company, cleanup_company = test_migration_company
+    test_company = await create_company()
     
     # Устанавливаем контекст
     user = User(
@@ -599,20 +575,19 @@ async def test_react_agent_migration():
     
     print("✅ Тест react_agent_migration пройден!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_stategraph_agent_migration():
+async def test_stategraph_agent_migration(migrated_db, storage, migrator, test_migration_company):
     """
     Тест 10: Проверка миграции StateGraph агента.
     
     Проверяет что StateGraph агенты (SimpleFlowAgent)
     мигрируются с правильным типом и graph_definition.
     """
-    test_company = await _create_test_company()
-    migrator = Migrator()
-    storage = Storage()
+    create_company, cleanup_company = test_migration_company
+    test_company = await create_company()
     
     # Устанавливаем контекст
     user = User(
@@ -653,17 +628,16 @@ async def test_stategraph_agent_migration():
     
     print("✅ Тест stategraph_agent_migration пройден!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_company_isolation():
+async def test_company_isolation(migrated_db, storage, migrator):
     """
     Тест 11: Проверка изоляции данных между компаниями.
     
     Проверяет что сущности одной компании не видны другой компании.
     """
-    # Создаем две разные компании
     company1 = Company(
         company_id="test_company_1",
         subdomain="test1",
@@ -680,11 +654,8 @@ async def test_company_isolation():
         created_at=datetime.now(timezone.utc)
     )
     
-    storage = Storage()
     await storage.set(f"company:{company1.company_id}", company1.model_dump_json(), force_global=True)
     await storage.set(f"company:{company2.company_id}", company2.model_dump_json(), force_global=True)
-    
-    migrator = Migrator()
     
     try:
         # 1. Мигрируем flow в первую компанию
@@ -770,13 +741,12 @@ async def test_company_isolation():
 
 
 @pytest.mark.asyncio
-async def test_migrate_without_dependencies():
+async def test_migrate_without_dependencies(migrated_db, storage, migrator):
     """
     Тест 12: Миграция flow без зависимостей.
     
     Проверяет что при with_dependencies=False зависимости не мигрируются.
     """
-    # Создаем отдельную компанию для этого теста чтобы избежать конфликтов
     fresh_company = Company(
         company_id="test_company_no_deps",
         subdomain="test_no_deps",
@@ -785,10 +755,7 @@ async def test_migrate_without_dependencies():
         created_at=datetime.now(timezone.utc)
     )
     
-    storage = Storage()
     await storage.set(f"company:{fresh_company.company_id}", fresh_company.model_dump_json(), force_global=True)
-    
-    migrator = Migrator()
     
     # Устанавливаем контекст
     user = User(
@@ -832,16 +799,14 @@ async def test_migrate_without_dependencies():
 
 
 @pytest.mark.asyncio
-async def test_api_remigrate_endpoints():
+async def test_api_remigrate_endpoints(migrated_db, storage, migrator, test_migration_company):
     """
     Тест 13: Проверка API endpoints для перемиграции.
     
     Проверяет что API endpoints работают корректно.
     """
-    
-    test_company = await _create_test_company()
-    migrator = Migrator()
-    storage = Storage()
+    create_company, cleanup_company = test_migration_company
+    test_company = await create_company()
     
     # Устанавливаем контекст
     user = User(
@@ -884,11 +849,14 @@ async def test_api_remigrate_endpoints():
     
     print("✅ Тест api_remigrate_endpoints пройден (сущности подготовлены)!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 if __name__ == "__main__":
     # Прямой запуск для отладки
+    import asyncio
+    from app.core.storage import Storage
+    
     async def run_all_tests():
         from app.identity.models import Company
         

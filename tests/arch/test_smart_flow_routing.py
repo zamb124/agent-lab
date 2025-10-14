@@ -7,30 +7,12 @@
 3. Разные ноды (calculator/weather) работают корректно
 """
 import pytest
-from pathlib import Path
-import sys
-
-backend_path = Path(__file__).parent.parent.parent / "backend"
-sys.path.insert(0, str(backend_path))
-
-from app.core.storage import Storage
-from app.core.flow_factory import FlowFactory
-from app.core.migrator import Migrator
-from app.core.agent_factory import AgentFactory
 from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_smart_flow_migration():
+async def test_smart_flow_migration(migrated_db, storage, agent_factory):
     """Тест: SmartFlow правильно мигрирует в БД"""
-    
-    migrator = Migrator()
-    
-    # Мигрируем все агенты включая SmartFlow
-    await migrator.run_full_migration()
-    await migrator._set_system_context()
-    
-    storage = Storage()
     
     # Проверяем что SmartFlowAgent есть в БД
     agent_id = "app.flows.smart_flow.SmartFlowAgent"
@@ -52,7 +34,6 @@ async def test_smart_flow_migration():
         print(f"  Тип: ReAct")
     
     # Проверяем что агент можно создать
-    agent_factory = AgentFactory()
     agent = await agent_factory.get_agent(agent_id)
     print(f"✅ SmartFlowAgent создан успешно")
     
@@ -66,52 +47,20 @@ async def test_smart_flow_migration():
 
 
 @pytest.mark.asyncio
-async def test_smart_flow_calculator_routing():
+async def test_smart_flow_calculator_routing(migrated_db, flow_factory, mock_llm):
     """Тест: SmartFlow направляет математические запросы в calculator"""
     
-    # Настраиваем мок LLM
-    from app.core.llm_factory import get_global_mock_llm, get_llm
-    get_llm("mock-gpt-4")
-    mock_llm = get_global_mock_llm()
-    if mock_llm:
-        mock_llm.set_responses({
+    # Настраиваем mock LLM
+    mock_llm.configure(
+        responses={
             "посчитай": "Использую calculate для вычисления",
             "5 + 7": "Результат: 12",
             "12": "Отлично! Калькулятор посчитал 5 + 7 и получил 12",
-        })
-    
-    # Мигрируем
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    await migrator._set_system_context()
+        }
+    )
     
     # Получаем flow
-    flow_factory = FlowFactory()
-    
-    # Проверяем что smart_flow есть в списке flows
-    storage = Storage()
-    all_keys = []
-    async with storage._get_session() as session:
-        from sqlalchemy import select, text
-        from app.db.models import Storage as StorageModel
-        result = await session.execute(
-            select(StorageModel.key).where(StorageModel.key.like('flow:%'))
-        )
-        all_keys = [row[0] for row in result.fetchall()]
-    
-    print(f"Найдены flows: {all_keys}")
-    
-    # Ищем smart_flow
-    smart_flow_key = None
-    for key in all_keys:
-        if "smart_flow" in key.lower():
-            smart_flow_key = key.replace("flow:", "")
-            break
-    
-    if not smart_flow_key:
-        pytest.skip("SmartFlow не найден в БД, возможно не мигрирован")
-    
-    print(f"Используем flow: {smart_flow_key}")
+    smart_flow_key = "app.flows.smart_flow.smart_flow_config"
     
     try:
         smart_flow = await flow_factory.get_flow(smart_flow_key)
@@ -135,42 +84,20 @@ async def test_smart_flow_calculator_routing():
 
 
 @pytest.mark.asyncio
-async def test_smart_flow_weather_routing():
+async def test_smart_flow_weather_routing(migrated_db, flow_factory, mock_llm):
     """Тест: SmartFlow направляет погодные запросы в weather"""
     
-    # Настраиваем мок LLM
-    from app.core.llm_factory import get_global_mock_llm, get_llm
-    get_llm("mock-gpt-4")
-    mock_llm = get_global_mock_llm()
-    if mock_llm:
-        mock_llm.set_responses({
+    # Настраиваем mock LLM
+    mock_llm.configure(
+        responses={
             "погода": "Использую get_weather",
             "москва": "Погода в Москве: солнечно, +20°C",
             "солнечно": "Отлично! В Москве хорошая погода - солнечно и тепло",
-        })
-    
-    # Мигрируем
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    await migrator._set_system_context()
+        }
+    )
     
     # Получаем flow
-    flow_factory = FlowFactory()
-    storage = Storage()
-    
-    # Ищем smart_flow
-    async with storage._get_session() as session:
-        from sqlalchemy import select
-        from app.db.models import Storage as StorageModel
-        result = await session.execute(
-            select(StorageModel.key).where(StorageModel.key.like('flow:%smart_flow%'))
-        )
-        keys = [row[0] for row in result.fetchall()]
-    
-    if not keys:
-        pytest.skip("SmartFlow не найден в БД")
-    
-    smart_flow_key = keys[0].replace("flow:", "")
+    smart_flow_key = "app.flows.smart_flow.smart_flow_config"
     smart_flow = await flow_factory.get_flow(smart_flow_key)
     
     # Тестируем погодный запрос
@@ -189,42 +116,21 @@ async def test_smart_flow_weather_routing():
 
 
 @pytest.mark.asyncio
-async def test_smart_flow_different_paths():
+async def test_smart_flow_different_paths(migrated_db, flow_factory, mock_llm):
     """Тест: SmartFlow выбирает разные пути для разных запросов"""
     
-    # Настраиваем мок LLM
-    from app.core.llm_factory import get_global_mock_llm, get_llm
-    get_llm("mock-gpt-4")
-    mock_llm = get_global_mock_llm()
-    if mock_llm:
-        mock_llm.set_responses({
+    # Настраиваем mock LLM
+    mock_llm.configure(
+        responses={
             "посчитай": "Результат: 20",
             "погода": "Погода: солнечно",
             "20": "Калькулятор посчитал",
             "солнечно": "Погода хорошая",
-        })
-    
-    # Мигрируем
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    await migrator._set_system_context()
+        }
+    )
     
     # Получаем flow
-    flow_factory = FlowFactory()
-    storage = Storage()
-    
-    async with storage._get_session() as session:
-        from sqlalchemy import select
-        from app.db.models import Storage as StorageModel
-        result = await session.execute(
-            select(StorageModel.key).where(StorageModel.key.like('flow:%smart_flow%'))
-        )
-        keys = [row[0] for row in result.fetchall()]
-    
-    if not keys:
-        pytest.skip("SmartFlow не найден в БД")
-    
-    smart_flow_key = keys[0].replace("flow:", "")
+    smart_flow_key = "app.flows.smart_flow.smart_flow_config"
     smart_flow = await flow_factory.get_flow(smart_flow_key)
     
     # Тест 1: Математика

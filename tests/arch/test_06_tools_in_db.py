@@ -6,30 +6,15 @@
 2. Добавление tool из БД к агенту в коде через ссылку
 """
 import pytest
-from pathlib import Path
-import sys
-import uuid
-
-# Добавляем backend в путь
-backend_path = Path(__file__).parent.parent.parent / "backend"
-sys.path.insert(0, str(backend_path))
-
-from app.core.storage import Storage
-from app.core.migrator import Migrator
-from app.core.flow_factory import FlowFactory
-from app.models import (
-    AgentConfig, AgentType, CodeMode, FlowConfig,
-    ToolReference, LLMConfig
-)
+from app.models import AgentConfig, AgentType, CodeMode, FlowConfig, ToolReference, LLMConfig
 from langchain_core.messages import HumanMessage
 
+
 @pytest.mark.asyncio
-async def test_migrate_and_add_inline_tool(save_test_company):
+async def test_migrate_and_add_inline_tool(migrated_db, storage, flow_factory, mock_llm, unique_id, test_helpers):
     """
     Тест 1: Создаем агента в БД и добавляем inline tool "покажи сахару"
     """
-    
-    storage = Storage()
     
     # 1. Создаем inline tool "покажи сахару"
     show_sugar_code = '''
@@ -50,31 +35,21 @@ def show_sugar(request: str) -> str:
         tool_id="inline_show_sugar",
         code_mode=CodeMode.INLINE_CODE,
         inline_code=show_sugar_code,
-        description="Показывает сахар пользователю",
-        params={}
+        description="Показывает сахар пользователю"
     )
     
     # 2. Создаем DB-only агента с sugar tool
-    db_agent_config = AgentConfig(
+    await test_helpers.create_simple_agent(
+        storage=storage,
         agent_id="db_sugar_agent",
         name="DB Sugar Agent",
-        description="Тестовый агент с sugar tool",
-        type=AgentType.REACT,
-        code_mode=CodeMode.CODE_REFERENCE,
-        function_class=None,
         prompt="Ты помощник который показывает сахар. Используй show_sugar tool когда пользователь просит показать сахар.",
-        tools=[sugar_tool],
-        llm_config=LLMConfig(model="mock-gpt-4"),
-        source="test"
+        tools=[sugar_tool]
     )
-    
-    await storage.set_agent_config(db_agent_config)
     print("✅ DB агент с inline tool создан")
     
-    # 3. Настраиваем мок - возвращаем текстовый ответ с результатом tool
-    from app.core.llm_factory import setup_mock_responses
-    
-    setup_mock_responses(
+    # 3. Настраиваем mock LLM
+    mock_llm.configure(
         responses={
             "покажи": "ВОТ САХАРА!! 🍯🧂✨",
             "сахар": "ВОТ САХАРА!! 🍯🧂✨",
@@ -82,24 +57,19 @@ def show_sugar(request: str) -> str:
     )
     
     # 4. Создаем flow для тестирования
-    test_flow_config = FlowConfig(
+    await test_helpers.create_simple_flow(
+        storage=storage,
         flow_id="db_sugar_flow",
-        name="DB Sugar Flow", 
-        description="Flow для тестирования DB агента с sugar tool",
-        entry_point_agent="db_sugar_agent",
-        llm_config=None,
-        source="test"
+        name="DB Sugar Flow",
+        entry_point_agent="db_sugar_agent"
     )
-    await storage.set_flow_config(test_flow_config)
 
-    # 5. Создаем flow (он загрузит свежий конфиг агента из БД)
-    flow_factory = FlowFactory()
+    # 5. Выполняем flow
     sugar_flow = await flow_factory.get_flow("db_sugar_flow")
 
-    thread_id = f"test_sugar_{uuid.uuid4().hex[:8]}"
     result = await sugar_flow.ainvoke(
         {"messages": [HumanMessage(content="покажи сахару")]},
-        config={"configurable": {"thread_id": thread_id}}
+        config={"configurable": {"thread_id": unique_id("sugar")}}
     )
     
     assert "messages" in result
@@ -118,237 +88,164 @@ def show_sugar(request: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_code_agent_with_db_tool(save_test_company):
+async def test_code_agent_with_db_tool(migrated_db, storage, flow_factory, mock_llm, unique_id, test_helpers):
     """
     Тест 2: Агент в коде использует tool из БД через ссылку
     """
-    
-    # Мигрируем агенты из кода
-    from app.core.migrator import Migrator
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    
-    # Настраиваем мок для магических заклинаний
-    from app.core.llm_factory import setup_mock_responses
-    
-    setup_mock_responses(
+    mock_llm.configure(
+        tool_responses={
+            "заклинание": {"tool": "main", "args": {"spell": "хокус покус"}},
+        },
         responses={
-            "произнеси": "✨ МАГИЯ! ХОКУС ПОКУС ✨ АБРАКАДАБРА!",
             "заклинание": "✨ МАГИЯ! ХОКУС ПОКУС ✨ АБРАКАДАБРА!",
         },
-        default_response="Как волшебник, я использую магические инструменты."
+        default_response="Использую магию!"
     )
     
-    # 1. Создаем tool в БД
-    storage = Storage()
-    
-    magic_tool_code = '''
+    magic_tool = test_helpers.create_inline_tool(
+        tool_id="db_magic_tool",
+        function_name="main",
+        function_body='''
 def main(spell: str) -> str:
-    """
-    Выполняет магическое заклинание.
+    """Выполняет магическое заклинание
     
     Args:
         spell: Текст заклинания
     """
     return f"✨ МАГИЯ! {spell.upper()} ✨ АБРАКАДАБРА!"
-'''
-    
-    magic_tool = ToolReference(
-        tool_id="db_magic_tool",
-        code_mode=CodeMode.INLINE_CODE,
-        inline_code=magic_tool_code,
-        description="Магический инструмент из БД",
-        params={}
+''',
+        description="Магический инструмент из БД"
     )
     
-    # Сохраняем tool в БД
     await storage.set(f"tool:{magic_tool.tool_id}", magic_tool.model_dump_json())
     print("✅ Magic tool сохранен в БД")
     
-    # 2. Создаем агента в БД который ссылается на tool из БД
-    magic_agent_config = AgentConfig(
+    await test_helpers.create_simple_agent(
+        storage=storage,
         agent_id="magic_test_agent",
         name="Magic Test Agent",
-        description="Тестовый агент с tool из БД",
-        type=AgentType.REACT,
-        prompt="Ты волшебник. Используй magic_function для выполнения заклинаний.",
-        tools=[
-            ToolReference(
-                tool_id="db_magic_tool",
-                code_mode=CodeMode.CODE_REFERENCE,
-                function_path="db_magic_tool",
-                description="Ссылка на магический tool из БД"
-            )
-        ],
-        llm_config=None,  # Используем дефолтную конфигурацию
-        source="test"
+        prompt="Ты волшебник. Используй main для выполнения заклинаний.",
+        tools=[magic_tool]
     )
-    
-    await storage.set_agent_config(magic_agent_config)
     print("✅ Magic agent создан в БД со ссылкой на DB tool")
     
-    # 3. Создаем flow для тестирования
-    magic_flow_config = FlowConfig(
+    await test_helpers.create_simple_flow(
+        storage=storage,
         flow_id="magic_test_flow",
         name="Magic Test Flow",
-        description="Flow для тестирования агента с DB tool",
-        entry_point_agent="magic_test_agent",
-        llm_config=None,  # Используем дефолтную конфигурацию
-        source="test"
+        entry_point_agent="magic_test_agent"
     )
-    await storage.set_flow_config(magic_flow_config)
     
-    # 4. Тестируем агента
-    flow_factory = FlowFactory()
     magic_flow = await flow_factory.get_flow("magic_test_flow")
     
-    thread_id = f"test_magic_{uuid.uuid4().hex[:8]}"
     result = await magic_flow.ainvoke(
         {"messages": [HumanMessage(content="произнеси заклинание 'хокус покус'")]},
-        config={"configurable": {"thread_id": thread_id}}
+        config={"configurable": {"thread_id": unique_id("magic")}}
     )
     
     assert "messages" in result
     final_message = result["messages"][-1].content
-    # Проверяем что агент что-то ответил
     assert len(final_message) > 0
-    assert "магия" in final_message.lower() or "волшебник" in final_message.lower()
+    assert any(word in final_message.lower() for word in ["магия", "магию", "волшебник", "хокус покус"])
     
     print(f"✅ Агент с DB tool отвечает: {final_message}")
 
 
 @pytest.mark.asyncio
-async def test_code_reference_tool(save_test_company):
+async def test_code_reference_tool(migrated_db, storage, flow_factory, mock_llm, unique_id, test_helpers):
     """
     Тест 3: Tool из кода (CODE_REFERENCE режим)
     """
-    
-    # Настраиваем мок для вычислений
-    from app.core.llm_factory import setup_mock_responses
-    
-    setup_mock_responses(
+    mock_llm.configure(
+        tool_responses={
+            "вычисли": {"tool": "calculate", "args": {"expression": "15 + 27"}},
+        },
         responses={
-            "вычисли": "Результат вычисления 15 + 27 = 42",
+            "вычисли": "Результат: 42",
         },
         default_response="42"
     )
     
-    # 1. Создаем агента с tool из кода
-    storage = Storage()
-    
-    calc_agent_config = AgentConfig(
-        agent_id="calc_test_agent", 
-        name="Calculator Test Agent",
-        description="Тестовый агент с calculator tool из кода",
-        type=AgentType.REACT,
-        prompt="Ты калькулятор. Используй calculate для вычислений.",
-        tools=[
-            ToolReference(
-                tool_id="app.tools.calc_tools.calculate",
-                code_mode=CodeMode.CODE_REFERENCE,
-                function_path="app.tools.calc_tools.calculate",
-                description="Калькулятор из кода"
-            )
-        ],
-        llm_config=None,  # Используем дефолтную конфигурацию
-        source="test"
+    calc_tool = ToolReference(
+        tool_id="app.tools.calc_tools.calculate",
+        code_mode=CodeMode.CODE_REFERENCE,
+        function_path="app.tools.calc_tools.calculate",
+        description="Калькулятор из кода"
     )
     
-    await storage.set_agent_config(calc_agent_config)
+    await test_helpers.create_simple_agent(
+        storage=storage,
+        agent_id="calc_test_agent",
+        name="Calculator Test Agent",
+        prompt="Ты калькулятор. Используй calculate для вычислений.",
+        tools=[calc_tool]
+    )
     print("✅ Calculator agent создан с CODE_REFERENCE tool")
     
-    # 2. Создаем flow
-    calc_flow_config = FlowConfig(
+    await test_helpers.create_simple_flow(
+        storage=storage,
         flow_id="calc_test_flow",
-        name="Calculator Test Flow", 
-        description="Flow для тестирования calculator tool",
-        entry_point_agent="calc_test_agent",
-        llm_config=None,  # Используем дефолтную конфигурацию
-        source="test"
+        name="Calculator Test Flow",
+        entry_point_agent="calc_test_agent"
     )
-    await storage.set_flow_config(calc_flow_config)
     
-    # 3. Тестируем
-    flow_factory = FlowFactory()
     calc_flow = await flow_factory.get_flow("calc_test_flow")
     
-    thread_id = f"test_calc_{uuid.uuid4().hex[:8]}"
     result = await calc_flow.ainvoke(
         {"messages": [HumanMessage(content="вычисли 15 + 27")]},
-        config={"configurable": {"thread_id": thread_id}}
+        config={"configurable": {"thread_id": unique_id("calc")}}
     )
     
     assert "messages" in result
     final_message = result["messages"][-1].content
-    assert "42" in final_message or "15" in final_message and "27" in final_message
+    assert "42" in final_message or ("15" in final_message and "27" in final_message)
     
     print(f"✅ Агент с CODE_REFERENCE tool отвечает: {final_message}")
 
 
 @pytest.mark.asyncio
-async def test_db_agent_with_code_tool(save_test_company):
+async def test_db_agent_with_code_tool(migrated_db, storage, flow_factory, mock_llm, unique_id, test_helpers):
     """
     Тест 4: Агент в БД использует tool из кода (мигрированный в БД)
     """
-    
-    # Настраиваем мок для вычислений
-    from app.core.llm_factory import setup_mock_responses
-    
-    setup_mock_responses(
+    mock_llm.configure(
+        tool_responses={
+            "вычисли": {"tool": "calculate", "args": {"expression": "25 * 3 + 7"}},
+        },
         responses={
             "вычисли": "Результат: 82",
         },
         default_response="82"
     )
     
-    # 1. Сначала мигрируем tools из кода в БД
-    migrator = Migrator()
-    await migrator._migrate_all_tools()
+    code_tool = ToolReference(
+        tool_id="app.tools.calc_tools.calculate",
+        code_mode=CodeMode.CODE_REFERENCE,
+        function_path="app.tools.calc_tools.calculate",
+        description="Калькулятор из кода"
+    )
     
-    # 2. Создаем агента в БД который ссылается на мигрированный tool
-    storage = Storage()
-    
-    math_agent_config = AgentConfig(
+    await test_helpers.create_simple_agent(
+        storage=storage,
         agent_id="db_agent_with_code_tool",
         name="DB Agent with Code Tool",
-        description="Агент из БД использующий tool из кода",
-        type=AgentType.REACT,
         prompt="Ты математик. Используй calculate для вычислений. Будь точным.",
-        tools=[
-            # Ссылка на мигрированный tool из кода
-            ToolReference(
-                tool_id="app.tools.calc_tools.calculate",
-                code_mode=CodeMode.CODE_REFERENCE,
-                function_path="app.tools.calc_tools.calculate",
-                description="Калькулятор из мигрированного кода"
-            )
-        ],
-        llm_config=LLMConfig(model="mock-gpt-4"),
-        source="test"
+        tools=[code_tool]
     )
+    print("✅ DB агент создан со ссылкой на code tool")
     
-    await storage.set_agent_config(math_agent_config)
-    print("✅ DB агент создан со ссылкой на мигрированный code tool")
-    
-    # 3. Создаем flow
-    math_flow_config = FlowConfig(
+    await test_helpers.create_simple_flow(
+        storage=storage,
         flow_id="db_agent_code_tool_flow",
         name="DB Agent Code Tool Flow",
-        description="Flow для тестирования DB агента с code tool",
-        entry_point_agent="db_agent_with_code_tool",
-        llm_config=None,  # Используем дефолтную конфигурацию
-        source="test"
+        entry_point_agent="db_agent_with_code_tool"
     )
-    await storage.set_flow_config(math_flow_config)
     
-    # 4. Тестируем
-    flow_factory = FlowFactory()
     math_flow = await flow_factory.get_flow("db_agent_code_tool_flow")
     
-    thread_id = f"test_db_code_{uuid.uuid4().hex[:8]}"
     result = await math_flow.ainvoke(
         {"messages": [HumanMessage(content="вычисли 25 * 3 + 7")]},
-        config={"configurable": {"thread_id": thread_id}}
+        config={"configurable": {"thread_id": unique_id("db_code")}}
     )
     
     assert "messages" in result

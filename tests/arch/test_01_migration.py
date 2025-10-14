@@ -5,29 +5,12 @@
 со всеми нодами, ребрами и зависимостями.
 """
 import pytest
-import asyncio
-from pathlib import Path
-import sys
-
-# Добавляем backend в путь
-backend_path = Path(__file__).parent.parent.parent / "backend"
-sys.path.insert(0, str(backend_path))
-
-from app.core.migrator import Migrator
-from app.core.storage import Storage
 from app.models import AgentType
 
 
-async def _test_flows_migration_from_code():
+@pytest.mark.asyncio
+async def test_flows_migration_from_code(migrated_db, storage):
     """Тест миграции weather_flow и smart_flow из кода"""
-    
-    # 1. ЗАПУСК МИГРАЦИИ
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    
-    await migrator._set_system_context()
-    
-    storage = Storage()
     
     # 2. ПРОВЕРКА WEATHER_FLOW
     weather_flow = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
@@ -82,14 +65,3 @@ async def _test_flows_migration_from_code():
     assert explainer_agent.type == AgentType.REACT
         
     print("✅ Все флоу и агенты успешно мигрированы из кода в БД!")
-
-
-@pytest.mark.asyncio
-async def test_migration():
-    """Pytest тест миграции"""
-    await _test_flows_migration_from_code()
-
-
-if __name__ == "__main__":
-    # Прямой запуск для отладки
-    asyncio.run(_test_flows_migration_from_code())

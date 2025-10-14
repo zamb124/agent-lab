@@ -8,36 +8,18 @@
 И все это работает вместе.
 """
 import pytest
-from pathlib import Path
-import sys
-
-# Добавляем backend в путь
-backend_path = Path(__file__).parent.parent.parent / "backend"
-sys.path.insert(0, str(backend_path))
-
-from app.core.storage import Storage
-from app.core.flow_factory import FlowFactory
 from app.models import (
-    AgentConfig, AgentType, CodeMode, FlowConfig,
+    AgentConfig, AgentType, CodeMode, FlowConfig, LLMConfig,
     GraphDefinition, GraphNode, GraphEdge, NodeType, ConditionType
 )
 from langchain_core.messages import HumanMessage
 
+
 @pytest.mark.asyncio
-async def test_create_hybrid_stategraph():
+async def test_create_hybrid_stategraph(migrated_db, storage):
     """Создание гибридного StateGraph агента"""
     
-    # Мигрируем агенты из кода которые будут использоваться
-    from app.core.migrator import Migrator
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    await migrator._set_system_context()
-    
-    storage = Storage()
-        
-        # 1. СОЗДАЕМ ГИБРИДНЫЙ ГРАФ
-        
-        # Inline код для входной ноды
+    # Inline код для входной ноды
     entry_code = '''
 def entry_function(state):
     """Входная нода - анализирует запрос"""
@@ -65,8 +47,8 @@ def entry_condition(state):
     """Условие для выбора пути обработки"""
     return state["processing_path"]
 '''
-        
-        # Inline код для простой математики
+    
+    # Inline код для простой математики
     simple_math_code = '''
 async def simple_math_function(state):
     """Простая математика - inline код"""
@@ -95,8 +77,8 @@ async def simple_math_function(state):
     
     return state
 '''
-        
-        # Inline код для финализатора
+    
+    # Inline код для финализатора
     finalizer_code = '''
 async def finalizer_function(state):
     """Финализирует обработку"""
@@ -188,6 +170,7 @@ async def finalizer_function(state):
         type=AgentType.STATEGRAPH,
         code_mode=CodeMode.INLINE_CODE,
         graph_definition=graph_def,
+        llm_config=LLMConfig(model="mock-gpt-4"),
         source="manual"
     )
     
@@ -205,32 +188,28 @@ async def finalizer_function(state):
     
     await storage.set_flow_config(hybrid_flow_config)
     print("✅ Гибридный Flow создан в БД")
-        
-    return True
+
 
 @pytest.mark.asyncio
-async def test_execute_hybrid_simple_math():
+async def test_execute_hybrid_simple_math(migrated_db, storage, flow_factory, mock_llm, unique_id):
     """Создание и выполнение гибридного агента - простая математика (inline код)"""
     
-    # Настраиваем мок LLM
-    from app.core.llm_factory import get_global_mock_llm, get_llm
-    get_llm("mock-gpt-4")
-    mock_llm = get_global_mock_llm()
-    if mock_llm:
-        mock_llm.set_responses({
+    # Создаем агента
+    await test_create_hybrid_stategraph(migrated_db, storage)
+    
+    # Настраиваем mock LLM
+    mock_llm.configure(
+        responses={
             "посчитай": "Использую calculate",
             "5 + 7": "Результат: 12",
-        })
+        }
+    )
     
-    # СОЗДАЕМ агента в этом же тесте для изоляции
-    await test_create_hybrid_stategraph()
-    
-    flow_factory = FlowFactory()
     hybrid_flow = await flow_factory.get_flow("hybrid_flow")
     
     result = await hybrid_flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 5 + 7")]},
-        config={"configurable": {"thread_id": "test_hybrid_simple"}}
+        config={"configurable": {"thread_id": unique_id("hybrid_simple")}}
     )
     
     assert "messages" in result
@@ -238,34 +217,31 @@ async def test_execute_hybrid_simple_math():
     # Проверяем что результат содержит гибридный агент
     final_content = " ".join([msg.content for msg in result["messages"]])
     assert "ГИБРИДНЫЙ АГЕНТ" in final_content
-    # Проверяем что агент работает (получаем хоть какой-то результат)
     assert len(final_content) > 20
-        
+    
     print(f"✅ Гибридный агент - простая математика (inline): {result['messages'][-1].content}")
 
+
 @pytest.mark.asyncio
-async def test_execute_hybrid_complex_math():
+async def test_execute_hybrid_complex_math(migrated_db, storage, flow_factory, mock_llm, unique_id):
     """Создание и выполнение гибридного агента - сложная математика (ссылка на агента)"""
     
-    # Настраиваем мок LLM
-    from app.core.llm_factory import get_global_mock_llm, get_llm
-    get_llm("mock-gpt-4")
-    mock_llm = get_global_mock_llm()
-    if mock_llm:
-        mock_llm.set_responses({
+    # Создаем агента
+    await test_create_hybrid_stategraph(migrated_db, storage)
+    
+    # Настраиваем mock LLM
+    mock_llm.configure(
+        responses={
             "вычисли": "Использую calculate для вычисления",
             "сложное": "Результат: 70",
-        })
+        }
+    )
     
-    # СОЗДАЕМ агента в этом же тесте для изоляции
-    await test_create_hybrid_stategraph()
-    
-    flow_factory = FlowFactory()
     hybrid_flow = await flow_factory.get_flow("hybrid_flow")
     
     result = await hybrid_flow.ainvoke(
         {"messages": [HumanMessage(content="Вычисли сложное выражение (15 + 25) * 2 - 10")]},
-        config={"configurable": {"thread_id": "test_hybrid_complex"}}
+        config={"configurable": {"thread_id": unique_id("hybrid_complex")}}
     )
     
     assert "messages" in result
@@ -273,34 +249,31 @@ async def test_execute_hybrid_complex_math():
     # Проверяем что результат содержит гибридный агент
     final_content = " ".join([msg.content for msg in result["messages"]])
     assert "ГИБРИДНЫЙ АГЕНТ" in final_content
-    # Проверяем что агент работает (получаем хоть какой-то результат)
     assert len(final_content) > 20
-        
+    
     print(f"✅ Гибридный агент - сложная математика (агент): {result['messages'][-1].content}")
 
+
 @pytest.mark.asyncio
-async def test_execute_hybrid_weather():
+async def test_execute_hybrid_weather(migrated_db, storage, flow_factory, mock_llm, unique_id):
     """Создание и выполнение гибридного агента - погода (ссылка на функцию)"""
     
-    # Настраиваем мок LLM
-    from app.core.llm_factory import get_global_mock_llm, get_llm
-    get_llm("mock-gpt-4")
-    mock_llm = get_global_mock_llm()
-    if mock_llm:
-        mock_llm.set_responses({
+    # Создаем агента
+    await test_create_hybrid_stategraph(migrated_db, storage)
+    
+    # Настраиваем mock LLM
+    mock_llm.configure(
+        responses={
             "погода": "Использую get_weather",
             "новосибирск": "Погода в Новосибирске: солнечно",
-        })
+        }
+    )
     
-    # СОЗДАЕМ агента в этом же тесте для изоляции
-    await test_create_hybrid_stategraph()
-    
-    flow_factory = FlowFactory()
     hybrid_flow = await flow_factory.get_flow("hybrid_flow")
     
     result = await hybrid_flow.ainvoke(
         {"messages": [HumanMessage(content="Какая погода в Новосибирске?")]},
-        config={"configurable": {"thread_id": "test_hybrid_weather"}}
+        config={"configurable": {"thread_id": unique_id("hybrid_weather")}}
     )
     
     assert "messages" in result
@@ -308,7 +281,6 @@ async def test_execute_hybrid_weather():
     # Проверяем что результат содержит гибридный агент
     final_content = " ".join([msg.content for msg in result["messages"]])
     assert "ГИБРИДНЫЙ АГЕНТ" in final_content
-    # Проверяем что агент работает (получаем хоть какой-то результат)
     assert len(final_content) > 20
     
     print(f"✅ Гибридный агент - погода (функция): {result['messages'][-1].content}")

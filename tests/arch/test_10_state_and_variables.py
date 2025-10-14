@@ -9,14 +9,10 @@
 """
 
 import pytest
-import pytest_asyncio
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 
 from app.core.variables import VariableResolver, get_state
-from app.core.storage import Storage
-from app.core.agent_factory import AgentFactory
-from app.core.checkpointer import init_checkpointer
 from app.models import (
     AgentConfig,
     AgentType,
@@ -28,59 +24,14 @@ from app.models import (
     ToolReference,
     CodeMode,
 )
-from app.models.context_models import Context
-from app.identity.models import User, Company
-from app.core.context import set_context
-
-
-@pytest_asyncio.fixture
-async def setup_storage():
-    """Инициализирует storage и checkpointer"""
-    storage = Storage()
-    await init_checkpointer()
-    return storage
-
-
-@pytest.fixture
-def test_context():
-    """Создает тестовый контекст"""
-    user = User(
-        user_id="test_user_123",
-        name="Тестовый Пользователь",
-        status="active",
-    )
-    
-    company = Company(
-        company_id="test_company",
-        subdomain="test",
-        name="Тестовая Компания",
-    )
-    
-    context = Context(
-        user=user,
-        platform="api",
-        active_company=company,
-        session_id="test_session_123",
-        flow_variables={
-            "bot_name": "Тест Бот",
-            "max_retries": 3,
-        },
-        company_variables={
-            "company_email": "test@company.com",
-        },
-    )
-    
-    set_context(context)
-    return context
 
 
 @pytest.mark.asyncio
-async def test_01_stategraph_has_correct_state(setup_storage, test_context):
+async def test_01_stategraph_has_correct_state(migrated_db, storage, agent_factory, unique_id, test_context):
     """
     Тест 1: StateGraph агент имеет правильный State.
     Проверяем что StateGraph агент использует наш State с полями messages, store и т.д.
     """
-    storage = setup_storage
     
     # Создаем StateGraph агента с нодами
     agent_config = AgentConfig(
@@ -121,7 +72,6 @@ async def start_node(state):
     await storage.set_agent_config(agent_config)
     
     # Получаем агента и компилируем граф
-    agent_factory = AgentFactory()
     agent = await agent_factory.get_agent("test_stategraph_agent")
     
     # Вызываем агента
@@ -134,8 +84,7 @@ async def start_node(state):
         "user_id": "test_user_123",
     }
     
-    import uuid
-    config = {"configurable": {"thread_id": f"test_thread_1_{uuid.uuid4().hex[:8]}"}}
+    config = {"configurable": {"thread_id": unique_id("test_thread_1")}}
     result = await agent.ainvoke(input_data, config=config)
     
     # Проверяем результат
@@ -148,12 +97,18 @@ async def start_node(state):
 
 
 @pytest.mark.asyncio
-async def test_02_react_agent_with_variables(setup_storage, test_context):
+async def test_02_react_agent_with_variables(storage, agent_factory, migrated_db, test_context):
     """
     Тест 2: ReAct агент собирается с промптом и переменными.
     Проверяем что переменные подставляются в промпт правильно.
     """
-    storage = setup_storage
+    from app.core.variables import VariableResolver
+    from app.core.context import get_context, set_context
+    
+    # Переустанавливаем контекст (migrated_db мог перезаписать его)
+    set_context(test_context)
+    context = get_context()
+    assert context.active_company.name == "Test Company"
     
     # Создаем ReAct агента с переменными в промпте
     agent_config = AgentConfig(
@@ -180,13 +135,15 @@ async def test_02_react_agent_with_variables(setup_storage, test_context):
         ),
         local_variables={
             "local_var": "test_local_value",
+            "bot_name": "Test Bot",
+            "company_email": "test@company.com",
+            "max_retries": "3",
         },
     )
     
     await storage.set_agent_config(agent_config)
     
     # Получаем агента
-    agent_factory = AgentFactory()
     agent = await agent_factory.get_agent("test_react_agent_vars")
     
     # Компилируем граф и проверяем что промпт отрендерен
@@ -200,31 +157,28 @@ async def test_02_react_agent_with_variables(setup_storage, test_context):
     
     # Проверяем что все переменные подставились
     assert "{bot_name}" not in rendered_prompt, "bot_name должен быть подставлен"
+    assert "Test Bot" in rendered_prompt, "bot_name должен быть 'Test Bot'"
     assert "{company_name}" not in rendered_prompt, "company_name должен быть подставлен"
+    assert test_context.active_company.name in rendered_prompt, "company_name должен быть из контекста"
     assert "{company_email}" not in rendered_prompt, "company_email должен быть подставлен"
+    assert "test@company.com" in rendered_prompt, "company_email должен быть 'test@company.com'"
     assert "{current_date}" not in rendered_prompt, "current_date должен быть подставлен"
     assert "{user_name}" not in rendered_prompt, "user_name должен быть подставлен"
+    assert test_context.user.name in rendered_prompt, "user_name должен быть из контекста"
     assert "{max_retries}" not in rendered_prompt, "max_retries должен быть подставлен"
+    assert "3" in rendered_prompt, "max_retries должен быть '3'"
     assert "{local_var}" not in rendered_prompt, "local_var должен быть подставлен"
-    
-    # Проверяем что значения правильные
-    assert "Тест Бот" in rendered_prompt
-    assert "Тестовая Компания" in rendered_prompt
-    assert "test@company.com" in rendered_prompt
-    assert "Тестовый Пользователь" in rendered_prompt
-    assert "3" in rendered_prompt
-    assert "test_local_value" in rendered_prompt
+    assert "test_local_value" in rendered_prompt, "local_var должен быть 'test_local_value'"
     
     print("✅ Тест 2 пройден: ReAct агент с правильными переменными")
 
 
 @pytest.mark.asyncio
-async def test_03_state_persistence_between_calls(setup_storage, test_context):
+async def test_03_state_persistence_between_calls(migrated_db, storage, agent_factory, unique_id, test_context):
     """
     Тест 3: Персистентность State между вызовами.
     Проверяем что данные в store сохраняются между вызовами агента.
     """
-    storage = setup_storage
     
     # Создаем агента который работает со store
     agent_config = AgentConfig(
@@ -262,12 +216,10 @@ async def counter_node(state):
     await storage.set_agent_config(agent_config)
     
     # Получаем агента
-    agent_factory = AgentFactory()
     agent = await agent_factory.get_agent("test_persistence_agent")
     
     # Первый вызов - используем уникальный thread_id
-    import uuid
-    thread_id = f"test_thread_persistence_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("test_thread_persistence")
     config = {"configurable": {"thread_id": thread_id}}
     
     input_data_1 = {
@@ -309,12 +261,11 @@ async def counter_node(state):
 
 
 @pytest.mark.asyncio
-async def test_04_state_access_from_tool(setup_storage, test_context):
+async def test_04_state_access_from_tool(migrated_db, storage, agent_factory, unique_id, test_context):
     """
     Тест 4: Доступ к State из тула.
     Проверяем что тул может читать и писать в state через get_state().
     """
-    storage = setup_storage
     
     # Создаем кастомный тул с доступом к state
     @tool
@@ -422,12 +373,10 @@ async def tool_node(state):
     await storage.set_agent_config(agent_config)
     
     # Получаем агента
-    agent_factory = AgentFactory()
     agent = await agent_factory.get_agent("test_agent_with_tool")
     
     # Первый вызов
-    import uuid as uuid2
-    thread_id = f"test_thread_tool_{uuid2.uuid4().hex[:8]}"
+    thread_id = unique_id("test_thread_tool")
     config = {"configurable": {"thread_id": thread_id}}
     
     input_data_1 = {
@@ -464,13 +413,11 @@ async def tool_node(state):
 
 
 @pytest.mark.asyncio
-async def test_05_session_tools_integration(setup_storage, test_context):
+async def test_05_session_tools_integration(migrated_db, storage, agent_factory, unique_id, test_context):
     """
     Тест 5: Интеграция с сессионными тулами.
     Проверяем что session_set и session_get работают правильно.
     """
-    
-    storage = setup_storage
     
     # Создаем агента который использует сессионные тулы
     agent_config = AgentConfig(
@@ -514,12 +461,10 @@ async def session_node(state):
     await storage.set_agent_config(agent_config)
     
     # Получаем агента
-    agent_factory = AgentFactory()
     agent = await agent_factory.get_agent("test_session_tools_agent")
     
     # Вызываем агента
-    import uuid as uuid3
-    thread_id = f"test_thread_session_{uuid3.uuid4().hex[:8]}"
+    thread_id = unique_id("test_thread_session")
     config = {"configurable": {"thread_id": thread_id}}
     
     input_data = {
@@ -542,13 +487,19 @@ async def session_node(state):
 
 
 @pytest.mark.asyncio  
-async def test_06_variable_priority(setup_storage, test_context):
+async def test_06_variable_priority(test_context):
     """
     Тест 6: Приоритет переменных.
     Проверяем что локальные переменные агента перекрывают переменные flow.
     """
     
-    # В context уже есть flow_variables с bot_name="Тест Бот"
+    # Устанавливаем переменную в контексте
+    from app.core.context import get_context
+    ctx = get_context()
+    if ctx.flow_variables is None:
+        ctx.flow_variables = {}
+    ctx.flow_variables["bot_name"] = "Тест Бот"
+    
     # Создадим агента с локальной переменной bot_name
     agent_config = AgentConfig(
         agent_id="test_priority_agent",

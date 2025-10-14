@@ -15,21 +15,19 @@ from app.models import (
     NodeType,
     ConditionType,
     CodeMode,
+    LLMConfig,
 )
-from app.core.storage import Storage
-from app.core.agent_factory import AgentFactory
+from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_stategraph_from_db_with_conditional():
+async def test_stategraph_from_db_with_conditional(migrated_db, storage, agent_factory, unique_id):
     """
     Создаем StateGraph агента в БД с:
     - 5 нодами (router, process_a, process_b, merge, finish)
     - Conditional edge от router
     - Проверяем что граф работает корректно
     """
-    
-    storage = Storage()
     
     # Определяем inline код для нод
     router_code = '''
@@ -174,7 +172,9 @@ async def finish_function(state):
         name="Test StateGraph from DB",
         description="Тестовый StateGraph агент созданный напрямую в БД",
         type=AgentType.STATEGRAPH,
+        code_mode=CodeMode.INLINE_CODE,
         graph_definition=graph_def,
+        llm_config=LLMConfig(model="mock-gpt-4"),
         source="test",
     )
     
@@ -183,28 +183,19 @@ async def finish_function(state):
     print("✅ Агент сохранен в БД")
     
     # Загружаем агента через фабрику
-    factory = AgentFactory()
-    agent = await factory.get_agent("test_stategraph_from_db")
+    agent = await agent_factory.get_agent("test_stategraph_from_db")
     print(f"✅ Агент загружен: {agent.config.name}")
     
     # Компилируем граф
     compiled_graph = await agent.compile_graph()
     print("✅ Граф скомпилирован")
     
-    # Очищаем checkpoints от предыдущих запусков
-    from app.core.checkpointer import get_checkpointer
-    await get_checkpointer()
-    # Создаем конфигурации для очистки
-    config_a = {"configurable": {"thread_id": "test_path_a"}}
-    config_b = {"configurable": {"thread_id": "test_path_b"}}
-    
     # Тест 1: Путь A (с "a" в тексте)
     print("\n=== Тест 1: Путь A ===")
-    from langchain_core.messages import HumanMessage
     
     result_a = await compiled_graph.ainvoke(
         {"messages": [HumanMessage(content="Привет, хочу путь a")]},
-        config=config_a
+        config={"configurable": {"thread_id": unique_id("path_a")}}
     )
     
     messages_a = result_a["messages"]
@@ -224,7 +215,7 @@ async def finish_function(state):
     
     result_b = await compiled_graph.ainvoke(
         {"messages": [HumanMessage(content="Привет, хочу другой путь")]},
-        config=config_b
+        config={"configurable": {"thread_id": unique_id("path_b")}}
     )
     
     messages_b = result_b["messages"]
@@ -240,7 +231,3 @@ async def finish_function(state):
     print("✅ Путь B отработал корректно")
     
     print("\n✅ Все тесты пройдены! StateGraph из БД работает корректно")
-    
-    # Очистка
-    await storage.delete("agent:test_stategraph_from_db")
-    print("✅ Тестовый агент удален из БД")

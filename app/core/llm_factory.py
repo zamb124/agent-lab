@@ -57,6 +57,26 @@ class MockLLM(BaseChatModel):
         """Сбросить счетчики вызовов (для изоляции тестов)"""
         self._call_count = {}
     
+    def configure(self, tool_responses: dict = None, responses: dict = None, default_response: str = None):
+        """
+        Удобный метод для настройки всех mock ответов сразу.
+        
+        Args:
+            tool_responses: Словарь с tool calls
+            responses: Словарь с текстовыми ответами
+            default_response: Дефолтный ответ
+            
+        Returns:
+            self для цепочки вызовов
+        """
+        if tool_responses:
+            self.set_tool_responses(tool_responses)
+        if responses:
+            self.set_responses(responses)
+        if default_response:
+            self.set_default_response(default_response)
+        return self
+    
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         """Синхронная генерация (не используется в async коде)"""
         raise NotImplementedError("Используйте ainvoke")

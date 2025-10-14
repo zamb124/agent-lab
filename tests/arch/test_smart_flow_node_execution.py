@@ -7,34 +7,25 @@
 3. Роутер правильно определяет путь
 """
 import pytest
-from pathlib import Path
-import sys
-
-backend_path = Path(__file__).parent.parent.parent / "backend"
-sys.path.insert(0, str(backend_path))
-
-from app.core.migrator import Migrator
-from app.core.agent_factory import AgentFactory
 from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_smart_flow_executes_different_nodes():
+async def test_smart_flow_executes_different_nodes(migrated_db, agent_factory, mock_llm):
     """Тест: SmartFlow выполняет разные ноды для разных запросов"""
     
-    # Мигрируем
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    await migrator._set_system_context()
-    
-    # Настраиваем мок LLM с разными ответами для разных агентов
-    from app.core.llm_factory import get_global_mock_llm, get_llm
-    get_llm("mock-gpt-4")
-    mock_llm = get_global_mock_llm()
-    
-    if mock_llm:
-        # Разные ответы для разных вызовов
-        mock_llm.set_responses({
+    # Настраиваем mock LLM с разными ответами для разных агентов
+    mock_llm.configure(
+        tool_responses={
+            # Для роутера - выбор нужного агента
+            "Посчитай": {"tool": "calculator_agent_tool", "args": {"request": "Посчитай 2+2"}},
+            "погода": {"tool": "weather_agent_tool", "args": {"request": "Какая погода в Москве?"}},
+            # Для calculator агента
+            "2+2": {"tool": "calculate", "args": {"expression": "2+2"}},
+            # Для weather агента  
+            "Москве": {"tool": "get_weather", "args": {"city": "Москва"}},
+        },
+        responses={
             # Для calculator
             "посчитай": "CALCULATOR: Использую calculate",
             "2+2": "CALCULATOR: Результат = 4",
@@ -46,10 +37,11 @@ async def test_smart_flow_executes_different_nodes():
             "москва": "WEATHER: В Москве солнечно",
             "солнечно": "WEATHER: Объяснение - погода хорошая",
             "get_weather": "WEATHER: Солнечно",
-        })
+        },
+        default_response="Не понял запрос"
+    )
     
     # Получаем SmartFlowAgent
-    agent_factory = AgentFactory()
     agent = await agent_factory.get_agent("app.flows.smart_flow.SmartFlowAgent")
     
     print("\n" + "="*70)
@@ -210,15 +202,7 @@ async def test_smart_flow_router_condition():
 
 
 @pytest.mark.asyncio
-async def test_smart_flow_graph_structure():
-    """Тест: проверка структуры графа SmartFlow"""
-    
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    await migrator._set_system_context()
-    
-    from app.core.storage import Storage
-    storage = Storage()
+async def test_smart_flow_graph_structure(migrated_db, storage):
     
     # Получаем конфигурацию агента
     agent_config = await storage.get_agent_config("app.flows.smart_flow.SmartFlowAgent")

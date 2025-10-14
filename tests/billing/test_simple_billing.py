@@ -2,13 +2,6 @@
 Простой тест системы биллинга.
 """
 
-from pathlib import Path
-import sys
-
-# Добавляем backend в путь
-backend_path = Path(__file__).parent.parent.parent / "backend"
-sys.path.insert(0, str(backend_path))
-
 
 def test_billing_models_import():
     """Тест что модели биллинга импортируются без ошибок"""
@@ -24,10 +17,8 @@ def test_billing_models_import():
     assert "tools" in TARIFF_PRICES[TariffPlan.FREE]
     assert TARIFF_PRICES[TariffPlan.FREE]["llm"]["*"] == 1.5  # Самый дорогой
     assert TARIFF_PRICES[TariffPlan.BASIC]["llm"]["*"] == 1.25
-    assert TARIFF_PRICES[TariffPlan.PREMIUM]["llm"]["*"] == 1.1  # Скидка
+    assert TARIFF_PRICES[TariffPlan.PREMIUM]["llm"]["*"] == 1.1
     assert TARIFF_PRICES[TariffPlan.ENTERPRISE]["llm"]["*"] == 1.1
-    
-    print("✅ Все модели биллинга импортируются корректно")
 
 
 def test_tool_decorator():
@@ -48,8 +39,6 @@ def test_tool_decorator():
     # Проверяем что функция работает
     result = test_function.invoke({"text": "hello"})
     assert "Result: hello" in result
-    
-    print("✅ Декоратор @tool работает корректно")
 
 
 def test_company_model_with_billing():
@@ -68,8 +57,6 @@ def test_company_model_with_billing():
     assert company.tariff_plan == "basic"
     assert company.monthly_budget == 1000.0
     assert company.current_month_spent == 50.0
-    
-    print("✅ Модель Company с биллинг полями работает")
 
 
 def test_toolreference_with_billing():
@@ -90,13 +77,3 @@ def test_toolreference_with_billing():
     assert tool_ref.billing_name == "custom_name"
     assert "premium" in tool_ref.free_for_plans
     assert tool_ref.tariff_limits["basic"] == 10
-    
-    print("✅ ToolReference с биллинг полями работает")
-
-
-if __name__ == "__main__":
-    test_billing_models_import()
-    test_tool_decorator()
-    test_company_model_with_billing()
-    test_toolreference_with_billing()
-    print("🎉 Все простые тесты биллинга прошли!")

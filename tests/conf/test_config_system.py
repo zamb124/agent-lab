@@ -409,28 +409,23 @@ class TestAuthFlow:
             assert "state" in auth_url
             assert "scope" in auth_url
     
-    async def test_auth_state_management(self):
+    async def test_auth_state_management(self, auth_service):
         """Тест управления состоянием авторизации"""
-        from app.identity.auth_service import auth_service
         from app.identity.models import AuthProvider
         
-        # Создаем состояние
         await auth_service._save_auth_state(
             "test-state", 
             AuthProvider.YANDEX, 
             "http://test.com/callback"
         )
         
-        # Получаем состояние
         state_data = await auth_service._get_auth_state("test-state")
         assert state_data is not None
         assert state_data["provider"] == "yandex"
         assert state_data["redirect_uri"] == "http://test.com/callback"
         
-        # Очищаем состояние
         await auth_service._cleanup_auth_state("test-state")
         
-        # Проверяем что состояние удалено
         state_data = await auth_service._get_auth_state("test-state")
         assert state_data is None
 

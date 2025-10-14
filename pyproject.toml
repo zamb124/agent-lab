@@ -58,6 +58,7 @@ packages = ["app"]
 
 [dependency-groups]
 dev = [
+    "filelock>=3.20.0",
     "playwright>=1.55.0",
     "pytest-playwright>=0.7.1",
     "ruff>=0.13.0",
