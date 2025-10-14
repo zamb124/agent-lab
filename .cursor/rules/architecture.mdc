@@ -73,3 +73,73 @@ def get_current_user():
 - Используй `checkpointer` для персистентности
 - Используй `GraphInterrupt` для запроса данных у пользователя
 - Используй `State` (TypedDict) как единое хранилище данных
+
+## LLM и Multimodal
+
+### Единый LLM провайдер
+
+Используй OpenRouter через `app/core/llm_factory.py`:
+
+<good_example>
+from app.core.llm_factory import get_llm
+
+# Дефолтная модель
+llm = get_llm()
+
+# Конкретная модель
+llm = get_llm("anthropic/claude-sonnet-4.5")
+
+# Модель для генерации изображений
+llm = get_llm("google/gemini-2.5-flash-image-preview")
+</good_example>
+
+<bad_example>
+# НЕ используй прямой импорт
+from langchain_openai import ChatOpenAI
+llm = ChatOpenAI(api_key="...", model="...")
+
+# НЕ используй Google SDK напрямую
+import google.generativeai as genai
+</bad_example>
+
+### Multimodal Output
+
+`ChatOpenAIWithBilling` автоматически обрабатывает файлы от LLM:
+- **Изображения** - сохраняются через `file_processor`
+- **Аудио** - сохраняются через `audio_processor` с распознаванием речи
+- **Файлы** - сохраняются через `file_processor`
+
+<good_example>
+# Агент с генерацией изображений
+class CreativeAgent(BaseAgent):
+    model = "google/gemini-2.5-flash-image-preview"
+    prompt = "Ты можешь генерировать изображения"
+
+# LLM вернет: "📎 Файл: generated_image.png (ID: file_xxx, ...)"
+# Файл автоматически сохранен в S3
+</good_example>
+
+### NanoBanana
+
+Используй `NanoBananaClient` для генерации изображений:
+
+<good_example>
+from app.core.core_clients.nano_banana_client import get_default_nano_banana_client
+
+client = await get_default_nano_banana_client()
+
+# Генерация
+file_ids = await client.generate_images(
+    prompt="Beautiful sunset",
+    num_images=1
+)
+
+# С референсом
+file_ids = await client.generate_images(
+    prompt="Make it darker",
+    reference_file_ids=["file_abc123"],
+    num_images=1
+)
+</good_example>
+
+**Важно**: NanoBanana теперь работает через OpenRouter, не нужен отдельный Google API key.

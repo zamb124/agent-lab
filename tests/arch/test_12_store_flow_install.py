@@ -8,128 +8,71 @@
 4. Выполнение хуков install/uninstall
 """
 import pytest
-import asyncio
 from datetime import datetime, timezone
 
-from app.core.migrator import Migrator
-from app.core.storage import Storage
-from app.core.flow_factory import FlowFactory
 from app.core.context import set_context, clear_context
 from app.identity.models import Company, User, AuthProvider, UserStatus
 from app.models.context_models import Context
 from app.models import ToolReference
 
 
-async def _create_test_company(company_id: str = "test_store_company"):
-    """Создает тестовую компанию"""
-    company = Company(
-        company_id=company_id,
-        subdomain=f"test_store_{company_id}",
-        name=f"Test Store Company {company_id}",
-        status="active",
-        created_at=datetime.now(timezone.utc)
-    )
+@pytest.fixture
+def test_store_company(storage):
+    """Создает тестовую компанию для store тестов"""
+    def _set_company_context(company: Company):
+        user = User(
+            user_id="test_user",
+            provider=AuthProvider.YANDEX,
+            provider_user_id="test",
+            email="test@test.com",
+            name="Test User",
+            status=UserStatus.ACTIVE,
+            groups=["admin"],
+            companies={company.company_id: ["admin"]},
+            active_company_id=company.company_id
+        )
+        
+        context = Context(
+            user=user,
+            platform="test",
+            active_company=company,
+            user_companies=[company]
+        )
+        set_context(context)
     
-    await _cleanup_test_company(company)
+    async def _create(company_id: str = "test_store_company"):
+        company = Company(
+            company_id=company_id,
+            subdomain=f"test_store_{company_id}",
+            name=f"Test Store Company {company_id}",
+            status="active",
+            created_at=datetime.now(timezone.utc)
+        )
+        
+        await storage.set(f"company:{company.company_id}", company.model_dump_json(), force_global=True)
+        return company
     
-    storage = Storage()
-    await storage.set(f"company:{company.company_id}", company.model_dump_json(), force_global=True)
+    async def _cleanup(company: Company):
+        prefixes = [
+            "flow:",
+            "agent:",
+            "tool:",
+            "session:",
+            f"company:{company.company_id}:",
+        ]
+        
+        for prefix in prefixes:
+            keys = await storage.list_by_prefix(prefix)
+            for key in keys:
+                await storage.delete(key, force_global=True)
+        
+        await storage.delete(f"company:{company.company_id}", force_global=True)
     
-    return company
-
-
-async def _cleanup_test_company(company: Company):
-    """Удаляет тестовую компанию и все её данные"""
-    storage = Storage()
-    
-    prefixes = [
-        "flow:",
-        "agent:",
-        "tool:",
-        "session:",
-        f"company:{company.company_id}:",
-    ]
-    
-    for prefix in prefixes:
-        keys = await storage.list_by_prefix(prefix)
-        for key in keys:
-            await storage.delete(key, force_global=True)
-    
-    await storage.delete(f"company:{company.company_id}", force_global=True)
-
-
-def _set_company_context(company: Company):
-    """Устанавливает контекст компании"""
-    user = User(
-        user_id="test_user",
-        provider=AuthProvider.YANDEX,
-        provider_user_id="test",
-        email="test@test.com",
-        name="Test User",
-        status=UserStatus.ACTIVE,
-        groups=["admin"],
-        companies={company.company_id: ["admin"]},
-        active_company_id=company.company_id
-    )
-    
-    context = Context(
-        user=user,
-        platform="test",
-        active_company=company,
-        user_companies=[company]
-    )
-    set_context(context)
-
-
-async def _cleanup_system_company():
-    """Удаляет все записи системной компании из БД"""
-    storage = Storage()
-    
-    system_company = Company(
-        company_id="system",
-        subdomain="system",
-        name="System Company",
-        status="active",
-        created_at=datetime.now(timezone.utc)
-    )
-    
-    user = User(
-        user_id="system",
-        provider=AuthProvider.YANDEX,
-        provider_user_id="system",
-        email="system@test.com",
-        name="System",
-        status=UserStatus.ACTIVE,
-        groups=["admin"],
-        companies={"system": ["admin"]},
-        active_company_id="system"
-    )
-    
-    from app.core.context import set_context
-    from app.models.context_models import Context
-    
-    context = Context(
-        user=user,
-        platform="test",
-        active_company=system_company,
-        user_companies=[system_company]
-    )
-    set_context(context)
-    
-    prefixes = [
-        "flow:",
-        "agent:",
-        "tool:",
-    ]
-    
-    for prefix in prefixes:
-        keys = await storage.list_by_prefix(prefix)
-        for key in keys:
-            await storage.delete(key, force_global=True)
+    return _create, _cleanup, _set_company_context
 
 
 @pytest.mark.asyncio
-async def test_new_company_only_tools():
+async def test_new_company_only_tools(migrated_db, storage, migrator, test_store_company):
     """
     Тест 1: При создании компании мигрируются только публичные tools.
     
@@ -138,15 +81,10 @@ async def test_new_company_only_tools():
     - Flows НЕ мигрируются
     - Агенты НЕ мигрируются
     """
-    await _cleanup_system_company()
+    create_company, cleanup_company, set_company_context = test_store_company
+    test_company = await create_company("new_company_1")
     
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    
-    test_company = await _create_test_company("new_company_1")
-    storage = Storage()
-    
-    _set_company_context(test_company)
+    set_company_context(test_company)
     
     await migrator.migrate_defaults_for_company(test_company)
     
@@ -164,11 +102,11 @@ async def test_new_company_only_tools():
     
     print("✅ Тест new_company_only_tools пройден!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_install_flow_creates_dependencies():
+async def test_install_flow_creates_dependencies(migrated_db, storage, flow_factory, migrator, test_store_company):
     """
     Тест 2: Установка flow создает все зависимости.
     
@@ -178,16 +116,10 @@ async def test_install_flow_creates_dependencies():
     - Создаются все приватные tools
     - Выполняется install hook
     """
-    await _cleanup_system_company()
+    create_company, cleanup_company, set_company_context = test_store_company
+    test_company = await create_company("install_test_company")
     
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    
-    test_company = await _create_test_company("install_test_company")
-    storage = Storage()
-    flow_factory = FlowFactory()
-    
-    _set_company_context(test_company)
+    set_company_context(test_company)
     
     await migrator.migrate_defaults_for_company(test_company)
     
@@ -213,11 +145,11 @@ async def test_install_flow_creates_dependencies():
     
     print("✅ Тест install_flow_creates_dependencies пройден!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_uninstall_flow_removes_dependencies():
+async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_factory, migrator, test_store_company):
     """
     Тест 3: Удаление flow удаляет все зависимости.
     
@@ -227,16 +159,10 @@ async def test_uninstall_flow_removes_dependencies():
     - Удаляются агенты flow
     - Публичные tools остаются
     """
-    await _cleanup_system_company()
+    create_company, cleanup_company, set_company_context = test_store_company
+    test_company = await create_company("uninstall_test_company")
     
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    
-    test_company = await _create_test_company("uninstall_test_company")
-    storage = Storage()
-    flow_factory = FlowFactory()
-    
-    _set_company_context(test_company)
+    set_company_context(test_company)
     
     await migrator.migrate_defaults_for_company(test_company)
     
@@ -265,24 +191,16 @@ async def test_uninstall_flow_removes_dependencies():
     
     print("✅ Тест uninstall_flow_removes_dependencies пройден!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_flow_hooks_execution():
+async def test_flow_hooks_execution(migrated_db, storage):
     """
     Тест 4: Проверка выполнения хуков install и uninstall.
     
     Проверяет что хуки правильно извлекаются из кода и выполняются.
     """
-    await _cleanup_system_company()
-    
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    
-    storage = Storage()
-    
-    await migrator._set_system_context()
     
     weather_flow = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
     assert weather_flow is not None, "Weather flow должен быть в системной компании"
@@ -302,22 +220,16 @@ async def test_flow_hooks_execution():
 
 
 @pytest.mark.asyncio
-async def test_hooks_actually_execute():
+async def test_hooks_actually_execute(migrated_db, storage, flow_factory, migrator, test_store_company):
     """
     Тест 4.5: Проверка ФАКТИЧЕСКОГО выполнения хуков install и uninstall.
     
     Проверяет что хуки реально выполняются, а не просто извлекаются из кода.
     """
-    await _cleanup_system_company()
+    create_company, cleanup_company, set_company_context = test_store_company
+    test_company = await create_company("hooks_test_company")
     
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    
-    test_company = await _create_test_company("hooks_test_company")
-    storage = Storage()
-    flow_factory = FlowFactory()
-    
-    _set_company_context(test_company)
+    set_company_context(test_company)
     
     await migrator.migrate_defaults_for_company(test_company)
     
@@ -351,11 +263,11 @@ async def test_hooks_actually_execute():
     print("✅ uninstall hook выполнился! Переменная удалена")
     print("✅ Тест hooks_actually_execute пройден!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_flow_with_image():
+async def test_flow_with_image(migrated_db, storage):
     """
     Тест 5: Проверка загрузки картинки flow в S3.
     
@@ -363,13 +275,6 @@ async def test_flow_with_image():
     - Картинка загружается в S3 (если файл существует)
     - image_file_id сохраняется
     """
-    await _cleanup_system_company()
-    
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    
-    storage = Storage()
-    await migrator._set_system_context()
     
     weather_flow = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
     assert weather_flow is not None, "Weather flow должен быть мигрирован"
@@ -380,31 +285,24 @@ async def test_flow_with_image():
 
 
 @pytest.mark.asyncio
-async def test_multiple_flows_isolation():
+async def test_multiple_flows_isolation(migrated_db, storage, flow_factory, migrator, test_store_company):
     """
     Тест 6: Изоляция flows между компаниями.
     
     Проверяет что flows в одной компании не видны в другой.
     """
-    await _cleanup_system_company()
+    create_company, cleanup_company, set_company_context = test_store_company
+    company1 = await create_company("isolation_company_1")
+    company2 = await create_company("isolation_company_2")
     
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    
-    company1 = await _create_test_company("isolation_company_1")
-    company2 = await _create_test_company("isolation_company_2")
-    
-    storage = Storage()
-    flow_factory = FlowFactory()
-    
-    _set_company_context(company1)
+    set_company_context(company1)
     await migrator.migrate_defaults_for_company(company1)
     await flow_factory.install_flow("app.flows.weather_flow.weather_flow_config")
     
     flow_in_company1 = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
     assert flow_in_company1 is not None, "Flow должен быть в компании 1"
     
-    _set_company_context(company2)
+    set_company_context(company2)
     await migrator.migrate_defaults_for_company(company2)
     
     flow_in_company2 = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
@@ -415,36 +313,29 @@ async def test_multiple_flows_isolation():
     flow_in_company2_after = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
     assert flow_in_company2_after is not None, "Flow должен быть установлен в компании 2"
     
-    _set_company_context(company1)
+    set_company_context(company1)
     await flow_factory.uninstall_flow("app.flows.weather_flow.weather_flow_config")
     
     flow_in_company1_after = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
     assert flow_in_company1_after is None, "Flow должен быть удален из компании 1"
     
-    _set_company_context(company2)
+    set_company_context(company2)
     flow_still_in_company2 = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
     assert flow_still_in_company2 is not None, "Flow должен остаться в компании 2"
     
     print("✅ Тест multiple_flows_isolation пройден!")
     clear_context()
-    await _cleanup_test_company(company1)
-    await _cleanup_test_company(company2)
+    await cleanup_company(company1)
+    await cleanup_company(company2)
 
 
 @pytest.mark.asyncio
-async def test_flow_author_extraction():
+async def test_flow_author_extraction(migrated_db, storage):
     """
     Тест 7: Проверка извлечения информации об авторе.
     
     Проверяет что author правильно мигрируется из кода.
     """
-    await _cleanup_system_company()
-    
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    
-    storage = Storage()
-    await migrator._set_system_context()
     
     weather_flow = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
     assert weather_flow is not None, "Weather flow должен быть мигрирован"
@@ -458,22 +349,16 @@ async def test_flow_author_extraction():
 
 
 @pytest.mark.asyncio
-async def test_install_twice_should_succeed():
+async def test_install_twice_should_succeed(migrated_db, storage, flow_factory, migrator, test_store_company):
     """
     Тест 8: Повторная установка flow должна перезаписывать существующий.
     
     Проверяет что можно переустановить flow (перемиграция).
     """
-    await _cleanup_system_company()
+    create_company, cleanup_company, set_company_context = test_store_company
+    test_company = await create_company("double_install_company")
     
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    
-    test_company = await _create_test_company("double_install_company")
-    storage = Storage()
-    flow_factory = FlowFactory()
-    
-    _set_company_context(test_company)
+    set_company_context(test_company)
     
     await migrator.migrate_defaults_for_company(test_company)
     
@@ -493,25 +378,20 @@ async def test_install_twice_should_succeed():
     
     print("✅ Тест install_twice_should_succeed пройден!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_uninstall_not_installed_should_fail():
+async def test_uninstall_not_installed_should_fail(migrated_db, storage, flow_factory, migrator, test_store_company):
     """
     Тест 9: Удаление неустановленного flow должно вызывать ошибку.
     
     Проверяет что нельзя удалить flow который не установлен.
     """
-    await _cleanup_system_company()
+    create_company, cleanup_company, set_company_context = test_store_company
+    test_company = await create_company("uninstall_empty_company")
     
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    
-    test_company = await _create_test_company("uninstall_empty_company")
-    flow_factory = FlowFactory()
-    
-    _set_company_context(test_company)
+    set_company_context(test_company)
     
     await migrator.migrate_defaults_for_company(test_company)
     
@@ -526,10 +406,12 @@ async def test_uninstall_not_installed_should_fail():
     
     print("✅ Тест uninstall_not_installed_should_fail пройден!")
     clear_context()
-    await _cleanup_test_company(test_company)
+    await cleanup_company(test_company)
 
 
 if __name__ == "__main__":
+    import asyncio
+    
     async def run_all_tests():
         try:
             print("\n=== Тест 1: new_company_only_tools ===")

@@ -3,42 +3,28 @@
 """
 
 import pytest
-import uuid
 from datetime import datetime, timezone
 
-from app.core.flow_factory import FlowFactory
-from app.core.storage import Storage
 from app.models import (
-    MessageRole,
+    MessageRole, SessionConfig, SessionStatus
 )
 from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_flow_history_from_smart_flow(save_test_company):
+async def test_flow_history_from_smart_flow(migrated_db, storage, flow_factory, unique_id):
     """
     Тест получения истории сообщений из выполненного smart_flow
     """
     print("\n=== Тест: История выполнения smart_flow ===")
-    
-    from app.core.migrator import Migrator
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    await migrator._set_system_context()
-    
-    flow_factory = FlowFactory()
     
     flow_id = "app.flows.smart_flow.smart_flow_config"
     flow = await flow_factory.get_flow(flow_id)
     
     print(f"✅ Flow загружен: {flow_id}")
     
-    thread_id = f"test_history_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("history")
     config = {"configurable": {"thread_id": thread_id}}
-    
-    from app.models import SessionConfig, SessionStatus
-    from app.core.storage import Storage
-    storage = Storage()
     
     session = SessionConfig(
         session_id=thread_id,
@@ -104,28 +90,17 @@ async def test_flow_history_from_smart_flow(save_test_company):
 
 
 @pytest.mark.asyncio
-async def test_flow_history_with_checkpoints(save_test_company):
+async def test_flow_history_with_checkpoints(migrated_db, storage, flow_factory, unique_id):
     """
     Тест получения истории с детальной информацией о checkpoints
     """
     print("\n=== Тест: История с checkpoints ===")
     
-    from app.core.migrator import Migrator
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    await migrator._set_system_context()
-    
-    flow_factory = FlowFactory()
-    
     flow_id = "app.flows.weather_flow.weather_flow_config"
     flow = await flow_factory.get_flow(flow_id)
     
-    thread_id = f"test_checkpoints_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("checkpoints")
     config = {"configurable": {"thread_id": thread_id}}
-    
-    from app.models import SessionConfig, SessionStatus
-    from app.core.storage import Storage
-    storage = Storage()
     
     session = SessionConfig(
         session_id=thread_id,
@@ -171,32 +146,22 @@ async def test_flow_history_with_checkpoints(save_test_company):
 
 
 @pytest.mark.asyncio
-async def test_flow_sessions_list(save_test_company):
+async def test_flow_sessions_list(migrated_db, storage, flow_factory, unique_id):
     """
     Тест получения списка сессий через FlowFactory
     """
     print("\n=== Тест: Список сессий ===")
     
-    from app.core.migrator import Migrator
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    await migrator._set_system_context()
-    
-    flow_factory = FlowFactory()
-    storage = Storage()
-    
     flow_id = "app.flows.smart_flow.smart_flow_config"
     flow = await flow_factory.get_flow(flow_id)
     
-    thread_id_1 = f"test_session_1_{uuid.uuid4().hex[:8]}"
-    thread_id_2 = f"test_session_2_{uuid.uuid4().hex[:8]}"
+    thread_id_1 = unique_id("session_1")
+    thread_id_2 = unique_id("session_2")
     
     config_1 = {"configurable": {"thread_id": thread_id_1}}
     config_2 = {"configurable": {"thread_id": thread_id_2}}
     
     print("🔄 Создаем 2 сессии...")
-    
-    from app.models import SessionConfig, SessionStatus
     
     session_1 = SessionConfig(
         session_id=thread_id_1,
@@ -282,28 +247,17 @@ async def test_flow_sessions_list(save_test_company):
 
 
 @pytest.mark.asyncio
-async def test_flow_history_tool_calls(save_test_company):
+async def test_flow_history_tool_calls(migrated_db, storage, flow_factory, unique_id):
     """
     Тест что история корректно фиксирует вызовы инструментов
     """
     print("\n=== Тест: Вызовы инструментов в истории ===")
     
-    from app.core.migrator import Migrator
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    await migrator._set_system_context()
-    
-    flow_factory = FlowFactory()
-    
     flow_id = "app.flows.smart_flow.smart_flow_config"
     flow = await flow_factory.get_flow(flow_id)
     
-    thread_id = f"test_tools_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("tools")
     config = {"configurable": {"thread_id": thread_id}}
-    
-    from app.models import SessionConfig, SessionStatus
-    from app.core.storage import Storage
-    storage = Storage()
     
     session = SessionConfig(
         session_id=thread_id,
@@ -361,13 +315,11 @@ async def test_flow_history_tool_calls(save_test_company):
 
 @pytest.mark.asyncio  
 @pytest.mark.skip(reason="Нестабилен при массовом запуске")
-async def test_flow_history_pagination(save_test_company):
+async def test_flow_history_pagination(migrated_db, flow_factory):
     """
     Тест пагинации при получении списка сессий
     """
     print("\n=== Тест: Пагинация сессий ===")
-    
-    flow_factory = FlowFactory()
     
     print("🔄 Получаем первую страницу (limit=2, offset=0)...")
     page_1 = await flow_factory.get_flow_sessions(

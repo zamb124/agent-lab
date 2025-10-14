@@ -6,26 +6,8 @@ import pytest
 import hashlib
 from urllib.parse import parse_qs, urlparse
 
-from app.core.clients.payment_providers.yoomoney_provider import YooMoneyProvider, YooMoneyConfig
+from app.core.clients.payment_providers.yoomoney_provider import YooMoneyConfig
 from app.core.clients.payment_providers.base_provider import PaymentRequest
-
-
-@pytest.fixture
-def yoomoney_config():
-    """Fixture с конфигурацией YooMoney"""
-    return YooMoneyConfig(
-        provider_type="yoomoney",
-        enabled=True,
-        account_number="4100119360332365",
-        notification_secret="test_secret_key_123",
-        quickpay_url="https://yoomoney.ru/quickpay/confirm.xml"
-    )
-
-
-@pytest.fixture
-def yoomoney_provider(yoomoney_config):
-    """Fixture с провайдером YooMoney"""
-    return YooMoneyProvider(yoomoney_config)
 
 
 @pytest.fixture

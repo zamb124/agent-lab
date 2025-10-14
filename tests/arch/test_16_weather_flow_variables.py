@@ -10,56 +10,13 @@
 """
 
 import pytest
-import pytest_asyncio
-import uuid
 from langchain_core.messages import HumanMessage
 
-from app.core.storage import Storage
-from app.core.flow_factory import FlowFactory
-from app.core.agent_factory import AgentFactory
-from app.core.checkpointer import init_checkpointer
 from app.models import FlowConfig
-from app.models.context_models import Context
-from app.identity.models import User, Company
-from app.core.context import set_context
-
-
-@pytest_asyncio.fixture
-async def setup_storage():
-    """Инициализирует storage и checkpointer"""
-    storage = Storage()
-    await init_checkpointer()
-    return storage
-
-
-@pytest.fixture
-def test_context():
-    """Создает тестовый контекст"""
-    user = User(
-        user_id="test_user_weather",
-        name="Виктор Погодный",
-        status="active",
-    )
-    
-    company = Company(
-        company_id="test_weather_company",
-        subdomain="weather_test",
-        name="Weather Test Company",
-    )
-    
-    context = Context(
-        user=user,
-        platform="api",
-        active_company=company,
-        session_id="test_weather_session",
-    )
-    
-    set_context(context)
-    return context
 
 
 @pytest.mark.asyncio
-async def test_01_weather_agent_has_store_config(setup_storage, test_context):
+async def test_01_weather_agent_has_store_config(migrated_db, storage, test_context):
     """
     Тест 1: WeatherAgent имеет конфигурацию store.
     
@@ -89,7 +46,7 @@ async def test_01_weather_agent_has_store_config(setup_storage, test_context):
 
 
 @pytest.mark.asyncio
-async def test_01b_travel_info_agent_uses_store_in_prompt(setup_storage, test_context):
+async def test_01b_travel_info_agent_uses_store_in_prompt(migrated_db, storage, test_context):
     """
     Тест 1b: TravelInfoAgent использует store переменные в промпте.
     
@@ -110,7 +67,7 @@ async def test_01b_travel_info_agent_uses_store_in_prompt(setup_storage, test_co
 
 
 @pytest.mark.asyncio
-async def test_02_weather_agent_prompt_has_variables(setup_storage, test_context):
+async def test_02_weather_agent_prompt_has_variables(migrated_db, storage, test_context):
     """
     Тест 2: WeatherAgent промпт содержит переменные разных типов.
     
@@ -148,7 +105,7 @@ async def test_02_weather_agent_prompt_has_variables(setup_storage, test_context
 
 
 @pytest.mark.asyncio
-async def test_03_weather_flow_has_store_config(setup_storage, test_context):
+async def test_03_weather_flow_has_store_config(migrated_db, storage, test_context):
     """
     Тест 3: WeatherFlow имеет конфигурацию store.
     
@@ -175,7 +132,7 @@ async def test_03_weather_flow_has_store_config(setup_storage, test_context):
 
 
 @pytest.mark.asyncio
-async def test_04_weather_flow_has_variables_config(setup_storage, test_context):
+async def test_04_weather_flow_has_variables_config(migrated_db, storage, test_context):
     """
     Тест 4: WeatherFlow имеет конфигурацию variables.
     
@@ -207,7 +164,7 @@ async def test_04_weather_flow_has_variables_config(setup_storage, test_context)
 
 
 @pytest.mark.asyncio
-async def test_05_all_variable_types_in_prompt(setup_storage, test_context):
+async def test_05_all_variable_types_in_prompt(migrated_db, storage, test_context):
     """
     Тест 5: Все типы переменных работают в одном промпте.
     
@@ -218,9 +175,10 @@ async def test_05_all_variable_types_in_prompt(setup_storage, test_context):
     - Опциональный синтаксис ({?var|default})
     """
     from app.core.variables import VariableResolver
+    from app.core.context import get_context
     
-    # Устанавливаем flow variables в контекст
-    context = test_context
+    # Устанавливаем flow variables в глобальный контекст
+    context = get_context()
     context.flow_variables = {
         "bot_name": "Weather Bot",
         "timeout": 30,
@@ -248,8 +206,8 @@ async def test_05_all_variable_types_in_prompt(setup_storage, test_context):
     
     # Проверяем что статические переменные подставились
     assert "Weather Bot" in static_rendered
-    assert "Weather Test Company" in static_rendered
-    assert "Виктор Погодный" in static_rendered
+    assert context.active_company.name in static_rendered
+    assert context.user.name in static_rendered
     assert "Привет от погодного бота!" in static_rendered
     assert "30 минут" in static_rendered
     assert "support@company.com" in static_rendered
@@ -288,7 +246,7 @@ async def test_06_optional_syntax_consistency(test_context):
     }
     
     # Существующие переменные
-    assert VariableResolver.render_template("{?company_name|НЕТ}") == "Weather Test Company"
+    assert VariableResolver.render_template("{?company_name|НЕТ}") == "Test Company"
     assert VariableResolver.render_template("{?existing_var|НЕТ}") == "значение"
     assert VariableResolver.render_template("{?nested.key1|НЕТ}") == "value1"
     

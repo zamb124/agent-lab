@@ -8,71 +8,41 @@
 """
 
 import pytest
-import pytest_asyncio
-import uuid
 from langchain_core.messages import HumanMessage
 
-from app.core.storage import Storage
-from app.core.agent_factory import AgentFactory
-from app.core.checkpointer import init_checkpointer
 from app.core.variables import VariableResolver
 from app.models import (
     AgentConfig,
     AgentType,
     LLMConfig,
 )
-from app.models.context_models import Context
-from app.identity.models import User, Company
-from app.core.context import set_context
-
-
-@pytest_asyncio.fixture
-async def setup_storage():
-    """Инициализирует storage и checkpointer"""
-    storage = Storage()
-    await init_checkpointer()
-    return storage
 
 
 @pytest.fixture
-def test_context():
-    """Создает тестовый контекст с переменными"""
-    user = User(
-        user_id="test_user_123",
-        name="Тестовый Пользователь",
-        status="active",
-    )
+def test_context_with_vars(test_context):
+    """Расширяет test_context переменными для этих тестов"""
+    from app.core.context import get_context
+    ctx = get_context()
+    if ctx.flow_variables is None:
+        ctx.flow_variables = {}
+    if ctx.company_variables is None:
+        ctx.company_variables = {}
     
-    company = Company(
-        company_id="test_company",
-        subdomain="test",
-        name="Тестовая Компания",
-    )
+    ctx.flow_variables.update({
+        "bot_name": "Тест Бот",
+        "timeout": 30,
+        "nested": {
+            "key1": "value1",
+            "key2": "value2"
+        }
+    })
+    ctx.company_variables["api_key"] = "sk-123"
     
-    context = Context(
-        user=user,
-        platform="api",
-        active_company=company,
-        session_id="test_session_123",
-        flow_variables={
-            "bot_name": "Тест Бот",
-            "timeout": 30,
-            "nested": {
-                "key1": "value1",
-                "key2": "value2"
-            }
-        },
-        company_variables={
-            "api_key": "sk-123",
-        },
-    )
-    
-    set_context(context)
-    return context
+    return ctx
 
 
 @pytest.mark.asyncio
-async def test_01_optional_syntax_for_static_variables(test_context):
+async def test_01_optional_syntax_for_static_variables(test_context_with_vars):
     """
     Тест 1: Опциональный синтаксис для статических переменных.
     
@@ -81,7 +51,7 @@ async def test_01_optional_syntax_for_static_variables(test_context):
     # Тест с существующей переменной
     template1 = "Компания: {?company_name|Нет компании}"
     rendered1 = VariableResolver.render_template(template1)
-    assert rendered1 == "Компания: Тестовая Компания"
+    assert rendered1 == "Компания: Test Company"
     
     # Тест с несуществующей переменной - должен быть дефолт
     template2 = "Email: {?company_email|не указан}"
@@ -102,7 +72,7 @@ async def test_01_optional_syntax_for_static_variables(test_context):
 
 
 @pytest.mark.asyncio
-async def test_02_optional_syntax_for_nested_variables(test_context):
+async def test_02_optional_syntax_for_nested_variables(test_context_with_vars):
     """
     Тест 2: Опциональный синтаксис для вложенных переменных.
     
@@ -127,7 +97,7 @@ async def test_02_optional_syntax_for_nested_variables(test_context):
 
 
 @pytest.mark.asyncio
-async def test_03_unified_syntax_in_agent_prompt(setup_storage, test_context):
+async def test_03_unified_syntax_in_agent_prompt(migrated_db, storage, agent_factory, unique_id, test_context_with_vars):
     """
     Тест 3: Унифицированный синтаксис в промпте агента.
     
@@ -135,7 +105,6 @@ async def test_03_unified_syntax_in_agent_prompt(setup_storage, test_context):
     - Статические переменные с {?var|default}
     - State переменные с {?store.var|default}
     """
-    storage = setup_storage
     
     agent_config = AgentConfig(
         agent_id="test_unified_syntax_agent",
@@ -169,10 +138,9 @@ STATE ПЕРЕМЕННЫЕ:
     await storage.set_agent_config(agent_config)
     
     # Получаем агента
-    agent_factory = AgentFactory()
     agent = await agent_factory.get_agent("test_unified_syntax_agent")
     
-    thread_id = f"test_thread_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("test_thread")
     config = {"configurable": {"thread_id": thread_id}}
     
     # Вызываем с частичными данными в store

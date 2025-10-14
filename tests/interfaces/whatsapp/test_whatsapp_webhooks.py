@@ -10,6 +10,8 @@ from fastapi import FastAPI
 from app.api.v1.whatsapp import router
 from app.models import FlowConfig
 
+pytestmark = pytest.mark.xdist_group(name="whatsapp_sequential")
+
 
 @pytest.fixture
 def app():

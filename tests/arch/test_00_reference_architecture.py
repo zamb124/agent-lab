@@ -12,25 +12,19 @@
 Это ЭТАЛОН для всех будущих тестов!
 """
 import pytest
-import uuid
-from pathlib import Path
-import sys
-
-backend_path = Path(__file__).parent.parent.parent / "backend"
-sys.path.insert(0, str(backend_path))
-
-from app.core.storage import Storage
-from app.core.flow_factory import FlowFactory
-from app.core.llm_factory import setup_mock_responses
-from app.models import (
-    AgentConfig, AgentType, CodeMode, FlowConfig,
-    ToolReference, LLMConfig
-)
+from app.models import AgentConfig, AgentType, CodeMode, ToolReference
 from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_00_reference_architecture(save_test_company):
+async def test_00_reference_architecture(
+    migrated_db,
+    storage,
+    flow_factory,
+    mock_llm,
+    test_helpers,
+    unique_id
+):
     """
     Эталонный тест: Supervisor -> Subagent -> Tool
     
@@ -47,85 +41,45 @@ async def test_00_reference_architecture(save_test_company):
     print("ЭТАЛОННЫЙ ТЕСТ: Supervisor -> MathAgent -> calculate_area_tool")
     print("="*80)
     
-    storage = Storage()
-    
-    # ============================================================
     # ШАГ 1: Создаем Tool для расчета площади круга
-    # ============================================================
     print("\n📦 Шаг 1: Создаем Tool")
     
-    calculate_area_code = '''
-from langchain_core.tools import tool
-import math
-
-@tool
+    area_tool = test_helpers.create_inline_tool(
+        tool_id="calculate_area_tool",
+        function_name="calculate_area",
+        function_body="""
 def calculate_area(radius: float) -> str:
-    """
-    Вычисляет площадь круга по радиусу.
-    
-    Args:
-        radius: Радиус круга
-        
-    Returns:
-        Площадь круга
-    """
+    '''Вычисляет площадь круга по радиусу'''
+    import math
     area = math.pi * radius ** 2
     return f"Площадь круга с радиусом {radius} = {area:.2f}"
-'''
-    
-    area_tool = ToolReference(
-        tool_id="calculate_area_tool",
-        code_mode=CodeMode.INLINE_CODE,
-        inline_code=calculate_area_code,
-        description="Вычисляет площадь круга",
-        params={}
+""",
+        description="Вычисляет площадь круга"
     )
     
     print("   ✅ Tool calculate_area создан")
     
-    # ============================================================
     # ШАГ 2: Создаем Subagent (MathAgent) с tool
-    # ============================================================
     print("\n🤖 Шаг 2: Создаем MathAgent (subagent)")
     
-    math_agent_config = AgentConfig(
+    await test_helpers.create_simple_agent(
+        storage=storage,
         agent_id="ref_math_agent",
         name="Reference Math Agent",
-        description="Математический агент для расчетов",
-        type=AgentType.REACT,
-        code_mode=CodeMode.CODE_REFERENCE,
-        function_class=None,
-        prompt="""Ты математик-специалист.
-
-Используй calculate_area tool для вычисления площади круга.
-
-Всегда используй инструменты для точных расчетов.""",
-        tools=[area_tool],
-        llm_config=LLMConfig(model="mock-gpt-4"),
-        source="test"
+        prompt="Ты математик-специалист. Используй calculate_area tool для вычисления площади круга.",
+        tools=[area_tool]
     )
     
-    await storage.set_agent_config(math_agent_config)
     print("   ✅ MathAgent создан с calculate_area tool")
     
-    # ============================================================
     # ШАГ 3: Создаем Supervisor агента
-    # ============================================================
     print("\n👔 Шаг 3: Создаем SupervisorAgent")
     
-    supervisor_config = AgentConfig(
+    await test_helpers.create_simple_agent(
+        storage=storage,
         agent_id="ref_supervisor",
         name="Reference Supervisor",
-        description="Supervisor для роутинга запросов",
-        type=AgentType.REACT,
-        code_mode=CodeMode.CODE_REFERENCE,
-        function_class=None,
-        prompt="""Ты координатор запросов.
-
-Анализируй запросы и вызывай подходящий инструмент:
-- Для математических вычислений -> используй math_agent_tool
-
-ВАЖНО: ВСЕГДА передавай ПОЛНЫЙ запрос пользователя в инструмент.""",
+        prompt="Ты координатор запросов. Для математических вычислений используй ref_math_agent.",
         tools=[
             ToolReference(
                 tool_id="agent:ref_math_agent",
@@ -133,45 +87,32 @@ def calculate_area(radius: float) -> str:
                 function_path="ref_math_agent",
                 description="Математический агент для расчетов"
             )
-        ],
-        llm_config=LLMConfig(model="mock-gpt-4"),
-        source="test"
+        ]
     )
     
-    await storage.set_agent_config(supervisor_config)
     print("   ✅ SupervisorAgent создан с math_agent как tool")
     
-    # ============================================================
     # ШАГ 4: Создаем Flow
-    # ============================================================
     print("\n🔄 Шаг 4: Создаем Flow")
     
-    flow_config = FlowConfig(
+    await test_helpers.create_simple_flow(
+        storage=storage,
         flow_id="ref_flow",
         name="Reference Flow",
-        description="Эталонный flow для демонстрации архитектуры",
-        entry_point_agent="ref_supervisor",
-        llm_config=None,
-        source="test"
+        entry_point_agent="ref_supervisor"
     )
     
-    await storage.set_flow_config(flow_config)
     print("   ✅ Flow создан с SupervisorAgent как entry point")
     
-    # ============================================================
     # ШАГ 5: Настраиваем MockLLM
-    # ============================================================
     print("\n🎭 Шаг 5: Настраиваем MockLLM")
     
-    setup_mock_responses(
+    mock_llm.configure(
         tool_responses={
-            # Supervisor вызывает MathAgent
             "посчитай площадь": {"tool": "ref_math_agent", "args": {"request": "Посчитай площадь круга радиусом 5"}},
-            # MathAgent вызывает calculate_area
             "радиусом 5": {"tool": "calculate_area", "args": {"radius": 5.0}},
         },
         responses={
-            # Финальный ответ после выполнения tool
             "площадь круга": "Площадь круга с радиусом 5 составляет 78.54 квадратных единиц",
         },
         default_response="Выполняю расчет..."
@@ -179,23 +120,17 @@ def calculate_area(radius: float) -> str:
     
     print("   ✅ MockLLM настроен для Supervisor -> MathAgent -> Tool")
     
-    # ============================================================
     # ШАГ 6: Выполняем Flow
-    # ============================================================
     print("\n▶️  Шаг 6: Выполняем Flow")
     
-    flow_factory = FlowFactory()
     ref_flow = await flow_factory.get_flow("ref_flow")
     
-    thread_id = f"ref_test_{uuid.uuid4().hex[:8]}"
     result = await ref_flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай площадь круга радиусом 5")]},
-        config={"configurable": {"thread_id": thread_id}}
+        config={"configurable": {"thread_id": unique_id("ref_test")}}
     )
     
-    # ============================================================
     # ШАГ 7: Проверяем результат
-    # ============================================================
     print("\n✓ Шаг 7: Проверяем результат")
     
     assert "messages" in result
@@ -225,7 +160,14 @@ def calculate_area(radius: float) -> str:
 
 
 @pytest.mark.asyncio
-async def test_00_simple_agent_with_tool(save_test_company):
+async def test_00_simple_agent_with_tool(
+    migrated_db,
+    storage,
+    flow_factory,
+    mock_llm,
+    test_helpers,
+    unique_id
+):
     """
     Упрощенный эталон: Один агент с одним tool.
     Самый базовый сценарий для быстрой проверки.
@@ -235,90 +177,58 @@ async def test_00_simple_agent_with_tool(save_test_company):
     print("ПРОСТОЙ ЭТАЛОН: Agent -> Tool")
     print("="*80)
     
-    storage = Storage()
-    
     # 1. Создаем простой tool
     print("\n📦 Создаем greet_tool")
     
-    greet_code = '''
-from langchain_core.tools import tool
-
-@tool
-def greet(name: str) -> str:
-    """Приветствует пользователя по имени"""
-    return f"Привет, {name}! Рад тебя видеть!"
-'''
-    
-    greet_tool = ToolReference(
+    greet_tool = test_helpers.create_inline_tool(
         tool_id="greet_tool",
-        code_mode=CodeMode.INLINE_CODE,
-        inline_code=greet_code,
-        description="Приветствует пользователя",
-        params={}
+        function_name="greet",
+        function_body="""
+def greet(name: str) -> str:
+    '''Приветствует пользователя по имени'''
+    return f"Привет, {name}! Рад тебя видеть!"
+""",
+        description="Приветствует пользователя"
     )
     
     # 2. Создаем агента с tool
     print("🤖 Создаем SimpleAgent")
     
-    simple_agent = AgentConfig(
+    simple_agent = await test_helpers.create_simple_agent(
+        storage=storage,
         agent_id="ref_simple_agent",
         name="Simple Reference Agent",
-        description="Простой агент для демонстрации",
-        type=AgentType.REACT,
-        code_mode=CodeMode.CODE_REFERENCE,
-        function_class=None,
         prompt="Ты вежливый помощник. Используй greet tool для приветствия.",
-        tools=[greet_tool],
-        llm_config=LLMConfig(model="mock-gpt-4"),
-        source="test"
+        tools=[greet_tool]
     )
     
-    print(f"   🔍 ПЕРЕД сохранением: simple_agent.tools = {simple_agent.tools}")
-    print(f"   🔍 ПЕРЕД сохранением: len = {len(simple_agent.tools)}")
-    
-    await storage.set_agent_config(simple_agent)
     print("   ✅ SimpleAgent создан")
     
     # Проверим что агент сохранился с tools
     loaded_config = await storage.get_agent_config("ref_simple_agent")
-    print(f"   🔍 ПОСЛЕ загрузки: loaded_config.tools = {loaded_config.tools}")
-    print(f"   🔍 ПОСЛЕ загрузки: len = {len(loaded_config.tools) if loaded_config.tools else 0}")
-    
-    # Проверим JSON напрямую
-    raw_json = await storage.get(f"agent:ref_simple_agent")
-    import json
-    if raw_json:
-        parsed = json.loads(raw_json)
-        print(f"   🔍 RAW JSON tools: {parsed.get('tools', 'NO TOOLS KEY')}")
-    print(f"   🔍 RAW JSON (first 300 chars): {raw_json[:300] if raw_json else 'None'}...")
-    
     assert loaded_config.tools is not None, "Tools не сохранились в БД!"
     assert len(loaded_config.tools) > 0, "Tools пустой список!"
     
     # 3. Создаем flow
     print("🔄 Создаем Flow")
     
-    flow_config = FlowConfig(
+    await test_helpers.create_simple_flow(
+        storage=storage,
         flow_id="ref_simple_flow",
         name="Simple Reference Flow",
-        description="Простой эталонный flow",
-        entry_point_agent="ref_simple_agent",
-        source="test"
+        entry_point_agent="ref_simple_agent"
     )
     
-    await storage.set_flow_config(flow_config)
     print("   ✅ Flow создан")
     
     # 4. Настраиваем MockLLM
     print("🎭 Настраиваем MockLLM")
     
-    setup_mock_responses(
+    mock_llm.configure(
         tool_responses={
-            # Первый вызов - вызываем greet tool
             "привет": {"tool": "greet", "args": {"name": "Виктор"}},
         },
         responses={
-            # Второй вызов после tool - формулируем финальный ответ
             "привет": "Отлично! Приветствие выполнено успешно.",
         },
         default_response="Готово!"
@@ -329,12 +239,11 @@ def greet(name: str) -> str:
     # 5. Выполняем
     print("▶️  Выполняем Flow")
     
-    flow_factory = FlowFactory()
     simple_flow = await flow_factory.get_flow("ref_simple_flow")
     
     result = await simple_flow.ainvoke(
         {"messages": [HumanMessage(content="Привет, меня зовут Виктор")]},
-        config={"configurable": {"thread_id": f"simple_{uuid.uuid4().hex[:8]}"}}
+        config={"configurable": {"thread_id": unique_id("simple")}}
     )
     
     # 6. Проверяем

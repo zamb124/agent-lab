@@ -4,18 +4,13 @@
 
 import pytest
 from langchain_core.messages import HumanMessage
-from app.core.flow_factory import FlowFactory
 from app.flows.smart_flow import SmartFlowAgent
 from app.models import FlowConfig, LLMConfig, AgentConfig
-from app.core.storage import Storage
-from datetime import datetime, timezone
 
 
 @pytest.mark.asyncio
-async def test_source_node_in_history(save_test_company):
+async def test_source_node_in_history(migrated_db, storage, flow_factory, unique_id):
     """Тест проверяет, что source_node корректно записывается в историю сообщений"""
-    
-    storage = Storage()
     
     weather_agent_config = AgentConfig(
         agent_id="app.agents.weather.agent.WeatherAgent",
@@ -24,8 +19,6 @@ async def test_source_node_in_history(save_test_company):
         function_class="app.agents.weather.agent.WeatherAgent",
         prompt="Ты погодный агент. Отвечай о погоде.",
         llm_config=LLMConfig(model="mock-gpt-4"),
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
     )
     await storage.set_agent_config(weather_agent_config)
     
@@ -36,8 +29,6 @@ async def test_source_node_in_history(save_test_company):
         function_class="app.agents.calculator.agent.CalculatorAgent",
         prompt="Ты калькулятор. Вычисляй математические выражения.",
         llm_config=LLMConfig(model="mock-gpt-4"),
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
     )
     await storage.set_agent_config(calc_agent_config)
     
@@ -48,8 +39,6 @@ async def test_source_node_in_history(save_test_company):
         function_class="app.agents.explainer.agent.ExplainerAgent",
         prompt="Ты объяснитель. Объясняй что произошло.",
         llm_config=LLMConfig(model="mock-gpt-4"),
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
     )
     await storage.set_agent_config(explainer_agent_config)
     
@@ -59,14 +48,12 @@ async def test_source_node_in_history(save_test_company):
         description="Тестовый flow для проверки отслеживания source_node",
         entry_point_agent="app.agents.weather.agent.WeatherAgent",
         llm_config=LLMConfig(model="mock-gpt-4"),
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
     )
     await storage.set_flow_config(flow_config)
     
     flow = SmartFlowAgent()
     
-    session_id = f"test:source_tracking:{datetime.now().timestamp()}"
+    session_id = unique_id("source_tracking")
     
     result = await flow.ainvoke(
         {
@@ -79,7 +66,6 @@ async def test_source_node_in_history(save_test_company):
     print(f"✅ Flow выполнен, session_id: {session_id}")
     print(f"📝 Результат: {result.get('messages', [])[-1] if result.get('messages') else 'Нет сообщений'}")
     
-    flow_factory = FlowFactory()
     history = await flow_factory.get_flow_history(
         session_id=session_id,
         limit=100,
@@ -124,11 +110,8 @@ async def test_source_node_in_history(save_test_company):
 
 
 @pytest.mark.asyncio
-async def test_checkpoint_metadata_structure(save_test_company):
+async def test_checkpoint_metadata_structure(migrated_db, storage, flow_factory, unique_id):
     """Тест для проверки структуры metadata в checkpoint"""
-    
-    storage = Storage()
-    flow_factory = FlowFactory()
     
     calc_agent_config = AgentConfig(
         agent_id="app.agents.calculator.agent.CalculatorAgent",
@@ -137,8 +120,6 @@ async def test_checkpoint_metadata_structure(save_test_company):
         function_class="app.agents.calculator.agent.CalculatorAgent",
         prompt="Ты калькулятор. Вычисляй математические выражения.",
         llm_config=LLMConfig(model="mock-gpt-4"),
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
     )
     await storage.set_agent_config(calc_agent_config)
     
@@ -149,8 +130,6 @@ async def test_checkpoint_metadata_structure(save_test_company):
         function_class="app.agents.weather.agent.WeatherAgent",
         prompt="Ты погодный агент. Отвечай о погоде.",
         llm_config=LLMConfig(model="mock-gpt-4"),
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
     )
     await storage.set_agent_config(weather_agent_config)
     
@@ -161,8 +140,6 @@ async def test_checkpoint_metadata_structure(save_test_company):
         function_class="app.agents.explainer.agent.ExplainerAgent",
         prompt="Ты объяснитель. Объясняй что произошло.",
         llm_config=LLMConfig(model="mock-gpt-4"),
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
     )
     await storage.set_agent_config(explainer_agent_config)
     
@@ -172,14 +149,12 @@ async def test_checkpoint_metadata_structure(save_test_company):
         description="Тестовый flow для проверки metadata",
         entry_point_agent="app.agents.calculator.agent.CalculatorAgent",
         llm_config=LLMConfig(model="mock-gpt-4"),
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
     )
     await storage.set_flow_config(flow_config)
     
     flow = SmartFlowAgent()
     
-    session_id = f"test:metadata:{datetime.now().timestamp()}"
+    session_id = unique_id("metadata")
     
     await flow.ainvoke(
         {

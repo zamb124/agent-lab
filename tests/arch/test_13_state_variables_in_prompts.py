@@ -8,13 +8,8 @@
 """
 
 import pytest
-import pytest_asyncio
-import uuid
 from langchain_core.messages import HumanMessage
 
-from app.core.storage import Storage
-from app.core.agent_factory import AgentFactory
-from app.core.checkpointer import init_checkpointer
 from app.models import (
     AgentConfig,
     AgentType,
@@ -22,62 +17,17 @@ from app.models import (
     ToolReference,
     CodeMode,
 )
-from app.models.context_models import Context
-from app.identity.models import User, Company
-from app.core.context import set_context
-
-
-@pytest_asyncio.fixture
-async def setup_storage():
-    """Инициализирует storage и checkpointer"""
-    storage = Storage()
-    await init_checkpointer()
-    return storage
-
-
-@pytest.fixture
-def test_context():
-    """Создает тестовый контекст"""
-    user = User(
-        user_id="test_user_123",
-        name="Тестовый Пользователь",
-        status="active",
-    )
-    
-    company = Company(
-        company_id="test_company",
-        subdomain="test",
-        name="Тестовая Компания",
-    )
-    
-    context = Context(
-        user=user,
-        platform="api",
-        active_company=company,
-        session_id="test_session_123",
-        flow_variables={
-            "bot_name": "Тест Бот",
-        },
-    )
-    
-    set_context(context)
-    return context
 
 
 @pytest.mark.asyncio
-async def test_01_store_variables_in_prompt(setup_storage, test_context):
-    """
-    Тест 1: Переменные из store в промпте агента.
-    Проверяем что переменные из state.store подставляются в промпт.
-    """
-    storage = setup_storage
+async def test_01_store_variables_in_prompt(migrated_db, storage, agent_factory, test_helpers, unique_id):
+    """Тест 1: Переменные из store в промпте агента"""
+    agent_id = unique_id("agent")
     
-    # Создаем ReAct агента с переменными из store в промпте
-    agent_config = AgentConfig(
-        agent_id="test_store_vars_agent",
+    await test_helpers.create_simple_agent(
+        storage=storage,
+        agent_id=agent_id,
         name="Test Store Variables Agent",
-        description="Агент с переменными из store",
-        type=AgentType.REACT,
         prompt="""
 Ты помощник компании {company_name}.
 Текущий пользователь: {user_name}
@@ -90,22 +40,12 @@ async def test_01_store_variables_in_prompt(setup_storage, test_context):
 
 Отвечай коротко на основе этих данных.
 """,
-        tools=[],
-        llm_config=LLMConfig(
-            provider="mock",
-            model="mock-gpt-4",
-            temperature=0.1,
-        ),
+        tools=[]
     )
     
-    await storage.set_agent_config(agent_config)
+    agent = await agent_factory.get_agent(agent_id)
     
-    # Получаем агента
-    agent_factory = AgentFactory()
-    agent = await agent_factory.get_agent("test_store_vars_agent")
-    
-    # Вызываем агента С данными в store
-    thread_id = f"test_thread_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("thread")
     config = {"configurable": {"thread_id": thread_id}}
     
     input_data = {
@@ -124,58 +64,22 @@ async def test_01_store_variables_in_prompt(setup_storage, test_context):
     
     result = await agent.ainvoke(input_data, config=config)
     
-    # Проверяем что агент успешно выполнился
     assert "messages" in result
     assert len(result["messages"]) > 1
-    
-    # Проверяем что store данные были доступны (mock LLM их не видит, но state_modifier отработал)
     assert result["store"]["warehouse_name"] == "Большие Каменщики"
     assert result["store"]["warehouse_id"] == "12345"
-    
-    print("✅ Тест 1 пройден: Store переменные доступны в промпте")
 
 
 @pytest.mark.asyncio
-async def test_02_store_variables_in_subagent_prompt(setup_storage, test_context):
-    """
-    Тест 2: Переменные из store в промпте субагента.
-    Проверяем что субагент тоже видит store переменные в своем промпте.
-    """
-    storage = setup_storage
+async def test_02_store_variables_in_subagent_prompt(migrated_db, storage, agent_factory, test_helpers, unique_id):
+    """Тест 2: Переменные из store в промпте субагента"""
+    subagent_id = unique_id("agent")
+    main_agent_id = unique_id("agent")
     
-    # Создаем тул для изменения store
-    @pytest_asyncio.fixture
-    async def create_set_store_tool():
-        tool_ref = ToolReference(
-            tool_id="set_store_data",
-            code_mode=CodeMode.INLINE_CODE,
-            inline_code="""
-from langchain_core.tools import tool
-from app.core.variables import get_state
-
-@tool
-def set_store_data(key: str, value: str) -> str:
-    '''Устанавливает данные в store'''
-    state = get_state()
-    if not state:
-        return "ERROR: State недоступен"
-    
-    if "store" not in state:
-        state["store"] = {}
-    
-    state["store"][key] = value
-    return f"Установлено: {key} = {value}"
-""",
-            description="Устанавливает данные в store",
-        )
-        return tool_ref
-    
-    # Создаем СУБАГЕНТА с доступом к store в промпте
-    subagent_config = AgentConfig(
-        agent_id="test_subagent_store",
+    await test_helpers.create_simple_agent(
+        storage=storage,
+        agent_id=subagent_id,
         name="Test Subagent With Store",
-        description="Субагент с доступом к store",
-        type=AgentType.REACT,
         prompt="""
 Ты субагент для работы со складами.
 
@@ -186,22 +90,13 @@ def set_store_data(key: str, value: str) -> str:
 
 Отвечай на основе этих данных.
 """,
-        tools=[],
-        llm_config=LLMConfig(
-            provider="mock",
-            model="mock-gpt-4",
-            temperature=0.1,
-        ),
+        tools=[]
     )
     
-    await storage.set_agent_config(subagent_config)
-    
-    # Создаем ГЛАВНОГО агента который использует субагента
-    main_agent_config = AgentConfig(
-        agent_id="test_main_agent",
+    await test_helpers.create_simple_agent(
+        storage=storage,
+        agent_id=main_agent_id,
         name="Test Main Agent",
-        description="Главный агент с субагентом",
-        type=AgentType.REACT,
         prompt="""
 Ты главный агент.
 
@@ -209,24 +104,15 @@ def set_store_data(key: str, value: str) -> str:
 - Пользователь: {user_name}
 - Склад: {?store.warehouse_name|не определен}
 
-Используй субагента test_subagent_store для работы со складом.
+Используй субагента для работы со складом.
 """,
-        tools=["agent:test_subagent_store"],
-        llm_config=LLMConfig(
-            provider="mock",
-            model="mock-gpt-4",
-            temperature=0.1,
-        ),
+        tools=[f"agent:{subagent_id}"]
     )
     
-    await storage.set_agent_config(main_agent_config)
-    
-    # Получаем главного агента
-    agent_factory = AgentFactory()
-    main_agent = await agent_factory.get_agent("test_main_agent")
+    main_agent = await agent_factory.get_agent(main_agent_id)
     
     # Вызываем с данными в store
-    thread_id = f"test_thread_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("thread")
     config = {"configurable": {"thread_id": thread_id}}
     
     input_data = {
@@ -252,19 +138,18 @@ def set_store_data(key: str, value: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_03_store_variables_update_changes_prompt(setup_storage, test_context):
+async def test_03_store_variables_update_changes_prompt(migrated_db, storage, agent_factory, test_helpers, unique_id):
     """
     Тест 3: Изменение store переменных меняет промпт.
     Проверяем что при изменении store.warehouse_name промпт обновляется.
     """
-    storage = setup_storage
     
-    # Создаем агента с переменными из store
-    agent_config = AgentConfig(
-        agent_id="test_dynamic_prompt_agent",
+    agent_id = unique_id("agent")
+    
+    await test_helpers.create_simple_agent(
+        storage=storage,
+        agent_id=agent_id,
         name="Test Dynamic Prompt Agent",
-        description="Агент с динамическим промптом",
-        type=AgentType.REACT,
         prompt="""
 Ты помощник.
 
@@ -276,21 +161,12 @@ ID СКЛАДА: {?store.warehouse_id|НЕТ}
 Если склад не определен, скажи "нет данных".
 Если склад определен, скажи его название.
 """,
-        tools=[],
-        llm_config=LLMConfig(
-            provider="mock",
-            model="mock-gpt-4",
-            temperature=0.1,
-        ),
+        tools=[]
     )
     
-    await storage.set_agent_config(agent_config)
+    agent = await agent_factory.get_agent(agent_id)
     
-    # Получаем агента
-    agent_factory = AgentFactory()
-    agent = await agent_factory.get_agent("test_dynamic_prompt_agent")
-    
-    thread_id = f"test_thread_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("thread")
     config = {"configurable": {"thread_id": thread_id}}
     
     # ВЫЗОВ 1: БЕЗ данных в store
@@ -357,12 +233,11 @@ ID СКЛАДА: {?store.warehouse_id|НЕТ}
 
 
 @pytest.mark.asyncio
-async def test_04_optional_and_default_values(setup_storage, test_context):
+async def test_04_optional_and_default_values(migrated_db, storage, agent_factory, test_helpers, unique_id):
     """
     Тест 4: Опциональные переменные и значения по умолчанию.
     Проверяем {?var} и {?var|default} синтаксис.
     """
-    storage = setup_storage
     
     # Создаем агента с опциональными переменными
     agent_config = AgentConfig(
@@ -395,11 +270,9 @@ async def test_04_optional_and_default_values(setup_storage, test_context):
     
     await storage.set_agent_config(agent_config)
     
-    # Получаем агента
-    agent_factory = AgentFactory()
     agent = await agent_factory.get_agent("test_optional_vars_agent")
     
-    thread_id = f"test_thread_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("thread")
     config = {"configurable": {"thread_id": thread_id}}
     
     # Вызываем с ЧАСТИЧНЫМИ данными в store
@@ -427,12 +300,11 @@ async def test_04_optional_and_default_values(setup_storage, test_context):
 
 
 @pytest.mark.asyncio
-async def test_05_special_functions(setup_storage, test_context):
+async def test_05_special_functions(migrated_db, storage, agent_factory, test_helpers, unique_id):
     """
     Тест 5: Специальные функции {#messages.count}, {#store.keys}.
     Проверяем что специальные функции работают.
     """
-    storage = setup_storage
     
     # Создаем агента со специальными функциями
     agent_config = AgentConfig(
@@ -460,11 +332,9 @@ async def test_05_special_functions(setup_storage, test_context):
     
     await storage.set_agent_config(agent_config)
     
-    # Получаем агента
-    agent_factory = AgentFactory()
     agent = await agent_factory.get_agent("test_special_funcs_agent")
     
-    thread_id = f"test_thread_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("thread")
     config = {"configurable": {"thread_id": thread_id}}
     
     # Первый вызов
@@ -502,12 +372,11 @@ async def test_05_special_functions(setup_storage, test_context):
 
 
 @pytest.mark.asyncio
-async def test_06_nested_store_access(setup_storage, test_context):
+async def test_06_nested_store_access(migrated_db, storage, agent_factory, test_helpers, unique_id):
     """
     Тест 6: Доступ к вложенным данным в store.
     Проверяем {store.settings.timeout} синтаксис.
     """
-    storage = setup_storage
     
     # Создаем агента с вложенными данными
     agent_config = AgentConfig(
@@ -538,11 +407,9 @@ async def test_06_nested_store_access(setup_storage, test_context):
     
     await storage.set_agent_config(agent_config)
     
-    # Получаем агента
-    agent_factory = AgentFactory()
     agent = await agent_factory.get_agent("test_nested_store_agent")
     
-    thread_id = f"test_thread_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("thread")
     config = {"configurable": {"thread_id": thread_id}}
     
     # Вызываем с вложенными данными

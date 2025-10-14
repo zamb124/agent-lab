@@ -7,32 +7,16 @@
 3. Через id ноды (fallback)
 """
 import pytest
-from pathlib import Path
-import sys
-
-backend_path = Path(__file__).parent.parent.parent / "backend"
-sys.path.insert(0, str(backend_path))
-
-from app.core.storage import Storage
-from app.core.flow_factory import FlowFactory
-from app.core.migrator import Migrator
 from app.models import (
-    AgentConfig, AgentType, CodeMode, FlowConfig,
+    AgentConfig, AgentType, CodeMode, FlowConfig, LLMConfig,
     GraphDefinition, GraphNode, GraphEdge, NodeType
 )
 from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_agent_node_with_params_agent_id():
+async def test_agent_node_with_params_agent_id(migrated_db, storage, flow_factory, mock_llm):
     """Тест: AGENT_NODE с agent_id в params"""
-    
-    # Мигрируем calculator агента
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    await migrator._set_system_context()
-    
-    storage = Storage()
     
     # Создаем граф с нодой агента через params['agent_id']
     graph_def = GraphDefinition(
@@ -58,6 +42,7 @@ async def test_agent_node_with_params_agent_id():
         type=AgentType.STATEGRAPH,
         code_mode=CodeMode.INLINE_CODE,
         graph_definition=graph_def,
+        llm_config=LLMConfig(model="mock-gpt-4"),
         source="manual"
     )
     
@@ -74,17 +59,14 @@ async def test_agent_node_with_params_agent_id():
     await storage.set_flow_config(flow_config)
     
     # Проверяем что граф компилируется
-    flow_factory = FlowFactory()
     flow = await flow_factory.get_flow("test_flow_params")
     
     # Проверяем выполнение
-    from app.core.llm_factory import get_global_mock_llm, get_llm
-    get_llm("mock-gpt-4")
-    mock_llm = get_global_mock_llm()
-    if mock_llm:
-        mock_llm.set_responses({
+    mock_llm.configure(
+        responses={
             "посчитай": "Результат: 12",
-        })
+        }
+    )
     
     result = await flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 5 + 7")]},
@@ -96,15 +78,8 @@ async def test_agent_node_with_params_agent_id():
 
 
 @pytest.mark.asyncio
-async def test_agent_node_with_function_class():
+async def test_agent_node_with_function_class(migrated_db, storage, flow_factory, mock_llm):
     """Тест: AGENT_NODE с function_class"""
-    
-    # Мигрируем calculator агента
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    await migrator._set_system_context()
-    
-    storage = Storage()
     
     # Создаем граф с нодой агента через function_class
     graph_def = GraphDefinition(
@@ -130,6 +105,7 @@ async def test_agent_node_with_function_class():
         type=AgentType.STATEGRAPH,
         code_mode=CodeMode.INLINE_CODE,
         graph_definition=graph_def,
+        llm_config=LLMConfig(model="mock-gpt-4"),
         source="manual"
     )
     
@@ -146,17 +122,14 @@ async def test_agent_node_with_function_class():
     await storage.set_flow_config(flow_config)
     
     # Проверяем что граф компилируется
-    flow_factory = FlowFactory()
     flow = await flow_factory.get_flow("test_flow_class")
     
     # Проверяем выполнение
-    from app.core.llm_factory import get_global_mock_llm, get_llm
-    get_llm("mock-gpt-4")
-    mock_llm = get_global_mock_llm()
-    if mock_llm:
-        mock_llm.set_responses({
+    mock_llm.configure(
+        responses={
             "посчитай": "Результат: 12",
-        })
+        }
+    )
     
     result = await flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 5 + 7")]},
@@ -168,15 +141,8 @@ async def test_agent_node_with_function_class():
 
 
 @pytest.mark.asyncio
-async def test_agent_node_with_id_fallback():
+async def test_agent_node_with_id_fallback(migrated_db, storage, flow_factory, mock_llm, agent_factory):
     """Тест: AGENT_NODE с id ноды как agent_id (fallback)"""
-    
-    # Мигрируем calculator агента
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    await migrator._set_system_context()
-    
-    storage = Storage()
     
     # Создаем граф с нодой агента без agent_id и function_class
     # ID ноды = agent_id агента
@@ -204,6 +170,7 @@ async def test_agent_node_with_id_fallback():
         type=AgentType.STATEGRAPH,
         code_mode=CodeMode.INLINE_CODE,
         graph_definition=graph_def,
+        llm_config=LLMConfig(model="mock-gpt-4"),
         source="manual"
     )
     
@@ -220,17 +187,14 @@ async def test_agent_node_with_id_fallback():
     await storage.set_flow_config(flow_config)
     
     # Проверяем что граф компилируется
-    flow_factory = FlowFactory()
     flow = await flow_factory.get_flow("test_flow_fallback")
     
     # Проверяем выполнение
-    from app.core.llm_factory import get_global_mock_llm, get_llm
-    get_llm("mock-gpt-4")
-    mock_llm = get_global_mock_llm()
-    if mock_llm:
-        mock_llm.set_responses({
+    mock_llm.configure(
+        responses={
             "посчитай": "Результат: 12",
-        })
+        }
+    )
     
     result = await flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 5 + 7")]},
@@ -242,15 +206,8 @@ async def test_agent_node_with_id_fallback():
 
 
 @pytest.mark.asyncio
-async def test_agent_node_short_id_fallback():
+async def test_agent_node_short_id_fallback(migrated_db, storage, flow_factory, agent_factory):
     """Тест: AGENT_NODE с коротким id (как в логах ошибки)"""
-    
-    # Мигрируем calculator агента
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    await migrator._set_system_context()
-    
-    storage = Storage()
     
     # Воспроизводим ошибку из логов: id="calculator" без agent_id и function_class
     graph_def = GraphDefinition(
@@ -277,6 +234,7 @@ async def test_agent_node_short_id_fallback():
         type=AgentType.STATEGRAPH,
         code_mode=CodeMode.INLINE_CODE,
         graph_definition=graph_def,
+        llm_config=LLMConfig(model="mock-gpt-4"),
         source="manual"
     )
     
@@ -293,13 +251,8 @@ async def test_agent_node_short_id_fallback():
     await storage.set_flow_config(flow_config)
     
     # Проверяем что получаем понятную ошибку
-    flow_factory = FlowFactory()
-    
     try:
         flow = await flow_factory.get_flow("test_flow_short_id")
-        # Попытка скомпилировать граф должна выдать ошибку
-        from app.core.agent_factory import AgentFactory
-        agent_factory = AgentFactory()
         agent = await agent_factory.get_agent("test_agent_short_id")
         await agent.compile_graph()
         
@@ -313,14 +266,8 @@ async def test_agent_node_short_id_fallback():
 
 
 @pytest.mark.asyncio
-async def test_agent_node_error_message_quality():
+async def test_agent_node_error_message_quality(migrated_db, storage, flow_factory, agent_factory):
     """Тест: качество сообщения об ошибке для некорректной ноды"""
-    
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    await migrator._set_system_context()
-    
-    storage = Storage()
     
     # Создаем граф с ПОЛНОСТЬЮ пустой нодой агента
     graph_def = GraphDefinition(
@@ -346,6 +293,7 @@ async def test_agent_node_error_message_quality():
         type=AgentType.STATEGRAPH,
         code_mode=CodeMode.INLINE_CODE,
         graph_definition=graph_def,
+        llm_config=LLMConfig(model="mock-gpt-4"),
         source="manual"
     )
     
@@ -362,12 +310,8 @@ async def test_agent_node_error_message_quality():
     await storage.set_flow_config(flow_config)
     
     # Проверяем что получаем информативную ошибку
-    flow_factory = FlowFactory()
-    
     try:
         flow = await flow_factory.get_flow("test_flow_empty")
-        from app.core.agent_factory import AgentFactory
-        agent_factory = AgentFactory()
         agent = await agent_factory.get_agent("test_agent_empty")
         await agent.compile_graph()
         

@@ -9,64 +9,23 @@
 """
 
 import pytest
-import pytest_asyncio
-import uuid
 from langchain_core.messages import HumanMessage
 
-from app.core.storage import Storage
-from app.core.agent_factory import AgentFactory
-from app.core.checkpointer import init_checkpointer
 from app.models import (
     AgentConfig,
     AgentType,
     LLMConfig,
     ToolReference,
     CodeMode,
+    GraphDefinition,
+    GraphNode,
+    GraphEdge,
+    NodeType
 )
-from app.models.context_models import Context
-from app.identity.models import User, Company
-from app.core.context import set_context
-
-
-@pytest_asyncio.fixture
-async def setup_storage():
-    """Инициализирует storage и checkpointer"""
-    storage = Storage()
-    await init_checkpointer()
-    return storage
-
-
-@pytest.fixture
-def test_context():
-    """Создает тестовый контекст"""
-    user = User(
-        user_id="test_user_123",
-        name="Тестовый Пользователь",
-        status="active",
-    )
-    
-    company = Company(
-        company_id="test_company",
-        subdomain="test",
-        name="Тестовая Компания",
-    )
-    
-    context = Context(
-        user=user,
-        platform="api",
-        active_company=company,
-        session_id="test_session_123",
-        flow_variables={
-            "bot_name": "Тест Бот",
-        },
-    )
-    
-    set_context(context)
-    return context
 
 
 @pytest.mark.asyncio
-async def test_01_subagent_changes_store_coordinator_sees(setup_storage, test_context):
+async def test_01_subagent_changes_store_coordinator_sees(migrated_db, storage, agent_factory, unique_id):
     """
     Тест 1: Субагент изменяет store - координатор видит изменения.
     
@@ -78,7 +37,6 @@ async def test_01_subagent_changes_store_coordinator_sees(setup_storage, test_co
     """
     from app.models import GraphDefinition, GraphNode, GraphEdge, NodeType
     
-    storage = setup_storage
     
     # Создаем СУБАГЕНТА через StateGraph который напрямую модифицирует store
     subagent_config = AgentConfig(
@@ -165,11 +123,9 @@ async def call_subagent(state):
     
     await storage.set_agent_config(coordinator_config)
     
-    # Получаем координатора
-    agent_factory = AgentFactory()
     coordinator = await agent_factory.get_agent("test_coordinator_agent")
     
-    thread_id = f"test_thread_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("thread")
     config = {"configurable": {"thread_id": thread_id}}
     
     # Вызываем координатора
@@ -199,7 +155,7 @@ async def call_subagent(state):
 
 
 @pytest.mark.asyncio
-async def test_02_coordinator_sets_store_subagent_sees(setup_storage, test_context):
+async def test_02_coordinator_sets_store_subagent_sees(migrated_db, storage, agent_factory, unique_id):
     """
     Тест 2: Координатор устанавливает store - субагент видит.
     
@@ -210,7 +166,6 @@ async def test_02_coordinator_sets_store_subagent_sees(setup_storage, test_conte
     """
     from app.models import GraphDefinition, GraphNode, GraphEdge, NodeType
     
-    storage = setup_storage
     
     # Создаем СУБАГЕНТА через StateGraph который читает store
     subagent_config = AgentConfig(
@@ -300,11 +255,9 @@ async def set_data_and_call(state):
     
     await storage.set_agent_config(coordinator_config)
     
-    # Получаем координатора
-    agent_factory = AgentFactory()
     coordinator = await agent_factory.get_agent("test_setter_coordinator")
     
-    thread_id = f"test_thread_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("thread")
     config = {"configurable": {"thread_id": thread_id}}
     
     # Вызываем координатора
@@ -335,7 +288,7 @@ async def set_data_and_call(state):
 
 
 @pytest.mark.asyncio
-async def test_03_multiple_subagents_share_store(setup_storage, test_context):
+async def test_03_multiple_subagents_share_store(migrated_db, storage, agent_factory, unique_id):
     """
     Тест 3: Несколько субагентов работают с одним store.
     
@@ -346,7 +299,6 @@ async def test_03_multiple_subagents_share_store(setup_storage, test_context):
     """
     from app.models import GraphDefinition, GraphNode, GraphEdge, NodeType
     
-    storage = setup_storage
     
     # Упрощенный тест: координатор через StateGraph последовательно модифицирует store
     coordinator_config = AgentConfig(
@@ -423,11 +375,9 @@ async def step3_verify(state):
     
     await storage.set_agent_config(coordinator_config)
     
-    # Получаем координатора
-    agent_factory = AgentFactory()
     coordinator = await agent_factory.get_agent("test_multi_coordinator")
     
-    thread_id = f"test_thread_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("thread")
     config = {"configurable": {"thread_id": thread_id}}
     
     input_data = {
@@ -464,7 +414,7 @@ async def step3_verify(state):
 
 
 @pytest.mark.asyncio
-async def test_04_store_persists_across_agent_chain(setup_storage, test_context):
+async def test_04_store_persists_across_agent_chain(migrated_db, storage, agent_factory, test_helpers, unique_id):
     """
     Тест 4: Store персистится на протяжении всей цепочки агентов.
     
@@ -472,7 +422,6 @@ async def test_04_store_persists_across_agent_chain(setup_storage, test_context)
     - Изменения в store сохраняются между вызовами субагентов
     - Каждый следующий агент видит накопленные данные
     """
-    storage = setup_storage
     
     # Создаем цепочку: Agent A → Agent B → Agent C
     # Каждый добавляет свой ключ и видит предыдущие
@@ -592,11 +541,9 @@ STORE (должны быть данные от A и B):
     await storage.set_agent_config(agent_c)
     await storage.set_agent_config(coordinator_config)
     
-    # Получаем координатора
-    agent_factory = AgentFactory()
     coordinator = await agent_factory.get_agent("test_chain_coordinator")
     
-    thread_id = f"test_thread_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("thread")
     config = {"configurable": {"thread_id": thread_id}}
     
     input_data = {
@@ -626,7 +573,7 @@ STORE (должны быть данные от A и B):
 
 
 @pytest.mark.asyncio
-async def test_05_initial_store_from_flow_config(setup_storage, test_context):
+async def test_05_initial_store_from_flow_config(migrated_db, storage, agent_factory, test_helpers, unique_id):
     """
     Тест 5: Начальные значения store из FlowConfig.
     
@@ -635,7 +582,6 @@ async def test_05_initial_store_from_flow_config(setup_storage, test_context):
     - Агенты видят эти значения в промптах
     - Агенты могут их изменять
     """
-    storage = setup_storage
     
     # Создаем агента с начальным store
     agent_config = AgentConfig(
@@ -663,11 +609,9 @@ async def test_05_initial_store_from_flow_config(setup_storage, test_context):
     
     await storage.set_agent_config(agent_config)
     
-    # Получаем агента
-    agent_factory = AgentFactory()
     agent = await agent_factory.get_agent("test_initial_store_agent")
     
-    thread_id = f"test_thread_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("thread")
     config = {"configurable": {"thread_id": thread_id}}
     
     # ПЕРВЫЙ ВЫЗОВ - store должен инициализироваться из конфигурации
@@ -692,7 +636,7 @@ async def test_05_initial_store_from_flow_config(setup_storage, test_context):
 
 
 @pytest.mark.asyncio
-async def test_06_store_merge_not_overwrite(setup_storage, test_context):
+async def test_06_store_merge_not_overwrite(migrated_db, storage, agent_factory, test_helpers, unique_id):
     """
     Тест 6: Store мержится, а не перезаписывается.
     
@@ -700,7 +644,6 @@ async def test_06_store_merge_not_overwrite(setup_storage, test_context):
     - Вложенные dict мержатся
     - Простые значения перезаписываются
     """
-    storage = setup_storage
     
     # Агент с начальным store содержащим вложенные данные
     agent_config = AgentConfig(
@@ -754,10 +697,9 @@ def update_settings(timeout: int, theme: str) -> str:
     
     await storage.set_agent_config(agent_config)
     
-    agent_factory = AgentFactory()
     agent = await agent_factory.get_agent("test_merge_store_agent")
     
-    thread_id = f"test_thread_{uuid.uuid4().hex[:8]}"
+    thread_id = unique_id("thread")
     config = {"configurable": {"thread_id": thread_id}}
     
     input_data = {

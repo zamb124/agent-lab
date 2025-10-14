@@ -82,16 +82,28 @@ class ToolFactory:
             logger.debug(f"🔥 Создаем INLINE_CODE инструмент: {ref.tool_id}")
             logger.debug(f"🔥 Inline код: {ref.inline_code[:100]}...")
             
-            # Создаем namespace для выполнения кода
-            namespace = {'asyncio': asyncio}
+            # Создаем namespace для выполнения кода с необходимыми импортами
+            import typing
+            from app.core.tool_decorator import tool as platform_tool
+            
+            namespace = {
+                'asyncio': asyncio,
+                'typing': typing,
+                'Annotated': typing.Annotated,
+                'Optional': typing.Optional,
+                'List': typing.List,
+                'Dict': typing.Dict,
+                'Any': typing.Any,
+                '__builtins__': __builtins__,
+            }
             
             # Выполняем inline код
-            exec(ref.inline_code, namespace)
+            exec(ref.inline_code, namespace, namespace)
             
             # Ищем функцию main или первую async функцию
             tool_function = namespace.get('main')
             if not tool_function:
-                # Ищем первую async функцию
+                # Ищем первую async функцию или tool объект
                 for name, obj in namespace.items():
                     if name.startswith('_'):
                         continue
@@ -101,13 +113,14 @@ class ToolFactory:
                         break
             
             if not tool_function:
-                # Если функция не найдена, создаем простую заглушку
-                logger.warning("⚠️ Функция не найдена в inline коде, создаем заглушку")
-                async def stub_function(*args, **kwargs):
-                    return "Результат"
-                tool_function = stub_function
+                raise ValueError(f"❌ Функция не найдена в inline коде для {ref.tool_id}")
             
-            # Создаем StructuredTool из функции
+            # Проверяем, является ли функция уже tool объектом (после @tool декоратора)
+            if hasattr(tool_function, '_is_platform_tool') or isinstance(tool_function, StructuredTool):
+                logger.debug("🔥 Функция уже является tool объектом, возвращаем напрямую")
+                return tool_function
+            
+            # Создаем StructuredTool из обычной функции
             logger.debug("🔥 Создаем StructuredTool из функции")
             tool_name = ref.tool_id.replace(".", "_")
             return StructuredTool.from_function(
