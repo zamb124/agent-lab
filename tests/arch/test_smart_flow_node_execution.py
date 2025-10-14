@@ -11,8 +11,10 @@ from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_smart_flow_executes_different_nodes(migrated_db, agent_factory, mock_llm):
+async def test_smart_flow_executes_different_nodes(migrated_db, agent_factory, mock_llm, migrator):
     """Тест: SmartFlow выполняет разные ноды для разных запросов"""
+    
+    await migrator.run_full_migration()
     
     # Настраиваем mock LLM с разными ответами для разных агентов
     mock_llm.configure(
@@ -202,7 +204,9 @@ async def test_smart_flow_router_condition():
 
 
 @pytest.mark.asyncio
-async def test_smart_flow_graph_structure(migrated_db, storage):
+async def test_smart_flow_graph_structure(migrated_db, storage, migrator):
+    
+    await migrator.run_full_migration()
     
     # Получаем конфигурацию агента
     agent_config = await storage.get_agent_config("app.flows.smart_flow.SmartFlowAgent")

@@ -119,7 +119,7 @@ async def migrated_db():
 
 
 @pytest_asyncio.fixture
-async def storage():
+async def storage(migrated_db):
     """Чистый Storage для каждого теста"""
     from app.db.database import engine
     
@@ -458,14 +458,14 @@ def test_helpers():
 
 
 @pytest_asyncio.fixture
-async def payment_service():
+async def payment_service(migrated_db):
     """PaymentService для тестов"""
     from app.services.payment_service import PaymentService
     return PaymentService()
 
 
 @pytest_asyncio.fixture
-async def billing_service():
+async def billing_service(migrated_db):
     """BillingService для тестов"""
     from app.services.billing_service import BillingService
     return BillingService()
