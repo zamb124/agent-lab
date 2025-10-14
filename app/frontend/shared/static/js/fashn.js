@@ -11,6 +11,7 @@ class FashnApp {
         this.selectedProduct = null;
         this.products = [];
         this.currentSite = this.getSiteFromUrl();
+        this.customProductImages = [];
         this.init();
     }
 
@@ -20,6 +21,7 @@ class FashnApp {
         this.loadProducts();
         this.updateGenerateButton();
         this.initFullscreenViewer();
+        this.initCustomProductModal();
     }
     
     getSiteFromUrl() {
@@ -75,11 +77,17 @@ class FashnApp {
         if (!grid) return;
 
         grid.innerHTML = `
+            <div class="add-product-card" id="addProductCard">
+                <div class="add-product-icon">
+                    <i class="bi bi-plus"></i>
+                </div>
+                <div class="add-product-text">Добавь свой товар</div>
+            </div>
             <div class="empty-state">
                 <div class="empty-state-content">
                     <i class="bi bi-bag" style="font-size: 48px; color: #9ca3af; margin-bottom: 16px;"></i>
                     <h3>No products yet</h3>
-                    <p>Add product URLs above to start building your collection</p>
+                    <p>Add product URLs above or upload your own product photos</p>
                 </div>
             </div>
         `;
@@ -177,7 +185,16 @@ class FashnApp {
         const grid = document.getElementById('productsGrid');
         if (!grid) return;
 
-        grid.innerHTML = products.map(product => {
+        const addProductCard = `
+            <div class="add-product-card" id="addProductCard">
+                <div class="add-product-icon">
+                    <i class="bi bi-plus"></i>
+                </div>
+                <div class="add-product-text">Добавь свой товар</div>
+            </div>
+        `;
+
+        grid.innerHTML = addProductCard + products.map(product => {
             const isLoading = product.isLoading;
             const isError = product.isError;
             
@@ -764,6 +781,211 @@ class FashnApp {
                 this.closeFullscreen();
             }
         });
+    }
+
+    initCustomProductModal() {
+        const modal = document.getElementById('customProductModal');
+        const addProductCard = document.getElementById('addProductCard');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const cancelModalBtn = document.getElementById('cancelModalBtn');
+        const saveCustomProductBtn = document.getElementById('saveCustomProductBtn');
+        const imagesUploadZone = document.getElementById('imagesUploadZone');
+        const productImagesInput = document.getElementById('productImagesInput');
+        const uploadedImagesPreview = document.getElementById('uploadedImagesPreview');
+
+        const openModal = () => {
+            modal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        };
+
+        const closeModal = () => {
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+            this.customProductImages = [];
+            uploadedImagesPreview.innerHTML = '';
+            saveCustomProductBtn.disabled = true;
+        };
+
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('#addProductCard')) {
+                openModal();
+            }
+        });
+
+        if (closeModalBtn) {
+            closeModalBtn.addEventListener('click', closeModal);
+        }
+
+        if (cancelModalBtn) {
+            cancelModalBtn.addEventListener('click', closeModal);
+        }
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeModal();
+            }
+        });
+
+        if (imagesUploadZone) {
+            imagesUploadZone.addEventListener('click', () => {
+                productImagesInput.click();
+            });
+
+            imagesUploadZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                imagesUploadZone.style.borderColor = 'var(--primary-green)';
+            });
+
+            imagesUploadZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                imagesUploadZone.style.borderColor = '';
+            });
+
+            imagesUploadZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                imagesUploadZone.style.borderColor = '';
+                
+                if (e.dataTransfer.files.length > 0) {
+                    this.handleCustomProductImages(Array.from(e.dataTransfer.files));
+                }
+            });
+        }
+
+        if (productImagesInput) {
+            productImagesInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    this.handleCustomProductImages(Array.from(e.target.files));
+                }
+            });
+        }
+
+        if (saveCustomProductBtn) {
+            saveCustomProductBtn.addEventListener('click', async () => {
+                await this.saveCustomProduct();
+                closeModal();
+            });
+        }
+    }
+
+    async handleCustomProductImages(files) {
+        const uploadedImagesPreview = document.getElementById('uploadedImagesPreview');
+        const saveCustomProductBtn = document.getElementById('saveCustomProductBtn');
+
+        for (const file of files) {
+            if (!file.type.startsWith('image/')) {
+                this.showError('Можно загружать только изображения');
+                continue;
+            }
+
+            if (file.size > 10 * 1024 * 1024) {
+                this.showError('Размер файла не должен превышать 10MB');
+                continue;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const imageId = `img_${Date.now()}_${Math.random()}`;
+                this.customProductImages.push({
+                    id: imageId,
+                    file: file,
+                    preview: e.target.result
+                });
+
+                const imageItem = document.createElement('div');
+                imageItem.className = 'image-preview-item';
+                imageItem.dataset.imageId = imageId;
+                imageItem.innerHTML = `
+                    <img src="${e.target.result}" alt="Product image">
+                    <button class="remove-image-btn" data-image-id="${imageId}">
+                        <i class="bi bi-x"></i>
+                    </button>
+                `;
+
+                imageItem.querySelector('.remove-image-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.removeCustomProductImage(imageId);
+                });
+
+                uploadedImagesPreview.appendChild(imageItem);
+
+                saveCustomProductBtn.disabled = this.customProductImages.length === 0;
+            };
+
+            reader.readAsDataURL(file);
+        }
+    }
+
+    removeCustomProductImage(imageId) {
+        this.customProductImages = this.customProductImages.filter(img => img.id !== imageId);
+        
+        const imageItem = document.querySelector(`[data-image-id="${imageId}"]`);
+        if (imageItem) {
+            imageItem.remove();
+        }
+
+        const saveCustomProductBtn = document.getElementById('saveCustomProductBtn');
+        saveCustomProductBtn.disabled = this.customProductImages.length === 0;
+    }
+
+    async saveCustomProduct() {
+        if (this.customProductImages.length === 0) {
+            this.showError('Загрузите минимум 1 фотографию товара');
+            return;
+        }
+
+        const productWidth = parseFloat(document.getElementById('productWidth').value) || 30;
+        const productHeight = parseFloat(document.getElementById('productHeight').value) || 0;
+
+        const saveCustomProductBtn = document.getElementById('saveCustomProductBtn');
+        const originalText = saveCustomProductBtn.innerHTML;
+
+        try {
+            saveCustomProductBtn.innerHTML = '<div class="loading-spinner"></div> Загружаем...';
+            saveCustomProductBtn.disabled = true;
+
+            const uploadedUrls = [];
+            
+            for (const imageData of this.customProductImages) {
+                const uploadResult = await this.uploadFile(imageData.file);
+                if (uploadResult.success) {
+                    uploadedUrls.push(uploadResult.url);
+                } else {
+                    throw new Error(`Ошибка загрузки файла: ${uploadResult.error}`);
+                }
+            }
+
+            const customProduct = {
+                id: `custom_${Date.now()}`,
+                name: 'Мой товар',
+                brand: 'CUSTOM',
+                price: 'Custom product',
+                category: 'tote',
+                color: 'Custom',
+                image: uploadedUrls[0],
+                imageUrl: uploadedUrls[0],
+                imageUrls: uploadedUrls,
+                dimensions: {
+                    length: productWidth,
+                    height: productHeight,
+                    width: productWidth
+                },
+                source: 'custom',
+                originalUrl: null
+            };
+
+            this.products.unshift(customProduct);
+            this.renderProducts(this.products);
+            this.selectProduct(customProduct.id);
+
+            this.showSuccess(`Товар добавлен! Загружено ${uploadedUrls.length} фото`);
+
+        } catch (error) {
+            console.error('Ошибка сохранения товара:', error);
+            this.showError('Ошибка сохранения товара: ' + error.message);
+        } finally {
+            saveCustomProductBtn.innerHTML = originalText;
+            saveCustomProductBtn.disabled = false;
+        }
     }
 }
 
