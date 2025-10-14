@@ -6,6 +6,7 @@ import pytest
 import pytest_asyncio
 import os
 import uuid
+import threading
 from pathlib import Path
 from typing import Callable, Dict, Optional
 from unittest.mock import MagicMock
@@ -24,6 +25,8 @@ from app.models import (
     AgentConfig, AgentType, CodeMode, FlowConfig,
     ToolReference, LLMConfig
 )
+
+_migration_done = threading.local()
 
 
 env_file = Path(__file__).parent.parent / ".env"
@@ -79,11 +82,29 @@ async def migrated_db():
     """Миграция БД для каждого теста (для изоляции)
     
     Контекст НЕ устанавливается здесь - используется test_context с autouse=True
+    Миграция выполняется только один раз на тред pytest, но проверяется наличие данных
     """
     from app.db.database import engine
     
     migrator = Migrator()
-    await migrator.run_full_migration()
+    
+    should_migrate = not getattr(_migration_done, 'value', False)
+    
+    if not should_migrate:
+        storage = Storage()
+        try:
+            flows = await storage.list_flow_configs()
+            if not flows:
+                should_migrate = True
+        except Exception:
+            should_migrate = True
+        finally:
+            if hasattr(storage, '_pool') and storage._pool:
+                await storage._pool.close()
+    
+    if should_migrate:
+        await migrator.run_full_migration()
+        _migration_done.value = True
     
     yield
     
