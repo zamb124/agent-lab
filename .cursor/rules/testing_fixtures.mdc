@@ -1,0 +1,325 @@
+---
+alwaysApply: false
+---
+# Правила работы с фикстурами тестов
+
+## Единая архитектура
+
+Все тесты используют унифицированные фикстуры из `tests/conftest.py`.
+
+## Основные фикстуры
+
+### База данных и миграция
+
+```python
+async def test_example(migrated_db, storage):
+    # migrated_db - автоматическая миграция перед тестом
+    # storage - чистый Storage для теста
+    agent = await storage.get_agent_config("agent_id")
+```
+
+### Фабрики
+
+```python
+async def test_with_factories(agent_factory, flow_factory, tool_factory, migrator):
+    # Используй фабрики для создания объектов из БД
+    agent = await agent_factory.get_agent("agent_id")
+    flow = await flow_factory.get_flow("flow_id")
+    
+    # Используй migrator для миграции компаний
+    await migrator.migrate_for_company(
+        company=company,
+        flows=["flow_id"],
+        with_dependencies=True
+    )
+```
+
+### MockLLM
+
+```python
+def test_with_mock_llm(mock_llm):
+    # Настрой mock ответы
+    mock_llm.configure(
+        tool_responses={
+            "ключ в запросе": {"tool": "tool_name", "args": {"param": "value"}}
+        },
+        responses={
+            "ключ": "Текстовый ответ"
+        },
+        default_response="Дефолтный ответ"
+    )
+```
+
+### Контекст и данные
+
+```python
+def test_with_context(test_context, test_company, test_user):
+    # test_context - автоматически устанавливается для каждого теста
+    # test_company - тестовая компания с балансом
+    # test_user - тестовый пользователь
+    assert test_context.user.user_id == "test_user"
+```
+
+### Сервисы
+
+```python
+async def test_with_services(variables_service, payment_service, billing_service):
+    # variables_service - VariablesService для работы с переменными
+    await variables_service.set_var("key", "value")
+    value = await variables_service.get_var("key")
+    
+    # payment_service - PaymentService для тестирования платежей
+    result = await payment_service.create_payment(company, user, amount, provider)
+    
+    # billing_service - BillingService для тестирования биллинга
+    can_use, reason = await billing_service.can_use_resource(user, company, "llm:gpt-4")
+    await billing_service.record_usage(user, company, "tool:api", cost=0.5)
+```
+
+### Платежи
+
+```python
+async def test_payments(payment_service, yoomoney_provider, test_company, test_user):
+    # payment_service - PaymentService для тестов
+    result = await payment_service.create_payment(
+        company=test_company,
+        user=test_user,
+        amount=1000.0,
+        provider=yoomoney_provider
+    )
+    
+    # yoomoney_provider - YooMoney провайдер для интеграционных тестов
+    # (с тестовыми credentials для проверки webhooks и signature)
+    
+    # payment_service_with_mock - PaymentService с мок storage
+    # mock_provider - Mock провайдер платежей
+```
+
+### Аутентификация
+
+```python
+async def test_auth(auth_service, mock_storage_cache, test_user):
+    # auth_service - AuthService для тестов OAuth
+    auth_service.storage.get = mock_storage_cache['get']
+    auth_service.storage.set = mock_storage_cache['set']
+    
+    # mock_storage_cache - in-memory кеш для storage
+    # Содержит: cache (dict), get, set, delete (async функции)
+    mock_storage_cache['cache']['key'] = 'value'
+    
+    result = await auth_service.complete_auth(request)
+```
+
+### Вспомогательные
+
+```python
+async def test_helpers(test_helpers, unique_id):
+    # unique_id - генератор уникальных ID
+    agent_id = unique_id("agent")  # "agent_abc12345"
+    
+    # test_helpers - класс с полезными методами
+    agent = await test_helpers.create_simple_agent(
+        storage=storage,
+        agent_id=agent_id,
+        name="Test Agent",
+        prompt="Промпт агента",
+        tools=[tool1, tool2]
+    )
+    
+    flow = await test_helpers.create_simple_flow(
+        storage=storage,
+        flow_id="test_flow",
+        name="Test Flow",
+        entry_point_agent=agent_id
+    )
+    
+    tool = test_helpers.create_inline_tool(
+        tool_id="test_tool",
+        function_name="my_func",
+        function_body='''
+def my_func(param: str) -> str:
+    """Описание"""
+    return f"Result: {param}"
+''',
+        description="Описание тула"
+    )
+```
+
+## Правила использования
+
+### 1. НЕ создавай объекты вручную
+
+<bad_example>
+storage = Storage()
+migrator = Migrator()
+await migrator.run_full_migration()
+
+payment_service = PaymentService()
+config = YooMoneyConfig(...)
+yoomoney_provider = YooMoneyProvider(config)
+</bad_example>
+
+<good_example>
+async def test_example(migrated_db, storage, migrator, payment_service, yoomoney_provider):
+    # migrated_db уже выполнил миграцию
+    # storage и migrator готовы к использованию
+    # payment_service готов для тестирования платежей
+    # yoomoney_provider готов для интеграционных тестов webhooks
+    
+    # Используй migrator если нужна специфичная миграция компании
+    await migrator.migrate_for_company(company, flows=["flow_id"])
+</good_example>
+
+### 2. НЕ добавляй sys.path
+
+<bad_example>
+import sys
+from pathlib import Path
+backend_path = Path(__file__).parent.parent.parent / "backend"
+sys.path.insert(0, str(backend_path))
+</bad_example>
+
+<good_example>
+# Просто импортируй напрямую
+from app.core.storage import Storage
+</good_example>
+
+### 3. Используй test_helpers для создания
+
+<bad_example>
+agent_config = AgentConfig(
+    agent_id="test_agent",
+    name="Test",
+    description="Test agent",
+    type=AgentType.REACT,
+    code_mode=CodeMode.CODE_REFERENCE,
+    function_class=None,
+    prompt="...",
+    tools=[],
+    llm_config=LLMConfig(model="mock-gpt-4"),
+    source="test"
+)
+await storage.set_agent_config(agent_config)
+</bad_example>
+
+<good_example>
+await test_helpers.create_simple_agent(
+    storage=storage,
+    agent_id="test_agent",
+    name="Test",
+    prompt="...",
+    tools=[]
+)
+</good_example>
+
+### 4. Используй unique_id для ID
+
+<bad_example>
+import uuid
+thread_id = f"test_{uuid.uuid4().hex[:8]}"
+</bad_example>
+
+<good_example>
+thread_id = unique_id("test")
+</good_example>
+
+### 5. Используй mock_llm.configure()
+
+<bad_example>
+from app.core.llm_factory import setup_mock_responses
+setup_mock_responses(...)
+</bad_example>
+
+<good_example>
+def test_example(mock_llm):
+    mock_llm.configure(...)
+</good_example>
+
+### 6. Используй фикстуру migrator
+
+<bad_example>
+from app.core.migrator import Migrator
+
+migrator = Migrator()
+await migrator.migrate_for_company(company, flows=["flow_id"])
+</bad_example>
+
+<good_example>
+async def test_example(migrator):
+    # Используй фикстуру напрямую
+    await migrator.migrate_for_company(company, flows=["flow_id"])
+</good_example>
+
+## Структура теста
+
+```python
+import pytest
+from app.models import AgentConfig, ToolReference
+from langchain_core.messages import HumanMessage
+
+
+@pytest.mark.asyncio
+async def test_name(
+    migrated_db,          # Миграция БД
+    storage,              # Storage
+    flow_factory,         # FlowFactory
+    migrator,             # Migrator
+    mock_llm,             # MockLLM
+    test_helpers,         # Вспомогательные методы
+    unique_id             # Генератор ID
+):
+    """Описание теста"""
+    
+    # 1. Настройка mock LLM
+    mock_llm.configure(
+        tool_responses={...},
+        responses={...}
+    )
+    
+    # 2. Создание тестовых данных
+    agent = await test_helpers.create_simple_agent(...)
+    flow = await test_helpers.create_simple_flow(...)
+    
+    # 3. Миграция компаний (если нужно)
+    await migrator.migrate_for_company(
+        company=test_company,
+        flows=["flow_id"],
+        with_dependencies=True
+    )
+    
+    # 4. Выполнение
+    flow_obj = await flow_factory.get_flow("flow_id")
+    result = await flow_obj.ainvoke(
+        {"messages": [HumanMessage(content="...")]},
+        config={"configurable": {"thread_id": unique_id("test")}}
+    )
+    
+    # 5. Проверки
+    assert "messages" in result
+    assert len(result["messages"]) > 0
+```
+
+## MockServer для HTTP запросов
+
+```python
+def test_with_http(mock_server):
+    @mock_server.get("/api/users")
+    async def get_users(url: str, params: dict, **kwargs):
+        return MockResponse(200, {"users": [...]})
+    
+    @mock_server.get("/api/users/{user_id}")
+    async def get_user(url: str, path_params: dict, **kwargs):
+        user_id = path_params["user_id"]
+        return MockResponse(200, {"id": user_id, "name": "Test"})
+    
+    # mock_server готов обрабатывать запросы
+```
+
+## Cleanup
+
+Cleanup выполняется автоматически:
+- Контекст очищается после каждого теста
+- База данных изолирована для каждого теста
+- MockLLM сбрасывает счетчики
+
+НЕ НУЖНО делать cleanup вручную, если только не создаются глобальные ресурсы.
