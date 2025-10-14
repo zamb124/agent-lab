@@ -183,7 +183,7 @@ async def test_execute_super_flow_math(migrated_db, storage, flow_factory, test_
     """Создание и выполнение супер флоу с математическим запросом"""
     
     # Создаем агента
-    await test_create_stategraph_with_flow_nodes(migrated_db, storage, test_helpers)
+    await test_create_stategraph_with_flow_nodes(migrated_db, storage, test_helpers, agent_repo)
     
     super_flow = await flow_factory.get_flow("super_flow")
     
@@ -206,7 +206,7 @@ async def test_execute_super_flow_weather(migrated_db, storage, flow_factory, te
     """Создание и выполнение супер флоу с погодным запросом"""
     
     # Создаем агента
-    await test_create_stategraph_with_flow_nodes(migrated_db, storage, test_helpers)
+    await test_create_stategraph_with_flow_nodes(migrated_db, storage, test_helpers, agent_repo)
     
     super_flow = await flow_factory.get_flow("super_flow")
     

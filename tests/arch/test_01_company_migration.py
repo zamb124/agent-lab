@@ -71,7 +71,7 @@ def test_migration_company(storage):
 
 
 @pytest.mark.asyncio
-async def test_migrate_defaults_for_company(migrated_db, storage, migrator, test_migration_company, flow_repo):
+async def test_migrate_defaults_for_company(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 1: Миграция только публичных tools для новой компании.
     
