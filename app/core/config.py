@@ -157,7 +157,7 @@ class NanoBananaConfig(BaseModel):
     """Конфигурация Nano Banana (Gemini Image Generation через OpenRouter)"""
 
     enabled: bool = False
-    model_name: str = "google/gemini-2.5-flash-image-preview"
+    model_name: str = "google/gemini-2.5-flash-preview-image"
     timeout: int = 60
 class AmoCRMConfig(BaseModel):
     """Конфигурация AmoCRM интеграции. Временно тут, пока не настроим OAuth"""

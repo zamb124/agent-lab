@@ -8,24 +8,20 @@ theme:
   name: material
   language: ru
   palette:
-    - media: "(prefers-color-scheme)"
-      toggle:
-        icon: material/brightness-auto
-        name: Переключить на светлую тему
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: deep purple
-      accent: purple
+      primary: indigo
+      accent: indigo
       toggle:
         icon: material/brightness-7
         name: Переключить на тёмную тему
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: deep purple
-      accent: purple
+      primary: indigo
+      accent: indigo
       toggle:
         icon: material/brightness-4
-        name: Переключить на автоматическую тему
+        name: Переключить на светлую тему
   features:
     - navigation.instant
     - navigation.instant.progress
@@ -37,13 +33,17 @@ theme:
     - navigation.top
     - navigation.path
     - navigation.indexes
+    - navigation.prune
+    - navigation.footer
     - search.suggest
     - search.highlight
     - search.share
     - content.code.copy
     - content.code.annotate
     - content.tooltips
+    - content.tabs.link
     - toc.follow
+    - toc.integrate
   icon:
     repo: fontawesome/brands/github
   logo: logo.png
@@ -56,15 +56,22 @@ extra:
   social:
     - icon: fontawesome/brands/github
       link: https://github.com/your-repo/agent-lab
+  generator: false
+  homepage: /
+
+extra_css:
+  - stylesheets/extra.css
 
 extra_javascript:
   - https://unpkg.com/mermaid@10/dist/mermaid.min.js
+  - javascripts/logo.js
 
 markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
       line_spans: __span
       pygments_lang_class: true
+      use_pygments: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences:
@@ -79,6 +86,20 @@ markdown_extensions:
   - attr_list
   - md_in_html
   - tables
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.keys
+  - pymdownx.smartsymbols
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - def_list
+  - footnotes
+  - abbr
+  - pymdownx.critic
+  - pymdownx.caret
+  - pymdownx.mark
+  - pymdownx.tilde
 
 plugins:
   - search:
