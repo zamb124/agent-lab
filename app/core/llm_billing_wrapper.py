@@ -6,6 +6,7 @@ LLM с встроенным биллингом для OpenRouter.
 
 import logging
 import base64
+import json
 import httpx
 from typing import Optional, List, Any, Mapping
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -80,6 +81,28 @@ class ChatOpenAIWithBilling(BaseChatModel):
                 })
         
         return openai_messages
+    
+    def _parse_tool_arguments(self, arguments: str) -> dict:
+        """
+        Парсит аргументы tool из JSON строки.
+        
+        Args:
+            arguments: JSON строка с аргументами
+            
+        Returns:
+            Словарь с аргументами
+        """
+        if not arguments:
+            return {}
+        
+        if isinstance(arguments, dict):
+            return arguments
+        
+        try:
+            return json.loads(arguments)
+        except json.JSONDecodeError as e:
+            logger.error(f"Ошибка парсинга аргументов tool: {e}, arguments={arguments}")
+            return {}
     
     def _convert_tools_to_openrouter_format(self, tools: List[Any]) -> List[dict]:
         """
@@ -223,9 +246,22 @@ class ChatOpenAIWithBilling(BaseChatModel):
             else:
                 content = "\n".join(file_descriptions)
         
-        # Создаем AIMessage
+        # Обрабатываем tool_calls из OpenRouter
+        tool_calls = []
+        if "tool_calls" in message_data and message_data["tool_calls"]:
+            for tc in message_data["tool_calls"]:
+                tool_calls.append({
+                    "name": tc["function"]["name"],
+                    "args": self._parse_tool_arguments(tc["function"].get("arguments", "{}")),
+                    "id": tc.get("id", f"call_{tc['function']['name']}"),
+                    "type": "tool_call"
+                })
+            logger.debug(f"Получено {len(tool_calls)} tool calls от LLM")
+        
+        # Создаем AIMessage с tool_calls
         ai_message = AIMessage(
-            content=content,
+            content=content or "",
+            tool_calls=tool_calls if tool_calls else [],
             response_metadata={
                 "token_usage": usage,
                 "model_name": self.model,
