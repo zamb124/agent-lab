@@ -46,7 +46,7 @@ async def test_agent_node_with_params_agent_id(migrated_db, storage, flow_factor
         source="manual"
     )
     
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     flow_config = FlowConfig(
         flow_id="test_flow_params",
@@ -56,7 +56,7 @@ async def test_agent_node_with_params_agent_id(migrated_db, storage, flow_factor
         platforms={"api": {}}
     )
     
-    await storage.set_flow_config(flow_config)
+    await flow_repo.set(flow_config)
     
     # Проверяем что граф компилируется
     flow = await flow_factory.get_flow("test_flow_params")
@@ -109,7 +109,7 @@ async def test_agent_node_with_function_class(migrated_db, storage, flow_factory
         source="manual"
     )
     
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     flow_config = FlowConfig(
         flow_id="test_flow_class",
@@ -119,7 +119,7 @@ async def test_agent_node_with_function_class(migrated_db, storage, flow_factory
         platforms={"api": {}}
     )
     
-    await storage.set_flow_config(flow_config)
+    await flow_repo.set(flow_config)
     
     # Проверяем что граф компилируется
     flow = await flow_factory.get_flow("test_flow_class")
@@ -174,7 +174,7 @@ async def test_agent_node_with_id_fallback(migrated_db, storage, flow_factory, m
         source="manual"
     )
     
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     flow_config = FlowConfig(
         flow_id="test_flow_fallback",
@@ -184,7 +184,7 @@ async def test_agent_node_with_id_fallback(migrated_db, storage, flow_factory, m
         platforms={"api": {}}
     )
     
-    await storage.set_flow_config(flow_config)
+    await flow_repo.set(flow_config)
     
     # Проверяем что граф компилируется
     flow = await flow_factory.get_flow("test_flow_fallback")
@@ -238,7 +238,7 @@ async def test_agent_node_short_id_fallback(migrated_db, storage, flow_factory, 
         source="manual"
     )
     
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     flow_config = FlowConfig(
         flow_id="test_flow_short_id",
@@ -248,7 +248,7 @@ async def test_agent_node_short_id_fallback(migrated_db, storage, flow_factory, 
         platforms={"api": {}}
     )
     
-    await storage.set_flow_config(flow_config)
+    await flow_repo.set(flow_config)
     
     # Проверяем что получаем понятную ошибку
     try:
@@ -297,7 +297,7 @@ async def test_agent_node_error_message_quality(migrated_db, storage, flow_facto
         source="manual"
     )
     
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     flow_config = FlowConfig(
         flow_id="test_flow_empty",
@@ -307,7 +307,7 @@ async def test_agent_node_error_message_quality(migrated_db, storage, flow_facto
         platforms={"api": {}}
     )
     
-    await storage.set_flow_config(flow_config)
+    await flow_repo.set(flow_config)
     
     # Проверяем что получаем информативную ошибку
     try:

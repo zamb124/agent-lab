@@ -164,7 +164,7 @@ async def finalizer_node(state):
         source="manual"
     )
         
-    await storage.set_agent_config(super_agent_config)
+    await agent_repo.set(super_agent_config)
     print("✅ Супер StateGraph агент создан в БД")
     
     # Создаем flow

@@ -74,7 +74,7 @@ async def save_warehouse(state):
         ),
     )
     
-    await storage.set_agent_config(subagent_config)
+    await agent_repo.set(subagent_config)
     
     # Создаем КООРДИНАТОРА через StateGraph
     coordinator_config = AgentConfig(
@@ -121,7 +121,7 @@ async def call_subagent(state):
         ),
     )
     
-    await storage.set_agent_config(coordinator_config)
+    await agent_repo.set(coordinator_config)
     
     coordinator = await agent_factory.get_agent("test_coordinator_agent")
     
@@ -201,7 +201,7 @@ async def read_store(state):
         ),
     )
     
-    await storage.set_agent_config(subagent_config)
+    await agent_repo.set(subagent_config)
     
     # Создаем КООРДИНАТОРА который устанавливает данные и вызывает субагента
     coordinator_config = AgentConfig(
@@ -253,7 +253,7 @@ async def set_data_and_call(state):
         ),
     )
     
-    await storage.set_agent_config(coordinator_config)
+    await agent_repo.set(coordinator_config)
     
     coordinator = await agent_factory.get_agent("test_setter_coordinator")
     
@@ -373,7 +373,7 @@ async def step3_verify(state):
         ),
     )
     
-    await storage.set_agent_config(coordinator_config)
+    await agent_repo.set(coordinator_config)
     
     coordinator = await agent_factory.get_agent("test_multi_coordinator")
     
@@ -536,10 +536,10 @@ STORE (должны быть данные от A и B):
         llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1),
     )
     
-    await storage.set_agent_config(agent_a)
-    await storage.set_agent_config(agent_b)
-    await storage.set_agent_config(agent_c)
-    await storage.set_agent_config(coordinator_config)
+    await agent_repo.set(agent_a)
+    await agent_repo.set(agent_b)
+    await agent_repo.set(agent_c)
+    await agent_repo.set(coordinator_config)
     
     coordinator = await agent_factory.get_agent("test_chain_coordinator")
     
@@ -607,7 +607,7 @@ async def test_05_initial_store_from_flow_config(migrated_db, storage, agent_fac
         llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1),
     )
     
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     agent = await agent_factory.get_agent("test_initial_store_agent")
     
@@ -695,7 +695,7 @@ def update_settings(timeout: int, theme: str) -> str:
         llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1),
     )
     
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     agent = await agent_factory.get_agent("test_merge_store_agent")
     

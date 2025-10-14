@@ -329,7 +329,7 @@ async def test_flow_variables_resolution(variables_service, storage):
         }
     )
     
-    await storage.set_flow_config(flow_config)
+    await flow_repo.set(flow_config)
     
     # Резолвим переменные flow
     resolved = await variables_service.resolve(flow_config.variables)
@@ -363,7 +363,7 @@ async def test_platform_config_resolution(variables_service, storage):
         }
     )
     
-    await storage.set_flow_config(flow_config)
+    await flow_repo.set(flow_config)
     
     resolved_platforms = await variables_service.resolve(flow_config.platforms)
     
@@ -400,7 +400,7 @@ async def test_nested_flow_variables(variables_service, storage):
         }
     )
     
-    await storage.set_flow_config(flow_config)
+    await flow_repo.set(flow_config)
     
     resolved = await variables_service.resolve(flow_config.variables)
     
@@ -439,7 +439,7 @@ async def test_flow_variables_in_runtime(variables_service, storage):
         }
     )
     
-    await storage.set_flow_config(flow_config)
+    await flow_repo.set(flow_config)
     
     resolved_variables = await variables_service.resolve(flow_config.variables)
     
@@ -488,7 +488,7 @@ async def test_variables_in_prompts(variables_service, storage):
         }
     )
     
-    await storage.set_flow_config(flow_config)
+    await flow_repo.set(flow_config)
     
     resolved = await variables_service.resolve(flow_config.variables)
     context = get_context()

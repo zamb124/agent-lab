@@ -8,6 +8,7 @@
 4. Выполнение хуков install/uninstall
 """
 import pytest
+from app.db.repositories import AgentRepository, FlowRepository
 from datetime import datetime, timezone
 
 from app.core.context import set_context, clear_context
@@ -88,13 +89,13 @@ async def test_new_company_only_tools(migrated_db, storage, migrator, test_store
     
     await migrator.migrate_defaults_for_company(test_company)
     
-    simple_flow = await storage.get_flow_config("app.flows.simple_flow.simple_flow_config")
+    simple_flow = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
     assert simple_flow is None, "Flows НЕ должны автоматически мигрироваться"
     
-    weather_flow = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    weather_flow = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert weather_flow is None, "Flows НЕ должны автоматически мигрироваться"
     
-    weather_agent = await storage.get_agent_config("app.agents.weather.agent.WeatherAgent")
+    weather_agent = await agent_repo.get("app.agents.weather.agent.WeatherAgent")
     assert weather_agent is None, "Агенты НЕ должны автоматически мигрироваться"
     
     tool_data = await storage.get("tool:app.tools.calc_tools.calculate")
@@ -123,7 +124,7 @@ async def test_install_flow_creates_dependencies(migrated_db, storage, flow_fact
     
     await migrator.migrate_defaults_for_company(test_company)
     
-    weather_flow = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    weather_flow = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert weather_flow is None, "Flow не должен быть установлен до вызова install"
     
     result = await flow_factory.install_flow("app.flows.weather_flow.weather_flow_config")
@@ -131,12 +132,12 @@ async def test_install_flow_creates_dependencies(migrated_db, storage, flow_fact
     assert result["flow_id"] == "app.flows.weather_flow.weather_flow_config"
     assert result["company_id"] == test_company.company_id
     
-    weather_flow = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    weather_flow = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert weather_flow is not None, "Flow должен быть установлен"
     assert weather_flow.install_hook is not None, "install_hook должен быть извлечен"
     assert isinstance(weather_flow.install_hook, ToolReference), "install_hook должен быть ToolReference"
     
-    weather_agent = await storage.get_agent_config("app.agents.weather.agent.WeatherAgent")
+    weather_agent = await agent_repo.get("app.agents.weather.agent.WeatherAgent")
     assert weather_agent is not None, "Агент flow должен быть мигрирован"
     
     variable_key = f"company:{test_company.company_id}:var:default_city"
@@ -172,15 +173,15 @@ async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_fa
     variable_before = await storage.get(variable_key)
     assert variable_before is not None, "Переменная должна существовать после install"
     
-    weather_flow_before = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    weather_flow_before = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert weather_flow_before is not None, "Flow должен существовать"
     
     await flow_factory.uninstall_flow("app.flows.weather_flow.weather_flow_config")
     
-    weather_flow_after = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    weather_flow_after = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert weather_flow_after is None, "Flow должен быть удален"
     
-    weather_agent_after = await storage.get_agent_config("app.agents.weather.agent.WeatherAgent")
+    weather_agent_after = await agent_repo.get("app.agents.weather.agent.WeatherAgent")
     assert weather_agent_after is None, "Агенты flow должны быть удалены"
     
     variable_after = await storage.get(variable_key)
@@ -202,7 +203,7 @@ async def test_flow_hooks_execution(migrated_db, storage):
     Проверяет что хуки правильно извлекаются из кода и выполняются.
     """
     
-    weather_flow = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    weather_flow = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert weather_flow is not None, "Weather flow должен быть в системной компании"
     
     assert weather_flow.install_hook is not None, "install_hook должен быть извлечен"
@@ -276,7 +277,7 @@ async def test_flow_with_image(migrated_db, storage):
     - image_file_id сохраняется
     """
     
-    weather_flow = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    weather_flow = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert weather_flow is not None, "Weather flow должен быть мигрирован"
     assert weather_flow.image_path == "app/flows/weather_flow.jpg", "image_path должен быть сохранен"
     
@@ -299,28 +300,28 @@ async def test_multiple_flows_isolation(migrated_db, storage, flow_factory, migr
     await migrator.migrate_defaults_for_company(company1)
     await flow_factory.install_flow("app.flows.weather_flow.weather_flow_config")
     
-    flow_in_company1 = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    flow_in_company1 = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert flow_in_company1 is not None, "Flow должен быть в компании 1"
     
     set_company_context(company2)
     await migrator.migrate_defaults_for_company(company2)
     
-    flow_in_company2 = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    flow_in_company2 = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert flow_in_company2 is None, "Flow НЕ должен быть виден в компании 2"
     
     await flow_factory.install_flow("app.flows.weather_flow.weather_flow_config")
     
-    flow_in_company2_after = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    flow_in_company2_after = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert flow_in_company2_after is not None, "Flow должен быть установлен в компании 2"
     
     set_company_context(company1)
     await flow_factory.uninstall_flow("app.flows.weather_flow.weather_flow_config")
     
-    flow_in_company1_after = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    flow_in_company1_after = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert flow_in_company1_after is None, "Flow должен быть удален из компании 1"
     
     set_company_context(company2)
-    flow_still_in_company2 = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    flow_still_in_company2 = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert flow_still_in_company2 is not None, "Flow должен остаться в компании 2"
     
     print("✅ Тест multiple_flows_isolation пройден!")
@@ -337,7 +338,7 @@ async def test_flow_author_extraction(migrated_db, storage):
     Проверяет что author правильно мигрируется из кода.
     """
     
-    weather_flow = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    weather_flow = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert weather_flow is not None, "Weather flow должен быть мигрирован"
     assert weather_flow.author is not None, "Author должен быть извлечен"
     assert weather_flow.author.name == "Viktor Shved", "Имя автора должно совпадать"
@@ -365,14 +366,14 @@ async def test_install_twice_should_succeed(migrated_db, storage, flow_factory, 
     result1 = await flow_factory.install_flow("app.flows.weather_flow.weather_flow_config")
     assert result1["flow_id"] == "app.flows.weather_flow.weather_flow_config"
     
-    flow1 = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    flow1 = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert flow1 is not None
     created_at_first = flow1.created_at
     
     result2 = await flow_factory.install_flow("app.flows.weather_flow.weather_flow_config")
     assert result2["flow_id"] == "app.flows.weather_flow.weather_flow_config"
     
-    flow2 = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    flow2 = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert flow2 is not None
     assert flow2.created_at == created_at_first, "created_at должен сохраниться при перемиграции"
     

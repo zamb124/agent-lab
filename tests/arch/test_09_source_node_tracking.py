@@ -20,7 +20,7 @@ async def test_source_node_in_history(migrated_db, storage, flow_factory, unique
         prompt="Ты погодный агент. Отвечай о погоде.",
         llm_config=LLMConfig(model="mock-gpt-4"),
     )
-    await storage.set_agent_config(weather_agent_config)
+    await agent_repo.set(weather_agent_config)
     
     calc_agent_config = AgentConfig(
         agent_id="app.agents.calculator.agent.CalculatorAgent",
@@ -30,7 +30,7 @@ async def test_source_node_in_history(migrated_db, storage, flow_factory, unique
         prompt="Ты калькулятор. Вычисляй математические выражения.",
         llm_config=LLMConfig(model="mock-gpt-4"),
     )
-    await storage.set_agent_config(calc_agent_config)
+    await agent_repo.set(calc_agent_config)
     
     explainer_agent_config = AgentConfig(
         agent_id="app.agents.explainer.agent.ExplainerAgent",
@@ -40,7 +40,7 @@ async def test_source_node_in_history(migrated_db, storage, flow_factory, unique
         prompt="Ты объяснитель. Объясняй что произошло.",
         llm_config=LLMConfig(model="mock-gpt-4"),
     )
-    await storage.set_agent_config(explainer_agent_config)
+    await agent_repo.set(explainer_agent_config)
     
     flow_config = FlowConfig(
         flow_id="test_source_tracking_flow",
@@ -49,7 +49,7 @@ async def test_source_node_in_history(migrated_db, storage, flow_factory, unique
         entry_point_agent="app.agents.weather.agent.WeatherAgent",
         llm_config=LLMConfig(model="mock-gpt-4"),
     )
-    await storage.set_flow_config(flow_config)
+    await flow_repo.set(flow_config)
     
     flow = SmartFlowAgent()
     
@@ -121,7 +121,7 @@ async def test_checkpoint_metadata_structure(migrated_db, storage, flow_factory,
         prompt="Ты калькулятор. Вычисляй математические выражения.",
         llm_config=LLMConfig(model="mock-gpt-4"),
     )
-    await storage.set_agent_config(calc_agent_config)
+    await agent_repo.set(calc_agent_config)
     
     weather_agent_config = AgentConfig(
         agent_id="app.agents.weather.agent.WeatherAgent",
@@ -131,7 +131,7 @@ async def test_checkpoint_metadata_structure(migrated_db, storage, flow_factory,
         prompt="Ты погодный агент. Отвечай о погоде.",
         llm_config=LLMConfig(model="mock-gpt-4"),
     )
-    await storage.set_agent_config(weather_agent_config)
+    await agent_repo.set(weather_agent_config)
     
     explainer_agent_config = AgentConfig(
         agent_id="app.agents.explainer.agent.ExplainerAgent",
@@ -141,7 +141,7 @@ async def test_checkpoint_metadata_structure(migrated_db, storage, flow_factory,
         prompt="Ты объяснитель. Объясняй что произошло.",
         llm_config=LLMConfig(model="mock-gpt-4"),
     )
-    await storage.set_agent_config(explainer_agent_config)
+    await agent_repo.set(explainer_agent_config)
     
     flow_config = FlowConfig(
         flow_id="test_metadata_flow",
@@ -150,7 +150,7 @@ async def test_checkpoint_metadata_structure(migrated_db, storage, flow_factory,
         entry_point_agent="app.agents.calculator.agent.CalculatorAgent",
         llm_config=LLMConfig(model="mock-gpt-4"),
     )
-    await storage.set_flow_config(flow_config)
+    await flow_repo.set(flow_config)
     
     flow = SmartFlowAgent()
     

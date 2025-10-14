@@ -12,6 +12,7 @@
 Это ЭТАЛОН для всех будущих тестов!
 """
 import pytest
+from app.db.repositories import AgentRepository, FlowRepository
 from app.models import AgentConfig, AgentType, CodeMode, ToolReference
 from langchain_core.messages import HumanMessage
 
@@ -205,7 +206,8 @@ def greet(name: str) -> str:
     print("   ✅ SimpleAgent создан")
     
     # Проверим что агент сохранился с tools
-    loaded_config = await storage.get_agent_config("ref_simple_agent")
+    agent_repo = AgentRepository(storage)
+    loaded_config = await agent_repo.get("ref_simple_agent")
     assert loaded_config.tools is not None, "Tools не сохранились в БД!"
     assert len(loaded_config.tools) > 0, "Tools пустой список!"
     

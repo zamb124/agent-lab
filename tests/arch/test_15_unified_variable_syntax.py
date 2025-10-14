@@ -135,7 +135,7 @@ STATE ПЕРЕМЕННЫЕ:
         ),
     )
     
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     # Получаем агента
     agent = await agent_factory.get_agent("test_unified_syntax_agent")

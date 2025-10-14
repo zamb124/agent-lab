@@ -5,6 +5,7 @@
 только через БД API без написания кода.
 """
 import pytest
+from app.db.repositories import AgentRepository, FlowRepository
 from app.models import ToolReference, CodeMode
 from langchain_core.messages import HumanMessage
 
@@ -84,7 +85,7 @@ def subtract_tool(a: int, b: int) -> str:
     )
     
     # Проверяем что агент действительно сохранился
-    saved_config = await storage.get_agent_config("db_math_agent")
+    saved_config = await agent_repo.get("db_math_agent")
     assert saved_config is not None, "Агент НЕ сохранился в БД!"
     
     print("✅ ReAct агент создан в БД")

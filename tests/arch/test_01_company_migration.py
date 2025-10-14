@@ -111,11 +111,11 @@ async def test_migrate_defaults_for_company(migrated_db, storage, migrator, test
     simple_flow_config = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
     assert simple_flow_config is None, "Flows НЕ должны автоматически мигрироваться"
     
-    weather_flow_config = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    weather_flow_config = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert weather_flow_config is None, "Flows НЕ должны автоматически мигрироваться"
     
     # Проверяем что агенты НЕ мигрировались
-    weather_agent = await storage.get_agent_config("app.agents.weather.agent.WeatherAgent")
+    weather_agent = await agent_repo.get("app.agents.weather.agent.WeatherAgent")
     assert weather_agent is None, "Агенты НЕ должны автоматически мигрироваться"
     
     # Проверяем что публичные tools мигрировались
@@ -170,11 +170,11 @@ async def test_migrate_single_flow_for_company(migrated_db, storage, migrator, t
     )
     
     # Проверяем flow
-    flow_config = await storage.get_flow_config("app.flows.simple_flow.simple_flow_config")
+    flow_config = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
     assert flow_config is not None, "Flow должен быть мигрирован"
     
     # Проверяем зависимости
-    agent_config = await storage.get_agent_config("app.flows.simple_flow.SimpleFlowAgent")
+    agent_config = await agent_repo.get("app.flows.simple_flow.SimpleFlowAgent")
     assert agent_config is not None, "Зависимые агенты должны быть мигрированы"
     
     print("✅ Тест migrate_single_flow_for_company пройден!")
@@ -222,7 +222,7 @@ async def test_migrate_single_agent_for_company(migrated_db, storage, migrator, 
     )
     
     # Проверяем агента
-    agent_config = await storage.get_agent_config("app.flows.simple_flow.SimpleFlowAgent")
+    agent_config = await agent_repo.get("app.flows.simple_flow.SimpleFlowAgent")
     assert agent_config is not None, "Агент должен быть мигрирован"
     
     print("✅ Тест migrate_single_agent_for_company пройден!")
@@ -270,12 +270,12 @@ async def test_remigrate_flow(migrated_db, storage, migrator, test_migration_com
     )
     
     # 2. Получаем flow из БД (Storage использует контекст компании)
-    flow_config = await storage.get_flow_config("app.flows.simple_flow.simple_flow_config")
+    flow_config = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
     original_updated_at = flow_config.updated_at
     
     # 3. "Изменяем" flow в БД (симулируем изменение)
     flow_config.description = "ИЗМЕНЕНО!!!"
-    await storage.set_flow_config(flow_config)
+    await flow_repo.set(flow_config)
     
     # 4. Перемигрируем flow (откат к коду)
     await migrator.remigrate_flow(
@@ -284,7 +284,7 @@ async def test_remigrate_flow(migrated_db, storage, migrator, test_migration_com
     )
     
     # 5. Проверяем что откатилось к базовому состоянию
-    flow_config_after = await storage.get_flow_config("app.flows.simple_flow.simple_flow_config")
+    flow_config_after = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
     
     assert flow_config_after.description != "ИЗМЕНЕНО!!!", "Описание должно откатиться к базовому"
     assert flow_config_after.description == "Простой тестовый флоу без LLM", "Описание должно быть из кода"
@@ -332,12 +332,12 @@ async def test_remigrate_agent(migrated_db, storage, migrator, test_migration_co
     )
     
     # 2. Получаем агента из БД
-    agent_config = await storage.get_agent_config("app.flows.simple_flow.SimpleFlowAgent")
+    agent_config = await agent_repo.get("app.flows.simple_flow.SimpleFlowAgent")
     original_name = agent_config.name
     
     # 3. "Изменяем" агента в БД
     agent_config.name = "ИЗМЕНЕННОЕ ИМЯ"
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     # 4. Перемигрируем агента
     await migrator.remigrate_agent(
@@ -346,7 +346,7 @@ async def test_remigrate_agent(migrated_db, storage, migrator, test_migration_co
     )
     
     # 5. Проверяем откат
-    agent_config_after = await storage.get_agent_config("app.flows.simple_flow.SimpleFlowAgent")
+    agent_config_after = await agent_repo.get("app.flows.simple_flow.SimpleFlowAgent")
     
     assert agent_config_after.name != "ИЗМЕНЕННОЕ ИМЯ", "Имя должно откатиться"
     assert agent_config_after.name == original_name, "Имя должно быть из кода"
@@ -396,10 +396,10 @@ async def test_migrate_with_nested_dependencies(migrated_db, storage, migrator, 
     )
     
     # Проверяем что все сущности мигрировались в компанию
-    flow_config = await storage.get_flow_config("app.flows.simple_flow.simple_flow_config")
+    flow_config = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
     assert flow_config is not None, "Flow должен быть в компании"
     
-    agent_config = await storage.get_agent_config("app.flows.simple_flow.SimpleFlowAgent")
+    agent_config = await agent_repo.get("app.flows.simple_flow.SimpleFlowAgent")
     assert agent_config is not None, "Агент должен быть в компании"
     
     print("✅ Тест migrate_with_nested_dependencies пройден!")
@@ -563,14 +563,14 @@ async def test_react_agent_migration(migrated_db, storage, migrator, test_migrat
     )
     
     # Проверяем CalculatorAgent
-    calc_agent = await storage.get_agent_config("app.agents.calculator.agent.CalculatorAgent")
+    calc_agent = await agent_repo.get("app.agents.calculator.agent.CalculatorAgent")
     assert calc_agent is not None, "CalculatorAgent должен быть мигрирован"
     assert calc_agent.type == AgentType.REACT, f"CalculatorAgent должен быть REACT, получили {calc_agent.type}"
     assert calc_agent.prompt is not None, "ReAct агент должен иметь prompt"
     assert calc_agent.graph_definition is None, "ReAct агент не должен иметь graph_definition"
     
     # Проверяем WeatherAgent
-    weather_agent = await storage.get_agent_config("app.agents.weather.agent.WeatherAgent")
+    weather_agent = await agent_repo.get("app.agents.weather.agent.WeatherAgent")
     assert weather_agent is not None, "WeatherAgent должен быть мигрирован"
     assert weather_agent.type == AgentType.REACT, f"WeatherAgent должен быть REACT, получили {weather_agent.type}"
     assert weather_agent.prompt is not None, "ReAct агент должен иметь prompt"
@@ -620,7 +620,7 @@ async def test_stategraph_agent_migration(migrated_db, storage, migrator, test_m
     )
     
     # Проверяем SimpleFlowAgent
-    agent_config = await storage.get_agent_config("app.flows.simple_flow.SimpleFlowAgent")
+    agent_config = await agent_repo.get("app.flows.simple_flow.SimpleFlowAgent")
     assert agent_config is not None, "SimpleFlowAgent должен быть мигрирован"
     assert agent_config.type == AgentType.STATEGRAPH, f"SimpleFlowAgent должен быть STATEGRAPH, получили {agent_config.type}"
     assert agent_config.graph_definition is not None, "StateGraph агент должен иметь graph_definition"
@@ -688,7 +688,7 @@ async def test_company_isolation(migrated_db, storage, migrator):
         )
         
         # 2. Проверяем что flow есть в первой компании
-        flow_config_1 = await storage.get_flow_config("app.flows.simple_flow.simple_flow_config")
+        flow_config_1 = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
         assert flow_config_1 is not None, "Flow должен быть в компании 1"
         
         # 3. Переключаемся на вторую компанию
@@ -713,7 +713,7 @@ async def test_company_isolation(migrated_db, storage, migrator):
         set_context(context2)
         
         # 4. Проверяем что flow НЕТ во второй компании
-        flow_config_2 = await storage.get_flow_config("app.flows.simple_flow.simple_flow_config")
+        flow_config_2 = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
         assert flow_config_2 is None, "Flow НЕ должен быть виден в компании 2"
         
         # 5. Мигрируем агента во вторую компанию
@@ -724,14 +724,14 @@ async def test_company_isolation(migrated_db, storage, migrator):
         )
         
         # 6. Проверяем что агент есть во второй компании
-        agent_config_2 = await storage.get_agent_config("app.agents.calculator.agent.CalculatorAgent")
+        agent_config_2 = await agent_repo.get("app.agents.calculator.agent.CalculatorAgent")
         assert agent_config_2 is not None, "Агент должен быть в компании 2"
         
         # 7. Переключаемся обратно на первую компанию
         set_context(context1)
         
         # 8. Проверяем что агента НЕТ в первой компании
-        agent_config_1 = await storage.get_agent_config("app.agents.calculator.agent.CalculatorAgent")
+        agent_config_1 = await agent_repo.get("app.agents.calculator.agent.CalculatorAgent")
         assert agent_config_1 is None, "Агент НЕ должен быть виден в компании 1"
         
         print("✅ Тест company_isolation пройден!")
@@ -788,11 +788,11 @@ async def test_migrate_without_dependencies(migrated_db, storage, migrator):
     )
     
     # Проверяем что flow мигрировался
-    flow_config = await storage.get_flow_config("app.flows.weather_flow.weather_flow_config")
+    flow_config = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert flow_config is not None, "Flow должен быть мигрирован"
     
     # Проверяем что зависимости НЕ мигрировались
-    agent_config = await storage.get_agent_config("app.agents.weather.agent.WeatherAgent")
+    agent_config = await agent_repo.get("app.agents.weather.agent.WeatherAgent")
     assert agent_config is None, "Зависимости НЕ должны быть мигрированы при with_dependencies=False"
     
     print("✅ Тест migrate_without_dependencies пройден!")
@@ -841,8 +841,8 @@ async def test_api_remigrate_endpoints(migrated_db, storage, migrator, test_migr
     )
     
     # Проверяем что сущности есть
-    flow_config = await storage.get_flow_config("app.flows.simple_flow.simple_flow_config")
-    agent_config = await storage.get_agent_config("app.agents.calculator.agent.CalculatorAgent")
+    flow_config = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
+    agent_config = await agent_repo.get("app.agents.calculator.agent.CalculatorAgent")
     tool_data = await storage.get("tool:app.tools.calc_tools.calculate")
     
     assert flow_config is not None
