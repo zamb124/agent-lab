@@ -75,7 +75,7 @@ async def telegram_webhook(flow_key: str, request: Request, flow_repo: FlowRepos
 
 
 @router.post("/admin/telegram/set_webhook/{flow_id}")
-async def set_telegram_webhook(flow_id: str, webhook_base_url: str):
+async def set_telegram_webhook(flow_id: str, webhook_base_url: str, flow_repo: FlowRepositoryDep):
     """
     Устанавливает webhook для Telegram бота flow.
     """
