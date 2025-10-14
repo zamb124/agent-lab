@@ -44,6 +44,7 @@ class ChatOpenAIWithBilling(BaseChatModel):
         
         self._billing_model = kwargs.get('model', 'unknown')
         self._billing_service = BillingService()
+        self._bound_tools = []
         
         logger.info(f"Создана LLM с биллингом: {self._billing_model}")
     
@@ -80,6 +81,73 @@ class ChatOpenAIWithBilling(BaseChatModel):
         
         return openai_messages
     
+    def _convert_tools_to_openrouter_format(self, tools: List[Any]) -> List[dict]:
+        """
+        Конвертирует LangChain tools в формат OpenRouter.
+        
+        Формат OpenRouter:
+        {
+          "type": "function",
+          "function": {
+            "name": "tool_name",
+            "description": "...",
+            "parameters": {...}
+          }
+        }
+        """
+        openrouter_tools = []
+        
+        for tool in tools:
+            tool_dict = {
+                "type": "function",
+                "function": {}
+            }
+            
+            # Получаем имя инструмента
+            if hasattr(tool, 'name'):
+                tool_dict["function"]["name"] = tool.name
+            elif hasattr(tool, '__name__'):
+                tool_dict["function"]["name"] = tool.__name__
+            else:
+                logger.warning(f"Tool не имеет имени: {tool}")
+                continue
+            
+            # Получаем описание
+            if hasattr(tool, 'description'):
+                tool_dict["function"]["description"] = tool.description
+            elif hasattr(tool, '__doc__') and tool.__doc__:
+                tool_dict["function"]["description"] = tool.__doc__.strip()
+            else:
+                tool_dict["function"]["description"] = f"Tool {tool_dict['function']['name']}"
+            
+            # Получаем параметры (args_schema)
+            if hasattr(tool, 'args_schema') and tool.args_schema:
+                schema = tool.args_schema
+                if hasattr(schema, 'model_json_schema'):
+                    json_schema = schema.model_json_schema()
+                    tool_dict["function"]["parameters"] = {
+                        "type": "object",
+                        "properties": json_schema.get("properties", {}),
+                        "required": json_schema.get("required", [])
+                    }
+                else:
+                    tool_dict["function"]["parameters"] = {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    }
+            else:
+                tool_dict["function"]["parameters"] = {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+            
+            openrouter_tools.append(tool_dict)
+            logger.debug(f"Сконвертирован tool: {tool_dict['function']['name']}")
+        
+        return openrouter_tools
+    
     def _generate(self, messages: List[BaseMessage], stop: Optional[List[str]] = None, run_manager: Optional[CallbackManagerForLLMRun] = None, **kwargs) -> ChatResult:
         """Синхронная генерация (не используется в async коде)"""
         raise NotImplementedError("Используйте ainvoke для асинхронных вызовов")
@@ -101,6 +169,13 @@ class ChatOpenAIWithBilling(BaseChatModel):
         
         if stop:
             payload["stop"] = stop
+        
+        # Добавляем tools если они есть
+        if self._bound_tools:
+            openrouter_tools = self._convert_tools_to_openrouter_format(self._bound_tools)
+            if openrouter_tools:
+                payload["tools"] = openrouter_tools
+                logger.debug(f"Добавлено {len(openrouter_tools)} tools в payload")
         
         # Headers
         headers = {
@@ -319,7 +394,19 @@ class ChatOpenAIWithBilling(BaseChatModel):
         return result
     
     def bind_tools(self, tools, **kwargs):
-        """Привязывает tools к LLM (поддержка tool calling)"""
+        """
+        Привязывает tools к LLM.
+        Сохраняет tools для передачи в OpenRouter API.
+        
+        Args:
+            tools: Список LangChain tools
+            **kwargs: Дополнительные параметры
+            
+        Returns:
+            Self для поддержки chain вызовов
+        """
+        self._bound_tools = tools if isinstance(tools, list) else [tools]
+        logger.debug(f"Привязано {len(self._bound_tools)} tools к LLM {self.model}")
         return self
     
     async def _save_image(self, img_data: dict, file_processor) -> FileRecord:
