@@ -25,7 +25,7 @@ from app.models import (
 
 
 @pytest.mark.asyncio
-async def test_01_subagent_changes_store_coordinator_sees(migrated_db, storage, agent_factory, unique_id):
+async def test_01_subagent_changes_store_coordinator_sees(migrated_db, storage, agent_factory, unique_id, agent_repo):
     """
     Тест 1: Субагент изменяет store - координатор видит изменения.
     
@@ -155,7 +155,7 @@ async def call_subagent(state):
 
 
 @pytest.mark.asyncio
-async def test_02_coordinator_sets_store_subagent_sees(migrated_db, storage, agent_factory, unique_id):
+async def test_02_coordinator_sets_store_subagent_sees(migrated_db, storage, agent_factory, unique_id, agent_repo):
     """
     Тест 2: Координатор устанавливает store - субагент видит.
     
@@ -288,7 +288,7 @@ async def set_data_and_call(state):
 
 
 @pytest.mark.asyncio
-async def test_03_multiple_subagents_share_store(migrated_db, storage, agent_factory, unique_id):
+async def test_03_multiple_subagents_share_store(migrated_db, storage, agent_factory, unique_id, agent_repo):
     """
     Тест 3: Несколько субагентов работают с одним store.
     
@@ -414,7 +414,7 @@ async def step3_verify(state):
 
 
 @pytest.mark.asyncio
-async def test_04_store_persists_across_agent_chain(migrated_db, storage, agent_factory, test_helpers, unique_id):
+async def test_04_store_persists_across_agent_chain(migrated_db, storage, agent_factory, test_helpers, unique_id, agent_repo):
     """
     Тест 4: Store персистится на протяжении всей цепочки агентов.
     
@@ -573,7 +573,7 @@ STORE (должны быть данные от A и B):
 
 
 @pytest.mark.asyncio
-async def test_05_initial_store_from_flow_config(migrated_db, storage, agent_factory, test_helpers, unique_id):
+async def test_05_initial_store_from_flow_config(migrated_db, storage, agent_factory, test_helpers, unique_id, agent_repo):
     """
     Тест 5: Начальные значения store из FlowConfig.
     
@@ -636,7 +636,7 @@ async def test_05_initial_store_from_flow_config(migrated_db, storage, agent_fac
 
 
 @pytest.mark.asyncio
-async def test_06_store_merge_not_overwrite(migrated_db, storage, agent_factory, test_helpers, unique_id):
+async def test_06_store_merge_not_overwrite(migrated_db, storage, agent_factory, test_helpers, unique_id, agent_repo):
     """
     Тест 6: Store мержится, а не перезаписывается.
     

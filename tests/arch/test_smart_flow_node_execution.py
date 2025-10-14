@@ -7,12 +7,11 @@
 3. Роутер правильно определяет путь
 """
 import pytest
-from app.db.repositories import AgentRepository, FlowRepository
 from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_smart_flow_executes_different_nodes(migrated_db, agent_factory, mock_llm, migrator):
+async def test_smart_flow_executes_different_nodes(migrated_db, agent_factory, mock_llm, migrator, agent_repo):
     """Тест: SmartFlow выполняет разные ноды для разных запросов"""
     
     await migrator.run_full_migration()
@@ -136,7 +135,7 @@ async def test_smart_flow_executes_different_nodes(migrated_db, agent_factory, m
 
 
 @pytest.mark.asyncio  
-async def test_smart_flow_router_condition():
+async def test_smart_flow_router_condition(agent_repo):
     """Тест: проверка логики роутера SmartFlow"""
     
     from app.flows.smart_flow import router_function, router_condition
@@ -219,7 +218,7 @@ async def test_smart_flow_router_condition():
 
 
 @pytest.mark.asyncio
-async def test_smart_flow_graph_structure(migrated_db, storage, migrator):
+async def test_smart_flow_graph_structure(migrated_db, storage, migrator, agent_repo):
     
     await migrator.run_full_migration()
     

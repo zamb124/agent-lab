@@ -12,7 +12,7 @@ from app.models import (
 from langchain_core.messages import HumanMessage
 
 @pytest.mark.asyncio
-async def test_create_stategraph_with_flow_nodes(migrated_db, storage, test_helpers):
+async def test_create_stategraph_with_flow_nodes(migrated_db, storage, test_helpers, agent_repo):
     """Создание StateGraph агента с нодами-флоу"""
         
         # 1. СОЗДАЕМ СУПЕР-АГЕНТА С ФЛОУ НОДАМИ
@@ -179,7 +179,7 @@ async def finalizer_node(state):
     return True
 
 @pytest.mark.asyncio
-async def test_execute_super_flow_math(migrated_db, storage, flow_factory, test_helpers, unique_id):
+async def test_execute_super_flow_math(migrated_db, storage, flow_factory, test_helpers, unique_id, agent_repo):
     """Создание и выполнение супер флоу с математическим запросом"""
     
     # Создаем агента
@@ -202,7 +202,7 @@ async def test_execute_super_flow_math(migrated_db, storage, flow_factory, test_
     print(f"✅ Супер флоу математический тест: {final_message}")
 
 @pytest.mark.asyncio
-async def test_execute_super_flow_weather(migrated_db, storage, flow_factory, test_helpers, unique_id):
+async def test_execute_super_flow_weather(migrated_db, storage, flow_factory, test_helpers, unique_id, agent_repo):
     """Создание и выполнение супер флоу с погодным запросом"""
     
     # Создаем агента

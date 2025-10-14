@@ -42,7 +42,7 @@ def test_context_with_vars(test_context):
 
 
 @pytest.mark.asyncio
-async def test_01_optional_syntax_for_static_variables(test_context_with_vars):
+async def test_01_optional_syntax_for_static_variables(test_context_with_vars, agent_repo):
     """
     Тест 1: Опциональный синтаксис для статических переменных.
     
@@ -72,7 +72,7 @@ async def test_01_optional_syntax_for_static_variables(test_context_with_vars):
 
 
 @pytest.mark.asyncio
-async def test_02_optional_syntax_for_nested_variables(test_context_with_vars):
+async def test_02_optional_syntax_for_nested_variables(test_context_with_vars, agent_repo):
     """
     Тест 2: Опциональный синтаксис для вложенных переменных.
     
@@ -97,7 +97,7 @@ async def test_02_optional_syntax_for_nested_variables(test_context_with_vars):
 
 
 @pytest.mark.asyncio
-async def test_03_unified_syntax_in_agent_prompt(migrated_db, storage, agent_factory, unique_id, test_context_with_vars):
+async def test_03_unified_syntax_in_agent_prompt(migrated_db, storage, agent_factory, unique_id, test_context_with_vars, agent_repo):
     """
     Тест 3: Унифицированный синтаксис в промпте агента.
     
@@ -167,7 +167,7 @@ STATE ПЕРЕМЕННЫЕ:
 
 
 @pytest.mark.asyncio
-async def test_04_variable_resolver_optional_syntax():
+async def test_04_variable_resolver_optional_syntax(agent_repo):
     """
     Тест 4: Проверка VariableResolver с опциональным синтаксисом.
     
@@ -219,7 +219,7 @@ async def test_04_variable_resolver_optional_syntax():
 
 
 @pytest.mark.asyncio
-async def test_05_special_characters_in_defaults():
+async def test_05_special_characters_in_defaults(agent_repo):
     """
     Тест 5: Специальные символы в значениях по умолчанию.
     

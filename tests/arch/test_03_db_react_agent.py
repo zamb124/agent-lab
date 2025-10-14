@@ -5,12 +5,11 @@
 только через БД API без написания кода.
 """
 import pytest
-from app.db.repositories import AgentRepository, FlowRepository
 from app.models import ToolReference, CodeMode
 from langchain_core.messages import HumanMessage
 
 @pytest.mark.asyncio
-async def test_mock_llm_direct(mock_llm):
+async def test_mock_llm_direct(mock_llm, agent_repo):
     """Тестируем мок LLM напрямую"""
     
     print(f"🧪 Создан мок: {type(mock_llm)}")
@@ -38,7 +37,7 @@ async def test_mock_llm_direct(mock_llm):
     print("✅ MockLLM работает корректно!")
 
 @pytest.mark.asyncio
-async def test_create_db_react_agent(migrated_db, storage, test_helpers):
+async def test_create_db_react_agent(migrated_db, storage, test_helpers, agent_repo):
     """Создание ReAct агента полностью в БД"""
     
     # Создаем tools
@@ -103,7 +102,7 @@ def subtract_tool(a: int, b: int) -> str:
     return True
 
 @pytest.mark.asyncio
-async def test_execute_db_react_agent(migrated_db, storage, agent_factory, flow_factory, mock_llm, test_helpers, unique_id):
+async def test_execute_db_react_agent(migrated_db, storage, agent_factory, flow_factory, mock_llm, test_helpers, unique_id, agent_repo):
     """Создание и выполнение ReAct агента из БД"""
     
     # Создаем агента
@@ -152,7 +151,7 @@ async def test_execute_db_react_agent(migrated_db, storage, agent_factory, flow_
     print(f"✅ Flow выполнение ReAct агента: {final_message[:100]}...")
 
 @pytest.mark.asyncio
-async def test_react_agent_tools(migrated_db, storage, agent_factory, mock_llm, test_helpers, unique_id):
+async def test_react_agent_tools(migrated_db, storage, agent_factory, mock_llm, test_helpers, unique_id, agent_repo):
     """Создание и тест что ReAct агент правильно использует инструменты"""
     
     # Создаем агента

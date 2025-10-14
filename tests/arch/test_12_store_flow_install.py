@@ -8,7 +8,6 @@
 4. Выполнение хуков install/uninstall
 """
 import pytest
-from app.db.repositories import AgentRepository, FlowRepository
 from datetime import datetime, timezone
 
 from app.core.context import set_context, clear_context
@@ -73,7 +72,7 @@ def test_store_company(storage):
 
 
 @pytest.mark.asyncio
-async def test_new_company_only_tools(migrated_db, storage, migrator, test_store_company):
+async def test_new_company_only_tools(migrated_db, storage, migrator, test_store_company, agent_repo, flow_repo):
     """
     Тест 1: При создании компании мигрируются только публичные tools.
     
@@ -107,7 +106,7 @@ async def test_new_company_only_tools(migrated_db, storage, migrator, test_store
 
 
 @pytest.mark.asyncio
-async def test_install_flow_creates_dependencies(migrated_db, storage, flow_factory, migrator, test_store_company):
+async def test_install_flow_creates_dependencies(migrated_db, storage, flow_factory, migrator, test_store_company, agent_repo, flow_repo):
     """
     Тест 2: Установка flow создает все зависимости.
     
@@ -150,7 +149,7 @@ async def test_install_flow_creates_dependencies(migrated_db, storage, flow_fact
 
 
 @pytest.mark.asyncio
-async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_factory, migrator, test_store_company):
+async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_factory, migrator, test_store_company, agent_repo, flow_repo):
     """
     Тест 3: Удаление flow удаляет все зависимости.
     
@@ -196,7 +195,7 @@ async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_fa
 
 
 @pytest.mark.asyncio
-async def test_flow_hooks_execution(migrated_db, storage):
+async def test_flow_hooks_execution(migrated_db, storage, agent_repo, flow_repo):
     """
     Тест 4: Проверка выполнения хуков install и uninstall.
     
@@ -221,7 +220,7 @@ async def test_flow_hooks_execution(migrated_db, storage):
 
 
 @pytest.mark.asyncio
-async def test_hooks_actually_execute(migrated_db, storage, flow_factory, migrator, test_store_company):
+async def test_hooks_actually_execute(migrated_db, storage, flow_factory, migrator, test_store_company, agent_repo, flow_repo):
     """
     Тест 4.5: Проверка ФАКТИЧЕСКОГО выполнения хуков install и uninstall.
     
@@ -268,7 +267,7 @@ async def test_hooks_actually_execute(migrated_db, storage, flow_factory, migrat
 
 
 @pytest.mark.asyncio
-async def test_flow_with_image(migrated_db, storage):
+async def test_flow_with_image(migrated_db, storage, agent_repo, flow_repo):
     """
     Тест 5: Проверка загрузки картинки flow в S3.
     
@@ -286,7 +285,7 @@ async def test_flow_with_image(migrated_db, storage):
 
 
 @pytest.mark.asyncio
-async def test_multiple_flows_isolation(migrated_db, storage, flow_factory, migrator, test_store_company):
+async def test_multiple_flows_isolation(migrated_db, storage, flow_factory, migrator, test_store_company, agent_repo, flow_repo):
     """
     Тест 6: Изоляция flows между компаниями.
     
@@ -331,7 +330,7 @@ async def test_multiple_flows_isolation(migrated_db, storage, flow_factory, migr
 
 
 @pytest.mark.asyncio
-async def test_flow_author_extraction(migrated_db, storage):
+async def test_flow_author_extraction(migrated_db, storage, agent_repo, flow_repo):
     """
     Тест 7: Проверка извлечения информации об авторе.
     
@@ -350,7 +349,7 @@ async def test_flow_author_extraction(migrated_db, storage):
 
 
 @pytest.mark.asyncio
-async def test_install_twice_should_succeed(migrated_db, storage, flow_factory, migrator, test_store_company):
+async def test_install_twice_should_succeed(migrated_db, storage, flow_factory, migrator, test_store_company, agent_repo, flow_repo):
     """
     Тест 8: Повторная установка flow должна перезаписывать существующий.
     
@@ -383,7 +382,7 @@ async def test_install_twice_should_succeed(migrated_db, storage, flow_factory, 
 
 
 @pytest.mark.asyncio
-async def test_uninstall_not_installed_should_fail(migrated_db, storage, flow_factory, migrator, test_store_company):
+async def test_uninstall_not_installed_should_fail(migrated_db, storage, flow_factory, migrator, test_store_company, agent_repo, flow_repo):
     """
     Тест 9: Удаление неустановленного flow должно вызывать ошибку.
     

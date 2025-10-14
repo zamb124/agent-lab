@@ -27,7 +27,7 @@ from app.models import (
 
 
 @pytest.mark.asyncio
-async def test_01_stategraph_has_correct_state(migrated_db, storage, agent_factory, unique_id, test_context):
+async def test_01_stategraph_has_correct_state(migrated_db, storage, agent_factory, unique_id, test_context, agent_repo):
     """
     Тест 1: StateGraph агент имеет правильный State.
     Проверяем что StateGraph агент использует наш State с полями messages, store и т.д.
@@ -97,7 +97,7 @@ async def start_node(state):
 
 
 @pytest.mark.asyncio
-async def test_02_react_agent_with_variables(storage, agent_factory, migrated_db, test_context):
+async def test_02_react_agent_with_variables(storage, agent_factory, migrated_db, test_context, agent_repo):
     """
     Тест 2: ReAct агент собирается с промптом и переменными.
     Проверяем что переменные подставляются в промпт правильно.
@@ -174,7 +174,7 @@ async def test_02_react_agent_with_variables(storage, agent_factory, migrated_db
 
 
 @pytest.mark.asyncio
-async def test_03_state_persistence_between_calls(migrated_db, storage, agent_factory, unique_id, test_context):
+async def test_03_state_persistence_between_calls(migrated_db, storage, agent_factory, unique_id, test_context, agent_repo):
     """
     Тест 3: Персистентность State между вызовами.
     Проверяем что данные в store сохраняются между вызовами агента.
@@ -261,7 +261,7 @@ async def counter_node(state):
 
 
 @pytest.mark.asyncio
-async def test_04_state_access_from_tool(migrated_db, storage, agent_factory, unique_id, test_context):
+async def test_04_state_access_from_tool(migrated_db, storage, agent_factory, unique_id, test_context, agent_repo):
     """
     Тест 4: Доступ к State из тула.
     Проверяем что тул может читать и писать в state через get_state().
@@ -413,7 +413,7 @@ async def tool_node(state):
 
 
 @pytest.mark.asyncio
-async def test_05_session_tools_integration(migrated_db, storage, agent_factory, unique_id, test_context):
+async def test_05_session_tools_integration(migrated_db, storage, agent_factory, unique_id, test_context, agent_repo):
     """
     Тест 5: Интеграция с сессионными тулами.
     Проверяем что session_set и session_get работают правильно.
@@ -487,7 +487,7 @@ async def session_node(state):
 
 
 @pytest.mark.asyncio  
-async def test_06_variable_priority(test_context):
+async def test_06_variable_priority(test_context, agent_repo):
     """
     Тест 6: Приоритет переменных.
     Проверяем что локальные переменные агента перекрывают переменные flow.

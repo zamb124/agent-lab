@@ -414,7 +414,7 @@ class BaseInterface(ABC):
         )
 
         # Сохраняем в БД через единый метод
-        await self.session_repository.save(session_config)
+        await self.session_repository.set(session_config)
 
         logger.info(f"🆕 Создана новая сессия {session_id}")
         return session_id

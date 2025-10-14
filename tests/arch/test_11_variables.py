@@ -9,7 +9,7 @@ from app.core.context import set_context
 
 
 @pytest.mark.asyncio
-async def test_variables_service_set_and_get(variables_service):
+async def test_variables_service_set_and_get(variables_service, flow_repo):
     """Тест сохранения и получения переменной"""
     
     # Сохраняем переменную
@@ -22,7 +22,7 @@ async def test_variables_service_set_and_get(variables_service):
 
 
 @pytest.mark.asyncio
-async def test_variables_service_secret(variables_service):
+async def test_variables_service_secret(variables_service, flow_repo):
     """Тест сохранения секрета"""
     
     # Сохраняем секрет
@@ -40,7 +40,7 @@ async def test_variables_service_secret(variables_service):
 
 
 @pytest.mark.asyncio
-async def test_variables_per_company_isolation(storage, unique_id):
+async def test_variables_per_company_isolation(storage, unique_id, flow_repo):
     """Тест изоляции переменных между компаниями"""
     from app.identity.models import Company, User, AuthProvider, UserStatus
     from app.models.context_models import Context
@@ -122,7 +122,7 @@ async def test_variables_per_company_isolation(storage, unique_id):
 
 
 @pytest.mark.asyncio
-async def test_variables_resolve_reference(variables_service):
+async def test_variables_resolve_reference(variables_service, flow_repo):
     """Тест резолюции @var:key ссылок"""
     
     await variables_service.set_var("bot_token", "123:ABC...", is_secret=True)
@@ -135,7 +135,7 @@ async def test_variables_resolve_reference(variables_service):
 
 
 @pytest.mark.asyncio
-async def test_variables_resolve_not_found(variables_service):
+async def test_variables_resolve_not_found(variables_service, flow_repo):
     """Тест auto-create при резолюции несуществующей переменной"""
     
     result = await variables_service.resolve("@var:nonexistent_var")
@@ -149,7 +149,7 @@ async def test_variables_resolve_not_found(variables_service):
 
 
 @pytest.mark.asyncio
-async def test_variables_resolve_dict(variables_service):
+async def test_variables_resolve_dict(variables_service, flow_repo):
     """Тест резолюции в словарях"""
     
     await variables_service.set_var("bot_name", "Test Bot", is_secret=False)
@@ -173,7 +173,7 @@ async def test_variables_resolve_dict(variables_service):
 
 
 @pytest.mark.asyncio
-async def test_variables_resolve_list(variables_service):
+async def test_variables_resolve_list(variables_service, flow_repo):
     """Тест резолюции в списках"""
     
     await variables_service.set_var("api_key", "sk-123", is_secret=True)
@@ -188,7 +188,7 @@ async def test_variables_resolve_list(variables_service):
 
 
 @pytest.mark.asyncio
-async def test_variables_delete(variables_service):
+async def test_variables_delete(variables_service, flow_repo):
     """Тест удаления переменной"""
     
     await variables_service.set_var("temp_var", "temp_value", is_secret=False)
@@ -203,7 +203,7 @@ async def test_variables_delete(variables_service):
 
 
 @pytest.mark.asyncio
-async def test_variables_list(variables_service):
+async def test_variables_list(variables_service, flow_repo):
     """Тест получения списка переменных"""
     
     await variables_service.set_var("var1", "value1", is_secret=False)
@@ -226,7 +226,7 @@ async def test_variables_list(variables_service):
 
 
 @pytest.mark.asyncio
-async def test_variables_storage_keys(variables_service, storage, test_company):
+async def test_variables_storage_keys(variables_service, storage, test_company, flow_repo):
     """Тест правильности формата ключей в Storage"""
     import json
     
@@ -242,7 +242,7 @@ async def test_variables_storage_keys(variables_service, storage, test_company):
 
 
 @pytest.mark.asyncio
-async def test_variables_singleton():
+async def test_variables_singleton(flow_repo):
     """Тест глобального экземпляра VariablesService"""
     service1 = get_variables_service()
     service2 = get_variables_service()
@@ -251,7 +251,7 @@ async def test_variables_singleton():
 
 
 @pytest.mark.asyncio
-async def test_variables_update(variables_service):
+async def test_variables_update(variables_service, flow_repo):
     """Тест обновления существующей переменной"""
     await variables_service.set_var("update_var", "old_value", is_secret=False)
     value = await variables_service.get_var("update_var")
@@ -270,7 +270,7 @@ async def test_variables_update(variables_service):
 
 
 @pytest.mark.asyncio
-async def test_variables_complex_resolve(variables_service):
+async def test_variables_complex_resolve(variables_service, flow_repo):
     """Тест сложной резолюции с вложенными структурами"""
     await variables_service.set_var("api_key", "sk-123", is_secret=True)
     await variables_service.set_var("bot_name", "Test Bot", is_secret=False)
@@ -308,7 +308,7 @@ async def test_variables_complex_resolve(variables_service):
 
 
 @pytest.mark.asyncio
-async def test_flow_variables_resolution(variables_service, storage):
+async def test_flow_variables_resolution(variables_service, storage, flow_repo):
     """Тест резолюции переменных в FlowConfig.variables"""
     from app.models import FlowConfig
     
@@ -341,7 +341,7 @@ async def test_flow_variables_resolution(variables_service, storage):
 
 
 @pytest.mark.asyncio
-async def test_platform_config_resolution(variables_service, storage):
+async def test_platform_config_resolution(variables_service, storage, flow_repo):
     """Тест резолюции @var:key в platform config"""
     from app.models import FlowConfig
     
@@ -373,7 +373,7 @@ async def test_platform_config_resolution(variables_service, storage):
 
 
 @pytest.mark.asyncio
-async def test_nested_flow_variables(variables_service, storage):
+async def test_nested_flow_variables(variables_service, storage, flow_repo):
     """Тест вложенных структур в flow variables"""
     from app.models import FlowConfig
     
@@ -413,7 +413,7 @@ async def test_nested_flow_variables(variables_service, storage):
 
 
 @pytest.mark.asyncio
-async def test_flow_variables_in_runtime(variables_service, storage):
+async def test_flow_variables_in_runtime(variables_service, storage, flow_repo):
     """Полный тест: создание company variable → добавление во flow → доступ из тула"""
     from app.models import FlowConfig
     from app.core.variables import VariableResolver
@@ -465,7 +465,7 @@ async def test_flow_variables_in_runtime(variables_service, storage):
 
 
 @pytest.mark.asyncio
-async def test_variables_in_prompts(variables_service, storage):
+async def test_variables_in_prompts(variables_service, storage, flow_repo):
     """Тест подстановки переменных в промпты с поддержкой вложенных структур"""
     from app.models import FlowConfig
     from app.core.variables import VariableResolver

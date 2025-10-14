@@ -12,7 +12,6 @@
 Это ЭТАЛОН для всех будущих тестов!
 """
 import pytest
-from app.db.repositories import AgentRepository, FlowRepository
 from app.models import AgentConfig, AgentType, CodeMode, ToolReference
 from langchain_core.messages import HumanMessage
 
@@ -24,7 +23,8 @@ async def test_00_reference_architecture(
     flow_factory,
     mock_llm,
     test_helpers,
-    unique_id
+    unique_id,
+    agent_repo
 ):
     """
     Эталонный тест: Supervisor -> Subagent -> Tool
@@ -206,7 +206,6 @@ def greet(name: str) -> str:
     print("   ✅ SimpleAgent создан")
     
     # Проверим что агент сохранился с tools
-    agent_repo = AgentRepository(storage)
     loaded_config = await agent_repo.get("ref_simple_agent")
     assert loaded_config.tools is not None, "Tools не сохранились в БД!"
     assert len(loaded_config.tools) > 0, "Tools пустой список!"
