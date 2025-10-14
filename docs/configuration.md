@@ -26,11 +26,20 @@
     "checkpointer_url": "postgresql://user:password@localhost:5432/dbname"
   },
   "llm": {
-    "default_provider": "openai",
-    "providers": {
-      "openai": {
-        "api_key": "sk-...",
-        "default_model": "gpt-4"
+    "openrouter": {
+      "api_key": "sk-or-v1-...",
+      "enabled": true,
+      "base_url": "https://openrouter.ai/api/v1",
+      "site_url": "https://agents-lab.ru",
+      "site_name": "Agent Lab"
+    },
+    "default_model": "anthropic/claude-sonnet-4.5",
+    "models": {
+      "anthropic/claude-sonnet-4.5": {
+        "temperature": 0.2,
+        "max_tokens": 10000,
+        "input_cost_per_token": 0.00003,
+        "output_cost_per_token": 0.00015
       }
     }
   }
@@ -68,6 +77,10 @@ export SERVER__PORT=8002
 # Использовать другую БД
 export DATABASE__URL="postgresql+asyncpg://user:pass@localhost:5433/mydb"
 
+# Настроить OpenRouter
+export LLM__OPENROUTER__API_KEY="sk-or-v1-..."
+export LLM__DEFAULT_MODEL="anthropic/claude-sonnet-4.5"
+
 # Включить debug режим
 export SERVER__DEBUG=true
 
@@ -87,8 +100,9 @@ services:
       - DATABASE__URL=postgresql+asyncpg://user:pass@postgres:5432/dbname
       - DATABASE__CHECKPOINTER_URL=postgresql://user:pass@postgres:5432/dbname
       
-      # Меняем провайдер LLM
-      - LLM__DEFAULT_PROVIDER=gemini
+      # Настройка OpenRouter
+      - LLM__OPENROUTER__API_KEY=sk-or-v1-...
+      - LLM__DEFAULT_MODEL=anthropic/claude-sonnet-4.5
 ```
 
 #### Продакшн
@@ -96,7 +110,8 @@ services:
 ```bash
 # .env файл
 DATABASE__URL=postgresql+asyncpg://prod_user:secure_pass@db.example.com:5432/prod_db
-LLM__PROVIDERS__OPENAI__API_KEY=sk-prod-key-...
+LLM__OPENROUTER__API_KEY=sk-or-v1-prod-key-...
+LLM__DEFAULT_MODEL=anthropic/claude-sonnet-4.5
 SERVER__DEBUG=false
 ```
 
@@ -200,21 +215,21 @@ app:
 ```json
 {
   "llm": {
-    "providers": {
-      "openai": {
-        "api_key": "sk-dev-key-..."
-      }
-    }
+    "openrouter": {
+      "api_key": "sk-or-v1-dev-key-..."
+    },
+    "default_model": "anthropic/claude-sonnet-4.5"
   }
 }
 ```
 
 **Продакшн:**
 ```bash
-export LLM__PROVIDERS__OPENAI__API_KEY="sk-prod-key-..."
+export LLM__OPENROUTER__API_KEY="sk-or-v1-prod-key-..."
+export LLM__DEFAULT_MODEL="anthropic/claude-opus-4"
 ```
 
-**Результат:** В продакшне используется продакшн ключ, в разработке - dev ключ
+**Результат:** В продакшне используется продакшн ключ и более мощная модель, в разработке - dev ключ и базовая модель
 
 ## Проверка конфигурации
 
@@ -224,7 +239,8 @@ from app.core.config import settings
 # Посмотреть текущие значения
 print(f"Database URL: {settings.database.url}")
 print(f"Server Port: {settings.server.port}")
-print(f"LLM Provider: {settings.llm.default_provider}")
+print(f"LLM Default Model: {settings.llm.default_model}")
+print(f"OpenRouter Enabled: {settings.llm.openrouter.enabled}")
 ```
 
 ## Рекомендации
@@ -252,9 +268,11 @@ from app.core.config import settings
 
 # Проверить ENV
 print(f"ENV DATABASE__URL: {os.getenv('DATABASE__URL')}")
+print(f"ENV LLM__OPENROUTER__API_KEY: {os.getenv('LLM__OPENROUTER__API_KEY')}")
 
 # Проверить итоговое значение
 print(f"Settings database.url: {settings.database.url}")
+print(f"Settings llm.default_model: {settings.llm.default_model}")
 ```
 
 ### Логи загрузки конфигурации
@@ -283,3 +301,33 @@ DATABASE__URL=postgresql+asyncpg://...
 Обрати внимание:
 - Двойное подчеркивание `__` вместо одинарного `_`
 - Префикс `postgresql+asyncpg` для asyncpg драйвера
+
+## Секции конфигурации
+
+### LLM
+
+Подробная документация: [LLM →](llm.md)
+
+Основные параметры:
+- `llm.openrouter.api_key` - API ключ OpenRouter
+- `llm.openrouter.enabled` - включить OpenRouter
+- `llm.default_model` - модель по умолчанию
+- `llm.models.*` - настройки отдельных моделей
+
+### Database
+
+- `database.url` - URL для asyncpg (async операции)
+- `database.checkpointer_url` - URL для psycopg (checkpointer)
+
+### Server
+
+- `server.env` - окружение (local, production, staging)
+- `server.host` - хост сервера
+- `server.port` - порт сервера (по умолчанию 8001)
+- `server.debug` - режим отладки
+
+### Auth
+
+- `auth.enabled` - включить авторизацию
+- `auth.secret_key` - секретный ключ для сессий
+- `auth.providers.*` - провайдеры OAuth

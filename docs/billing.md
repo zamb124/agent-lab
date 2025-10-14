@@ -52,7 +52,7 @@ class UsageRecord:
     company_id: str
     session_id: Optional[str]
     usage_type: UsageType  # TOOL_CALL, LLM_REQUEST, etc
-    resource_name: str     # "openai:gpt-4", "tool:weather_api"
+    resource_name: str     # "llm:anthropic/claude-sonnet-4.5", "tool:weather_api"
     cost: float           # Списанная сумма в рублях
     quantity: int         # Количество (токены, вызовы)
     metadata: Dict
@@ -68,26 +68,22 @@ class UsageRecord:
 ```python
 TARIFF_PRICES = {
     TariffPlan.FREE: {
-        "openai": {},      # Базовая цена
-        "gemini": {},
+        "llm": {},         # Базовая цена для всех моделей через OpenRouter
         "tools": {},
     },
     TariffPlan.BASIC: {
-        "openai": {
-            "gpt-4": 0.8,        # Скидка 20%
-            "gpt-3.5-turbo": 0.8,
+        "llm": {
+            "anthropic/claude-sonnet-4.5": 0.8,   # Скидка 20%
+            "openai/gpt-4o": 0.8,
         },
-        "gemini": {"*": 0.8},  # Для всех моделей
         "tools": {"*": 0.7},    # Скидка 30%
     },
     TariffPlan.PREMIUM: {
-        "openai": {"*": 0.5},   # Скидка 50%
-        "gemini": {"*": 0.5},
+        "llm": {"*": 0.5},      # Скидка 50% на все модели
         "tools": {"*": 0.3},    # Скидка 70%
     },
     TariffPlan.ENTERPRISE: {
-        "openai": {"*": 0.0},   # Бесплатно
-        "gemini": {"*": 0.0},
+        "llm": {"*": 0.0},      # Бесплатно
         "tools": {"*": 0.0},
     }
 }
@@ -97,28 +93,34 @@ TARIFF_PRICES = {
 
 Определены в `BillingService._get_base_resource_cost()`:
 
-### LLM (за запрос)
+### LLM (за токен через OpenRouter)
+
+Стоимость рассчитывается по токенам (input и output отдельно):
 
 ```python
-llm_base_prices = {
-    "openai": {
-        "gpt-4": 1.0,
-        "gpt-4o": 0.8,
-        "gpt-3.5-turbo": 0.1,
+# Настраивается в conf.json
+llm_prices = {
+    "anthropic/claude-sonnet-4.5": {
+        "input_cost_per_token": 0.00003,   # ₽ за токен
+        "output_cost_per_token": 0.00015,  # ₽ за токен
     },
-    "gemini": {
-        "gemini-2.0-flash-exp": 0.2,
-        "gemini-2.5-pro": 0.5,
-        "gemini-1.5-flash": 0.15,
+    "anthropic/claude-opus-4": {
+        "input_cost_per_token": 0.00015,
+        "output_cost_per_token": 0.00075,
     },
-    "yandex": {
-        "yandexgpt/latest": 0.3,
+    "openai/gpt-4o": {
+        "input_cost_per_token": 0.000225,
+        "output_cost_per_token": 0.0009,
     },
-    "anthropic": {
-        "claude-3-sonnet": 0.7,
-    }
 }
 ```
+
+**Формула**:
+```
+Стоимость = (input_tokens × input_cost_per_token) + (output_tokens × output_cost_per_token)
+```
+
+Подробнее: [LLM документация](llm.md)
 
 ### Инструменты (за вызов)
 
@@ -136,7 +138,7 @@ tool_base_prices = {
 
 Все ресурсы именуются по формату `category:resource`:
 
-- LLM: `openai:gpt-4`, `gemini:gemini-2.0-flash-exp`
+- LLM: `llm:anthropic/claude-sonnet-4.5`, `llm:openai/gpt-4o`
 - Tools: `tool:weather_api`, `tool:calculator`
 
 ## Расчет итоговой стоимости
@@ -147,15 +149,17 @@ tool_base_prices = {
 
 **Примеры**:
 
-1. FREE план, OpenAI GPT-4:
-   - Базовая: 1.0₽
+1. FREE план, Claude Sonnet 4.5:
+   - Input: 1000 токенов × 0.00003₽ = 0.03₽
+   - Output: 500 токенов × 0.00015₽ = 0.075₽
+   - Базовая: 0.105₽
    - Множитель: 1.0 (нет скидки)
-   - Итого: 1.0₽
+   - **Итого: 0.105₽**
 
-2. BASIC план, OpenAI GPT-4:
-   - Базовая: 1.0₽
+2. BASIC план, Claude Sonnet 4.5:
+   - Базовая: 0.105₽
    - Множитель: 0.8 (скидка 20%)
-   - Итого: 0.8₽
+   - **Итого: 0.084₽**
 
 3. PREMIUM план, tool:weather_api:
    - Базовая: 0.1₽
@@ -196,21 +200,29 @@ def calculate(expression: str) -> str:
 
 ## LLM биллинг
 
-LLM автоматически оборачиваются в `ChatOpenAIWithBilling` при создании:
+LLM автоматически оборачиваются в `ChatOpenAIWithBilling` при создании через фабрику:
 
 ```python
+from app.core.llm_factory import get_llm
+
 # Создание LLM (автоматически с биллингом)
-llm = get_llm("openai", "gpt-4")
+llm = get_llm("anthropic/claude-sonnet-4.5")
 
 # При вызове:
 result = await llm.ainvoke("Привет!")
 # Автоматически:
 # 1. Проверяется баланс компании через can_use_resource()
-# 2. Выполняется запрос
-# 3. Списываются средства через record_usage()
+# 2. Выполняется запрос к OpenRouter
+# 3. Извлекаются токены из response
+# 4. Рассчитывается стоимость (input + output)
+# 5. Списываются средства через record_usage()
 ```
 
-**Файл**: `app/core/llm_billing_wrapper.py`
+**Файлы**: 
+- `app/core/llm_factory.py` - фабрика LLM
+- `app/core/llm_billing_wrapper.py` - биллинг обертка
+
+**Подробнее**: [LLM документация](llm.md)
 
 ## Проверки перед использованием
 
@@ -285,7 +297,7 @@ stats = await billing_service.get_company_usage_stats("company_id")
     "total_cost": 1250.50,      # Общая стоимость за месяц
     "total_calls": 15420,       # Общее количество вызовов
     "by_resource": {
-        "openai:gpt-4": {
+        "llm:anthropic/claude-sonnet-4.5": {
             "cost": 900.0,
             "calls": 300
         },
@@ -347,17 +359,22 @@ await migrator.run_full_migration()
 
 ## Настройка базовых цен
 
-Чтобы изменить базовые цены, отредактируйте:
+Для LLM цены настраиваются в конфигурации `conf.json`:
 
-`app/services/billing_service.py` → `_get_base_resource_cost()`
-
-```python
-llm_base_prices = {
-    "openai": {
-        "gpt-4": 2.0,  # Изменить базовую цену
+```json
+{
+  "llm": {
+    "models": {
+      "anthropic/claude-sonnet-4.5": {
+        "input_cost_per_token": 0.00003,
+        "output_cost_per_token": 0.00015
+      }
     }
+  }
 }
 ```
+
+Подробнее: [LLM документация](llm.md)
 
 ## Настройка тарифных множителей
 
@@ -409,7 +426,7 @@ billing_service = BillingService()
 can_use, reason = await billing_service.can_use_resource(
     user=current_user,
     company=current_company,
-    resource_name="openai:gpt-4"
+    resource_name="llm:anthropic/claude-sonnet-4.5"
 )
 
 if not can_use:

@@ -100,6 +100,20 @@ def get_weather(city: str) -> str:
 
 **Файл**: `app/services/billing_service.py`
 
+### LLM Factory
+
+Создание LLM через OpenRouter с автоматическим биллингом:
+- Единый API для всех провайдеров (OpenAI, Anthropic, Google и др.)
+- Автоматический учет токенов и стоимости
+- Mock модели для тестов
+- Поддержка настройки через конфигурацию
+
+**Файлы**: 
+- `app/core/llm_factory.py` - фабрика LLM
+- `app/core/llm_billing_wrapper.py` - биллинг обертка
+
+**Подробнее**: [LLM документация](llm.md)
+
 ### Identity System
 
 Система авторизации с поддержкой:

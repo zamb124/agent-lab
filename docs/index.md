@@ -34,6 +34,7 @@
 
 - [Deployment →](deployment.md)
 - [Конфигурация →](configuration.md)
+- [LLM →](llm.md)
 
 ---
 
@@ -76,5 +77,6 @@
 **Для разработчиков:**
 - [API документация](api.md) - интеграция и разработка
 - [Архитектура](architecture.md) - как устроена система
+- [LLM и OpenRouter](llm.md) - настройка языковых моделей
 - [Интеграции](integrations/amocrm/README.md) - подключение внешних сервисов  
 
