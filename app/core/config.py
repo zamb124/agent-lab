@@ -154,11 +154,10 @@ class WhatsAppConfig(BaseModel):
 
 
 class NanoBananaConfig(BaseModel):
-    """Конфигурация Nano Banana (Gemini Image Generation)"""
+    """Конфигурация Nano Banana (Gemini Image Generation через OpenRouter)"""
 
     enabled: bool = False
-    api_key: Optional[str] = None
-    model_name: str = "gemini-2.5-flash-image-preview"
+    model_name: str = "google/gemini-2.5-flash-image-preview"
     timeout: int = 60
 class AmoCRMConfig(BaseModel):
     """Конфигурация AmoCRM интеграции. Временно тут, пока не настроим OAuth"""

@@ -385,11 +385,24 @@ class GraphDefinition(BaseModel):
     def _determine_node_type(node_func) -> NodeType:
         """Определяет тип ноды по функции"""
         if hasattr(node_func, '__name__'):
+            # Проверяем является ли это методом класса агента
+            if hasattr(node_func, '__self__'):
+                # Это bound method агента
+                return NodeType.AGENT_NODE
+            
+            # Если это свободная функция с "_function" в имени - это FUNCTION_NODE
             if "_function" in node_func.__name__ or node_func.__name__.endswith("_function"):
                 return NodeType.FUNCTION_NODE
-            else:
-                return NodeType.AGENT_NODE
-        return NodeType.AGENT_NODE
+            
+            # Если это свободная функция с "_node" в имени - тоже FUNCTION_NODE
+            if "_node" in node_func.__name__ or node_func.__name__.endswith("_node"):
+                return NodeType.FUNCTION_NODE
+            
+            # По умолчанию свободная функция = FUNCTION_NODE
+            # AGENT_NODE только если это метод агента (с __self__)
+            return NodeType.FUNCTION_NODE
+        
+        return NodeType.FUNCTION_NODE
 
 
 class ToolReference(BuilderEntity):

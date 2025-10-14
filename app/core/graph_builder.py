@@ -173,15 +173,34 @@ class GraphBuilder:
     async def _create_agent_node(self, node, llm_config: Optional[LLMConfig] = None):
         """Создает ноду-агента"""
 
-        # Поддерживаем и agent_id и function_class
+        # Поддерживаем несколько вариантов указания агента:
+        # 1. node.params['agent_id'] - строка с ID агента (для UI/API)
+        # 2. node.function_class - путь к классу агента (для миграции из кода)
+        # 3. node.id как agent_id (если нода названа по имени агента)
         agent_id = node.params.get("agent_id") or node.function_class
+        
+        if not agent_id:
+            # Попытка использовать id ноды как agent_id
+            logger.warning(
+                f"Нода агента {node.id} не содержит agent_id или function_class, "
+                f"пытаемся использовать id ноды как agent_id"
+            )
+            agent_id = node.id
+        
         if not agent_id:
             raise ValueError(
-                f"Нода агента {node.id} должна содержать agent_id или function_class"
+                f"Нода агента {node.id} должна содержать agent_id в params или function_class. "
+                f"Доступные поля: params={node.params}, function_class={node.function_class}"
             )
 
         agent_factory = AgentFactory()
-        agent = await agent_factory.get_agent(agent_id)
+        
+        try:
+            agent = await agent_factory.get_agent(agent_id)
+        except Exception as e:
+            raise ValueError(
+                f"Не удалось загрузить агента {agent_id} для ноды {node.id}: {e}"
+            ) from e
 
         async def agent_node(state: State) -> State:
             """Функция ноды агента"""

@@ -150,7 +150,8 @@ weather_flow_config = FlowConfig(
         # Вложенные структуры
         "units": {
             "temperature": "celsius",
-            "wind": "ms"
+            "wind": "ms",
+            "wind2": ""
         },
         
         # Смешанное использование
