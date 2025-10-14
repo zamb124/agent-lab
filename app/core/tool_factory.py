@@ -22,7 +22,39 @@ logger = logging.getLogger(__name__)
 
 
 class ToolFactory:
-    """Фабрика для создания инструментов"""
+    """Фабрика для создания инструментов с кэшированием"""
+
+    def __init__(self):
+        self._tool_cache = {}
+        self._module_cache = {}
+
+    def _get_cached_module(self, module_path: str, reload: bool = False):
+        """
+        Получает модуль с кэшированием.
+        
+        Args:
+            module_path: Путь к модулю
+            reload: Принудительно перезагрузить модуль
+            
+        Returns:
+            Загруженный модуль
+        """
+        if reload or module_path not in self._module_cache:
+            module = importlib.import_module(module_path)
+            if reload and module_path in self._module_cache:
+                module = importlib.reload(module)
+            self._module_cache[module_path] = module
+            logger.debug(f"Модуль загружен и кэширован: {module_path}")
+        else:
+            logger.debug(f"Модуль взят из кэша: {module_path}")
+        
+        return self._module_cache[module_path]
+
+    def clear_cache(self):
+        """Очищает кэш загруженных modules и tools"""
+        self._tool_cache.clear()
+        self._module_cache.clear()
+        logger.info("Кэш ToolFactory очищен")
 
     async def create_tools(self, tool_refs: List[ToolReference]) -> List[Any]:
         """
@@ -58,9 +90,9 @@ class ToolFactory:
         # Создаем базовый инструмент
         if tool_id.startswith("mcp:"):
             tool = await self._create_mcp_tool(ref)
-        elif "agents" in tool_id:
+        elif tool_id.startswith("agent:") or "agents" in tool_id:
             tool = await self._create_agent_tool(ref)
-        elif "flows" in tool_id:
+        elif tool_id.startswith("flow:") or "flows" in tool_id:
             tool = await self._create_flow_tool(ref)
         elif ref.code_mode == CodeMode.INLINE_CODE:
             tool = await self._create_inline_code_tool(ref)
@@ -141,8 +173,11 @@ class ToolFactory:
 
         try:
             # Разделяем путь на модуль и имя объекта
+            if "." not in function_path:
+                raise ValueError(f"function_path должен содержать точку (модуль.функция): {function_path}")
+            
             module_path, name = function_path.rsplit(".", 1)
-            module = importlib.import_module(module_path)
+            module = self._get_cached_module(module_path)
             tool_obj = getattr(module, name)
 
             # Если это класс, создаем экземпляр

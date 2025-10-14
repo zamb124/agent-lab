@@ -846,7 +846,7 @@ class AgentConfig(BuilderEntity):
         
         agent_config = await cls.from_class(agent_class=agent_class)
         
-        await migrator.storage.set_agent_config(agent_config)
+        await migrator.persister.save_agent(agent_config)
         
         # Резолвим @var: ссылки в local_variables и store
         from ..services.variables_service import get_variables_service
@@ -1214,7 +1214,8 @@ class FlowConfig(BuilderEntity):
         if not isinstance(flow_config_orig, cls):
             raise ValueError(f"Объект {flow_id} не является FlowConfig")
         
-        existing_flow = await migrator.storage.get_flow_config(flow_id)
+        flow_repo = migrator.persister.flow_repository
+        existing_flow = await flow_repo.get(flow_id)
         
         flow_config = cls.from_flow_config_object(flow_config_orig, flow_id)
         
@@ -1229,7 +1230,7 @@ class FlowConfig(BuilderEntity):
         elif not flow_config.created_at:
             flow_config.created_at = now
         
-        await migrator.storage.set_flow_config(flow_config)
+        await migrator.persister.save_flow(flow_config)
         
         from ..services.variables_service import get_variables_service
         variables_service = get_variables_service()

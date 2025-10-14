@@ -711,7 +711,7 @@ class TestWhatsAppInterfaceRegistration:
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_phone_response)
             
-            with patch('app.core.storage.Storage.list_by_prefix') as mock_list:
+            with patch('app.db.repositories.Storage.list_by_prefix') as mock_list:
                 mock_list.return_value = ["company:test:flow:test_flow"]
                 
                 result = await WhatsAppInterface.register(flow_id, username, platform_config)

@@ -1,24 +1,19 @@
 """
-Единый базовый класс для всех агентов.
-Содержит логику для автоматической сборки графов на основе конфигурации.
+Базовый абстрактный класс для всех агентов.
+Определяет общий интерфейс и функциональность для всех типов агентов.
 """
 
 import logging
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Union
 
-from langgraph.prebuilt import create_react_agent
 from langchain_core.runnables import Runnable
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
-from app.models import AgentConfig, AgentType
-from app.core.llm_factory import get_llm
-from app.core.checkpointer import get_checkpointer
+from app.models import AgentConfig
+from app.core.variables import set_state_in_context
 from app.core.container import get_container
-from app.core.state import State
-from app.core.variables import VariableResolver, set_state_in_context
-from app.core.state_modifier import render_state_variables
 from langgraph.errors import GraphInterrupt
 from langchain_core.messages import HumanMessage
 
@@ -83,109 +78,16 @@ class BaseAgent(ABC):
         self._tools = tools
         logger.info(f"🔧 Установлено {len(tools)} tools для агента {self.config.agent_id}")
 
+    @abstractmethod
     async def compile_graph(self) -> Runnable:
         """
-        Главный метод. Читает self.config и собирает граф заново каждый раз.
+        Абстрактный метод для компиляции графа агента.
+        Каждый подкласс должен реализовать свою логику компиляции.
+        
+        Returns:
+            Скомпилированный граф LangGraph
         """
-        logger.info(f"🔥 ВЫЗВАН compile_graph для агента: {self.config.agent_id} (тип: {self.config.type})")
-
-        if self.config.type == AgentType.STATEGRAPH:
-            return await self._compile_stategraph()
-        elif self.config.type == AgentType.REACT:
-            return await self._compile_react_graph()
-        else:
-            raise ValueError(f"Неизвестный тип агента: {self.config.type}")
-
-    async def _compile_react_graph(self) -> Runnable:
-        """Собирает стандартный ReAct-граф"""
-        logger.info(f"🔥 ВЫЗВАН _compile_react_graph для агента: {self.config.agent_id}")
-        
-        if not self.config.prompt:
-            raise ValueError(f"ReAct агент {self.config.agent_id} требует prompt")
-
-        # Получаем LLM на основе конфигурации агента
-        if self.config.llm_config:
-            llm_kwargs = {}
-            if self.config.llm_config.temperature is not None:
-                llm_kwargs["temperature"] = self.config.llm_config.temperature
-            if self.config.llm_config.max_tokens is not None:
-                llm_kwargs["max_tokens"] = self.config.llm_config.max_tokens
-
-            llm = get_llm(
-                model=self.config.llm_config.model,
-                **llm_kwargs,
-            )
-        else:
-            llm = get_llm()
-        tools = await self.get_tools()
-
-        # ЭТАП 1: Рендерим статические переменные (company_name, current_date и т.д.)
-        local_vars = self.config.local_variables if hasattr(self.config, 'local_variables') else {}
-        static_rendered_prompt = VariableResolver.render_template(
-            self.config.prompt,
-            local_vars=local_vars
-        )
-        logger.info(f"📝 Статические переменные подставлены для {self.config.agent_id}")
-
-        # ЭТАП 2: Создаем функцию prompt для динамических переменных из state
-        def dynamic_prompt(state: State) -> str:
-            """Динамический промпт, который рендерится перед каждым вызовом LLM"""
-            # Создаем контекст для подстановки
-            context = {
-                "store": state.get("store", {}),
-                "user_id": state.get("user_id", ""),
-                "session_id": state.get("session_id", ""),
-                "task_id": state.get("task_id", ""),
-                "remaining_steps": state.get("remaining_steps", 0),
-            }
-            
-            # Добавляем все ключи из store на верхний уровень для удобства
-            store = state.get("store", {})
-            if isinstance(store, dict):
-                for key, value in store.items():
-                    if key not in context:
-                        context[key] = value
-            
-            # Рендерим store переменные
-            rendered = render_state_variables(
-                static_rendered_prompt,
-                context=context,
-                full_state=state
-            )
-            
-            return rendered
-        
-        logger.info(f"🔄 Dynamic prompt создан для {self.config.agent_id}")
-
-        # Создаем ReAct агента с State, checkpointer и dynamic prompt
-        checkpointer = await get_checkpointer()
-        graph = create_react_agent(
-            model=llm,
-            tools=tools,
-            prompt=dynamic_prompt,
-            checkpointer=checkpointer,
-            state_schema=State
-        )
-
-        logger.info(f"ReAct граф создан для агента {self.config.agent_id}")
-        return graph
-
-    async def _compile_stategraph(self) -> Runnable:
-        """Собирает кастомный StateGraph на основе graph_definition"""
-        if not self.config.graph_definition:
-            raise ValueError(
-                f"StateGraph агент {self.config.agent_id} требует graph_definition"
-            )
-
-        # Используем GraphBuilder через контейнер
-        container = get_container()
-        builder = container.get_graph_builder()
-        graph = await builder.build_from_definition(
-            self.config.graph_definition, self.config.llm_config
-        )
-
-        logger.info(f"StateGraph граф создан для агента {self.config.agent_id}")
-        return graph
+        pass
 
     async def ainvoke(
         self, input_data: Dict[str, Any], config: Optional[Dict[str, Any]] = None

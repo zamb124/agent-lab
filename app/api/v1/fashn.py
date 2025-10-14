@@ -21,7 +21,7 @@ from ...core.file_processor import FileProcessor, get_default_file_processor
 from ...tools.fashn_tools import virtual_try_on
 from ...tools.nano_banana_tools import generate_images
 from ...core.context import get_context
-from ...core.storage import Storage
+from app.db.repositories import Storage
 logger = logging.getLogger(__name__)
 
 router = APIRouter(

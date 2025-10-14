@@ -12,8 +12,8 @@ from typing import Callable, Dict, Optional
 from unittest.mock import MagicMock
 from dotenv import load_dotenv
 
-from app.core.storage import Storage
-from app.core.migrator import Migrator
+from app.db.repositories import Storage
+from app.core.migration import Migrator
 from app.core.agent_factory import AgentFactory
 from app.core.flow_factory import FlowFactory
 from app.core.tool_factory import ToolFactory

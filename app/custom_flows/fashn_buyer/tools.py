@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 from langchain_core.tools import tool
 
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.core.file_processor import get_default_file_processor
 from app.core.context import get_context
 from .models import (

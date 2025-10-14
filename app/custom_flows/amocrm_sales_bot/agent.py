@@ -2,13 +2,13 @@
 Реактивный агент ассистента закупщика для сбора информации о брендовых вещах.
 """
 
-from app.agents.base import BaseAgent
+from app.agents.react_agent import ReActAgent
 from app.core.proxy_setup import configure_proxy_from_settings
 
 configure_proxy_from_settings()
 
 
-class AmocrmSalesBot(BaseAgent):
+class AmocrmSalesBot(ReActAgent):
     """Агент продажного менеджера для работы с клиентами AmoCRM"""
 
     name = "amocrm_sales_bot_agent"

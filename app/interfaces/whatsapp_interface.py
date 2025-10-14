@@ -10,7 +10,7 @@ import hmac
 from typing import Dict, Any, Optional, List
 import httpx
 from app.interfaces.base import BaseInterface, Message
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.core.config import settings
 from app.core.audio_processor import get_default_audio_processor
 from app.services.variables_service import get_variables_service

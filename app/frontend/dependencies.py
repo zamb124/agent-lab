@@ -7,7 +7,7 @@ Dependency Injection для фронтенда
 from typing import Annotated
 from fastapi import Depends
 
-from app.core.storage import Storage
+from app.db.repositories import Storage, AgentRepository, FlowRepository, TaskRepository, SessionRepository, ToolRepository
 from app.core.container import get_container
 from app.core.context import get_context
 from app.models import Context
@@ -25,6 +25,36 @@ async def get_storage() -> Storage:
     """
     container = get_container()
     return container.get_storage()
+
+
+async def get_agent_repository() -> AgentRepository:
+    """Получить AgentRepository из контейнера"""
+    container = get_container()
+    return container.get_agent_repository()
+
+
+async def get_flow_repository() -> FlowRepository:
+    """Получить FlowRepository из контейнера"""
+    container = get_container()
+    return container.get_flow_repository()
+
+
+async def get_task_repository() -> TaskRepository:
+    """Получить TaskRepository из контейнера"""
+    container = get_container()
+    return container.get_task_repository()
+
+
+async def get_session_repository() -> SessionRepository:
+    """Получить SessionRepository из контейнера"""
+    container = get_container()
+    return container.get_session_repository()
+
+
+async def get_tool_repository() -> ToolRepository:
+    """Получить ToolRepository из контейнера"""
+    container = get_container()
+    return container.get_tool_repository()
 
 
 async def get_canvas_service(
@@ -59,3 +89,8 @@ async def get_request_context() -> Context:
 StorageDep = Annotated[Storage, Depends(get_storage)]
 CanvasServiceDep = Annotated[CanvasService, Depends(get_canvas_service)]
 ContextDep = Annotated[Context, Depends(get_request_context)]
+AgentRepositoryDep = Annotated[AgentRepository, Depends(get_agent_repository)]
+FlowRepositoryDep = Annotated[FlowRepository, Depends(get_flow_repository)]
+TaskRepositoryDep = Annotated[TaskRepository, Depends(get_task_repository)]
+SessionRepositoryDep = Annotated[SessionRepository, Depends(get_session_repository)]
+ToolRepositoryDep = Annotated[ToolRepository, Depends(get_tool_repository)]

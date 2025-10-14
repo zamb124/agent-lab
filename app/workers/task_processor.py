@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone
 
 from app.core.config import settings
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.core.container import get_container
 from app.models import TaskStatus, SessionConfig, SessionStatus
 from app.core.context import set_context, clear_context, get_context
@@ -30,6 +30,7 @@ class TaskProcessor:
         self.storage = Storage()
         container = get_container()
         self.agent_factory = container.get_agent_factory()
+        self.task_repository = container.get_task_repository()
         self.running = False
 
     async def start(self):
@@ -68,7 +69,7 @@ class TaskProcessor:
     async def _process_pending_tasks(self):
         """Обработка задач в статусе pending"""
         logger.debug(f"🔍 Ищем pending задачи (limit={settings.worker.max_workers})...")
-        tasks = await self.storage.get_pending_tasks(limit=settings.worker.max_workers)
+        tasks = await self.task_repository.list_pending(limit=settings.worker.max_workers)
 
         if not tasks:
             logger.debug("📋 Нет задач для обработки")
@@ -107,7 +108,7 @@ class TaskProcessor:
         try:
             task.status = TaskStatus.PROCESSING
             task.started_at = datetime.now(timezone.utc)
-            await self.storage.set_task_config(task)
+            await self.task_repository.set(task)
 
             flow_config = await self.storage.get_flow_config(task.flow_id)
             if not flow_config:
@@ -183,7 +184,7 @@ class TaskProcessor:
                 }
 
                 logger.info(f"🔄 Сохраняем задачу с interrupt: {task.task_id}")
-                await self.storage.set_task_config(task)
+                await self.task_repository.set(task)
                 logger.info(f"🔄 Задача с interrupt сохранена: {task.task_id}")
                 
                 # Обновляем статистику сессии
@@ -211,7 +212,7 @@ class TaskProcessor:
             )
             task.completed_at = datetime.now(timezone.utc)
 
-            await self.storage.set_task_config(task)
+            await self.task_repository.set(task)
             logger.info(f"✅ {task.task_id} завершена")
             
             # ВАЖНО: Обновляем статистику сессии (Database-First)
@@ -239,7 +240,7 @@ class TaskProcessor:
                 "question": str(interrupt.value),
                 "interrupt_data": str(interrupt),
             }
-            await self.storage.set_task_config(task)
+            await self.task_repository.set(task)
             
             # Обновляем статистику сессии
             await self._update_session_stats(task.session_id, user_message)

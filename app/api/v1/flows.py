@@ -11,8 +11,9 @@ from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List
 
 from app.interfaces.api_interface import api_interface
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.models import TaskStatus
+from app.frontend.dependencies import FlowRepositoryDep
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ class TaskResponse(BaseModel):
 
 
 @router.post("/{flow_id}/message", response_model=FlowMessageResponse, summary="Отправить сообщение боту")
-async def send_message_to_flow(flow_id: str, request: FlowMessageRequest):
+async def send_message_to_flow(flow_id: str, request: FlowMessageRequest, flow_repo: FlowRepositoryDep):
     """
     Отправляет текстовое сообщение боту для обработки.
     
@@ -102,8 +103,7 @@ async def send_message_to_flow(flow_id: str, request: FlowMessageRequest):
         task_id для polling и session_id для продолжения диалога
     """
     # Проверяем что флоу существует и поддерживает API
-    storage = Storage()
-    flow_config = await storage.get_flow_config(flow_id)
+    flow_config = await flow_repo.get(flow_id)
 
     if not flow_config:
         raise HTTPException(status_code=404, detail=f"Флоу {flow_id} не найден")
@@ -335,7 +335,7 @@ async def clear_session(flow_id: str, session_id: str):
 
 
 @router.get("/{flow_id}/info", summary="Информация о боте")
-async def get_flow_info(flow_id: str):
+async def get_flow_info(flow_id: str, flow_repo: FlowRepositoryDep):
     """
     Получает информацию о боте: название, описание, поддерживаемые платформы.
     
@@ -348,8 +348,7 @@ async def get_flow_info(flow_id: str):
         Название, описание, список платформ, entry point агент
     """
     try:
-        storage = Storage()
-        flow_config = await storage.get_flow_config(flow_id)
+        flow_config = await flow_repo.get(flow_id)
 
         if not flow_config:
             raise HTTPException(status_code=404, detail=f"Флоу {flow_id} не найден")
@@ -374,7 +373,7 @@ async def get_flow_info(flow_id: str):
 
 
 @router.get("/", summary="Список доступных ботов")
-async def list_flows():
+async def list_flows(flow_repo: FlowRepositoryDep):
     """
     Получает список всех ботов доступных через API.
     
@@ -384,8 +383,6 @@ async def list_flows():
         Массив ботов с их ID, названиями и описаниями
     """
     try:
-        storage = Storage()
-
         # Получаем все флоу (это может быть медленно для большого количества)
         # В реальности лучше сделать отдельный метод в Storage
         flows = []
@@ -394,7 +391,7 @@ async def list_flows():
         test_flows = ["test_flow", "smart_flow", "weather_flow"]
 
         for flow_id in test_flows:
-            flow_config = await storage.get_flow_config(flow_id)
+            flow_config = await flow_repo.get(flow_id)
             if flow_config and "api" in flow_config.platforms:
                 flows.append(
                     {

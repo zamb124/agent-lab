@@ -21,7 +21,7 @@ from .base_provider import BaseAuthProvider
 from .providers.yandex import YandexProvider
 from .providers.google import GoogleProvider
 from ..core.config import settings
-from ..core.storage import Storage
+from app.db.repositories import Storage
 
 logger = logging.getLogger(__name__)
 

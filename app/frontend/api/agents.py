@@ -7,13 +7,14 @@ from typing import List, Optional, Dict, Any
 import uuid
 
 from app.models import AgentConfig, AgentType, CodeMode
-from app.frontend.dependencies import StorageDep
+from app.frontend.dependencies import StorageDep, AgentRepositoryDep
 
 router = APIRouter(prefix="/agents", tags=["builder-agents"])
 
 
 @router.get("/", response_model=List[AgentConfig])
 async def list_agents(
+    agent_repo: AgentRepositoryDep,
     storage: StorageDep,
     public_only: bool = False
 ) -> List[AgentConfig]:
@@ -29,7 +30,7 @@ async def list_agents(
     for key in agent_keys:
         # Извлекаем agent_id из ключа (убираем префикс компании и "agent:")
         agent_id = key.split(":")[-1]  # Берем последнюю часть после ":"
-        agent = await storage.get_agent_config(agent_id)
+        agent = await agent_repo.get(agent_id)
         if agent:
             # Фильтруем по публичности если нужно
             if public_only and not getattr(agent, 'is_public', False):
@@ -40,9 +41,9 @@ async def list_agents(
 
 
 @router.get("/{agent_id:path}", response_model=AgentConfig)
-async def get_agent(agent_id: str, storage: StorageDep) -> AgentConfig:
+async def get_agent(agent_id: str, agent_repo: AgentRepositoryDep) -> AgentConfig:
     """Получить агента по ID"""
-    agent = await storage.get_agent_config(agent_id)
+    agent = await agent_repo.get(agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     return agent
@@ -50,11 +51,11 @@ async def get_agent(agent_id: str, storage: StorageDep) -> AgentConfig:
 
 @router.post("/", response_model=AgentConfig)
 async def create_agent(
+    agent_repo: AgentRepositoryDep,
     name: str = "Новый Agent",
     description: Optional[str] = None,
     agent_type: AgentType = AgentType.REACT,
-    prompt: Optional[str] = None,
-    storage: StorageDep = None
+    prompt: Optional[str] = None
 ) -> AgentConfig:
     """Создать нового агента и сразу сохранить в БД"""
     agent_id = f"agent_{uuid.uuid4().hex[:8]}"
@@ -69,8 +70,8 @@ async def create_agent(
         source="canvas_created"
     )
     
-    # Сразу сохраняем в БД
-    await storage.set_agent_config(agent_config)
+    # Сохраняем в БД через репозиторий
+    await agent_repo.set(agent_config)
     
     return agent_config
 
@@ -79,10 +80,10 @@ async def create_agent(
 async def update_agent(
     agent_id: str,
     updates: Dict[str, Any],
-    storage: StorageDep
+    agent_repo: AgentRepositoryDep
 ) -> AgentConfig:
     """Обновить агента"""
-    agent = await storage.get_agent_config(agent_id)
+    agent = await agent_repo.find_by_id(agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     
@@ -102,25 +103,25 @@ async def update_agent(
     # Валидируем через модель - валидаторы автоматически преобразуют типы
     validated_agent = AgentConfig(**agent_dict)
     
-    await storage.set_agent_config(validated_agent)
+    await agent_repo.set(validated_agent)
     return validated_agent
 
 
 @router.delete("/{agent_id:path}")
-async def delete_agent(agent_id: str, storage: StorageDep):
+async def delete_agent(agent_id: str, agent_repo: AgentRepositoryDep):
     """Удалить агента"""
-    agent = await storage.get_agent_config(agent_id)
+    agent = await agent_repo.find_by_id(agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     
-    await storage.delete_agent_config(agent_id)
+    await agent_repo.delete(agent_id)
     return {"message": "Agent deleted successfully"}
 
 
 @router.get("/{agent_id:path}/graph")
-async def get_agent_graph(agent_id: str, storage: StorageDep) -> Dict[str, Any]:
+async def get_agent_graph(agent_id: str, agent_repo: AgentRepositoryDep) -> Dict[str, Any]:
     """Получить граф агента"""
-    agent = await storage.get_agent_config(agent_id)
+    agent = await agent_repo.find_by_id(agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     
@@ -150,10 +151,10 @@ async def get_agent_graph(agent_id: str, storage: StorageDep) -> Dict[str, Any]:
 async def update_agent_graph(
     agent_id: str,
     graph_data: Dict[str, Any],
-    storage: StorageDep
+    agent_repo: AgentRepositoryDep
 ):
     """Обновить граф агента"""
-    agent = await storage.get_agent_config(agent_id)
+    agent = await agent_repo.find_by_id(agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     
@@ -175,5 +176,5 @@ async def update_agent_graph(
         entry_point=graph_data.get("entry_point", "")
     )
     
-    await storage.set_agent_config(agent)
+    await agent_repo.set(agent)
     return {"message": "Agent graph updated successfully"}

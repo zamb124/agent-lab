@@ -5,7 +5,7 @@
 import asyncio
 import json
 import logging
-from app.core.storage import Storage
+from app.db.repositories import Storage
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

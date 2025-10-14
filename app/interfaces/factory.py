@@ -7,8 +7,9 @@ from app.interfaces.amocrm_interface import AmoCRMInterface
 from app.interfaces.web_interface import WebInterface
 from app.interfaces.api_interface import APIInterface
 from app.interfaces.whatsapp_interface import WhatsAppInterface
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.models import FlowConfig
+from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class InterfaceFactory:
 
     def __init__(self):
         self.storage = Storage()
+        self.flow_repository = get_container().get_flow_repository()
 
     async def create_interface(
         self, platform: str, config: Dict[str, Any]
@@ -50,7 +52,7 @@ class InterfaceFactory:
                 return None
 
             # Загружаем flow config чтобы получить telegram_config
-            flow_config = await self.storage.get_flow_config(flow_id)
+            flow_config = await self.flow_repository.get(flow_id)
             if not flow_config:
                 logger.error(f"Flow {flow_id} не найден")
                 return None
@@ -107,7 +109,7 @@ class InterfaceFactory:
                 logger.error("Нет flow_id для создания WhatsApp интерфейса")
                 return None
 
-            flow_config = await self.storage.get_flow_config(flow_id)
+            flow_config = await self.flow_repository.get(flow_id)
             if not flow_config:
                 logger.error(f"Flow {flow_id} не найден")
                 return None
@@ -159,7 +161,7 @@ class InterfaceFactory:
         flows_to_register = []
 
         if flow_id:
-            flow_config = await self.storage.get_flow_config(flow_id)
+            flow_config = await self.flow_repository.get(flow_id)
             if not flow_config:
                 raise ValueError(f"Flow {flow_id} not found")
 

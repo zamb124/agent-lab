@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 from langchain_core.messages import HumanMessage, AIMessage
 from app.interfaces.base import BaseInterface, Message
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.clients.amo_crm_integration import get_amocrm_client
 from app.core.config import settings
 from app.core.checkpointer import get_checkpointer

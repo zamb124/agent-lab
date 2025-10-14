@@ -6,7 +6,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
 import logging
 import asyncio
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.interfaces.web_interface import web_interface
 from app.core.context import get_context, set_context, clear_context
 from app.models import Context

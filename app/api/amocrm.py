@@ -12,8 +12,9 @@ from pydantic import BaseModel
 
 from app.clients.amo_crm_integration import get_amocrm_client
 from app.core.config import settings
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.interfaces.amocrm_interface import AmoCRMInterface
+from app.frontend.dependencies import FlowRepositoryDep
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -377,7 +378,8 @@ async def handle_message_webhook_with_scope(
 async def amocrm_webhook_with_flow(
     scope_id: str,
     flow_id: str,
-    request: Request
+    request: Request,
+    flow_repo: FlowRepositoryDep
 ):
     """
     Универсальный webhook для AmoCRM с запуском flow через TaskProcessor
@@ -404,8 +406,7 @@ async def amocrm_webhook_with_flow(
         logger.info(f"📩 Webhook AmoCRM для flow {flow_id}")
         logger.info(f"Scope ID: {scope_id}")
 
-        storage = Storage()
-        flow_config = await storage.get_flow_config(flow_id)
+        flow_config = await flow_repo.get(flow_id)
 
         if not flow_config:
             logger.error(f"Flow {flow_id} не найден в БД")

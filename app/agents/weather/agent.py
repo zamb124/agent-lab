@@ -2,7 +2,7 @@
 Простой агент для работы с погодой и путешествиями.
 """
 
-from app.agents.base import BaseAgent
+from app.agents.react_agent import ReActAgent
 from app.tools.standard import ask_user
 from app.tools.weather_tools import suggest_travel, get_weather
 from app.tools.file_tools import read_file
@@ -11,7 +11,7 @@ from app.tools.nano_banana_tools import generate_images
 from app.tools.rag_tools import search_knowledge_base, list_documents_in_knowledge_base
 
 
-class TravelInfoAgent(BaseAgent):
+class TravelInfoAgent(ReActAgent):
     """Субагент для сбора информации о направлении путешествия"""
 
     name = "travel_info_agent"
@@ -47,7 +47,7 @@ class TravelInfoAgent(BaseAgent):
     tools = [ask_user, read_file, "app.tools.session_tools.session_set"]
 
 
-class WeatherAgent(BaseAgent):
+class WeatherAgent(ReActAgent):
     """Агент для помощи с погодой и путешествиями"""
 
     name = "weather_agent"

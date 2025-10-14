@@ -16,7 +16,7 @@ import httpx
 from .core_clients.s3_client import S3ClientFactory, get_default_s3_client
 from .core_clients.cloud_voice_client import get_default_cloud_voice_client
 from app.models import AudioRecord, FileStatus
-from .storage import Storage
+from app.db.repositories import Storage
 from .config import settings
 
 logger = logging.getLogger(__name__)

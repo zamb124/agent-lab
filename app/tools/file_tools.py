@@ -6,7 +6,7 @@ import json
 from typing import Optional
 from langchain_core.tools import tool
 
-from ..core.storage import Storage
+from app.db.repositories import Storage
 from ..core.core_clients.s3_client import get_default_s3_client
 from ..core.config import settings
 

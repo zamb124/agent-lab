@@ -9,7 +9,7 @@ import base64
 from typing import List, Optional
 
 from ..config import settings
-from ..storage import Storage
+from app.db.repositories import Storage
 from .s3_client import S3ClientFactory
 
 logger = logging.getLogger(__name__)

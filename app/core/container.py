@@ -17,11 +17,16 @@ class Container:
         self._tool_factory = None
         self._flow_factory = None
         self._graph_builder = None
+        self._agent_repository = None
+        self._flow_repository = None
+        self._task_repository = None
+        self._session_repository = None
+        self._tool_repository = None
     
     def get_storage(self):
         """Получает Storage (lazy loading)"""
         if self._storage is None:
-            from app.core.storage import Storage
+            from app.db.repositories import Storage
             self._storage = Storage()
         return self._storage
     
@@ -52,6 +57,41 @@ class Container:
             from app.core.graph_builder import GraphBuilder
             self._graph_builder = GraphBuilder()
         return self._graph_builder
+    
+    def get_agent_repository(self):
+        """Получает AgentRepository (lazy loading)"""
+        if self._agent_repository is None:
+            from app.db.repositories import AgentRepository
+            self._agent_repository = AgentRepository(self.get_storage())
+        return self._agent_repository
+    
+    def get_flow_repository(self):
+        """Получает FlowRepository (lazy loading)"""
+        if self._flow_repository is None:
+            from app.db.repositories import FlowRepository
+            self._flow_repository = FlowRepository(self.get_storage())
+        return self._flow_repository
+    
+    def get_task_repository(self):
+        """Получает TaskRepository (lazy loading)"""
+        if self._task_repository is None:
+            from app.db.repositories import TaskRepository
+            self._task_repository = TaskRepository(self.get_storage())
+        return self._task_repository
+    
+    def get_session_repository(self):
+        """Получает SessionRepository (lazy loading)"""
+        if self._session_repository is None:
+            from app.db.repositories import SessionRepository
+            self._session_repository = SessionRepository(self.get_storage())
+        return self._session_repository
+    
+    def get_tool_repository(self):
+        """Получает ToolRepository (lazy loading)"""
+        if self._tool_repository is None:
+            from app.db.repositories import ToolRepository
+            self._tool_repository = ToolRepository(self.get_storage())
+        return self._tool_repository
 
 
 # Глобальный контейнер

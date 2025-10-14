@@ -7,8 +7,8 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
 from app.frontend.core.template_loader import get_templates
 from app.frontend.core.utils import render_with_dashboard
-from app.core.storage import Storage
-from app.core.migrator import Migrator
+from app.db.repositories import Storage
+from app.core.migration import Migrator
 from app.models import FlowConfig
 
 router = APIRouter(prefix="/frontend/store", tags=["store-pages"])

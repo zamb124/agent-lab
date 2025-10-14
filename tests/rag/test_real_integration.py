@@ -75,7 +75,7 @@ class TestRealRAGIntegration:
             search_knowledge_base,
             list_documents_in_knowledge_base
         )
-        from app.core.storage import Storage
+        from app.db.repositories import Storage
         from app.models.rag_models import AgentRAGConfig
         from unittest.mock import MagicMock, AsyncMock
         import json

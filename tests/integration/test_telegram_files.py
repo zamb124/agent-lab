@@ -9,7 +9,7 @@ import uuid
 import httpx
 from unittest.mock import patch, AsyncMock, MagicMock
 
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.models import FileRecord, FileStatus
 
 

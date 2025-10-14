@@ -9,7 +9,7 @@ from pathlib import Path
 
 from app.core.core_clients.s3_client import S3ClientFactory, get_default_s3_client
 from app.models import FileRecord, FileStatus
-from app.core.storage import Storage
+from app.db.repositories import Storage
 
 
 def skip_if_s3_fails(test_func):

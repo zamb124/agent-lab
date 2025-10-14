@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
-from ..core.storage import Storage
+from app.db.repositories import Storage
 from ..core.clients.payment_providers.base_provider import (
     BasePaymentProvider,
     PaymentRequest,

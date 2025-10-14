@@ -11,10 +11,11 @@ from datetime import datetime
 import httpx
 import json
 from app.interfaces.base import BaseInterface, Message
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.core.config import settings
 from app.core.audio_processor import get_default_audio_processor
 from app.services.variables_service import get_variables_service
+
 logger = logging.getLogger(__name__)
 
 
@@ -627,11 +628,13 @@ class TelegramInterface(BaseInterface):
             logger.warning(f"⚠️ Username изменен: {username} → {actual_username}")
             platform_config["username"] = actual_username
             
-            flow_config = await storage.get_flow_config(flow_id)
+            # Используем репозиторий из BaseInterface (создаем временный экземпляр для доступа к атрибуту)
+            temp_interface = cls(token, platform_config)
+            flow_config = await temp_interface.flow_repository.get(flow_id)
             if flow_config and flow_config.platforms.get("telegram"):
                 # Обновляем только username, не трогая остальные поля (token и т.д.)
                 flow_config.platforms["telegram"]["username"] = actual_username
-                await storage.set_flow_config(flow_config)
+                await temp_interface.flow_repository.set(flow_config)
                 logger.info("✅ Username обновлен в FlowConfig")
         
         # Устанавливаем команды

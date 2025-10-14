@@ -6,8 +6,9 @@ WhatsApp webhook endpoints.
 import logging
 from fastapi import APIRouter, Request, HTTPException, Query
 
-from app.core.storage import Storage
+from app.db.repositories import Storage
 from app.interfaces.whatsapp_interface import WhatsAppInterface
+from app.frontend.dependencies import FlowRepositoryDep
 
 logger = logging.getLogger(__name__)
 
@@ -163,14 +164,13 @@ async def whatsapp_webhook(flow_key: str, request: Request):
 
 
 @router.post("/admin/whatsapp/register/{flow_id}")
-async def register_whatsapp_flow(flow_id: str):
+async def register_whatsapp_flow(flow_id: str, flow_repo: FlowRepositoryDep):
     """
     Регистрирует WhatsApp для flow.
     
     Проверяет credentials и возвращает информацию для настройки webhook.
     """
-    storage = Storage()
-    flow_config = await storage.get_flow_config(flow_id)
+    flow_config = await flow_repo.get(flow_id)
 
     if not flow_config:
         raise HTTPException(status_code=404, detail=f"Flow {flow_id} not found")
@@ -199,6 +199,7 @@ async def send_template_message(
     flow_id: str,
     phone_number: str,
     template_name: str,
+    flow_repo: FlowRepositoryDep,
     language_code: str = "ru",
     parameters: list = None
 ):
@@ -215,8 +216,7 @@ async def send_template_message(
         language_code: Код языка (ru, en, etc.)
         parameters: Параметры для подстановки в template
     """
-    storage = Storage()
-    flow_config = await storage.get_flow_config(flow_id)
+    flow_config = await flow_repo.get(flow_id)
 
     if not flow_config:
         raise HTTPException(status_code=404, detail=f"Flow {flow_id} not found")
@@ -283,14 +283,13 @@ async def send_template_message(
 
 
 @router.get("/admin/whatsapp/phone_info/{flow_id}")
-async def get_phone_info(flow_id: str):
+async def get_phone_info(flow_id: str, flow_repo: FlowRepositoryDep):
     """
     Получает информацию о телефонном номере WhatsApp Business.
     
     Полезно для проверки статуса и лимитов.
     """
-    storage = Storage()
-    flow_config = await storage.get_flow_config(flow_id)
+    flow_config = await flow_repo.get(flow_id)
 
     if not flow_config:
         raise HTTPException(status_code=404, detail=f"Flow {flow_id} not found")

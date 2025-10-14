@@ -9,10 +9,12 @@ import json
 import inspect
 from langchain_core.tools import tool
 
-from app.models import AgentConfig, CodeMode, ToolReference
+from app.models import AgentConfig, AgentType, CodeMode, ToolReference
 from app.agents.base import BaseAgent
-from app.core.storage import Storage
+from app.agents.react_agent import ReActAgent
+from app.agents.stategraph_agent import StateGraphAgent
 from app.core.tool_factory import ToolFactory
+from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +23,7 @@ class AgentFactory:
     """Фабрика для создания агентов"""
 
     def __init__(self):
-        self.storage = Storage()
+        self.repository = get_container().get_agent_repository()
 
     async def get_agent(self, agent_id: str) -> BaseAgent:
         """
@@ -35,9 +37,9 @@ class AgentFactory:
         """
         logger.debug(f"🔥 ВЫЗВАН AgentFactory.get_agent для {agent_id}")
         
-        # Загружаем конфигурацию из БД
+        # Загружаем конфигурацию из БД через репозиторий
         logger.debug(f"🔍 Ищем конфигурацию агента в БД: {agent_id}")
-        config = await self.storage.get_agent_config(agent_id)
+        config = await self.repository.get(agent_id)
         logger.debug(f"🔍 Результат поиска config: {config is not None}")
         
         if not config:
@@ -57,18 +59,18 @@ class AgentFactory:
     async def _create_agent_instance(self, config: AgentConfig) -> BaseAgent:
         """
         Создает экземпляр агента на основе конфигурации.
+        Выбирает правильный класс агента: ReActAgent или StateGraphAgent.
 
         Args:
             config: Конфигурация агента
 
         Returns:
-            Экземпляр агента
+            Экземпляр агента (ReActAgent, StateGraphAgent или кастомный класс)
         """
-        logger.debug(f"🔥 ВЫЗВАН _create_agent_instance для {config.agent_id}")
-        logger.debug(f"🔥 config.function_class = {config.function_class}")
+        logger.debug(f"Создание агента {config.agent_id}, тип: {config.type}")
         
         if config.function_class:
-            # Агент определен в коде, импортируем класс
+            # Агент определен в коде, импортируем кастомный класс
             module_path, class_name = config.function_class.rsplit(".", 1)
             module = importlib.import_module(module_path)
             agent_class = getattr(module, class_name)
@@ -79,19 +81,24 @@ class AgentFactory:
                 )
 
             agent = agent_class(config)
-
-            # ВАЖНО: Загружаем tools из БД даже для агентов из кода
-            await self._load_tools_from_db(agent, config)
-
-            return agent
+            logger.info(f"Создан кастомный агент {config.agent_id} из класса {config.function_class}")
         else:
-            # Агент создан через UI, используем базовый класс
-            agent = BaseAgent(config)
+            # Агент создан через UI - выбираем тип по config.type
+            if config.type == AgentType.REACT:
+                agent_class = ReActAgent
+                logger.info(f"Создание ReAct агента {config.agent_id}")
+            elif config.type == AgentType.STATEGRAPH:
+                agent_class = StateGraphAgent
+                logger.info(f"Создание StateGraph агента {config.agent_id}")
+            else:
+                raise ValueError(f"Неизвестный тип агента: {config.type}")
+            
+            agent = agent_class(config)
 
-            # Загружаем tools из БД
-            await self._load_tools_from_db(agent, config)
+        # Загружаем tools из БД
+        await self._load_tools_from_db(agent, config)
 
-            return agent
+        return agent
 
     async def _load_tools_from_db(self, agent: BaseAgent, config: AgentConfig):
         """Загружает tools агента из БД"""
@@ -122,111 +129,11 @@ class AgentFactory:
         )
 
     async def _create_tool_from_reference(self, tool_ref):
-        """Создает tool из ToolReference"""
-        logger.debug(f"🔥 СОЗДАЕМ ТУЛ: {tool_ref.tool_id}, cost={tool_ref.cost}, billing_name={tool_ref.billing_name}")
-
-        # Проверяем ссылку на tool в БД
-        if tool_ref.tool_id.startswith("tool:"):
-            # Это ссылка на tool в БД
-            db_tool_id = tool_ref.tool_id[5:]  # Убираем префикс "tool:"
-            tool_data = await self.storage.get(f"tool:{db_tool_id}")
-            if tool_data:
-                db_tool_ref = ToolReference.model_validate(json.loads(tool_data))
-                return await self._create_tool_from_reference(db_tool_ref)
-            else:
-                raise ValueError(f"Tool {db_tool_id} не найден в БД")
-
-        # Проверяем ссылку на агента
-        if tool_ref.tool_id.startswith("agent:"):
-            # Это ссылка на агента - используем ToolFactory
-            tool_factory = ToolFactory()
-            return await tool_factory._create_agent_tool(tool_ref)
-
-        # Сначала проверяем есть ли тул в БД с метаданными биллинга
-        db_tool_data = await self.storage.get(f"tool:{tool_ref.tool_id}")
-        if db_tool_data:
-            logger.debug(f"🔥 Найден тул в БД: {tool_ref.tool_id}")
-            db_tool_ref = ToolReference.model_validate(json.loads(db_tool_data))
-            logger.debug(f"🔥 БД тул code_mode={db_tool_ref.code_mode}, cost={db_tool_ref.cost}, billing_name={db_tool_ref.billing_name}")
-            
-            # Проверяем code_mode из БД
-            if db_tool_ref.code_mode == CodeMode.INLINE_CODE:
-                # Для INLINE_CODE инструментов используем ToolFactory
-                logger.debug("🔥 Используем ToolFactory для INLINE_CODE инструмента")
-                tool_factory = ToolFactory()
-                return await tool_factory._create_single_tool(db_tool_ref)
-            
-            # Для CODE_REFERENCE продолжаем как раньше
-            if db_tool_ref.code_mode == CodeMode.CODE_REFERENCE:
-                # Импортируем функцию из кода
-                if db_tool_ref.function_path:
-                    module_path, func_name = db_tool_ref.function_path.rsplit(".", 1)
-                elif "." in db_tool_ref.tool_id:
-                    module_path, func_name = db_tool_ref.tool_id.rsplit(".", 1)
-                else:
-                    raise ValueError(f"Не удалось определить путь к функции: {db_tool_ref.tool_id}")
-                
-                # Принудительно перезагружаем модуль
-                logger.debug(f"🔥 Импортируем модуль: {module_path}")
-                module = importlib.import_module(module_path)
-                logger.debug(f"🔥 Модуль загружен: {module}")
-                importlib.reload(module)  # Перезагружаем для получения свежего кода
-                logger.debug("🔥 Модуль перезагружен")
-                tool_function = getattr(module, func_name)
-                logger.debug(f"🔥 Функция получена: {tool_function}")
-                logger.debug(f"🔥 Тип функции: {type(tool_function)}")
-                
-                # Проверяем тип функции перед обращением к __code__
-                if hasattr(tool_function, '__code__'):
-                    logger.debug(f"🔥 Загружена функция {func_name}: async={asyncio.iscoroutinefunction(tool_function)}")
-                    logger.debug(f"🔥 Исходный код функции: {tool_function.__code__.co_flags}")
-                else:
-                    logger.debug(f"🔥 Загружена функция {func_name}: это StructuredTool или другой объект без __code__")
-                
-                # Оборачиваем в биллинг если есть стоимость
-                if db_tool_ref.cost > 0 or db_tool_ref.free_for_plans:
-                    tool_factory = ToolFactory()
-                    return tool_factory._wrap_tool_with_billing(tool_function, db_tool_ref)
-                else:
-                    return tool_function
-            
-            # Фолбек на старую логику если тула нет в БД
-            if tool_ref.function_path:
-                if "." in tool_ref.function_path:
-                    module_path, func_name = tool_ref.function_path.rsplit(".", 1)
-                    module = importlib.import_module(module_path)
-                    return getattr(module, func_name)
-                else:
-                    raise ValueError(f"function_path должен содержать модуль: {tool_ref.function_path}")
-            else:
-                # Fallback на tool_id
-                if "." in tool_ref.tool_id:
-                    module_path, func_name = tool_ref.tool_id.rsplit(".", 1)
-                    module = importlib.import_module(module_path)
-                    return getattr(module, func_name)
-                else:
-                    raise ValueError(f"tool_id должен содержать полный путь к функции: {tool_ref.tool_id}")
-
-        elif tool_ref.code_mode == CodeMode.INLINE_CODE:
-            # Создаем tool из inline кода
-            if not tool_ref.inline_code:
-                raise ValueError(f"Нет inline_code для tool {tool_ref.tool_id}")
-
-            # Выполняем код и извлекаем функцию
-            local_namespace = {"tool": tool}  # Добавляем tool decorator
-            exec(tool_ref.inline_code, globals(), local_namespace)
-
-            # Ищем любую функцию с атрибутами tool
-            for name, obj in local_namespace.items():
-                if callable(obj) and hasattr(obj, "name") and not name.startswith("_"):
-                    return obj
-
-            # Если не нашли, ищем любую функцию
-            for name, obj in local_namespace.items():
-                if callable(obj) and not name.startswith("_") and name != "tool":
-                    # Это наша функция, оборачиваем в @tool
-                    return tool(obj)
-
-            raise ValueError(f"Не найдена функция в inline коде {tool_ref.tool_id}")
-
-        return None
+        """
+        Создает tool из ToolReference.
+        Делегирует всю логику в ToolFactory.
+        """
+        logger.debug(f"Создание tool: {tool_ref.tool_id}")
+        
+        tool_factory = ToolFactory()
+        return await tool_factory._create_single_tool(tool_ref)
