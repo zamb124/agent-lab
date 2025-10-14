@@ -83,18 +83,24 @@ class WebInterface(BaseInterface):
             await self.send_message(access_denied_message)
             return None
         
-        # Проверяем: если session_id уже полный с префиксом web:, используем как есть
+        # Проверяем и валидируем session_id
         if js_session_id and js_session_id.startswith('web:'):
-            session_id = js_session_id
-            logger.debug(f"✅ Используем полный session_id: {session_id}")
+            parts = js_session_id.split(':')
+            if len(parts) >= 2:
+                session_user = parts[1]
+                if session_user != real_user_id:
+                    logger.warning(f"⚠️ Session от другого пользователя: {session_user} != {real_user_id}, создаем новый")
+                    session_id = f"web:{real_user_id}:{flow_id}:{uuid.uuid4().hex[:8]}"
+                else:
+                    session_id = js_session_id
+                    logger.debug(f"✅ Используем валидный session_id: {session_id}")
+            else:
+                session_id = f"web:{real_user_id}:{flow_id}:{uuid.uuid4().hex[:8]}"
         elif js_session_id and (js_session_id.startswith('telegram:') or js_session_id.startswith('whatsapp:') or js_session_id.startswith('api:')):
-            # Игнорируем session_id от других платформ - создаем новый для web
             logger.warning(f"⚠️ Получен session_id от другой платформы: {js_session_id[:50]}, создаем новый для web")
             session_id = f"web:{real_user_id}:{flow_id}:{uuid.uuid4().hex[:8]}"
-            logger.debug(f"🔧 Создан новый session_id для web: {session_id}")
         else:
-            # Формируем полный session_id: web:user_id:flow_id:uuid
-            session_id = f"web:{real_user_id}:{flow_id}:{js_session_id}"
+            session_id = f"web:{real_user_id}:{flow_id}:{js_session_id or uuid.uuid4().hex[:8]}"
             logger.debug(f"🔧 Сформирован session_id: {session_id}")
 
         # Если нет ни текста, ни файлов - пропускаем
@@ -193,23 +199,22 @@ class WebInterface(BaseInterface):
         is_user_message = message.metadata.get("is_user_message", False)
 
         if is_user_message:
-            # Пользовательское сообщение
             notification = {
                 "type": "USER_MESSAGE",
+                "session_id": message.session_id,
                 "content": message.content,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "message_id": f"user_{datetime.now(timezone.utc).timestamp()}",
                 "user_id": message.user_id,
             }
         else:
-            # Сообщение от агента или команды
             is_command_response = message.metadata.get("is_command_response", False)
             command = message.metadata.get("command", "")
 
             if is_command_response and command == "/clear":
-                # Специальное уведомление для команды очистки
                 notification = {
                     "type": "CLEAR_CHAT",
+                    "session_id": message.session_id,
                     "data": {
                         "message": message.content,
                         "session_id": message.session_id,
@@ -217,9 +222,9 @@ class WebInterface(BaseInterface):
                     },
                 }
             else:
-                # Обычное сообщение от агента
                 notification = {
                     "type": "AGENT_MESSAGE",
+                    "session_id": message.session_id,
                     "data": {
                         "message_type": "text",
                         "content": message.content,
@@ -233,9 +238,8 @@ class WebInterface(BaseInterface):
                     },
                 }
 
-        # Сохраняем уведомление в БД с TTL 15 минут (используем UUID для уникальности)
-        notification_key = f"web_notification:{message.session_id}:{uuid.uuid4().hex}"
-        await self.storage.set(notification_key, json.dumps(notification), ttl=900)
+        notification_key = f"web_notification:web:{message.user_id}:{uuid.uuid4().hex}"
+        await self.storage.set(notification_key, json.dumps(notification), ttl=900, force_global=True)
 
         logger.info(
             f"📤 Уведомление сохранено: key={notification_key}, type={notification.get('type', 'unknown')}, content={message.content[:50]}..."
@@ -243,8 +247,12 @@ class WebInterface(BaseInterface):
 
     async def send_typing_notification(self, session_id: str, is_typing: bool):
         """Отправка уведомления о печати для web чата"""
+        parts = session_id.split(':')
+        user_id = parts[1] if len(parts) >= 2 else "unknown"
+        
         typing_notification = {
             "type": "AGENT_TYPING",
+            "session_id": session_id,
             "data": {
                 "is_typing": is_typing,
                 "agent_name": "Agent",
@@ -252,18 +260,20 @@ class WebInterface(BaseInterface):
             },
         }
 
-        notification_key = f"web_notification:{session_id}:{uuid.uuid4().hex}"
-        await self.storage.set(
-            notification_key, json.dumps(typing_notification), ttl=900
-        )
+        notification_key = f"web_notification:web:{user_id}:{uuid.uuid4().hex}"
+        await self.storage.set(notification_key, json.dumps(typing_notification), ttl=900, force_global=True)
 
         status = "начал" if is_typing else "закончил"
         logger.info(f"💬 Агент {status} печатать: key={notification_key}")
 
     async def send_interrupt_question(self, session_id: str, question: str):
         """Сохраняет interrupt вопрос в БД"""
+        parts = session_id.split(':')
+        user_id = parts[1] if len(parts) >= 2 else "unknown"
+        
         interrupt_notification = {
             "type": "AGENT_INTERRUPT",
+            "session_id": session_id,
             "data": {
                 "question": question,
                 "session_id": session_id,
@@ -271,10 +281,8 @@ class WebInterface(BaseInterface):
             },
         }
 
-        notification_key = f"web_notification:{session_id}:{uuid.uuid4().hex}"
-        await self.storage.set(
-            notification_key, json.dumps(interrupt_notification), ttl=900
-        )
+        notification_key = f"web_notification:web:{user_id}:{uuid.uuid4().hex}"
+        await self.storage.set(notification_key, json.dumps(interrupt_notification), ttl=900, force_global=True)
         logger.info(f"🟡 Interrupt уведомление сохранено: key={notification_key}")
 
     # Глобальный экземпляр для использования

@@ -50,7 +50,7 @@ async def _poll_notifications(session_id: str, context: Context):
                     connection_status = session_id in websocket_manager.connections["chat"]
                     logger.info(f"🔍 [Итерация {iteration}] Polling активен: connection={connection_status}, pattern={notification_pattern}")
                 
-                keys = await storage.list_by_prefix(notification_pattern)
+                keys = await storage.list_by_prefix(notification_pattern, limit=1000, force_global=True)
                 
                 if keys:
                     logger.info(f"📬 [Итерация {iteration}] Найдено {len(keys)} уведомлений: {keys[:3]}...")
