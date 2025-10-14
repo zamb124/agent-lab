@@ -1,0 +1,195 @@
+---
+description: "Правила работы с Repository Pattern и Dependency Injection"
+alwaysApply: true
+---
+# Repository Pattern и Dependency Injection
+
+## Repository Pattern
+
+Используй паттерн Repository для работы с данными:
+- **Storage** - низкоуровневый key-value доступ (`get`, `set`, `delete`, `list_by_prefix`)
+- **Repository** - высокоуровневый CRUD для конкретных моделей
+- **Factory** - создание сложных объектов со всеми зависимостями
+
+### Архитектура
+
+```
+Storage (key-value) 
+   ↓
+Repository (CRUD для модели)
+   ↓
+Factory (создание объектов)
+```
+
+## Доступные репозитории
+
+- `AgentRepository` - работа с `AgentConfig`
+- `FlowRepository` - работа с `FlowConfig`
+- `TaskRepository` - работа с `TaskConfig`
+- `SessionRepository` - работа с `SessionConfig`
+- `ToolRepository` - работа с `ToolReference`
+
+## Dependency Injection
+
+### В API endpoints используй DI
+
+<good_example>
+from app.frontend.dependencies import AgentRepositoryDep
+
+@router.get("/{agent_id}")
+async def get_agent(
+    agent_id: str,
+    agent_repo: AgentRepositoryDep
+) -> AgentConfig:
+    agent = await agent_repo.get(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404)
+    return agent
+</good_example>
+
+<bad_example>
+from app.core.container import get_container
+
+@router.get("/{agent_id}")
+async def get_agent(agent_id: str):
+    # НЕ создавай репозиторий вручную в каждом endpoint
+    repo = get_container().get_agent_repository()
+    agent = await repo.get(agent_id)
+    return agent
+</bad_example>
+
+### В сервисах и фабриках используй атрибуты
+
+<good_example>
+class AgentFactory:
+    def __init__(self):
+        # Репозиторий как атрибут (композиция)
+        self.repository = get_container().get_agent_repository()
+    
+    async def get_agent(self, agent_id: str) -> BaseAgent:
+        # Используем атрибут
+        config = await self.repository.get(agent_id)
+        return await self._create_agent_instance(config)
+</good_example>
+
+<bad_example>
+class AgentFactory:
+    async def get_agent(self, agent_id: str):
+        # НЕ создавай репозиторий при каждом вызове метода
+        repo = get_container().get_agent_repository()
+        config = await repo.get(agent_id)
+        ...
+</bad_example>
+
+## Методы репозиториев
+
+Все репозитории наследуются от `BaseRepository` и **обязаны** реализовать:
+
+### Обязательные методы (единообразный API как в Storage):
+- `get(entity_id)` - получить по ID
+- `set(entity)` - сохранить
+- `delete(entity_id)` - удалить
+
+### Дополнительные методы:
+- `list_all(limit)` - список всех (опционально)
+- Специфичные методы для каждого репозитория
+
+<good_example>
+# AgentRepository
+agent_repo = get_container().get_agent_repository()
+
+# Получить (единообразно с Storage)
+agent = await agent_repo.get("agent_id")
+
+# Сохранить (единообразно с Storage)
+await agent_repo.set(agent_config)
+
+# Удалить (единообразно с Storage)
+await agent_repo.delete("agent_id")
+
+# Список всех
+agents = await agent_repo.list_all(limit=100)
+</good_example>
+
+## Factory + Repository (композиция)
+
+Factory использует Repository для получения конфигурации, затем создает живой объект:
+
+<good_example>
+class AgentFactory:
+    def __init__(self):
+        self.repository = get_container().get_agent_repository()
+    
+    async def get_agent(self, agent_id: str) -> BaseAgent:
+        # Repository получает конфиг
+        config = await self.repository.get(agent_id)
+        if not config:
+            raise ValueError(f"Агент {agent_id} не найден")
+        
+        # Factory создает живой объект
+        agent = await self._create_agent_instance(config)
+        await self._load_tools_from_db(agent, config)
+        return agent
+</good_example>
+
+## Dependency Injection для всех репозиториев
+
+```python
+from app.frontend.dependencies import (
+    AgentRepositoryDep,
+    FlowRepositoryDep,
+    TaskRepositoryDep,
+    SessionRepositoryDep,
+    ToolRepositoryDep
+)
+
+@router.post("/complex")
+async def complex_operation(
+    agent_repo: AgentRepositoryDep,
+    flow_repo: FlowRepositoryDep,
+    task_repo: TaskRepositoryDep
+):
+    # Все репозитории доступны через DI
+    agent = await agent_repo.get("agent_id")
+    flow = await flow_repo.get("flow_id")
+    task = await task_repo.get("task_id")
+    ...
+```
+
+## Создание нового репозитория
+
+Если нужен новый репозиторий:
+
+1. Создай класс-наследник `BaseRepository[T]`
+2. Реализуй 5 абстрактных методов
+3. Добавь в `app/db/repositories/__init__.py`
+4. Добавь в `Container` (`app/core/container.py`)
+5. Добавь в `dependencies.py` для DI
+
+Python/IDE автоматически проверит, что все методы реализованы!
+
+## Когда использовать Storage напрямую
+
+Используй Storage напрямую только для:
+- Специфичных ключей (например, `var:*`, `token:*`)
+- Операций `list_by_prefix` для поиска ключей
+- Временных данных без модели
+
+<good_example>
+# Получение переменных (нет репозитория для Variables)
+storage = get_container().get_storage()
+var_keys = await storage.list_by_prefix("var:")
+
+# Для моделей используй репозиторий
+agent_repo = get_container().get_agent_repository()
+agent = await agent_repo.get(agent_id)
+</good_example>
+
+## Преимущества Repository Pattern
+
+✅ **Единообразие** - все репозитории имеют одинаковый интерфейс  
+✅ **Тестируемость** - легко мокировать репозитории  
+✅ **Разделение ответственности** - Storage не знает о моделях  
+✅ **Type Safety** - строгая типизация через Generic[T]  
+✅ **DI-friendly** - легко инжектировать в endpoints  
+✅ **Fail Fast** - ошибка при импорте, если метод не реализован

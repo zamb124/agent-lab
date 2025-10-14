@@ -69,7 +69,7 @@ async def start_node(state):
         ),
     )
     
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     # Получаем агента и компилируем граф
     agent = await agent_factory.get_agent("test_stategraph_agent")
@@ -141,7 +141,7 @@ async def test_02_react_agent_with_variables(storage, agent_factory, migrated_db
         },
     )
     
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     # Получаем агента
     agent = await agent_factory.get_agent("test_react_agent_vars")
@@ -213,7 +213,7 @@ async def counter_node(state):
         ),
     )
     
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     # Получаем агента
     agent = await agent_factory.get_agent("test_persistence_agent")
@@ -370,7 +370,7 @@ async def tool_node(state):
         ),
     )
     
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     # Получаем агента
     agent = await agent_factory.get_agent("test_agent_with_tool")
@@ -458,7 +458,7 @@ async def session_node(state):
         ),
     )
     
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     # Получаем агента
     agent = await agent_factory.get_agent("test_session_tools_agent")

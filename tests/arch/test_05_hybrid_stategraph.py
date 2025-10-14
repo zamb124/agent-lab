@@ -174,7 +174,7 @@ async def finalizer_function(state):
         source="manual"
     )
     
-    await storage.set_agent_config(hybrid_agent_config)
+    await agent_repo.set(hybrid_agent_config)
     print("✅ Гибридный StateGraph агент создан в БД")
     
     # 3. СОЗДАЕМ FLOW
@@ -186,7 +186,7 @@ async def finalizer_function(state):
         platforms={"api": {}}
     )
     
-    await storage.set_flow_config(hybrid_flow_config)
+    await flow_repo.set(hybrid_flow_config)
     print("✅ Гибридный Flow создан в БД")
 
 

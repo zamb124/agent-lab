@@ -33,7 +33,7 @@ async def test_flow_history_from_smart_flow(migrated_db, storage, flow_factory, 
         flow_id=flow_id,
         status=SessionStatus.ACTIVE,
     )
-    await storage.set_session_config(session)
+    await session_repo.set(session)
     
     print("🔄 Выполняем flow с вопросом о математике...")
     result = await flow.ainvoke(
@@ -109,7 +109,7 @@ async def test_flow_history_with_checkpoints(migrated_db, storage, flow_factory,
         flow_id=flow_id,
         status=SessionStatus.ACTIVE,
     )
-    await storage.set_session_config(session)
+    await session_repo.set(session)
     
     print("🔄 Выполняем weather_flow...")
     await flow.ainvoke(
@@ -172,7 +172,7 @@ async def test_flow_sessions_list(migrated_db, storage, flow_factory, unique_id)
         created_at=datetime.now(timezone.utc),
         last_activity=datetime.now(timezone.utc)
     )
-    await storage.set_session_config(session_1)
+    await session_repo.set(session_1)
     
     session_2 = SessionConfig(
         session_id=thread_id_2,
@@ -183,7 +183,7 @@ async def test_flow_sessions_list(migrated_db, storage, flow_factory, unique_id)
         created_at=datetime.now(timezone.utc),
         last_activity=datetime.now(timezone.utc)
     )
-    await storage.set_session_config(session_2)
+    await session_repo.set(session_2)
     
     await flow.ainvoke(
         {"messages": [HumanMessage(content="Первая сессия")]},
@@ -266,7 +266,7 @@ async def test_flow_history_tool_calls(migrated_db, storage, flow_factory, uniqu
         flow_id=flow_id,
         status=SessionStatus.ACTIVE,
     )
-    await storage.set_session_config(session)
+    await session_repo.set(session)
     
     print("🔄 Выполняем flow с запросом который вызовет калькулятор...")
     await flow.ainvoke(

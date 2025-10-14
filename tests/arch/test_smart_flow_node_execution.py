@@ -7,6 +7,7 @@
 3. Роутер правильно определяет путь
 """
 import pytest
+from app.db.repositories import AgentRepository, FlowRepository
 from langchain_core.messages import HumanMessage
 
 
@@ -223,7 +224,7 @@ async def test_smart_flow_graph_structure(migrated_db, storage, migrator):
     await migrator.run_full_migration()
     
     # Получаем конфигурацию агента
-    agent_config = await storage.get_agent_config("app.flows.smart_flow.SmartFlowAgent")
+    agent_config = await agent_repo.get("app.flows.smart_flow.SmartFlowAgent")
     
     assert agent_config is not None, "SmartFlowAgent не найден в БД"
     assert agent_config.graph_definition is not None, "У SmartFlowAgent нет graph_definition"

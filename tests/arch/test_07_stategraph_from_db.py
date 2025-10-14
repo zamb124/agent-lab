@@ -179,7 +179,7 @@ async def finish_function(state):
     )
     
     # Сохраняем в БД
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     print("✅ Агент сохранен в БД")
     
     # Загружаем агента через фабрику

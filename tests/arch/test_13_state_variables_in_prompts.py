@@ -268,7 +268,7 @@ async def test_04_optional_and_default_values(migrated_db, storage, agent_factor
         ),
     )
     
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     agent = await agent_factory.get_agent("test_optional_vars_agent")
     
@@ -330,7 +330,7 @@ async def test_05_special_functions(migrated_db, storage, agent_factory, test_he
         ),
     )
     
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     agent = await agent_factory.get_agent("test_special_funcs_agent")
     
@@ -405,7 +405,7 @@ async def test_06_nested_store_access(migrated_db, storage, agent_factory, test_
         ),
     )
     
-    await storage.set_agent_config(agent_config)
+    await agent_repo.set(agent_config)
     
     agent = await agent_factory.get_agent("test_nested_store_agent")
     

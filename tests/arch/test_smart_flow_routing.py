@@ -7,6 +7,7 @@
 3. Разные ноды (calculator/weather) работают корректно
 """
 import pytest
+from app.db.repositories import AgentRepository, FlowRepository
 from langchain_core.messages import HumanMessage
 
 
@@ -16,7 +17,7 @@ async def test_smart_flow_migration(migrated_db, storage, agent_factory):
     
     # Проверяем что SmartFlowAgent есть в БД
     agent_id = "app.flows.smart_flow.SmartFlowAgent"
-    agent_config = await storage.get_agent_config(agent_id)
+    agent_config = await agent_repo.get(agent_id)
     
     assert agent_config is not None, f"SmartFlowAgent не найден в БД"
     print(f"✅ SmartFlowAgent найден в БД: {agent_config.name}")
