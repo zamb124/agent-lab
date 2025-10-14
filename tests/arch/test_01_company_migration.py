@@ -13,7 +13,6 @@ from app.core.context import set_context, clear_context
 from app.identity.models import Company, User, AuthProvider, UserStatus
 from app.models.context_models import Context
 from app.models import AgentType
-from app.db.repositories import AgentRepository, FlowRepository
 
 
 @pytest.fixture
@@ -72,7 +71,7 @@ def test_migration_company(storage):
 
 
 @pytest.mark.asyncio
-async def test_migrate_defaults_for_company(migrated_db, storage, migrator, test_migration_company):
+async def test_migrate_defaults_for_company(migrated_db, storage, migrator, test_migration_company, flow_repo):
     """
     Тест 1: Миграция только публичных tools для новой компании.
     
@@ -107,7 +106,6 @@ async def test_migrate_defaults_for_company(migrated_db, storage, migrator, test
     await migrator.migrate_defaults_for_company(test_company)
     
     # Проверяем что flows НЕ мигрировались
-    flow_repo = FlowRepository(storage)
     simple_flow_config = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
     assert simple_flow_config is None, "Flows НЕ должны автоматически мигрироваться"
     
@@ -131,7 +129,7 @@ async def test_migrate_defaults_for_company(migrated_db, storage, migrator, test
 
 
 @pytest.mark.asyncio
-async def test_migrate_single_flow_for_company(migrated_db, storage, migrator, test_migration_company):
+async def test_migrate_single_flow_for_company(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 2: Миграция отдельного flow в компанию.
     
@@ -183,7 +181,7 @@ async def test_migrate_single_flow_for_company(migrated_db, storage, migrator, t
 
 
 @pytest.mark.asyncio
-async def test_migrate_single_agent_for_company(migrated_db, storage, migrator, test_migration_company):
+async def test_migrate_single_agent_for_company(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 3: Миграция отдельного агента в компанию.
     
@@ -231,7 +229,7 @@ async def test_migrate_single_agent_for_company(migrated_db, storage, migrator, 
 
 
 @pytest.mark.asyncio
-async def test_remigrate_flow(migrated_db, storage, migrator, test_migration_company):
+async def test_remigrate_flow(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 4: Перемиграция flow для отката к базовому состоянию.
     
@@ -296,7 +294,7 @@ async def test_remigrate_flow(migrated_db, storage, migrator, test_migration_com
 
 
 @pytest.mark.asyncio
-async def test_remigrate_agent(migrated_db, storage, migrator, test_migration_company):
+async def test_remigrate_agent(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 5: Перемиграция агента для отката к базовому состоянию.
     """
@@ -357,7 +355,7 @@ async def test_remigrate_agent(migrated_db, storage, migrator, test_migration_co
 
 
 @pytest.mark.asyncio
-async def test_migrate_with_nested_dependencies(migrated_db, storage, migrator, test_migration_company):
+async def test_migrate_with_nested_dependencies(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 6: Миграция с вложенными зависимостями.
     
@@ -408,7 +406,7 @@ async def test_migrate_with_nested_dependencies(migrated_db, storage, migrator, 
 
 
 @pytest.mark.asyncio
-async def test_migrate_single_tool(migrated_db, storage, migrator, test_migration_company):
+async def test_migrate_single_tool(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 7: Миграция отдельного tool.
     
@@ -456,7 +454,7 @@ async def test_migrate_single_tool(migrated_db, storage, migrator, test_migratio
 
 
 @pytest.mark.asyncio
-async def test_remigrate_tool(migrated_db, storage, migrator, test_migration_company):
+async def test_remigrate_tool(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 8: Перемиграция tool для отката к базовому состоянию.
     """
@@ -521,7 +519,7 @@ async def test_remigrate_tool(migrated_db, storage, migrator, test_migration_com
 
 
 @pytest.mark.asyncio
-async def test_react_agent_migration(migrated_db, storage, migrator, test_migration_company):
+async def test_react_agent_migration(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 9: Проверка миграции ReAct агента.
     
@@ -581,7 +579,7 @@ async def test_react_agent_migration(migrated_db, storage, migrator, test_migrat
 
 
 @pytest.mark.asyncio
-async def test_stategraph_agent_migration(migrated_db, storage, migrator, test_migration_company):
+async def test_stategraph_agent_migration(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 10: Проверка миграции StateGraph агента.
     
@@ -634,7 +632,7 @@ async def test_stategraph_agent_migration(migrated_db, storage, migrator, test_m
 
 
 @pytest.mark.asyncio
-async def test_company_isolation(migrated_db, storage, migrator):
+async def test_company_isolation(migrated_db, storage, migrator, agent_repo, flow_repo):
     """
     Тест 11: Проверка изоляции данных между компаниями.
     
@@ -743,7 +741,7 @@ async def test_company_isolation(migrated_db, storage, migrator):
 
 
 @pytest.mark.asyncio
-async def test_migrate_without_dependencies(migrated_db, storage, migrator):
+async def test_migrate_without_dependencies(migrated_db, storage, migrator, agent_repo, flow_repo):
     """
     Тест 12: Миграция flow без зависимостей.
     
@@ -801,7 +799,7 @@ async def test_migrate_without_dependencies(migrated_db, storage, migrator):
 
 
 @pytest.mark.asyncio
-async def test_api_remigrate_endpoints(migrated_db, storage, migrator, test_migration_company):
+async def test_api_remigrate_endpoints(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 13: Проверка API endpoints для перемиграции.
     

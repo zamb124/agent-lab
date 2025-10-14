@@ -142,6 +142,41 @@ async def agent_factory():
 
 
 @pytest_asyncio.fixture
+async def agent_repo(storage):
+    """AgentRepository для тестов"""
+    from app.db.repositories import AgentRepository
+    return AgentRepository(storage)
+
+
+@pytest_asyncio.fixture
+async def flow_repo(storage):
+    """FlowRepository для тестов"""
+    from app.db.repositories import FlowRepository
+    return FlowRepository(storage)
+
+
+@pytest_asyncio.fixture
+async def task_repo(storage):
+    """TaskRepository для тестов"""
+    from app.db.repositories import TaskRepository
+    return TaskRepository(storage)
+
+
+@pytest_asyncio.fixture
+async def session_repo(storage):
+    """SessionRepository для тестов"""
+    from app.db.repositories import SessionRepository
+    return SessionRepository(storage)
+
+
+@pytest_asyncio.fixture
+async def tool_repo(storage):
+    """ToolRepository для тестов"""
+    from app.db.repositories import ToolRepository
+    return ToolRepository(storage)
+
+
+@pytest_asyncio.fixture
 async def flow_factory():
     """FlowFactory для каждого теста"""
     return FlowFactory()

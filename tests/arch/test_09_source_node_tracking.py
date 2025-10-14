@@ -9,7 +9,7 @@ from app.models import FlowConfig, LLMConfig, AgentConfig
 
 
 @pytest.mark.asyncio
-async def test_source_node_in_history(migrated_db, storage, flow_factory, unique_id):
+async def test_source_node_in_history(migrated_db, storage, flow_factory, unique_id, agent_repo, flow_repo):
     """Тест проверяет, что source_node корректно записывается в историю сообщений"""
     
     weather_agent_config = AgentConfig(
@@ -110,7 +110,7 @@ async def test_source_node_in_history(migrated_db, storage, flow_factory, unique
 
 
 @pytest.mark.asyncio
-async def test_checkpoint_metadata_structure(migrated_db, storage, flow_factory, unique_id):
+async def test_checkpoint_metadata_structure(migrated_db, storage, flow_factory, unique_id, agent_repo, flow_repo):
     """Тест для проверки структуры metadata в checkpoint"""
     
     calc_agent_config = AgentConfig(

@@ -7,12 +7,11 @@
 3. Разные ноды (calculator/weather) работают корректно
 """
 import pytest
-from app.db.repositories import AgentRepository, FlowRepository
 from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_smart_flow_migration(migrated_db, storage, agent_factory):
+async def test_smart_flow_migration(migrated_db, storage, agent_factory, agent_repo):
     """Тест: SmartFlow правильно мигрирует в БД"""
     
     # Проверяем что SmartFlowAgent есть в БД
@@ -48,7 +47,7 @@ async def test_smart_flow_migration(migrated_db, storage, agent_factory):
 
 
 @pytest.mark.asyncio
-async def test_smart_flow_calculator_routing(migrated_db, flow_factory, mock_llm):
+async def test_smart_flow_calculator_routing(migrated_db, flow_factory, mock_llm, agent_repo):
     """Тест: SmartFlow направляет математические запросы в calculator"""
     
     # Настраиваем mock LLM
@@ -85,7 +84,7 @@ async def test_smart_flow_calculator_routing(migrated_db, flow_factory, mock_llm
 
 
 @pytest.mark.asyncio
-async def test_smart_flow_weather_routing(migrated_db, flow_factory, mock_llm):
+async def test_smart_flow_weather_routing(migrated_db, flow_factory, mock_llm, agent_repo):
     """Тест: SmartFlow направляет погодные запросы в weather"""
     
     # Настраиваем mock LLM
@@ -117,7 +116,7 @@ async def test_smart_flow_weather_routing(migrated_db, flow_factory, mock_llm):
 
 
 @pytest.mark.asyncio
-async def test_smart_flow_different_paths(migrated_db, flow_factory, mock_llm):
+async def test_smart_flow_different_paths(migrated_db, flow_factory, mock_llm, agent_repo):
     """Тест: SmartFlow выбирает разные пути для разных запросов"""
     
     # Настраиваем mock LLM

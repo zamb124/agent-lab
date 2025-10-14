@@ -5,12 +5,11 @@
 со всеми нодами, ребрами и зависимостями.
 """
 import pytest
-from app.db.repositories import AgentRepository, FlowRepository
 from app.models import AgentType
 
 
 @pytest.mark.asyncio
-async def test_flows_migration_from_code(migrated_db, storage):
+async def test_flows_migration_from_code(migrated_db, storage, agent_repo, flow_repo):
     """Тест миграции weather_flow и smart_flow из кода"""
     
     # 2. ПРОВЕРКА WEATHER_FLOW
