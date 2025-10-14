@@ -118,6 +118,7 @@ plugins:
             Для разработчиков: For Developers
             Архитектура: Architecture
             Конфигурация: Configuration
+            LLM: LLM
             Разработка: Development
             Фронтенд: Frontend
             Клиенты: Clients
@@ -155,6 +156,7 @@ nav:
   - Для разработчиков:
       - Архитектура: architecture.md
       - Конфигурация: configuration.md
+      - LLM: llm.md
       - Deployment: deployment.md
       - Разработка:
           - Фронтенд: frontend.md
