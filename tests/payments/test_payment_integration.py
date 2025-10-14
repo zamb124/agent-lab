@@ -179,20 +179,25 @@ async def test_duplicate_webhook_protection(
     assert after_second_company.balance == after_first_company.balance, "Баланс не должен увеличиваться повторно"
 
 
-@pytest.mark.asyncio  
+@pytest.mark.asyncio
 async def test_company_transactions_persistence(
     storage,
     save_test_company,
     test_company,
     test_user,
     yoomoney_provider,
-    payment_service
+    payment_service,
+    unique_id
 ):
     """
     Тест сохранения множественных транзакций для компании.
     Проверяет что можно получить историю транзакций из БД.
     """
+    test_company_id = unique_id("test_txn_company")
+    test_company.company_id = test_company_id
     test_company.balance = 5000.0
+    
+    await storage.set(f"company:{test_company_id}", test_company.model_dump_json(), force_global=True)
     
     created_transactions = []
     
@@ -204,6 +209,9 @@ async def test_company_transactions_persistence(
             provider=yoomoney_provider
         )
         created_transactions.append(result["transaction_id"])
+    
+    import asyncio
+    await asyncio.sleep(0.1)
     
     for transaction_id in created_transactions:
         saved_transaction = await payment_service.get_transaction(transaction_id)
@@ -219,10 +227,13 @@ async def test_company_transactions_persistence(
         offset=0
     )
     
-    assert len(history) >= 3, "Должно быть минимум 3 транзакции"
+    assert len(history) >= 3, f"Должно быть минимум 3 транзакции, получили {len(history)}"
     
     our_transactions = [t for t in history if t.transaction_id in created_transactions]
-    assert len(our_transactions) == 3, "Все наши транзакции должны быть в истории"
+    assert len(our_transactions) == 3, (
+        f"Все наши транзакции должны быть в истории. "
+        f"Создали: {len(created_transactions)}, Нашли: {len(our_transactions)}"
+    )
     
     for i in range(len(our_transactions) - 1):
         assert our_transactions[i].created_at >= our_transactions[i + 1].created_at
