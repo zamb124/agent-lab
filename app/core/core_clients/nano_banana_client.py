@@ -23,7 +23,7 @@ class NanoBananaClient:
     
     def __init__(
         self,
-        model_name: str = "google/gemini-2.5-flash-image-preview",
+        model_name: str = "google/gemini-2.5-flash-preview-image",
         timeout: int = 60,
     ):
         self.model_name = model_name

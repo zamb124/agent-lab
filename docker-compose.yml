@@ -23,6 +23,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: app
       args:
         - CONFIG_FILE=${CONFIG_FILE:-deploy/conf.json}
     ports:
