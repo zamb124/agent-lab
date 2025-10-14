@@ -27,7 +27,7 @@ def ask_user(question: str) -> str:
         Ответ пользователя в формате "QUESTION: вопрос\nANSWER: ответ"
     """
     result = interrupt(question)
-    formatted_result = f"QUESTION: {question}\nANSWER: {result}"
+    formatted_result = f"{result}"
     return formatted_result
 
 
