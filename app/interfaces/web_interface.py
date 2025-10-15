@@ -3,6 +3,7 @@ Web Interface - адаптер для веб-чата.
 Работает в многоинстансной архитектуре через БД уведомления.
 """
 
+import asyncio
 import base64
 import uuid
 import logging
@@ -190,6 +191,40 @@ class WebInterface(BaseInterface):
                 "files_count": len(files_data) if files_data else 0,
             },
         )
+
+    async def send_reasoning(self, session_id: str, reasoning_text: str):
+        """
+        Отправляет reasoning как отдельное уведомление в web chat.
+        Reasoning отображается как специальное сообщение с индикатором "думает".
+        
+        Args:
+            session_id: ID сессии
+            reasoning_text: Текст reasoning от LLM
+        """
+        if not reasoning_text or not reasoning_text.strip():
+            return
+        
+        # Извлекаем user_id из session_id (формат: web:user_id:flow:uuid)
+        parts = session_id.split(":")
+        user_id = parts[1] if len(parts) > 1 else "unknown"
+        
+        # Создаем уведомление для reasoning
+        notification = {
+            "type": "AGENT_REASONING",
+            "session_id": session_id,
+            "data": {
+                "content": reasoning_text.strip(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "message_id": f"reasoning_{datetime.now(timezone.utc).timestamp()}",
+            },
+        }
+        
+        notification_key = f"web_notification:web:{user_id}:{uuid.uuid4().hex}"
+        await self.storage.set(notification_key, json.dumps(notification), ttl=900, force_global=True)
+        
+        logger.debug(f"💭 Reasoning отправлен в web chat для session {session_id}: {reasoning_text[:50]}...")
+        
+        await asyncio.sleep(0.3)
 
     async def send_message(self, message: Message):
         """

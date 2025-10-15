@@ -3,6 +3,7 @@
  */
 
 import { showNotification } from '/static/js/components/notification.js';
+import { renderMarkdown } from '/static/js/utils/markdown.js';
 
 (function() {
     'use strict';
@@ -31,6 +32,14 @@ import { showNotification } from '/static/js/components/notification.js';
             const html = await response.text();
             
             modalDetails.innerHTML = html;
+            
+            // Парсим description как Markdown
+            const descriptionElement = document.getElementById('flow-description-content');
+            if (descriptionElement) {
+                const markdownText = descriptionElement.textContent;
+                const htmlContent = renderMarkdown(markdownText);
+                descriptionElement.innerHTML = htmlContent;
+            }
         } catch (error) {
             console.error('Ошибка загрузки деталей flow:', error);
             modalDetails.innerHTML = '<div class="empty-state"><p>Ошибка загрузки деталей</p></div>';

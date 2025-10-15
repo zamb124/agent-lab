@@ -530,6 +530,8 @@
   "models.context.fields.flow_config.description": "FlowConfig для текущего запроса",
   "models.context.fields.agent_config.title": "Конфигурация агента",
   "models.context.fields.agent_config.description": "AgentConfig для текущего запроса",
+  "models.context.fields.interface.title": "Интерфейс",
+  "models.context.fields.interface.description": "Интерфейс для отправки промежуточных сообщений (reasoning, thinking, etc)",
   "models.flowauthor.fields.name.title": "Имя",
   "models.flowauthor.fields.name.description": "Имя автора или организации",
   "models.flowauthor.fields.email.title": "Email",

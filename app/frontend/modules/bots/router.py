@@ -71,16 +71,14 @@ async def bot_details(request: Request, bot_id: str):
             "prompt": "",
             "flow_variables": {},
             "local_variables": {},
-            "llm_config": {
-                "provider": "openai",
-                "model": "gpt-4"
-            },
+            "llm_config": None,
             "rag_config": {
                 "enabled": True,
                 "namespace_scope": "flow",
                 "search_scopes": ["flow", "company"],
                 "auto_index_messages": False
             },
+            "enable_reasoning": False,
             "is_new": True,
         }
         return templates.TemplateResponse(
@@ -123,6 +121,7 @@ async def bot_details(request: Request, bot_id: str):
         "local_variables": agent_local_variables,
         "llm_config": agent_llm_config,
         "rag_config": getattr(flow_config, 'rag_config', None),
+        "enable_reasoning": getattr(flow_config, 'enable_reasoning', False),
         "is_new": False,
     }
     

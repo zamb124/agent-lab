@@ -71,6 +71,8 @@ async def create_flow(
         timeout=flow_data.get("timeout"),
         max_retries=flow_data.get("max_retries", 3),
         variables=flow_data.get("variables", {}),
+        store=flow_data.get("store", {}),
+        enable_reasoning=flow_data.get("enable_reasoning", False),
         source="ui_created"
     )
     
@@ -144,7 +146,7 @@ async def update_flow(
     flow_dict = flow.model_dump()
     
     # Обновляем только разрешенные поля
-    allowed_fields = {"name", "description", "entry_point_agent", "platforms", "timeout", "max_retries", "canvas_data", "variables"}
+    allowed_fields = {"name", "description", "entry_point_agent", "platforms", "timeout", "max_retries", "canvas_data", "variables", "store", "enable_reasoning", "rag_config"}
     for field, value in updates.items():
         if field in allowed_fields:
             flow_dict[field] = value

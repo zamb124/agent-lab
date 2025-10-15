@@ -73,7 +73,7 @@
                 <img src="{{ flow.image_url }}" alt="{{ flow.name }}">
             </div>
             
-            <div class="flow-description">{{ flow.description }}</div>
+            <div class="flow-description markdown-content" id="flow-description-content">{{ flow.description }}</div>
             
             {% if flow.platforms %}
             <div class="flow-platforms-section">

@@ -1102,6 +1102,10 @@ class ChatManager {
                 this.showTypingIndicator(false);
                 this.addAgentMessage(message.data);
                 break;
+            case 'AGENT_REASONING':
+                console.log('💭 Получено AGENT_REASONING:', message.data);
+                this.addReasoningMessage(message.data);
+                break;
             case 'AGENT_INTERRUPT':
                 this.showTypingIndicator(false);
                 this.handleAgentInterrupt(message.data);
@@ -1209,6 +1213,24 @@ class ChatManager {
         };
         
         this.addMessageToUI(messageObj);
+    }
+
+    addReasoningMessage(data) {
+        /**
+         * Добавляет reasoning сообщение в чат.
+         * Reasoning отображается как специальное сообщение с иконкой 💭
+         */
+        const messageObj = {
+            type: 'reasoning',
+            content: data.content,
+            sender: 'agent',
+            timestamp: new Date(data.timestamp),
+            message_id: data.message_id || `reasoning_${Date.now()}`,
+            isReasoning: true
+        };
+        
+        this.addMessageToUI(messageObj);
+        console.log('💭 Reasoning сообщение добавлено в UI');
     }
 
     addMessageToUI(messageObj) {

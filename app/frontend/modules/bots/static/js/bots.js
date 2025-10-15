@@ -226,56 +226,57 @@ import { showNotification } from '/static/js/components/notification.js';
         }
     });
     
-    let llmProvidersData = null;
+    let llmModelsData = null;
 
-    async function loadLLMProviders() {
-        if (llmProvidersData) return llmProvidersData;
+    async function loadLLMModels() {
+        if (llmModelsData) return llmModelsData;
         
         try {
-            const response = await fetch('/api/v1/admin/llm/providers', {
+            const response = await fetch('/api/v1/admin/llm/models', {
                 headers: {
                     'Authorization': `Bearer ${window.app.authToken}`
                 }
             });
             
             if (!response.ok) {
-                throw new Error('Не удалось загрузить список LLM провайдеров');
+                throw new Error('Не удалось загрузить список LLM моделей');
             }
             
-            llmProvidersData = await response.json();
-            return llmProvidersData;
+            llmModelsData = await response.json();
+            return llmModelsData;
         } catch (error) {
-            console.error('Ошибка загрузки LLM провайдеров:', error);
+            console.error('Ошибка загрузки LLM моделей:', error);
             return null;
         }
     }
 
     window.updateLLMModels = async function() {
-        const provider = document.getElementById('bot-llm-provider')?.value;
         const modelSelect = document.getElementById('bot-llm-model');
         
         if (!modelSelect) return;
         
         const currentValue = modelSelect.dataset.currentValue || modelSelect.value;
         
-        const providersData = await loadLLMProviders();
-        
-        let models = [{ value: '', label: 'По умолчанию' }];
-        
-        if (providersData && provider && providersData.providers[provider]) {
-            models = providersData.providers[provider].models;
-        }
+        const modelsData = await loadLLMModels();
         
         modelSelect.innerHTML = '';
-        models.forEach(model => {
-            const option = document.createElement('option');
-            option.value = model.value;
-            option.textContent = model.label;
-            if (model.value === currentValue) {
-                option.selected = true;
-            }
-            modelSelect.appendChild(option);
-        });
+        
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = 'По умолчанию';
+        modelSelect.appendChild(defaultOption);
+        
+        if (modelsData && modelsData.models) {
+            modelsData.models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.value;
+                option.textContent = model.label;
+                if (model.value === currentValue) {
+                    option.selected = true;
+                }
+                modelSelect.appendChild(option);
+            });
+        }
     };
 
     function initBotSettings() {
@@ -530,6 +531,7 @@ import { showNotification } from '/static/js/components/notification.js';
             description: botDescription,
             timeout: document.getElementById('bot-timeout')?.value || null,
             max_retries: parseInt(document.getElementById('bot-max-retries')?.value) || 3,
+            enable_reasoning: document.getElementById('bot-enable-reasoning')?.checked || false,
         };
         
         if (isNewBot) {
@@ -577,6 +579,7 @@ import { showNotification } from '/static/js/components/notification.js';
             botId: botId,
             isNewBot: isNewBot,
             flowData: flowData,
+            enable_reasoning: flowData.enable_reasoning,
             promptValue: promptValue ? `${promptValue.substring(0, 100)}...` : null,
             flowVariables: flowVariables,
             hasPromptEditor: !!promptEditor
@@ -633,16 +636,12 @@ import { showNotification } from '/static/js/components/notification.js';
                     agentUpdates.tools = selectedTools;
                 }
                 
-                const llmProvider = document.getElementById('bot-llm-provider')?.value;
                 const llmModel = document.getElementById('bot-llm-model')?.value;
                 const llmTemperature = document.getElementById('bot-llm-temperature')?.value;
                 
-                if (llmProvider || llmModel || llmTemperature) {
+                if (llmModel || llmTemperature) {
                     const llmConfig = {};
                     
-                    if (llmProvider) {
-                        llmConfig.provider = llmProvider;
-                    }
                     if (llmModel) {
                         llmConfig.model = llmModel;
                     }

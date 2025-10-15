@@ -622,16 +622,21 @@ async def reload_telegram_bots():
 
 @router.get("/llm/providers")
 async def get_llm_providers():
+    """Получить список доступных LLM моделей через OpenRouter (legacy endpoint)"""
+    return await get_llm_models()
+
+
+@router.get("/llm/models")
+async def get_llm_models():
     """Получить список доступных LLM моделей через OpenRouter"""
     settings = get_settings()
     
-    if not settings.llm.openrouter.enabled:
+    if not hasattr(settings.llm, 'openrouter') or not settings.llm.openrouter.enabled:
         return {
             "default_model": settings.llm.default_model,
             "models": []
         }
     
-    # Собираем список моделей из конфигурации
     models_list = []
     for model_id, model_config in settings.llm.models.items():
         models_list.append({

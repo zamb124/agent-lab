@@ -18,13 +18,21 @@ const MESSAGE_TYPES = {
     CARD: 'card',
     CAROUSEL: 'carousel',
     LOCATION: 'location',
-    CONTACT: 'contact'
+    CONTACT: 'contact',
+    REASONING: 'reasoning'
 };
 
 class ChatMessageRenderer {
     renderMessage(message) {
         const container = document.createElement('div');
         container.className = `chat-message ${message.sender}`;
+        
+        if (message.isReasoning) {
+            container.classList.add('reasoning');
+            const reasoningDiv = this.renderReasoning(message);
+            container.appendChild(reasoningDiv);
+            return container;
+        }
         
         const contentDiv = this.renderContent(message);
         container.appendChild(contentDiv);
@@ -45,6 +53,24 @@ class ChatMessageRenderer {
         }
         
         return container;
+    }
+
+    renderReasoning(message) {
+        const details = document.createElement('details');
+        details.className = 'reasoning-details';
+        
+        const summary = document.createElement('summary');
+        summary.className = 'reasoning-summary';
+        summary.innerHTML = '💭 <span class="reasoning-label">Размышление</span>';
+        
+        const content = document.createElement('div');
+        content.className = 'reasoning-content';
+        content.innerHTML = renderMarkdown(message.content);
+        
+        details.appendChild(summary);
+        details.appendChild(content);
+        
+        return details;
     }
 
     renderContent(message) {

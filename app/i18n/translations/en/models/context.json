@@ -47,6 +47,10 @@
     "agent_config": {
       "title": "[TODO: models.context.fields.agent_config.title]",
       "description": "[TODO: models.context.fields.agent_config.description]"
+    },
+    "interface": {
+      "title": "[TODO: models.context.fields.interface.title]",
+      "description": "[TODO: models.context.fields.interface.description]"
     }
   }
 }

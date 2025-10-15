@@ -298,7 +298,7 @@ class FileProcessor:
             f"{size_mb:.2f} MB" if size_mb >= 1 else f"{file_record.file_size} байт"
         )
 
-        return f"📎 Файл: {file_record.original_name} (ID: {file_record.file_id}, [Скачать]({file_record.url}), Тип: {file_record.content_type}, Размер: {size_str})"
+        return f"📎 [{file_record.original_name}]({file_record.url}) ({size_str})"
 
     @staticmethod
     def extract_file_info_from_message(message: str) -> list[Dict[str, str]]:
@@ -314,9 +314,20 @@ class FileProcessor:
         """
         files = []
         
-        # Новый формат: 📎 Файл: name (ID: id, [Скачать](url), Тип: type, Размер: size)
-        new_pattern = r"📎 Файл: ([^(]+) \(ID: ([^,]+), \[Скачать\]\(([^)]+)\), Тип: ([^,]+), Размер: ([^)]+)\)"
-        for match in re.finditer(new_pattern, message):
+        # Новый компактный формат: 📎 [filename](url) (size)
+        compact_pattern = r"📎 \[([^\]]+)\]\(([^)]+)\) \(([^)]+)\)"
+        for match in re.finditer(compact_pattern, message):
+            files.append({
+                "name": match.group(1).strip(),
+                "file_id": None,  # В компактном формате нет ID
+                "url": match.group(2).strip(),
+                "content_type": None,  # В компактном формате нет типа
+                "size": match.group(3).strip(),
+            })
+        
+        # Старый подробный формат: 📎 Файл: name (ID: id, [Скачать](url), Тип: type, Размер: size)
+        detailed_pattern = r"📎 Файл: ([^(]+) \(ID: ([^,]+), \[Скачать\]\(([^)]+)\), Тип: ([^,]+), Размер: ([^)]+)\)"
+        for match in re.finditer(detailed_pattern, message):
             files.append({
                 "name": match.group(1).strip(),
                 "file_id": match.group(2).strip(),

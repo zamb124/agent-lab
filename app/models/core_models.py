@@ -1031,6 +1031,13 @@ class FlowConfig(BuilderEntity):
         widget_attrs={"rows": 6, "placeholder": '{"max_attempts": 3, "welcome_shown": false}'}
     )
     
+    # Reasoning от LLM
+    enable_reasoning: bool = Field(
+        default=False,
+        title="Включить Reasoning",
+        description="Отправлять промежуточные размышления LLM (reasoning) пользователю в реальном времени",
+    )
+    
     # RAG конфигурация для flow
     rag_config: Optional[AgentRAGConfig] = Field(
         default_factory=lambda: AgentRAGConfig(
@@ -1372,6 +1379,8 @@ class FlowConfig(BuilderEntity):
             timeout=obj.timeout,
             max_retries=obj.max_retries,
             variables=obj.variables,
+            store=getattr(obj, "store", {}),
+            enable_reasoning=getattr(obj, "enable_reasoning", False),
             is_public=getattr(obj, "is_public", False),
             author=getattr(obj, "author", None),
             image_path=getattr(obj, "image_path", None),
