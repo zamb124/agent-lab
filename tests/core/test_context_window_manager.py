@@ -23,15 +23,16 @@ class TestContextWindowManager:
         manager = ContextWindowManager()
         
         messages = [
-            SystemMessage(content="Ты помощник" * 100),
-            HumanMessage(content="Привет" * 50),
-            AIMessage(content="Здравствуйте" * 50),
+            SystemMessage(content="Ты помощник" * 100),  # ~1200 символов
+            HumanMessage(content="Привет" * 50),  # ~300 символов
+            AIMessage(content="Здравствуйте" * 50),  # ~600 символов
         ]
         
         token_count = manager._count_tokens(messages)
         
+        # С коэффициентом 2.5: (1200+300+600)/2.5 + 3*10 = 840 + 30 = 870
         assert token_count > 0
-        assert 400 < token_count < 700
+        assert 700 < token_count < 1000  # Консервативная оценка дает больше токенов
     
     async def test_no_summarization_under_threshold(self, test_company, test_user):
         """Суммаризация НЕ происходит если контекст в норме"""
