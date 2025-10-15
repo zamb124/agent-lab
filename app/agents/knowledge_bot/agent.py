@@ -3,7 +3,7 @@
 Демонстрирует работу с документами и семантическим поиском.
 """
 
-from app.agents.base import BaseAgent
+from app.agents.react_agent import ReActAgent
 from app.tools.standard import ask_user
 from app.tools.rag_tools import (
     search_knowledge_base,
@@ -12,7 +12,7 @@ from app.tools.rag_tools import (
 )
 
 
-class KnowledgeBotAgent(BaseAgent):
+class KnowledgeBotAgent(ReActAgent):
     """Агент с доступом к базе знаний компании"""
 
     name = "knowledge_bot_agent"

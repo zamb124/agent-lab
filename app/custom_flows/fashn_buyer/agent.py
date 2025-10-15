@@ -2,11 +2,11 @@
 Реактивный агент ассистента закупщика для сбора информации о брендовых вещах.
 """
 
-from app.agents.base import BaseAgent
+from app.agents.react_agent import ReActAgent
 from .tools import save_fashn_issue_card, get_fashn_issue_status, add_fashn_issue_comment
 
 
-class FashnBuyerAgent(BaseAgent):
+class FashnBuyerAgent(ReActAgent):
     """Агент ассистента закупщика для сбора информации о брендовых вещах"""
 
     name = "fashn_buyer_agent"
