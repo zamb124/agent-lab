@@ -249,6 +249,9 @@ class ChatOpenAIWithBilling(BaseChatModel):
         # Логируем ответ
         logger.info(f"LLM ответ:\n{json.dumps(data, ensure_ascii=False, indent=2)}")
         
+        # Обрабатываем reasoning если есть
+        await self._process_reasoning(data)
+        
         # Извлекаем токены
         usage = data.get("usage", {})
         input_tokens = usage.get("prompt_tokens", 0)
@@ -303,6 +306,70 @@ class ChatOpenAIWithBilling(BaseChatModel):
         generation = ChatGeneration(message=ai_message)
         return ChatResult(generations=[generation])
     
+    async def _process_reasoning(self, response_data: dict):
+        """
+        Обрабатывает reasoning из OpenRouter response и отправляет в интерфейс.
+        
+        Args:
+            response_data: Полный ответ от OpenRouter API
+        """
+        logger.info("🔍 _process_reasoning: начало обработки")
+        
+        if not response_data.get("choices"):
+            logger.info("🔍 _process_reasoning: нет choices в ответе")
+            return
+        
+        choice = response_data["choices"][0]
+        message = choice.get("message", {})
+        
+        # Извлекаем reasoning_details
+        reasoning_details = message.get("reasoning_details")
+        if not reasoning_details:
+            logger.info("🔍 _process_reasoning: нет reasoning_details в message")
+            return
+        
+        logger.info(f"🔍 _process_reasoning: найдено {len(reasoning_details)} reasoning блоков")
+        
+        # Получаем контекст
+        context = get_context()
+        if not context:
+            logger.warning("💭 Reasoning пропущен: нет контекста")
+            return
+            
+        if not context.interface:
+            logger.warning(f"💭 Reasoning пропущен: нет интерфейса в контексте (context есть, session={context.session_id})")
+            return
+        
+        if not context.session_id:
+            logger.warning("💭 Reasoning пропущен: нет session_id в контексте")
+            return
+        
+        logger.info(f"🔍 _process_reasoning: context.interface={type(context.interface).__name__}, session_id={context.session_id}")
+        
+        # Проверяем настройки flow
+        if context.flow_config:
+            enable_reasoning = getattr(context.flow_config, 'enable_reasoning', False)
+            logger.info(f"🔍 _process_reasoning: flow_config.enable_reasoning={enable_reasoning}")
+            if not enable_reasoning:
+                logger.warning(f"💭 Reasoning отключен в настройках flow {context.flow_config.flow_id}")
+                return
+        else:
+            logger.info("🔍 _process_reasoning: нет flow_config в контексте, reasoning разрешен")
+        
+        # Отправляем каждый reasoning блок
+        for detail in reasoning_details:
+            if detail.get("type") == "reasoning.text":
+                reasoning_text = detail.get("text", "")
+                if reasoning_text:
+                    try:
+                        await context.interface.send_reasoning(
+                            context.session_id, 
+                            reasoning_text
+                        )
+                        logger.info(f"💭 Reasoning отправлен: {reasoning_text[:50]}...")
+                    except Exception as e:
+                        logger.error(f"Ошибка отправки reasoning: {e}", exc_info=True)
+
     async def _process_multimodal_fields(self, message_data: dict) -> List[str]:
         """
         Обрабатывает multimodal fields из OpenRouter response.

@@ -102,6 +102,49 @@ class BaseInterface(ABC):
     async def send_typing_notification(self, session_id: str, is_typing: bool):
         """Отправка уведомления о печати"""
         pass
+    
+    async def start_typing_indicator(self, session_id: str):
+        """
+        Запускает индикатор 'печатает...'.
+        Для большинства платформ - fallback к send_typing_notification(True).
+        Telegram переопределяет для фоновой корутины.
+        """
+        await self.send_typing_notification(session_id, True)
+    
+    async def stop_typing_indicator(self, session_id: str):
+        """
+        Останавливает индикатор 'печатает...'.
+        Для большинства платформ - fallback к send_typing_notification(False).
+        Telegram переопределяет для остановки корутины.
+        """
+        await self.send_typing_notification(session_id, False)
+
+    async def send_reasoning(self, session_id: str, reasoning_text: str):
+        """
+        Отправляет reasoning как промежуточное сообщение.
+        Базовая реализация - форматирует с префиксом '💭'.
+        Наследники могут переопределить для специального форматирования.
+        
+        Args:
+            session_id: ID сессии
+            reasoning_text: Текст reasoning от LLM
+        """
+        if not reasoning_text or not reasoning_text.strip():
+            return
+        
+        formatted = f"💭 {reasoning_text.strip()}"
+        
+        message = Message(
+            user_id="system",
+            session_id=session_id,
+            content=formatted,
+            flow_id="system",
+            platform=self.platform_name,
+            metadata={"is_reasoning": True}
+        )
+        
+        await self.send_message(message)
+        logger.debug(f"💭 Отправлен reasoning для сессии {session_id}")
 
     async def send_busy_message(self, session_id: str, flow_id: str = "system"):
         """Отправляет сообщение о том что сессия занята"""

@@ -1197,4 +1197,115 @@
             right: 10px !important;
         }
     }
+
+    /* Reasoning стили */
+    .chat-message.reasoning {
+        background: var(--chat-reasoning-bg, #ffe4f0);
+        border: 1px solid var(--chat-reasoning-border, #ffcce0);
+        border-radius: 6px;
+        padding: 0;
+        margin-bottom: 8px;
+    }
+
+    .reasoning-details {
+        background: transparent;
+        border: none;
+        padding: 0;
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--chat-reasoning-text, rgba(0, 0, 0, 0.6));
+    }
+
+    .chat-message.reasoning:has(.reasoning-details[open]) {
+        background: var(--chat-reasoning-bg-open, #ffd5e8);
+    }
+
+    .reasoning-summary {
+        cursor: pointer;
+        padding: 6px 10px;
+        font-weight: 500;
+        user-select: none;
+        list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--chat-reasoning-text, rgba(0, 0, 0, 0.5));
+        border-radius: 6px;
+        transition: background 0.2s ease;
+    }
+
+    .reasoning-summary .reasoning-label {
+        white-space: nowrap;
+    }
+
+    .reasoning-summary:hover {
+        background: var(--chat-reasoning-hover, rgba(0, 0, 0, 0.05));
+    }
+
+    .reasoning-summary::before {
+        content: '●';
+        display: inline-block;
+        font-size: 0.5rem;
+        color: var(--chat-reasoning-icon, #ff99c8);
+        transition: all 0.2s ease;
+    }
+
+    .reasoning-details[open] .reasoning-summary::before {
+        content: '○';
+    }
+
+    .reasoning-summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .reasoning-content {
+        padding: 8px 10px 10px 10px;
+        font-size: 0.8rem;
+        line-height: 1.4;
+        color: var(--chat-reasoning-content, rgba(0, 0, 0, 0.65));
+        border-top: 1px solid var(--chat-reasoning-border, rgba(100, 100, 100, 0.1));
+    }
+
+    .reasoning-content p {
+        margin: 0.3em 0;
+    }
+
+    .reasoning-content p:first-child {
+        margin-top: 0;
+    }
+
+    .reasoning-content p:last-child {
+        margin-bottom: 0;
+    }
+
+    /* Dark theme для reasoning */
+    [data-theme="dark"] .chat-message.reasoning {
+        background: rgba(255, 105, 180, 0.15);
+        border-color: rgba(255, 105, 180, 0.25);
+    }
+
+    [data-theme="dark"] .chat-message.reasoning:has(.reasoning-details[open]) {
+        background: rgba(255, 105, 180, 0.2);
+    }
+
+    [data-theme="dark"] .reasoning-details {
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    [data-theme="dark"] .reasoning-summary {
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    [data-theme="dark"] .reasoning-summary:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    [data-theme="dark"] .reasoning-summary::before {
+        color: rgba(255, 105, 180, 0.6);
+    }
+
+    [data-theme="dark"] .reasoning-content {
+        color: rgba(255, 255, 255, 0.6);
+        border-top-color: rgba(255, 105, 180, 0.2);
+    }
 </style>

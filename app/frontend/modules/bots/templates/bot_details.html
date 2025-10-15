@@ -122,23 +122,10 @@
         {% endif %}
         
         <div class="control-group">
-            <label class="control-label">LLM</label>
-            <div class="control-value">
-                <select class="form-control form-control-sm" id="bot-llm-provider" 
-                        onchange="updateLLMModels()" 
-                        style="width: auto; min-width: 120px;">
-                    <option value="">По умолчанию</option>
-                    <option value="openai" {% if bot.llm_config and bot.llm_config.provider == 'openai' %}selected{% endif %}>OpenAI</option>
-                    <option value="gemini" {% if bot.llm_config and bot.llm_config.provider == 'gemini' %}selected{% endif %}>Gemini</option>
-                </select>
-            </div>
-        </div>
-        
-        <div class="control-group">
-            <label class="control-label">Модель</label>
+            <label class="control-label">Модель LLM</label>
             <div class="control-value">
                 <select class="form-control form-control-sm" id="bot-llm-model" 
-                        style="width: auto; min-width: 180px; font-family: monospace;"
+                        style="width: auto; min-width: 250px; font-family: monospace;"
                         data-current-value="{{ bot.llm_config.model if bot.llm_config else '' }}">
                     <option value="">По умолчанию</option>
                 </select>
@@ -218,6 +205,19 @@
                          data-prompt="{{ bot.prompt }}"
                          data-flow-id="{{ bot.flow_id }}"
                          data-entry-point="{{ bot.entry_point }}"></div>
+                </div>
+                
+                <div class="form-group">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="bot-enable-reasoning"
+                               {% if bot.enable_reasoning %}checked{% endif %}>
+                        <label class="form-check-label" for="bot-enable-reasoning">
+                            💭 Включить размышления (reasoning)
+                        </label>
+                    </div>
+                    <small class="form-text text-muted">
+                        Отправлять промежуточные размышления LLM пользователю. Работает только с моделями поддерживающими reasoning (Google Gemini 2.5 Pro и др.)
+                    </small>
                 </div>
             </div>
             

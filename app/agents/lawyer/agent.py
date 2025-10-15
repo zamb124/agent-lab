@@ -18,9 +18,12 @@ class LawyerAgent(ReActAgent):
 
     name = "lawyer_agent"
     description = "Юрист компании ЭНЖИЛАБС, специалист по российскому законодательству"
-    model = "google/gemini-2.5-pro"
-    temperature = 0.2
-    max_tokens = 8192
+    
+    llm_config = {
+        "model": "google/gemini-2.5-pro",
+        "temperature": 0.2,
+        "max_tokens": 8192
+    }
 
     prompt = """Ты юридический советник компании {company_short_name} ({company_full_name}).
 

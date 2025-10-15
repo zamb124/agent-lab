@@ -102,8 +102,14 @@ class TaskProcessor:
         
         interface = await interface_factory.create_interface(task.context.platform, metadata)
         
+        # Устанавливаем interface в контекст для доступа из LLM (reasoning)
+        current_context = get_context()
+        if current_context and interface:
+            current_context.interface = interface
+            logger.debug(f"✅ Interface установлен в контекст для reasoning")
+        
         if interface:
-            await interface.send_typing_notification(task.session_id, True)
+            await interface.start_typing_indicator(task.session_id)
 
         try:
             task.status = TaskStatus.PROCESSING
@@ -222,7 +228,7 @@ class TaskProcessor:
 
             # Отправляем уведомление об окончании печати
             if interface:
-                await interface.send_typing_notification(task.session_id, False)
+                await interface.stop_typing_indicator(task.session_id)
 
             # Отправляем результат обратно пользователю через интерфейс
             await self._send_result_via_interface(task, result)
@@ -231,7 +237,7 @@ class TaskProcessor:
             logger.info(f"❓ {task.task_id} ждет ответа: {interrupt.value}")
             
             if interface:
-                await interface.send_typing_notification(task.session_id, False)
+                await interface.stop_typing_indicator(task.session_id)
             
             task.status = TaskStatus.PROCESSING
             task.output_data = {
@@ -273,7 +279,7 @@ class TaskProcessor:
     async def _handle_task_error(self, task, error: Exception, interface, user_message: str = None):
         """Обработка ошибки задачи"""
         if interface:
-            await interface.send_typing_notification(task.session_id, False)
+            await interface.stop_typing_indicator(task.session_id)
             await asyncio.sleep(0.1)
         
         if user_message:

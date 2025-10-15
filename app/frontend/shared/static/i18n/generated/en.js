@@ -531,6 +531,8 @@
   "models.context.fields.flow_config.description": "[TODO: models.context.fields.flow_config.description]",
   "models.context.fields.agent_config.title": "[TODO: models.context.fields.agent_config.title]",
   "models.context.fields.agent_config.description": "[TODO: models.context.fields.agent_config.description]",
+  "models.context.fields.interface.title": "[TODO: models.context.fields.interface.title]",
+  "models.context.fields.interface.description": "[TODO: models.context.fields.interface.description]",
   "models.flowauthor.fields.name.title": "[TODO: models.flowauthor.fields.name.title]",
   "models.flowauthor.fields.name.description": "[TODO: models.flowauthor.fields.name.description]",
   "models.flowauthor.fields.email.title": "[TODO: models.flowauthor.fields.email.title]",

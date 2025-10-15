@@ -29,6 +29,7 @@ class TelegramInterface(BaseInterface):
         super().__init__(platform_config)
         self.bot_token = bot_token
         self.username = platform_config.get("username", "unknown_bot")
+        self._typing_tasks: Dict[str, asyncio.Task] = {}
 
     async def handle_message(
         self, raw_data: Dict[str, Any], flow_id: str
@@ -175,25 +176,40 @@ class TelegramInterface(BaseInterface):
             logger.error(f"Ошибка отправки в Telegram: {e}")
 
     async def _send_text_message(self, chat_id: str, text: str):
-        """Отправляет текстовое сообщение"""
+        """Отправляет текстовое сообщение с автоматическим разбиением длинных сообщений"""
+        # Обрабатываем ссылки на файлы
+        text = self._beautify_file_links(text)
+        
         # Конвертируем Markdown в HTML
         html_text = self._convert_markdown_to_html(text)
         
+        # Разбиваем на части если превышает лимит Telegram (4096 символов)
+        message_parts = self._split_message(html_text, max_length=4096)
+        
         url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
-        payload = {
-            "chat_id": chat_id,
-            "text": html_text,
-            "parse_mode": "HTML",
-        }
+        
+        for i, part in enumerate(message_parts):
+            payload = {
+                "chat_id": chat_id,
+                "text": part,
+                "parse_mode": "HTML",
+            }
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, json=payload)
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=payload)
 
-            if response.status_code == 200:
-                logger.info(f"✅ Отправлено текстовое сообщение в Telegram чат {chat_id}")
-            else:
-                logger.error(f"❌ Ошибка отправки текста в Telegram: {response.status_code}")
-                logger.error(f"❌ Ответ API: {response.text}")
+                if response.status_code == 200:
+                    if len(message_parts) > 1:
+                        logger.info(f"✅ Отправлена часть {i+1}/{len(message_parts)} в Telegram чат {chat_id}")
+                    else:
+                        logger.info(f"✅ Отправлено текстовое сообщение в Telegram чат {chat_id}")
+                else:
+                    logger.error(f"❌ Ошибка отправки текста в Telegram: {response.status_code}")
+                    logger.error(f"❌ Ответ API: {response.text}")
+            
+            # Небольшая задержка между частями чтобы сохранить порядок
+            if i < len(message_parts) - 1:
+                await asyncio.sleep(0.3)
 
     async def _send_audio_message(self, chat_id: str, audio_info: Dict[str, Any]):
         """Отправляет аудиофайл как voice message"""
@@ -314,6 +330,60 @@ class TelegramInterface(BaseInterface):
         except Exception as e:
             logger.error(f"❌ Ошибка отправки ссылки на аудио: {e}")
 
+    async def send_reasoning(self, session_id: str, reasoning_text: str):
+        """
+        Telegram-специфичная отправка reasoning.
+        Использует expandable blockquote для компактности.
+        """
+        if not reasoning_text or not reasoning_text.strip():
+            return
+        
+        # Извлекаем chat_id из session_id (формат: telegram:chat_id:flow:uuid)
+        parts = session_id.split(":")
+        chat_id = parts[1] if len(parts) > 1 else None
+        
+        if not chat_id:
+            logger.warning(f"Не удалось извлечь chat_id из session_id: {session_id}")
+            return
+        
+        # Форматируем reasoning как expandable blockquote (скрываемый блок)
+        # Ограничиваем длину reasoning для читаемости
+        max_length = 500
+        if len(reasoning_text) > max_length:
+            # Разбиваем на абзацы
+            paragraphs = reasoning_text.split("\n\n")
+            for paragraph in paragraphs:
+                if paragraph.strip():
+                    truncated = paragraph[:max_length]
+                    formatted = f"<blockquote expandable>💭 <b>Размышление:</b>\n{truncated}</blockquote>"
+                    await self._send_reasoning_message(chat_id, formatted)
+                    await asyncio.sleep(0.3)
+        else:
+            formatted = f"<blockquote expandable>💭 <b>Размышление:</b>\n{reasoning_text}</blockquote>"
+            await self._send_reasoning_message(chat_id, formatted)
+        
+        logger.debug(f"💭 Reasoning отправлен в Telegram для session {session_id}")
+
+    async def _send_reasoning_message(self, chat_id: str, formatted_text: str):
+        """Отправляет reasoning сообщение в Telegram"""
+        try:
+            url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
+            payload = {
+                "chat_id": chat_id,
+                "text": formatted_text,
+                "parse_mode": "HTML",
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, json=payload)
+                
+                if response.status_code != 200:
+                    logger.error(
+                        f"Ошибка отправки reasoning в Telegram: {response.status_code} - {response.text}"
+                    )
+        except Exception as e:
+            logger.error(f"Исключение при отправке reasoning: {e}", exc_info=True)
+
     async def send_typing_notification(self, session_id: str, is_typing: bool):
         """Отправка уведомления о печати в Telegram"""
         try:
@@ -343,6 +413,52 @@ class TelegramInterface(BaseInterface):
 
         except Exception as e:
             logger.error(f"Ошибка отправки typing уведомления в Telegram: {e}")
+    
+    async def start_typing_indicator(self, session_id: str):
+        """Запускает фоновую корутину для поддержания индикатора 'печатает...'"""
+        if session_id in self._typing_tasks:
+            logger.debug(f"Typing индикатор для {session_id} уже запущен")
+            return
+        
+        task = asyncio.create_task(self._typing_loop(session_id))
+        self._typing_tasks[session_id] = task
+        logger.info(f"🔄 Запущена фоновая корутина typing для {session_id}")
+    
+    async def stop_typing_indicator(self, session_id: str):
+        """Останавливает фоновую корутину typing индикатора"""
+        task = self._typing_tasks.pop(session_id, None)
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            logger.info(f"⏹️ Остановлена корутина typing для {session_id}")
+    
+    async def _typing_loop(self, session_id: str):
+        """Фоновая корутина для периодической отправки typing индикатора"""
+        try:
+            parts = session_id.split(":")
+            if len(parts) < 2 or parts[0] != "telegram":
+                return
+            
+            chat_id = parts[1]
+            url = f"https://api.telegram.org/bot{self.bot_token}/sendChatAction"
+            payload = {"chat_id": chat_id, "action": "typing"}
+            
+            while True:
+                try:
+                    async with httpx.AsyncClient(timeout=3.0) as client:
+                        await client.post(url, json=payload)
+                    logger.debug(f"⌛ Отправлен периодический typing для чата {chat_id}")
+                except Exception as e:
+                    logger.warning(f"Ошибка отправки typing: {e}")
+                
+                await asyncio.sleep(4.0)
+        
+        except asyncio.CancelledError:
+            logger.debug(f"Корутина typing для {session_id} отменена")
+            raise
 
     async def setup_commands(self) -> bool:
         """Устанавливает команды для Telegram бота"""
@@ -821,6 +937,99 @@ class TelegramInterface(BaseInterface):
         
         return combined_message
 
+    def _split_message(self, text: str, max_length: int = 4096) -> List[str]:
+        """
+        Разбивает длинное сообщение на части по max_length символов.
+        Старается разбивать по логичным границам: абзацы, предложения.
+        """
+        if len(text) <= max_length:
+            return [text]
+        
+        parts = []
+        current_part = ""
+        
+        # Разбиваем по абзацам
+        paragraphs = text.split('\n\n')
+        
+        for paragraph in paragraphs:
+            # Если параграф сам по себе длиннее max_length
+            if len(paragraph) > max_length:
+                # Разбиваем по предложениям
+                sentences = paragraph.split('. ')
+                for sentence in sentences:
+                    sentence_with_dot = sentence if sentence.endswith('.') else sentence + '.'
+                    
+                    # Если даже предложение слишком длинное - режем по символам
+                    if len(sentence_with_dot) > max_length:
+                        for i in range(0, len(sentence_with_dot), max_length - 10):
+                            chunk = sentence_with_dot[i:i + max_length - 10]
+                            if current_part:
+                                parts.append(current_part)
+                                current_part = ""
+                            parts.append(chunk)
+                    else:
+                        if len(current_part) + len(sentence_with_dot) + 1 <= max_length:
+                            current_part += sentence_with_dot + ' '
+                        else:
+                            if current_part:
+                                parts.append(current_part.strip())
+                            current_part = sentence_with_dot + ' '
+            else:
+                # Добавляем параграф к текущей части
+                if len(current_part) + len(paragraph) + 2 <= max_length:
+                    current_part += paragraph + '\n\n'
+                else:
+                    if current_part:
+                        parts.append(current_part.strip())
+                    current_part = paragraph + '\n\n'
+        
+        # Добавляем остаток
+        if current_part:
+            parts.append(current_part.strip())
+        
+        return parts if parts else [text[:max_length]]
+    
+    def _beautify_file_links(self, text: str) -> str:
+        """
+        Преобразует голые ссылки на файлы в красивый формат.
+        
+        Например:
+        https://example.com/files/document.pdf?params -> 📎 [document.pdf](url)
+        """
+        import urllib.parse
+        from pathlib import Path
+        
+        # Паттерн для поиска URL с расширениями файлов
+        # Ищем URL которые заканчиваются на .doc, .docx, .pdf, .txt, .xls, .xlsx и т.д.
+        file_extensions = r'\.(pdf|docx?|xlsx?|txt|zip|rar|png|jpe?g|gif|mp4|mp3|wav)'
+        
+        # Находим все URL с файлами, которые идут отдельной строкой или после пробела
+        def replace_file_url(match):
+            full_match = match.group(0)
+            url = match.group(1)
+            
+            # Извлекаем имя файла из URL
+            parsed = urllib.parse.urlparse(url)
+            path = urllib.parse.unquote(parsed.path)
+            filename = Path(path).name
+            
+            # Если не смогли извлечь имя - используем оригинальный URL
+            if not filename:
+                return full_match
+            
+            # Возвращаем красиво отформатированную ссылку
+            return f"📎 [{filename}]({url})"
+        
+        # Ищем URL которые:
+        # 1. Начинаются с новой строки или пробела
+        # 2. Содержат https?://
+        # 3. Заканчиваются расширением файла (с возможными query параметрами)
+        pattern = rf'(?:^|\s)(https?://[^\s<>]+{file_extensions}[^\s<>]*?)(?:\s|$)'
+        
+        text = re.sub(pattern, replace_file_url, text, flags=re.MULTILINE | re.IGNORECASE)
+        
+        return text
+    
     def _convert_markdown_to_html(self, text: str) -> str:
         """Конвертирует простой Markdown в HTML для Telegram"""
         
