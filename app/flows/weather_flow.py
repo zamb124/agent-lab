@@ -162,7 +162,8 @@ weather_flow_config = FlowConfig(
     },
     install_hook=install,
     after_install_hook=after_install,
-    uninstall_hook=uninstall
+    uninstall_hook=uninstall,
+    
 )
 
 # ═══════════════════════════════════════════════════════════════
