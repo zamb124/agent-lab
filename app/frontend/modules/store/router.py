@@ -37,7 +37,10 @@ async def store_list(request: Request):
     flows = []
     for full_flow_id, flow_config in flows_with_ids:
         flow_id_for_check = flow_config.flow_id or flow_config.name.lower().replace(' ', '_')
-        installed = await storage.get_flow_config(flow_id_for_check) is not None
+        installed = (
+            await storage.get_flow_config(full_flow_id) is not None or
+            await storage.get_flow_config(flow_id_for_check) is not None
+        )
         
         author_dict = None
         if hasattr(flow_config, 'author') and flow_config.author:

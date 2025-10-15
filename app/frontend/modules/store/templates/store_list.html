@@ -2,18 +2,20 @@
     {% if flows %}
         {% for flow in flows %}
         <div class="store-card {% if flow.installed %}installed{% endif %}" data-flow-id="{{ flow.flow_id }}" onclick="openFlowDetails('{{ flow.flow_id }}')">
-            {% if flow.installed %}
-            <span class="store-card-badge installed">
-                <i class="bi bi-check-circle-fill"></i>
-                Установлено
-            </span>
-            {% endif %}
             <div class="store-card-image">
-                <img src="{{ flow.image_url }}" alt="{{ flow.name }}" loading="lazy">
+                {% if flow.installed %}
+                <span class="store-card-badge installed">
+                    <i class="bi bi-check-circle-fill"></i>
+                    Установлено
+                </span>
+                {% endif %}
+                <div class="store-card-image-wrapper">
+                    <img src="{{ flow.image_url }}" alt="{{ flow.name }}" loading="lazy">
+                </div>
             </div>
             <div class="store-card-body">
                 <h3 class="store-card-title">{{ flow.name }}</h3>
-                <p class="store-card-description">{{ flow.description }}</p>
+                <div class="store-card-description" data-markdown="{{ flow.description }}"></div>
                 
                 {% if flow.platforms and flow.platforms|length > 0 %}
                 <div class="store-card-platforms">

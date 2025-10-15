@@ -8,6 +8,26 @@ import { renderMarkdown } from '/static/js/utils/markdown.js';
 (function() {
     'use strict';
     
+    function initializeStoreDescriptions() {
+        const descriptions = document.querySelectorAll('.store-card-description[data-markdown]');
+        if (descriptions.length === 0) return;
+        
+        descriptions.forEach(element => {
+            const markdownText = element.getAttribute('data-markdown');
+            if (markdownText && !element.dataset.processed) {
+                element.innerHTML = renderMarkdown(markdownText);
+                element.removeAttribute('data-markdown');
+                element.dataset.processed = 'true';
+            }
+        });
+    }
+    
+    document.body.addEventListener('htmx:afterSettle', (event) => {
+        if (event.target.id === 'store-list-view') {
+            initializeStoreDescriptions();
+        }
+    });
+    
     window.openFlowDetails = async function(flowId) {
         const modal = document.getElementById('flow-details-modal');
         const modalDetails = document.getElementById('modal-flow-details');
