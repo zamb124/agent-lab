@@ -517,9 +517,23 @@ class ChatManager {
             allSessions: this.agentSessions
         });
         
-        const isExistingSession = existingSession && !session_id;
+        let isExistingSession = false;
+        let sessionToUse = session_id;
         
-        this.currentSession = session_id || this.getOrCreateSessionForAgent(agent_id);
+        if (!session_id && existingSession) {
+            if (existingSession.startsWith('web:') || !existingSession.includes(':')) {
+                sessionToUse = existingSession;
+                isExistingSession = true;
+                console.log('✅ Используем существующую web-сессию:', sessionToUse);
+            } else {
+                const platform = existingSession.split(':')[0];
+                console.log(`⚠️ Последняя сессия для агента ${agent_id} - платформа ${platform}. Создаём новую web-сессию.`);
+                sessionToUse = this.createNewSessionForAgent(agent_id);
+                isExistingSession = false;
+            }
+        }
+        
+        this.currentSession = sessionToUse || this.getOrCreateSessionForAgent(agent_id);
         
         console.log('📋 Итоговая сессия:', {
             currentSession: this.currentSession,
@@ -536,7 +550,7 @@ class ChatManager {
         this.connectWebSocket();
 
         if (isExistingSession) {
-            console.log('📜 Загружаем историю для существующей сессии:', this.currentSession);
+            console.log('📜 Загружаем историю для существующей web-сессии:', this.currentSession);
             await this.loadSessionHistory(this.currentSession);
         } else {
             console.log('🆕 Новая сессия или передан session_id, история не загружается');

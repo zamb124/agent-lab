@@ -639,9 +639,21 @@ async def get_llm_models():
     
     models_list = []
     for model_id, model_config in settings.llm.models.items():
+        input_cost_per_1m = model_config.input_cost_per_token * 1_000_000
+        output_cost_per_1m = model_config.output_cost_per_token * 1_000_000
+        
+        cost_display = f" (вход: {input_cost_per_1m:.2f}₽, выход: {output_cost_per_1m:.2f}₽ за 1М токенов)"
+        
+        label = f"{model_id}"
+        if model_config.description:
+            label += f" - {model_config.description}"
+        label += cost_display
+        
         models_list.append({
             "value": model_id,
-            "label": f"{model_id} - {model_config.description}" if model_config.description else model_id
+            "label": label,
+            "input_cost_per_1m": round(input_cost_per_1m, 2),
+            "output_cost_per_1m": round(output_cost_per_1m, 2)
         })
     
     return {

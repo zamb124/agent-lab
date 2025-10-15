@@ -125,7 +125,7 @@
             <label class="control-label">Модель LLM</label>
             <div class="control-value">
                 <select class="form-control form-control-sm" id="bot-llm-model" 
-                        style="width: auto; min-width: 250px; font-family: monospace;"
+                        style="width: auto; min-width: 250px; max-width: 500px; font-family: monospace;"
                         data-current-value="{{ bot.llm_config.model if bot.llm_config else '' }}">
                     <option value="">По умолчанию</option>
                 </select>
