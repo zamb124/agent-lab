@@ -2,12 +2,12 @@
 Агент для управления Telegram каналом - создание и публикация постов.
 """
 
-from app.agents.base import BaseAgent
+from app.agents.react_agent import ReActAgent
 from app.tools.telegram_channel_tools import publish_to_telegram_channel
 from app.tools.nano_banana_tools import generate_images
 
 
-class TelegramChannelAgent(BaseAgent):
+class TelegramChannelAgent(ReActAgent):
     """Агент для создания и публикации постов в Telegram канал"""
 
     name = "telegram_channel_agent"
