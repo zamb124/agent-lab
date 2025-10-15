@@ -169,7 +169,7 @@ class BaseAgent(ABC):
             logger.info(f"🔍 Без thread_id, используем {len(all_messages)} сообщений")
         
         # Проверка и суммаризация контекста ПЕРЕД вызовом графа
-        logger.debug(f"🔍 СУММАРИЗАЦИЯ CHECK: agent={self.config.name}, messages={len(all_messages)}, llm_config={self.config.llm_config}")
+        logger.warning(f"🔍 СУММАРИЗАЦИЯ CHECK: agent={self.config.name}, messages={len(all_messages)}, llm_config={self.config.llm_config}")
         
         if all_messages and self.config.llm_config and len(all_messages) > 1:
             logger.info(f"🔍 Запускаем проверку контекста для агента {self.config.name}")
