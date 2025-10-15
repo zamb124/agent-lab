@@ -61,7 +61,8 @@ class OpenRouterConfig(BaseModel):
 class ModelConfig(BaseModel):
     """Конфигурация отдельной модели"""
 
-    max_tokens: Optional[int] = None
+    max_tokens: Optional[int] = None  # Максимум токенов в ответе
+    context_window: Optional[int] = None  # Размер контекстного окна (input)
     temperature: float = 0.2
     description: Optional[str] = None
     input_cost_per_token: float = 0.00001  # ₽ за токен (input)
@@ -74,6 +75,7 @@ class LLMConfig(BaseModel):
     openrouter: Optional[OpenRouterConfig] = None
     models: Dict[str, ModelConfig] = Field(default_factory=dict)
     default_model: str = "anthropic/claude-sonnet-4.5"
+    default_summarization_model: str = "google/gemini-2.5-flash"  # Дефолтная модель для суммаризации
 
 
 class ServerConfig(BaseModel):

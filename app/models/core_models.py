@@ -631,9 +631,35 @@ class LLMConfig(BaseModel):
     )
     max_tokens: Optional[int] = Field(
         default=None,
-        title="Максимум токенов",
-        description="Максимальное количество токенов в ответе",
+        title="Максимум токенов в ответе",
+        description="Максимальное количество токенов в ответе модели",
         ge=1,
+    )
+    
+    context_window: Optional[int] = Field(
+        default=None,
+        title="Размер контекстного окна",
+        description="Максимальное количество токенов на входе (если None - из глобальной конфигурации модели)",
+        ge=1000,
+    )
+    summarization_threshold: float = Field(
+        default=0.8,
+        title="Порог суммаризации (%)",
+        description="При каком проценте заполненности контекста начинать суммаризацию (0.5-1.0)",
+        ge=0.5,
+        le=1.0,
+    )
+    summarization_target: float = Field(
+        default=0.2,
+        title="Целевой размер после суммаризации (%)",
+        description="До какого процента от context_window сжимать диалог (0.1-0.5)",
+        ge=0.1,
+        le=0.5,
+    )
+    enable_auto_summarization: bool = Field(
+        default=True,
+        title="Автосуммаризация",
+        description="Автоматически суммаризировать диалог при достижении порога",
     )
 
 

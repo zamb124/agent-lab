@@ -29,6 +29,27 @@
     "additional_params": {
       "title": "Additional Parameters",
       "description": "Additional parameters for LLM"
+    },
+    "context_window": {
+      "title": "[TODO: models.llmconfig.fields.context_window.title]",
+      "description": "[TODO: models.llmconfig.fields.context_window.description]"
+    },
+    "summarization_threshold": {
+      "title": "[TODO: models.llmconfig.fields.summarization_threshold.title]",
+      "description": "[TODO: models.llmconfig.fields.summarization_threshold.description]"
+    },
+    "summarization_target": {
+      "title": "[TODO: models.llmconfig.fields.summarization_target.title]",
+      "description": "[TODO: models.llmconfig.fields.summarization_target.description]"
+    },
+    "summarization_model": {
+      "title": "[TODO: models.llmconfig.fields.summarization_model.title]",
+      "description": "[TODO: models.llmconfig.fields.summarization_model.description]",
+      "placeholder": "[TODO: models.llmconfig.fields.summarization_model.placeholder]"
+    },
+    "enable_auto_summarization": {
+      "title": "[TODO: models.llmconfig.fields.enable_auto_summarization.title]",
+      "description": "[TODO: models.llmconfig.fields.enable_auto_summarization.description]"
     }
   }
 }

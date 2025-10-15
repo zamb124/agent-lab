@@ -29,6 +29,27 @@
     "additional_params": {
       "title": "Дополнительные параметры",
       "description": "Дополнительные параметры для LLM"
+    },
+    "context_window": {
+      "title": "Размер контекстного окна",
+      "description": "Максимальное количество токенов на входе (если None - из глобальной конфигурации модели)"
+    },
+    "summarization_threshold": {
+      "title": "Порог суммаризации (%)",
+      "description": "При каком проценте заполненности контекста начинать суммаризацию (0.5-1.0)"
+    },
+    "summarization_target": {
+      "title": "Целевой размер после суммаризации (%)",
+      "description": "До какого процента от context_window сжимать диалог (0.1-0.5)"
+    },
+    "summarization_model": {
+      "title": "Модель для суммаризации",
+      "description": "Модель для суммаризации диалога (если None - используется основная модель)",
+      "placeholder": "google/gemini-2.5-flash, deepseek/deepseek-v3-0324"
+    },
+    "enable_auto_summarization": {
+      "title": "Автосуммаризация",
+      "description": "Автоматически суммаризировать диалог при достижении порога"
     }
   }
 }
