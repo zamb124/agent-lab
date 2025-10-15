@@ -27,6 +27,7 @@ lawyer_flow = FlowConfig(
         "company_full_name_en": "Limited Liability Company Angilabs",
         "ceo_name": "Шведов Виктор Викторович",
         "bot_name": "Юридический советник ЭНЖИЛАБС"
-    }
+    },
+    is_public=True,
 )
 
