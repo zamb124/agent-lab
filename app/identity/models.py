@@ -208,7 +208,7 @@ class Company(BaseModel):
         description="Тарифный план компании (free, basic, premium, enterprise)"
     )
     balance: float = Field(
-        default=0.0,
+        default=50.0,
         title="Баланс",
         description="Баланс компании в RUB (реальные деньги на счету)",
         ge=0.0
