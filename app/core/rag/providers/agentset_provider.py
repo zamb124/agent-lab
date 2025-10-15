@@ -6,12 +6,15 @@ RAG провайдер на базе Agentset.ai.
 
 import httpx
 import logging
+import re
+import hashlib
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from ..base_provider import BaseRAGProvider
 from app.models.rag_models import RAGDocument, RAGSearchResult, RAGNamespace
 from ...core_clients.s3_client import get_default_s3_client
+from ...slug_utils import generate_slug
 
 logger = logging.getLogger(__name__)
 
@@ -60,16 +63,51 @@ class AgentsetRAGProvider(BaseRAGProvider):
         """
         Создает namespace в Agentset.
         Если не указать embeddingConfig - используется managed модель Agentset.
+        
+        Args:
+            name: Имя namespace (используется как slug если slug не передан)
+            description: Описание namespace
+            **kwargs: Дополнительные параметры, включая slug
         """
-        slug = kwargs.get("slug") or name.lower().replace(" ", "-").replace("_", "-")[:48]
+        slug = kwargs.get("slug") or generate_slug(name, add_hash=True)
         
         payload = {
             "name": name,
             "slug": slug
         }
         
-        response = await self._client.post("/v1/namespace", json=payload)
-        response.raise_for_status()
+        logger.info(f"Создание namespace: name='{name}', slug='{slug}'")
+        
+        try:
+            response = await self._client.post("/v1/namespace", json=payload)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 409:
+                logger.info(f"Namespace '{name}' уже существует (slug='{slug}'), получаем его")
+                namespaces = await self.list_namespaces()
+                for ns in namespaces:
+                    ns_slug = ns.metadata.get("agentset_data", {}).get("slug")
+                    if ns_slug == slug or ns.name == name:
+                        logger.info(f"Найден существующий namespace: {name} (ID: {ns.namespace_id})")
+                        return ns
+                
+                raise ValueError(
+                    f"Namespace '{name}' уже существует, но не найден в списке. Попробуйте другое имя."
+                )
+            
+            error_detail = ""
+            try:
+                error_body = e.response.json()
+                error_detail = f" Детали: {error_body}"
+            except Exception:
+                error_detail = f" Тело ответа: {e.response.text[:500]}"
+            
+            raise httpx.HTTPStatusError(
+                f"Ошибка создания namespace в AgentSet (name='{name}', slug='{slug}'): "
+                f"{e.response.status_code} - {e.response.reason_phrase}{error_detail}",
+                request=e.request,
+                response=e.response,
+            ) from e
         
         result = response.json()
         data = result.get("data", result)
