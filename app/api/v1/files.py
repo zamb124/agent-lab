@@ -7,6 +7,8 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 import httpx
 from app.core.file_processor import get_default_file_processor
+from app.core.audio_processor import get_default_audio_processor
+from app.core.core_clients.s3_client import S3ClientFactory
 from app.core.context import get_context
 
 logger = logging.getLogger(__name__)
@@ -78,32 +80,29 @@ async def download_file(file_id: str):
                 ) and not file_record.metadata.get("telegram_upload"):
                     raise HTTPException(status_code=403, detail="Нет доступа к файлу")
 
-        # Используем прямой S3 URL из модели
-        if not file_record.direct_s3_url:
-            logger.error(f"Не удалось сформировать S3 URL для файла {file_id}")
-            raise HTTPException(
-                status_code=500, detail="Не удалось получить ссылку на файл"
-            )
+        # Генерируем signed URL на 1 час для скачивания
+        s3_client = S3ClientFactory.create_client_for_bucket(file_record.s3_bucket)
         
-        s3_url = file_record.direct_s3_url
+        signed_url = await s3_client.generate_presigned_url(
+            key=file_record.s3_key,
+            expiration=3600  # 1 час
+        )
+        
+        if not signed_url:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Не удалось создать signed URL для файла {file_id}"
+            )
 
-        logger.info(f"Попытка скачать файл {file_id} из S3: {s3_url}")
+        logger.info(f"✅ Создан signed URL для {file_id} (срок: 1 час)")
 
-        # Проверяем доступность файла в S3 перед началом стриминга
-        async with httpx.AsyncClient() as client:
-            try:
-                head_response = await client.head(s3_url, follow_redirects=True)
-                if head_response.status_code != 200:
-                    logger.error(f"Файл не найден в S3: {s3_url}, статус: {head_response.status_code}")
-                    raise HTTPException(status_code=404, detail="Файл не найден в хранилище")
-            except httpx.RequestError as e:
-                logger.error(f"Ошибка подключения к S3: {e}")
-                raise HTTPException(status_code=500, detail="Ошибка доступа к хранилищу")
-
-        # Стримим файл через нашу платформу
+        # Стримим файл через signed URL
         async def stream_file():
             async with httpx.AsyncClient() as client:
-                async with client.stream("GET", s3_url) as response:
+                async with client.stream("GET", signed_url) as response:
+                    if response.status_code != 200:
+                        logger.error(f"Ошибка S3: {response.status_code}")
+                        return
                     async for chunk in response.aiter_bytes():
                         yield chunk
 

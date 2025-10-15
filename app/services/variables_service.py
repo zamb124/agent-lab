@@ -5,7 +5,8 @@
 
 import logging
 import json
-from typing import Optional, Dict, Any
+import re
+from typing import Optional, Dict, Any, Set, List
 
 from app.db.repositories import Storage
 
@@ -132,6 +133,99 @@ class VariablesService:
         
         else:
             return value
+    
+    def extract_variable_keys(self, value: Any) -> Set[str]:
+        """
+        Извлекает все ссылки на переменные (@var:key) из значения.
+        
+        Args:
+            value: Значение для анализа (str, dict, list)
+        
+        Returns:
+            Множество ключей переменных (без префикса @var:)
+        """
+        keys = set()
+        
+        if isinstance(value, str):
+            # Ищем @var:key в строке
+            matches = re.findall(r'@var:([a-zA-Z0-9_-]+)', value)
+            keys.update(matches)
+        
+        elif isinstance(value, dict):
+            for v in value.values():
+                keys.update(self.extract_variable_keys(v))
+        
+        elif isinstance(value, list):
+            for item in value:
+                keys.update(self.extract_variable_keys(item))
+        
+        return keys
+    
+    async def add_tag_to_variable(self, var_key: str, tag: str) -> bool:
+        """
+        Добавляет тег к переменной (если переменная существует).
+        
+        Args:
+            var_key: Ключ переменной
+            tag: Тег для добавления
+        
+        Returns:
+            True если тег добавлен
+        """
+        storage_key = f"var:{var_key}"
+        data = await self.storage.get(storage_key)
+        
+        if not data:
+            logger.debug(f"Переменная {var_key} не найдена, пропускаем добавление тега {tag}")
+            return False
+        
+        var_data = json.loads(data)
+        groups = var_data.get("groups", [])
+        
+        if tag not in groups:
+            groups.append(tag)
+            var_data["groups"] = groups
+            
+            await self.storage.set(storage_key, json.dumps(var_data))
+            logger.info(f"✅ Тег '{tag}' добавлен к переменной '{var_key}'")
+            return True
+        else:
+            logger.debug(f"Тег '{tag}' уже существует для переменной '{var_key}'")
+            return False
+    
+    async def tag_variables_for_entity(
+        self, 
+        entity_name: str, 
+        data_sources: List[Any]
+    ) -> int:
+        """
+        Добавляет теги к переменным используемым в сущности (агент/flow).
+        
+        Args:
+            entity_name: Название сущности (имя агента или flow)
+            data_sources: Список источников данных для поиска @var: ссылок
+        
+        Returns:
+            Количество переменных с добавленными тегами
+        """
+        all_var_keys = set()
+        
+        for source in data_sources:
+            if source:
+                all_var_keys.update(self.extract_variable_keys(source))
+        
+        if not all_var_keys:
+            logger.debug(f"Не найдено переменных @var: для {entity_name}")
+            return 0
+        
+        logger.info(f"Найдено {len(all_var_keys)} переменных для {entity_name}: {all_var_keys}")
+        
+        tagged_count = 0
+        for var_key in all_var_keys:
+            if await self.add_tag_to_variable(var_key, entity_name):
+                tagged_count += 1
+        
+        return tagged_count
 
 
 # Глобальный экземпляр

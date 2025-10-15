@@ -850,7 +850,6 @@ class AgentConfig(BuilderEntity):
         
         await migrator.persister.save_agent(agent_config)
         
-        # Резолвим @var: ссылки в local_variables и store
         from ..services.variables_service import get_variables_service
         variables_service = get_variables_service()
         
@@ -1245,6 +1244,16 @@ class FlowConfig(BuilderEntity):
         
         if flow_config.store:
             await variables_service.resolve(flow_config.store, auto_create=True)
+        
+        flow_tag = flow_config.name
+        data_sources = [
+            flow_config.variables,
+            flow_config.platforms,
+            flow_config.store
+        ]
+        tagged_count = await variables_service.tag_variables_for_entity(flow_tag, data_sources)
+        if tagged_count > 0:
+            logger.info(f"✅ Добавлено тегов для flow '{flow_tag}': {tagged_count}")
         
         if with_dependencies and flow_config.entry_point_agent:
             await AgentConfig.migrate(

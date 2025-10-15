@@ -5,7 +5,6 @@
 
 import logging
 from typing import Optional
-from urllib.parse import quote
 from langchain_core.runnables import RunnableConfig
 
 from app.core.tool_decorator import tool
@@ -230,11 +229,12 @@ async def list_documents_in_knowledge_base(
             "failed": "❌"
         }.get(doc.status, "❓")
         
-        source_url = doc.metadata.get("source_url")
+        # Используем signed URL (срок 1 час) вместо публичного
+        signed_url = doc.metadata.get("signed_url")
         
-        if source_url:
-            safe_url = quote(source_url, safe=':/?#[]@!$&\'()*+,;=')
-            doc_name = f"**[{doc.name}]({safe_url})**"
+        if signed_url:
+            # Signed URL уже правильно закодирован, не нужно quote!
+            doc_name = f"**[{doc.name}]({signed_url})**"
         else:
             doc_name = f"**{doc.name}**"
         

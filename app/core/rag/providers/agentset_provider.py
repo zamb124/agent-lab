@@ -10,6 +10,7 @@ import re
 import hashlib
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+from urllib.parse import urlparse, unquote
 
 from ..base_provider import BaseRAGProvider
 from app.models.rag_models import RAGDocument, RAGSearchResult, RAGNamespace
@@ -295,50 +296,53 @@ class AgentsetRAGProvider(BaseRAGProvider):
         **kwargs
     ) -> RAGDocument:
         """
-        Загружает документ из S3.
+        Загружает документ из S3 через signed URL.
         
         Стратегия:
-        1. Копируем файл в публичную папку rag_public/ с ACL public-read
-        2. Используем direct S3 URL
-        3. Передаем URL в Agentset
+        1. Генерируем signed URL на 24 часа для индексации Agentset
+        2. Сохраняем оригинальный s3_key в metadata для генерации новых signed URL
+        3. Передаем signed URL в Agentset (файл остается приватным в S3)
+        4. После индексации URL протухнет, но документ уже в RAG
         """
         s3_client = await get_default_s3_client()
         
         if not s3_client:
             raise ValueError("S3 клиент не настроен. Проверьте конфигурацию s3.enabled")
         
-        public_key = f"rag_public/{namespace_id}/{Path(s3_key).name}"
-        
-        file_data = await s3_client.download_bytes(s3_key)
-        if not file_data:
-            raise ValueError(f"Не удалось скачать файл из S3: {s3_key}")
-        
-        await s3_client.upload_bytes(
-            data=file_data,
-            key=public_key,
-            content_type=self._get_content_type(s3_key),
-            acl="public-read"
+        # Генерируем signed URL на 24 часа (86400 сек) для индексации Agentset
+        signed_url = await s3_client.generate_presigned_url(
+            key=s3_key,
+            expiration=86400  # 24 часа
         )
         
-        file_url = f"{s3_client.endpoint_url}/{s3_client.bucket_name}/{public_key}"
+        if not signed_url:
+            raise ValueError(f"Не удалось создать signed URL для файла: {s3_key}")
         
         doc_name = document_name or Path(s3_key).name
         
+        # Сохраняем оригинальный s3_key для генерации новых signed URL
+        if metadata is None:
+            metadata = {}
+        metadata["s3_key"] = s3_key
+        
         ingest_data = await self._create_ingest_job_from_url(
             namespace_id,
-            file_url,
+            signed_url,  # Передаем signed URL вместо публичного
             doc_name,
             metadata
         )
         
-        logger.info(f"Документ '{doc_name}' из S3 загружен в namespace {namespace_id} через URL: {file_url}")
+        logger.info(
+            f"Документ '{doc_name}' загружен в namespace {namespace_id} через signed URL "
+            f"(срок индексации: 24ч, файл остается приватным)"
+        )
         
         return RAGDocument(
             document_id=ingest_data["id"],
             name=doc_name,
             namespace=namespace_id,
             status=ingest_data.get("status", "processing"),
-            metadata=metadata or {},
+            metadata=metadata,
             created_at=ingest_data.get("createdAt")
         )
     
@@ -385,33 +389,56 @@ class AgentsetRAGProvider(BaseRAGProvider):
         for item in items:
             ingest_job_id = item.get("ingestJobId")
             source = item.get("source", {})
-            source_url = source.get("fileUrl")
             original_name = None
             file_id = None
+            s3_key = None
+            stored_metadata = item.get("metadata", {})
 
-            if source_url:
-                original_name = Path(source_url).name
+            if source.get("fileUrl"):
+                # Парсим URL правильно: убираем query параметры и декодируем
+                parsed_url = urlparse(source["fileUrl"])
+                original_name = unquote(Path(parsed_url.path).name)
 
             if ingest_job_id:
                 job = await self._client.get(f"/v1/namespace/{namespace_id}/ingest-jobs/{ingest_job_id}")
                 if job.status_code == 200:
                     job_data = job.json().get("data", {})
                     job_name = job_data.get("payload", {}).get("name", "")
+                    job_metadata = job_data.get("config", {}).get("metadata", {})
 
                     if "::" in job_name:
                         file_id, encoded_name = job_name.split("::", 1)
                         original_name = encoded_name or original_name
                     elif job_name:
                         original_name = job_name
+                    
+                    # Извлекаем s3_key из metadata
+                    s3_key = job_metadata.get("s3_key")
 
             doc_name = original_name or item.get("name") or f"document_{item['id'][:8]}"
+
+            # Генерируем signed URL если есть s3_key
+            signed_url = None
+            if s3_key:
+                from app.core.core_clients.s3_client import get_default_s3_client
+                s3_client = await get_default_s3_client()
+                if s3_client:
+                    # Signed URL на 1 час (3600 секунд)
+                    signed_url = await s3_client.generate_presigned_url(
+                        key=s3_key,
+                        expiration=3600
+                    )
 
             documents.append(RAGDocument(
                 document_id=item["id"],
                 name=doc_name,
                 namespace=namespace_id,
                 status=item.get("status", "unknown"),
-                metadata={"file_id": file_id, "source_url": source_url},
+                metadata={
+                    "file_id": file_id,
+                    "s3_key": s3_key,
+                    "signed_url": signed_url  # Временная подписанная ссылка (1 час)
+                },
                 created_at=item.get("createdAt")
             ))
         

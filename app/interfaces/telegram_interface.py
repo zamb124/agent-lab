@@ -823,9 +823,26 @@ class TelegramInterface(BaseInterface):
 
     def _convert_markdown_to_html(self, text: str) -> str:
         """Конвертирует простой Markdown в HTML для Telegram"""
-        # Заменяем [текст](url) на <a href="url">текст</a>
-        text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', text)
         
+        # Шаг 1: Защищаем ВСЕ URL (и в ссылках [](url), и голые http://...)
+        protected_items = []
+        
+        # Сохраняем Markdown ссылки [текст](url)
+        def save_markdown_link(match):
+            protected_items.append(('markdown_link', match.group(0)))
+            return f"§§§ITEM{len(protected_items)-1}§§§"
+        
+        text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', save_markdown_link, text)
+        
+        # Сохраняем голые URL (http://, https://)
+        # Захватываем до пробела, скобки или *, включая _ внутри URL
+        def save_url(match):
+            protected_items.append(('url', match.group(0)))
+            return f"§§§ITEM{len(protected_items)-1}§§§"
+        
+        text = re.sub(r'https?://[^\s<>"\)\*]+', save_url, text)
+        
+        # Шаг 2: Обрабатываем форматирование (теперь URL защищены)
         # Заменяем **жирный** на <b>жирный</b>
         text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
         
@@ -834,5 +851,15 @@ class TelegramInterface(BaseInterface):
         
         # Заменяем _подчеркнутый_ на <u>подчеркнутый</u>
         text = re.sub(r'_(.*?)_', r'<u>\1</u>', text)
+        
+        # Шаг 3: Восстанавливаем защищенные элементы
+        for i, (item_type, item_value) in enumerate(protected_items):
+            if item_type == 'markdown_link':
+                # Конвертируем [текст](url) в <a href="url">текст</a>
+                html = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', item_value)
+                text = text.replace(f"§§§ITEM{i}§§§", html)
+            elif item_type == 'url':
+                # Голый URL оборачиваем в ссылку
+                text = text.replace(f"§§§ITEM{i}§§§", f'<a href="{item_value}">{item_value}</a>')
         
         return text
