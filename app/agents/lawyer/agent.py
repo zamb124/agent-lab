@@ -1,9 +1,10 @@
 """
-Юридический агент для компании ЭНЖИЛАБС.
+Юридический агент для компании.
 Специализируется на российском законодательстве и юридическом сопровождении компании.
 """
 
 from app.agents.react_agent import ReActAgent
+from app.tools.research_tools import sgr_research
 from app.tools.standard import ask_user
 from app.tools.rag_tools import (
     search_knowledge_base,
@@ -14,10 +15,10 @@ from app.tools.file_tools import read_file
 
 
 class LawyerAgent(ReActAgent):
-    """Юридический агент для ЭНЖИЛАБС"""
+    """Юридический агент для"""
 
     name = "lawyer_agent"
-    description = "Юрист компании ЭНЖИЛАБС, специалист по российскому законодательству"
+    description = "Юрист/ассистент компании, специалист по российскому законодательству"
     
     llm_config = {
         "model": "google/gemini-2.5-pro",
@@ -72,10 +73,10 @@ class LawyerAgent(ReActAgent):
 Отвечай на русском языке."""
 
     tools = [
-        ask_user,
         search_knowledge_base,
         upload_document_to_knowledge_base,
         list_documents_in_knowledge_base,
-        read_file
+        read_file,
+        sgr_research
     ]
 

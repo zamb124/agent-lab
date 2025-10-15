@@ -11,6 +11,7 @@ import functools
 import logging
 from typing import Optional, Callable, List
 from langchain_core.tools import tool as langchain_tool
+from langgraph.errors import GraphInterrupt
 
 logger = logging.getLogger(__name__)
 
@@ -87,8 +88,12 @@ def tool(
                     logger.info(f"   Result: {str(result)[:200]}...")
                     return result
                 except Exception as e:
-                    logger.error(f"❌ [TOOL ERROR] {tool_name}: {e}", exc_info=True)
-                    raise
+                    if isinstance(e, GraphInterrupt):
+                        logger.info(f"💬 [TOOL ASK_USER] {tool_name}: запрос данных у пользователя")
+                        raise
+                    else:
+                        logger.error(f"❌ [TOOL ERROR] {tool_name}: {e}", exc_info=True)
+                        raise
             
             wrapped_func = async_wrapper
         else:
@@ -105,8 +110,12 @@ def tool(
                     logger.info(f"   Result: {str(result)[:200]}...")
                     return result
                 except Exception as e:
-                    logger.error(f"❌ [TOOL ERROR] {tool_name}: {e}", exc_info=True)
-                    raise
+                    if isinstance(e, GraphInterrupt):
+                        logger.info(f"💬 [TOOL ASK_USER] {tool_name}: запрос данных у пользователя")
+                        raise
+                    else:
+                        logger.error(f"❌ [TOOL ERROR] {tool_name}: {e}", exc_info=True)
+                        raise
             
             wrapped_func = sync_wrapper
         

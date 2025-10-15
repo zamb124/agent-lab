@@ -125,8 +125,11 @@ class ContextWindowManager:
         """
         Подсчет токенов в сообщениях.
         
-        Используется приблизительная оценка: 1 токен ≈ 4 символа.
-        Учитывает content, tool_calls и другие поля.
+        Используется консервативная оценка: 1 токен ≈ 2.5 символа.
+        Это более точная оценка с учетом:
+        - Накладных расходов на форматирование OpenAI API
+        - Специальных токенов (role, разделители)
+        - Русского языка (больше токенов чем английский)
         """
         total_chars = 0
         message_details = []
@@ -169,10 +172,12 @@ class ContextWindowManager:
             msg_chars = len(str(msg.content)) if hasattr(msg, 'content') else 0
             message_details.append(f"  [{i}] {msg_type}: {msg_chars} символов")
         
-        estimated_tokens = total_chars // 4
+        # Консервативная оценка: 1 токен ≈ 2.5 символа (вместо 4)
+        # Это учитывает что OpenAI API добавляет много служебных токенов
+        estimated_tokens = int(total_chars / 2.5)
         
-        # Оверхед на каждое сообщение (role, форматирование и т.д.)
-        extra_tokens_per_message = 4
+        # Оверхед на каждое сообщение (role, форматирование, разделители)
+        extra_tokens_per_message = 10  # Увеличено с 4 до 10 для учета накладных расходов
         total_messages_overhead = len(messages) * extra_tokens_per_message
         
         total_tokens = estimated_tokens + total_messages_overhead
@@ -296,16 +301,38 @@ class ContextWindowManager:
             logger.debug("Нет session_id для уведомления о суммаризации")
             return
         
+        # Извлекаем user_id из session_id (формат: platform:user_id:flow_id:unique_id)
+        user_id = context.user.user_id if context.user else "system"
+        chat_id = None
+        
+        if ":" in session_id:
+            parts = session_id.split(":")
+            if len(parts) >= 2:
+                user_id = parts[1]  # Второй элемент - user_id
+                
+                # Для Telegram chat_id = user_id
+                if parts[0] == "telegram":
+                    chat_id = user_id
+        
+        # Формируем metadata с chat_id для Telegram
+        metadata = {"is_system": True, "type": "summarization_start"}
+        if chat_id:
+            metadata["chat_id"] = chat_id
+        
         notification = Message(
-            user_id="system",
+            user_id=user_id,
             session_id=session_id,
             content="⏳ Производится суммаризация истории диалога для оптимизации контекста...",
             flow_id=context.flow_config.flow_id if context.flow_config else "system",
             platform=context.platform or "web",
-            metadata={"is_system": True, "type": "summarization_start"}
+            metadata=metadata
         )
         await context.interface.send_message(notification)
-        logger.info(f"📤 Отправлено уведомление о суммаризации для сессии {session_id}")
+        
+        # Показываем typing indicator чтобы юзер видел что агент работает
+        await context.interface.send_typing_notification(session_id, is_typing=True)
+        
+        logger.info(f"📤 Отправлено уведомление о суммаризации для user_id={user_id}, session={session_id}")
     
     async def _update_checkpoint_messages(self, config: Dict[str, Any], new_messages: List[BaseMessage]):
         """

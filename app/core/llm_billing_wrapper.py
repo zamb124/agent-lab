@@ -330,6 +330,11 @@ class ChatOpenAIWithBilling(BaseChatModel):
         """
         Обрабатывает reasoning из OpenRouter response и отправляет в интерфейс.
         
+        Поддерживает множество форматов reasoning от разных провайдеров:
+        - reasoning_details[] с различными типами (reasoning.text, reasoning.summary и т.д.)
+        - прямое поле reasoning в message
+        - любые другие форматы через универсальный парсер
+        
         Args:
             response_data: Полный ответ от OpenRouter API
         """
@@ -341,14 +346,6 @@ class ChatOpenAIWithBilling(BaseChatModel):
         
         choice = response_data["choices"][0]
         message = choice.get("message", {})
-        
-        # Извлекаем reasoning_details
-        reasoning_details = message.get("reasoning_details")
-        if not reasoning_details:
-            logger.info("🔍 _process_reasoning: нет reasoning_details в message")
-            return
-        
-        logger.info(f"🔍 _process_reasoning: найдено {len(reasoning_details)} reasoning блоков")
         
         # Получаем контекст
         context = get_context()
@@ -376,19 +373,67 @@ class ChatOpenAIWithBilling(BaseChatModel):
         else:
             logger.info("🔍 _process_reasoning: нет flow_config в контексте, reasoning разрешен")
         
-        # Отправляем каждый reasoning блок
-        for detail in reasoning_details:
-            if detail.get("type") == "reasoning.text":
-                reasoning_text = detail.get("text", "")
-                if reasoning_text:
-                    try:
-                        await context.interface.send_reasoning(
-                            context.session_id, 
-                            reasoning_text
-                        )
-                        logger.info(f"💭 Reasoning отправлен: {reasoning_text[:50]}...")
-                    except Exception as e:
-                        logger.error(f"Ошибка отправки reasoning: {e}", exc_info=True)
+        reasoning_texts = []
+        
+        # 1. Проверяем reasoning_details (xAI, Gemini и др.)
+        reasoning_details = message.get("reasoning_details")
+        if reasoning_details and isinstance(reasoning_details, list):
+            logger.info(f"🔍 _process_reasoning: найдено {len(reasoning_details)} reasoning блоков")
+            
+            for detail in reasoning_details:
+                if not isinstance(detail, dict):
+                    continue
+                
+                detail_type = detail.get("type", "unknown")
+                reasoning_text = None
+                
+                # Известные типы
+                if detail_type == "reasoning.text":
+                    reasoning_text = detail.get("text")
+                elif detail_type == "reasoning.summary":
+                    reasoning_text = detail.get("summary")
+                elif detail_type == "reasoning.content":
+                    reasoning_text = detail.get("content")
+                else:
+                    # Для неизвестных типов пробуем извлечь из любого текстового поля
+                    for field in ["text", "summary", "content", "reasoning", "thought"]:
+                        if field in detail and isinstance(detail[field], str):
+                            reasoning_text = detail[field]
+                            logger.info(f"🔍 Извлечено reasoning из неизвестного типа '{detail_type}' через поле '{field}'")
+                            break
+                
+                if reasoning_text and reasoning_text.strip():
+                    reasoning_texts.append((detail_type, reasoning_text))
+        
+        # 2. Проверяем прямое поле reasoning в message (OpenAI o1, Claude и др.)
+        if "reasoning" in message and isinstance(message["reasoning"], str):
+            reasoning_text = message["reasoning"]
+            if reasoning_text.strip():
+                reasoning_texts.append(("reasoning", reasoning_text))
+                logger.info("🔍 Найдено прямое поле 'reasoning' в message")
+        
+        # 3. Проверяем другие возможные поля (thinking, thought и т.д.)
+        for field_name in ["thinking", "thought", "explanation"]:
+            if field_name in message and isinstance(message[field_name], str):
+                reasoning_text = message[field_name]
+                if reasoning_text.strip():
+                    reasoning_texts.append((field_name, reasoning_text))
+                    logger.info(f"🔍 Найдено поле '{field_name}' в message")
+        
+        # Отправляем все найденные reasoning блоки
+        if not reasoning_texts:
+            logger.info("🔍 _process_reasoning: reasoning не найден ни в одном формате")
+            return
+        
+        for source_type, reasoning_text in reasoning_texts:
+            try:
+                await context.interface.send_reasoning(
+                    context.session_id, 
+                    reasoning_text
+                )
+                logger.info(f"💭 Reasoning отправлен (тип: {source_type}): {reasoning_text[:50]}...")
+            except Exception as e:
+                logger.error(f"Ошибка отправки reasoning: {e}", exc_info=True)
 
     async def _process_multimodal_fields(self, message_data: dict) -> List[str]:
         """

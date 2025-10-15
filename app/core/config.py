@@ -273,6 +273,25 @@ class RAGConfig(BaseModel):
     providers: Dict[str, RAGProviderConfig] = Field(default_factory=dict)
 
 
+class SGRConfig(BaseModel):
+    """Конфигурация SGR Deep Research сервиса"""
+    
+    enabled: bool = False
+    base_url: str = "http://localhost:8010"
+    api_key: Optional[str] = None
+    timeout: float = 300.0
+    
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_api_key: Optional[str] = None
+    llm_model: str = "gpt-4o-mini"
+    llm_max_tokens: int = 8000
+    llm_temperature: float = 0.4
+    
+    tavily_api_key: Optional[str] = None
+    max_steps: int = 6
+    max_results: int = 10
+
+
 class Settings(BaseSettings):
     """Настройки приложения с поддержкой JSON конфигурации"""
 
@@ -293,6 +312,7 @@ class Settings(BaseSettings):
     payment_providers: PaymentProvidersConfig = Field(default_factory=PaymentProvidersConfig)
     migration: MigrationSettings = Field(default_factory=MigrationSettings)
     rag: RAGConfig = Field(default_factory=RAGConfig)
+    sgr: SGRConfig = Field(default_factory=SGRConfig)
 
     def __init__(self, **data):
         # Загружаем JSON конфигурацию
