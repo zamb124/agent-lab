@@ -20,6 +20,7 @@ from langgraph.errors import GraphInterrupt
 from langchain_core.messages import HumanMessage
 from langgraph.types import Command
 from app.services.variables_service import get_variables_service
+
 logger = logging.getLogger(__name__)
 
 
@@ -145,11 +146,12 @@ class TaskProcessor:
             has_pending = state.next and len(state.next) > 0
             
             if has_pending:
-                logger.info("🔄 Возобновляем выполнение")
+                logger.info("🔄 Возобновляем выполнение (суммаризация не применяется)")
                 result = await compiled_graph.ainvoke(Command(resume=user_message), config)
             else:
-                logger.info("🆕 Новый запрос")
-                result = await compiled_graph.ainvoke(
+                logger.info("🆕 Новый запрос (суммаризация через BaseAgent.ainvoke)")
+                # Вызываем через entry_agent.ainvoke() чтобы сработала проверка контекста
+                result = await entry_agent.ainvoke(
                     {"messages": [HumanMessage(content=user_message)], **input_data_with_context},
                     config=config
                 )

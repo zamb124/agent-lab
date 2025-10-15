@@ -14,6 +14,8 @@ from pydantic import BaseModel, Field
 from app.models import AgentConfig
 from app.core.variables import set_state_in_context
 from app.core.container import get_container
+from app.core.context_window_manager import ContextWindowManager
+from app.core.context import get_context
 from langgraph.errors import GraphInterrupt
 from langchain_core.messages import HumanMessage
 
@@ -119,7 +121,6 @@ class BaseAgent(ABC):
             input_data["session_id"] = run_config.get("session_id", "")
         
         if "user_id" not in input_data:
-            from app.core.context import get_context
             context = get_context()
             input_data["user_id"] = context.user.user_id if context and context.user else ""
 
@@ -144,6 +145,65 @@ class BaseAgent(ABC):
                 run_config["configurable"]["thread_id"] = (
                     f"agent_{self.config.agent_id}"
                 )
+
+        # Загружаем messages из checkpoint если есть thread_id
+        thread_id = run_config.get("configurable", {}).get("thread_id")
+        messages_from_input = input_data.get("messages", [])
+        
+        if thread_id:
+            # Есть thread_id - загружаем полный контекст из checkpoint
+            state = await graph.aget_state(run_config)
+            
+            if state and state.values and state.values.get("messages"):
+                # Мержим messages из checkpoint + новые из input
+                checkpoint_messages = state.values["messages"]
+                all_messages = checkpoint_messages + messages_from_input
+                logger.info(f"🔍 Загружено из checkpoint: {len(checkpoint_messages)} + новых: {len(messages_from_input)} = {len(all_messages)}")
+            else:
+                # Checkpoint пустой - используем только новые
+                all_messages = messages_from_input
+                logger.info(f"🔍 Checkpoint пустой, используем {len(all_messages)} новых сообщений")
+        else:
+            # Нет thread_id - используем только переданные messages
+            all_messages = messages_from_input
+            logger.info(f"🔍 Без thread_id, используем {len(all_messages)} сообщений")
+        
+        # Проверка и суммаризация контекста ПЕРЕД вызовом графа
+        logger.debug(f"🔍 СУММАРИЗАЦИЯ CHECK: agent={self.config.name}, messages={len(all_messages)}, llm_config={self.config.llm_config}")
+        
+        if all_messages and self.config.llm_config and len(all_messages) > 1:
+            logger.info(f"🔍 Запускаем проверку контекста для агента {self.config.name}")
+            manager = ContextWindowManager()
+            
+            # НЕ передаем config чтобы manager не обновлял checkpoint
+            # Мы обновим его сами после выполнения графа
+            summarized_messages, was_summarized = await manager.check_and_summarize_if_needed(
+                messages=all_messages,
+                llm_config=self.config.llm_config.model_dump() if hasattr(self.config.llm_config, 'model_dump') else self.config.llm_config,
+                config=run_config
+            )
+            
+            if was_summarized:
+                # Очищаем checkpoint перед вызовом графа с суммаризированными messages
+                from app.core.checkpointer import get_checkpointer
+                checkpointer = await get_checkpointer()
+                
+                # Удаляем старый thread чтобы начать с чистого листа
+                await checkpointer.adelete_thread(thread_id)
+                logger.info(f"🗑️ Старый checkpoint удален для thread_id={thread_id}")
+                
+                # Передаем ВСЕ суммаризированные messages (они уже включают новые)
+                input_data["messages"] = summarized_messages
+                logger.info(f"📚 Контекст агента {self.config.name} суммаризирован: {len(all_messages)} → {len(summarized_messages)} сообщений")
+            else:
+                logger.info(f"📚 Суммаризация НЕ требуется для агента {self.config.name}")
+        else:
+            if not all_messages:
+                logger.info("📚 Нет сообщений для проверки контекста")
+            elif len(all_messages) == 1:
+                logger.info("📚 Только одно сообщение, пропускаем проверку")
+            if not self.config.llm_config:
+                logger.info("📚 Нет llm_config для проверки контекста")
 
         try:
             messages = input_data.get("messages", [])
