@@ -252,12 +252,6 @@ class ChatOpenAIWithBilling(BaseChatModel):
         # Обрабатываем reasoning если есть
         await self._process_reasoning(data)
         
-        # Извлекаем токены
-        usage = data.get("usage", {})
-        input_tokens = usage.get("prompt_tokens", 0)
-        output_tokens = usage.get("completion_tokens", 0)
-        total_tokens = usage.get("total_tokens", 0)
-        
         # Обрабатываем первый choice
         if not data.get("choices"):
             raise ValueError("Нет choices в ответе OpenRouter")
@@ -265,6 +259,32 @@ class ChatOpenAIWithBilling(BaseChatModel):
         choice = data["choices"][0]
         message_data = choice.get("message", {})
         content = message_data.get("content", "")
+        tool_calls_data = message_data.get("tool_calls", [])
+        
+        # Если есть content И tool_calls - отправляем промежуточное сообщение пользователю
+        if content and content.strip() and tool_calls_data:
+            context = get_context()
+            if context and context.interface and context.session_id:
+                try:
+                    from app.interfaces.base import Message
+                    intermediate_msg = Message(
+                        user_id=context.user.user_id if context.user else "system",
+                        flow_id=context.flow_config.flow_id if context.flow_config else "unknown",
+                        session_id=context.session_id,
+                        content=content,
+                        platform=context.platform or "web",
+                        metadata={}
+                    )
+                    await context.interface.send_message(intermediate_msg)
+                    logger.info(f"💬 Промежуточное сообщение отправлено: {content[:80]}...")
+                except Exception as e:
+                    logger.error(f"Ошибка отправки промежуточного сообщения: {e}", exc_info=True)
+        
+        # Извлекаем токены
+        usage = data.get("usage", {})
+        input_tokens = usage.get("prompt_tokens", 0)
+        output_tokens = usage.get("completion_tokens", 0)
+        total_tokens = usage.get("total_tokens", 0)
         
         # Обрабатываем multimodal output
         file_descriptions = await self._process_multimodal_fields(message_data)
