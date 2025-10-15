@@ -18,8 +18,8 @@ from pydantic import BaseModel, Field
 from PIL import Image
 
 from ...core.file_processor import FileProcessor, get_default_file_processor
-from ...tools.fashn_tools import virtual_try_on
-from ...tools.nano_banana_tools import generate_images
+from ...tools.integrations.fashn_tools import virtual_try_on
+from ...tools.integrations.nano_banana_tools import generate_images
 from ...core.context import get_context
 from app.db.repositories import Storage
 logger = logging.getLogger(__name__)

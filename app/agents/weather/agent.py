@@ -3,12 +3,12 @@
 """
 
 from app.agents.react_agent import ReActAgent
-from app.tools.standard import ask_user
-from app.tools.weather_tools import suggest_travel, get_weather
-from app.tools.file_tools import read_file
-from app.tools.voice_tools import synthesize_speech
-from app.tools.nano_banana_tools import generate_images
-from app.tools.rag_tools import search_knowledge_base, list_documents_in_knowledge_base
+from app.tools.misc.standard import ask_user
+from app.tools.misc.weather_tools import suggest_travel, get_weather
+from app.tools.files.file_tools import read_file
+from app.tools.voice.voice_tools import synthesize_speech
+from app.tools.integrations.nano_banana_tools import generate_images
+from app.tools.misc.rag_tools import search_knowledge_base, list_documents_in_knowledge_base
 
 
 class TravelInfoAgent(ReActAgent):
@@ -51,7 +51,7 @@ class TravelInfoAgent(ReActAgent):
 ✅ ask_user("Есть ли у вас на примете конкретный город?")
 """
 
-    tools = [ask_user, read_file, "app.tools.session_tools.session_set"]
+    tools = [ask_user, read_file, "app.tools.session.session_tools.session_set"]
 
 
 class WeatherAgent(ReActAgent):
@@ -154,6 +154,6 @@ class WeatherAgent(ReActAgent):
         generate_images,
         search_knowledge_base,
         list_documents_in_knowledge_base,
-        "app.tools.session_tools.session_set",
-        "app.tools.session_tools.session_get",
+        "app.tools.session.session_tools.session_set",
+        "app.tools.session.session_tools.session_get",
     ]

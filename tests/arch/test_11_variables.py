@@ -418,7 +418,7 @@ async def test_flow_variables_in_runtime(variables_service, storage, flow_repo):
     from app.models import FlowConfig
     from app.core.variables import VariableResolver
     from app.core.context import get_context
-    from app.tools.session_tools import get_variable
+    from app.tools.session.session_tools import get_variable
     
     await variables_service.set_var(
         key="test_bot_token",

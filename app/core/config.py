@@ -239,8 +239,8 @@ class MigrationSettings(BaseModel):
     )
     default_tools: list[str] = Field(
         default_factory=lambda: [
-            "app.tools.calc_tools.calculate",
-            "app.tools.calc_tools.get_math_help",
+            "app.tools.calc.calc_tools.calculate",
+            "app.tools.calc.calc_tools.get_math_help",
         ],
         description="Список тулов для миграции в новую компанию (если нужны отдельно)"
     )

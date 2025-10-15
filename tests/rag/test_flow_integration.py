@@ -41,7 +41,7 @@ class TestAgentRAGTools:
     
     def test_agent_has_rag_tools(self):
         """Тест что агент имеет RAG инструменты"""
-        from app.tools.rag_tools import (
+        from app.tools.misc.rag_tools import (
             search_knowledge_base,
             upload_document_to_knowledge_base,
             list_documents_in_knowledge_base

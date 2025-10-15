@@ -7,8 +7,8 @@ from typing import Optional
 from langchain_core.tools import tool
 
 from app.db.repositories import Storage
-from ..core.core_clients.s3_client import get_default_s3_client
-from ..core.config import settings
+from app.core.core_clients.s3_client import get_default_s3_client
+from app.core.config import settings
 
 
 @tool

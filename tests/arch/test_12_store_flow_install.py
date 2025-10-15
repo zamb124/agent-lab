@@ -97,7 +97,7 @@ async def test_new_company_only_tools(migrated_db, storage, migrator, test_store
     weather_agent = await agent_repo.get("app.agents.weather.agent.WeatherAgent")
     assert weather_agent is None, "Агенты НЕ должны автоматически мигрироваться"
     
-    tool_data = await storage.get("tool:app.tools.calc_tools.calculate")
+    tool_data = await storage.get("tool:app.tools.calc.calc_tools.calculate")
     assert tool_data is not None, "Публичные tools должны быть мигрированы"
     
     print("✅ Тест new_company_only_tools пройден!")
@@ -186,7 +186,7 @@ async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_fa
     variable_after = await storage.get(variable_key)
     assert variable_after is None, "uninstall hook должен удалить переменную"
     
-    tool_data = await storage.get("tool:app.tools.calc_tools.calculate")
+    tool_data = await storage.get("tool:app.tools.calc.calc_tools.calculate")
     assert tool_data is not None, "Публичные tools должны остаться"
     
     print("✅ Тест uninstall_flow_removes_dependencies пройден!")

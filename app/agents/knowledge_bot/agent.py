@@ -4,8 +4,8 @@
 """
 
 from app.agents.react_agent import ReActAgent
-from app.tools.standard import ask_user
-from app.tools.rag_tools import (
+from app.tools.misc.standard import ask_user
+from app.tools.misc.rag_tools import (
     search_knowledge_base,
     upload_document_to_knowledge_base,
     list_documents_in_knowledge_base

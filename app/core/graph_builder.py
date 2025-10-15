@@ -134,6 +134,11 @@ class GraphBuilder:
                             )
 
             if condition_func:
+                # Добавляем маппинг "END" → END константу если её нет
+                if "END" not in mapping:
+                    mapping["END"] = END
+                    logger.info(f"✅ Добавлен автоматический маппинг 'END' → END для {source}")
+                
                 graph.add_conditional_edges(source, condition_func, mapping)
             else:
                 logger.warning(f"Не найдена функция условия для {source}")

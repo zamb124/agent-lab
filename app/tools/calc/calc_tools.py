@@ -2,7 +2,7 @@
 Инструменты для калькулятора.
 """
 
-from ..core.tool_decorator import tool
+from app.core.tool_decorator import tool
 
 
 @tool(is_public=True, title="Калькулятор")

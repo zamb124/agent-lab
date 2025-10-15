@@ -10,12 +10,12 @@ from typing import Optional
 from datetime import datetime, timezone
 from langchain_core.tools import tool
 
-from ..clients.fashn_client import get_fashn_client
+from app.clients.fashn_client import get_fashn_client
 from app.db.repositories import Storage
-from ..models import FileRecord
-from ..models.fashn_models import TryOnRecord, TryOnParameters
-from ..core.core_clients.s3_client import get_default_s3_client
-from ..core.context import get_context
+from app.models import FileRecord
+from app.models.fashn_models import TryOnRecord, TryOnParameters
+from app.core.core_clients.s3_client import get_default_s3_client
+from app.core.context import get_context
 
 logger = logging.getLogger(__name__)
 

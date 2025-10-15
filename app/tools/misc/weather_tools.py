@@ -2,7 +2,7 @@
 Мок-инструменты для работы с погодой.
 """
 
-from ..core.tool_decorator import tool
+from app.core.tool_decorator import tool
 import random
 
 

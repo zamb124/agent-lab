@@ -4,14 +4,14 @@
 """
 
 from app.agents.react_agent import ReActAgent
-from app.tools.research_tools import sgr_research
-from app.tools.standard import ask_user
-from app.tools.rag_tools import (
+from app.tools.search.research_tools import sgr_research
+from app.tools.misc.standard import ask_user
+from app.tools.misc.rag_tools import (
     search_knowledge_base,
     upload_document_to_knowledge_base,
     list_documents_in_knowledge_base
 )
-from app.tools.file_tools import read_file
+from app.tools.files.file_tools import read_file
 
 
 class LawyerAgent(ReActAgent):
