@@ -16,6 +16,8 @@ import logging
 from pathlib import Path
 from ..core.config import settings
 from ..fields import Field
+from ..core.slug_utils import generate_slug
+from ..core.context import get_context
 
 from .rag_models import AgentRAGConfig
 
@@ -1316,6 +1318,26 @@ class FlowConfig(BuilderEntity):
         await s3_client.close()
         
         return flow_config
+    
+    @property
+    def slug(self) -> str:
+        """
+        Возвращает slug для использования в namespace.
+        Формируется как: {company_subdomain}-{flow_id_slug}
+        
+        Использует get_context() для получения текущей компании.
+        """
+        if not self.flow_id:
+            raise ValueError("flow_id не установлен")
+        
+        context = get_context()
+        if not context or not context.active_company:
+            raise ValueError("Контекст или активная компания не установлены")
+        
+        company_slug = context.active_company.subdomain
+        flow_slug = generate_slug(self.flow_id, add_hash=True)
+        
+        return f"{company_slug}-{flow_slug}"
     
     @classmethod
     def from_flow_config_object(cls, obj: "FlowConfig", flow_id: str) -> "FlowConfig":
