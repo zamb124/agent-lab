@@ -46,7 +46,9 @@ class SearchAgent(ReActAgent):
 👤 Пользователь: {?user_name|Исследователь}
 🎯 Исходный запрос: {?store.original_query|не указан}
 📝 Подвопросы: {?store.sub_queries|не подготовлены}
-🔄 Итерация: {?store.iteration|0}/{?store.max_iterations|2}
+🔄 Итерация: {?store.iteration|0}/{?store.max_iterations|1}
+⚙️ Источников на запрос: {?max_sources_per_query|3}
+🔍 Режим поиска: {?search_depth|basic}
 
 ТВОЯ ЗАДАЧА:
 1. Взять подвопросы из {store.sub_queries} (разделены через ||||)
@@ -56,18 +58,19 @@ class SearchAgent(ReActAgent):
 5. Оценить достаточно ли информации
 
 ДОСТУПНЫЕ ИНСТРУМЕНТЫ:
-- tavily_search(query, max_results=5) - основной поиск, оптимизирован для LLM
-- tavily_search_advanced(query, search_depth="advanced") - расширенный поиск с полным контентом
-- serper_search(query, num_results=10) - Google поиск через Serper
+- tavily_search(query, max_results) - основной поиск, оптимизирован для LLM
+- tavily_search_advanced(query, search_depth) - расширенный поиск с полным контентом
+- serper_search(query, num_results) - Google поиск через Serper
 - session_set(key, value) - сохранить данные
 
 ПРОЦЕСС РАБОТЫ:
 1. Возьми sub_queries из {store.sub_queries}
 2. Раздели строку по |||| чтобы получить список подвопросов
 3. Для КАЖДОГО подвопроса:
-   a. Выполни tavily_search(подвопрос, max_results=5)
-   b. Сохрани результаты
-   c. Оцени качество (достаточно ли информации)
+   a. Если {search_depth} = "advanced": используй tavily_search_advanced(подвопрос, search_depth="advanced")
+   b. Иначе: используй tavily_search(подвопрос, max_results={?max_sources_per_query|3})
+   c. Сохрани результаты
+   d. Оцени качество (достаточно ли информации)
 4. Собери ВСЕ результаты поиска в одну строку
 5. Сохрани через session_set("search_results", все_результаты)
 6. Сохрани количество найденных источников: session_set("sources_count", число)
@@ -86,18 +89,20 @@ class SearchAgent(ReActAgent):
 ВАЖНО:
 - Если подвопросов нет в store - возьми {store.original_query} и ищи по нему
 - Используй tavily_search как основной инструмент (он лучше для LLM)
-- Если результатов мало (< 3 на подвопрос) - попробуй переформулировать запрос
+- Учитывай лимит источников: {?max_sources_per_query|3} на подвопрос
+- Режим поиска: {?search_depth|basic} (basic = быстро, advanced = подробно)
 - После сохранения результатов сообщи сколько источников найдено
 
 ПРИМЕР РАБОТЫ:
 Подвопросы в store: "Что такое RAG||||Как работает RAG"
+max_sources_per_query = 3
 1. Раздели: ["Что такое RAG", "Как работает RAG"]
-2. Для "Что такое RAG": tavily_search("Что такое RAG", max_results=5)
-3. Для "Как работает RAG": tavily_search("Как работает RAG", max_results=5)
+2. Для "Что такое RAG": tavily_search("Что такое RAG", max_results=3)
+3. Для "Как работает RAG": tavily_search("Как работает RAG", max_results=3)
 4. Объедини результаты
 5. session_set("search_results", объединенные_результаты)
-6. session_set("sources_count", "10")
-7. "Найдено 10 источников по 2 подвопросам."""
+6. session_set("sources_count", "6")
+7. "Найдено 6 источников по 2 подвопросам."""
     
     tools = [
         tavily_search,
