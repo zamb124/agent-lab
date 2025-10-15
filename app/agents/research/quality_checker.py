@@ -46,7 +46,8 @@ class QualityCheckerAgent(ReActAgent):
 🎯 Исходный запрос: {?store.original_query|не указан}
 📚 Источников: {?store.sources_count|0}
 📊 Фактов: {?store.facts_count|0}
-🔄 Итерация: {?store.iteration|0}/{?store.max_iterations|2}
+🔄 Итерация: {?store.iteration|0}/{?store.max_iterations|1}
+⚙️ Порог качества: {?quality_threshold|7.0}
 
 ФИНАЛЬНЫЙ ОТЧЕТ:
 {?store.final_report|не создан}
@@ -105,8 +106,8 @@ class QualityCheckerAgent(ReActAgent):
    average_score = (completeness + sources_quality + objectivity) / 3
 
 6. Прими решение:
-   - Если average_score >= 7.0: decision = "complete"
-   - Если average_score < 7.0: decision = "need_more_search"
+   - Если average_score >= {?quality_threshold|7.0}: decision = "complete"
+   - Если average_score < {?quality_threshold|7.0}: decision = "need_more_search"
 
 7. Сохрани результаты:
    - session_set("completeness_score", балл)
