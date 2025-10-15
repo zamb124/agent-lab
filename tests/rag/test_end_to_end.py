@@ -16,7 +16,7 @@ class TestFlowToAgentRAGConfig:
     @pytest.mark.asyncio
     async def test_flow_config_accessible_by_tools(self):
         """Тест что tools могут получить RAG конфигурацию из flow"""
-        from app.tools.rag_tools import _get_rag_config_from_context
+        from app.tools.misc.rag_tools import _get_rag_config_from_context
         
         mock_context = MagicMock()
         mock_context.flow_config = knowledge_bot_flow
@@ -31,7 +31,7 @@ class TestFlowToAgentRAGConfig:
     @pytest.mark.asyncio
     async def test_agent_config_override_flow(self):
         """Тест что агент может переопределить RAG конфигурацию flow"""
-        from app.tools.rag_tools import _get_rag_config_from_context
+        from app.tools.misc.rag_tools import _get_rag_config_from_context
         
         mock_context = MagicMock()
         mock_context.flow_config = knowledge_bot_flow
@@ -64,7 +64,7 @@ class TestEndToEndRAGWorkflow:
         3. Загрузка документа
         4. Поиск информации
         """
-        from app.tools.rag_tools import search_knowledge_base, upload_document_to_knowledge_base
+        from app.tools.misc.rag_tools import search_knowledge_base, upload_document_to_knowledge_base
         
         mock_context = MagicMock()
         mock_context.flow_config = knowledge_bot_flow
@@ -118,10 +118,10 @@ class TestEndToEndRAGWorkflow:
         mock_file_processor = AsyncMock()
         mock_file_processor.get_file_record = AsyncMock(return_value=mock_file_record)
         
-        with patch("app.tools.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.rag_tools.get_default_file_processor", return_value=mock_file_processor):
-                with patch("app.tools.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
-                    with patch("app.tools.rag_tools.get_or_create_namespace", new=mock_get_ns):
+        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("app.tools.misc.rag_tools.get_default_file_processor", return_value=mock_file_processor):
+                with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+                    with patch("app.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
                         upload_result = await upload_document_to_knowledge_base.ainvoke(
                             {"file_id": "file_123", "description": "Test"},
                             config={}
@@ -148,7 +148,7 @@ class TestEndToEndRAGWorkflow:
     @pytest.mark.asyncio
     async def test_agent_scope_isolation(self):
         """Тест изоляции данных по скоупам flow"""
-        from app.tools.rag_tools import upload_document_to_knowledge_base
+        from app.tools.misc.rag_tools import upload_document_to_knowledge_base
         
         mock_get_ns = AsyncMock(return_value="mock_ns_id")
         mock_context = MagicMock()
@@ -195,10 +195,10 @@ class TestEndToEndRAGWorkflow:
             status="processing"
         ))
         
-        with patch("app.tools.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.rag_tools.get_default_file_processor", return_value=mock_file_processor):
-                with patch("app.tools.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
-                    with patch("app.tools.rag_tools.get_or_create_namespace", new=mock_get_ns):
+        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("app.tools.misc.rag_tools.get_default_file_processor", return_value=mock_file_processor):
+                with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+                    with patch("app.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
                         result = await upload_document_to_knowledge_base.ainvoke(
                             {"file_id": "file_123"},
                             config={}
@@ -211,7 +211,7 @@ class TestEndToEndRAGWorkflow:
     @pytest.mark.asyncio
     async def test_session_scope_isolation(self):
         """Тест изоляции данных по сессиям"""
-        from app.tools.rag_tools import upload_document_to_knowledge_base
+        from app.tools.misc.rag_tools import upload_document_to_knowledge_base
         
         mock_context = MagicMock()
         
@@ -259,10 +259,10 @@ class TestEndToEndRAGWorkflow:
         
         mock_get_ns = AsyncMock(return_value="mock_ns_id")
         
-        with patch("app.tools.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.rag_tools.get_default_file_processor", return_value=mock_file_processor):
-                with patch("app.tools.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
-                    with patch("app.tools.rag_tools.get_or_create_namespace", new=mock_get_ns):
+        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("app.tools.misc.rag_tools.get_default_file_processor", return_value=mock_file_processor):
+                with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+                    with patch("app.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
                         result = await upload_document_to_knowledge_base.ainvoke(
                             {"file_id": "file_123"},
                             config={}

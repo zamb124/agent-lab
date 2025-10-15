@@ -3,8 +3,8 @@
 """
 
 from app.agents.react_agent import ReActAgent
-from app.tools.standard import ask_user
-from app.tools.calc_tools import calculate, get_math_help
+from app.tools.misc.standard import ask_user
+from app.tools.calc.calc_tools import calculate, get_math_help
 
 
 class CalculatorAgent(ReActAgent):

@@ -225,6 +225,18 @@ class BaseAgent(ABC):
             
             result = await graph.ainvoke(input_data, config=run_config)
             
+            # Синхронизируем изменения из context.state обратно в result
+            # (нужно для session_set/session_get которые модифицируют контекст)
+            context_after = get_context()
+            if context_after and context_after.state and isinstance(result, dict):
+                context_store = context_after.state.get("store", {})
+                if context_store and context_store != result.get("store", {}):
+                    # Мержим изменения из контекста в результат
+                    if "store" not in result:
+                        result["store"] = {}
+                    result["store"].update(context_store)
+                    logger.info(f"🔄 Синхронизированы изменения store из контекста: {list(context_store.keys())}")
+            
             # Обновляем state в контексте после выполнения
             if isinstance(result, dict):
                 set_state_in_context(result)

@@ -110,7 +110,7 @@ logging.getLogger("app.agents.base").setLevel(
 logging.getLogger("app.workers.task_processor").setLevel(
     logging.INFO
 )  # Основные логи воркера
-logging.getLogger("app.tools.standard").setLevel(
+logging.getLogger("app.tools.misc.standard").setLevel(
     logging.WARNING
 )  # Убираем технические логи ask_user
 logging.getLogger("app.core.llm_factory").setLevel(

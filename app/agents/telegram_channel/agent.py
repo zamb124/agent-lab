@@ -3,8 +3,8 @@
 """
 
 from app.agents.react_agent import ReActAgent
-from app.tools.telegram_channel_tools import publish_to_telegram_channel
-from app.tools.nano_banana_tools import generate_images
+from app.tools.integrations.telegram_channel_tools import publish_to_telegram_channel
+from app.tools.integrations.nano_banana_tools import generate_images
 
 
 class TelegramChannelAgent(ReActAgent):

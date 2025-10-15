@@ -8,8 +8,8 @@ import uuid
 from pathlib import Path
 from langchain_core.tools import tool
 
-from ..core.core_clients import get_default_cloud_voice_client
-from ..core.audio_processor import get_default_audio_processor
+from app.core.core_clients import get_default_cloud_voice_client
+from app.core.audio_processor import get_default_audio_processor
 
 logger = logging.getLogger(__name__)
 

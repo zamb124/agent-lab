@@ -897,6 +897,15 @@ class AgentConfig(BuilderEntity):
                     else:
                         await ToolReference.migrate(tool_id, migrator)
         
+        # Мигрируем субагенты из graph_definition (для StateGraph агентов)
+        if with_tools and agent_config.graph_definition:
+            for node in agent_config.graph_definition.nodes:
+                if node.type == NodeType.AGENT_NODE:
+                    sub_agent_id = node.params.get("agent_id")
+                    if sub_agent_id and "." in sub_agent_id:
+                        logger.info(f"🔄 Рекурсивная миграция субагента из ноды: {sub_agent_id}")
+                        await cls.migrate(sub_agent_id, migrator, with_tools=True)
+        
         return agent_config
     
     @classmethod

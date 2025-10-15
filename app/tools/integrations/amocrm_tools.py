@@ -26,7 +26,7 @@ import logging
 from typing import Optional
 from langchain_core.tools import tool
 
-from ..clients.amo_crm_integration import get_amocrm_client
+from app.clients.amo_crm_integration import get_amocrm_client
 
 logger = logging.getLogger(__name__)
 

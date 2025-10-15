@@ -104,7 +104,7 @@ Email: {support_email}
 Используйте готовые тулы для работы с сессией:
 
 ```python
-from app.tools.session_tools import (
+from app.tools.session.session_tools import (
     session_set,
     session_get,
     session_has,
@@ -115,8 +115,8 @@ from app.tools.session_tools import (
 
 # В конфигурации агента
 tools = [
-    ToolReference(tool_id="app.tools.session_tools.session_set"),
-    ToolReference(tool_id="app.tools.session_tools.session_get"),
+    ToolReference(tool_id="app.tools.session.session_tools.session_set"),
+    ToolReference(tool_id="app.tools.session.session_tools.session_get"),
 ]
 ```
 

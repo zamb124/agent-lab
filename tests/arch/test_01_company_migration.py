@@ -117,10 +117,10 @@ async def test_migrate_defaults_for_company(migrated_db, storage, migrator, test
     assert weather_agent is None, "Агенты НЕ должны автоматически мигрироваться"
     
     # Проверяем что публичные tools мигрировались
-    tool1_data = await storage.get("tool:app.tools.calc_tools.calculate")
+    tool1_data = await storage.get("tool:app.tools.calc.calc_tools.calculate")
     assert tool1_data is not None, "Публичные tools должны быть мигрированы"
     
-    tool2_data = await storage.get("tool:app.tools.calc_tools.get_math_help")
+    tool2_data = await storage.get("tool:app.tools.calc.calc_tools.get_math_help")
     assert tool2_data is not None, "Публичные tools должны быть мигрированы"
     
     print("✅ Тест migrate_defaults_for_company пройден!")
@@ -439,12 +439,12 @@ async def test_migrate_single_tool(migrated_db, storage, migrator, test_migratio
     # Мигрируем конкретный tool
     await migrator.migrate_for_company(
         company=test_company,
-        tools=["app.tools.calc_tools.calculate"],
+        tools=["app.tools.calc.calc_tools.calculate"],
         with_dependencies=False
     )
     
     # Проверяем tool
-    tool_key = "tool:app.tools.calc_tools.calculate"
+    tool_key = "tool:app.tools.calc.calc_tools.calculate"
     tool_data = await storage.get(tool_key)
     assert tool_data is not None, "Tool должен быть мигрирован"
     
@@ -485,13 +485,13 @@ async def test_remigrate_tool(migrated_db, storage, migrator, test_migration_com
     # 1. Первая миграция
     await migrator.migrate_for_company(
         company=test_company,
-        tools=["app.tools.calc_tools.calculate"],
+        tools=["app.tools.calc.calc_tools.calculate"],
         with_dependencies=False
     )
     
     # 2. Получаем tool из БД
     from app.models import ToolReference
-    tool_key = "tool:app.tools.calc_tools.calculate"
+    tool_key = "tool:app.tools.calc.calc_tools.calculate"
     tool_data = await storage.get(tool_key)
     tool_ref = ToolReference.model_validate_json(tool_data)
     original_description = tool_ref.description
@@ -502,7 +502,7 @@ async def test_remigrate_tool(migrated_db, storage, migrator, test_migration_com
     
     # 4. Перемигрируем tool
     await migrator.remigrate_tool(
-        "app.tools.calc_tools.calculate",
+        "app.tools.calc.calc_tools.calculate",
         test_company
     )
     
@@ -834,7 +834,7 @@ async def test_api_remigrate_endpoints(migrated_db, storage, migrator, test_migr
         company=test_company,
         flows=["app.flows.simple_flow.simple_flow_config"],
         agents=["app.agents.calculator.agent.CalculatorAgent"],
-        tools=["app.tools.calc_tools.calculate"],
+        tools=["app.tools.calc.calc_tools.calculate"],
         with_dependencies=False
     )
     
