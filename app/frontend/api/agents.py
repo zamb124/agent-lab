@@ -83,7 +83,7 @@ async def update_agent(
     agent_repo: AgentRepositoryDep
 ) -> AgentConfig:
     """Обновить агента"""
-    agent = await agent_repo.find_by_id(agent_id)
+    agent = await agent_repo.get(agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     
@@ -110,7 +110,7 @@ async def update_agent(
 @router.delete("/{agent_id:path}")
 async def delete_agent(agent_id: str, agent_repo: AgentRepositoryDep):
     """Удалить агента"""
-    agent = await agent_repo.find_by_id(agent_id)
+    agent = await agent_repo.get(agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     
@@ -121,7 +121,7 @@ async def delete_agent(agent_id: str, agent_repo: AgentRepositoryDep):
 @router.get("/{agent_id:path}/graph")
 async def get_agent_graph(agent_id: str, agent_repo: AgentRepositoryDep) -> Dict[str, Any]:
     """Получить граф агента"""
-    agent = await agent_repo.find_by_id(agent_id)
+    agent = await agent_repo.get(agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     
@@ -154,7 +154,7 @@ async def update_agent_graph(
     agent_repo: AgentRepositoryDep
 ):
     """Обновить граф агента"""
-    agent = await agent_repo.find_by_id(agent_id)
+    agent = await agent_repo.get(agent_id)
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
     
