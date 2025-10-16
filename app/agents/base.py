@@ -33,6 +33,9 @@ class BaseAgent(ABC):
     graph_definition: Optional[Dict[str, Any]] = None
     llm_config: Optional[Dict[str, Any]] = None
     history_from: Union[str, List[str], None] = None
+    
+    # ВАЖНО: store НЕ должен быть в агенте!
+    # Store задается только в FlowConfig - это общая память для всех агентов flow
 
     def __init__(self, agent_config: Optional[AgentConfig] = None):
         self.config = agent_config
@@ -100,16 +103,21 @@ class BaseAgent(ABC):
         """
         run_config = config or {}
 
-        # Инициализируем store начальными значениями из конфигурации агента
-        if "store" not in input_data and self.config.store:
-            input_data["store"] = self.config.store.copy()
-        elif "store" in input_data and self.config.store:
-            # Если store уже есть, добавляем только отсутствующие ключи из конфигурации
-            for key, value in self.config.store.items():
-                if key not in input_data["store"]:
-                    input_data["store"][key] = value
-        elif "store" not in input_data:
-            input_data["store"] = {}
+        # Инициализируем store из flow_config (общая память всех агентов)
+        context = get_context()
+        
+        if "store" not in input_data:
+            if context and context.flow_config and context.flow_config.store:
+                input_data["store"] = context.flow_config.store.copy()
+                logger.debug(f"📦 Store инициализирован из flow_config: {list(input_data['store'].keys())}")
+            else:
+                input_data["store"] = {}
+        else:
+            # Store уже есть (продолжение сессии) - мержим недостающие ключи из flow
+            if context and context.flow_config and context.flow_config.store:
+                for key, value in context.flow_config.store.items():
+                    if key not in input_data["store"]:
+                        input_data["store"][key] = value
         
         if "remaining_steps" not in input_data:
             input_data["remaining_steps"] = 25

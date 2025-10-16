@@ -110,11 +110,4 @@ max_sources_per_query = 3
         serper_search,
         session_set
     ]
-    
-    # Для переиспользуемости через store:
-    # store = {
-    #     "max_iterations": 2,
-    #     "search_provider": "tavily",
-    #     "results_per_query": 5
-    # }
 

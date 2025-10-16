@@ -37,12 +37,8 @@ async def send_progress(message: str, chat_action: str = "typing") -> None:
         return
     
     try:
-        # Отправляем typing индикатор если платформа поддерживает
-        if hasattr(context.interface, 'send_chat_action'):
-            await context.interface.send_chat_action(
-                context.session_id.split(":")[0],  # chat_id
-                chat_action
-            )
+        # Отправляем typing индикатор перед сообщением
+        await context.interface.send_typing_notification(context.session_id, is_typing=True)
         
         # Отправляем сообщение
         from app.interfaces.base import Message
@@ -58,6 +54,9 @@ async def send_progress(message: str, chat_action: str = "typing") -> None:
         
         await context.interface.send_message(progress_msg)
         logger.info(f"📤 Прогресс отправлен: {message[:60]}...")
+        
+        # Отправляем typing индикатор снова после сообщения
+        await context.interface.send_typing_notification(context.session_id, is_typing=True)
         
     except Exception as e:
         logger.warning(f"Не удалось отправить прогресс: {e}")

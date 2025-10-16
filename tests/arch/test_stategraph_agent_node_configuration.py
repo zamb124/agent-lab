@@ -42,7 +42,7 @@ async def test_agent_node_with_params_agent_id(migrated_db, storage, flow_factor
         type=AgentType.STATEGRAPH,
         code_mode=CodeMode.INLINE_CODE,
         graph_definition=graph_def,
-        llm_config=LLMConfig(model="mock-gpt-4"),
+        llm_config=LLMConfig(model="mock-gpt-4", context_window=10000),
         source="manual"
     )
     
@@ -105,7 +105,7 @@ async def test_agent_node_with_function_class(migrated_db, storage, flow_factory
         type=AgentType.STATEGRAPH,
         code_mode=CodeMode.INLINE_CODE,
         graph_definition=graph_def,
-        llm_config=LLMConfig(model="mock-gpt-4"),
+        llm_config=LLMConfig(model="mock-gpt-4", context_window=10000),
         source="manual"
     )
     
@@ -170,7 +170,7 @@ async def test_agent_node_with_id_fallback(migrated_db, storage, flow_factory, m
         type=AgentType.STATEGRAPH,
         code_mode=CodeMode.INLINE_CODE,
         graph_definition=graph_def,
-        llm_config=LLMConfig(model="mock-gpt-4"),
+        llm_config=LLMConfig(model="mock-gpt-4", context_window=10000),
         source="manual"
     )
     
@@ -234,7 +234,7 @@ async def test_agent_node_short_id_fallback(migrated_db, storage, flow_factory, 
         type=AgentType.STATEGRAPH,
         code_mode=CodeMode.INLINE_CODE,
         graph_definition=graph_def,
-        llm_config=LLMConfig(model="mock-gpt-4"),
+        llm_config=LLMConfig(model="mock-gpt-4", context_window=10000),
         source="manual"
     )
     
@@ -293,7 +293,7 @@ async def test_agent_node_error_message_quality(migrated_db, storage, flow_facto
         type=AgentType.STATEGRAPH,
         code_mode=CodeMode.INLINE_CODE,
         graph_definition=graph_def,
-        llm_config=LLMConfig(model="mock-gpt-4"),
+        llm_config=LLMConfig(model="mock-gpt-4", context_window=10000),
         source="manual"
     )
     

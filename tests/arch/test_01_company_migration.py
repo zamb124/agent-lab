@@ -841,7 +841,7 @@ async def test_api_remigrate_endpoints(migrated_db, storage, migrator, test_migr
     # Проверяем что сущности есть
     flow_config = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
     agent_config = await agent_repo.get("app.agents.calculator.agent.CalculatorAgent")
-    tool_data = await storage.get("tool:app.tools.calc_tools.calculate")
+    tool_data = await storage.get("tool:app.tools.calc.calc_tools.calculate")
     
     assert flow_config is not None
     assert agent_config is not None

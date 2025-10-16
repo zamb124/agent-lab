@@ -16,33 +16,21 @@ from app.models import FlowConfig
 
 
 @pytest.mark.asyncio
-async def test_01_weather_agent_has_store_config(migrated_db, storage, test_context):
+async def test_01_weather_flow_has_store_config(migrated_db, storage, test_context, flow_repo):
     """
-    Тест 1: WeatherAgent имеет конфигурацию store.
+    Тест 1: WeatherFlow имеет конфигурацию store.
     
-    Проверяем что у агента есть поле store с начальными значениями.
+    ВАЖНО: Store теперь задается в FlowConfig, а НЕ в агенте!
     """
-    from app.agents.weather.agent import WeatherAgent
+    from app.flows.weather_flow import weather_flow_config
     
-    # Проверяем что у класса агента есть store
-    assert hasattr(WeatherAgent, 'store')
-    assert WeatherAgent.store is not None
-    assert isinstance(WeatherAgent.store, dict)
-    assert "requests_count" in WeatherAgent.store
-    assert "show_tips" in WeatherAgent.store
-    assert "preferred_units" in WeatherAgent.store
+    # Проверяем что у FlowConfig есть store (НЕ у агента!)
+    assert hasattr(weather_flow_config, 'store')
+    assert weather_flow_config.store is not None
+    assert isinstance(weather_flow_config.store, dict)
     
-    print(f"✅ WeatherAgent.store определен: {WeatherAgent.store}")
-    
-    # Создаем AgentConfig из класса
-    from app.models import AgentConfig
-    agent_config = await AgentConfig.from_class(WeatherAgent)
-    
-    # Проверяем что store перенесся в конфигурацию
-    assert agent_config.store is not None
-    assert agent_config.store == WeatherAgent.store
-    
-    print(f"✅ AgentConfig.store содержит начальные значения")
+    print(f"✅ WeatherFlow.store определен: {weather_flow_config.store}")
+    print(f"   Ключей в store: {len(weather_flow_config.store)}")
 
 
 @pytest.mark.asyncio
