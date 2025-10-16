@@ -37,34 +37,25 @@
 - Если не знаешь ответа - передавай человеку
 ```
 
-**Локальные переменные агента**
-Переменные, доступные только этому агенту. Формат JSON:
+**Переменные агента**
+Настраиваются в конфигурации агента, но хранятся на уровне flow.
 
-```json
-{
-  "company_name": "Моя Компания",
-  "support_email": "support@example.com"
-}
-```
+### Шаг 3: Настройка модели ИИ
 
-### Шаг 3: Настройка LLM
+Выберите подходящую модель для вашего бота:
 
-Выберите модель для вашего бота:
+**Доступные модели:**
+- **Claude Sonnet 4.5** - универсальная модель высокого качества
+- **Gemini 2.5 Flash** - быстрая и экономичная
+- **Grok Code Fast** - для задач программирования
+- **GPT-4o** - мощная модель от OpenAI
 
-**Провайдер:**
-- `openai` - ChatGPT (рекомендуется для начала)
-- `yandex` - YandexGPT
-- `gemini` - Google Gemini
-
-**Модель:**
-- OpenAI: `gpt-4`, `gpt-4-turbo`, `gpt-3.5-turbo`
-- Yandex: `yandexgpt/latest`, `yandexgpt-lite/latest`
-- Gemini: `gemini-1.5-pro`, `gemini-1.5-flash`
-
-**Температура** (0-1):
-- 0 - детерминированные ответы
-- 0.7 - сбалансированная креативность
-- 1 - максимальная креативность
+**Параметры модели:**
+- **Температура** (0-1): уровень креативности ответов
+  - 0.2 - детерминированные ответы
+  - 0.7 - сбалансированная креативность
+- **Максимум токенов**: длина ответа
+- **Системный промпт**: инструкции для модели
 
 ### Шаг 4: Настройка RAG (База знаний)
 
@@ -82,15 +73,12 @@ RAG (Retrieval-Augmented Generation) позволяет боту искать и
 
 ### Шаг 5: Переменные Flow
 
-Глобальные переменные, доступные всем агентам в боте. Пример:
+Глобальные переменные, доступные всем агентам в боте.
 
-```json
-{
-  "api_url": "https://api.example.com",
-  "timeout": 30,
-  "max_retries": 3
-}
-```
+Примеры переменных:
+- api_url - URL внешнего API
+- timeout - время ожидания
+- max_retries - количество попыток
 
 ### Шаг 6: Дополнительные настройки
 
@@ -124,7 +112,7 @@ RAG (Retrieval-Augmented Generation) позволяет боту искать и
    - **Access Token** - токен доступа
    - **Verify Token** - токен верификации webhook
 6. Настройте webhook в Meta:
-   - URL: `https://your-domain.com/api/v1/webhook/whatsapp/{bot_id}`
+   - URL: `https://{company_subdomain}.agents-lab.ru/api/v1/webhook/whatsapp/{bot_id}`
    - Verify Token: тот же, что указали в Agent Lab
 
 ### Web Chat
@@ -138,10 +126,10 @@ RAG (Retrieval-Augmented Generation) позволяет боту искать и
 <script>
   window.agentLabConfig = {
     botId: 'your_bot_id',
-    apiUrl: 'https://your-domain.com'
+    apiUrl: 'https://{company_subdomain}.agents-lab.ru'
   };
 </script>
-<script src="https://your-domain.com/static/chat-widget.js"></script>
+<script src="https://{company_subdomain}.agents-lab.ru/static/chat-widget.js"></script>
 ```
 
 3. Вставьте код перед закрывающим тегом `</body>`
@@ -165,7 +153,7 @@ RAG (Retrieval-Augmented Generation) позволяет боту искать и
 Прямой доступ к боту через REST API:
 
 ```bash
-curl -X POST https://your-domain.com/api/v1/flow/{bot_id}/invoke \
+curl -X POST https://{company_subdomain}.agents-lab.ru/api/v1/flow/{bot_id}/invoke \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

@@ -291,16 +291,13 @@ User → [Agent1 ⇄ Agent2 ⇄ Agent3] → Response
 
 ### Управление состоянием
 
-**State** - единое хранилище данных для всех агентов:
+**State** - единое хранилище данных для всех агентов.
 
-```json
-{
-  "messages": [...],
-  "user_data": {...},
-  "current_step": "collecting_info",
-  "collected_data": {...}
-}
-```
+State хранит:
+- Историю сообщений
+- Данные пользователя
+- Текущий шаг сценария
+- Собранную информацию
 
 Каждый агент может читать и обновлять state.
 
@@ -342,12 +339,7 @@ Email поддержки: {support_email}
 Текущий пользователь: {user.name}
 ```
 
-В коде агента:
-```python
-from app.core.variables import get_variable
-
-api_key = await get_variable("OPENAI_API_KEY")
-```
+Переменные доступны в настройках агента и используются автоматически.
 
 ### Безопасность
 
