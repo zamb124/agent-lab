@@ -153,11 +153,22 @@ nav:
   - Главная: index.md
   
   - Для пользователей:
+      - Обзор: user_docs/index.md
       - Обзор платформы: user_docs/overview.md
       - Начало работы: user_docs/getting_started.md
+      - Магазин ботов: user_docs/store.md
+      - Создание ботов: user_docs/bots_creation.md
       - Управление ботами: user_docs/bots_management.md
       - Платформы: user_docs/platforms.md
       - Возможности: user_docs/features.md
+      - Переменные: user_docs/variables.md
+      - Биллинг: user_docs/billing.md
+      - Визуальный конструктор: user_docs/builder.md
+      - Сценарии использования: user_docs/scenarios.md
+      - Лучшие практики: user_docs/best_practices.md
+      - FAQ: user_docs/faq.md
+      - Видео-гайды: user_docs/videos.md
+      - Устранение проблем: user_docs/troubleshooting.md
   
   - API и интеграции:
       - API документация: api.md
@@ -176,6 +187,7 @@ nav:
   
   - Для разработчиков:
       - Архитектура: architecture.md
+      - Агенты: agents.md
       - Конфигурация: configuration.md
       - LLM: llm.md
       - Deployment: deployment.md
