@@ -267,11 +267,10 @@ class TestTelegramFileIntegration:
         print(formatted_message)
         
         # Проверяем что сообщение содержит все нужные данные
-        # Формат использует markdown ссылку
+        # Формат использует markdown ссылку: 📎 [filename](url) (size)
         assert "📎" in formatted_message
         assert "user_document.pdf" in formatted_message
         assert "test_file_123" in formatted_message
-        assert "application/pdf" in formatted_message
         assert "1.00 MB" in formatted_message
         
         # Тестируем обратное извлечение
@@ -280,8 +279,8 @@ class TestTelegramFileIntegration:
         
         file_info = extracted[0]
         assert file_info["name"] == "user_document.pdf"
-        assert file_info["file_id"] == "test_file_123"
-        assert file_info["content_type"] == "application/pdf"
+        # Новый формат (markdown) не хранит file_id и content_type в тексте
+        # Эта информация доступна через API по ссылке
         
         print("✅ Информация о файле корректно извлекается обратно")
         
