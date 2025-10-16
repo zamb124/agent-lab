@@ -54,39 +54,33 @@ class SynthesizerAgent(ReActAgent):
 
 ТВОЯ ЗАДАЧА:
 1. Синтезировать итоговый исследовательский отчет
-2. Структурировать информацию логично
+2. Структурировать информацию логично с разделами
 3. Добавить цитирование источников
-4. Создать резюме и выводы
+4. Создать краткое резюме и ключевые выводы
 5. Сохранить финальный отчет
 
 ДОСТУПНЫЕ ИНСТРУМЕНТЫ:
 - session_set(key, value) - сохранить данные
-- synthesize_report(query, facts_json, sources) - создать отчет из фактов
-- format_markdown(text, style) - отформатировать в markdown
-- create_citations(sources, format) - создать правильные цитаты
 
 ПРОЦЕСС РАБОТЫ:
-1. Используй данные из store:
-   - {store.original_query}
-   - {store.facts_json}
-   - {store.facts_structured}
-   - {store.processed_sources}
+1. Прочитай данные из store:
+   - {store.original_query} - исходный вопрос
+   - {store.facts_structured} - извлеченные факты (уже структурированы по категориям)
+   - {store.processed_sources} - обработанные источники с URL
 
-2. Создай основной отчет:
-   report = synthesize_report(original_query, facts_json, processed_sources)
+2. Создай структурированный отчет в markdown формате:
+   - Заголовок на основе запроса
+   - Краткое резюме (2-3 предложения с главными выводами)
+   - Детальный анализ с разделами (используй категории из facts_structured)
+   - Ключевые выводы (3-5 пунктов)
+   - Список источников с URL
 
-3. Извлеки URLs источников из processed_sources
+3. Используй факты из {store.facts_structured} - они готовы к использованию
 
-4. Создай цитаты:
-   citations = create_citations(список_urls, format="simple")
+4. Извлеки URLs из {store.processed_sources} и добавь в раздел "📚 Источники"
 
-5. Объедини отчет + цитаты
-
-6. Отформатируй финальный документ:
-   final_report = format_markdown(отчет_с_цитатами, style="academic")
-
-7. Сохрани:
-   - session_set("final_report", final_report)
+5. Сохрани:
+   - session_set("final_report", готовый_markdown_отчет)
    - session_set("report_length", длина_в_символах)
 
 СТРУКТУРА ОТЧЕТА:
@@ -128,20 +122,9 @@ class SynthesizerAgent(ReActAgent):
 - Если факты противоречат друг другу - укажи это явно
 - Используй markdown форматирование (заголовки, списки, bold)
 - Эмодзи используй умеренно (только для заголовков разделов)
+- Отчет должен быть компактным и структурированным (не более 2000 слов)
 - После создания отчета - обязательно сохрани его
-- Сообщи пользователю что отчет готов и сколько символов"""
+- Сообщи пользователю что отчет готов и его размер"""
     
-    tools = [
-        session_set,
-        synthesize_report,
-        format_markdown,
-        create_citations
-    ]
-    
-    # Для переиспользуемости через store:
-    # store = {
-    #     "report_style": "academic",
-    #     "include_citations": True,
-    #     "max_length": 10000
-    # }
+    tools = [session_set]
 

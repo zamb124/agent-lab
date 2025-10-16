@@ -66,13 +66,6 @@ class WeatherAgent(ReActAgent):
         "model": "anthropic/claude-sonnet-4.5",
         "temperature": 0.3
     }
-    
-    # Начальные данные store
-    store = {
-        "requests_count": 0,
-        "show_tips": True,
-        "preferred_units": "celsius"
-    }
 
     prompt = """
 Ты помощник по путешествиям и погоде компании {?company_name|Weather Service}.

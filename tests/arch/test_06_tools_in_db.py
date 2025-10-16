@@ -219,9 +219,9 @@ async def test_db_agent_with_code_tool(migrated_db, storage, flow_factory, mock_
     )
     
     code_tool = ToolReference(
-        tool_id="app.tools.calc_tools.calculate",
+        tool_id="app.tools.calc.calc_tools.calculate",
         code_mode=CodeMode.CODE_REFERENCE,
-        function_path="app.tools.calc_tools.calculate",
+        function_path="app.tools.calc.calc_tools.calculate",
         description="Калькулятор из кода"
     )
     

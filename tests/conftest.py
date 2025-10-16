@@ -437,7 +437,7 @@ class TestHelpers:
             function_class=None,
             prompt=prompt,
             tools=tools or [],
-            llm_config=LLMConfig(model="mock-gpt-4"),
+            llm_config=LLMConfig(model="mock-gpt-4", context_window=10000),
             source="test"
         )
         

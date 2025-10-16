@@ -35,21 +35,13 @@ class Flow:
     ) -> Any:
         """
         Унифицированный метод вызова Flow.
-        Инициализирует store из конфигурации и передает вызов entry агенту.
+        Передает вызов entry агенту (store инициализируется в BaseAgent из context.flow_config).
         """
         if not self.entry_agent:
             await self.initialize()
 
-        # Инициализируем store начальными значениями из конфигурации если это первый вызов
-        if "store" not in input_data and self.config.store:
-            input_data["store"] = self.config.store.copy()
-        elif "store" in input_data and self.config.store:
-            # Если store уже есть, добавляем только отсутствующие ключи из конфигурации
-            for key, value in self.config.store.items():
-                if key not in input_data["store"]:
-                    input_data["store"][key] = value
-
         # Передаем вызов entry агенту
+        # Store автоматически инициализируется в BaseAgent.ainvoke из context.flow_config.store
         return await self.entry_agent.ainvoke(input_data, config)
 
     def as_tool(self, name: Optional[str] = None, description: Optional[str] = None):

@@ -265,6 +265,7 @@ async def test_04_optional_and_default_values(migrated_db, storage, agent_factor
             provider="mock",
             model="mock-gpt-4",
             temperature=0.1,
+            context_window=10000,
         ),
     )
     
@@ -327,6 +328,7 @@ async def test_05_special_functions(migrated_db, storage, agent_factory, test_he
             provider="mock",
             model="mock-gpt-4",
             temperature=0.1,
+            context_window=10000,
         ),
     )
     
@@ -402,6 +404,7 @@ async def test_06_nested_store_access(migrated_db, storage, agent_factory, test_
             provider="mock",
             model="mock-gpt-4",
             temperature=0.1,
+            context_window=10000,
         ),
     )
     
