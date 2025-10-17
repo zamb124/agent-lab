@@ -3,10 +3,279 @@
 /* Основной контейнер Builder */
 .builder-container {
     display: flex;
+    position: relative;
     height: 100vh;
     background: var(--bg-primary);
     color: var(--text-primary);
     overflow: hidden;
+}
+
+/* ============================================
+   PALETTE (левая панель с компонентами)
+   ============================================ */
+
+.node-palette {
+    position: absolute;
+    left: 20px;
+    top: 80px;
+    width: 240px;
+    max-height: calc(100vh - 120px);
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+    overflow: hidden;
+    transition: width 0.3s ease;
+}
+
+.palette-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.palette-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-collapse-palette {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+
+.btn-collapse-palette:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.node-palette.collapsed {
+    width: 60px;
+}
+
+.node-palette.collapsed .palette-header h3 span {
+    display: none;
+}
+
+.node-palette.collapsed .palette-section {
+    display: none;
+}
+
+.node-palette.collapsed .btn-collapse-palette i {
+    transform: rotate(180deg);
+}
+
+.palette-section {
+    padding: 16px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.palette-section-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+}
+
+.palette-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    margin-bottom: 8px;
+    border-radius: 8px;
+    cursor: grab;
+    transition: all 0.2s ease;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+}
+
+.palette-item:hover {
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.palette-item:active {
+    cursor: grabbing;
+}
+
+.palette-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.palette-info {
+    flex: 1;
+}
+
+.palette-name {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.palette-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* ============================================
+   PROPERTIES PANEL (правая панель)
+   ============================================ */
+
+.properties-panel {
+    position: absolute;
+    right: 20px;
+    top: 80px;
+    width: 400px;
+    max-height: calc(100vh - 120px);
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    z-index: 100;
+    overflow: hidden;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.properties-body {
+    overflow-y: auto;
+    max-height: calc(100vh - 120px);
+}
+
+/* Шапка формы фиксируется */
+.properties-panel .card {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 120px);
+    overflow: hidden;
+}
+
+.properties-panel .card-header {
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: inherit;
+}
+
+.properties-panel .card-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Фиксированный крестик закрытия */
+.properties-close-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    cursor: pointer;
+    border-radius: 50%;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    font-size: 14px;
+}
+
+.properties-close-btn:hover {
+    background: rgba(0, 0, 0, 0.7);
+    transform: scale(1.1);
+}
+
+.properties-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.properties-empty i {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.3;
+}
+
+.properties-empty p {
+    margin: 0;
+    font-size: 14px;
+}
+
+.properties-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: var(--text-muted);
+}
+
+.properties-loading p {
+    margin-top: 16px;
+    font-size: 14px;
+}
+
+/* Скрываем кнопки сохранения внутри properties panel */
+.properties-panel .card-body .d-flex.gap-3.justify-content-end {
+    display: none !important;
+}
+
+/* Убираем внешние отступы у карточки в properties panel */
+.properties-panel .card {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
 }
 
 /* Общие стили для кнопок */
@@ -733,6 +1002,7 @@
 
 .builder-canvas {
     flex: 1;
+    width: 100%;
     display: flex;
     flex-direction: column;
     background: var(--bg-primary);
@@ -813,22 +1083,24 @@
 }
 
 /* Ноды на канвасе */
+/* ============================================
+   CANVAS NODES (минималистичные кубики)
+   ============================================ */
+
 .canvas-node {
     position: absolute;
-    background: var(--bg-secondary);
-    border: 2px solid var(--border-color) !important; /* Всегда нейтральная рамка */
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-md);
+    background: white;
+    border: 2px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     cursor: pointer;
     pointer-events: all;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    min-width: 300px;
-    min-height: auto; /* Убрали фиксированную высоту */
-    will-change: transform;
+    transition: all 0.2s ease;
+    min-width: 180px;
     width: auto;
-    max-width: none;
-    overflow: visible; /* Порты могут выходить за края */
+    padding: 16px;
     z-index: 10;
+    overflow: visible;
 }
 
 /* Для tooltip нужен еще больший z-index */
@@ -1048,21 +1320,94 @@
     font-size: 11px;
 }
 
+/* Состояния ноды */
 .canvas-node:hover {
-    border-color: var(--accent-primary);
-    box-shadow: var(--shadow-lg);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    transform: translateY(-1px);
 }
 
 .canvas-node.selected {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 2px var(--accent-primary-alpha);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
 .canvas-node.dragging {
     z-index: 100;
-    box-shadow: var(--shadow-xl);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16);
     transition: none;
     cursor: grabbing;
+}
+
+/* Цветные границы для разных типов нод */
+.canvas-node[data-node-type="flow_node"] {
+    border-color: #3b82f6;
+}
+
+.canvas-node[data-node-type="agent_node"] {
+    border-color: #8b5cf6;
+}
+
+.canvas-node[data-node-type="tool_node"] {
+    border-color: #10b981;
+}
+
+.canvas-node[data-node-type="function_node"] {
+    border-color: #f59e0b;
+}
+
+.canvas-node[data-node-type="message_node"] {
+    border-color: #06b6d4;
+}
+
+.canvas-node[data-node-type="conditional_node"] {
+    border-color: #ef4444;
+}
+
+/* Простая структура ноды */
+.node-simple-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.node-simple-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.node-simple-icon.flow { background: #3b82f6; }
+.node-simple-icon.agent { background: #8b5cf6; }
+.node-simple-icon.tool { background: #10b981; }
+.node-simple-icon.function { background: #f59e0b; }
+.node-simple-icon.message { background: #06b6d4; }
+.node-simple-icon.conditional { background: #ef4444; }
+
+.node-simple-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.node-simple-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.node-simple-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Типы нод - стили удалены, используется общий стиль .canvas-node */

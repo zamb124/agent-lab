@@ -14,8 +14,7 @@
                     {% endif %}
                 </div>
                 <div>
-                    <h5 class="mb-0 font-semibold">{{ model_instance.name if model_instance and hasattr(model_instance, 'name') else (model_type.title() if model_type else 'Форма') }}</h5>
-                    <small class="text-muted">{{ model_type.title() if model_type else 'Редактирование' }}</small>
+                    <h5 class="mb-0 font-semibold">{{ title if title else (name if name else (model_type.title() if model_type else 'Форма')) }}</h5>
                 </div>
             </div>
         

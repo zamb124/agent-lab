@@ -1,6 +1,14 @@
 /**
  * Управление канвасом Builder на базе SVG + Vanilla JS
  */
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 class BuilderCanvas {
     constructor(element, builder) {
         this.element = element;
@@ -172,6 +180,14 @@ class BuilderCanvas {
         // Сохраняем в коллекции
         this.nodes.set(node.id, node);
         
+        // Обновляем размеры из реального DOM элемента
+        setTimeout(() => {
+            const rect = node.element.getBoundingClientRect();
+            node.width = rect.width / this.zoom;
+            node.height = rect.height / this.zoom;
+            this.updateNodeEdges(node);
+        }, 50);
+        
         // Настраиваем обработчики
         this.setupNodeHandlers(node);
         
@@ -179,33 +195,16 @@ class BuilderCanvas {
     }
     
     /**
-     * Создание HTML элемента ноды
+     * Создание HTML элемента ноды (простой кубик)
      */
     async createNodeElement(node) {
         const element = document.createElement('div');
-        element.className = `canvas-node ${node.data.type}-node`;
+        element.className = `canvas-node`;
         element.dataset.nodeId = node.id;
         element.dataset.nodeType = node.data.type;
         element.style.transform = `translate3d(${node.x}px, ${node.y}px, 0)`;
-        // Для форм делаем ноды компактными но достаточно широкими
-        if (node.data.type === 'agent_node' || node.data.type === 'flow_node') {
-            element.style.width = '380px';
-            element.style.minHeight = `${node.height}px`;
-        } else if (node.data.type === 'tool_node') {
-            element.style.width = `${node.width}px`;
-            element.style.minHeight = 'auto'; /* Тулы подстраиваются под контент */
-        } else {
-            element.style.width = `${node.width}px`;
-            element.style.minHeight = `${node.height}px`;
-        }
         
-        // Для нод агентов, флоу и инструментов загружаем полную форму через HTMX
-        if (node.data.type === 'agent_node' || node.data.type === 'flow_node' || node.data.type === 'tool_node') {
-            await this.createEditableNodeElement(element, node);
-        } else {
-            // Для остальных нод используем простой вид
-            await this.createSimpleNodeElement(element, node);
-        }
+        await this.createSimpleNodeElement(element, node);
         
         return element;
     }
@@ -341,46 +340,94 @@ class BuilderCanvas {
     }
     
     /**
-     * Создание простой ноды
+     * Создание простой ноды (минималистичный кубик)
      */
     async createSimpleNodeElement(element, node) {
-        const iconClass = this.getNodeIcon(node.data.type);
-        const nodeName = node.data.params?.name || node.id;
-        const nodeDescription = node.data.params?.description || '';
+        const nodeType = node.data.type;
+        const nodeName = node.data.params?.name || this.getNodeTypeName(nodeType);
+        let nodeDesc = node.data.params?.description || this.getNodeTypeDesc(nodeType);
+        
+        // Обрезаем название до 30 символов
+        const displayName = nodeName.length > 30 ? nodeName.substring(0, 27) + '...' : nodeName;
+        
+        // Обрезаем описание до 25 символов
+        if (nodeDesc && nodeDesc.length > 25) {
+            nodeDesc = nodeDesc.substring(0, 22) + '...';
+        }
+        
+        const iconClass = this.getNodeIcon(nodeType);
+        const iconType = this.getNodeIconType(nodeType);
+        
+        // Экранируем HTML
+        const escapedName = escapeHtml(displayName);
+        const escapedDesc = escapeHtml(nodeDesc);
+        
+        // Определяем какие порты нужны
+        let portsHtml = '';
+        
+        if (nodeType === 'flow_node') {
+            // Flow: только выходной порт (entry point)
+            portsHtml = `
+                <div class="node-ports">
+                    <div class="output-ports">
+                        <div class="port output-port" data-port-type="output" data-port-id="output">
+                            <div class="port-dot"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else if (nodeType === 'tool_node') {
+            // Tool: только входной порт (конечная нода)
+            portsHtml = `
+                <div class="node-ports">
+                    <div class="input-ports">
+                        <div class="port input-port" data-port-type="input" data-port-id="input">
+                            <div class="port-dot"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else if (nodeType === 'message_node') {
+            // Message: только входной порт
+            portsHtml = `
+                <div class="node-ports">
+                    <div class="input-ports">
+                        <div class="port input-port" data-port-type="input" data-port-id="input">
+                            <div class="port-dot"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            // Agent, Function, Conditional: оба порта
+            portsHtml = `
+                <div class="node-ports">
+                    <div class="input-ports">
+                        <div class="port input-port" data-port-type="input" data-port-id="input">
+                            <div class="port-dot"></div>
+                        </div>
+                    </div>
+                    <div class="output-ports">
+                        <div class="port output-port" data-port-type="output" data-port-id="output">
+                            <div class="port-dot"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
         
         element.innerHTML = `
-            <div class="node-header">
-                <div class="node-icon">
+            <div class="node-simple-content">
+                <div class="node-simple-icon ${iconType}">
                     <i class="${iconClass}"></i>
                 </div>
-                <div class="node-title">${nodeName}</div>
-                <div class="node-actions">
-                    <button class="btn-icon" data-action="edit">
-                        <i class="icon-edit"></i>
-                    </button>
+                <div class="node-simple-info">
+                    <div class="node-simple-title">${escapedName}</div>
+                    <div class="node-simple-desc">${escapedDesc}</div>
                 </div>
             </div>
             
-            ${nodeDescription ? `<div class="node-description">${nodeDescription}</div>` : ''}
-            
-            <!-- Порты для подключения -->
-            <div class="node-ports">
-                <div class="input-ports">
-                    <div class="port input-port" data-port-type="input" data-port-id="input">
-                        <div class="port-dot"></div>
-                    </div>
-                </div>
-                <div class="output-ports">
-                    <div class="port output-port" data-port-type="output" data-port-id="output">
-                        <div class="port-dot"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Статус выполнения -->
-            <div class="node-status" data-status="idle">
-                <div class="status-indicator"></div>
-            </div>
+            ${portsHtml}
         `;
     }
     
@@ -662,13 +709,59 @@ class BuilderCanvas {
      */
     getNodeIcon(nodeType) {
         const icons = {
-            'agent_node': 'icon-brain',
-            'tool_node': 'icon-tool',
-            'flow_node': 'icon-flow',
-            'function_node': 'icon-code',
-            'message_node': 'icon-message'
+            'flow_node': 'bi bi-diagram-3',
+            'agent_node': 'bi bi-robot',
+            'tool_node': 'bi bi-tools',
+            'function_node': 'bi bi-code-square',
+            'message_node': 'bi bi-chat-dots',
+            'conditional_node': 'bi bi-lightning'
         };
-        return icons[nodeType] || 'icon-circle';
+        return icons[nodeType] || 'bi bi-square';
+    }
+    
+    /**
+     * Получение типа иконки (для CSS класса)
+     */
+    getNodeIconType(nodeType) {
+        const types = {
+            'flow_node': 'flow',
+            'agent_node': 'agent',
+            'tool_node': 'tool',
+            'function_node': 'function',
+            'message_node': 'message',
+            'conditional_node': 'conditional'
+        };
+        return types[nodeType] || 'default';
+    }
+    
+    /**
+     * Получение названия типа ноды
+     */
+    getNodeTypeName(nodeType) {
+        const names = {
+            'flow_node': 'Flow',
+            'agent_node': 'Agent',
+            'tool_node': 'Tool',
+            'function_node': 'Function',
+            'message_node': 'Message',
+            'conditional_node': 'Conditional'
+        };
+        return names[nodeType] || 'Node';
+    }
+    
+    /**
+     * Получение описания типа ноды
+     */
+    getNodeTypeDesc(nodeType) {
+        const descs = {
+            'flow_node': 'Entry point',
+            'agent_node': 'AI agent',
+            'tool_node': 'Function call',
+            'function_node': 'Custom code',
+            'message_node': 'Send message',
+            'conditional_node': 'Router logic'
+        };
+        return descs[nodeType] || '';
     }
     
     /**
@@ -986,6 +1079,11 @@ class BuilderCanvas {
         
         e.stopPropagation();
         
+        // Запоминаем начальную позицию для определения клика vs drag
+        this.mouseDownStartX = e.clientX;
+        this.mouseDownStartY = e.clientY;
+        this.mouseDownTime = Date.now();
+        
         this.isDragging = true;
         this.draggedNode = node;
         this.dragStartX = e.clientX;
@@ -1030,6 +1128,15 @@ class BuilderCanvas {
      */
     stopNodeDrag() {
         if (this.draggedNode) {
+            // Определяем был ли это клик или drag
+            const timeDiff = Date.now() - this.mouseDownTime;
+            const distanceMoved = Math.sqrt(
+                Math.pow(this.dragStartX - this.mouseDownStartX, 2) +
+                Math.pow(this.dragStartY - this.mouseDownStartY, 2)
+            );
+            
+            const wasClick = timeDiff < 200 && distanceMoved < 5;
+            
             this.draggedNode.element.classList.remove('dragging');
             
             // Убираем класс оптимизации
@@ -1043,6 +1150,12 @@ class BuilderCanvas {
             if (this.edgeUpdateThrottle) {
                 clearTimeout(this.edgeUpdateThrottle);
                 this.edgeUpdateThrottle = null;
+            }
+            
+            // Если это был клик - открываем properties panel
+            if (wasClick && this.builder.propertiesPanel) {
+                console.log('👆 Клик на ноду, открываем properties panel');
+                this.builder.propertiesPanel.show(this.draggedNode);
             }
             
             this.draggedNode = null;
@@ -1482,6 +1595,48 @@ class BuilderCanvas {
         // Если нет явной точки входа, возвращаем первую ноду
         const firstNode = this.nodes.values().next().value;
         return firstNode ? firstNode.id : null;
+    }
+    
+    /**
+     * Обновление визуализации ноды после изменения данных
+     */
+    async updateNodeFromData(node) {
+        if (!node || !node.element) return;
+        
+        // Сохраняем текущую позицию
+        const currentX = node.x;
+        const currentY = node.y;
+        
+        // Пересоздаем содержимое ноды
+        await this.createSimpleNodeElement(node.element, node);
+        
+        // Восстанавливаем позицию
+        node.x = currentX;
+        node.y = currentY;
+        node.element.style.transform = `translate3d(${node.x}px, ${node.y}px, 0)`;
+        
+        // Обновляем обработчики
+        this.setupNodeHandlers(node);
+        
+        console.log('✅ Нода обновлена:', node.id);
+    }
+    
+    /**
+     * Дублирование ноды
+     */
+    duplicateNode(node) {
+        const duplicatedData = {
+            ...node.data,
+            id: `${node.data.type}_${Date.now()}`,
+            ui: {
+                x: node.x + 50,
+                y: node.y + 50,
+                width: node.width,
+                height: node.height
+            }
+        };
+        
+        return this.addNode(duplicatedData);
     }
 }
 

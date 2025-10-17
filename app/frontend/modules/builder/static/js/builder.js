@@ -2,9 +2,6 @@
  * Главный класс Builder для визуального редактирования агентских флоу
  */
 
-import { showNotification } from '/static/js/components/notification.js';
-import { showModal, hideModal } from '/static/js/components/modal.js';
-
 class Builder {
     constructor(options = {}) {
         this.options = {
@@ -18,13 +15,13 @@ class Builder {
         this.selectedEdges = new Set();
         
         // Компоненты
-        this.sidebar = null;
+        this.palette = null;
+        this.propertiesPanel = null;
         this.canvas = null;
         this.dragDrop = null;
         
         // DOM элементы
         this.container = null;
-        this.sidebarEl = null;
         this.canvasEl = null;
         
         // Флаги
@@ -39,12 +36,13 @@ class Builder {
         
         try {
             this.container = document.getElementById('builderContainer');
-            this.sidebarEl = document.getElementById('builderSidebar');
             this.canvasEl = document.getElementById('builderCanvas');
             
-            if (!this.container || !this.sidebarEl || !this.canvasEl) {
+            if (!this.container || !this.canvasEl) {
                 throw new Error('Не найдены необходимые DOM элементы');
             }
+            
+            console.log('✅ DOM элементы найдены');
             
             // Инициализируем компоненты
             await this.initComponents();
@@ -76,12 +74,13 @@ class Builder {
      * Инициализация компонентов
      */
     async initComponents() {
-        // Загружаем модули
-        await this.loadModules();
+        // Инициализируем палитру
+        this.palette = new NodePalette(this);
+        await this.palette.init();
         
-        // Инициализируем сайдбар
-        this.sidebar = new BuilderSidebar(this.sidebarEl, this);
-        await this.sidebar.init();
+        // Инициализируем панель свойств
+        this.propertiesPanel = new PropertiesPanel(this);
+        await this.propertiesPanel.init();
         
         // Инициализируем канвас
         this.canvas = new BuilderCanvas(this.canvasEl, this);
@@ -172,16 +171,8 @@ class Builder {
      * Загрузка начальных данных
      */
     async loadInitialData() {
-        try {
-            // Загружаем списки для сайдбара
-            await this.sidebar.loadFlows();
-            await this.sidebar.loadAgents();
-            await this.sidebar.loadTools();
-            
-        } catch (error) {
-            console.error('Ошибка загрузки данных:', error);
-            this.showNotification('Ошибка загрузки данных', 'error');
-        }
+        // Начальных данных больше не загружаем, palette статичная
+        console.log('✅ Builder готов к работе');
     }
     
     /**
@@ -201,18 +192,32 @@ class Builder {
             const canvasResponse = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}/canvas`);
             if (canvasResponse.ok) {
                 const canvasData = await canvasResponse.json();
-                await this.canvas.loadGraph(canvasData);
                 
-                // Если канвас пустой, автоматически добавляем флоу
-                if (!canvasData.nodes || canvasData.nodes.length === 0) {
-                    console.log('📦 Канвас пустой, автоматически добавляем флоу');
+                console.log('📊 Canvas data:', canvasData);
+                console.log('📊 Nodes count:', canvasData.nodes?.length || 0);
+                
+                // Проверяем есть ли агенты/тулы на канвасе (не только Flow)
+                const hasNonFlowNodes = canvasData.nodes?.some(node => 
+                    node.type !== 'flow_node'
+                ) || false;
+                
+                console.log('📊 Has non-flow nodes:', hasNonFlowNodes);
+                
+                if (!hasNonFlowNodes) {
+                    // Канвас пустой или только с Flow нодой - разворачиваем
+                    console.log('📦 Канвас без агентов/тулов, разворачиваем Flow');
+                    const centerPos = this.canvas.getCenterPosition();
                     await this.dragDrop.createFlowWithExpansion(
                         { 
                             id: this.currentFlow.flow_id, 
                             name: this.currentFlow.name 
                         }, 
-                        this.canvas.getCenterPosition()
+                        centerPos
                     );
+                } else {
+                    // Канвас уже заполнен - просто загружаем
+                    console.log('📦 Канвас уже заполнен, загружаем сохраненный граф');
+                    await this.canvas.loadGraph(canvasData);
                 }
             }
             
@@ -688,10 +693,6 @@ class Builder {
             form.addEventListener('htmx:afterRequest', (event) => {
                 if (event.detail.successful) {
                     this.showNotification('Изменения сохранены', 'success');
-                    // Перезагружаем список в сайдбаре
-                    if (this.sidebar) {
-                        this.sidebar.loadFlows();
-                    }
                 }
             });
         }
@@ -745,7 +746,18 @@ class Builder {
     }
     
     showNotification(message, type = 'info', duration = 3000) {
-        showNotification(message, type, duration);
+        // Простая реализация уведомлений
+        const icon = {
+            'success': '✅',
+            'error': '❌',
+            'warning': '⚠️',
+            'info': 'ℹ️'
+        }[type] || 'ℹ️';
+        
+        console.log(`${icon} ${message}`);
+        
+        // Можно добавить toast notification позже
+        // Пока просто логируем
     }
     
     /**
