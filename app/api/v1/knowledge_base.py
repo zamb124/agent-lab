@@ -4,7 +4,7 @@ API endpoints для работы с базой знаний (RAG).
 """
 
 import logging
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
 
@@ -12,7 +12,7 @@ from app.core.context import get_context
 from app.db.repositories import Storage
 from app.core.file_processor import FileProcessor
 from app.models.rag_models import RAGDocument
-from app.tools.misc.rag_tools import upload_document_to_knowledge_base
+from app.tools.misc.rag_tools import upload_document_to_knowledge_base, upload_text_to_knowledge_base
 from app.frontend.dependencies import FlowRepositoryDep
 
 router = APIRouter(
@@ -31,6 +31,13 @@ class UploadDocumentResponse(BaseModel):
     document_id: str
     name: str
     status: str
+
+
+class UploadTextRequest(BaseModel):
+    """Запрос на загрузку текста"""
+    text: str
+    document_name: Optional[str] = None
+    description: Optional[str] = None
 
 
 class DocumentListResponse(BaseModel):
@@ -121,6 +128,63 @@ async def upload_document_to_flow(
     return UploadDocumentResponse(
         document_id=document_id,
         name=file.filename,
+        status="processing"
+    )
+
+
+@router.post("/flows/{flow_id}/text", response_model=UploadDocumentResponse, summary="Загрузить текст")
+async def upload_text_to_flow(
+    flow_id: str,
+    request: UploadTextRequest,
+    flow_repo: FlowRepositoryDep = None
+):
+    """
+    Загружает текст напрямую в базу знаний бота.
+
+    Args:
+        flow_id: ID бота
+        request: Текст и метаданные
+
+    Returns:
+        document_id и статус обработки
+    """
+    context = get_context()
+
+    if not context or not context.active_company:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+
+    flow_config = await flow_repo.get(flow_id)
+
+    if not flow_config:
+        raise HTTPException(status_code=404, detail=f"Flow {flow_id} не найден")
+
+    if flow_config.rag_config is None:
+        from app.models.rag_models import AgentRAGConfig
+        flow_config.rag_config = AgentRAGConfig(
+            enabled=True,
+            namespace_scope="flow",
+            search_scopes=["flow", "company"]
+        )
+        await flow_repo.set(flow_config)
+
+    context.flow_config = flow_config
+
+    # Вызываем новый тул upload_text_to_knowledge_base
+    result_text = await upload_text_to_knowledge_base.ainvoke({
+        "text": request.text,
+        "document_name": request.document_name,
+        "description": request.description or "Загружен через UI"
+    }, config={})
+
+    document_id = "uploaded"
+    if "ID документа:" in result_text:
+        document_id = result_text.split("ID документа:")[1].split("\n")[0].strip()
+
+    doc_name = request.document_name or f"Text document ({len(request.text)} chars)"
+
+    return UploadDocumentResponse(
+        document_id=document_id,
+        name=doc_name,
         status="processing"
     )
 

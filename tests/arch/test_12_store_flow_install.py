@@ -232,9 +232,12 @@ async def test_hooks_actually_execute(migrated_db, storage, flow_factory, migrat
     set_company_context(test_company)
     
     await migrator.migrate_defaults_for_company(test_company)
-    
-    # Проверяем что до install нет переменных
+
+    # Очищаем переменную если она существует от предыдущих тестов
     default_city_key = f"company:{test_company.company_id}:var:default_city"
+    await storage.delete(default_city_key)
+
+    # Проверяем что до install нет переменных
     before_install = await storage.get(default_city_key)
     assert before_install is None, "Переменная не должна существовать до install"
     

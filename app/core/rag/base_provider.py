@@ -78,6 +78,20 @@ class BaseRAGProvider(ABC):
         Провайдер скачивает из S3 и обрабатывает.
         """
         pass
+
+    @abstractmethod
+    async def upload_document_from_text(
+        self,
+        namespace_id: str,
+        text: str,
+        document_name: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ) -> RAGDocument:
+        """
+        Загружает текст напрямую в RAG хранилище.
+        """
+        pass
     
     @abstractmethod
     async def get_document(

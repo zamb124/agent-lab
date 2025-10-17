@@ -282,9 +282,14 @@
                                     <i class="bi bi-files"></i>
                                     Документы в базе знаний
                                 </h5>
-                                <button class="document-upload-button" onclick="uploadDocumentToKnowledgeBase('{{ bot.flow_id }}')" title="Загрузить документ">
-                                    <i class="bi bi-upload"></i>
-                                </button>
+                                <div class="document-upload-buttons">
+                                    <button class="document-upload-button" onclick="uploadDocumentToKnowledgeBase('{{ bot.flow_id }}')" title="Загрузить документ">
+                                        <i class="bi bi-upload"></i>
+                                    </button>
+                                    <button class="document-upload-button" onclick="openUploadTextModal()" title="Загрузить текст">
+                                        <i class="bi bi-file-earmark-text"></i>
+                                    </button>
+                                </div>
                             </div>
                             
                             <div id="knowledge-base-docs-list" class="documents-list">
@@ -699,6 +704,58 @@
                     </button>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно загрузки текста -->
+<div id="upload-text-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px); align-items: center; justify-content: center; z-index: 1050;">
+    <div class="modal-content" style="max-width: 800px;">
+        <div class="modal-header">
+            <h3>Загрузить текст в базу знаний</h3>
+            <div class="modal-header-actions">
+                <button class="btn-icon" onclick="uploadTextFromModal('{{ bot.flow_id }}')" title="Загрузить">
+                    <i class="bi bi-upload"></i>
+                </button>
+                <button class="btn-close" onclick="closeUploadTextModal()" title="Закрыть">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Название документа <span class="text-muted">(опционально)</span></label>
+                <input type="text"
+                       class="form-control"
+                       id="upload-text-document-name"
+                       placeholder="Будет сгенерировано автоматически"
+                       maxlength="100"
+                       onkeydown="if(event.keyCode===13) {event.preventDefault(); return false;}">
+                <small class="form-text">Оставьте пустым для автоматической генерации названия</small>
+            </div>
+
+            <div class="form-group">
+                <label>Текст документа</label>
+                <textarea class="form-control"
+                          id="upload-text-content"
+                          rows="15"
+                          placeholder="Вставьте или введите текст для загрузки в базу знаний..."
+                          required></textarea>
+                <small class="form-text">
+                    Текст будет разбит на фрагменты и проиндексирован для поиска.
+                    Максимальная длина: 50,000 символов.
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label>Описание <span class="text-muted">(опционально)</span></label>
+                <input type="text"
+                       class="form-control"
+                       id="upload-text-description"
+                       placeholder="Краткое описание документа"
+                       maxlength="200">
+            </div>
+
         </div>
     </div>
 </div>

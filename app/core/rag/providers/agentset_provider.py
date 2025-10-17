@@ -345,6 +345,77 @@ class AgentsetRAGProvider(BaseRAGProvider):
             metadata=metadata,
             created_at=ingest_data.get("createdAt")
         )
+
+    async def upload_document_from_text(
+        self,
+        namespace_id: str,
+        text: str,
+        document_name: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        **kwargs
+    ) -> RAGDocument:
+        """
+        Загружает текст в Agentset, сначала сохраняя его как файл в S3.
+        """
+        doc_name = document_name or f"text_document_{len(text)}"
+
+        # Сохраняем текст как файл в S3
+        s3_client = await get_default_s3_client()
+        if not s3_client:
+            raise ValueError("S3 клиент не настроен для загрузки текста в RAG")
+
+        # Создаем временный файл в S3
+        import uuid
+        file_id_short = str(uuid.uuid4())[:8]  # Короткий UUID (8 символов)
+
+        # Генерируем читаемое название файла
+        if document_name and document_name.strip():
+            # Если пользователь указал название - используем его, убираем расширение если есть
+            base_name = document_name.strip()
+            if '.' in base_name:
+                base_name = base_name.rsplit('.', 1)[0]  # Убираем расширение
+
+            safe_name = "".join(c for c in base_name if c.isalnum() or c in (' ', '-', '_')).strip()
+            if not safe_name:
+                safe_name = "document"
+            file_base_name = safe_name[:40]  # Ограничиваем длину
+        else:
+            # Если не указано - используем первые символы текста
+            text_preview = text.strip()[:40].replace('\n', ' ').replace('\r', ' ')
+            safe_name = "".join(c for c in text_preview if c.isalnum() or c in (' ', '-', '_')).strip()
+            if not safe_name:
+                safe_name = "text"
+            file_base_name = safe_name
+
+        s3_key = f"rag_text/{namespace_id}/{file_id_short}_{file_base_name}.txt"
+
+        # Загружаем текст как bytes в S3
+        text_bytes = text.encode('utf-8')
+        await s3_client.upload_bytes(
+            data=text_bytes,
+            key=s3_key,
+            content_type="text/plain",
+            acl="private"  # Текст остается приватным в S3
+        )
+
+        # Обновляем метаданные с информацией о файле для правильного извлечения названия
+        if metadata is None:
+            metadata = {}
+        metadata.update({
+            "file_id": file_id_short,  # Добавляем короткий file_id для кодирования названия
+            "original_text_length": len(text),
+            "s3_key": s3_key,
+            "uploaded_via": "text_upload"
+        })
+
+        # Используем существующий метод для загрузки из S3
+        return await self.upload_document_from_s3(
+            namespace_id=namespace_id,
+            s3_key=s3_key,
+            document_name=doc_name,
+            metadata=metadata,
+            **kwargs
+        )
     
     async def get_document(
         self,
