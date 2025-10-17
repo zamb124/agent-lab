@@ -773,8 +773,12 @@ class BuilderCanvas {
         // Drag & Drop ноды
         element.addEventListener('mousedown', (e) => this.handleNodeMouseDown(e, node));
         
-        // Клик по ноде
-        element.addEventListener('click', (e) => this.handleNodeClick(e, node));
+        // Клик по ноде (только левая кнопка)
+        element.addEventListener('mousedown', (e) => {
+            if (e.button === 0) {
+                this.handleNodeClick(e, node);
+            }
+        });
         
         // Порты для соединений
         const ports = element.querySelectorAll('.port');
@@ -1204,6 +1208,11 @@ class BuilderCanvas {
      */
     handleNodeClick(e, node) {
         e.stopPropagation();
+        
+        // Игнорируем правую кнопку мыши
+        if (e.button === 2) {
+            return;
+        }
         
         // Выделение ноды
         if (e.ctrlKey || e.metaKey) {
