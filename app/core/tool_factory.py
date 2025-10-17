@@ -7,14 +7,22 @@ import importlib
 import inspect
 import functools
 import asyncio
-from typing import List, Any
+from typing import List, Any, Dict
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
-
+import typing
 from app.models import ToolReference, CodeMode
 from app.core.flow_factory import FlowFactory
 from app.core.container import get_container
 from app.core.context import get_context
+from app.core.variables import get_state
+from app.core.progress_sender import send_progress
+from app.tools.session.session_tools import (
+    session_set, session_get, session_has, session_delete, session_keys, get_variable
+)
+from app.tools.misc.standard import ask_user
+from app.core.tool_decorator import tool
+from langgraph.types import interrupt
 from app.services.billing_service import BillingService
 from app.models.billing_models import UsageType
 
@@ -115,19 +123,8 @@ class ToolFactory:
             logger.debug(f"🔥 Inline код: {ref.inline_code[:100]}...")
             
             # Создаем namespace для выполнения кода с необходимыми импортами
-            import typing
-            from app.core.tool_decorator import tool as platform_tool
-            
-            namespace = {
-                'asyncio': asyncio,
-                'typing': typing,
-                'Annotated': typing.Annotated,
-                'Optional': typing.Optional,
-                'List': typing.List,
-                'Dict': typing.Dict,
-                'Any': typing.Any,
-                '__builtins__': __builtins__,
-            }
+            # Используем тот же namespace, что и для документации
+            namespace = self.get_tool_namespace()
             
             # Выполняем inline код
             exec(ref.inline_code, namespace, namespace)
@@ -165,6 +162,44 @@ class ToolFactory:
         except Exception as e:
             logger.error(f"❌ Ошибка создания INLINE_CODE инструмента {ref.tool_id}: {e}")
             raise
+
+    def get_tool_namespace(self) -> Dict[str, Any]:
+        """
+        Возвращает namespace доступный для inline тулов.
+        Используется для автокомплита и документации.
+        """
+        
+
+        namespace = {
+            'asyncio': asyncio,
+            'typing': typing,
+            'Annotated': typing.Annotated,
+            'Optional': typing.Optional,
+            'List': typing.List,
+            'Dict': typing.Dict,
+            'Any': typing.Any,
+            '__builtins__': __builtins__,
+        }
+
+        # Добавляем платформенные функции
+        platform_functions = {
+            'tool': tool,
+            'get_context': get_context,
+            'get_state': get_state,
+            'send_progress': send_progress,
+            'interrupt': interrupt,
+            # Для session_tools используем оригинальные функции из StructuredTool объектов
+            'ask_user': ask_user.func if hasattr(ask_user, 'func') else ask_user,
+            'session_set': session_set.func if hasattr(session_set, 'func') else session_set,
+            'session_get': session_get.func if hasattr(session_get, 'func') else session_get,
+            'session_has': session_has.func if hasattr(session_has, 'func') else session_has,
+            'session_delete': session_delete.func if hasattr(session_delete, 'func') else session_delete,
+            'session_keys': session_keys.func if hasattr(session_keys, 'func') else session_keys,
+            'get_variable': get_variable.func if hasattr(get_variable, 'func') else get_variable,
+        }
+
+        namespace.update(platform_functions)
+        return namespace
 
     async def _create_function_tool(self, ref: ToolReference) -> Any:
         """Создает инструмент из обычной функции или класса"""

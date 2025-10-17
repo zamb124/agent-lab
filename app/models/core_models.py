@@ -20,42 +20,12 @@ from ..core.slug_utils import generate_slug
 from ..core.context import get_context
 
 from .rag_models import AgentRAGConfig
+from .types import HistorySource, PythonCode
 
 if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
-
-
-class HistorySource(str):
-    """Специальный тип для источника истории диалогов"""
-
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, v):
-        if v is None:
-            return None
-        if isinstance(v, str):
-            return v
-        if isinstance(v, list) and all(isinstance(item, str) for item in v):
-            return v
-        raise ValueError("history_from должен быть строкой, списком строк или None")
-
-    @classmethod
-    def __get_pydantic_json_schema__(cls, core_schema, handler):
-        return {
-            "anyOf": [
-                {"type": "string"},
-                {"type": "array", "items": {"type": "string"}},
-                {"type": "null"}
-            ]
-        }
-
-    def __repr__(self):
-        return f"HistorySource({super().__repr__()})"
 
 
 class NodeType(str, Enum):
@@ -442,11 +412,10 @@ class ToolReference(BuilderEntity):
         description="Путь к функции для CODE_REFERENCE",
         placeholder="app.tools.calc_tools.add_numbers",
     )
-    inline_code: Optional[str] = Field(
+    inline_code: Optional[PythonCode] = Field(
         default=None,
         title="Инлайн код",
-        description="Python код для INLINE_CODE",
-        widget_attrs={"rows": 8, "class": "code-editor"},
+        description="Python код для INLINE_CODE режима",
     )
     description: Optional[str] = Field(
         default=None,
