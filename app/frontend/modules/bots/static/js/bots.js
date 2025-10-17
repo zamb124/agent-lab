@@ -326,6 +326,14 @@ import { showNotification } from '/static/js/components/notification.js';
         }
         
         updateLLMModels();
+
+        // Сворачиваем все каналы по умолчанию
+        const platformCards = document.querySelectorAll('.platform-settings');
+        platformCards.forEach(card => {
+            if (!card.classList.contains('collapsed')) {
+                card.classList.add('collapsed');
+            }
+        });
     }
     
     function initPromptEditor() {
@@ -754,7 +762,7 @@ import { showNotification } from '/static/js/components/notification.js';
         
         const modalHeader = modal.querySelector('.modal-header h3');
         if (modalHeader) {
-            modalHeader.textContent = 'Добавить платформу';
+            modalHeader.textContent = 'Добавить канал общения';
         }
         
         console.log('🔧 Модалка открыта, parent:', modal.parentElement.tagName);
@@ -776,7 +784,7 @@ import { showNotification } from '/static/js/components/notification.js';
             const platformConfig = flowData.platforms[platformType];
             
             if (!platformConfig) {
-                throw new Error('Платформа не найдена');
+                throw new Error('Канал не найден');
             }
             
             await addPlatform(botId);
@@ -787,7 +795,7 @@ import { showNotification } from '/static/js/components/notification.js';
             
             const modalHeader = modal.querySelector('.modal-header h3');
             if (modalHeader) {
-                modalHeader.textContent = 'Редактировать платформу';
+                modalHeader.textContent = 'Редактировать канал';
             }
             
             const platformIcons = {
@@ -812,11 +820,11 @@ import { showNotification } from '/static/js/components/notification.js';
             
             fillPlatformFormData(platformConfig, platformType);
             
-            console.log('✏️ Платформа открыта для редактирования:', platformType);
+            console.log('✏️ Канал открыт для редактирования:', platformType);
             
         } catch (error) {
-            console.error('Ошибка загрузки данных платформы:', error);
-            showNotification('Не удалось загрузить настройки платформы: ' + error.message, 'danger');
+            console.error('Ошибка загрузки данных каналы:', error);
+            showNotification('Не удалось загрузить настройки каналы: ' + error.message, 'danger');
         }
     };
     
@@ -942,7 +950,7 @@ import { showNotification } from '/static/js/components/notification.js';
         }
     };
 
-    // Глобальная переменная для хранения выбранной платформы
+    // Глобальная переменная для хранения выбранной каналы
     let selectedPlatformType = '';
 
     window.togglePlatformDropdown = function() {
@@ -968,7 +976,7 @@ import { showNotification } from '/static/js/components/notification.js';
     window.selectPlatform = function(value, icon, text) {
         selectedPlatformType = value;
         
-        // Обновляем отображение выбранной платформы
+        // Обновляем отображение выбранной каналы
         const selectText = document.querySelector('.select-text');
         selectText.innerHTML = `<i class="${icon}"></i> ${text}`;
         
@@ -1055,7 +1063,7 @@ import { showNotification } from '/static/js/components/notification.js';
                 usernameField.placeholder = 'ID группы';
                 break;
             default:
-                tokenField.placeholder = 'Токен платформы';
+                tokenField.placeholder = 'Токен каналы';
                 usernameField.placeholder = 'Username/ID';
                 break;
         }
@@ -1316,7 +1324,7 @@ import { showNotification } from '/static/js/components/notification.js';
         
         const selectText = document.querySelector('.select-text');
         if (selectText) {
-            selectText.innerHTML = 'Выберите платформу';
+            selectText.innerHTML = 'Выберите канал';
         }
         
         const dropdown = document.getElementById('platform-dropdown');
@@ -1386,7 +1394,7 @@ import { showNotification } from '/static/js/components/notification.js';
         const platformType = isEditMode ? editPlatformType : selectedPlatformType;
         
         if (!platformType) {
-            showNotification('Выберите тип платформы', 'warning');
+            showNotification('Выберите тип каналы', 'warning');
             return;
         }
 
@@ -1420,7 +1428,7 @@ import { showNotification } from '/static/js/components/notification.js';
             savedUsername = usernameInput?.value?.trim() || '';
             
             if (!savedUsername) {
-                showNotification('Введите username/ID для платформы', 'warning');
+                showNotification('Введите username/ID для каналы', 'warning');
                 return;
             }
             
@@ -1441,7 +1449,7 @@ import { showNotification } from '/static/js/components/notification.js';
                 finalToken = input?.value?.trim() || '';
                 
                 if (!finalToken) {
-                    showNotification('Введите токен для платформы', 'warning');
+                    showNotification('Введите токен для каналы', 'warning');
                     return;
                 }
                 
@@ -1469,7 +1477,7 @@ import { showNotification } from '/static/js/components/notification.js';
         console.log('🔍 DEBUG: savedUsername =', savedUsername);
 
         if (botId === 'new') {
-            showNotification('Сначала создайте бота, затем добавляйте платформы', 'warning');
+            showNotification('Сначала создайте бота, затем добавляйте каналы', 'warning');
             return;
         }
 
@@ -1487,7 +1495,7 @@ import { showNotification } from '/static/js/components/notification.js';
 
             const currentFlow = await currentFlowResponse.json();
             
-            // Добавляем новую платформу
+            // Добавляем новую канал
             if (!currentFlow.platforms) {
                 currentFlow.platforms = {};
             }
@@ -1496,7 +1504,7 @@ import { showNotification } from '/static/js/components/notification.js';
             console.log('📤 Обновляем platforms в flow:', currentFlow.platforms);
 
             if (savedToken && savedUsername) {
-                console.log('💾 Сохраняем токен для платформы:', platformType);
+                console.log('💾 Сохраняем токен для каналы:', platformType);
                 const tokenResponse = await fetch('/api/v1/admin/tokens', {
                     method: 'POST',
                     headers: {
@@ -1539,19 +1547,19 @@ import { showNotification } from '/static/js/components/notification.js';
                 throw new Error(errorMessage);
             }
 
-            showNotification(`Платформа ${platformType} добавлена`, 'success');
+            showNotification(`Канал ${platformType} добавлен`, 'success');
             closeAddPlatformModal();
             
             await expandBot(botId);
 
         } catch (error) {
-            console.error('❌ Ошибка добавления платформы:', error);
-            showNotification('Ошибка добавления платформы: ' + error.message, 'danger');
+            console.error('❌ Ошибка добавления каналы:', error);
+            showNotification('Ошибка добавления каналы: ' + error.message, 'danger');
         }
     };
 
     window.removePlatform = async function(botId, platformType) {
-        if (!confirm(`Удалить платформу ${platformType}?`)) {
+        if (!confirm(`Удалить канал ${platformType}?`)) {
             return;
         }
 
@@ -1569,7 +1577,7 @@ import { showNotification } from '/static/js/components/notification.js';
 
             const currentFlow = await currentFlowResponse.json();
             
-            // Удаляем платформу
+            // Удаляем канал
             if (currentFlow.platforms && currentFlow.platforms[platformType]) {
                 delete currentFlow.platforms[platformType];
                 
@@ -1586,18 +1594,18 @@ import { showNotification } from '/static/js/components/notification.js';
                 });
 
                 if (!updateResponse.ok) {
-                    throw new Error('Не удалось удалить платформу');
+                    throw new Error('Не удалось удалить канал');
                 }
 
-                showNotification(`Платформа ${platformType} удалена`, 'success');
+                showNotification(`Канал ${platformType} удален`, 'success');
                 
                 // Перезагружаем детали бота
                 await expandBot(botId);
             }
 
         } catch (error) {
-            console.error('Ошибка удаления платформы:', error);
-            showNotification('Ошибка удаления платформы: ' + error.message, 'danger');
+            console.error('Ошибка удаления каналы:', error);
+            showNotification('Ошибка удаления каналы: ' + error.message, 'danger');
         }
     };
 
@@ -1625,7 +1633,7 @@ import { showNotification } from '/static/js/components/notification.js';
         }
     });
 
-    // Закрытие модального окна добавления платформы по клику на фон
+    // Закрытие модального окна добавления каналы по клику на фон
     document.addEventListener('click', (e) => {
         if (e.target.id === 'add-platform-modal') {
             window.closeAddPlatformModal();

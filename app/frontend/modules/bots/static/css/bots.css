@@ -834,6 +834,10 @@ body.sidebar-collapsed .bot-modal {
     margin-bottom: 0;
 }
 
+.platform-settings.collapsed .platform-collapse-btn i {
+    transform: rotate(-90deg);
+}
+
 .switch {
     position: relative;
     display: inline-block;
@@ -1967,7 +1971,7 @@ input:checked + .slider:before {
         padding: 0.75rem;
     }
     
-    /* Платформы */
+    /* Каналы */
     .platform-settings {
         margin-bottom: 0.75rem;
     }

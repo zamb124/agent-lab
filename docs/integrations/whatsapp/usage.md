@@ -288,7 +288,7 @@ buttons = [
     {"id": "opt2", "text": "Опция 2"}
 ]
 
-# Платформа сама решает как отобразить
+# Канал сама решает как отобразить
 # Telegram → inline keyboard
 # WhatsApp → reply buttons
 ```
@@ -393,7 +393,7 @@ curl -X POST "https://your-company.agents-lab.ru/api/v1/admin/whatsapp/register/
 
 **Готово!** Тот же агент теперь работает и в Telegram и в WhatsApp.
 
-## Advanced: Платформо-специфичная логика
+## Advanced: Канало-специфичная логика
 
 Если нужна разная логика для платформ:
 

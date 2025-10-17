@@ -198,7 +198,7 @@ async def update_flow(
             # Проверяем что есть token для платформ требующих его
             if platform_name == "telegram":
                 if not platform_config.get("token"):
-                    logger.warning(f"⚠️ Платформа telegram для {validated_flow.flow_id} не имеет token, пропускаем регистрацию")
+                    logger.warning(f"⚠️ Канал telegram для {validated_flow.flow_id} не имеет token, пропускаем регистрацию")
                     continue
             
             try:
