@@ -171,7 +171,7 @@ weather_flow_config = FlowConfig(
         # Смешанное использование
         "limits": {
             "max_cities": 5,
-            "timeout_seconds": "@var:api_timeout"
+            "timeout_seconds": "@var:api_timeout",
         }
     },
 
