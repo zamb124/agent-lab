@@ -25,7 +25,10 @@ def get_template_name_from_type(annotation: Any, value: Any = None) -> str:
         # Проверяем, является ли значение BaseModel
         if isinstance(value, BaseModel):
             return "basemodel"
-        return value_type.__name__.lower()
+        
+        template_name = value_type.__name__.lower()
+        print(f"🔍 Template from value type: {value_type.__name__} → {template_name}")
+        return template_name
 
     # Убираем Optional - это единственное что нужно обработать специально
     origin = get_origin(annotation)

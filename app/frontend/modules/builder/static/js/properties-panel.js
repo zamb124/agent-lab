@@ -412,7 +412,9 @@ class PropertiesPanel {
                 url = `/frontend/models/agent/${encodeURIComponent(agentId)}?view=form`;
             } else if (nodeType === 'tool_node') {
                 const toolId = node.data.params?.tool_id || 'new';
+                console.log('🔧 Загружаем Tool:', toolId);
                 url = `/frontend/models/tool/${encodeURIComponent(toolId)}?view=form`;
+                console.log('📡 URL для Tool:', url);
             } else {
                 this.body.innerHTML = `
                     <div class="alert alert-info">
@@ -435,6 +437,15 @@ class PropertiesPanel {
             
             if (typeof htmx !== 'undefined') {
                 htmx.process(this.body);
+            }
+            
+            // Инициализируем Ace Editor через HTMXManager
+            if (window.app && window.app.htmxManager) {
+                console.log('🔧 Вызываем HTMXManager.initAceEditors()');
+                window.app.htmxManager.initAceEditors(this.body);
+            } else {
+                console.warn('⚠️ HTMXManager не найден, пробуем локальную инициализацию');
+                this.initAceEditors();
             }
             
             this.setupAutoSave(node);
@@ -481,6 +492,69 @@ class PropertiesPanel {
                 
                 this.builder.canvas.updateNodeFromData(node);
             });
+        });
+    }
+    
+    initAceEditors() {
+        // Находим все контейнеры для code-editor
+        const codeContainers = this.body.querySelectorAll('.code-editor-container');
+        
+        if (codeContainers.length === 0) {
+            return;
+        }
+        
+        console.log(`📝 Найдено ${codeContainers.length} code editor контейнеров`);
+        
+        codeContainers.forEach(container => {
+            const fieldName = container.dataset.fieldName;
+            const containerId = container.id;
+            
+            if (!fieldName || !containerId) {
+                console.warn('⚠️ Container без fieldName или id');
+                return;
+            }
+            
+            // Проверяем что Ace загружен
+            if (typeof ace === 'undefined') {
+                console.error('❌ Ace Editor не загружен!');
+                return;
+            }
+            
+            console.log(`✅ Инициализируем Ace Editor для ${fieldName}`);
+            
+            try {
+                const editor = ace.edit(containerId);
+                editor.setTheme('ace/theme/monokai');
+                editor.session.setMode('ace/mode/python');
+                
+                // Получаем начальное значение из textarea
+                const textarea = document.getElementById(fieldName);
+                if (textarea) {
+                    editor.setValue(textarea.value || '', -1);
+                }
+                
+                editor.setOptions({
+                    fontSize: '14px',
+                    showPrintMargin: false,
+                    enableBasicAutocompletion: true,
+                    enableLiveAutocompletion: true,
+                    enableSnippets: true
+                });
+                
+                // Синхронизация с textarea
+                editor.session.on('change', () => {
+                    if (textarea) {
+                        textarea.value = editor.getValue();
+                        const event = new Event('change', { bubbles: true });
+                        textarea.dispatchEvent(event);
+                    }
+                });
+                
+                console.log(`✅ Ace Editor инициализирован для ${fieldName}`);
+                
+            } catch (error) {
+                console.error(`❌ Ошибка инициализации Ace для ${fieldName}:`, error);
+            }
         });
     }
     

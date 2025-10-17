@@ -19,6 +19,9 @@ export default class HTMXManager {
             if (e.detail.target.id === 'modal-container') {
                 this.showModal();
             }
+            
+            // Инициализируем Ace Editor после любого HTMX swap
+            this.initAceEditors(e.detail.target);
         });
         
         // Обработка ошибок HTMX
@@ -228,5 +231,85 @@ export default class HTMXManager {
                 }, 200);
             }
         }
+    }
+    
+    initAceEditors(targetElement = document) {
+        // Находим все контейнеры для code-editor
+        const codeContainers = targetElement.querySelectorAll('.code-editor-container');
+        
+        if (codeContainers.length === 0) {
+            return;
+        }
+        
+        console.log(`📝 Найдено ${codeContainers.length} code editor контейнеров`);
+        
+        codeContainers.forEach(container => {
+            const fieldName = container.dataset.fieldName;
+            const containerId = container.id;
+            
+            if (!fieldName || !containerId) {
+                console.warn('⚠️ Container без fieldName или id');
+                return;
+            }
+            
+            // Проверяем что контейнер еще не инициализирован
+            if (container.dataset.aceInitialized === 'true') {
+                console.log(`⏭️ Ace Editor уже инициализирован для ${fieldName}`);
+                return;
+            }
+            
+            // Проверяем что Ace загружен
+            if (typeof ace === 'undefined') {
+                console.error('❌ Ace Editor не загружен!');
+                return;
+            }
+            
+            console.log(`✅ Инициализируем Ace Editor для ${fieldName}`);
+            
+            try {
+                // Проверяем что CodeEditor класс доступен
+                if (typeof CodeEditor === 'undefined') {
+                    console.error('❌ CodeEditor класс не найден! Используем простой Ace');
+                    // Fallback на простой Ace
+                    const editor = ace.edit(containerId);
+                    editor.setTheme('ace/theme/monokai');
+                    editor.session.setMode('ace/mode/python');
+                    const textarea = document.getElementById(fieldName);
+                    if (textarea) {
+                        editor.setValue(textarea.value || '', -1);
+                    }
+                } else {
+                    // Используем полноценный CodeEditor компонент
+                    const textarea = document.getElementById(fieldName);
+                    const initialValue = textarea ? textarea.value : '';
+                    
+                    // Получаем flowId из builder если есть
+                    const flowId = window.builder?.currentFlow?.flow_id || null;
+                    
+                    const codeEditor = new CodeEditor({
+                        container: `#${containerId}`,
+                        value: initialValue,
+                        mode: 'python',
+                        height: '400px',
+                        flowId: flowId,
+                        onChange: (value) => {
+                            if (textarea) {
+                                textarea.value = value;
+                                const event = new Event('change', { bubbles: true });
+                                textarea.dispatchEvent(event);
+                            }
+                        }
+                    });
+                    
+                    console.log(`✅ CodeEditor (с панелью) инициализирован для ${fieldName}, flowId:`, flowId);
+                }
+                
+                // Помечаем как инициализированный
+                container.dataset.aceInitialized = 'true';
+                
+            } catch (error) {
+                console.error(`❌ Ошибка инициализации CodeEditor для ${fieldName}:`, error);
+            }
+        });
     }
 }

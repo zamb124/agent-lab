@@ -61,7 +61,6 @@ __all__ = [
     "AgentConfig",
     "FlowAuthor",
     "VariableDefinition",
-    "VariableDefinitionInput",
     "FlowConfig",
     "TaskStatus",
     "TaskConfig",

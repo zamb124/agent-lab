@@ -961,17 +961,20 @@ class BuilderDragDrop {
      */
     async expandToolRecursively(toolId, position, parentNodeId, savedCanvasData = null) {
         try {
-            // Кодируем toolId для URL (заменяем точки на слеши для корректного роутинга)
+            // Кодируем toolId для URL
             const encodedToolId = encodeURIComponent(toolId);
             
-            // Получаем данные тула
-            const toolResponse = await fetch(`/frontend/api/tools/${encodedToolId}`);
-            if (!toolResponse.ok) {
-                console.warn(`Тул ${toolId} не найден: ${toolResponse.statusText}`);
-                return null;
+            // Получаем данные тула из API
+            const apiResponse = await fetch(`/frontend/api/tools/${encodedToolId}`);
+            
+            if (!apiResponse.ok) {
+                throw new Error(
+                    `Тул ${toolId} не найден в БД. ` +
+                    `Запустите миграцию: python -m app.core.migration.migrator`
+                );
             }
             
-            const toolData = await toolResponse.json();
+            const toolData = await apiResponse.json();
             
             // Проверяем сохраненные позиции для этого инструмента
             let finalPosition = position;

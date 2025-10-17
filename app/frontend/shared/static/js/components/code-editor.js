@@ -40,6 +40,7 @@ class CodeEditor {
         this.storeVars = {};
         this.flowVars = {};
         this.availableLibs = {};
+        this.libraryDocumentation = null;
         this.currentSystemTheme = currentTheme;
         
         this.init();
@@ -137,6 +138,9 @@ class CodeEditor {
                 <button class="toolbar-btn" id="showStoreVarsBtn-${this.uniqueId}" title="Доступные переменные store">
                     <i class="bi bi-database"></i>
                 </button>
+                <button class="toolbar-btn" id="infoBtn-${this.uniqueId}" title="Документация по API">
+                    <i class="bi bi-info-circle"></i>
+                </button>
                 <button class="toolbar-btn" id="fullscreenBtn-${this.uniqueId}" title="Полноэкранный режим (F11)">
                     <i class="bi bi-arrows-fullscreen"></i>
                 </button>
@@ -224,36 +228,44 @@ class CodeEditor {
                 callback(null, completions);
             }
         };
-        
+
         if (this.editor.completers) {
             this.editor.completers.push(platformCompleter);
         }
+
+        // Загружаем документацию по библиотекам
+        this.loadLibraryDocumentation();
     }
     
     getCompletions() {
         const completions = [];
-        
-        const standardLibs = [
-            { caption: 'httpx', value: 'httpx', meta: 'library', docHTML: 'Асинхронный HTTP клиент' },
-            { caption: 'asyncio', value: 'asyncio', meta: 'library', docHTML: 'Асинхронное программирование' },
-            { caption: 'typing', value: 'typing', meta: 'library', docHTML: 'Типизация Python' },
-            { caption: 'json', value: 'json', meta: 'library', docHTML: 'Работа с JSON' },
-            { caption: 'datetime', value: 'datetime', meta: 'library', docHTML: 'Работа с датами' },
-            { caption: 're', value: 're', meta: 'library', docHTML: 'Регулярные выражения' },
-            { caption: 'uuid', value: 'uuid', meta: 'library', docHTML: 'Генерация UUID' },
-            { caption: 'pathlib', value: 'pathlib', meta: 'library', docHTML: 'Работа с путями' }
-        ];
-        
-        const platformImports = [
-            { caption: '@tool', value: 'from app.core.tool_decorator import tool\n\n@tool', meta: 'snippet', docHTML: 'Декоратор для создания тула' },
-            { caption: 'get_context', value: 'get_context()', meta: 'function', docHTML: 'Получить текущий контекст' },
-            { caption: 'get_state', value: 'get_state()', meta: 'function', docHTML: 'Получить state агента' },
-            { caption: 'send_progress', value: 'send_progress()', meta: 'function', docHTML: 'Отправить прогресс' },
-            { caption: 'GraphInterrupt', value: 'GraphInterrupt', meta: 'class', docHTML: 'Запрос данных у пользователя' }
-        ];
-        
-        completions.push(...standardLibs, ...platformImports);
-        
+
+        // Добавляем доступные библиотеки из документации
+        if (this.libraryDocumentation) {
+            this.libraryDocumentation.forEach(lib => {
+                // Основной элемент
+                completions.push({
+                    caption: lib.name,
+                    value: lib.name,
+                    meta: lib.type,
+                    docHTML: lib.description || `${lib.type} ${lib.name}`
+                });
+
+                // Добавляем методы/подэлементы
+                if (lib.methods) {
+                    lib.methods.forEach(method => {
+                        completions.push({
+                            caption: `${lib.name}.${method.name}`,
+                            value: `${lib.name}.${method.name}`,
+                            meta: method.type,
+                            docHTML: method.description || `${method.type} ${method.name}`
+                        });
+                    });
+                }
+            });
+        }
+
+        // Store переменные
         Object.keys(this.storeVars).forEach(key => {
             completions.push({
                 caption: `store.${key}`,
@@ -262,7 +274,8 @@ class CodeEditor {
                 docHTML: `Store переменная: ${this.storeVars[key]}`
             });
         });
-        
+
+        // Flow переменные
         Object.keys(this.flowVars).forEach(key => {
             completions.push({
                 caption: `flow.${key}`,
@@ -271,7 +284,7 @@ class CodeEditor {
                 docHTML: `Flow переменная: ${this.flowVars[key]}`
             });
         });
-        
+
         return completions;
     }
     
@@ -300,7 +313,18 @@ class CodeEditor {
         } else {
             console.error('❌ Кнопка showStoreVarsBtn не найдена!');
         }
-        
+
+        const infoBtn = this.toolbar.querySelector(`#infoBtn-${this.uniqueId}`);
+        console.log('   infoBtn:', !!infoBtn);
+        if (infoBtn) {
+            infoBtn.addEventListener('click', () => {
+                console.log('📚 Кнопка Info нажата!');
+                this.showApiDocumentation();
+            });
+        } else {
+            console.error('❌ Кнопка infoBtn не найдена!');
+        }
+
         const fullscreenBtn = this.toolbar.querySelector(`#fullscreenBtn-${this.uniqueId}`);
         console.log('   fullscreenBtn:', !!fullscreenBtn);
         if (fullscreenBtn) {
@@ -310,26 +334,26 @@ class CodeEditor {
     
     async loadFlowContext(flowId) {
         console.log('📡 loadFlowContext вызван для flowId:', flowId);
-        
+
         try {
             const url = `/frontend/api/flows/${flowId}/variables`;
             console.log('📡 Запрос к API:', url);
-            
+
             const response = await fetch(url);
             console.log('📡 Ответ от API:', response.status, response.statusText);
-            
+
             if (!response.ok) {
                 console.warn('❌ Не удалось загрузить контекст flow, статус:', response.status);
                 return;
             }
-            
+
             const data = await response.json();
             console.log('📡 Данные от API:', data);
-            
+
             this.storeVars = data.store || {};
             this.flowVars = data.variables || {};
             this.availableLibs = data.available_tools || [];
-            
+
             console.log('✅ Контекст flow загружен:', {
                 storeVars: Object.keys(this.storeVars).length,
                 flowVars: Object.keys(this.flowVars).length,
@@ -339,6 +363,27 @@ class CodeEditor {
             console.log('   Flow vars:', this.flowVars);
         } catch (error) {
             console.error('❌ Ошибка загрузки контекста flow:', error);
+        }
+    }
+
+    async loadLibraryDocumentation() {
+        console.log('📚 Загружаем документацию по библиотекам...');
+
+        try {
+            const response = await fetch('/frontend/api/code/documentation');
+            if (!response.ok) {
+                console.warn('❌ Не удалось загрузить документацию:', response.status);
+                return;
+            }
+
+            const data = await response.json();
+            this.libraryDocumentation = data.libraries || [];
+
+            console.log('✅ Документация загружена:', this.libraryDocumentation.length, 'элементов');
+        } catch (error) {
+            console.error('❌ Ошибка загрузки документации:', error);
+            // Fallback - пустая документация
+            this.libraryDocumentation = [];
         }
     }
     
@@ -405,11 +450,12 @@ class CodeEditor {
             content += '<div class="vars-section"><h4>📦 Store переменные</h4><div class="vars-list">';
             for (const [key, value] of Object.entries(this.storeVars)) {
                 const valueStr = JSON.stringify(value, null, 2);
+                const copyText = `state["store"]["${key}"]`;
                 content += `
                     <div class="var-item">
                         <div class="var-key">state["store"]["${key}"]</div>
                         <div class="var-value">${this.escapeHtml(valueStr)}</div>
-                        <button class="var-copy-btn" onclick="navigator.clipboard.writeText('state[\\"store\\"][\\"${key}\\"]')" title="Копировать">
+                        <button class="var-copy-btn" data-copy-text='${copyText}' title="Копировать">
                             <i class="bi bi-clipboard"></i>
                         </button>
                     </div>
@@ -422,11 +468,12 @@ class CodeEditor {
             content += '<div class="vars-section"><h4>🔧 Flow переменные</h4><div class="vars-list">';
             for (const [key, value] of Object.entries(this.flowVars)) {
                 const valueStr = JSON.stringify(value, null, 2);
+                const copyText = `{${key}}`;
                 content += `
                     <div class="var-item">
                         <div class="var-key">{${key}}</div>
                         <div class="var-value">${this.escapeHtml(valueStr)}</div>
-                        <button class="var-copy-btn" onclick="navigator.clipboard.writeText('{${key}}')" title="Копировать">
+                        <button class="var-copy-btn" data-copy-text='${copyText}' title="Копировать">
                             <i class="bi bi-clipboard"></i>
                         </button>
                     </div>
@@ -444,12 +491,152 @@ class CodeEditor {
         return div.innerHTML;
     }
     
+    formatDocstring(text) {
+        if (!text) return '';
+
+        // Очищаем от лишних пробелов в начале и конце
+        text = text.trim();
+
+        // Заменяем \n на <br> для переносов строк
+        text = text.replace(/\n/g, '<br>');
+
+        // Обрабатываем многострочные докстринги с отступами
+        text = text.replace(/<br>\s+/g, (match) => {
+            const spaces = match.length - 4; // 4 символа <br>
+            return '<br>' + '&nbsp;'.repeat(Math.max(0, spaces));
+        });
+
+        // Подсвечиваем Args: и Returns: секции
+        text = text.replace(/(Args:|Returns:|Examples?:)/gi, '<strong>$1</strong>');
+
+        return text;
+    }
+
+    showApiDocumentation() {
+        console.log('📚 showApiDocumentation вызван');
+
+        if (!this.libraryDocumentation || this.libraryDocumentation.length === 0) {
+            this.showVariablesModal('Документация по API', `
+                <p style="text-align: center; color: var(--code-editor-text-secondary); padding: 20px;">
+                    Документация загружается...<br>
+                    Если загрузка не удалась, попробуйте перезагрузить страницу.
+                </p>
+            `);
+            return;
+        }
+
+        let content = '<div class="api-documentation">';
+
+        // Группируем по типам
+        const grouped = {
+            function: [],
+            module: [],
+            class: [],
+            variable: []
+        };
+
+        this.libraryDocumentation.forEach(lib => {
+            if (grouped[lib.type]) {
+                grouped[lib.type].push(lib);
+            }
+        });
+
+        // Функции платформы
+        if (grouped.function.length > 0) {
+            content += '<div class="doc-section"><h4>🔧 Функции платформы</h4>';
+            grouped.function.forEach(func => {
+                content += `
+                    <div class="api-item">
+                        <div class="api-name">${func.name}</div>
+                        <div class="api-signature">${func.signature || ''}</div>
+                        <div class="api-description">${this.formatDocstring(func.description) || 'Нет описания'}</div>
+                    </div>
+                `;
+            });
+            content += '</div>';
+        }
+
+        // Модули
+        if (grouped.module.length > 0) {
+            content += '<div class="doc-section"><h4>📦 Модули</h4>';
+            grouped.module.forEach(mod => {
+                content += `
+                    <div class="api-item">
+                        <div class="api-name">${mod.name}</div>
+                        <div class="api-description">${this.formatDocstring(mod.description) || 'Нет описания'}</div>
+                    </div>
+                `;
+
+                if (mod.methods && mod.methods.length > 0) {
+                    content += '<div class="api-methods">';
+                    mod.methods.forEach(method => {
+                        content += `
+                            <div class="api-method">
+                                <span class="method-name">${method.name}</span>
+                                <span class="method-signature">${method.signature || ''}</span>
+                                <div class="method-description">${this.formatDocstring(method.description) || ''}</div>
+                            </div>
+                        `;
+                    });
+                    content += '</div>';
+                }
+            });
+            content += '</div>';
+        }
+
+        // Классы
+        if (grouped.class.length > 0) {
+            content += '<div class="doc-section"><h4>🏗️ Классы</h4>';
+            grouped.class.forEach(cls => {
+                content += `
+                    <div class="api-item">
+                        <div class="api-name">${cls.name}</div>
+                        <div class="api-description">${this.formatDocstring(cls.description) || 'Нет описания'}</div>
+                    </div>
+                `;
+
+                if (cls.methods && cls.methods.length > 0) {
+                    content += '<div class="api-methods">';
+                    cls.methods.forEach(method => {
+                        content += `
+                            <div class="api-method">
+                                <span class="method-name">${method.name}</span>
+                                <span class="method-signature">${method.signature || ''}</span>
+                                <div class="method-description">${this.formatDocstring(method.description) || ''}</div>
+                            </div>
+                        `;
+                    });
+                    content += '</div>';
+                }
+            });
+            content += '</div>';
+        }
+
+        // Переменные
+        if (grouped.variable.length > 0) {
+            content += '<div class="doc-section"><h4>📊 Переменные</h4>';
+            grouped.variable.forEach(v => {
+                content += `
+                    <div class="api-item">
+                        <div class="api-name">${v.name}</div>
+                        <div class="api-description">${this.formatDocstring(v.description) || 'Нет описания'}</div>
+                    </div>
+                `;
+            });
+            content += '</div>';
+        }
+
+        content += '</div>';
+
+        this.showVariablesModal('Документация по API', content);
+    }
+
     showVariablesModal(title, content) {
         const existingModal = document.querySelector('.code-editor-variables-modal');
         if (existingModal) {
             existingModal.remove();
         }
-        
+
         const modal = document.createElement('div');
         modal.className = 'code-editor-variables-modal';
         modal.innerHTML = `
@@ -466,22 +653,47 @@ class CodeEditor {
                 </div>
             </div>
         `;
-        
+
         document.body.appendChild(modal);
-        
+
         setTimeout(() => modal.classList.add('show'), 10);
-        
+
         const closeBtn = modal.querySelector('.variables-modal-close');
         const overlay = modal.querySelector('.variables-modal-overlay');
-        
+
         const closeModal = () => {
             modal.classList.remove('show');
             setTimeout(() => modal.remove(), 300);
         };
-        
+
         closeBtn.addEventListener('click', closeModal);
         overlay.addEventListener('click', closeModal);
-        
+
+        // Обработчики для кнопок копирования
+        const copyBtns = modal.querySelectorAll('.var-copy-btn');
+        copyBtns.forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const textToCopy = btn.dataset.copyText;
+                if (textToCopy) {
+                    try {
+                        await navigator.clipboard.writeText(textToCopy);
+                        console.log('✅ Скопировано:', textToCopy);
+
+                        // Визуальная обратная связь
+                        const icon = btn.querySelector('i');
+                        if (icon) {
+                            icon.className = 'bi bi-check';
+                            setTimeout(() => {
+                                icon.className = 'bi bi-clipboard';
+                            }, 1000);
+                        }
+                    } catch (error) {
+                        console.error('❌ Ошибка копирования:', error);
+                    }
+                }
+            });
+        });
+
         document.addEventListener('keydown', function escHandler(e) {
             if (e.key === 'Escape') {
                 closeModal();
@@ -491,12 +703,49 @@ class CodeEditor {
     }
     
     toggleFullscreen() {
-        this.container.classList.toggle('code-editor-fullscreen');
-        const icon = this.toolbar.querySelector(`#fullscreenBtn-${this.uniqueId} i`);
-        if (this.container.classList.contains('code-editor-fullscreen')) {
-            icon.className = 'bi bi-fullscreen-exit';
+        const isFullscreen = this.container.classList.contains('code-editor-fullscreen');
+        
+        if (!isFullscreen) {
+            // Входим в fullscreen
+            this.originalParent = this.container.parentNode;
+            this.originalNextSibling = this.container.nextSibling;
+            
+            // Перемещаем в body
+            document.body.appendChild(this.container);
+            this.container.classList.add('code-editor-fullscreen');
+            
+            const icon = this.toolbar.querySelector(`#fullscreenBtn-${this.uniqueId} i`);
+            if (icon) icon.className = 'bi bi-fullscreen-exit';
+            
+            // Блокируем скролл body
+            document.body.style.overflow = 'hidden';
+            
+            console.log('✅ Fullscreen режим включен');
         } else {
-            icon.className = 'bi bi-arrows-fullscreen';
+            // Выходим из fullscreen
+            this.container.classList.remove('code-editor-fullscreen');
+            
+            // Возвращаем на место
+            if (this.originalParent) {
+                if (this.originalNextSibling) {
+                    this.originalParent.insertBefore(this.container, this.originalNextSibling);
+                } else {
+                    this.originalParent.appendChild(this.container);
+                }
+            }
+            
+            const icon = this.toolbar.querySelector(`#fullscreenBtn-${this.uniqueId} i`);
+            if (icon) icon.className = 'bi bi-arrows-fullscreen';
+            
+            // Разблокируем скролл body
+            document.body.style.overflow = '';
+            
+            console.log('✅ Fullscreen режим выключен');
+        }
+        
+        // Обновляем размер редактора
+        if (this.editor) {
+            this.editor.resize();
         }
     }
     

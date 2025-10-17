@@ -1,0 +1,50 @@
+{% if view_mode == "table" %}
+  <td class="field-cell">
+    {% if readonly %}
+      {% if value %}
+        <span class="badge badge-code">{{ value|length }} символов</span>
+      {% else %}
+        <span class="text-muted">-</span>
+      {% endif %}
+    {% else %}
+      <span class="badge badge-code">{{ value|length if value else 0 }} символов</span>
+    {% endif %}
+  </td>
+{% else %}
+  <div class="field field-python-code">
+    <label for="{{ field_name }}" class="field-label {% if required %}required{% endif %}">
+      {{ title }}
+    </label>
+    {% if description %}
+      <div class="field-description">{{ description }}</div>
+    {% endif %}
+    
+    <div class="field-input-wrapper">
+      {% if readonly %}
+        <div class="code-readonly">
+          <pre><code class="language-python">{{ value if value else 'Код не указан' }}</code></pre>
+        </div>
+      {% else %}
+        <!-- Контейнер для код-редактора -->
+        <div id="code-editor-{{ field_name }}" 
+             class="code-editor-container" 
+             data-field-name="{{ field_name }}"
+             data-mode="python"
+             style="min-height: 300px;">
+        </div>
+        
+        <!-- Скрытое поле для HTMX -->
+        <textarea 
+          id="{{ field_name }}" 
+          name="{{ field_name }}" 
+          class="d-none"
+          {% if required %}required{% endif %}>{{ value if value else '' }}</textarea>
+      {% endif %}
+    </div>
+    
+    {% if help_text %}
+      <div class="field-help">{{ help_text }}</div>
+    {% endif %}
+  </div>
+{% endif %}
+
