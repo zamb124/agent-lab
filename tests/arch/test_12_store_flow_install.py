@@ -409,6 +409,229 @@ async def test_uninstall_not_installed_should_fail(migrated_db, storage, flow_fa
     await cleanup_company(test_company)
 
 
+async def test_variables_definitions_validation(migrated_db, storage):
+    """Тест валидации variables_definitions в FlowConfig"""
+    from app.models import FlowConfig
+
+    # Тест 1: Правильная валидация - все переменные используются
+    flow_config = FlowConfig(
+        name="Test Flow",
+        description="Test flow with variables",
+        entry_point_agent="test_agent",
+        variables={
+            "test_var": "@var:test_key"
+        },
+        variables_definitions=[
+            {
+                "key": "test_key",
+                "description": "Test variable",
+                "is_secret": False,
+                "required": True
+            }
+        ]
+    )
+
+    assert len(flow_config.variables_definitions) == 1
+    assert flow_config.variables_definitions[0].key == "test_key"
+    assert flow_config.variables_definitions[0].is_secret == False
+    assert flow_config.variables_definitions[0].required == True
+
+    print("✅ Тест variables_definitions_validation пройден!")
+
+
+async def test_flow_variables_definitions_install(migrated_db, storage, flow_factory, migrator, test_store_company, agent_repo, flow_repo):
+    """Тест установки flow с variables_definitions"""
+    from app.services.variables_service import VariablesService
+
+    test_company = await test_store_company("test_vars_company")
+
+    try:
+        # Создаем мок flow с variables_definitions
+        from app.models import FlowConfig
+
+        mock_flow = FlowConfig(
+            name="Test Variables Flow",
+            description="Flow for testing variables_definitions",
+            entry_point_agent="test_agent",
+            flow_id="test.variables.flow",
+            variables={
+                "test_var": "@var:test_key",
+                "secret_var": "@var:secret_key"
+            },
+            variables_definitions=[
+                {
+                    "key": "test_key",
+                    "description": "Test variable for flow",
+                    "default_value": "test_value",
+                    "is_secret": False,
+                    "required": True
+                },
+                {
+                    "key": "secret_key",
+                    "description": "Secret variable for flow",
+                    "is_secret": True,
+                    "required": True
+                }
+            ]
+        )
+
+        # Мокаем получение flow из migrator
+        original_get_public_flows = migrator.get_public_flows
+        async def mock_get_public_flows():
+            return [("test.variables.flow", mock_flow)]
+        migrator.get_public_flows = mock_get_public_flows
+
+        try:
+            # Устанавливаем flow с переменными
+            result = await flow_factory.install_flow("test.variables.flow")
+
+            # Проверяем что flow установлен
+            assert result["flow_id"] == "test.variables.flow"
+
+            # Проверяем что переменные созданы
+            variables_service = VariablesService()
+            test_var = await variables_service.get_var("test_key")
+            secret_var = await variables_service.get_var("secret_key")
+
+            assert test_var == "test_value", f"Expected 'test_value', got {test_var}"
+            assert secret_var is None, "Secret variable should not be set by default"
+
+            print("✅ Тест flow_variables_definitions_install пройден!")
+
+        finally:
+            migrator.get_public_flows = original_get_public_flows
+
+    finally:
+        clear_context()
+        await cleanup_company(test_company)
+
+
+async def test_flow_install_with_custom_variables(migrated_db, storage, migrator, test_store_company):
+    """Тест установки flow с кастомными переменными через API"""
+    from app.services.variables_service import VariablesService
+    from app.frontend.api.flows import install_flow
+    from fastapi import HTTPException
+    from pydantic import BaseModel
+
+    test_company = await test_store_company("test_custom_vars_company")
+
+    try:
+        # Создаем мок flow с variables_definitions
+        from app.models import FlowConfig
+
+        mock_flow = FlowConfig(
+            name="Test Custom Variables Flow",
+            description="Flow for testing custom variables",
+            entry_point_agent="test_agent",
+            flow_id="test.custom.vars.flow",
+            variables={
+                "custom_var": "@var:custom_key"
+            },
+            variables_definitions=[
+                {
+                    "key": "custom_key",
+                    "description": "Custom variable",
+                    "is_secret": False,
+                    "required": True
+                }
+            ]
+        )
+
+        # Мокаем получение flow из migrator
+        original_get_public_flows = migrator.get_public_flows
+        async def mock_get_public_flows():
+            return [("test.custom.vars.flow", mock_flow)]
+        migrator.get_public_flows = mock_get_public_flows
+
+        try:
+            # Создаем request с кастомными переменными
+            class InstallFlowRequest(BaseModel):
+                variables: dict = None
+
+            request = InstallFlowRequest(variables={"custom_key": "custom_value"})
+
+            # Устанавливаем flow с кастомными переменными
+            result = await install_flow(
+                flow_id="test.custom.vars.flow",
+                storage=storage,
+                flow_repo=None,
+                request=request
+            )
+
+            # Проверяем что flow установлен
+            assert result["flow_id"] == "test.custom.vars.flow"
+
+            # Проверяем что переменная создана с кастомным значением
+            variables_service = VariablesService()
+            custom_var = await variables_service.get_var("custom_key")
+
+            assert custom_var == "custom_value", f"Expected 'custom_value', got {custom_var}"
+
+            print("✅ Тест flow_install_with_custom_variables пройден!")
+
+        finally:
+            migrator.get_public_flows = original_get_public_flows
+
+    finally:
+        clear_context()
+        await cleanup_company(test_company)
+
+
+async def test_variables_resolution_after_install(migrated_db, storage, flow_factory, migrator, test_store_company):
+    """Тест резолюции @var: ссылок после установки flow с переменными"""
+    from app.services.variables_service import VariablesService
+
+    test_company = await test_store_company("test_resolution_company")
+
+    try:
+        # Создаем мок flow с @var: ссылками
+        from app.models import FlowConfig
+
+        mock_flow = FlowConfig(
+            name="Test Resolution Flow",
+            description="Flow for testing variable resolution",
+            entry_point_agent="test_agent",
+            flow_id="test.resolution.flow",
+            variables={
+                "resolved_var": "@var:resolution_key"
+            },
+            variables_definitions=[
+                {
+                    "key": "resolution_key",
+                    "description": "Variable for resolution test",
+                    "default_value": "resolved_value",
+                    "is_secret": False,
+                    "required": True
+                }
+            ]
+        )
+
+        # Мокаем получение flow из migrator
+        original_get_public_flows = migrator.get_public_flows
+        async def mock_get_public_flows():
+            return [("test.resolution.flow", mock_flow)]
+        migrator.get_public_flows = mock_get_public_flows
+
+        try:
+            # Устанавливаем flow
+            result = await flow_factory.install_flow("test.resolution.flow")
+
+            # Проверяем резолюцию переменных
+            variables_service = VariablesService()
+            resolved = await variables_service.resolve(mock_flow.variables)
+
+            assert resolved["resolved_var"] == "resolved_value", f"Expected 'resolved_value', got {resolved['resolved_var']}"
+
+            print("✅ Тест variables_resolution_after_install пройден!")
+
+        finally:
+            migrator.get_public_flows = original_get_public_flows
+
+    finally:
+        clear_context()
+        await cleanup_company(test_company)
+
+
 if __name__ == "__main__":
     import asyncio
     

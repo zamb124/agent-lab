@@ -10,7 +10,8 @@ import uuid
 from app.models import FlowConfig
 from app.frontend.dependencies import StorageDep, CanvasServiceDep, FlowRepositoryDep, AgentRepositoryDep
 from app.core.migration import Migrator
-
+from pydantic import BaseModel
+from typing import Dict, Any, Optional
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/flows", tags=["builder-flows"])
@@ -235,41 +236,82 @@ async def delete_flow(flow_id: str, storage: StorageDep, flow_repo: FlowReposito
     return {"message": "Flow deleted successfully"}
 
 
+
+
+class InstallFlowRequest(BaseModel):
+    variables: Optional[Dict[str, str]] = None  # key -> value
+
 @router.post("/{flow_id:path}/install")
-async def install_flow(flow_id: str, storage: StorageDep, flow_repo: FlowRepositoryDep):
+async def install_flow(
+    flow_id: str,
+    storage: StorageDep,
+    flow_repo: FlowRepositoryDep,
+    request: Optional[InstallFlowRequest] = None,
+):
     """
     Установить flow из Store.
     Запускает install() и after_install_hook если они определены в flow.
+
+    Принимает переменные для создания в компании.
     """
     from app.core.flow_factory import FlowFactory
-    
+    from app.services.variables_service import VariablesService
+
     migrator = Migrator()
     migrator.storage = storage
-    
+
     flows_with_ids = await migrator.get_public_flows()
-    
+
     flow_config = None
     for full_flow_id, flow in flows_with_ids:
         if full_flow_id == flow_id:
             flow_config = flow
             break
-    
+
     if not flow_config:
         raise HTTPException(status_code=404, detail="Flow не найден в коде")
-    
+
+    # Создаем переменные если они переданы
+    if request and request.variables:
+        variables_service = VariablesService()
+        for key, value in request.variables.items():
+            # Пропускаем пустые значения
+            if not value:
+                logger.info(f"⚠️ Пропускаем пустую переменную {key} для flow {flow_id}")
+                continue
+
+            # Определяем настройки переменной из variables_definitions
+            var_def = None
+            if hasattr(flow_config, 'variables_definitions') and flow_config.variables_definitions:
+                for vd in flow_config.variables_definitions:
+                    if vd.key == key:
+                        var_def = vd
+                        break
+
+            is_secret = var_def.is_secret if var_def else False
+            description = var_def.description if var_def else f"Переменная {key}"
+
+            await variables_service.set_var(
+                key=key,
+                value=value,
+                is_secret=is_secret,
+                description=description
+            )
+            logger.info(f"✅ Создана переменная {key} для flow {flow_id}")
+
     flow_factory = FlowFactory()
     result = await flow_factory.install_flow(flow_id)
-    
+
     logger.info(f"✅ Flow {flow_id} успешно установлен")
     logger.info(f"📋 Result from install_flow: {result}")
-    
+
     response_data = {
         "message": f"Flow '{flow_config.name}' успешно установлен",
         "flow_id": result["flow_id"],
         "additional_url": result.get("additional_url")
     }
     logger.info(f"📤 Returning response: {response_data}")
-    
+
     return response_data
 
 

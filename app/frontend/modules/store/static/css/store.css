@@ -264,7 +264,7 @@
     background: var(--bg-card);
     border: 1px solid var(--border-primary);
     width: 100%;
-    max-width: 900px;
+    max-width: 1170px;
     max-height: 90vh;
     display: flex;
     flex-direction: column;
@@ -683,4 +683,111 @@
         padding: 1rem;
     }
 }
+
+/* Variables form styles */
+.flow-variables-section {
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    margin-top: 1.5rem;
+}
+
+.flow-variables-section h4 {
+    margin: 0 0 1rem 0;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.variables-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.variable-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.variable-input-group label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.variable-input-group input {
+    padding: 0.75rem;
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    transition: border-color var(--transition-fast);
+}
+
+.variable-input-group input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.input-container {
+    position: relative;
+}
+
+.input-container .has-password-toggle {
+    padding-right: 3rem; /* место для кнопки */
+}
+
+.password-toggle {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.25rem;
+    border-radius: var(--radius-sm);
+    transition: color var(--transition-fast);
+    font-size: 1rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.password-toggle:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+}
+
+.password-toggle:active {
+    transform: translateY(-50%) scale(0.95);
+}
+
+.variable-input-group input:required {
+    border-color: var(--error-color);
+}
+
+.variable-input-group input:required:focus {
+    border-color: var(--error-color);
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.variable-input-group small {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
 

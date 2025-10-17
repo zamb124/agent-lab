@@ -570,7 +570,7 @@ import { showNotification } from '/static/js/components/notification.js';
             flowData.store = sessionStore;
         }
         
-        const namespaceScope = document.getElementById('rag-namespace-scope')?.value || 'flow';
+        const namespaceScope = 'flow'; // Всегда сохраняем в flow
         const searchScopes = [];
         document.querySelectorAll('.rag-search-scope:checked').forEach(checkbox => {
             searchScopes.push(checkbox.value);

@@ -6,7 +6,7 @@ Pydantic модели для конфигурации агентов и флоу
 from __future__ import annotations
 
 from pydantic import BaseModel, field_validator
-from typing import Optional, List, Dict, Any, TYPE_CHECKING
+from typing import Optional, List, Dict, Any, TYPE_CHECKING, Union
 from enum import Enum
 from datetime import datetime, timezone
 import json
@@ -968,7 +968,7 @@ class AgentConfig(BuilderEntity):
 
 class FlowAuthor(BaseModel):
     """Информация об авторе flow"""
-    
+
     name: str = Field(
         default="Agent Lab",
         title="Имя",
@@ -999,6 +999,38 @@ class FlowAuthor(BaseModel):
         title="Twitter",
         description="Twitter профиль"
     )
+
+
+class VariableDefinition(BaseModel):
+    """Определение переменной с описанием для установки flow"""
+
+    key: str = Field(
+        title="Ключ переменной",
+        description="Имя переменной в формате @var:key"
+    )
+    description: str = Field(
+        title="Описание",
+        description="Описание переменной для пользователя"
+    )
+    default_value: Optional[str] = Field(
+        default=None,
+        title="Значение по умолчанию",
+        description="Предлагаемое значение по умолчанию"
+    )
+    is_secret: bool = Field(
+        default=False,
+        title="Секретная переменная",
+        description="Переменная содержит чувствительные данные"
+    )
+    required: bool = Field(
+        default=True,
+        title="Обязательная",
+        description="Требуется ли заполнить переменную при установке"
+    )
+
+
+# Type alias для гибкого определения переменных
+VariableDefinitionInput = Union[VariableDefinition, Dict[str, Any]]
 
 
 class FlowConfig(BuilderEntity):
@@ -1057,7 +1089,73 @@ class FlowConfig(BuilderEntity):
         description="Переменные доступные во всех агентах флоу (используйте {variable} в промптах)",
         widget_attrs={"rows": 6, "placeholder": '{"bot_name": "Помощник", "timeout_minutes": 30}'}
     )
-    
+
+    # Определения переменных для установки flow из store
+    variables_definitions: List[VariableDefinitionInput] = Field(
+        default_factory=list,
+        title="Определения переменных",
+        description="Переменные которые нужно заполнить при установке flow из store (словари или VariableDefinition объекты)"
+    )
+
+    @field_validator('variables_definitions', mode='before')
+    @classmethod
+    def validate_variables_definitions(cls, value):
+        """Валидирует и конвертирует определения переменных"""
+        if not isinstance(value, list):
+            return []
+
+        validated = []
+        for item in value:
+            if isinstance(item, dict):
+                # Конвертируем dict в VariableDefinition (Pydantic сам кинет ValidationError если невалидно)
+                var_def = VariableDefinition(**item)
+                validated.append(var_def)
+            elif isinstance(item, VariableDefinition):
+                validated.append(item)
+            else:
+                raise ValueError(f"Unsupported variable definition type: {type(item)}")
+
+        return validated
+
+    @field_validator('variables_definitions', mode='after')
+    @classmethod
+    def validate_variables_usage(cls, value, info):
+        """Проверяет что переменные из definitions используются в flow"""
+        if not value or not hasattr(info.data, 'get'):
+            return value
+
+        flow_data = info.data
+
+        # Собираем все @var: ссылки из flow
+        var_usage = set()
+
+        def collect_vars(obj):
+            if isinstance(obj, str) and obj.startswith('@var:'):
+                var_usage.add(obj[5:])  # Убираем @var: префикс
+            elif isinstance(obj, dict):
+                for v in obj.values():
+                    collect_vars(v)
+            elif isinstance(obj, list):
+                for v in obj:
+                    collect_vars(v)
+
+        # Ищем @var: ссылки в variables, store, platforms
+        if 'variables' in flow_data:
+            collect_vars(flow_data['variables'])
+        if 'store' in flow_data:
+            collect_vars(flow_data['store'])
+        if 'platforms' in flow_data:
+            collect_vars(flow_data['platforms'])
+
+        # Проверяем что все переменные из definitions используются
+        defined_vars = {vd.key for vd in value}
+        unused_vars = defined_vars - var_usage
+
+        if unused_vars:
+            logger.warning(f"Flow {flow_data.get('name', 'unknown')} has unused variables in definitions: {unused_vars}")
+
+        return value
+
     # Начальные данные store
     store: Dict[str, Any] = Field(
         default_factory=dict,
@@ -1078,7 +1176,7 @@ class FlowConfig(BuilderEntity):
         default_factory=lambda: AgentRAGConfig(
             enabled=True,
             namespace_scope="flow",
-            search_scopes=["flow", "company"],
+            search_scopes=["flow"],
             auto_index_messages=False
         ),
         title="RAG конфигурация",
@@ -1173,7 +1271,7 @@ class FlowConfig(BuilderEntity):
             return AgentRAGConfig(
                 enabled=True,
                 namespace_scope="flow",
-                search_scopes=["flow", "company"],
+                search_scopes=["flow"],
                 auto_index_messages=False
             )
         return v

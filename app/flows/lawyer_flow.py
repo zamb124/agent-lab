@@ -81,14 +81,51 @@ lawyer_flow = FlowConfig(
     },
     
     variables={
-        "company_short_name": "ООО ЭНЖИЛАБС",
-        "company_full_name": "Общество с Ограниченной Ответственностью ЭНЖИЛАБС",
-        "company_short_name_en": "Angilabs LLC",
-        "company_full_name_en": "Limited Liability Company Angilabs",
-        "ceo_name": "Шведов Виктор Викторович",
-        "bot_name": "Юридический советник ЭНЖИЛАБС"
+        "company_short_name": "@var:company_short_name",
+        "company_full_name": "@var:company_full_name",
+        "company_short_name_en": "@var:company_short_name_en",
+        "company_full_name_en": "@var:company_full_name_en",
+        "ceo_name": "@var:ceo_name",
+        "bot_name": "@var:bot_name"
     },
-    
+
+    variables_definitions=[
+        {
+            "key": "lawyer_bot",
+            "description": "Юзернейм Telegram бота для юридического консультанта",
+            "default_value": "lawyer_bot",
+            "is_secret": False,
+            "required": True
+        },
+        {
+            "key": "lawyer_bot_telegram_token",
+            "description": "Токен Telegram бота для юридического консультанта",
+            "is_secret": True,
+            "required": True
+        },
+        {
+            "key": "company_short_name",
+            "description": "Краткое наименование компании",
+            "default_value": "ООО ЭНЖИЛАБС",
+            "is_secret": False,
+            "required": False
+        },
+        {
+            "key": "company_full_name",
+            "description": "Полное наименование компании",
+            "default_value": "Общество с Ограниченной Ответственностью ЭНЖИЛАБС",
+            "is_secret": False,
+            "required": False
+        },
+        {
+            "key": "ceo_name",
+            "description": "ФИО генерального директора",
+            "default_value": "Шведов Виктор Викторович",
+            "is_secret": False,
+            "required": False
+        },
+    ],
+
     enable_reasoning=True,
     
     is_public=True,

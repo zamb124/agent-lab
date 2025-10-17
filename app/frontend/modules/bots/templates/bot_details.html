@@ -251,24 +251,6 @@
                 </div>
                 
                 <div class="rag-settings-section">
-                    <div class="form-group">
-                            <label>Скоуп хранения</label>
-                            <select class="form-control" id="rag-namespace-scope">
-                                <option value="company" {% if bot.rag_config and bot.rag_config.namespace_scope == 'company' %}selected{% endif %}>
-                                    Компания (общая база для всех flow)
-                                </option>
-                                <option value="flow" {% if bot.rag_config and bot.rag_config.namespace_scope == 'flow' %}selected{% endif %}>
-                                    Flow (личная база этого бота)
-                                </option>
-                                <option value="session" {% if bot.rag_config and bot.rag_config.namespace_scope == 'session' %}selected{% endif %}>
-                                    Сессия (временные документы для каждой сессии)
-                                </option>
-                            </select>
-                            <small class="form-text">
-                                Где будут храниться документы загруженные через бота
-                            </small>
-                        </div>
-                        
                         <div class="form-group">
                             <label>Скоупы поиска</label>
                             <div class="checkbox-group">
@@ -281,16 +263,9 @@
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input rag-search-scope" type="checkbox" value="flow" id="rag-search-flow"
-                                           {% if bot.rag_config and 'flow' in bot.rag_config.search_scopes %}checked{% endif %}>
+                                           {% if bot.rag_config and 'flow' in bot.rag_config.search_scopes %}checked{% else %}checked{% endif %}>
                                     <label class="form-check-label" for="rag-search-flow">
                                         Искать в базе этого flow
-                                    </label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input rag-search-scope" type="checkbox" value="session" id="rag-search-session"
-                                           {% if bot.rag_config and 'session' in bot.rag_config.search_scopes %}checked{% endif %}>
-                                    <label class="form-check-label" for="rag-search-session">
-                                        Искать в базе текущей сессии
                                     </label>
                                 </div>
                             </div>
