@@ -20,8 +20,8 @@
     top: 80px;
     width: 240px;
     max-height: calc(100vh - 120px);
-    background: white;
-    border: 1px solid #e5e7eb;
+    background: var(--bg-card);
+    border: 1px solid var(--border-primary);
     border-radius: 12px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
     display: flex;
@@ -72,12 +72,20 @@
     width: 60px;
 }
 
-.node-palette.collapsed .palette-header h3 span {
+.node-palette.collapsed .palette-header h3 {
     display: none;
 }
 
 .node-palette.collapsed .palette-section {
     display: none;
+}
+
+.node-palette.collapsed .palette-section-title {
+    display: none;
+}
+
+.node-palette.collapsed .btn-collapse-palette {
+    margin: auto;
 }
 
 .node-palette.collapsed .btn-collapse-palette i {
@@ -1136,8 +1144,8 @@
 
 .canvas-node {
     position: absolute;
-    background: white;
-    border: 2px solid #e5e7eb;
+    background: var(--bg-card);
+    border: 2px solid var(--border-primary);
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     cursor: pointer;
@@ -1548,14 +1556,14 @@
 
 /* Разные цвета для входных и выходных портов */
 .input-port .port-dot {
-    background: #10b981; /* Зеленый для входных */
-    border-color: #ffffff;
+    background: #10b981;
+    border: 2px solid var(--bg-card);
     box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3);
 }
 
 .output-port .port-dot {
-    background: #f59e0b; /* Оранжевый для выходных */
-    border-color: #ffffff;
+    background: #f59e0b;
+    border: 2px solid var(--bg-card);
     box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.3);
 }
 
@@ -1573,8 +1581,8 @@
 }
 
 .port.connecting .port-dot {
-    background: #ef4444; /* Красный при подключении */
-    border-color: #ffffff;
+    background: #ef4444;
+    border: 2px solid var(--bg-card);
     box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.4);
     animation: pulse 1s infinite;
 }

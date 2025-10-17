@@ -64,13 +64,17 @@ class CodeEditor {
     }
     
     init() {
+        console.log('🔧 CodeEditor.init(), flowId:', this.options.flowId);
         this.createEditorWrapper();
         this.createEditor();
         this.setupEventListeners();
         this.watchThemeChanges();
         
         if (this.options.flowId) {
+            console.log('📡 Загружаем контекст flow:', this.options.flowId);
             this.loadFlowContext(this.options.flowId);
+        } else {
+            console.warn('⚠️ flowId не передан, контекст не загружается');
         }
     }
     
@@ -112,6 +116,10 @@ class CodeEditor {
     }
     
     createEditorWrapper() {
+        this.uniqueId = Math.random().toString(36).substr(2, 9);
+        
+        console.log('🔧 createEditorWrapper, uniqueId:', this.uniqueId);
+        
         this.container.innerHTML = '';
         this.container.classList.add('code-editor-wrapper');
         this.container.setAttribute('data-theme', this.currentSystemTheme);
@@ -126,16 +134,16 @@ class CodeEditor {
                 </span>
             </div>
             <div class="toolbar-right">
-                <button class="toolbar-btn" id="formatCodeBtn-${this.getUniqueId()}" title="Форматировать код (Ctrl+Shift+F)">
+                <button class="toolbar-btn" id="formatCodeBtn-${this.uniqueId}" title="Форматировать код (Ctrl+Shift+F)">
                     <i class="bi bi-brush"></i>
                 </button>
-                <button class="toolbar-btn" id="validateCodeBtn-${this.getUniqueId()}" title="Проверить синтаксис">
+                <button class="toolbar-btn" id="validateCodeBtn-${this.uniqueId}" title="Проверить синтаксис">
                     <i class="bi bi-check-circle"></i>
                 </button>
-                <button class="toolbar-btn" id="showStoreVarsBtn-${this.getUniqueId()}" title="Доступные переменные store">
+                <button class="toolbar-btn" id="showStoreVarsBtn-${this.uniqueId}" title="Доступные переменные store">
                     <i class="bi bi-database"></i>
                 </button>
-                <button class="toolbar-btn" id="fullscreenBtn-${this.getUniqueId()}" title="Полноэкранный режим (F11)">
+                <button class="toolbar-btn" id="fullscreenBtn-${this.uniqueId}" title="Полноэкранный режим (F11)">
                     <i class="bi bi-arrows-fullscreen"></i>
                 </button>
             </div>
@@ -150,23 +158,14 @@ class CodeEditor {
         this.statusBar = document.createElement('div');
         this.statusBar.className = 'code-editor-status';
         this.statusBar.innerHTML = `
-            <span class="status-item" id="lineColStatus-${this.getUniqueId()}">Строка 1, Столбец 1</span>
-            <span class="status-item" id="langStatus-${this.getUniqueId()}">Python</span>
-            <span class="status-item" id="validationStatus-${this.getUniqueId()}"></span>
+            <span class="status-item" id="lineColStatus-${this.uniqueId}">Строка 1, Столбец 1</span>
+            <span class="status-item" id="langStatus-${this.uniqueId}">Python</span>
+            <span class="status-item" id="validationStatus-${this.uniqueId}"></span>
         `;
         
         this.container.appendChild(this.toolbar);
         this.container.appendChild(this.editorContainer);
         this.container.appendChild(this.statusBar);
-        
-        this.uniqueId = this.getUniqueId();
-    }
-    
-    getUniqueId() {
-        if (!this._uniqueId) {
-            this._uniqueId = Math.random().toString(36).substr(2, 9);
-        }
-        return this._uniqueId;
     }
     
     createEditor() {
@@ -283,46 +282,69 @@ class CodeEditor {
     }
     
     setupEventListeners() {
+        console.log('🔧 setupEventListeners, uniqueId:', this.uniqueId);
+        
         const formatBtn = this.toolbar.querySelector(`#formatCodeBtn-${this.uniqueId}`);
+        console.log('   formatBtn:', !!formatBtn);
         if (formatBtn) {
             formatBtn.addEventListener('click', () => this.formatCode());
         }
         
         const validateBtn = this.toolbar.querySelector(`#validateCodeBtn-${this.uniqueId}`);
+        console.log('   validateBtn:', !!validateBtn);
         if (validateBtn) {
             validateBtn.addEventListener('click', () => this.validateCode());
         }
         
         const storeVarsBtn = this.toolbar.querySelector(`#showStoreVarsBtn-${this.uniqueId}`);
+        console.log('   storeVarsBtn:', !!storeVarsBtn);
         if (storeVarsBtn) {
-            storeVarsBtn.addEventListener('click', () => this.showStoreVariables());
+            storeVarsBtn.addEventListener('click', () => {
+                console.log('🗄️ Кнопка Store Variables нажата!');
+                this.showStoreVariables();
+            });
+        } else {
+            console.error('❌ Кнопка showStoreVarsBtn не найдена!');
         }
         
         const fullscreenBtn = this.toolbar.querySelector(`#fullscreenBtn-${this.uniqueId}`);
+        console.log('   fullscreenBtn:', !!fullscreenBtn);
         if (fullscreenBtn) {
             fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
         }
     }
     
     async loadFlowContext(flowId) {
+        console.log('📡 loadFlowContext вызван для flowId:', flowId);
+        
         try {
-            const response = await fetch(`/frontend/api/flows/${flowId}/variables`);
+            const url = `/frontend/api/flows/${flowId}/variables`;
+            console.log('📡 Запрос к API:', url);
+            
+            const response = await fetch(url);
+            console.log('📡 Ответ от API:', response.status, response.statusText);
+            
             if (!response.ok) {
-                console.warn('Не удалось загрузить контекст flow');
+                console.warn('❌ Не удалось загрузить контекст flow, статус:', response.status);
                 return;
             }
             
             const data = await response.json();
+            console.log('📡 Данные от API:', data);
+            
             this.storeVars = data.store || {};
             this.flowVars = data.variables || {};
             this.availableLibs = data.available_tools || [];
             
             console.log('✅ Контекст flow загружен:', {
                 storeVars: Object.keys(this.storeVars).length,
-                flowVars: Object.keys(this.flowVars).length
+                flowVars: Object.keys(this.flowVars).length,
+                availableTools: this.availableLibs.length
             });
+            console.log('   Store vars:', this.storeVars);
+            console.log('   Flow vars:', this.flowVars);
         } catch (error) {
-            console.error('Ошибка загрузки контекста flow:', error);
+            console.error('❌ Ошибка загрузки контекста flow:', error);
         }
     }
     
@@ -365,38 +387,113 @@ class CodeEditor {
     }
     
     showStoreVariables() {
+        console.log('🗄️ showStoreVariables вызван');
+        console.log('   this.storeVars:', this.storeVars);
+        console.log('   this.flowVars:', this.flowVars);
+        console.log('   this.options.flowId:', this.options.flowId);
+        
         const hasVars = Object.keys(this.storeVars).length > 0 || Object.keys(this.flowVars).length > 0;
         
+        console.log('   hasVars:', hasVars);
+        
         if (!hasVars) {
-            if (window.showNotification) {
-                window.showNotification('Нет доступных переменных', 'info');
-            }
+            this.showVariablesModal('Нет доступных переменных', `
+                <p style="text-align: center; color: var(--code-editor-text-secondary); padding: 20px;">
+                    ${this.options.flowId ? 'Переменные и store этого flow пусты.<br>Добавьте переменные в конфигурацию flow.' : 'Flow ID не передан в редактор.<br>Редактор должен быть открыт в контексте flow.'}
+                </p>
+            `);
             return;
         }
         
-        let content = '<div class="store-vars-popup">';
+        let content = '';
         
         if (Object.keys(this.storeVars).length > 0) {
-            content += '<h4>📦 Store переменные:</h4><ul>';
+            content += '<div class="vars-section"><h4>📦 Store переменные</h4><div class="vars-list">';
             for (const [key, value] of Object.entries(this.storeVars)) {
-                content += `<li><code>state["store"]["${key}"]</code> = ${JSON.stringify(value)}</li>`;
+                const valueStr = JSON.stringify(value, null, 2);
+                content += `
+                    <div class="var-item">
+                        <div class="var-key">state["store"]["${key}"]</div>
+                        <div class="var-value">${this.escapeHtml(valueStr)}</div>
+                        <button class="var-copy-btn" onclick="navigator.clipboard.writeText('state[\\"store\\"][\\"${key}\\"]')" title="Копировать">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                    </div>
+                `;
             }
-            content += '</ul>';
+            content += '</div></div>';
         }
         
         if (Object.keys(this.flowVars).length > 0) {
-            content += '<h4>🔧 Flow переменные:</h4><ul>';
+            content += '<div class="vars-section"><h4>🔧 Flow переменные</h4><div class="vars-list">';
             for (const [key, value] of Object.entries(this.flowVars)) {
-                content += `<li><code>{${key}}</code> = ${JSON.stringify(value)}</li>`;
+                const valueStr = JSON.stringify(value, null, 2);
+                content += `
+                    <div class="var-item">
+                        <div class="var-key">{${key}}</div>
+                        <div class="var-value">${this.escapeHtml(valueStr)}</div>
+                        <button class="var-copy-btn" onclick="navigator.clipboard.writeText('{${key}}')" title="Копировать">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                    </div>
+                `;
             }
-            content += '</ul>';
+            content += '</div></div>';
         }
         
-        content += '</div>';
-        
-        if (window.showNotification) {
-            window.showNotification(content, 'info', 10000);
+        this.showVariablesModal('Доступные переменные', content);
+    }
+    
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    showVariablesModal(title, content) {
+        const existingModal = document.querySelector('.code-editor-variables-modal');
+        if (existingModal) {
+            existingModal.remove();
         }
+        
+        const modal = document.createElement('div');
+        modal.className = 'code-editor-variables-modal';
+        modal.innerHTML = `
+            <div class="variables-modal-overlay"></div>
+            <div class="variables-modal-content">
+                <div class="variables-modal-header">
+                    <h3>${title}</h3>
+                    <button class="variables-modal-close">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <div class="variables-modal-body">
+                    ${content}
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        setTimeout(() => modal.classList.add('show'), 10);
+        
+        const closeBtn = modal.querySelector('.variables-modal-close');
+        const overlay = modal.querySelector('.variables-modal-overlay');
+        
+        const closeModal = () => {
+            modal.classList.remove('show');
+            setTimeout(() => modal.remove(), 300);
+        };
+        
+        closeBtn.addEventListener('click', closeModal);
+        overlay.addEventListener('click', closeModal);
+        
+        document.addEventListener('keydown', function escHandler(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+                document.removeEventListener('keydown', escHandler);
+            }
+        });
     }
     
     toggleFullscreen() {

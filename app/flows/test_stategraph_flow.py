@@ -11,6 +11,16 @@ test_stategraph_flow_config = FlowConfig(
     entry_point_agent="app.agents.test_stategraph_agent.test_stategraph_agent_config",
     timeout=120,
     max_retries=3,
-    is_public=True
+    is_public=True,
+    variables={
+        "bot_name": "Test Bot",
+        "max_attempts": 3,
+        "greeting_message": "Привет! Я демонстрационный бот."
+    },
+    store={
+        "warehouse_id": None,
+        "courier_id": None,
+        "user_name": None
+    }
 )
 

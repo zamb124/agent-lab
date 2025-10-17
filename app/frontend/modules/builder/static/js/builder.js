@@ -9,6 +9,8 @@ class Builder {
             ...options
         };
         
+        this.flowId = options.flowId || null;
+        
         // Состояние
         this.currentFlow = null;
         this.selectedNodes = new Set();
