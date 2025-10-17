@@ -51,7 +51,48 @@
                 </div>
             </div>
             {% endif %}
-            
+
+            {% if flow.variables_definitions and flow.variables_definitions|length > 0 %}
+            <div class="flow-variables-section">
+                <h4><i class="bi bi-gear"></i> Настройка переменных</h4>
+                <p class="text-muted">Заполните переменные для корректной работы flow:</p>
+                <div class="variables-form" id="variables-form">
+                    {% for var_def in flow.variables_definitions %}
+                    <div class="variable-input-group">
+                        <label for="var_{{ var_def.key }}">
+                            {{ var_def.description }}
+                            {% if var_def.is_secret %}
+                                <i class="bi bi-shield-lock text-warning" title="Секретная переменная"></i>
+                            {% endif %}
+                            {% if var_def.required %}
+                                <span class="text-danger">*</span>
+                            {% endif %}
+                        </label>
+                        <div class="input-container">
+                            <input
+                                type="{% if var_def.is_secret %}password{% else %}text{% endif %}"
+                                id="var_{{ var_def.key }}"
+                                name="{{ var_def.key }}"
+                                {% if var_def.default_value %}value="{{ var_def.default_value }}"{% endif %}
+                                {% if var_def.required %}required{% endif %}
+                                placeholder="Введите значение..."
+                                class="form-control {% if var_def.is_secret %}has-password-toggle{% endif %}"
+                            >
+                            {% if var_def.is_secret %}
+                            <button type="button" class="password-toggle" onclick="togglePassword('var_{{ var_def.key }}')" title="Показать/скрыть пароль">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                        {% if var_def.is_secret %}
+                        <small class="text-muted">Это секретная переменная, она будет храниться в зашифрованном виде</small>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
             <div class="flow-actions">
                 {% if flow.installed %}
                 <button class="btn btn-danger" onclick="uninstallFlow('{{ flow.flow_id }}')">

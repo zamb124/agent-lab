@@ -2,6 +2,7 @@
 Роутер модуля Store - магазин готовых flows
 """
 
+import logging
 from pathlib import Path
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
@@ -13,6 +14,7 @@ from app.models import FlowConfig
 
 router = APIRouter(prefix="/frontend/store", tags=["store-pages"])
 templates = get_templates()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -72,15 +74,20 @@ async def store_list(request: Request):
 @router.get("/{flow_id:path}/details", response_class=HTMLResponse)
 async def flow_details(request: Request, flow_id: str):
     """Детальная информация о flow из кода (для модалки)"""
+    logger.info(f"Flow details requested for: {flow_id}")
+
     storage = Storage()
     migrator = Migrator()
-    
+
     flows_with_ids = await migrator.get_public_flows()
-    
+    logger.info(f"Found {len(flows_with_ids)} public flows")
+
     flow_config = None
     for full_flow_id, flow in flows_with_ids:
+        logger.info(f"Checking flow: {full_flow_id}")
         if full_flow_id == flow_id:
             flow_config = flow
+            logger.info(f"Found matching flow: {full_flow_id}")
             break
     
     if not flow_config:
@@ -109,6 +116,7 @@ async def flow_details(request: Request, flow_id: str):
         "image_url": image_url,
         "author": author_dict,
         "installed": installed,
+        "variables_definitions": getattr(flow_config, 'variables_definitions', []),
     }
     
     return templates.TemplateResponse(

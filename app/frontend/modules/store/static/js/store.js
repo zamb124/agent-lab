@@ -74,42 +74,102 @@ import { renderMarkdown } from '/static/js/utils/markdown.js';
         if (listView) listView.style.display = 'block';
     };
     
+    window.togglePassword = function(inputId) {
+        const input = document.getElementById(inputId);
+        const button = input.parentElement.querySelector('.password-toggle');
+        const icon = button.querySelector('i');
+
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.className = 'bi bi-eye-slash';
+            button.title = 'Скрыть пароль';
+        } else {
+            input.type = 'password';
+            icon.className = 'bi bi-eye';
+            button.title = 'Показать пароль';
+        }
+    };
+
     window.installFlow = async function(flowId) {
-        if (!confirm('Установить этот flow? Будут мигрированы flow, агенты и функции.')) {
+        // Собираем переменные из формы
+        const variablesForm = document.getElementById('variables-form');
+
+        let variables = null;
+
+        if (variablesForm) {
+            variables = {};
+            const inputs = variablesForm.querySelectorAll('input[name]');
+            let hasEmptyRequired = false;
+
+            inputs.forEach(input => {
+                const value = input.value.trim();
+                const isRequired = input.hasAttribute('required');
+
+                // Собираем все переменные, включая пустые
+                variables[input.name] = value;
+
+                // Проверяем обязательные поля
+                if (isRequired && !value) {
+                    hasEmptyRequired = true;
+                    input.style.borderColor = 'var(--error-color)';
+                } else {
+                    input.style.borderColor = '';
+                }
+            });
+
+            // Если есть пустые обязательные поля, показываем ошибку
+            if (hasEmptyRequired) {
+                showNotification('Заполните все обязательные поля', 'danger');
+                // Прокручиваем к форме в sidebar
+                variablesForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                return;
+            }
+        }
+
+        const hasVariables = variablesForm && variables;
+
+        const confirmMessage = hasVariables
+            ? 'Установить этот flow? Будут созданы переменные и мигрированы flow, агенты и функции.'
+            : 'Установить этот flow? Будут мигрированы flow, агенты и функции.';
+
+        if (!confirm(confirmMessage)) {
             return;
         }
-        
+
         showNotification('Установка flow...', 'info');
-        
+
+        const requestBody = { variables: variables };
+
         const response = await fetch(`/frontend/api/flows/${flowId}/install`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${window.app.authToken}`
-            }
+            },
+            body: JSON.stringify(requestBody)
         });
-        
+
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
             showNotification('Ошибка установки: ' + (error.detail || `HTTP ${response.status}`), 'danger');
             return;
         }
-        
+
         const result = await response.json();
         console.log('📦 Install result:', result);
         console.log('🔗 Additional URL:', result.additional_url);
-        
+
         showNotification(result.message || 'Flow успешно установлен', 'success');
-        
+
         closeFlowModal();
-        
+
         if (result.additional_url) {
             console.log('🚀 Opening additional URL:', result.additional_url);
             window.open(result.additional_url, '_blank');
         } else {
             console.log('⚠️ No additional_url in result');
         }
-        
+
         htmx.ajax('GET', '/frontend/bots/', {
             target: '#content',
             swap: 'innerHTML'

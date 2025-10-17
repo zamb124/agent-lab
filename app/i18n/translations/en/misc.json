@@ -31,5 +31,7 @@
   "avatar": "[TODO: avatar]",
   "url": "[TODO: url]",
   "website": "[TODO: website]",
-  "github": "[TODO: github]"
+  "github": "[TODO: github]",
+  "is_secret": "[TODO: is_secret]",
+  "default_value": "[TODO: default_value]"
 }
