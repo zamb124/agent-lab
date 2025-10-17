@@ -201,8 +201,8 @@ class APP {
         document.cookie = 'session_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     }
     
-    showNotification(message, type = 'info') {
-        showNotification(message, type);
+    showNotification(message, type = 'info', duration = 5000) {
+        showNotification(message, type, duration);
     }
     
     async loadUserProfile() {

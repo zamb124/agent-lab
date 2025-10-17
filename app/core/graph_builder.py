@@ -61,6 +61,7 @@ class GraphBuilder:
         # Добавляем ребра
         start_target = None  # Запоминаем куда ведет START
         conditional_groups = {}  # Группируем conditional edges по источнику
+        expression_edges = []  # Собираем EXPRESSION ребра для отдельной обработки
 
         for edge in graph_def.edges:
             if edge.source == "START":
@@ -69,16 +70,21 @@ class GraphBuilder:
                 continue
 
             if edge.condition_type == ConditionType.ROUTER:
-                # Группируем conditional edges по источнику
+                # Группируем ROUTER edges по источнику
                 if edge.source not in conditional_groups:
                     conditional_groups[edge.source] = {}
                 conditional_groups[edge.source][edge.target] = edge.target
-            else:
-                # Обычное ребро
+            elif edge.condition_type == ConditionType.EXPRESSION:
+                # EXPRESSION ребра обрабатываем отдельно
+                expression_edges.append(edge)
+            elif edge.condition_type is None or edge.condition is None:
+                # Обычное ребро (без условия)
                 if edge.target == "END":
                     graph.add_edge(edge.source, END)
                 else:
                     graph.add_edge(edge.source, edge.target)
+            else:
+                logger.warning(f"Неизвестный condition_type для {edge.source} -> {edge.target}: {edge.condition_type}")
 
         # Добавляем conditional edges группами
         for source, mapping in conditional_groups.items():
@@ -143,6 +149,41 @@ class GraphBuilder:
             else:
                 logger.warning(f"Не найдена функция условия для {source}")
 
+        # Добавляем EXPRESSION ребра
+        for edge in expression_edges:
+            condition_expr = edge.condition
+            
+            if not condition_expr:
+                logger.warning(f"EXPRESSION edge {edge.source} -> {edge.target} не содержит условия")
+                continue
+            
+            target = END if edge.target == "END" else edge.target
+            
+            # Создаем функцию условия для EXPRESSION
+            def make_condition_func(expr: str, edge_info: str):
+                def condition_func(state: State) -> bool:
+                    """Функция проверки EXPRESSION условия"""
+                    try:
+                        # Выполняем выражение в контексте state
+                        result = eval(expr, {"state": state, "State": State})
+                        logger.info(f"✅ EXPRESSION {edge_info}: {expr} = {result}")
+                        return bool(result)
+                    except Exception as e:
+                        logger.error(f"❌ Ошибка в EXPRESSION {edge_info}: {e}", exc_info=True)
+                        return False
+                return condition_func
+            
+            condition_func = make_condition_func(condition_expr, f"{edge.source} -> {edge.target}")
+            
+            # Добавляем условное ребро
+            # LangGraph поддерживает добавление ребра с условием через add_conditional_edges
+            graph.add_conditional_edges(
+                edge.source,
+                condition_func,
+                {True: target, False: END}  # Если true - идем к target, если false - END
+            )
+            logger.info(f"✅ Добавлено EXPRESSION ребро: {edge.source} -> {edge.target}")
+
         # Устанавливаем точку входа
         if start_target:
             # Используем ноду куда ведет START
@@ -170,8 +211,12 @@ class GraphBuilder:
             return await self._create_tool_node(node)
         elif node.type == NodeType.FUNCTION_NODE:
             return await self._create_function_node(node)
+        elif node.type == NodeType.ROUTER_NODE:
+            return await self._create_router_node(node)
         elif node.type == NodeType.MESSAGE_NODE:
             return self._create_message_node(node)
+        elif node.type == NodeType.FLOW_NODE:
+            return await self._create_flow_node(node)
         else:
             raise ValueError(f"Неизвестный тип ноды: {node.type}")
 
@@ -319,6 +364,75 @@ class GraphBuilder:
 
         return function_node
 
+    async def _create_router_node(self, node):
+        """
+        Создает ноду-роутер для условных переходов.
+        
+        ROUTER_NODE - это специальная FUNCTION_NODE, которая определяет
+        следующую ноду на основе состояния (state).
+        
+        Функция-роутер должна возвращать строку - ID следующей ноды.
+        """
+        
+        # Проверяем режим хранения кода
+        if hasattr(node, "code_mode") and node.code_mode == CodeMode.INLINE_CODE:
+            # INLINE_CODE режим
+            if not node.inline_code:
+                raise ValueError(f"ROUTER_NODE {node.id} должна содержать inline_code")
+
+            # Выполняем inline код и извлекаем функцию
+            router_func = await self._execute_inline_code(node)
+
+        else:
+            # CODE_REFERENCE режим
+            function_path = node.params.get("function") or node.function_path
+            if not function_path:
+                raise ValueError(
+                    f"ROUTER_NODE {node.id} должна содержать function или function_path"
+                )
+
+            # Импортируем функцию
+            module_path, func_name = function_path.rsplit(".", 1)
+            module = importlib.import_module(module_path)
+            router_func = getattr(module, func_name)
+
+        async def router_node(state: State) -> State:
+            """
+            Функция роутера.
+            
+            Важно: сама нода ничего не возвращает, она просто выполняется.
+            Логика роутинга берется из функции для conditional_edges.
+            """
+            try:
+                logger.info(f"ROUTER_NODE {node.id}: выполняется логика роутинга")
+                
+                # Роутер может модифицировать state перед принятием решения
+                if inspect.iscoroutinefunction(router_func):
+                    result = await router_func(state)
+                else:
+                    result = router_func(state)
+                
+                # Если функция возвращает dict, обновляем state
+                if isinstance(result, dict):
+                    state.update(result)
+                
+                # Если возвращает строку, сохраняем решение роутера в state
+                elif isinstance(result, str):
+                    if "store" not in state:
+                        state["store"] = {}
+                    state["store"]["router_decision"] = result
+                    logger.info(f"ROUTER_NODE {node.id}: принято решение -> {result}")
+
+                return state
+            except Exception as e:
+                logger.error(f"Ошибка в ROUTER_NODE {node.id}: {e}", exc_info=True)
+                if "store" not in state:
+                    state["store"] = {}
+                state["store"]["error"] = str(e)
+                return state
+
+        return router_node
+
     async def _execute_inline_code(self, node):
         """Выполняет inline код и возвращает функцию"""
         try:
@@ -359,19 +473,72 @@ class GraphBuilder:
             raise
 
     def _create_message_node(self, node):
-        """Создает ноду сообщения"""
+        """Создает ноду сообщения для отправки фиксированного текста"""
         message = node.params.get("message", "")
+        
+        if not message:
+            logger.warning(f"MESSAGE_NODE {node.id} не содержит сообщение")
 
         async def message_node(state: State) -> State:
             """Функция ноды сообщения"""
-            # Добавляем сообщение в историю
-            if "messages" not in state:
-                state["messages"] = []
+            try:
+                # Добавляем сообщение в историю
+                if "messages" not in state:
+                    state["messages"] = []
 
-            state["messages"].append(AIMessage(content=message))
-            return state
+                state["messages"].append(AIMessage(content=message))
+                logger.info(f"MESSAGE_NODE {node.id}: добавлено сообщение '{message[:50]}...'")
+                return state
+            except Exception as e:
+                logger.error(f"Ошибка в MESSAGE_NODE {node.id}: {e}", exc_info=True)
+                if "store" not in state:
+                    state["store"] = {}
+                state["store"]["error"] = str(e)
+                return state
 
         return message_node
+
+    async def _create_flow_node(self, node):
+        """Создает ноду для вызова другого flow"""
+        from app.core.flow_factory import FlowFactory
+        
+        flow_id = node.params.get("flow_id")
+        if not flow_id:
+            raise ValueError(
+                f"FLOW_NODE {node.id} должна содержать flow_id в params. "
+                f"Доступные поля: {node.params}"
+            )
+
+        flow_factory = FlowFactory()
+        
+        try:
+            flow = await flow_factory.get_flow(flow_id)
+        except Exception as e:
+            raise ValueError(
+                f"Не удалось загрузить flow {flow_id} для ноды {node.id}: {e}"
+            ) from e
+
+        async def flow_node(state: State) -> State:
+            """Функция ноды flow"""
+            try:
+                logger.info(f"FLOW_NODE {node.id}: вызов flow {flow_id}")
+                
+                result = await flow.ainvoke(state)
+                
+                if isinstance(result, dict):
+                    state.update(result)
+                
+                logger.info(f"FLOW_NODE {node.id}: flow {flow_id} завершен успешно")
+                return state
+            except Exception as e:
+                logger.error(f"Ошибка в FLOW_NODE {node.id} (flow {flow_id}): {e}", exc_info=True)
+                if "store" not in state:
+                    state["store"] = {}
+                state["store"]["error"] = str(e)
+                state["store"]["failed_flow"] = flow_id
+                return state
+
+        return flow_node
 
     def _create_condition_function(self, condition: str):
         """Создает функцию условия для условных ребер"""

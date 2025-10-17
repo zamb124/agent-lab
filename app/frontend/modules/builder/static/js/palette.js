@@ -38,10 +38,10 @@ class NodePalette {
                 label: 'Message',
                 desc: 'Send message'
             },
-            'conditional_node': {
+            'router_node': {
                 icon: 'bi-lightning',
                 color: '#ef4444',
-                label: 'Conditional',
+                label: 'Router',
                 desc: 'Router logic'
             }
         };

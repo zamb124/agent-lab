@@ -12,7 +12,7 @@
         </div>
         <div class="header-right">
             {% if not bot.is_new %}
-            <a href="/builder?flow={{ bot.flow_id }}" class="btn btn-outline btn-sm btn-desktop-only" title="Открыть в визуальном редакторе">
+            <a href="/frontend/builder/flow/{{ bot.flow_id }}" class="btn btn-outline btn-sm btn-desktop-only" title="Открыть в визуальном редакторе">
                 <i class="bi bi-diagram-3"></i>
                 Builder
             </a>
@@ -40,7 +40,7 @@
                 </button>
                 <div class="mobile-actions-dropdown" id="mobile-actions-dropdown">
                     {% if not bot.is_new %}
-                    <a href="/builder?flow={{ bot.flow_id }}" class="mobile-action-item">
+                    <a href="/frontend/builder/flow/{{ bot.flow_id }}" class="mobile-action-item">
                         <i class="bi bi-diagram-3"></i>
                         Builder
                     </a>

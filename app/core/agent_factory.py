@@ -83,15 +83,13 @@ class AgentFactory:
             agent = agent_class(config)
             logger.info(f"Создан кастомный агент {config.agent_id} из класса {config.function_class}")
         else:
-            # Агент создан через UI - выбираем тип по config.type
-            if config.type == AgentType.REACT:
-                agent_class = ReActAgent
-                logger.info(f"Создание ReAct агента {config.agent_id}")
-            elif config.type == AgentType.STATEGRAPH:
+            # Агент создан через UI - определяем тип по graph_definition
+            if config.graph_definition:
                 agent_class = StateGraphAgent
                 logger.info(f"Создание StateGraph агента {config.agent_id}")
             else:
-                raise ValueError(f"Неизвестный тип агента: {config.type}")
+                agent_class = ReActAgent
+                logger.info(f"Создание ReAct агента {config.agent_id}")
             
             agent = agent_class(config)
 
