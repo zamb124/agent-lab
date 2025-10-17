@@ -1,0 +1,24 @@
+{
+  "fields": {
+    "key": {
+      "title": "[TODO: models.variabledefinition.fields.key.title]",
+      "description": "[TODO: models.variabledefinition.fields.key.description]"
+    },
+    "description": {
+      "title": "[TODO: models.variabledefinition.fields.description.title]",
+      "description": "[TODO: models.variabledefinition.fields.description.description]"
+    },
+    "default_value": {
+      "title": "[TODO: models.variabledefinition.fields.default_value.title]",
+      "description": "[TODO: models.variabledefinition.fields.default_value.description]"
+    },
+    "is_secret": {
+      "title": "[TODO: models.variabledefinition.fields.is_secret.title]",
+      "description": "[TODO: models.variabledefinition.fields.is_secret.description]"
+    },
+    "required": {
+      "title": "[TODO: models.variabledefinition.fields.required.title]",
+      "description": "[TODO: models.variabledefinition.fields.required.description]"
+    }
+  }
+}

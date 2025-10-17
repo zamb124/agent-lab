@@ -32,45 +32,28 @@ class BuilderDragDrop {
      */
     setupDropZone() {
         const canvasContainer = document.getElementById('canvasContainer');
-        if (!canvasContainer) return;
+        if (!canvasContainer) {
+            console.error('❌ canvasContainer не найден!');
+            return;
+        }
         
-        // Создаем индикатор зоны сброса
-        this.dropZone = document.createElement('div');
-        this.dropZone.className = this.config.dropZoneClass;
-        this.dropZone.innerHTML = `
-            <div class="drop-zone-content">
-                <i class="icon-plus"></i>
-                <span>Перетащите элемент сюда</span>
-            </div>
-        `;
-        canvasContainer.appendChild(this.dropZone);
+        console.log('✅ Настраиваем drop zone для canvas');
         
         // Обработчики для зоны сброса
         canvasContainer.addEventListener('dragover', (e) => this.handleDragOver(e));
         canvasContainer.addEventListener('dragenter', (e) => this.handleDragEnter(e));
         canvasContainer.addEventListener('dragleave', (e) => this.handleDragLeave(e));
         canvasContainer.addEventListener('drop', (e) => this.handleDrop(e));
+        
+        console.log('✅ Drop zone настроен');
     }
     
     /**
      * Настройка источников перетаскивания
      */
     setupDragSources() {
-        // Настраиваем drag для элементов сайдбара
-        this.setupSidebarDrag();
-        
-        // Переодически проверяем новые элементы
-        this.observer = new MutationObserver(() => {
-            this.setupSidebarDrag();
-        });
-        
-        const sidebar = document.getElementById('builderSidebar');
-        if (sidebar) {
-            this.observer.observe(sidebar, {
-                childList: true,
-                subtree: true
-            });
-        }
+        // Palette настраивается отдельно в palette.js
+        console.log('✅ Drag sources инициализированы');
     }
     
     /**
@@ -296,6 +279,7 @@ class BuilderDragDrop {
      */
     handleDragOver(e) {
         e.preventDefault();
+        e.stopPropagation();
         e.dataTransfer.dropEffect = 'copy';
     }
     
@@ -324,26 +308,41 @@ class BuilderDragDrop {
      */
     async handleDrop(e) {
         e.preventDefault();
-        this.hideDropZone();
+        e.stopPropagation();
+        
+        console.log('🎯 DROP EVENT!', e);
+        console.log('📦 dataTransfer types:', e.dataTransfer.types);
         
         let dropData = null;
         
-        // Пытаемся получить данные из dataTransfer
-        try {
-            const transferData = e.dataTransfer?.getData('application/json');
-            if (transferData) {
-                dropData = JSON.parse(transferData);
-            }
-        } catch (error) {
-            console.warn('Не удалось получить данные из dataTransfer:', error);
-        }
+        // Проверяем данные из palette (новый формат)
+        const nodeType = e.dataTransfer?.getData('application/x-node-type');
+        console.log('🔍 Проверка nodeType:', nodeType);
         
-        // Если нет данных в dataTransfer, используем текущие draggedData
-        if (!dropData && this.draggedData) {
+        if (nodeType) {
+            console.log('🎨 Drop из palette:', nodeType);
             dropData = {
-                type: this.draggedData.type,
-                data: this.draggedData
+                type: 'palette_node',
+                nodeType: nodeType
             };
+        } else {
+            // Пытаемся получить данные из dataTransfer (старый формат)
+            try {
+                const transferData = e.dataTransfer?.getData('application/json');
+                if (transferData) {
+                    dropData = JSON.parse(transferData);
+                }
+            } catch (error) {
+                console.warn('Не удалось получить данные из dataTransfer:', error);
+            }
+            
+            // Если нет данных в dataTransfer, используем текущие draggedData
+            if (!dropData && this.draggedData) {
+                dropData = {
+                    type: this.draggedData.type,
+                    data: this.draggedData
+                };
+            }
         }
         
         if (!dropData) {
@@ -412,15 +411,22 @@ class BuilderDragDrop {
      * Создание элемента на канвасе
      */
     async createCanvasElement(dropData, position) {
-        const { type, data } = dropData;
+        const { type, data, nodeType } = dropData;
         
         try {
+            // Обработка нового формата (palette_node)
+            if (type === 'palette_node' && nodeType) {
+                await this.createNodeFromPalette(nodeType, position);
+                return;
+            }
+            
             // Проверяем, что первым элементом может быть только флоу
             if (this.builder.canvas.nodes.size === 0 && type !== 'flow') {
                 this.builder.showNotification('Первым элементом на канвасе должен быть Flow', 'warning');
                 return;
             }
             
+            // Обработка старого формата
             switch (type) {
                 case 'agent':
                     await this.createAgentNode(data, position);
@@ -442,6 +448,91 @@ class BuilderDragDrop {
             console.error('Ошибка создания элемента на канвасе:', error);
             this.builder.showNotification('Ошибка создания элемента: ' + error.message, 'error');
         }
+    }
+    
+    /**
+     * Создание ноды из palette (новый формат)
+     */
+    async createNodeFromPalette(nodeType, position) {
+        const nodeId = `${nodeType}_${Date.now()}`;
+        
+        const nodeData = {
+            id: nodeId,
+            type: nodeType,
+            params: {
+                name: this.getDefaultNodeName(nodeType),
+                description: this.getDefaultNodeDescription(nodeType)
+            },
+            ui: {
+                x: position.x - 90,
+                y: position.y - 40,
+                width: 180,
+                height: 80
+            }
+        };
+        
+        // Для flow, agent и tool нужно создать сущность в БД
+        if (nodeType === 'flow_node') {
+            const response = await fetch('/frontend/api/flows/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({})
+            });
+            const flowData = await response.json();
+            nodeData.params.flow_id = flowData.flow_id;
+            nodeData.params.name = flowData.name;
+        } else if (nodeType === 'agent_node') {
+            const response = await fetch('/frontend/api/agents/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({})
+            });
+            const agentData = await response.json();
+            nodeData.params.agent_id = agentData.agent_id;
+            nodeData.params.name = agentData.name;
+        } else if (nodeType === 'tool_node') {
+            const response = await fetch('/frontend/api/tools/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({})
+            });
+            const toolData = await response.json();
+            nodeData.params.tool_id = toolData.tool_id;
+            nodeData.params.name = toolData.name || 'New Tool';
+        }
+        
+        await this.builder.canvas.addNode(nodeData);
+        console.log(`✅ ${nodeData.params.name} добавлен на канвас`);
+    }
+    
+    /**
+     * Получение имени по умолчанию для типа ноды
+     */
+    getDefaultNodeName(nodeType) {
+        const names = {
+            'flow_node': 'New Flow',
+            'agent_node': 'New Agent',
+            'tool_node': 'New Tool',
+            'function_node': 'New Function',
+            'message_node': 'New Message',
+            'conditional_node': 'New Conditional'
+        };
+        return names[nodeType] || 'New Node';
+    }
+    
+    /**
+     * Получение описания по умолчанию для типа ноды
+     */
+    getDefaultNodeDescription(nodeType) {
+        const descs = {
+            'flow_node': 'Entry point',
+            'agent_node': 'AI agent',
+            'tool_node': 'Function call',
+            'function_node': 'Custom code',
+            'message_node': 'Send message',
+            'conditional_node': 'Router logic'
+        };
+        return descs[nodeType] || '';
     }
     
     /**
@@ -512,8 +603,8 @@ class BuilderDragDrop {
                 ui: {
                     x: position.x,
                     y: position.y,
-                    width: 220,
-                    height: 120
+                    width: 180,
+                    height: 80
                 }
             };
             
@@ -541,7 +632,11 @@ class BuilderDragDrop {
             }
             
             // Если у флоу есть entry_point_agent, начинаем рекурсивное разворачивание
+            console.log('🔍 Проверка entry_point_agent:', fullFlowData.entry_point_agent);
+            
             if (fullFlowData.entry_point_agent) {
+                console.log('✅ Entry point agent найден, начинаем разворачивание');
+                
                 const layoutManager = new FlowLayoutManager();
                 layoutManager.setBuilder(this.builder);
                 console.log('🔧 FlowLayoutManager создан с builder:', !!this.builder, 'canvas:', !!this.builder?.canvas);
@@ -553,15 +648,21 @@ class BuilderDragDrop {
                     console.log('Найдены сохраненные позиции элементов, используем их вместо автоматического размещения');
                 }
                 
+                console.log('🚀 Запускаем expandAgentRecursively для:', fullFlowData.entry_point_agent);
+                
                 await this.expandAgentRecursively(
                     fullFlowData.entry_point_agent,
                     layoutManager.getNextPosition(position, 'agent', 0),
                     flowNode.id,
-                    new Set(), // Для предотвращения циклических зависимостей
+                    new Set(),
                     layoutManager,
-                    0, // Уровень глубины
-                    shouldUseSavedPositions ? fullFlowData.canvas_data : null // Передаем сохраненные данные
+                    0,
+                    shouldUseSavedPositions ? fullFlowData.canvas_data : null
                 );
+                
+                console.log('✅ Разворачивание завершено');
+            } else {
+                console.log('⚠️ У Flow нет entry_point_agent');
             }
             
             // Подгоняем масштаб канваса
@@ -644,8 +745,8 @@ class BuilderDragDrop {
                 ui: {
                     x: finalPosition.x,
                     y: finalPosition.y,
-                    width: 200,
-                    height: 100
+                    width: 180,
+                    height: 80
                 }
             };
             
@@ -705,22 +806,56 @@ class BuilderDragDrop {
                 }
             }
             
-            // Если агент имеет граф с другими агентами, разворачиваем их
-            if (agentData.graph_definition && agentData.graph_definition.nodes) {
-                let childIndex = 0;
-                for (const node of agentData.graph_definition.nodes) {
-                    if (node.type === 'agent_node' && node.params.agent_id && node.params.agent_id !== agentId) {
-                        const childPosition = layoutManager.getNextPosition(position, 'agent', depth + 1, childIndex);
+            // Если это StateGraph агент с graph_definition - разворачиваем граф
+            if (agentData.type === 'stategraph' && agentData.graph_definition) {
+                console.log(`📊 StateGraph агент обнаружен: ${agentId}, разворачиваем граф`);
+                await this.expandGraphDefinition(
+                    agentData.graph_definition,
+                    finalPosition,
+                    agentNode.id,
+                    layoutManager,
+                    depth,
+                    savedCanvasData
+                );
+            }
+            // Иначе для ReAct агентов разворачиваем tools
+            else if (agentData.tools && agentData.tools.length > 0) {
+                for (let i = 0; i < agentData.tools.length; i++) {
+                    const toolRef = agentData.tools[i];
+                    let toolPosition = layoutManager.getNextPosition(finalPosition, 'tool', depth + 1, i);
+                    
+                    // Проверяем сохраненные позиции для этого инструмента
+                    if (savedCanvasData && savedCanvasData.nodes) {
+                        const savedToolNode = savedCanvasData.nodes.find(node => 
+                            node.type === 'tool_node' && node.params.tool_id === toolRef.tool_id
+                        );
+                        if (savedToolNode && savedToolNode.ui) {
+                            toolPosition = { x: savedToolNode.ui.x, y: savedToolNode.ui.y };
+                            console.log(`Используем сохраненную позицию для инструмента ${toolRef.tool_id}: (${toolPosition.x}, ${toolPosition.y})`);
+                        }
+                    }
+                    
+                    // Проверяем, это тул или агент
+                    if (toolRef.tool_id.startsWith('agent:')) {
+                        // Это субагент
+                        const subAgentId = toolRef.tool_id.replace('agent:', '');
                         await this.expandAgentRecursively(
-                            node.params.agent_id,
-                            childPosition,
+                            subAgentId,
+                            toolPosition,
                             agentNode.id,
-                            new Set(visitedAgents), // Создаем новый Set для каждой ветки
+                            new Set(visitedAgents),
                             layoutManager,
                             depth + 1,
-                            savedCanvasData // Передаем сохраненные данные дальше
+                            savedCanvasData
                         );
-                        childIndex++;
+                    } else {
+                        // Это тул
+                        await this.expandToolRecursively(
+                            toolRef.tool_id,
+                            toolPosition,
+                            agentNode.id,
+                            savedCanvasData
+                        );
                     }
                 }
             }
@@ -731,6 +866,110 @@ class BuilderDragDrop {
             console.error(`Ошибка разворачивания агента ${agentId}:`, error);
             return null;
         }
+    }
+    
+    /**
+     * Разворачивание graph_definition (для StateGraph агентов)
+     */
+    async expandGraphDefinition(graphDef, basePosition, parentNodeId, layoutManager, depth, savedCanvasData) {
+        console.log(`📊 Разворачиваем граф с ${graphDef.nodes.length} нодами и ${graphDef.edges.length} ребрами`);
+        
+        const createdNodes = new Map();
+        
+        // Создаем все ноды графа
+        for (let i = 0; i < graphDef.nodes.length; i++) {
+            const graphNode = graphDef.nodes[i];
+            const nodeId = graphNode.id;
+            
+            // Проверяем есть ли у этой ноды conditional edges (router)
+            const hasConditionalEdges = graphDef.edges.some(edge => 
+                edge.source === nodeId && edge.condition_type === 'router'
+            );
+            
+            // Если это function_node с conditional edges - делаем conditional_node
+            let nodeType = graphNode.type;
+            if (nodeType === 'function_node' && hasConditionalEdges) {
+                nodeType = 'conditional_node';
+                console.log(`🔄 ${nodeId}: function_node → conditional_node (есть router edges)`);
+            }
+            
+            // Рассчитываем позицию
+            let nodePosition = layoutManager.getNextPosition(basePosition, 'agent', depth + 1, i);
+            
+            // Определяем тип ноды и параметры
+            let nodeData = {
+                id: `${nodeType}_${nodeId}_${Date.now()}`,
+                type: nodeType,
+                params: {
+                    name: nodeId,
+                    description: graphNode.description || this.getDefaultNodeDescription(nodeType),
+                    ...graphNode.params
+                },
+                ui: {
+                    x: nodePosition.x,
+                    y: nodePosition.y,
+                    width: 180,
+                    height: 80
+                }
+            };
+            
+            // Создаем ноду на канвасе
+            const canvasNode = await this.builder.canvas.addNode(nodeData);
+            createdNodes.set(nodeId, canvasNode.id);
+            
+            console.log(`✅ Создана нода графа: ${nodeId} (${nodeType})`);
+        }
+        
+        // Создаем edges между нодами графа
+        for (const edge of graphDef.edges) {
+            if (edge.source === 'START' || edge.target === 'END') {
+                // Пропускаем специальные ноды START/END
+                continue;
+            }
+            
+            const sourceCanvasId = createdNodes.get(edge.source);
+            const targetCanvasId = createdNodes.get(edge.target);
+            
+            if (sourceCanvasId && targetCanvasId) {
+                const edgeData = {
+                    id: `${sourceCanvasId}-${targetCanvasId}`,
+                    source: sourceCanvasId,
+                    target: targetCanvasId,
+                    type: edge.condition_type === 'router' ? 'conditional' : 'default'
+                };
+                
+                this.builder.canvas.addEdge(edgeData);
+                console.log(`🔗 Создана связь: ${edge.source} → ${edge.target}`);
+            }
+        }
+        
+        // Связываем entry_point графа с родительской нодой
+        if (parentNodeId && graphDef.entry_point) {
+            let realEntryPoint = graphDef.entry_point;
+            
+            // Если entry_point это START, находим куда START ведет
+            if (realEntryPoint === 'START') {
+                const startEdge = graphDef.edges.find(edge => edge.source === 'START');
+                if (startEdge) {
+                    realEntryPoint = startEdge.target;
+                    console.log(`🔍 Entry point START → ${realEntryPoint}`);
+                }
+            }
+            
+            const entryNodeCanvasId = createdNodes.get(realEntryPoint);
+            if (entryNodeCanvasId) {
+                const edgeData = {
+                    id: `${parentNodeId}-${entryNodeCanvasId}`,
+                    source: parentNodeId,
+                    target: entryNodeCanvasId,
+                    type: 'default'
+                };
+                this.builder.canvas.addEdge(edgeData);
+                console.log(`🔗 Связан parent с entry_point: ${parentNodeId} → ${realEntryPoint}`);
+            }
+        }
+        
+        console.log(`✅ Граф развернут: ${graphDef.nodes.length} нод, ${graphDef.edges.length} связей`);
     }
     
     /**
@@ -775,8 +1014,8 @@ class BuilderDragDrop {
                 ui: {
                     x: finalPosition.x,
                     y: finalPosition.y,
-                    width: 450,  // Увеличили до реального размера с формой
-                    height: 600  // Увеличили до реального размера с формой
+                    width: 180,
+                    height: 80
                 }
             };
             
@@ -874,10 +1113,10 @@ class BuilderDragDrop {
 class FlowLayoutManager {
     constructor() {
         this.config = {
-            horizontalSpacing: 450,  // Расстояние между уровнями по горизонтали
-            verticalSpacing: 220,    // Расстояние между элементами по вертикали
-            toolOffset: 350,        // Смещение для тулов
-            toolSpacing: 200        // Расстояние между тулами
+            horizontalSpacing: 280,  // Расстояние между уровнями по горизонтали (для компактных кубиков)
+            verticalSpacing: 140,    // Расстояние между элементами по вертикали
+            toolOffset: 200,        // Смещение для тулов
+            toolSpacing: 120        // Расстояние между тулами
         };
     }
     
@@ -891,7 +1130,7 @@ class FlowLayoutManager {
     /**
      * Проверка пересечения с существующими нодами
      */
-    checkCollision(x, y, width = 380, height = 600) { // Увеличили высоту до реальной
+    checkCollision(x, y, width = 180, height = 80) {
         if (!this.builder || !this.builder.canvas || !this.builder.canvas.nodes) {
             console.warn('⚠️ checkCollision: нет доступа к canvas');
             return false;
@@ -899,12 +1138,12 @@ class FlowLayoutManager {
         
         const canvas = this.builder.canvas;
         
-        const margin = 30; // Увеличили минимальный отступ
+        const margin = 20;
         console.log(`🔍 Проверяем пересечение для (${x}, ${y}) размер ${width}x${height} с ${canvas.nodes.size} нодами`);
         
         for (const node of canvas.nodes.values()) {
-            const nodeWidth = node.width || 380;
-            const nodeHeight = node.height || 600; // Используем реальную высоту карточек
+            const nodeWidth = node.width || 180;
+            const nodeHeight = node.height || 80;
             
             // Проверяем пересечение прямоугольников с учетом margin
             const collision = x < node.x + nodeWidth + margin &&
