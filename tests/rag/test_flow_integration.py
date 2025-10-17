@@ -108,17 +108,16 @@ class TestRAGConfigParsing:
     def test_default_rag_config(self):
         """Тест что RAG включен по умолчанию"""
         from app.models import FlowConfig
-        
+
         flow = FlowConfig(
             name="Test",
             entry_point_agent="test.agent"
         )
-        
+
         assert flow.rag_config is not None
         assert flow.rag_config.enabled is True
         assert flow.rag_config.namespace_scope == "flow"
-        assert "flow" in flow.rag_config.search_scopes
-        assert "company" in flow.rag_config.search_scopes
+        assert flow.rag_config.search_scopes == ["flow"]
 
 
 class TestRAGNamespaceGeneration:

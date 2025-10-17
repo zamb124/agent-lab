@@ -183,13 +183,77 @@ async def upload_document_to_knowledge_base(
     )
 
 
+@tool(is_public=True, title="Загрузить текст в базу знаний")
+async def upload_text_to_knowledge_base(
+    text: str,
+    document_name: Optional[str] = None,
+    description: Optional[str] = None,
+    config: RunnableConfig = None
+) -> str:
+    """
+    Загружает текст напрямую в базу знаний бота.
+
+    Args:
+        text: Текст для загрузки в RAG
+        document_name: Имя документа (опционально, будет сгенерировано автоматически)
+        description: Описание документа
+
+    Returns:
+        Результат загрузки
+    """
+    context = get_context()
+    rag_config = _get_rag_config_from_context(context)
+
+    if not rag_config or not rag_config.enabled:
+        return "RAG не настроен для этого flow"
+
+    company_id = context.active_company.company_id
+    flow_id = context.flow_config.flow_id if context.flow_config else "unknown"
+    session_id = context.session_id
+    scope = rag_config.namespace_scope
+
+    if scope == "flow":
+        namespace_id = await get_or_create_namespace("flow", f"{company_id}_{flow_id}")
+    elif scope == "company":
+        namespace_id = await get_or_create_namespace("company", company_id)
+    else:
+        namespace_id = await get_or_create_namespace("session", f"{company_id}_{flow_id}_{session_id}")
+
+    doc_name = document_name or f"Text document ({len(text)} chars)"
+
+    rag_provider = get_default_rag_provider()
+
+    document = await rag_provider.upload_document_from_text(
+        namespace_id=namespace_id,
+        text=text,
+        document_name=doc_name,
+        metadata={
+            "description": description,
+            "uploaded_by": context.user.user_id,
+        }
+    )
+
+    scope_name = {
+        "flow": "базу текущего flow",
+        "company": "общую базу компании",
+        "session": "базу текущей сессии"
+    }.get(scope, scope)
+
+    return (
+        f"✅ Текст '{document.name}' успешно добавлен в {scope_name}\n"
+        f"ID документа: {document.document_id}\n"
+        f"Статус: {document.status}\n"
+        f"Текст будет проиндексирован и доступен для поиска через несколько минут"
+    )
+
+
 @tool(is_public=True, title="Список документов")
 async def list_documents_in_knowledge_base(
     config: RunnableConfig = None
 ) -> str:
     """
     Показывает список всех документов в базе знаний.
-    
+
     Returns:
         Список документов с деталями
     """

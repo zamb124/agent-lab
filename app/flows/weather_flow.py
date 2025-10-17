@@ -45,18 +45,20 @@ async def uninstall(flow_config: FlowConfig, company_id: str):
     Хук удаления Weather Flow.
     Удаляет созданные переменные.
     """
+    logger.info(f"🔄 НАЧАЛО uninstall hook для Weather Flow, company_id: {company_id}")
     variables_service = VariablesService()
 
     # Удаляем переменные из variables_definitions
     if hasattr(flow_config, 'variables_definitions') and flow_config.variables_definitions:
+        logger.info(f"📋 Найдено {len(flow_config.variables_definitions)} переменных для удаления")
         for var_def in flow_config.variables_definitions:
-            try:
-                await variables_service.delete_var(var_def.key)
-                logger.info(f"Удалена переменная: {var_def.key}")
-            except Exception as e:
-                logger.warning(f"Не удалось удалить переменную {var_def.key}: {e}")
+            logger.info(f"🗑️  Удаляем переменную: {var_def.key}")
+            await variables_service.delete_var(var_def.key)
+            logger.info(f"✅ Переменная {var_def.key} удалена")
+    else:
+        logger.warning("⚠️  variables_definitions не найдены в flow_config")
 
-    logger.info(f"Weather Flow удален из компании {company_id}")
+    logger.info(f"✅ Weather Flow удален из компании {company_id}")
 
 async def after_install():
     """

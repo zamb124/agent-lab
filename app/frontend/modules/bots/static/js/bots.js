@@ -939,14 +939,100 @@ import { showNotification } from '/static/js/components/notification.js';
             modal.style.display = 'none';
         }
         document.body.style.overflow = 'auto';
-        
+
         // Сбрасываем форму
         resetPlatformForm();
-        
+
         // Удаляем WhatsApp контейнер если он был создан
         const whatsappContainer = document.getElementById('whatsapp-fields-container');
         if (whatsappContainer) {
             whatsappContainer.remove();
+        }
+    };
+
+    window.openUploadTextModal = function() {
+        const modal = document.getElementById('upload-text-modal');
+        if (modal) {
+            // Убеждаемся, что модалка в конце body для правильного z-index
+            if (modal.parentElement !== document.body) {
+                document.body.appendChild(modal);
+            }
+            modal.style.display = 'flex';
+        }
+        document.body.style.overflow = 'hidden';
+
+        // Очищаем форму
+        document.getElementById('upload-text-document-name').value = '';
+        document.getElementById('upload-text-content').value = '';
+        document.getElementById('upload-text-description').value = '';
+
+        // Фокус на textarea
+        setTimeout(() => {
+            document.getElementById('upload-text-content').focus();
+        }, 100);
+    };
+
+    window.closeUploadTextModal = function() {
+        const modal = document.getElementById('upload-text-modal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+        document.body.style.overflow = 'auto';
+
+        // Очищаем форму
+        document.getElementById('upload-text-document-name').value = '';
+        document.getElementById('upload-text-content').value = '';
+        document.getElementById('upload-text-description').value = '';
+    };
+
+    window.uploadTextFromModal = async function(flowId) {
+        const textContent = document.getElementById('upload-text-content').value.trim();
+        const documentName = document.getElementById('upload-text-document-name').value.trim();
+        const description = document.getElementById('upload-text-description').value.trim();
+
+        if (!textContent) {
+            showNotification('Пожалуйста, введите текст для загрузки', 'warning');
+            document.getElementById('upload-text-content').focus();
+            return;
+        }
+
+        if (textContent.length > 50000) {
+            showNotification('Текст слишком длинный. Максимальная длина: 50,000 символов', 'warning');
+            return;
+        }
+
+        try {
+            showNotification('Загрузка текста...', 'info');
+
+            const response = await fetch(`/api/v1/knowledge-base/flows/${flowId}/text`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    text: textContent,
+                    document_name: documentName || undefined,
+                    description: description || undefined
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Ошибка загрузки текста');
+            }
+
+            const result = await response.json();
+            showNotification('Текст успешно загружен и добавлен в базу знаний', 'success');
+
+            // Закрываем модалку
+            closeUploadTextModal();
+
+            await addSearchToolToAgent(flowId);
+            await loadKnowledgeBaseDocuments(flowId);
+
+        } catch (error) {
+            console.error('Ошибка загрузки текста:', error);
+            showNotification('Не удалось загрузить текст: ' + error.message, 'danger');
         }
     };
 
@@ -1846,7 +1932,7 @@ import { showNotification } from '/static/js/components/notification.js';
         
         input.click();
     };
-    
+
     window.loadKnowledgeBaseDocuments = async function(flowId) {
         const listContainer = document.getElementById('knowledge-base-docs-list');
         if (!listContainer) return;
@@ -1887,7 +1973,7 @@ import { showNotification } from '/static/js/components/notification.js';
                     'failed': '<i class="bi bi-x-circle-fill text-danger"></i>'
                 }[doc.status] || '<i class="bi bi-question-circle"></i>';
                 
-                const downloadUrl = doc.metadata && doc.metadata.source_url ? doc.metadata.source_url : null;
+                const downloadUrl = doc.metadata && (doc.metadata.source_url || doc.metadata.signed_url) ? (doc.metadata.source_url || doc.metadata.signed_url) : null;
                 const safeDownloadAttr = downloadUrl ? escapeAttr(downloadUrl) : '';
                 const cardClasses = downloadUrl ? 'document-card document-card-clickable' : 'document-card';
                 const dataDownloadAttr = downloadUrl ? ` data-download-url="${safeDownloadAttr}"` : '';

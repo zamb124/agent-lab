@@ -1520,6 +1520,7 @@ class FlowConfig(BuilderEntity):
             install_hook=getattr(obj, "install_hook", None),
             after_install_hook=getattr(obj, "after_install_hook", None),
             uninstall_hook=getattr(obj, "uninstall_hook", None),
+            variables_definitions=getattr(obj, "variables_definitions", []),
             rag_config=getattr(obj, "rag_config", None),
             canvas_data=getattr(obj, "canvas_data", None),
             source=obj.source,
