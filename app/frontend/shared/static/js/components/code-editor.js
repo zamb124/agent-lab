@@ -46,20 +46,18 @@ class CodeEditor {
     }
     
     detectSystemTheme() {
-        const builderContainer = document.querySelector('.builder-container');
-        if (builderContainer) {
-            return 'dark';
-        }
-        
         const htmlTheme = document.documentElement.getAttribute('data-theme');
         if (htmlTheme) {
+            console.log('🎨 Тема из data-theme:', htmlTheme);
             return htmlTheme;
         }
         
         if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            console.log('🎨 Тема из system preference: dark');
             return 'dark';
         }
         
+        console.log('🎨 Тема по умолчанию: dark');
         return 'dark';
     }
     
@@ -79,16 +77,12 @@ class CodeEditor {
     }
     
     watchThemeChanges() {
-        const builderContainer = document.querySelector('.builder-container');
-        if (builderContainer) {
-            return;
-        }
-        
         const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
                 if (mutation.attributeName === 'data-theme') {
                     const newTheme = this.detectSystemTheme();
                     if (newTheme !== this.currentSystemTheme) {
+                        console.log(`🎨 Тема изменилась: ${this.currentSystemTheme} → ${newTheme}`);
                         this.currentSystemTheme = newTheme;
                         this.updateEditorTheme(newTheme);
                     }
