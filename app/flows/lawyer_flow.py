@@ -117,13 +117,34 @@ lawyer_flow = FlowConfig(
             "is_secret": False,
             "required": False
         },
-        {
-            "key": "ceo_name",
-            "description": "ФИО генерального директора",
-            "default_value": "Шведов Виктор Викторович",
-            "is_secret": False,
-            "required": False
-        },
+            {
+                "key": "ceo_name",
+                "description": "ФИО генерального директора",
+                "default_value": "Шведов Виктор Викторович",
+                "is_secret": False,
+                "required": False
+            },
+            {
+                "key": "company_short_name_en",
+                "description": "Краткое наименование компании на английском",
+                "default_value": "LLC ENZHLABS",
+                "is_secret": False,
+                "required": False
+            },
+            {
+                "key": "company_full_name_en",
+                "description": "Полное наименование компании на английском",
+                "default_value": "Limited Liability Company ENZHLABS",
+                "is_secret": False,
+                "required": False
+            },
+            {
+                "key": "bot_name",
+                "description": "Имя бота для отображения",
+                "default_value": "Юридический консультант",
+                "is_secret": False,
+                "required": False
+            },
     ],
 
     enable_reasoning=True,

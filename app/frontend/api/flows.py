@@ -276,7 +276,7 @@ async def install_flow(
         variables_service = VariablesService()
         for key, value in request.variables.items():
             # Пропускаем пустые значения
-            if not value:
+            if value is None or value == "":
                 logger.info(f"⚠️ Пропускаем пустую переменную {key} для flow {flow_id}")
                 continue
 
