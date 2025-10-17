@@ -10,15 +10,15 @@ theme:
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: indigo
+      primary: purple
+      accent: purple
       toggle:
         icon: material/brightness-7
         name: Переключить на тёмную тему
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: indigo
+      primary: purple
+      accent: purple
       toggle:
         icon: material/brightness-4
         name: Переключить на светлую тему
@@ -151,7 +151,7 @@ plugins:
 
 nav:
   - Главная: index.md
-  
+
   - Для пользователей:
       - Обзор: user_docs/index.md
       - Обзор платформы: user_docs/overview.md
@@ -169,22 +169,9 @@ nav:
       - FAQ: user_docs/faq.md
       - Видео-гайды: user_docs/videos.md
       - Устранение проблем: user_docs/troubleshooting.md
-  
-  - API и интеграции:
-      - API документация: api.md
-      - API Reference: api_reference.md
-      - Интеграции:
-          - AmoCRM:
-              - Обзор: integrations/amocrm/README.md
-              - Домены: integrations/amocrm/DOMAIN.md
-          - WhatsApp:
-              - Обзор: integrations/whatsapp/README.md
-              - Установка: integrations/whatsapp/setup.md
-              - Использование: integrations/whatsapp/usage.md
-              - План: integrations/whatsapp/integration_plan.md
-          - SGR: sgr_integration.md
-          - YooMoney: yoomoney_oauth.md
-  
+
+  - API: api_links.md
+
   - Для разработчиков:
       - Архитектура: architecture.md
       - Агенты: agents.md
