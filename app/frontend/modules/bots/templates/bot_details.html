@@ -18,7 +18,7 @@
             </a>
             <button class="btn btn-outline btn-sm btn-desktop-only" onclick="openBotChat('{{ bot.flow_id }}', '{{ bot.name }}')">
                 <i class="bi bi-chat-dots"></i>
-                Тестировать
+                Запустить
             </button>
             <button class="btn btn-warning btn-sm btn-desktop-only" 
                     onclick="remigrateFlowWithDeps('{{ bot.flow_id }}')"
@@ -46,7 +46,7 @@
                     </a>
                     <button class="mobile-action-item" onclick="openBotChat('{{ bot.flow_id }}', '{{ bot.name }}'); closeMobileActionsMenu()">
                         <i class="bi bi-chat-dots"></i>
-                        Тестировать
+                        Запустить
                     </button>
                     <button class="mobile-action-item" onclick="remigrateFlowWithDeps('{{ bot.flow_id }}'); closeMobileActionsMenu()">
                         <i class="bi bi-arrow-counterclockwise"></i>

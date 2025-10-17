@@ -283,7 +283,16 @@ class Builder {
             return;
         }
         
-        this.showNotification('Функция запуска флоу в разработке', 'info');
+        if (window.app && window.app.chat) {
+            window.app.chat.open({
+                agent_id: this.currentFlow.flow_id,
+                session_id: null,
+                title: this.currentFlow.name
+            });
+        } else {
+            console.error('Chat manager не инициализирован');
+            this.showNotification('Чат недоступен. Попробуйте обновить страницу.', 'error');
+        }
     }
     
     /**
