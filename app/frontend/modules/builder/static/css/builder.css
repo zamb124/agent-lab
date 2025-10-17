@@ -594,7 +594,7 @@
     color: var(--text-secondary);
 }
 
-/* Платформы */
+/* Каналы */
 .card-platforms {
     display: flex;
     flex-wrap: wrap;

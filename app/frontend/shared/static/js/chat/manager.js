@@ -230,7 +230,7 @@ class ChatManager {
         
         if (!input) return;
         
-        // Проверяем, это сессия другой платформы?
+        // Проверяем, это сессия другой каналы?
         const isReadOnly = this.currentSession && 
                           this.currentSession.includes(':') && 
                           !this.currentSession.startsWith('web:');
@@ -238,13 +238,13 @@ class ChatManager {
         if (isReadOnly) {
             const platform = this.currentSession.split(':')[0];
             input.disabled = true;
-            input.placeholder = `Сессия платформы "${platform}" (только просмотр)`;
+            input.placeholder = `Сессия каналы "${platform}" (только просмотр)`;
             
             if (sendBtn) sendBtn.disabled = true;
             if (attachBtn) attachBtn.disabled = true;
             if (voiceBtn) voiceBtn.disabled = true;
             
-            console.log(`🔒 Поле ввода заблокировано для платформы ${platform}`);
+            console.log(`🔒 Поле ввода заблокировано для каналы ${platform}`);
         } else {
             input.disabled = false;
             input.placeholder = 'Введите сообщение...';
@@ -610,7 +610,7 @@ class ChatManager {
             // Проверяем формат session_id
             let fullSessionId;
             if (session_id.includes(':')) {
-                // session_id уже полный (содержит платформу)
+                // session_id уже полный (содержит канал)
                 fullSessionId = session_id;
                 console.log('✅ session_id уже полный:', fullSessionId);
             } else {
@@ -914,11 +914,11 @@ class ChatManager {
             // Проверяем: если текущая сессия не web: - запрещаем отправку
             if (this.currentSession && this.currentSession.includes(':') && !this.currentSession.startsWith('web:')) {
                 const platform = this.currentSession.split(':')[0];
-                console.warn(`⚠️ Попытка отправить файлы в сессию платформы ${platform}: ${this.currentSession}`);
+                console.warn(`⚠️ Попытка отправить файлы в сессию каналы ${platform}: ${this.currentSession}`);
                 
                 if (this.app && this.app.showNotification) {
                     this.app.showNotification(
-                        `Нельзя отправлять сообщения в сессию платформы "${platform}". Это сессия только для просмотра.`, 
+                        `Нельзя отправлять сообщения в сессию каналы "${platform}". Это сессия только для просмотра.`, 
                         'warning'
                     );
                 }
@@ -1180,11 +1180,11 @@ class ChatManager {
         // Проверяем: если текущая сессия не web: - запрещаем отправку
         if (this.currentSession && this.currentSession.includes(':') && !this.currentSession.startsWith('web:')) {
             const platform = this.currentSession.split(':')[0];
-            console.warn(`⚠️ Попытка отправить сообщение в сессию платформы ${platform}: ${this.currentSession}`);
+            console.warn(`⚠️ Попытка отправить сообщение в сессию каналы ${platform}: ${this.currentSession}`);
             
             if (this.app && this.app.showNotification) {
                 this.app.showNotification(
-                    `Нельзя отправлять сообщения в сессию платформы "${platform}". Это сессия только для просмотра.`, 
+                    `Нельзя отправлять сообщения в сессию каналы "${platform}". Это сессия только для просмотра.`, 
                     'warning'
                 );
             }

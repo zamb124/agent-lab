@@ -157,7 +157,7 @@
 -   **👋 [Начало работы](user_docs/getting_started.md)** - создайте первого бота за 15 минут
 -   **🏪 [Магазин ботов](user_docs/store.md)** - готовые решения для бизнеса
 -   **🤖 [Создание ботов](user_docs/bots_creation.md)** - сделайте бота под свои нужды
--   **📱 [Платформы](user_docs/platforms.md)** - подключите Telegram, WhatsApp, сайт
+-   **📱 [Каналы](user_docs/platforms.md)** - подключите Telegram, WhatsApp, сайт
 -   **⚙️ [Управление](user_docs/bots_management.md)** - настройка и мониторинг
 
 </div>

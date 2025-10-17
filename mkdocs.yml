@@ -122,10 +122,10 @@ plugins:
           nav_translations:
             Главная: Home
             Для пользователей: For Users
-            Обзор платформы: Platform Overview
+            Обзор канала: Channel Overview
             Начало работы: Getting Started
             Управление ботами: Bots Management
-            Платформы: Platforms
+            Каналы: Channels
             Возможности: Features
             Сценарии использования: Use Cases
             API и интеграции: API & Integrations
@@ -159,7 +159,7 @@ nav:
       - Магазин ботов: user_docs/store.md
       - Создание ботов: user_docs/bots_creation.md
       - Управление ботами: user_docs/bots_management.md
-      - Платформы: user_docs/platforms.md
+      - Каналы: user_docs/platforms.md
       - Возможности: user_docs/features.md
       - Переменные: user_docs/variables.md
       - Биллинг: user_docs/billing.md

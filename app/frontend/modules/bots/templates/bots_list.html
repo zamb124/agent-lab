@@ -29,7 +29,7 @@
         
         <div class="bot-card-body">
             <div class="bot-platforms">
-                <span class="platforms-label" data-i18n="bots.platforms">Платформы:</span>
+                <span class="platforms-label" data-i18n="bots.platforms">Каналы:</span>
                 <div class="platform-tags">
                     {% if bot.platforms and bot.platforms|length > 0 %}
                         {% for platform in bot.platforms %}
@@ -52,7 +52,7 @@
                     {% else %}
                         <span class="platform-empty">
                             <i class="bi bi-inbox"></i>
-                            <span>Нет платформ</span>
+                            <span>Нет канала</span>
                         </span>
                     {% endif %}
                 </div>

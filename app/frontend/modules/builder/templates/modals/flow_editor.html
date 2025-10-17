@@ -73,7 +73,7 @@
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Платформы</label>
+                        <label class="form-label">Каналы</label>
                         <div class="platforms-list">
                             {% set platforms = flow.platforms if flow else {'api': {}} %}
                             {% for platform, config in platforms.items() %}
@@ -92,7 +92,7 @@
                             </div>
                             {% endfor %}
                             
-                            <!-- Добавление новых платформ -->
+                            <!-- Добавление новых канала -->
                             <div class="platform-item">
                                 <div class="form-check">
                                     <input class="form-check-input" 
