@@ -1146,10 +1146,10 @@ class BuilderCanvas {
             // Финальное обновление связей
             this.updateNodeEdges(this.draggedNode);
             
-            // Очищаем requestAnimationFrame
-            if (this.edgeUpdateFrame) {
-                cancelAnimationFrame(this.edgeUpdateFrame);
-                this.edgeUpdateFrame = null;
+            // Очищаем throttle
+            if (this.edgeUpdateThrottle) {
+                clearTimeout(this.edgeUpdateThrottle);
+                this.edgeUpdateThrottle = null;
             }
             
             // Если это был клик - открываем properties panel

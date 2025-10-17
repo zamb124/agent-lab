@@ -16,7 +16,7 @@
 .notification {
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
-    animation: slideInRight 0.3s ease-out forwards;
+    animation: slideInRight 0.3s ease-out;
     background: var(--bg-card);
     border: 1px solid var(--border-primary);
     padding: 1rem 1.25rem;
@@ -27,8 +27,6 @@
     max-width: 350px;
     transition: opacity 0.3s ease, transform 0.3s ease;
     pointer-events: all;
-    transform: translateX(0);
-    opacity: 1;
 }
 
 .notification-success {

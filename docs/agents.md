@@ -373,9 +373,9 @@ class ResearchCoordinatorAgent(StateGraphAgent):
     )
 ```
 
-**Типы нод в StateGraph:**
+**Типы нод:**
 
-1. **AGENT_NODE** - вызов другого агента (субагент)
+1. **AGENT_NODE** - вызов другого агента
    ```python
    GraphNode(
        id="my_agent",
@@ -393,22 +393,7 @@ class ResearchCoordinatorAgent(StateGraphAgent):
    )
    ```
 
-3. **ROUTER_NODE** - функция-роутер для условных переходов
-   ```python
-   GraphNode(
-       id="router",
-       type=NodeType.ROUTER_NODE,
-       params={"function": "module.path.router_function"}
-   )
-   # Функция должна возвращать ID следующей ноды
-   def router_function(state: State) -> str:
-       if state.get("condition"):
-           return "node_a"
-       else:
-           return "node_b"
-   ```
-
-4. **TOOL_NODE** - вызов tool
+3. **TOOL_NODE** - вызов tool
    ```python
    GraphNode(
        id="my_tool",
@@ -417,7 +402,7 @@ class ResearchCoordinatorAgent(StateGraphAgent):
    )
    ```
 
-5. **MESSAGE_NODE** - отправка фиксированного сообщения
+4. **MESSAGE_NODE** - отправка фиксированного сообщения
    ```python
    GraphNode(
        id="greeting",
@@ -426,7 +411,7 @@ class ResearchCoordinatorAgent(StateGraphAgent):
    )
    ```
 
-6. **FLOW_NODE** - вызов другого flow (композиция)
+5. **FLOW_NODE** - вызов другого flow (композиция)
    ```python
    GraphNode(
        id="sub_flow",
