@@ -778,51 +778,10 @@ class BuilderDragDrop {
                 this.builder.canvas.addEdge(edgeData);
             }
             
-            // Добавляем тулы и субагенты
-            if (agentData.tools && agentData.tools.length > 0) {
-                for (let i = 0; i < agentData.tools.length; i++) {
-                    const toolRef = agentData.tools[i];
-                    let toolPosition = layoutManager.getNextPosition(finalPosition, 'tool', depth + 1, i);
-                    
-                    // Проверяем сохраненные позиции для этого инструмента
-                    if (savedCanvasData && savedCanvasData.nodes) {
-                        const savedToolNode = savedCanvasData.nodes.find(node => 
-                            node.type === 'tool_node' && node.params.tool_id === toolRef.tool_id
-                        );
-                        if (savedToolNode && savedToolNode.ui) {
-                            toolPosition = { x: savedToolNode.ui.x, y: savedToolNode.ui.y };
-                            console.log(`Используем сохраненную позицию для инструмента ${toolRef.tool_id}: (${toolPosition.x}, ${toolPosition.y})`);
-                        }
-                    }
-                    
-                    // Проверяем, это тул или агент
-                    if (toolRef.tool_id.startsWith('agent:')) {
-                        // Это субагент
-                        const subAgentId = toolRef.tool_id.replace('agent:', '');
-                        await this.expandAgentRecursively(
-                            subAgentId,
-                            toolPosition,
-                            agentNode.id,
-                            new Set(visitedAgents),
-                            layoutManager,
-                            depth + 1,
-                            savedCanvasData // Передаем сохраненные данные для субагентов
-                        );
-                    } else {
-                        // Это тул
-                        await this.expandToolRecursively(
-                            toolRef.tool_id,
-                            toolPosition,
-                            agentNode.id,
-                            savedCanvasData // Передаем сохраненные данные для инструментов
-                        );
-                    }
-                }
-            }
-            
-            // Если это StateGraph агент с graph_definition - разворачиваем граф
+            // Разворачиваем содержимое агента в зависимости от типа
             if (agentData.type === 'stategraph' && agentData.graph_definition) {
-                console.log(`📊 StateGraph агент обнаружен: ${agentId}, разворачиваем граф`);
+                // StateGraph агент - разворачиваем его граф
+                console.log(`📊 StateGraph агент: ${agentId}, разворачиваем граф`);
                 await this.expandGraphDefinition(
                     agentData.graph_definition,
                     finalPosition,
@@ -831,27 +790,26 @@ class BuilderDragDrop {
                     depth,
                     savedCanvasData
                 );
-            }
-            // Иначе для ReAct агентов разворачиваем tools
-            else if (agentData.tools && agentData.tools.length > 0) {
+            } else if (agentData.tools && agentData.tools.length > 0) {
+                // ReAct агент - разворачиваем tools и субагенты
+                console.log(`🔧 ReAct агент: ${agentId}, разворачиваем ${agentData.tools.length} tools`);
                 for (let i = 0; i < agentData.tools.length; i++) {
                     const toolRef = agentData.tools[i];
                     let toolPosition = layoutManager.getNextPosition(finalPosition, 'tool', depth + 1, i);
                     
-                    // Проверяем сохраненные позиции для этого инструмента
+                    // Проверяем сохраненные позиции
                     if (savedCanvasData && savedCanvasData.nodes) {
                         const savedToolNode = savedCanvasData.nodes.find(node => 
                             node.type === 'tool_node' && node.params.tool_id === toolRef.tool_id
                         );
                         if (savedToolNode && savedToolNode.ui) {
                             toolPosition = { x: savedToolNode.ui.x, y: savedToolNode.ui.y };
-                            console.log(`Используем сохраненную позицию для инструмента ${toolRef.tool_id}: (${toolPosition.x}, ${toolPosition.y})`);
                         }
                     }
                     
-                    // Проверяем, это тул или агент
+                    // Проверяем, это тул или субагент
                     if (toolRef.tool_id.startsWith('agent:')) {
-                        // Это субагент
+                        // Субагент
                         const subAgentId = toolRef.tool_id.replace('agent:', '');
                         await this.expandAgentRecursively(
                             subAgentId,
@@ -863,7 +821,7 @@ class BuilderDragDrop {
                             savedCanvasData
                         );
                     } else {
-                        // Это тул
+                        // Тул
                         await this.expandToolRecursively(
                             toolRef.tool_id,
                             toolPosition,
