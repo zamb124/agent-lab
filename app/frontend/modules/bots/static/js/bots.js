@@ -2078,7 +2078,7 @@ import { showNotification } from '/static/js/components/notification.js';
         
         const requestBody = {
             user_id: userId,
-            text: message
+            message: message
         };
         
         if (sessionId) {
