@@ -225,43 +225,171 @@
     color: var(--text-secondary, #cbd5e0);
 }
 
-.store-vars-popup {
-    max-width: 500px;
-    text-align: left;
-    padding: 12px;
+/* Модальное окно для переменных */
+.code-editor-variables-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
 
-.store-vars-popup h4 {
-    margin: 0 0 8px 0;
-    font-size: 14px;
+.code-editor-variables-modal.show {
+    opacity: 1;
+}
+
+.variables-modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.variables-modal-content {
+    position: relative;
+    background: var(--code-editor-bg);
+    border: 1px solid var(--code-editor-border);
+    border-radius: 12px;
+    width: 90%;
+    max-width: 700px;
+    max-height: 80vh;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.variables-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: var(--code-editor-toolbar-bg);
+    border-bottom: 1px solid var(--code-editor-border);
+}
+
+.variables-modal-header h3 {
+    margin: 0;
+    font-size: 18px;
     font-weight: 600;
     color: var(--code-editor-text);
 }
 
-.store-vars-popup ul {
-    list-style: none;
+.variables-modal-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
     padding: 0;
-    margin: 0 0 16px 0;
-}
-
-.store-vars-popup li {
-    padding: 6px 0;
-    font-size: 13px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
     color: var(--code-editor-text-secondary);
-    border-bottom: 1px solid var(--code-editor-border);
+    cursor: pointer;
+    transition: all 0.15s ease;
 }
 
-.store-vars-popup li:last-child {
-    border-bottom: none;
-}
-
-.store-vars-popup code {
+.variables-modal-close:hover {
     background: var(--code-editor-hover);
-    padding: 2px 6px;
-    border-radius: 3px;
+    color: var(--code-editor-text);
+}
+
+.variables-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+.vars-section {
+    margin-bottom: 24px;
+}
+
+.vars-section:last-child {
+    margin-bottom: 0;
+}
+
+.vars-section h4 {
+    margin: 0 0 12px 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--code-editor-text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.vars-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.var-item {
+    display: grid;
+    grid-template-columns: minmax(200px, auto) 1fr auto;
+    gap: 12px;
+    align-items: start;
+    padding: 12px;
+    background: var(--code-editor-toolbar-bg);
+    border: 1px solid var(--code-editor-border);
+    border-radius: 8px;
+    transition: all 0.15s ease;
+}
+
+.var-item:hover {
+    border-color: var(--primary-color, #3b82f6);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.1);
+}
+
+.var-key {
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--primary-color, #3b82f6);
+    word-break: break-all;
+}
+
+.var-value {
     font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
     font-size: 12px;
-    color: var(--primary-color, #3b82f6);
+    color: var(--code-editor-text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.var-copy-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--code-editor-border);
+    border-radius: 6px;
+    color: var(--code-editor-text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.var-copy-btn:hover {
+    background: var(--primary-color, #3b82f6);
+    border-color: var(--primary-color, #3b82f6);
+    color: white;
+    transform: scale(1.05);
+}
+
+.var-copy-btn i {
+    font-size: 14px;
 }
 
 @media (max-width: 768px) {

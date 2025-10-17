@@ -27,6 +27,10 @@ class PropertiesPanel {
     }
     
     initCodeEditor(containerId, defaultCode, onSaveCallback) {
+        console.log('🔧 initCodeEditor вызван');
+        console.log('   containerId:', containerId);
+        console.log('   this.builder.flowId:', this.builder.flowId);
+        
         if (typeof CodeEditor === 'undefined') {
             console.error('CodeEditor не загружен! Проверьте что code-editor.js подключен.');
             return null;
