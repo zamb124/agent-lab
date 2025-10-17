@@ -26,18 +26,6 @@
     --code-editor-gutter-text: #a0aec0;
 }
 
-/* Builder всегда темный */
-.builder-container .code-editor-wrapper {
-    --code-editor-bg: #1a202c;
-    --code-editor-toolbar-bg: #2d3748;
-    --code-editor-border: #4a5568;
-    --code-editor-text: #e2e8f0;
-    --code-editor-text-secondary: #cbd5e0;
-    --code-editor-hover: #4a5568;
-    --code-editor-gutter-bg: #21252b;
-    --code-editor-gutter-text: #636d83;
-}
-
 .code-editor-wrapper {
     display: flex;
     flex-direction: column;
