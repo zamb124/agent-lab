@@ -4,13 +4,7 @@
 
 {% block head %}
 <link rel="stylesheet" href="/static/builder/css/builder.css">
-<link rel="stylesheet" href="/static/css/components/code-editor.css">
-<!-- Ace Editor для inline кода -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.2/ace.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.2/mode-python.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.2/theme-monokai.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.2/theme-github.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.2/ext-language_tools.min.js"></script>
+<link rel="stylesheet" href="/static/builder/css/element-selector.css">
 {% endblock %}
 
 {% block content %}
@@ -82,8 +76,8 @@
                 </div>
             </div>
             
-            <!-- Conditional Node -->
-            <div class="palette-item" data-node-type="conditional_node" draggable="true">
+            <!-- Router Node -->
+            <div class="palette-item" data-node-type="router_node" draggable="true">
                 <div class="palette-icon" style="background: #ef4444;">
                     <i class="bi bi-lightning"></i>
                 </div>
@@ -230,53 +224,43 @@
 {% endblock %}
 
 {% block scripts %}
-<!-- Ace Editor (проще для CDN, чем CodeMirror 6) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.2/ace.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.2/ext-language_tools.js"></script>
-<script src="/static/js/components/code-editor.js"></script>
 <script src="/static/builder/js/palette.js"></script>
 <script src="/static/builder/js/properties-panel.js"></script>
 <script src="/static/builder/js/canvas.js"></script>
+<script src="/static/builder/js/element-selector.js"></script>
 <script src="/static/builder/js/drag-drop.js"></script>
 <script src="/static/builder/js/builder.js"></script>
 <script>
     // Инициализация Builder после загрузки всех зависимостей
     function initBuilder() {
         console.log('🚀 Инициализация Builder...');
-        
+
         if (typeof htmx === 'undefined') {
             console.log('⏳ HTMX еще не загружен, ждем...');
             setTimeout(initBuilder, 100);
             return;
         }
-        
-        if (typeof ace === 'undefined') {
-            console.log('⏳ Ace Editor еще не загружен, ждем...');
-            setTimeout(initBuilder, 100);
-            return;
-        }
-        
+
         if (typeof CodeEditor === 'undefined') {
             console.log('⏳ CodeEditor еще не загружен, ждем...');
             setTimeout(initBuilder, 100);
             return;
         }
-        
+
         if (typeof Builder === 'undefined') {
             console.error('❌ Builder class не найден!');
             return;
         }
-        
+
         console.log('✅ Все зависимости загружены. Создаем экземпляр Builder');
-        console.log('✅ ace:', typeof ace !== 'undefined');
         console.log('✅ CodeEditor:', typeof CodeEditor !== 'undefined');
-        
+
         window.builder = new Builder({
             flowId: {% if flow_id %}"{{ flow_id }}"{% else %}null{% endif %}
         });
         window.builder.init();
     }
-    
+
     document.addEventListener('DOMContentLoaded', initBuilder);
 </script>
 {% endblock %}

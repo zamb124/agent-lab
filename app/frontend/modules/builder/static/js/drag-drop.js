@@ -4,19 +4,22 @@
 class BuilderDragDrop {
     constructor(builder) {
         this.builder = builder;
-        
+
         // Состояние
         this.isDragging = false;
         this.draggedElement = null;
         this.draggedData = null;
         this.dropZone = null;
-        
+
         // Настройки
         this.config = {
             dragThreshold: 5, // Минимальное расстояние для начала drag
             dropZoneClass: 'drop-zone',
             draggingClass: 'dragging'
         };
+
+        // Компонент выбора типа элемента
+        this.elementSelector = new ElementSelector(builder);
     }
     
     /**
@@ -309,16 +312,20 @@ class BuilderDragDrop {
     async handleDrop(e) {
         e.preventDefault();
         e.stopPropagation();
-        
+
         console.log('🎯 DROP EVENT!', e);
         console.log('📦 dataTransfer types:', e.dataTransfer.types);
-        
+        console.log('📦 dataTransfer data:', {
+            'application/x-node-type': e.dataTransfer?.getData('application/x-node-type'),
+            'application/json': e.dataTransfer?.getData('application/json')
+        });
+
         let dropData = null;
-        
+
         // Проверяем данные из palette (новый формат)
         const nodeType = e.dataTransfer?.getData('application/x-node-type');
         console.log('🔍 Проверка nodeType:', nodeType);
-        
+
         if (nodeType) {
             console.log('🎨 Drop из palette:', nodeType);
             dropData = {
@@ -335,7 +342,7 @@ class BuilderDragDrop {
             } catch (error) {
                 console.warn('Не удалось получить данные из dataTransfer:', error);
             }
-            
+
             // Если нет данных в dataTransfer, используем текущие draggedData
             if (!dropData && this.draggedData) {
                 dropData = {
@@ -344,21 +351,26 @@ class BuilderDragDrop {
                 };
             }
         }
-        
+
         if (!dropData) {
             console.warn('Нет данных для drop');
             return;
         }
-        
+
         // Вычисляем позицию на канвасе
         const position = this.getCanvasPosition(e);
-        
+
         // Создаем элемент на канвасе
-        await this.createCanvasElement(dropData, position);
-        
-        console.log('Drop completed:', dropData, position);
+        await this.createCanvasElement(dropData, position, e);
     }
-    
+
+    /**
+     * Показать меню выбора типа элемента
+     */
+    async showElementTypeSelector(dropData, position, event) {
+        await this.elementSelector.showTypeSelection(dropData, position, event);
+    }
+
     /**
      * Обработка окончания drag
      */
@@ -410,47 +422,29 @@ class BuilderDragDrop {
     /**
      * Создание элемента на канвасе
      */
-    async createCanvasElement(dropData, position) {
-        const { type, data, nodeType } = dropData;
-        
-        try {
-            // Проверяем, что первым элементом может быть только flow
-            const isFirstNode = this.builder.canvas.nodes.size === 0;
-            const actualType = (type === 'palette_node' && nodeType) ? nodeType : type;
-            
-            if (isFirstNode && actualType !== 'flow' && actualType !== 'flow_node') {
-                this.builder.showNotification('Первым элементом на канвасе должен быть Flow', 'warning');
-                return;
-            }
-            
-            // Обработка нового формата (palette_node)
-            if (type === 'palette_node' && nodeType) {
-                await this.createNodeFromPalette(nodeType, position);
-                return;
-            }
-            
-            // Обработка старого формата
-            switch (type) {
-                case 'agent':
-                    await this.createAgentNode(data, position);
-                    break;
-                    
-                case 'tool':
-                    await this.createToolNode(data, position);
-                    break;
-                    
-                case 'flow':
-                    await this.createFlowWithExpansion(data, position);
-                    break;
-                    
-                default:
-                    console.warn('Неизвестный тип элемента:', type);
-            }
-            
-        } catch (error) {
-            console.error('❌ Ошибка создания элемента на канвасе:', error);
-            console.error('Stack trace:', error.stack);
-            this.builder.showNotification('Ошибка создания элемента: ' + error.message, 'error');
+    async createCanvasElement(dropData, position, event) {
+        console.log('createCanvasElement called with:', dropData, position);
+        const { type, nodeType } = dropData;
+
+        // Определяем тип элемента
+        const elementType = type === 'palette_node' ? nodeType : type;
+        console.log('createCanvasElement:', { type, nodeType, elementType });
+
+        // Показываем меню выбора только для основных типов
+        const shouldShowMenu = ['flow_node', 'agent_node', 'tool_node'].includes(elementType);
+        console.log('shouldShowMenu:', shouldShowMenu, 'for elementType:', elementType);
+
+        if (shouldShowMenu) {
+            console.log('Showing menu for:', elementType);
+            // Показываем меню выбора типа элемента
+            await this.showElementTypeSelector({
+                ...dropData,
+                type: elementType // Нормализуем тип для меню выбора
+            }, position, event);
+        } else {
+            console.log('Creating element directly for:', elementType, 'nodeType:', nodeType, 'type:', type);
+            // Для других типов (function_node, message_node, router_node) создаем сразу
+            await this.createNodeFromPalette(nodeType || type, position);
         }
     }
     
@@ -507,6 +501,7 @@ class BuilderDragDrop {
             // Эти типы нод не требуют создания сущностей в БД
             // Параметры уже установлены в nodeData
             console.log(`✅ Создание ${nodeType} без API вызова`);
+            console.log('Node data:', nodeData);
         } else {
             console.warn(`⚠️ Неизвестный тип ноды: ${nodeType}`);
         }

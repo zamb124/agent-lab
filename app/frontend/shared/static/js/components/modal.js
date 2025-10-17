@@ -149,17 +149,9 @@ class ModalManager {
 
 const modalManager = new ModalManager();
 
-export function showModal(content, options = {}) {
-    return modalManager.show(content, options);
-}
-
-export function hideModal(id) {
-    modalManager.hide(id);
-}
-
-export function hideAllModals() {
-    modalManager.hideAll();
-}
-
-export default modalManager;
+// Экспортируем в глобальную область
+window.modalManager = modalManager;
+window.showModal = (content, options = {}) => modalManager.show(content, options);
+window.hideModal = (id) => modalManager.hide(id);
+window.hideAllModals = () => modalManager.hideAll();
 
