@@ -159,6 +159,11 @@ class Builder {
             clearCanvasBtn.addEventListener('click', () => this.clearCanvas());
         }
         
+        const resetToCodeBtn = document.getElementById('resetToCodeBtn');
+        if (resetToCodeBtn) {
+            resetToCodeBtn.addEventListener('click', () => this.resetToCode());
+        }
+        
         // Горячие клавиши
         document.addEventListener('keydown', (e) => this.handleKeydown(e));
         
@@ -486,9 +491,11 @@ class Builder {
     enableFlowActions() {
         const saveBtn = document.getElementById('saveFlowBtn');
         const runBtn = document.getElementById('runFlowBtn');
+        const resetBtn = document.getElementById('resetToCodeBtn');
         
         if (saveBtn) saveBtn.disabled = false;
         if (runBtn) runBtn.disabled = false;
+        if (resetBtn) resetBtn.disabled = false;
     }
     
     /**
@@ -812,15 +819,54 @@ class Builder {
         }
     }
     
+    async resetToCode() {
+        if (!this.currentFlow) {
+            this.showNotification('Нет активного флоу', 'warning');
+            return;
+        }
+        
+        if (!confirm('Сбросить к коду? Canvas будет пересоздан из graph_definition.')) {
+            return;
+        }
+        
+        try {
+            const flowId = this.currentFlow.flow_id;
+            
+            // Очищаем canvas_data через PUT /canvas
+            const response = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}/canvas`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({nodes: [], edges: [], entry_point: null})
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            // СНАЧАЛА очищаем текущий граф на канвасе
+            this.canvas.clearGraph();
+            
+            // ПОТОМ перезагружаем flow
+            await this.loadFlow(flowId);
+            this.showNotification('Canvas сброшен к коду и перезагружен', 'success');
+            
+        } catch (error) {
+            console.error('Ошибка сброса:', error);
+            this.showNotification('Ошибка: ' + error.message, 'error');
+        }
+    }
+    
     /**
      * Отключение действий с флоу
      */
     disableFlowActions() {
         const saveBtn = document.getElementById('saveFlowBtn');
         const runBtn = document.getElementById('runFlowBtn');
+        const resetBtn = document.getElementById('resetToCodeBtn');
         
         if (saveBtn) saveBtn.disabled = true;
         if (runBtn) runBtn.disabled = true;
+        if (resetBtn) resetBtn.disabled = true;
     }
 }
 

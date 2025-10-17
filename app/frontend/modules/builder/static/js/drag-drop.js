@@ -895,6 +895,14 @@ class BuilderDragDrop {
             const graphNode = graphDef.nodes[i];
             const nodeId = graphNode.id;
             
+            console.log(`📦 GraphNode[${nodeId}]:`, {
+                type: graphNode.type,
+                inline_code: graphNode.inline_code ? 'есть' : 'нет',
+                function_path: graphNode.function_path || 'нет',
+                code_mode: graphNode.code_mode,
+                params: graphNode.params
+            });
+            
             // Проверяем есть ли у этой ноды conditional edges (router)
             const hasConditionalEdges = graphDef.edges.some(edge => 
                 edge.source === nodeId && edge.condition_type === 'router'
@@ -919,6 +927,10 @@ class BuilderDragDrop {
                     description: graphNode.description || this.getDefaultNodeDescription(nodeType),
                     ...graphNode.params
                 },
+                // Копируем поля из GraphNode на верхний уровень
+                inline_code: graphNode.inline_code || null,
+                function_path: graphNode.function_path || null,
+                code_mode: graphNode.code_mode || 'code_reference',
                 ui: {
                     x: nodePosition.x,
                     y: nodePosition.y,

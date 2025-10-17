@@ -26,6 +26,7 @@ from app.frontend.api import agents as frontend_agents
 from app.frontend.api import tools as frontend_tools
 from app.frontend.api import variables as frontend_variables
 from app.frontend.api import i18n as frontend_i18n
+from app.frontend.api import code as frontend_code
 from app.frontend.pages import auth as auth_pages
 from app.frontend.pages import dashboard as dashboard_pages
 from app.frontend.pages import public as public_pages
@@ -302,6 +303,7 @@ app.include_router(frontend_agents.router, prefix="/frontend/api", tags=["fronte
 app.include_router(frontend_tools.router, prefix="/frontend/api", tags=["frontend-tools"], include_in_schema=False)
 app.include_router(frontend_variables.router, prefix="/frontend/api", tags=["frontend-variables"], include_in_schema=False)
 app.include_router(frontend_i18n.router, prefix="/frontend/api/i18n", tags=["frontend-i18n"], include_in_schema=False)
+app.include_router(frontend_code.router, prefix="/frontend/api", tags=["frontend-code"], include_in_schema=False)
 
 # Frontend Pages (HTML) - скрыто от публичной документации
 app.include_router(public_pages.router, tags=["public-pages"], include_in_schema=False)

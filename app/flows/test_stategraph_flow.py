@@ -11,5 +11,6 @@ test_stategraph_flow_config = FlowConfig(
     entry_point_agent="app.agents.test_stategraph_agent.test_stategraph_agent_config",
     timeout=120,
     max_retries=3,
+    is_public=True
 )
 

@@ -1,0 +1,304 @@
+/**
+ * Стили для универсального CodeEditor компонента
+ * Используется в Builder, админке тулов, везде где нужен Python редактор
+ * Адаптируется под светлую и темную темы
+ */
+
+:root {
+    --code-editor-bg: #1a202c;
+    --code-editor-toolbar-bg: #2d3748;
+    --code-editor-border: #4a5568;
+    --code-editor-text: #e2e8f0;
+    --code-editor-text-secondary: #cbd5e0;
+    --code-editor-hover: #4a5568;
+    --code-editor-gutter-bg: #21252b;
+    --code-editor-gutter-text: #636d83;
+}
+
+[data-theme="light"] {
+    --code-editor-bg: #ffffff;
+    --code-editor-toolbar-bg: #f7fafc;
+    --code-editor-border: #e2e8f0;
+    --code-editor-text: #1a202c;
+    --code-editor-text-secondary: #4a5568;
+    --code-editor-hover: #edf2f7;
+    --code-editor-gutter-bg: #f7fafc;
+    --code-editor-gutter-text: #a0aec0;
+}
+
+/* Builder всегда темный */
+.builder-container .code-editor-wrapper {
+    --code-editor-bg: #1a202c;
+    --code-editor-toolbar-bg: #2d3748;
+    --code-editor-border: #4a5568;
+    --code-editor-text: #e2e8f0;
+    --code-editor-text-secondary: #cbd5e0;
+    --code-editor-hover: #4a5568;
+    --code-editor-gutter-bg: #21252b;
+    --code-editor-gutter-text: #636d83;
+}
+
+.code-editor-wrapper {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    border: 1px solid var(--code-editor-border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--code-editor-bg);
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.code-editor-wrapper.code-editor-fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    border-radius: 0;
+    margin: 0;
+}
+
+.code-editor-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--code-editor-toolbar-bg);
+    border-bottom: 1px solid var(--code-editor-border);
+    transition: background-color 0.2s ease;
+}
+
+.toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.toolbar-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--code-editor-text);
+}
+
+.toolbar-label i {
+    font-size: 16px;
+    color: var(--primary-color, #3b82f6);
+}
+
+.toolbar-right {
+    display: flex;
+    gap: 6px;
+}
+
+.toolbar-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--code-editor-text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.toolbar-btn:hover {
+    background: var(--code-editor-hover);
+    color: var(--code-editor-text);
+    transform: translateY(-1px);
+}
+
+.toolbar-btn:active {
+    transform: translateY(0) scale(0.95);
+}
+
+.toolbar-btn i {
+    font-size: 15px;
+}
+
+.code-editor-container {
+    flex: 1;
+    overflow: hidden;
+    background: transparent;
+    min-height: 200px;
+    position: relative;
+}
+
+.code-editor-container .ace_editor {
+    width: 100% !important;
+    height: 100% !important;
+    font-size: 14px;
+    line-height: 1.6;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+}
+
+/* Ace Editor темная тема (monokai) */
+[data-theme="dark"] .code-editor-container .ace_gutter {
+    background: var(--code-editor-gutter-bg) !important;
+    border-right: 1px solid var(--code-editor-border);
+    color: var(--code-editor-gutter-text) !important;
+}
+
+/* Ace Editor светлая тема (github) */
+[data-theme="light"] .code-editor-container .ace_gutter {
+    background: var(--code-editor-gutter-bg) !important;
+    border-right: 1px solid var(--code-editor-border);
+    color: var(--code-editor-gutter-text) !important;
+}
+
+.code-editor-container .ace_gutter-active-line {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+.code-editor-container .ace_active-line {
+    background-color: rgba(59, 130, 246, 0.08) !important;
+}
+
+.code-editor-container .ace_selection {
+    background-color: rgba(59, 130, 246, 0.25) !important;
+}
+
+.code-editor-container .ace_autocomplete {
+    background: var(--code-editor-bg) !important;
+    border: 1px solid var(--code-editor-border) !important;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    color: var(--code-editor-text) !important;
+}
+
+.code-editor-container .ace_autocomplete .ace_marker-layer .ace_active-line {
+    background: var(--primary-color, #3b82f6) !important;
+}
+
+.code-editor-container .ace_autocomplete .ace_line-hover {
+    background: var(--code-editor-hover) !important;
+}
+
+.code-editor-status {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px;
+    background: var(--code-editor-toolbar-bg);
+    border-top: 1px solid var(--code-editor-border);
+    font-size: 12px;
+    color: var(--code-editor-text-secondary);
+    transition: background-color 0.2s ease;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.status-item i {
+    font-size: 13px;
+}
+
+.status-success {
+    color: var(--success-color, #10b981);
+}
+
+.status-error {
+    color: var(--error-color, #ef4444);
+}
+
+.status-warning {
+    color: var(--warning-color, #f59e0b);
+}
+
+.status-info {
+    color: var(--info-color, #3b82f6);
+}
+
+.status-validating {
+    color: var(--text-secondary, #cbd5e0);
+}
+
+.store-vars-popup {
+    max-width: 500px;
+    text-align: left;
+    padding: 12px;
+}
+
+.store-vars-popup h4 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--code-editor-text);
+}
+
+.store-vars-popup ul {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 16px 0;
+}
+
+.store-vars-popup li {
+    padding: 6px 0;
+    font-size: 13px;
+    color: var(--code-editor-text-secondary);
+    border-bottom: 1px solid var(--code-editor-border);
+}
+
+.store-vars-popup li:last-child {
+    border-bottom: none;
+}
+
+.store-vars-popup code {
+    background: var(--code-editor-hover);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+    font-size: 12px;
+    color: var(--primary-color, #3b82f6);
+}
+
+@media (max-width: 768px) {
+    .code-editor-toolbar {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .toolbar-right {
+        flex-wrap: wrap;
+    }
+    
+    .code-editor-container {
+        min-height: 250px;
+    }
+}
+
+.code-editor-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    color: var(--code-editor-text-secondary);
+    font-size: 14px;
+}
+
+.code-editor-loading i {
+    margin-right: 8px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+

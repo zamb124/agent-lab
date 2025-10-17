@@ -1308,4 +1308,10 @@
         color: rgba(255, 255, 255, 0.6);
         border-top-color: rgba(255, 105, 180, 0.2);
     }
+    
+    /* Скрываем виджет чата в Builder */
+    .builder-container ~ #chat-widget,
+    .builder-container ~ #chat-widget-toggle {
+        display: none !important;
+    }
 </style>

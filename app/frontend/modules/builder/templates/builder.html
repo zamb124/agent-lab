@@ -4,6 +4,7 @@
 
 {% block head %}
 <link rel="stylesheet" href="/static/builder/css/builder.css">
+<link rel="stylesheet" href="/static/css/components/code-editor.css">
 {% endblock %}
 
 {% block content %}
@@ -75,13 +76,13 @@
                 </div>
             </div>
             
-            <!-- Router Node -->
-            <div class="palette-item" data-node-type="router_node" draggable="true">
+            <!-- Conditional Node -->
+            <div class="palette-item" data-node-type="conditional_node" draggable="true">
                 <div class="palette-icon" style="background: #ef4444;">
                     <i class="bi bi-lightning"></i>
                 </div>
                 <div class="palette-info">
-                    <div class="palette-name">Router</div>
+                    <div class="palette-name">Conditional</div>
                     <div class="palette-desc">Router logic</div>
                 </div>
             </div>
@@ -137,6 +138,9 @@
                 <button class="btn btn-secondary btn-sm" id="clearCanvasBtn" title="{{ t('builder.toolbar.clear_canvas') }}">
                     <i class="bi bi-trash"></i>
                 </button>
+                <button class="btn btn-warning btn-sm" id="resetToCodeBtn" disabled title="Сбросить к коду (очистить canvas_data)">
+                    <i class="bi bi-arrow-counterclockwise"></i>
+                </button>
                 <button class="btn btn-success btn-sm" id="saveFlowBtn" disabled>
                     <i class="bi bi-cloud-upload"></i> {{ t('builder.toolbar.save') }}
                 </button>
@@ -174,16 +178,30 @@
     <!-- Панель свойств справа -->
     <aside class="properties-panel" id="propertiesPanel" style="display: none;">
         <!-- Фиксированный крестик закрытия -->
-        <button class="properties-close-btn" id="propertiesCloseBtn">
+        <button class="properties-close-btn" id="closePanelBtn">
             <i class="bi bi-x-lg"></i>
         </button>
         
+        <!-- Заголовок панели (только для inline редакторов) -->
+        <div class="properties-header" id="propertiesTitle" style="display: none;">
+            <span class="properties-name">Properties</span>
+        </div>
+        
         <div class="properties-body" id="propertiesBody">
-            <!-- Форма будет загружена через HTMX -->
             <div class="properties-empty">
                 <i class="bi bi-cursor"></i>
                 <p>Select a node to edit properties</p>
             </div>
+        </div>
+        
+        <!-- Footer для кнопок действий -->
+        <div class="properties-footer" id="propertiesFooter" style="display: none;">
+            <button class="btn btn-sm btn-outline-danger" id="deleteNodeBtn">
+                <i class="bi bi-trash"></i> Delete
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" id="duplicateNodeBtn">
+                <i class="bi bi-copy"></i> Duplicate
+            </button>
         </div>
     </aside>
 </div>
@@ -206,13 +224,17 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- Ace Editor (проще для CDN, чем CodeMirror 6) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.2/ace.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.2/ext-language_tools.js"></script>
+<script src="/static/js/components/code-editor.js"></script>
 <script src="/static/builder/js/palette.js"></script>
 <script src="/static/builder/js/properties-panel.js"></script>
 <script src="/static/builder/js/canvas.js"></script>
 <script src="/static/builder/js/drag-drop.js"></script>
 <script src="/static/builder/js/builder.js"></script>
 <script>
-    // Инициализация Builder после загрузки HTMX
+    // Инициализация Builder после загрузки всех зависимостей
     function initBuilder() {
         console.log('🚀 Инициализация Builder...');
         
@@ -222,12 +244,27 @@
             return;
         }
         
+        if (typeof ace === 'undefined') {
+            console.log('⏳ Ace Editor еще не загружен, ждем...');
+            setTimeout(initBuilder, 100);
+            return;
+        }
+        
+        if (typeof CodeEditor === 'undefined') {
+            console.log('⏳ CodeEditor еще не загружен, ждем...');
+            setTimeout(initBuilder, 100);
+            return;
+        }
+        
         if (typeof Builder === 'undefined') {
             console.error('❌ Builder class не найден!');
             return;
         }
         
-        console.log('✅ Создаем экземпляр Builder');
+        console.log('✅ Все зависимости загружены. Создаем экземпляр Builder');
+        console.log('✅ ace:', typeof ace !== 'undefined');
+        console.log('✅ CodeEditor:', typeof CodeEditor !== 'undefined');
+        
         window.builder = new Builder({
             flowId: {{ flow_id | tojson if flow_id else 'null' }}
         });

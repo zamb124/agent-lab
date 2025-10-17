@@ -158,13 +158,15 @@
     top: 80px;
     width: 400px;
     max-height: calc(100vh - 120px);
-    background: white;
-    border: 1px solid #e5e7eb;
+    background: var(--bg-card);
+    border: 1px solid var(--border-primary);
     border-radius: 16px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    box-shadow: var(--shadow-lg);
     z-index: 100;
     overflow: hidden;
     animation: fadeIn 0.2s ease;
+    display: flex;
+    flex-direction: column;
 }
 
 @keyframes fadeIn {
@@ -178,9 +180,41 @@
     }
 }
 
+.properties-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-primary);
+    background: var(--bg-subtle);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.properties-icon {
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+}
+
+.properties-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
 .properties-body {
+    flex: 1;
     overflow-y: auto;
-    max-height: calc(100vh - 120px);
+    max-height: calc(100vh - 180px);
+}
+
+.properties-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border-primary);
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    flex-shrink: 0;
 }
 
 /* Шапка формы фиксируется */
@@ -235,7 +269,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 100%;
+    min-height: 200px;
     color: var(--text-muted);
     text-align: center;
 }
@@ -249,6 +283,19 @@
 .properties-empty p {
     margin: 0;
     font-size: 14px;
+}
+
+.properties-form {
+    padding: 20px;
+}
+
+.properties-form h4 {
+    margin-top: 0;
+    margin-bottom: 16px;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .properties-loading {

@@ -82,6 +82,41 @@ async def create_flow(
     return flow_config
 
 
+@router.get("/{flow_id:path}/variables")
+async def get_flow_variables(
+    flow_id: str,
+    flow_repo: FlowRepositoryDep,
+    agent_repo: AgentRepositoryDep
+) -> Dict[str, Any]:
+    """
+    Получить все переменные flow для автокомплита в code editor.
+    Возвращает: variables, store, available_tools
+    """
+    flow = await flow_repo.get(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    
+    available_tools = []
+    
+    if flow.entry_point_agent:
+        agent = await agent_repo.get(flow.entry_point_agent)
+        if agent and agent.tools:
+            available_tools = [
+                {
+                    "name": tool.tool_id,
+                    "title": tool.title or tool.tool_id,
+                    "description": tool.description or ""
+                }
+                for tool in agent.tools
+            ]
+    
+    return {
+        "variables": flow.variables or {},
+        "store": flow.store or {},
+        "available_tools": available_tools
+    }
+
+
 @router.get("/{flow_id:path}/canvas")
 async def get_flow_canvas(flow_id: str, storage: StorageDep, flow_repo: FlowRepositoryDep) -> Dict[str, Any]:
     """Получить данные канваса для флоу"""
