@@ -1358,7 +1358,7 @@
     border-color: #06b6d4;
 }
 
-.canvas-node[data-node-type="conditional_node"] {
+.canvas-node[data-node-type="router_node"] {
     border-color: #ef4444;
 }
 
@@ -1386,7 +1386,7 @@
 .node-simple-icon.tool { background: #10b981; }
 .node-simple-icon.function { background: #f59e0b; }
 .node-simple-icon.message { background: #06b6d4; }
-.node-simple-icon.conditional { background: #ef4444; }
+.node-simple-icon.router { background: #ef4444; }
 
 .node-simple-info {
     flex: 1;
@@ -1611,6 +1611,7 @@
 
 /* Временная связь при создании */
 .temp-edge {
+    fill: none;
     stroke: var(--accent-primary);
     stroke-width: 2;
     stroke-dasharray: 5,5;

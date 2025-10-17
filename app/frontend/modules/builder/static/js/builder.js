@@ -746,18 +746,30 @@ class Builder {
     }
     
     showNotification(message, type = 'info', duration = 3000) {
-        // Простая реализация уведомлений
-        const icon = {
-            'success': '✅',
-            'error': '❌',
-            'warning': '⚠️',
-            'info': 'ℹ️'
-        }[type] || 'ℹ️';
-        
-        console.log(`${icon} ${message}`);
-        
-        // Можно добавить toast notification позже
-        // Пока просто логируем
+        if (window.app && window.app.showNotification) {
+            // Преобразуем типы builder → app
+            const appType = {
+                'success': 'success',
+                'error': 'danger',
+                'warning': 'warning',
+                'info': 'info'
+            }[type] || 'info';
+            
+            // Для ошибок и предупреждений увеличиваем время показа
+            const appDuration = (type === 'error' || type === 'warning') ? 8000 : duration;
+            
+            window.app.showNotification(message, appType, appDuration);
+        } else {
+            // Фолбэк на консоль если app не загружен
+            const icon = {
+                'success': '✅',
+                'error': '❌',
+                'warning': '⚠️',
+                'info': 'ℹ️'
+            }[type] || 'ℹ️';
+            
+            console.log(`${icon} ${message}`);
+        }
     }
     
     /**

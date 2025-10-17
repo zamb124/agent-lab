@@ -714,7 +714,7 @@ class BuilderCanvas {
             'tool_node': 'bi bi-tools',
             'function_node': 'bi bi-code-square',
             'message_node': 'bi bi-chat-dots',
-            'conditional_node': 'bi bi-lightning'
+            'router_node': 'bi bi-lightning'
         };
         return icons[nodeType] || 'bi bi-square';
     }
@@ -729,7 +729,7 @@ class BuilderCanvas {
             'tool_node': 'tool',
             'function_node': 'function',
             'message_node': 'message',
-            'conditional_node': 'conditional'
+            'router_node': 'router'
         };
         return types[nodeType] || 'default';
     }
@@ -744,7 +744,7 @@ class BuilderCanvas {
             'tool_node': 'Tool',
             'function_node': 'Function',
             'message_node': 'Message',
-            'conditional_node': 'Conditional'
+            'router_node': 'Router'
         };
         return names[nodeType] || 'Node';
     }
@@ -759,7 +759,7 @@ class BuilderCanvas {
             'tool_node': 'Function call',
             'function_node': 'Custom code',
             'message_node': 'Send message',
-            'conditional_node': 'Router logic'
+            'router_node': 'Router logic'
         };
         return descs[nodeType] || '';
     }
@@ -1146,10 +1146,10 @@ class BuilderCanvas {
             // Финальное обновление связей
             this.updateNodeEdges(this.draggedNode);
             
-            // Очищаем throttle
-            if (this.edgeUpdateThrottle) {
-                clearTimeout(this.edgeUpdateThrottle);
-                this.edgeUpdateThrottle = null;
+            // Очищаем requestAnimationFrame
+            if (this.edgeUpdateFrame) {
+                cancelAnimationFrame(this.edgeUpdateFrame);
+                this.edgeUpdateFrame = null;
             }
             
             // Если это был клик - открываем properties panel
@@ -1187,15 +1187,16 @@ class BuilderCanvas {
      * Throttled обновление связей ноды для производительности
      */
     throttledUpdateNodeEdges(node) {
-        // Очищаем предыдущий throttle
-        if (this.edgeUpdateThrottle) {
-            clearTimeout(this.edgeUpdateThrottle);
+        // Отменяем предыдущий запрос если есть
+        if (this.edgeUpdateFrame) {
+            cancelAnimationFrame(this.edgeUpdateFrame);
         }
         
-        // Устанавливаем новый throttle с задержкой 16ms (60 FPS)
-        this.edgeUpdateThrottle = setTimeout(() => {
+        // Используем requestAnimationFrame для плавности (синхронно с экраном)
+        this.edgeUpdateFrame = requestAnimationFrame(() => {
             this.updateNodeEdges(node);
-        }, 16);
+            this.edgeUpdateFrame = null;
+        });
     }
     
     /**
@@ -1323,15 +1324,17 @@ class BuilderCanvas {
         const sourceType = sourceNode.data.type;
         const targetType = targetNode.data.type;
         
-        // Правила подключений:
-        // Flow -> Agent (только)
-        // Agent -> Tool или Agent
-        // Tool -> ничего (нет выходного порта)
+        console.log(`🔍 Валидация: ${sourceType} -> ${targetType}`);
+        
+        // Правила подключений для StateGraph нод:
+        // Flow -> любая нода с input портом
+        // Agent, Function, Router, Message -> любая нода с input портом
+        // Tool -> ничего (конечная нода, нет output порта)
         
         if (sourceType === 'flow_node') {
-            // Flow может подключаться только к Agent
-            if (targetType !== 'agent_node') {
-                console.warn(`Flow не может подключаться к ${targetType}`);
+            // Flow может подключаться к любой ноде кроме другого Flow
+            if (targetType === 'flow_node') {
+                console.warn(`Flow не может подключаться к другому Flow`);
                 return false;
             }
             
@@ -1348,22 +1351,25 @@ class BuilderCanvas {
             return true;
         }
         
-        if (sourceType === 'agent_node') {
-            // Agent может подключаться к Tool или другому Agent
-            if (targetType !== 'tool_node' && targetType !== 'agent_node') {
-                console.warn(`Agent не может подключаться к ${targetType}`);
-                return false;
-            }
-            return true;
-        }
-        
         if (sourceType === 'tool_node') {
-            // Tool не может ни к чему подключаться (нет выходного порта)
+            // Tool - конечная нода, не может быть источником
             console.warn('Tool не может быть источником подключения');
             return false;
         }
         
-        return false;
+        // Для всех остальных типов (agent, function, router, message) - разрешаем
+        // Они могут подключаться к любой ноде кроме flow и самих себя
+        if (targetType === 'flow_node') {
+            console.warn(`${sourceType} не может подключаться к Flow`);
+            return false;
+        }
+        
+        if (sourceId === targetId) {
+            console.warn('Нельзя подключить ноду к самой себе');
+            return false;
+        }
+        
+        return true;
     }
     
     /**

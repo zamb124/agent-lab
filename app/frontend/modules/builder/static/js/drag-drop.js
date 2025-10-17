@@ -414,15 +414,18 @@ class BuilderDragDrop {
         const { type, data, nodeType } = dropData;
         
         try {
-            // Обработка нового формата (palette_node)
-            if (type === 'palette_node' && nodeType) {
-                await this.createNodeFromPalette(nodeType, position);
+            // Проверяем, что первым элементом может быть только flow
+            const isFirstNode = this.builder.canvas.nodes.size === 0;
+            const actualType = (type === 'palette_node' && nodeType) ? nodeType : type;
+            
+            if (isFirstNode && actualType !== 'flow' && actualType !== 'flow_node') {
+                this.builder.showNotification('Первым элементом на канвасе должен быть Flow', 'warning');
                 return;
             }
             
-            // Проверяем, что первым элементом может быть только флоу
-            if (this.builder.canvas.nodes.size === 0 && type !== 'flow') {
-                this.builder.showNotification('Первым элементом на канвасе должен быть Flow', 'warning');
+            // Обработка нового формата (palette_node)
+            if (type === 'palette_node' && nodeType) {
+                await this.createNodeFromPalette(nodeType, position);
                 return;
             }
             
@@ -445,7 +448,8 @@ class BuilderDragDrop {
             }
             
         } catch (error) {
-            console.error('Ошибка создания элемента на канвасе:', error);
+            console.error('❌ Ошибка создания элемента на канвасе:', error);
+            console.error('Stack trace:', error.stack);
             this.builder.showNotification('Ошибка создания элемента: ' + error.message, 'error');
         }
     }
@@ -499,10 +503,20 @@ class BuilderDragDrop {
             const toolData = await response.json();
             nodeData.params.tool_id = toolData.tool_id;
             nodeData.params.name = toolData.name || 'New Tool';
+        } else if (nodeType === 'function_node' || nodeType === 'router_node' || nodeType === 'message_node') {
+            // Эти типы нод не требуют создания сущностей в БД
+            // Параметры уже установлены в nodeData
+            console.log(`✅ Создание ${nodeType} без API вызова`);
+        } else {
+            console.warn(`⚠️ Неизвестный тип ноды: ${nodeType}`);
         }
         
         await this.builder.canvas.addNode(nodeData);
         console.log(`✅ ${nodeData.params.name} добавлен на канвас`);
+        
+        // Показываем успешную нотификацию
+        const nodeTypeName = this.getDefaultNodeName(nodeType).replace('New ', '');
+        this.builder.showNotification(`${nodeTypeName} добавлен на канвас`, 'success');
     }
     
     /**
@@ -515,7 +529,7 @@ class BuilderDragDrop {
             'tool_node': 'New Tool',
             'function_node': 'New Function',
             'message_node': 'New Message',
-            'conditional_node': 'New Conditional'
+            'router_node': 'New Router'
         };
         return names[nodeType] || 'New Node';
     }
@@ -530,7 +544,7 @@ class BuilderDragDrop {
             'tool_node': 'Function call',
             'function_node': 'Custom code',
             'message_node': 'Send message',
-            'conditional_node': 'Router logic'
+            'router_node': 'Router logic'
         };
         return descs[nodeType] || '';
     }
@@ -886,11 +900,11 @@ class BuilderDragDrop {
                 edge.source === nodeId && edge.condition_type === 'router'
             );
             
-            // Если это function_node с conditional edges - делаем conditional_node
+            // Если это function_node с conditional edges - делаем router_node
             let nodeType = graphNode.type;
             if (nodeType === 'function_node' && hasConditionalEdges) {
-                nodeType = 'conditional_node';
-                console.log(`🔄 ${nodeId}: function_node → conditional_node (есть router edges)`);
+                nodeType = 'router_node';
+                console.log(`🔄 ${nodeId}: function_node → router_node (есть router edges)`);
             }
             
             // Рассчитываем позицию

@@ -61,12 +61,12 @@ class HistorySource(str):
 class NodeType(str, Enum):
     """Типы нод в графе"""
 
-    AGENT_NODE = "agent_node"
-    TOOL_NODE = "tool_node"
-    FUNCTION_NODE = "function_node"
-    FLOW_NODE = "flow_node"
-    CONDITIONAL_EDGE = "conditional_edge"
-    MESSAGE_NODE = "message_node"
+    AGENT_NODE = "agent_node"          # Вызов субагента
+    TOOL_NODE = "tool_node"            # Вызов инструмента
+    FUNCTION_NODE = "function_node"    # Вызов функции (обычная функция)
+    ROUTER_NODE = "router_node"        # Функция-роутер для условных переходов
+    FLOW_NODE = "flow_node"            # Вызов другого flow
+    MESSAGE_NODE = "message_node"      # Отправка фиксированного сообщения
 
 
 class AgentType(str, Enum):
@@ -161,13 +161,13 @@ class GraphEdge(BaseModel):
     condition: Optional[str] = Field(
         default=None,
         title="Условие",
-        description="Условие или выражение для перехода",
+        description="Условие или выражение для перехода (только для ROUTER и EXPRESSION)",
         widget_attrs={"rows": 3},
     )
-    condition_type: ConditionType = Field(
-        default=ConditionType.EXPRESSION,
+    condition_type: Optional[ConditionType] = Field(
+        default=None,
         title="Тип условия",
-        description="Тип условия для перехода",
+        description="Тип условия для перехода (None = обычное ребро, ROUTER = функция-роутер, EXPRESSION = булево выражение)",
     )
 
 
@@ -258,7 +258,6 @@ class GraphDefinition(BaseModel):
             agent_id=f"{agent_class.__module__}.{agent_class.__name__}",
             name="temp",
             description="temp",
-            type=AgentType.REACT,
         )
         
         try:
@@ -694,8 +693,33 @@ class AgentConfig(BuilderEntity):
     type: AgentType = Field(
         default=AgentType.REACT,
         title="Тип агента",
-        description="Тип агента (ReAct или StateGraph)",
+        description="Тип агента (ReAct или StateGraph). Автоматически определяется по graph_definition",
+        readonly=True,
     )
+    
+    @field_validator('type', mode='before')
+    @classmethod
+    def auto_determine_type(cls, v, info):
+        """Автоматически определяет тип агента на основе graph_definition"""
+        data = info.data
+        
+        # Если graph_definition есть → StateGraph
+        if data.get('graph_definition'):
+            return AgentType.STATEGRAPH
+        
+        # Если передан тип явно, используем его
+        if v:
+            return v
+            
+        # По умолчанию ReAct
+        return AgentType.REACT
+    
+    def __init__(self, **data):
+        """Инициализация с автоопределением типа"""
+        # Если type не передан, но есть graph_definition → STATEGRAPH
+        if 'type' not in data and data.get('graph_definition'):
+            data['type'] = AgentType.STATEGRAPH
+        super().__init__(**data)
 
     # Режим хранения кода
     code_mode: CodeMode = Field(
@@ -872,7 +896,14 @@ class AgentConfig(BuilderEntity):
         module = __import__(module_path, fromlist=[class_name])
         agent_class = getattr(module, class_name)
         
-        agent_config = await cls.from_class(agent_class=agent_class)
+        # Проверяем что это класс, а не готовый AgentConfig
+        if isinstance(agent_class, cls):
+            # Это уже готовый AgentConfig (например, test_stategraph_agent_config)
+            agent_config = agent_class
+            logger.info(f"✅ Найден готовый AgentConfig: {agent_id}")
+        else:
+            # Это класс агента, нужно создать конфиг
+            agent_config = await cls.from_class(agent_class=agent_class)
         
         await migrator.persister.save_agent(agent_config)
         
@@ -936,8 +967,6 @@ class AgentConfig(BuilderEntity):
         
         graph_definition = await GraphDefinition.migrate(agent_class)
         
-        agent_type = AgentType.STATEGRAPH if graph_definition else AgentType.REACT
-        
         llm_config = None
         if raw_llm_config:
             if isinstance(raw_llm_config, dict):
@@ -950,7 +979,6 @@ class AgentConfig(BuilderEntity):
             name=name,
             title=title,
             description=description,
-            type=agent_type,
             function_class=f"{agent_class.__module__}.{agent_class.__name__}",
             prompt=prompt,
             graph_definition=graph_definition,
