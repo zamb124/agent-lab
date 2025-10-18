@@ -12,12 +12,13 @@ if __name__ == "__main__":
     # Определяем количество воркеров на основе CPU cores
     if settings.server.workers == 4:  # Если не переопределено в конфиге
         cpu_count = multiprocessing.cpu_count()
-        workers = cpu_count * 2 + 1
+        workers = min(cpu_count * 2 + 1, 8)  # Максимум 8 воркеров
     else:
         workers = settings.server.workers
 
     print("🚀 Запуск Agents Lab в продакшн режиме...")
     print(f"📍 Адрес: http://{settings.server.host}:{settings.server.port}")
+    print(f"💻 CPU cores: {multiprocessing.cpu_count()}")
     print(f"🔧 Воркеров: {workers}")
     print(f"🏭 Worker class: {settings.server.worker_class}")
 

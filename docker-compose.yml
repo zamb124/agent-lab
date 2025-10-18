@@ -37,7 +37,7 @@ services:
         condition: service_healthy
         required: false
     restart: unless-stopped
-    command: python run.py
+    command: python run_prod.py
 
   # Task Worker
   worker:
