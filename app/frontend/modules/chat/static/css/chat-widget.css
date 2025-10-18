@@ -18,17 +18,17 @@
 }
 
 [data-theme="dark"] .chat-widget {
-    --chat-bg: var(--bg-card, #1e1e2e);
+    --chat-bg: rgba(30, 30, 46, 0.95);
     --chat-border: var(--border-primary, #374151);
-    --chat-header-bg: var(--bg-tertiary, #16213e);
+    --chat-header-bg: rgba(22, 33, 62, 0.95);
     --chat-header-text: var(--text-primary, #ffffff);
-    --chat-messages-bg: var(--bg-secondary, #1a1a2e);
-    --chat-input-bg: var(--bg-card, #1e1e2e);
+    --chat-messages-bg: rgba(26, 26, 46, 0.95);
+    --chat-input-bg: rgba(30, 30, 46, 0.95);
     --chat-input-border: var(--border-primary, #374151);
     --chat-input-text: var(--text-primary, #ffffff);
     --chat-user-msg-bg: var(--accent-primary, #6366f1);
     --chat-user-msg-text: white;
-    --chat-agent-msg-bg: var(--bg-hover, #252545);
+    --chat-agent-msg-bg: rgba(37, 37, 69, 0.9);
     --chat-agent-msg-text: var(--text-primary, #ffffff);
     --chat-agent-msg-border: var(--border-secondary, #4b5563);
     --chat-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.5));
