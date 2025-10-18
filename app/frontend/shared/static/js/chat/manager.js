@@ -74,6 +74,31 @@ class ChatManager {
         }
     }
 
+    getDefaultAgent() {
+        const DEFAULT_FAQ_FLOW_ID = 'app.flows.faq_flow.faq_flow_config';
+        
+        const customDefault = localStorage.getItem('default_agent_id');
+        if (customDefault) {
+            console.log('📦 Используем кастомный дефолтный агент:', customDefault);
+            return customDefault;
+        }
+
+        console.log('✅ Используем дефолтный FAQ агент:', DEFAULT_FAQ_FLOW_ID);
+        return DEFAULT_FAQ_FLOW_ID;
+    }
+
+    setDefaultAgent(agent_id) {
+        if (agent_id) {
+            localStorage.setItem('default_agent_id', agent_id);
+            console.log('✅ Установлен дефолтный агент:', agent_id);
+        }
+    }
+
+    clearDefaultAgentCache() {
+        localStorage.removeItem('default_agent_id');
+        console.log('🗑️ Кеш дефолтного агента очищен');
+    }
+
     getOrCreateSessionForAgent(agent_id) {
         if (!agent_id) {
             agent_id = 'default_agent';
@@ -501,7 +526,7 @@ class ChatManager {
     async open(options = {}) {
         console.log('🔵 Открытие чата:', options);
         
-        const {
+        let {
             agent_id = null,
             session_id = null,
             user_id = 'current_user',
@@ -509,6 +534,11 @@ class ChatManager {
             position = 'right',
             size = 'medium'
         } = options;
+
+        if (!agent_id) {
+            agent_id = this.getDefaultAgent();
+            console.log('📌 Агент не выбран, используем дефолтный FAQ агент:', agent_id);
+        }
 
         if (agent_id) {
             this.activeAgents.add(agent_id);
@@ -697,6 +727,11 @@ class ChatManager {
         
         if (toggle) {
             toggle.style.display = 'none';
+        }
+        
+        if (!this.currentAgent) {
+            console.log('📌 Чат открывается без агента, автоматически выбираем дефолтный');
+            this.open({});
         }
     }
 

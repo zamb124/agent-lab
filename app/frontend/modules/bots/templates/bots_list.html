@@ -15,12 +15,7 @@
     
     {# Карточки ботов #}
     {% for bot in bots %}
-    <div class="card bot-card" data-bot-id="{{ bot.flow_id }}" onclick="expandBot('{{ bot.flow_id }}')"
-        <button class="btn-icon btn-chat-mini" 
-                onclick="event.stopPropagation(); openBotChat('{{ bot.flow_id }}', '{{ bot.name }}')" 
-                title="Запустить">
-            <i class="bi bi-chat-dots"></i>
-        </button>
+    <div class="card bot-card" data-bot-id="{{ bot.flow_id }}" onclick="expandBot('{{ bot.flow_id }}')">
         <div class="bot-card-header">
             <div class="card-icon">
                 <i class="bi bi-robot"></i>
