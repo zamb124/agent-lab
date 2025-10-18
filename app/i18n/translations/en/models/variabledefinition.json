@@ -1,24 +1,24 @@
 {
   "fields": {
     "key": {
-      "title": "[TODO: models.variabledefinition.fields.key.title]",
-      "description": "[TODO: models.variabledefinition.fields.key.description]"
+      "title": "Key",
+      "description": "Variable key identifier"
     },
     "description": {
-      "title": "[TODO: models.variabledefinition.fields.description.title]",
-      "description": "[TODO: models.variabledefinition.fields.description.description]"
+      "title": "Description",
+      "description": "Variable description and purpose"
     },
     "default_value": {
-      "title": "[TODO: models.variabledefinition.fields.default_value.title]",
-      "description": "[TODO: models.variabledefinition.fields.default_value.description]"
+      "title": "Default Value",
+      "description": "Default value for the variable"
     },
     "is_secret": {
-      "title": "[TODO: models.variabledefinition.fields.is_secret.title]",
-      "description": "[TODO: models.variabledefinition.fields.is_secret.description]"
+      "title": "Is Secret",
+      "description": "Whether this variable contains sensitive information"
     },
     "required": {
-      "title": "[TODO: models.variabledefinition.fields.required.title]",
-      "description": "[TODO: models.variabledefinition.fields.required.description]"
+      "title": "Required",
+      "description": "Whether this variable is required"
     }
   }
 }

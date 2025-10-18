@@ -41,16 +41,16 @@
       "description": "Reference to current agent state (available in tools)"
     },
     "flow_config": {
-      "title": "[TODO: models.context.fields.flow_config.title]",
-      "description": "[TODO: models.context.fields.flow_config.description]"
+      "title": "Flow Config",
+      "description": "Flow configuration reference"
     },
     "agent_config": {
-      "title": "[TODO: models.context.fields.agent_config.title]",
-      "description": "[TODO: models.context.fields.agent_config.description]"
+      "title": "Agent Config",
+      "description": "Agent configuration reference"
     },
     "interface": {
-      "title": "[TODO: models.context.fields.interface.title]",
-      "description": "[TODO: models.context.fields.interface.description]"
+      "title": "Interface",
+      "description": "Communication interface for responses"
     }
   }
 }

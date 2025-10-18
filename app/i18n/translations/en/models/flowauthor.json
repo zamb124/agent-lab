@@ -1,28 +1,28 @@
 {
   "fields": {
     "name": {
-      "title": "[TODO: models.flowauthor.fields.name.title]",
-      "description": "[TODO: models.flowauthor.fields.name.description]"
+      "title": "Author Name",
+      "description": "Name of the flow author"
     },
     "email": {
-      "title": "[TODO: models.flowauthor.fields.email.title]",
-      "description": "[TODO: models.flowauthor.fields.email.description]"
+      "title": "Email",
+      "description": "Author's email address"
     },
     "website": {
-      "title": "[TODO: models.flowauthor.fields.website.title]",
-      "description": "[TODO: models.flowauthor.fields.website.description]"
+      "title": "Website",
+      "description": "Author's personal website"
     },
     "github": {
-      "title": "[TODO: models.flowauthor.fields.github.title]",
-      "description": "[TODO: models.flowauthor.fields.github.description]"
+      "title": "GitHub",
+      "description": "Author's GitHub profile"
     },
     "linkedin": {
-      "title": "[TODO: models.flowauthor.fields.linkedin.title]",
-      "description": "[TODO: models.flowauthor.fields.linkedin.description]"
+      "title": "LinkedIn",
+      "description": "Author's LinkedIn profile"
     },
     "twitter": {
-      "title": "[TODO: models.flowauthor.fields.twitter.title]",
-      "description": "[TODO: models.flowauthor.fields.twitter.description]"
+      "title": "Twitter",
+      "description": "Author's Twitter handle"
     }
   }
 }

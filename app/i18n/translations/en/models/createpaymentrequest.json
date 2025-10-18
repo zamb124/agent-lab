@@ -1,10 +1,10 @@
 {
   "fields": {
     "amount": {
-      "description": "[TODO: models.createpaymentrequest.fields.amount.description]"
+      "description": "Payment amount in rubles"
     },
     "provider": {
-      "description": "[TODO: models.createpaymentrequest.fields.provider.description]"
+      "description": "Payment provider (yoomoney, yukassa)"
     }
   }
 }

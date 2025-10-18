@@ -1,3 +1,3 @@
 {
-  "flow_id }}": "[TODO: {{ bot.flow_id }}]"
+  "flow_id }}": "{{ bot.flow_id }}"
 }

@@ -33,12 +33,12 @@
       "description": "Last activity time"
     },
     "message_count": {
-      "title": "[TODO: models.sessionconfig.fields.message_count.title]",
-      "description": "[TODO: models.sessionconfig.fields.message_count.description]"
+      "title": "Message Count",
+      "description": "Number of messages in session"
     },
     "first_message": {
-      "title": "[TODO: models.sessionconfig.fields.first_message.title]",
-      "description": "[TODO: models.sessionconfig.fields.first_message.description]"
+      "title": "First Message",
+      "description": "First message content in session"
     }
   }
 }

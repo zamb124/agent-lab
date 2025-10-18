@@ -31,25 +31,25 @@
       "description": "Additional parameters for LLM"
     },
     "context_window": {
-      "title": "[TODO: models.llmconfig.fields.context_window.title]",
-      "description": "[TODO: models.llmconfig.fields.context_window.description]"
+      "title": "Context Window",
+      "description": "Maximum context length in tokens"
     },
     "summarization_threshold": {
-      "title": "[TODO: models.llmconfig.fields.summarization_threshold.title]",
-      "description": "[TODO: models.llmconfig.fields.summarization_threshold.description]"
+      "title": "Summarization Threshold",
+      "description": "Context length threshold for triggering summarization"
     },
     "summarization_target": {
-      "title": "[TODO: models.llmconfig.fields.summarization_target.title]",
-      "description": "[TODO: models.llmconfig.fields.summarization_target.description]"
+      "title": "Summarization Target",
+      "description": "Target length for summarization"
     },
     "summarization_model": {
-      "title": "[TODO: models.llmconfig.fields.summarization_model.title]",
-      "description": "[TODO: models.llmconfig.fields.summarization_model.description]",
-      "placeholder": "[TODO: models.llmconfig.fields.summarization_model.placeholder]"
+      "title": "Summarization Model",
+      "description": "Model used for summarization",
+      "placeholder": "gpt-3.5-turbo, claude-2"
     },
     "enable_auto_summarization": {
-      "title": "[TODO: models.llmconfig.fields.enable_auto_summarization.title]",
-      "description": "[TODO: models.llmconfig.fields.enable_auto_summarization.description]"
+      "title": "Enable Auto Summarization",
+      "description": "Automatically summarize long contexts"
     }
   }
 }
