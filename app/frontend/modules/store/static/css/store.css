@@ -13,7 +13,7 @@
 .store-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 1.5rem;
+    gap: 1rem;
     width: 100%;
 }
 
@@ -25,10 +25,10 @@
 
 .store-card-image {
     width: 100%;
-    height: 220px;
+    height: 150px;
     overflow: hidden;
     position: relative;
-    background: var(--bg-secondary);
+    background: transparent;
     border-top-left-radius: var(--radius-xl);
     border-top-right-radius: var(--radius-xl);
 }
@@ -75,15 +75,15 @@
 }
 
 .store-card-body {
-    padding: 1.25rem;
+    padding: 1rem;
     display: flex;
     flex-direction: column;
-    gap: 0.875rem;
+    gap: 0.75rem;
     flex: 1;
 }
 
 .store-card-title {
-    font-size: 1.125rem;
+    font-size: 1rem;
     font-weight: 600;
     color: var(--text-primary);
     margin: 0;
@@ -222,7 +222,7 @@
 
 .flow-sidebar {
     padding: 1.5rem;
-    background: var(--bg-secondary);
+    background: var(--bg-card);
     border-right: 1px solid var(--border-primary);
     display: flex;
     flex-direction: column;
@@ -340,7 +340,8 @@
     height: 350px;
     overflow: hidden;
     border-radius: var(--radius-lg);
-    background: var(--bg-secondary);
+    background: transparent;
+    border: 1px solid var(--border-primary);
     margin-bottom: 1.5rem;
 }
 
@@ -435,7 +436,8 @@
 
 .flow-platforms-section {
     padding: 1.25rem;
-    background: var(--bg-secondary);
+    background: transparent;
+    border: 1px solid var(--border-primary);
     border-radius: var(--radius-md);
 }
 
@@ -473,7 +475,8 @@
 
 .flow-variables-section {
     padding: 1rem;
-    background: var(--bg-secondary);
+    background: transparent;
+    border: 1px solid var(--border-primary);
     border-radius: var(--radius-md);
     margin-top: 1.5rem;
 }
