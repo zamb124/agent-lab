@@ -21,7 +21,9 @@
 }
 
 .modal-overlay[style*="display: flex"],
-.modal[style*="display: flex"] {
+.modal[style*="display: flex"],
+.modal-overlay.active,
+.modal.active {
     display: flex !important;
 }
 
