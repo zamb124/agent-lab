@@ -228,6 +228,7 @@
   "dashboard.navigation.builder": "Agent Builder",
   "dashboard.navigation.admin": "Administration",
   "dashboard.navigation.billing": "Billing & Payment",
+  "dashboard.navigation.docs": "Documentation",
   "dashboard.navigation.agents": "Agents",
   "dashboard.navigation.flows": "Flows",
   "dashboard.navigation.tasks": "Tasks",
