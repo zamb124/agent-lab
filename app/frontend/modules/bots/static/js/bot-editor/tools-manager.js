@@ -115,33 +115,53 @@ export class ToolsManager {
             }
             
             const toolsList = document.createElement('div');
-            toolsList.className = 'tools-list';
+            toolsList.className = 'abilities-selector-grid';
             
             Array.from(toolsMap.values()).forEach(tool => {
                 const toolItem = document.createElement('div');
-                toolItem.className = 'tool-item';
+                toolItem.className = 'ability-selector-card';
                 
                 const isChecked = selectedToolIds.includes(tool.id);
                 const isNonPublic = !tool.is_public;
                 const isAgent = tool.type === 'agent';
-                const badge = isAgent 
-                    ? '<span class="tool-type-badge agent">Агент</span>' 
-                    : '<span class="tool-type-badge function">Функция</span>';
-                const lockIcon = isNonPublic ? ' 🔒' : '';
+                const lockIcon = isNonPublic ? '<i class="bi bi-lock-fill"></i>' : '';
+                
+                const iconClass = isAgent ? 'agent-icon' : 'tool-icon';
+                const iconName = isAgent ? 'bi-robot' : 'bi-tools';
+                const badgeClass = isAgent ? 'agent-badge' : '';
+                const badge = isAgent ? `<div class="ability-badge ${badgeClass}">${tool.type || 'agent'}</div>` : '';
+                const costBadge = tool.cost > 0 ? `<div class="ability-badge cost-badge">${tool.cost} ₽</div>` : '';
                 
                 toolItem.innerHTML = `
                     <input type="checkbox" 
+                           class="ability-selector-checkbox"
                            id="tool-${tool.id.replace(/\./g, '-').replace(/:/g, '-')}" 
                            data-tool-id="${tool.id}"
                            ${isChecked ? 'checked' : ''}>
-                    <div class="tool-item-content">
-                        <label class="tool-item-name" for="tool-${tool.id.replace(/\./g, '-').replace(/:/g, '-')}">
-                            ${badge}
-                            <span>${tool.title || tool.name}${lockIcon}</span>
-                        </label>
-                        ${tool.description ? `<div class="tool-item-description">${tool.description}</div>` : ''}
-                        ${tool.cost > 0 ? `<div class="tool-item-cost">Стоимость: ${tool.cost} ₽</div>` : ''}
-                    </div>
+                    <label for="tool-${tool.id.replace(/\./g, '-').replace(/:/g, '-')}" class="ability-selector-label">
+                        <div class="ability-card-header">
+                            <div class="ability-icon ${iconClass}">
+                                <i class="bi ${iconName}"></i>
+                            </div>
+                            <div class="ability-header-right">
+                                <div class="ability-selector-check">
+                                    <i class="bi bi-check-circle-fill"></i>
+                                </div>
+                                <div class="ability-badges">
+                                    ${badge}
+                                    ${costBadge}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="ability-card-body">
+                            <h4 class="ability-name">
+                                ${tool.title || tool.name}
+                                ${lockIcon}
+                            </h4>
+                            ${tool.description ? `<p class="ability-description" title="${tool.description}">${tool.description}</p>` : ''}
+                        </div>
+                    </label>
                 `;
                 
                 toolsList.appendChild(toolItem);

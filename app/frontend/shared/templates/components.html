@@ -10,6 +10,7 @@
   {{ c.skeleton(type='card', count=6) }}
   {{ c.platform_badge('telegram') }}
   {{ c.pagination(offset, limit, total, '/api/list') }}
+  {{ c.slider(id='temperature', value=0.2, min=0.1, max=1.0) }}
   
   С call blocks:
   {% call c.card(title='Заголовок') %}Контент{% endcall %}
@@ -571,3 +572,36 @@
     </ul>
 </div>
 {% endmacro %}
+
+{# ========================================
+   SLIDER COMPONENT
+   ======================================== #}
+
+{% macro slider(id='', name='', value=0.2, min=0.1, max=1.0, step=0.1, segments=10, labels={}, icon='palette', label_text='Креативность') %}
+<div class="creativity-slider-container" data-slider-id="{{ id }}">
+    <div class="creativity-track-wrapper">
+        <input type="range" 
+               class="creativity-slider" 
+               id="{{ id }}"
+               {% if name %}name="{{ name }}"{% endif %}
+               min="{{ min }}" 
+               max="{{ max }}" 
+               step="{{ step }}" 
+               value="{{ value }}"
+               data-labels='{{ labels | tojson }}'>
+        <div class="creativity-track">
+            <div class="creativity-fill"></div>
+            <div class="creativity-segments">
+                {% for i in range(segments) %}
+                <div class="segment"></div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="creativity-label">
+        <span class="creativity-mode">{{ labels.get('0.1-0.5', 'Строгий') }}</span>
+        <span class="creativity-value">{{ value }}</span>
+    </div>
+</div>
+{% endmacro %}
+

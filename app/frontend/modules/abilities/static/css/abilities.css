@@ -1,0 +1,261 @@
+/* Abilities Page Styles */
+
+.abilities-page {
+    min-height: 100vh;
+}
+
+.abilities-hero {
+    background-image: url('/static/img/back.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    border-radius: var(--radius-lg);
+    padding: 4rem 2rem;
+    margin-bottom: 2rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.abilities-hero::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.9) 0%, rgba(139, 92, 246, 0.9) 100%);
+    z-index: 1;
+}
+
+.abilities-hero-content {
+    position: relative;
+    z-index: 2;
+    text-align: center;
+    color: white;
+}
+
+.abilities-hero-content h2 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.abilities-hero-content p {
+    font-size: 1.25rem;
+    opacity: 0.95;
+    text-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
+}
+
+.abilities-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin-top: 2rem;
+}
+
+@media (max-width: 1024px) {
+    .abilities-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+.abilities-column {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.abilities-column-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+}
+
+.abilities-column-header i {
+    font-size: 1.75rem;
+    color: var(--accent-primary);
+}
+
+.abilities-column-header h3 {
+    flex: 1;
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.count-badge {
+    background: var(--accent-primary);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--radius-full);
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.abilities-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+}
+
+.ability-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 180px;
+    user-select: none;
+}
+
+.ability-card:hover {
+    border-color: var(--accent-primary);
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.2);
+}
+
+.ability-card:active {
+    transform: scale(0.98);
+}
+
+.ability-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.ability-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+}
+
+.agent-icon {
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    color: white;
+}
+
+.tool-icon {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+}
+
+.ability-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.agent-badge {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--accent-primary);
+    border: 1px solid var(--accent-primary);
+}
+
+.cost-badge {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    border: 1px solid #10b981;
+}
+
+.ability-card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.ability-name {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.ability-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    margin: 0;
+    flex: 1;
+    
+    /* Обрезка текста с многоточием */
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: help;
+}
+
+/* Модальное окно с формой */
+.modal-overlay .modal-content {
+    border-radius: var(--radius-2xl);
+    overflow: hidden;
+}
+
+.modal-dialog .card {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+.modal-dialog .card-header {
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.modal-dialog .card-body {
+    padding: 0;
+}
+
+.modal-body {
+    max-height: calc(90vh - 150px);
+    overflow-y: auto;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .abilities-hero {
+        padding: 3rem 1.5rem;
+    }
+    
+    .abilities-hero-content h2 {
+        font-size: 2rem;
+    }
+    
+    .abilities-hero-content p {
+        font-size: 1rem;
+    }
+    
+    .abilities-container {
+        gap: 1.5rem;
+    }
+    
+    .ability-card {
+        min-height: 160px;
+    }
+    
+    .modal-dialog {
+        max-width: 95vw !important;
+        margin: 10px;
+    }
+}
+

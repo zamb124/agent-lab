@@ -1,5 +1,5 @@
 ---
-alwaysApply: true
+alwaysApply: false
 ---
 # Правила для Frontend
 
@@ -869,6 +869,18 @@ modules/my_module/static/
 
 ---
 
+## Плагинная система
+
+**Для создания плагинов фронтенда смотри отдельный файл правил:**  
+→ `.cursor/rules/frontend_plugins.mdc`
+
+Плагины позволяют расширять фронтенд без изменения кода в `shared/`:
+- Автоматическая регистрация
+- Sidebar/footer items
+- Dashboard widgets
+- Lazy loading JS
+- Модульные стили
+
 ## Документация
 
 - `app/frontend/shared/templates/components/README.md` - API всех компонентов
@@ -876,3 +888,5 @@ modules/my_module/static/
 - `app/frontend/shared/templates/components.html` - реэкспорт макросов (77 строк)
 - `app/frontend/shared/templates/macros/` - исходники макросов (7 файлов)
 - `FRONTEND_MODERNIZATION_PLAN.md` - план модернизации UI
+- `app/frontend/PLUGIN_SYSTEM.md` - документация плагинной системы
+- `.cursor/rules/frontend_plugins.mdc` - правила создания плагинов

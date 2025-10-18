@@ -459,14 +459,14 @@ export default class BuilderModule {
     }
     
     handleContextMenu(e) {
-        e.preventDefault();
-        
-        const contextMenu = document.getElementById('contextMenu');
-        if (!contextMenu) return;
+        if (!this.isBuilderPage()) {
+            return;
+        }
         
         const target = e.target.closest('.canvas-node, .edge');
         
         if (target) {
+            e.preventDefault();
             this.showContextMenu(e.clientX, e.clientY, target);
         } else {
             this.hideContextMenu();
