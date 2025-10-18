@@ -1,0 +1,238 @@
+/* Variables модуль */
+
+.variables-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.25rem;
+    width: 100%;
+}
+
+.variable-card {
+    transition: all var(--transition-normal);
+    border: 1px solid var(--border-primary);
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-height: 150px;
+}
+
+.variable-card:hover {
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.variable-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.variable-card-icon {
+    width: 32px;
+    height: 32px;
+    background: var(--accent-primary);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.variable-card-icon i {
+    font-size: 1rem;
+    color: white;
+}
+
+.variable-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.variable-groups {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.variable-group-badge {
+    display: inline-flex;
+    padding: 0.125rem 0.375rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-secondary);
+    border-radius: var(--radius-sm);
+    font-size: 0.625rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.variable-card-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.variable-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.variable-key {
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.variable-key code {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+    background: none;
+    padding: 0;
+}
+
+.variable-value {
+    font-size: 0.75rem;
+}
+
+.variable-secret-group {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.variable-secret-group input {
+    flex: 1;
+    font-family: monospace;
+    font-size: 0.75rem;
+}
+
+.variable-value-display {
+    padding: 0.375rem 0.5rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+}
+
+.variable-value-display code {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+    background: none;
+    padding: 0;
+    font-size: 0.75rem;
+}
+
+.btn-icon-danger {
+    color: var(--accent-danger);
+}
+
+.btn-icon-danger:hover {
+    color: white;
+    background: var(--accent-danger);
+    border-color: var(--accent-danger);
+}
+
+.variable-card-create {
+    border: 1px dashed var(--border-secondary);
+    padding: 0;
+    cursor: pointer;
+}
+
+.variable-card-create:hover {
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.variable-card-create:hover i {
+    opacity: 1 !important;
+    color: var(--accent-primary);
+}
+
+.variable-create-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 0.75rem;
+    padding-top: 1.5rem;
+}
+
+.variable-create-icon {
+    font-size: 2.5rem;
+    color: var(--accent-primary);
+    opacity: 0.7;
+}
+
+.variable-create-content {
+    text-align: center;
+}
+
+.variable-create-title {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.variable-create-subtitle {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.variable-modal .modal-content {
+    max-width: 500px;
+}
+
+.variable-group-header {
+    margin-bottom: 2rem;
+}
+
+.variable-group-title {
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.variable-group-badge {
+    display: inline-flex;
+    padding: 0.25rem 0.625rem;
+    background: var(--accent-primary);
+    border-radius: var(--radius-md);
+    font-size: 0.75rem;
+    color: white;
+}
+
+.variable-group-count {
+    color: var(--text-muted);
+    margin-left: 0.5rem;
+}
+
+.empty-group-header {
+    margin-bottom: 2rem;
+}
+
+.empty-group-title {
+    margin-bottom: 1rem;
+    color: var(--text-muted);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.variable-badge-group {
+    font-size: 0.85rem;
+}
+
+.variable-badge-remove {
+    cursor: pointer;
+    margin-left: 0.25rem;
+}
+

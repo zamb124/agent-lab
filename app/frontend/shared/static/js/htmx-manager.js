@@ -32,9 +32,9 @@ export default class HTMXManager {
             }
         });
         
-        // Плавные анимации для HTMX
+        // Анимации для строк таблиц при обновлении
         document.addEventListener('htmx:beforeSwap', (e) => {
-            if (e.target.tagName === 'TR') {
+            if (e.target.tagName === 'TR' && e.target.hasAttribute('hx-get')) {
                 e.target.style.opacity = '0.5';
             }
         });

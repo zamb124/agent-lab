@@ -23,11 +23,15 @@
 @import url('/static/css/components/modals.css');
 @import url('/static/css/components/dropdowns.css');
 @import url('/static/css/components/badges.css');
+@import url('/static/css/components/platform-badges.css');
 @import url('/static/css/components/tables.css');
 @import url('/static/css/components/alerts.css');
 @import url('/static/css/components/notifications.css');
 @import url('/static/css/components/loading.css');
 @import url('/static/css/components/auth.css');
+@import url('/static/css/components/skeleton.css');
+@import url('/static/css/components/empty-state.css');
+@import url('/static/css/components/icons.css');
 
 /* Utilities */
 @import url('/static/css/utilities/spacing.css');

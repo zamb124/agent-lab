@@ -1,3 +1,5 @@
+/* Bots модуль - только уникальные стили */
+
 .bots-container {
     padding: 0;
     margin: 0;
@@ -8,26 +10,75 @@
     box-sizing: border-box;
 }
 
-.loading-indicator {
+.model-select {
+    width: auto;
+    min-width: 180px;
+    max-width: 300px;
+    font-family: monospace;
+}
+
+.temperature-input {
+    width: 80px;
+}
+
+.panel-description {
+    padding-left: 20px;
+}
+
+.api-test-result {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-md);
+    display: none;
+}
+
+.api-test-result.show {
+    display: block;
+}
+
+.warning-box {
+    margin-bottom: 1.25rem;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    background: rgba(255, 193, 7, 0.1);
+    border-left: 4px solid var(--warning, #ffc107);
+}
+
+.danger-box {
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    background: rgba(220, 53, 69, 0.1);
+    border-left: 4px solid var(--danger, #dc3545);
+}
+
+.modal-compact .modal-content {
+    max-width: 540px;
+}
+
+.modal-confirm {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 10000;
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 3rem 0;
-    gap: 0.875rem;
 }
 
-.loading-indicator .spinner {
-    width: 48px;
-    height: 48px;
-    border: 4px solid var(--border-primary);
-    border-top-color: var(--accent-primary);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+.modal-warning-header {
+    border-bottom: 2px solid var(--warning, #ffc107);
 }
 
-@keyframes spin {
-    to { transform: rotate(360deg); }
+.bot-create-card-body {
+    min-height: 200px;
+}
+
+.bot-create-icon {
+    opacity: 0.7;
 }
 
 .bots-grid {
@@ -174,53 +225,6 @@
     gap: 0.5rem;
 }
 
-.platform-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.125rem 0.5rem;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-lg);
-    font-size: 0.6875rem;
-    font-weight: 500;
-    color: var(--text-primary);
-}
-
-.platform-tag i {
-    font-size: 0.75rem;
-}
-
-.platform-tag.platform-telegram {
-    background: rgba(0, 136, 204, 0.1);
-    border-color: rgba(0, 136, 204, 0.3);
-    color: #0088cc;
-}
-
-.platform-tag.platform-whatsapp {
-    background: rgba(37, 211, 102, 0.1);
-    border-color: rgba(37, 211, 102, 0.3);
-    color: #25d366;
-}
-
-.platform-tag.platform-api {
-    background: rgba(99, 102, 241, 0.1);
-    border-color: rgba(99, 102, 241, 0.3);
-    color: var(--accent-primary);
-}
-
-.platform-tag.platform-web {
-    background: rgba(16, 185, 129, 0.1);
-    border-color: rgba(16, 185, 129, 0.3);
-    color: #10b981;
-}
-
-.platform-tag.platform-amocrm {
-    background: rgba(51, 153, 51, 0.1);
-    border-color: rgba(51, 153, 51, 0.3);
-    color: #339933;
-}
-
 .platform-empty {
     display: inline-flex;
     align-items: center;
@@ -274,7 +278,6 @@
     max-width: 200px;
     display: inline-block;
 }
-
 
 .bot-modal {
     position: fixed;
@@ -333,25 +336,6 @@ body.sidebar-collapsed .bot-modal {
     display: none;
 }
 
-.btn-close-modal {
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-md);
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all var(--transition-fast);
-}
-
-.btn-close-modal:hover {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-}
-
 .bot-modal-body {
     flex: 1;
     overflow: hidden;
@@ -392,27 +376,6 @@ body.sidebar-collapsed .bot-modal {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-}
-
-.btn-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border-primary);
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all var(--transition-fast);
-    font-size: 1rem;
-}
-
-.btn-icon:hover {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border-color: var(--accent-primary);
 }
 
 .header-controls-row {
@@ -483,53 +446,6 @@ body.sidebar-collapsed .bot-modal {
     color: var(--accent-primary);
     opacity: 1;
     transform: scale(1.1);
-}
-
-.platform-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.125rem 0.5rem;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-secondary);
-    border-radius: var(--radius-lg);
-    font-size: 0.6875rem;
-    font-weight: 500;
-    text-transform: capitalize;
-}
-
-.platform-badge i {
-    font-size: 0.75rem;
-}
-
-.platform-badge.platform-telegram {
-    background: rgba(0, 136, 204, 0.1);
-    border-color: rgba(0, 136, 204, 0.3);
-    color: #0088cc;
-}
-
-.platform-badge.platform-whatsapp {
-    background: rgba(37, 211, 102, 0.1);
-    border-color: rgba(37, 211, 102, 0.3);
-    color: #25d366;
-}
-
-.platform-badge.platform-api {
-    background: rgba(99, 102, 241, 0.1);
-    border-color: rgba(99, 102, 241, 0.3);
-    color: var(--accent-primary);
-}
-
-.platform-badge.platform-web {
-    background: rgba(16, 185, 129, 0.1);
-    border-color: rgba(16, 185, 129, 0.3);
-    color: #10b981;
-}
-
-.platform-badge.platform-amocrm {
-    background: rgba(51, 153, 51, 0.1);
-    border-color: rgba(51, 153, 51, 0.3);
-    color: #339933;
 }
 
 .bot-details-content {
@@ -713,54 +629,6 @@ body.sidebar-collapsed .bot-modal {
 .settings-panel[data-panel="main"] #bot-prompt-editor-container {
     flex: 1;
     overflow: hidden;
-}
-
-.form-group {
-    margin-bottom: 1.25rem;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
-    color: var(--text-primary);
-    font-size: 0.8125rem;
-}
-
-.form-control {
-    width: 100%;
-    padding: 0.625rem 1rem;
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-md);
-    background: var(--bg-card);
-    color: var(--text-primary);
-    font-size: 0.9375rem;
-    outline: none;
-    transition: all var(--transition-fast);
-}
-
-.form-control:focus {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-}
-
-.form-control:disabled, .form-control[readonly] {
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
-    cursor: not-allowed;
-}
-
-.form-text {
-    display: block;
-    margin-top: 0.375rem;
-    font-size: 0.8125rem;
-    color: var(--text-secondary);
-}
-
-.form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
 }
 
 .platform-settings {
@@ -1128,13 +996,8 @@ input:checked + .slider:before {
         border-radius: 0;
         border: none;
     }
-    
-    .form-row {
-        grid-template-columns: 1fr;
-    }
 }
 
-/* Модальное окно добавления платформы */
 #add-platform-modal {
     position: fixed !important;
     top: 0 !important;  
@@ -1149,12 +1012,10 @@ input:checked + .slider:before {
     padding: 0 !important;
 }
 
-/* Скрытое состояние */
 #add-platform-modal[style*="display: none"] {
     display: none !important;
 }
 
-/* Видимое состояние */  
 #add-platform-modal[style*="display: flex"] {
     display: flex !important;
 }
@@ -1223,7 +1084,6 @@ input:checked + .slider:before {
     padding: 1.25rem;
 }
 
-/* Строки кастомных переменных */
 .variable-row {
     display: flex;
     gap: 0.5rem;
@@ -1271,7 +1131,6 @@ input:checked + .slider:before {
     font-weight: 500;
 }
 
-/* Выпадающий список платформ */
 #platform-type-select {
     width: 100%;
     padding: 0.75rem;
@@ -1287,7 +1146,6 @@ input:checked + .slider:before {
     color: var(--text-primary);
 }
 
-/* Секция настроек платформы */
 #platform-config-section {
     margin-top: 1.5rem;
     padding-top: 1.5rem;
@@ -1301,7 +1159,6 @@ input:checked + .slider:before {
     font-weight: 600;
 }
 
-/* Заголовок платформы с кнопкой удаления */  
 .platform-header {
     display: flex;
     justify-content: space-between;
@@ -1342,7 +1199,6 @@ input:checked + .slider:before {
     color: white;
 }
 
-/* Кастомный dropdown для выбора платформы */
 .custom-select-wrapper {
     position: relative;
     width: 100%;
@@ -1436,7 +1292,6 @@ input:checked + .slider:before {
     font-weight: 500;
 }
 
-/* Иконки специфичных платформ */
 .dropdown-option[data-value="telegram"] i {
     color: #0088cc;
 }
@@ -1476,6 +1331,7 @@ input:checked + .slider:before {
 .dropdown-option[data-value="retailcrm"] i {
     color: #ff6b35;
 }
+
 .rag-settings-section {
     padding: 20px;
 }
@@ -1808,7 +1664,6 @@ input:checked + .slider:before {
     z-index: 1020;
 }
 
-/* Мобильное меню действий */
 .btn-mobile-only {
     display: none;
 }
@@ -1875,9 +1730,7 @@ input:checked + .slider:before {
     }
 }
 
-/* Адаптация для мобильных устройств */
 @media (max-width: 768px) {
-    /* Показываем мобильное меню, скрываем десктопные кнопки */
     .btn-mobile-only {
         display: block;
     }
@@ -1886,12 +1739,10 @@ input:checked + .slider:before {
         display: none !important;
     }
     
-    /* Скрываем ID flow и агента в шапке */
     .header-controls-row .control-group:has(code) {
         display: none !important;
     }
     
-    /* Делаем вкладки скроллируемыми горизонтально */
     .settings-tabs {
         overflow-x: auto;
         overflow-y: hidden;
@@ -1911,20 +1762,6 @@ input:checked + .slider:before {
         white-space: nowrap;
     }
     
-    /* Сокращаем лейблы полей */
-    .form-group label {
-        font-size: 0.8125rem;
-        word-break: keep-all;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    
-    .form-row-main .form-group label {
-        max-width: 100%;
-    }
-    
-    /* Адаптация шапки для мобильных */
     .header-top-row {
         padding: 0.75rem 1rem;
     }
@@ -1939,7 +1776,6 @@ input:checked + .slider:before {
         flex-wrap: wrap;
     }
     
-    /* Адаптация редактора промпта */
     .bot-details-content {
         padding: 0.75rem;
     }
@@ -1961,7 +1797,6 @@ input:checked + .slider:before {
         width: 100%;
     }
     
-    /* Уменьшаем отступы */
     .platforms-header,
     .panel-description {
         padding-left: 0 !important;
@@ -1971,7 +1806,6 @@ input:checked + .slider:before {
         padding: 0.75rem;
     }
     
-    /* Каналы */
     .platform-settings {
         margin-bottom: 0.75rem;
     }
@@ -1984,7 +1818,6 @@ input:checked + .slider:before {
         padding: 0.75rem;
     }
     
-    /* Модалка на весь экран на мобильных */
     .bot-modal-content {
         border-radius: 0;
         max-width: 100%;
@@ -1996,7 +1829,6 @@ input:checked + .slider:before {
     }
 }
 
-/* Адаптация для очень маленьких экранов */
 @media (max-width: 480px) {
     .header-left h2 {
         font-size: 1rem;
@@ -2025,4 +1857,3 @@ input:checked + .slider:before {
         font-size: 0.875rem;
     }
 }
-

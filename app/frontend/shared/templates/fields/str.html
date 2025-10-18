@@ -1,7 +1,7 @@
 {% if view_mode == "table" %}
   <td class="field-cell">
     {% if readonly %}
-      <div class="text-truncate" style="max-width: 200px;" title="{{ value or '' }}">
+      <div class="text-truncate max-w-200" title="{{ value or '' }}">
         <span class="badge badge-secondary">{{ value or '-' }}</span>
       </div>
     {% else %}

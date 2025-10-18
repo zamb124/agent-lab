@@ -4,21 +4,24 @@
 
 import { getCookie } from '/static/js/utils/cookies.js';
 import { showNotification } from '/static/js/components/notification.js';
+import PluginManager from '/static/js/plugin-manager.js';
 
 class APP {
     constructor() {
         this.authToken = null;
         this.themeManager = null;
         this.layoutManager = null;
+        this.pluginManager = null;
         this.init();
     }
     
-    init() {
+    async init() {
         this.setupAuth();
         this.setupHTMX();
-        this.setupManagers();
+        await this.setupManagers();
         this.setupUI();
         this.loadUserProfile();
+        await this.loadPlugins();
     }
     
     async setupManagers() {
@@ -176,18 +179,7 @@ class APP {
     }
     
     setupUI() {
-        // Плавные анимации для HTMX
-        document.addEventListener('htmx:beforeSwap', (e) => {
-            e.target.style.opacity = '0';
-            e.target.style.transform = 'translateY(10px)';
-        });
-        
-        document.addEventListener('htmx:afterSwap', (e) => {
-            setTimeout(() => {
-                e.target.style.opacity = '1';
-                e.target.style.transform = 'translateY(0)';
-            }, 50);
-        });
+        // Анимации управляются через CSS и dashboard.html
     }
     setAuthToken(token) {
         this.authToken = token;
@@ -260,6 +252,40 @@ class APP {
             this.showNotification('Ошибка загрузки данных', 'danger');
             throw error;
         }
+    }
+    
+    /**
+     * Загрузка плагинов
+     */
+    async loadPlugins() {
+        console.log('🔌 Инициализация плагинной системы...');
+        
+        this.pluginManager = new PluginManager(this);
+        
+        const pluginsMetadata = window.__PLUGINS__ || [];
+        
+        if (pluginsMetadata.length === 0) {
+            console.warn('⚠️ Нет метаданных плагинов (window.__PLUGINS__)');
+            return;
+        }
+        
+        console.log(`🔍 Найдено плагинов: ${pluginsMetadata.length}`);
+        
+        for (const pluginMeta of pluginsMetadata) {
+            if (!pluginMeta.has_js || !pluginMeta.main_js) {
+                console.log(`⏭️  ${pluginMeta.name} - нет JS модуля`);
+                continue;
+            }
+            
+            try {
+                const modulePath = `/static/${pluginMeta.name}/js/${pluginMeta.main_js}`;
+                await this.pluginManager.register(pluginMeta.name, modulePath);
+            } catch (error) {
+                console.error(`❌ Не удалось загрузить плагин ${pluginMeta.name}:`, error);
+            }
+        }
+        
+        console.log(`✅ Загружено плагинов: ${this.pluginManager.getLoadedNames().length}`);
     }
 }
 

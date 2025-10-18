@@ -1,3 +1,7 @@
+{% import 'components.html' as c %}
+
+<link rel="stylesheet" href="/static/history/css/history.css">
+
 <h1 class="header-title" id="page-title" hx-swap-oob="true">
     <i class="bi bi-clock-history me-2"></i>
     История
@@ -38,10 +42,9 @@
                   hx-get="/frontend/history/sessions" 
                   hx-target="#sessions-table"
                   hx-trigger="submit, change from:select"
-                  hx-indicator="#loading-indicator"
                   class="d-flex flex-wrap align-items-center gap-2">
                 
-                <select class="form-select form-select-sm" id="filter-platform" name="platform" style="width: 140px;">
+                <select class="form-select form-select-sm w-140" id="filter-platform" name="platform">
                     <option value="">Канал</option>
                     <option value="web">Web</option>
                     <option value="telegram">Telegram</option>
@@ -50,9 +53,9 @@
                     <option value="amocrm">AmoCRM</option>
                 </select>
                 
-                <input type="text" class="form-control form-control-sm" id="filter-flow" name="flow_id" placeholder="Flow" style="width: 150px;">
+                <input type="text" class="form-control form-control-sm w-150" id="filter-flow" name="flow_id" placeholder="Flow">
                 
-                <select class="form-select form-select-sm" id="filter-status" name="status" style="width: 120px;">
+                <select class="form-select form-select-sm w-120" id="filter-status" name="status">
                     <option value="">Статус</option>
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
@@ -60,40 +63,32 @@
                     <option value="waiting_input">Waiting</option>
                 </select>
                 
-                <input type="datetime-local" class="form-control form-control-sm" id="filter-date-from" name="date_from" style="width: 160px;">
+                <input type="datetime-local" class="form-control form-control-sm w-160" id="filter-date-from" name="date_from">
                 
-                <input type="datetime-local" class="form-control form-control-sm" id="filter-date-to" name="date_to" style="width: 160px;">
+                <input type="datetime-local" class="form-control form-control-sm w-160" id="filter-date-to" name="date_to">
                 
-                <button type="submit" class="btn btn-primary btn-sm">
-                    <i class="bi bi-funnel"></i>
-                    Применить
-                </button>
+                {{ c.button('Применить',
+                    variant='primary',
+                    size='sm',
+                    icon='funnel',
+                    type='submit'
+                ) }}
                 
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="
-                    document.getElementById('history-filters').reset();
-                    htmx.trigger('#history-filters', 'submit');
-                ">
-                    <i class="bi bi-x-circle"></i>
-                    Сбросить
-                </button>
+                {{ c.button('Сбросить',
+                    variant='outline-secondary',
+                    size='sm',
+                    icon='x-circle',
+                    type='button',
+                    onclick='document.getElementById(\'history-filters\').reset(); htmx.trigger(\'#history-filters\', \'submit\');'
+                ) }}
             </form>
         </div>
     </div>
 
-    <div style="position: relative; min-height: 400px; margin-top: 1.5rem;">
-        <div id="loading-indicator" class="htmx-indicator">
-            <div class="loading-overlay">
-                <div style="text-align: center;">
-                    <div class="spinner"></div>
-                </div>
-            </div>
-        </div>
-
-        <div id="sessions-table" 
-             hx-get="/frontend/history/sessions" 
-             hx-trigger="load"
-             hx-indicator="#loading-indicator">
-        </div>
+    <div id="sessions-table" 
+         hx-get="/frontend/history/sessions" 
+         hx-trigger="load">
+        {{ c.skeleton(type='table', count=5) }}
     </div>
 </div>
 

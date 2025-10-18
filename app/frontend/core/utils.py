@@ -5,6 +5,7 @@
 from fastapi import Request
 from fastapi.responses import HTMLResponse
 from app.frontend.core.template_loader import get_templates
+from app.frontend.core.plugin_loader import get_plugins_for_template
 
 
 templates = get_templates()
@@ -36,10 +37,13 @@ async def render_with_dashboard(
     if is_htmx_request(request):
         return templates.TemplateResponse(content_template, context)
     
+    plugin_data = get_plugins_for_template()
+    
     return templates.TemplateResponse(
         "dashboard.html",
         {
             "request": request,
             "preload_url": content_url,
+            **plugin_data
         }
     )

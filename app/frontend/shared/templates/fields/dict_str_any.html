@@ -1,7 +1,7 @@
 {% if view_mode == "table" %}
   {# В таблице показываем JSON кратко #}
   <td class="field-cell">
-    <code class="small text-truncate d-block" style="max-width: 150px;">
+    <code class="small text-truncate d-block max-w-150">
       {{ value|tojson if value else '{}' }}
     </code>
   </td>

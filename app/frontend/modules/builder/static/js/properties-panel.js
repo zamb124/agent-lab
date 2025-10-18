@@ -71,21 +71,26 @@ class PropertiesPanel {
         this.currentNode = node;
         
         if (this.panel) {
+            this.panel.classList.remove('hidden');
             this.panel.style.display = 'flex';
         }
         
         if (this.footer) {
+            this.footer.classList.remove('hidden');
             this.footer.style.display = 'flex';
         }
         
-        // Обновляем заголовок и показываем его только для inline редакторов
         const nodeType = node.data.type;
         const isInlineEditor = ['message_node', 'router_node', 'function_node'].includes(nodeType);
         
         if (this.title) {
-            this.title.style.display = isInlineEditor ? 'flex' : 'none';
             if (isInlineEditor) {
+                this.title.classList.remove('hidden');
+                this.title.style.display = 'flex';
                 this.updateTitle(node);
+            } else {
+                this.title.classList.add('hidden');
+                this.title.style.display = 'none';
             }
         }
         
@@ -98,6 +103,7 @@ class PropertiesPanel {
             this.codeEditor = null;
         }
         
+        this.panel.classList.add('hidden');
         this.panel.style.display = 'none';
         this.currentNode = null;
         

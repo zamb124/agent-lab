@@ -1,17 +1,21 @@
+{% import 'components.html' as c %}
+
 {% if bots %}
 <div class="bots-grid">
-    <div class="bot-card bot-card-create" onclick="createBot()" style="cursor: pointer;">
-        <div class="bot-card-body" style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; gap: 1rem;">
-            <i class="bi bi-plus-circle" style="font-size: 3rem; color: var(--accent-primary); opacity: 0.7;"></i>
+    {# Карточка "Создать бота" #}
+    <div class="bot-card bot-card-create" onclick="createBot()">
+        <div class="bot-card-body d-flex flex-col align-items-center justify-content-center gap-3 bot-create-card-body">
+            <i class="bi bi-plus-circle icon-xl text-primary bot-create-icon"></i>
             <div class="text-center">
-                <h4 style="margin: 0; color: var(--text-primary);" data-i18n="bots.create_bot">Создать бота</h4>
+                <h4 class="m-0" data-i18n="bots.create_bot">Создать бота</h4>
                 <small class="text-muted">Добавить нового бота</small>
             </div>
         </div>
     </div>
     
+    {# Карточки ботов #}
     {% for bot in bots %}
-    <div class="bot-card" data-bot-id="{{ bot.flow_id }}" onclick="expandBot('{{ bot.flow_id }}')" style="cursor: pointer;">
+    <div class="bot-card" data-bot-id="{{ bot.flow_id }}" onclick="expandBot('{{ bot.flow_id }}')"
         <button class="btn-icon btn-chat-mini" 
                 onclick="event.stopPropagation(); openBotChat('{{ bot.flow_id }}', '{{ bot.name }}')" 
                 title="Запустить">
@@ -33,20 +37,17 @@
                 <div class="platform-tags">
                     {% if bot.platforms and bot.platforms|length > 0 %}
                         {% for platform in bot.platforms %}
+                        {% set platform_config = {
+                            'telegram': {'icon': 'telegram', 'text': 'Telegram'},
+                            'whatsapp': {'icon': 'whatsapp', 'text': 'WhatsApp'},
+                            'api': {'icon': 'code-slash', 'text': 'API'},
+                            'web': {'icon': 'globe', 'text': 'Web'},
+                            'amocrm': {'icon': 'building', 'text': 'AmoCRM'}
+                        } %}
+                        {% set config = platform_config.get(platform, {'icon': 'gear', 'text': platform}) %}
+                        
                         <span class="platform-tag platform-{{ platform }}">
-                            {% if platform == 'telegram' %}
-                                <i class="bi bi-telegram"></i> Telegram
-                            {% elif platform == 'whatsapp' %}
-                                <i class="bi bi-whatsapp"></i> WhatsApp
-                            {% elif platform == 'api' %}
-                                <i class="bi bi-code-slash"></i> API
-                            {% elif platform == 'web' %}
-                                <i class="bi bi-globe"></i> Web
-                            {% elif platform == 'amocrm' %}
-                                <i class="bi bi-building"></i> AmoCRM
-                            {% else %}
-                                <i class="bi bi-gear"></i> {{ platform }}
-                            {% endif %}
+                            <i class="bi bi-{{ config.icon }}"></i> {{ config.text }}
                         </span>
                         {% endfor %}
                     {% else %}
@@ -69,11 +70,14 @@
     {% endfor %}
 </div>
 {% else %}
-<div class="empty-state-centered">
-    <button class="empty-state-add-btn" onclick="createBot()">
-        <i class="bi bi-plus-circle"></i>
-    </button>
-    <h3 data-i18n="bots.empty_state.title">У вас пока нет ботов</h3>
-    <p data-i18n="bots.empty_state.description">Создайте своего первого бота, чтобы начать работу</p>
-</div>
+{# Пустое состояние - СУПЕР просто с макросом! #}
+{{ c.empty_state(
+    icon='robot',
+    title='У вас пока нет ботов',
+    description='Создайте своего первого бота, чтобы начать работу с платформой',
+    button_text='Создать бота',
+    button_variant='primary',
+    button_icon='plus',
+    button_onclick='createBot()'
+) }}
 {% endif %}

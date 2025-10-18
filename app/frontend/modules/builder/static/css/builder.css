@@ -141,6 +141,30 @@
     flex-shrink: 0;
 }
 
+.palette-icon-flow {
+    background: #3b82f6;
+}
+
+.palette-icon-agent {
+    background: #8b5cf6;
+}
+
+.palette-icon-tool {
+    background: #10b981;
+}
+
+.palette-icon-function {
+    background: #f59e0b;
+}
+
+.palette-icon-message {
+    background: #06b6d4;
+}
+
+.palette-icon-router {
+    background: #ef4444;
+}
+
 .palette-info {
     flex: 1;
 }

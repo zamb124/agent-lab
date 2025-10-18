@@ -1,5 +1,9 @@
 /* Модальные окна */
 
+.modal-hidden {
+    display: none !important;
+}
+
 .modal-overlay,
 .modal {
     position: fixed;

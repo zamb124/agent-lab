@@ -1,0 +1,217 @@
+/* History модуль - только уникальные стили */
+
+.history-info {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
+    border-bottom: 1px solid var(--border-primary);
+    padding: 1.5rem;
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.info-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.info-value {
+    font-size: 1rem;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.info-value.flow-name {
+    color: var(--accent-primary);
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.info-value code {
+    background: var(--bg-tertiary);
+    color: var(--accent-info);
+    padding: 0.35rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-family: 'Monaco', 'Consolas', monospace;
+}
+
+.session-id-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.copy-btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.copy-btn:hover {
+    opacity: 1;
+}
+
+.messages-timeline {
+    padding: 1.5rem;
+    max-height: 65vh;
+    overflow-y: auto;
+}
+
+.message-bubble {
+    margin-bottom: 1.5rem;
+    animation: fadeIn 0.3s ease;
+}
+
+.message-bubble.user {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.message-bubble.assistant,
+.message-bubble.tool,
+.message-bubble.system {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.message-content-wrapper {
+    max-width: 75%;
+    position: relative;
+}
+
+.message-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.message-body {
+    padding: 1rem;
+    border-radius: 12px;
+    position: relative;
+}
+
+.user .message-body {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.assistant .message-body {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    color: var(--text-primary);
+}
+
+.tool .message-body {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--accent-info);
+    border-left: 3px solid var(--accent-info);
+    color: var(--text-primary);
+}
+
+.system .message-body {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-secondary);
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.tool-call-box {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: rgba(255, 193, 7, 0.1);
+    border-left: 3px solid var(--accent-warning);
+    border-radius: 6px;
+}
+
+.tool-call-box .tool-name {
+    color: var(--accent-warning);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.tool-call-box code {
+    background: var(--bg-tertiary);
+    color: var(--accent-info);
+    padding: 0.5rem;
+    border-radius: 4px;
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    overflow-x: auto;
+}
+
+.message-time {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+}
+
+.message-role-icon {
+    font-size: 1.2rem;
+}
+
+.message-role-user {
+    color: var(--accent-primary);
+}
+
+.message-role-assistant {
+    color: var(--accent-success);
+}
+
+.message-role-tool {
+    color: var(--accent-info);
+}
+
+.message-role-system {
+    color: var(--text-muted);
+}
+
+.message-source-badge {
+    background: var(--accent-info);
+    color: white;
+    font-size: 0.7rem;
+    margin-left: 0.5rem;
+}
+
+.message-content {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.tool-call-args {
+    background: var(--bg-tertiary);
+    color: var(--accent-info);
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    overflow-x: auto;
+    margin-bottom: 0;
+}
+
+.tool-call-id {
+    background: transparent;
+    padding: 0;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}

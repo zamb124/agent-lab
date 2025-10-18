@@ -1,150 +1,95 @@
+{% import 'components.html' as c %}
+
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">{{ t('chats.title') }} ({{ total }})</h5>
-        <span class="badge bg-primary">{{ t('chats.shown') }}: {{ sessions|length }}</span>
+        <span class="text-muted">{{ t('chats.shown') }}: {{ sessions|length }}</span>
     </div>
-    <div class="card-body p-0">
+    <div class="card-body {% if sessions %}p-0{% endif %}">
         {% if sessions %}
-        <div class="table-responsive" style="overflow-x: auto;">
-            <table class="table table-hover mb-0" style="min-width: 1000px;">
-                <thead>
-                    <tr>
-                        <th style="width: 12%">{{ t('chats.platform') }}</th>
-                        <th style="width: 15%">{{ t('chats.flow') }}</th>
-                        <th style="width: 28%">{{ t('chats.first_message') }}</th>
-                        <th style="width: 8%">{{ t('chats.status') }}</th>
-                        <th style="width: 8%" class="text-center">{{ t('chats.messages') }}</th>
-                        <th style="width: 12%">{{ t('chats.created') }}</th>
-                        <th style="width: 12%">{{ t('chats.activity') }}</th>
-                        <th style="width: 5%" class="text-center">{{ t('chats.chat_button') }}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for session in sessions %}
-                    <tr>
-                        <td>
-                            {% if session.platform == 'web' %}
-                                <span class="badge bg-info">
-                                    <i class="bi bi-globe"></i>&nbsp;{{ t('chats.platform_values.web') }}
-                                </span>
-                            {% elif session.platform == 'telegram' %}
-                                <span class="badge bg-primary">
-                                    <i class="bi bi-telegram"></i>&nbsp;{{ t('chats.platform_values.telegram') }}
-                                </span>
-                            {% elif session.platform == 'whatsapp' %}
-                                <span class="badge bg-success">
-                                    <i class="bi bi-whatsapp"></i>&nbsp;WhatsApp
-                                </span>
-                            {% elif session.platform == 'api' %}
-                                <span class="badge bg-success">
-                                    <i class="bi bi-code-slash"></i>&nbsp;{{ t('chats.platform_values.api') }}
-                                </span>
-                            {% elif session.platform == 'amocrm' %}
-                                <span class="badge bg-warning">
-                                    <i class="bi bi-building"></i>&nbsp;AmoCRM
-                                </span>
-                            {% else %}
-                                <span class="badge bg-secondary">{{ session.platform }}</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if session.flow_id %}
-                                <a href="/frontend/builder/flow/{{ session.flow_id }}" 
-                                   class="text-decoration-none" 
-                                   title="{{ t('builder.title') }}">
-                                    <small>{{ session.flow_name or session.flow_id }}</small>
-                                    <i class="bi bi-box-arrow-up-right ms-1" style="font-size: 0.75rem;"></i>
-                                </a>
-                            {% else %}
-                                <small class="text-muted">{{ t('chats.not_specified') }}</small>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if session.first_message %}
-                                <small class="text-muted">{{ session.first_message }}{% if session.first_message|length == 60 %}...{% endif %}</small>
-                            {% else %}
-                                <small class="text-muted">-</small>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if session.status == 'active' %}
-                                <span class="badge bg-success">{{ t('chats.status_values.active') }}</span>
-                            {% elif session.status == 'inactive' %}
-                                <span class="badge bg-secondary">{{ t('chats.status_values.inactive') }}</span>
-                            {% elif session.status == 'processing' %}
-                                <span class="badge bg-warning">{{ t('chats.status_values.processing') }}</span>
-                            {% elif session.status == 'waiting_input' %}
-                                <span class="badge bg-info">{{ t('chats.status_values.waiting_input') }}</span>
-                            {% else %}
-                                <span class="badge bg-secondary">{{ session.status }}</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-center">
-                            <span class="badge bg-primary">{{ session.message_count }}</span>
-                        </td>
-                        <td>
-                            <small class="text-muted">
-                                {{ session.created_at.strftime('%Y-%m-%d %H:%M') if session.created_at else '-' }}
-                            </small>
-                        </td>
-                        <td>
-                            <small class="text-muted">
-                                {{ session.last_activity.strftime('%Y-%m-%d %H:%M') if session.last_activity else '-' }}
-                            </small>
-                        </td>
-                        <td class="text-center">
-                            <button class="btn btn-sm btn-primary" 
-                                    onclick="window.app.chat.openExistingSession('{{ session.flow_id }}', '{{ session.session_id }}')"
-                                    data-tooltip="{{ t('chats.open_chat') }}">
-                                <i class="bi bi-chat-dots"></i>
-                            </button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+        {% call c.table_container(min_width='1000px') %}
+            <thead>
+                <tr>
+                    <th class="w-12">{{ t('chats.platform') }}</th>
+                    <th class="w-15">{{ t('chats.flow') }}</th>
+                    <th class="w-28">{{ t('chats.first_message') }}</th>
+                    <th class="w-8">{{ t('chats.status') }}</th>
+                    <th class="w-8 text-center">{{ t('chats.messages') }}</th>
+                    <th class="w-12">{{ t('chats.created') }}</th>
+                    <th class="w-12">{{ t('chats.activity') }}</th>
+                    <th class="w-5 text-center">{{ t('chats.chat_button') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for session in sessions %}
+                <tr>
+                    <td>{{ c.platform_badge(session.platform) }}</td>
+                    <td>
+                        {% if session.flow_id %}
+                            <a href="/frontend/builder/flow/{{ session.flow_id }}" 
+                               class="text-decoration-none" 
+                               title="{{ t('builder.title') }}">
+                                <small>{{ session.flow_name or session.flow_id }}</small>
+                                <i class="bi bi-box-arrow-up-right ms-1 text-xs"></i>
+                            </a>
+                        {% else %}
+                            <small class="text-muted">{{ t('chats.not_specified') }}</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if session.first_message %}
+                            <small class="text-muted">{{ session.first_message }}{% if session.first_message|length == 60 %}...{% endif %}</small>
+                        {% else %}
+                            <small class="text-muted">-</small>
+                        {% endif %}
+                    </td>
+                    <td>{{ c.status_badge(session.status, translate=true) }}</td>
+                    <td class="text-center">{{ c.counter_badge(session.message_count) }}</td>
+                    <td>
+                        <small class="text-muted">
+                            {{ session.created_at.strftime('%Y-%m-%d %H:%M') if session.created_at else '-' }}
+                        </small>
+                    </td>
+                    <td>
+                        <small class="text-muted">
+                            {{ session.last_activity.strftime('%Y-%m-%d %H:%M') if session.last_activity else '-' }}
+                        </small>
+                    </td>
+                    <td class="text-center">
+                        {{ c.button('',
+                            variant='primary',
+                            size='sm',
+                            icon='chat-dots',
+                            onclick='window.app.chat.openExistingSession(\'' + session.flow_id + '\', \'' + session.session_id + '\')',
+                            data_tooltip=t('chats.open_chat')
+                        ) }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        {% endcall %}
         
         {% if total > limit %}
         <div class="card-footer">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    Показано {{ offset + 1 }}-{{ (offset + sessions|length) }} из {{ total }}
-                </div>
-                <div class="btn-group" role="group">
-                    {% if offset > 0 %}
-                    <button class="btn btn-outline-secondary btn-sm"
-                            hx-get="/frontend/chats/list?offset={{ offset - limit }}&limit={{ limit }}"
-                            hx-target="#chats-list"
-                            hx-include="#chats-filters">
-                        <i class="bi bi-chevron-left"></i> {{ t('chats.back') }}
-                    </button>
-                    {% endif %}
-                    
-                    {% if offset + limit < total %}
-                    <button class="btn btn-outline-secondary btn-sm"
-                            hx-get="/frontend/chats/list?offset={{ offset + limit }}&limit={{ limit }}"
-                            hx-target="#chats-list"
-                            hx-include="#chats-filters">
-                        {{ t('chats.forward') }} <i class="bi bi-chevron-right"></i>
-                    </button>
-                    {% endif %}
-                </div>
-            </div>
+            {{ c.pagination(
+                offset=offset,
+                limit=limit,
+                total=total,
+                hx_get_url='/frontend/chats/list',
+                hx_target='#chats-list',
+                hx_include='#chats-filters',
+                prev_text=t('chats.back'),
+                next_text=t('chats.forward')
+            ) }}
         </div>
         {% endif %}
         
         {% else %}
-        <div class="empty-state py-5">
-            <div class="empty-state-icon">
-                <i class="bi bi-inbox display-4 text-muted"></i>
-            </div>
-            <div class="empty-state-title">{{ t('chats.empty_state.title') }}</div>
-            <div class="empty-state-description">
-                {{ t('chats.empty_state.description') }}
-            </div>
-        </div>
+        {{ c.empty_state(
+            icon='inbox',
+            title=t('chats.empty_state.title'),
+            description=t('chats.empty_state.description')
+        ) }}
         {% endif %}
     </div>
 </div>
-
