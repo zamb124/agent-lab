@@ -1,7 +1,7 @@
 /**
  * Управление боковой панелью Builder
  */
-class BuilderSidebar {
+export default class BuilderSidebar {
     constructor(element, builder) {
         this.element = element;
         this.builder = builder;
@@ -982,4 +982,3 @@ class BuilderSidebar {
 }
 
 // Экспортируем класс в глобальную область
-window.BuilderSidebar = BuilderSidebar;

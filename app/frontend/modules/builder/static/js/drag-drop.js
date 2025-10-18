@@ -1,7 +1,10 @@
 /**
  * Drag & Drop функциональность для Builder
  */
-class BuilderDragDrop {
+
+import ElementSelector from './element-selector.js';
+
+export default class BuilderDragDrop {
     constructor(builder) {
         this.builder = builder;
 
@@ -1092,7 +1095,7 @@ class BuilderDragDrop {
 /**
  * Менеджер для автоматического размещения элементов при разворачивании флоу
  */
-class FlowLayoutManager {
+export class FlowLayoutManager {
     constructor() {
         this.config = {
             horizontalSpacing: 280,  // Расстояние между уровнями по горизонтали (для компактных кубиков)
@@ -1232,6 +1235,3 @@ class FlowLayoutManager {
     }
 }
 
-// Экспортируем классы в глобальную область
-window.BuilderDragDrop = BuilderDragDrop;
-window.FlowLayoutManager = FlowLayoutManager;

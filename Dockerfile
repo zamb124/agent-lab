@@ -37,6 +37,7 @@ FROM base AS app
 # Копируем код приложения
 COPY app/ ./app/
 COPY run.py ./
+COPY run_prod.py ./
 COPY run_worker.py ./
 COPY conf.json ./
 
@@ -46,5 +47,5 @@ COPY --from=docs-builder /app/site ./site
 # Открываем порт
 EXPOSE 8001
 
-# Команда запуска
-CMD ["python", "run.py"]
+# Команда запуска (используем run_prod.py для продакшена)
+CMD ["python", "run_prod.py"]

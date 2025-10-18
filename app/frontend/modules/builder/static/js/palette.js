@@ -2,7 +2,7 @@
  * NodePalette - управление палитрой компонентов
  */
 
-class NodePalette {
+export default class NodePalette {
     constructor(builder) {
         this.builder = builder;
         this.element = document.getElementById('nodePalette');
@@ -100,7 +100,4 @@ class NodePalette {
         e.target.closest('.palette-item').classList.remove('dragging');
     }
 }
-
-// Экспортируем класс
-window.NodePalette = NodePalette;
 

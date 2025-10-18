@@ -4,6 +4,11 @@
 {% block title %}{{ t('builder.title') }} - {{ t('common.app_name') }}{% endblock %}
 
 {% block head %}
+<!-- Метаданные плагинов для JS -->
+<script>
+    window.__PLUGINS__ = {{ plugin_metadata | default([]) | tojson | safe }};
+</script>
+
 <link rel="stylesheet" href="/static/builder/css/builder.css">
 <link rel="stylesheet" href="/static/builder/css/element-selector.css">
 {% endblock %}
@@ -225,43 +230,4 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="/static/builder/js/palette.js"></script>
-<script src="/static/builder/js/properties-panel.js"></script>
-<script src="/static/builder/js/canvas.js"></script>
-<script src="/static/builder/js/element-selector.js"></script>
-<script src="/static/builder/js/drag-drop.js"></script>
-<script src="/static/builder/js/builder.js"></script>
-<script>
-    // Инициализация Builder после загрузки всех зависимостей
-    function initBuilder() {
-        console.log('🚀 Инициализация Builder...');
-
-        if (typeof htmx === 'undefined') {
-            console.log('⏳ HTMX еще не загружен, ждем...');
-            setTimeout(initBuilder, 100);
-            return;
-        }
-
-        if (typeof CodeEditor === 'undefined') {
-            console.log('⏳ CodeEditor еще не загружен, ждем...');
-            setTimeout(initBuilder, 100);
-            return;
-        }
-
-        if (typeof Builder === 'undefined') {
-            console.error('❌ Builder class не найден!');
-            return;
-        }
-
-        console.log('✅ Все зависимости загружены. Создаем экземпляр Builder');
-        console.log('✅ CodeEditor:', typeof CodeEditor !== 'undefined');
-
-        window.builder = new Builder({
-            flowId: {% if flow_id %}"{{ flow_id }}"{% else %}null{% endif %}
-        });
-        window.builder.init();
-    }
-
-    document.addEventListener('DOMContentLoaded', initBuilder);
-</script>
 {% endblock %}
