@@ -1,6 +1,6 @@
 {% import 'components.html' as c %}
 
-<h1 class="header-title" hx-swap-oob="true" id="page-title">Главная</h1>
+<h1 class="header-title" hx-swap-oob="true" id="page-title">{{ t('dashboard.welcome.title') }}</h1>
 
 <div class="welcome-container">
     <div class="welcome-hero">
@@ -8,19 +8,17 @@
             <i class="bi bi-robot"></i>
         </div>
         <h1 class="welcome-title">
-            Добро пожаловать в <span class="langflow-gradient">Agent Lab</span>
+            {{ t('dashboard.welcome.hero_title') | safe }}
         </h1>
         <p class="welcome-subtitle">
-            Платформа для создания умных AI-агентов и автоматизации бизнес-процессов
+            {{ t('dashboard.welcome.hero_subtitle') }}
         </p>
     </div>
 
     <div class="welcome-content">
         <div class="welcome-intro">
             <p class="welcome-text">
-                Мы рады приветствовать вас на платформе <strong>Agent Lab</strong>! 
-                Здесь вы можете создавать интеллектуальных ботов, автоматизировать рутинные задачи 
-                и подключать их к любимым каналам связи — всё это без единой строчки кода.
+                {{ t('dashboard.welcome.intro_text') | safe }}
             </p>
         </div>
 
@@ -29,9 +27,9 @@
                 <div class="feature-icon">
                     <i class="bi bi-magic"></i>
                 </div>
-                <h3 class="feature-title">Создавайте ботов легко</h3>
+                <h3 class="feature-title">{{ t('dashboard.welcome.features.create_bots.title') }}</h3>
                 <p class="feature-description">
-                    Визуальный редактор и готовые шаблоны позволят запустить вашего первого бота за считанные минуты
+                    {{ t('dashboard.welcome.features.create_bots.description') }}
                 </p>
             </div>
 
@@ -39,9 +37,9 @@
                 <div class="feature-icon">
                     <i class="bi bi-diagram-3"></i>
                 </div>
-                <h3 class="feature-title">Builder для сложных сценариев</h3>
+                <h3 class="feature-title">{{ t('dashboard.welcome.features.builder.title') }}</h3>
                 <p class="feature-description">
-                    Создавайте многоагентные системы с помощью визуального конструктора и настраивайте логику работы
+                    {{ t('dashboard.welcome.features.builder.description') }}
                 </p>
             </div>
 
@@ -49,9 +47,9 @@
                 <div class="feature-icon">
                     <i class="bi bi-chat-dots"></i>
                 </div>
-                <h3 class="feature-title">Множество каналов</h3>
+                <h3 class="feature-title">{{ t('dashboard.welcome.features.channels.title') }}</h3>
                 <p class="feature-description">
-                    Подключайте Telegram, WhatsApp, Web Chat, API и AmoCRM — всё в одном месте
+                    {{ t('dashboard.welcome.features.channels.description') }}
                 </p>
             </div>
 
@@ -59,9 +57,9 @@
                 <div class="feature-icon">
                     <i class="bi bi-book"></i>
                 </div>
-                <h3 class="feature-title">База знаний (RAG)</h3>
+                <h3 class="feature-title">{{ t('dashboard.welcome.features.rag.title') }}</h3>
                 <p class="feature-description">
-                    Загружайте документы и ваш бот будет отвечать на основе ваших данных
+                    {{ t('dashboard.welcome.features.rag.description') }}
                 </p>
             </div>
 
@@ -69,9 +67,9 @@
                 <div class="feature-icon">
                     <i class="bi bi-tools"></i>
                 </div>
-                <h3 class="feature-title">Богатый набор инструментов</h3>
+                <h3 class="feature-title">{{ t('dashboard.welcome.features.tools.title') }}</h3>
                 <p class="feature-description">
-                    Интеграции с внешними сервисами, работа с файлами, API и многое другое
+                    {{ t('dashboard.welcome.features.tools.description') }}
                 </p>
             </div>
 
@@ -79,27 +77,27 @@
                 <div class="feature-icon">
                     <i class="bi bi-graph-up"></i>
                 </div>
-                <h3 class="feature-title">Аналитика и мониторинг</h3>
+                <h3 class="feature-title">{{ t('dashboard.welcome.features.analytics.title') }}</h3>
                 <p class="feature-description">
-                    Отслеживайте эффективность ботов, просматривайте историю диалогов и оптимизируйте работу
+                    {{ t('dashboard.welcome.features.analytics.description') }}
                 </p>
             </div>
         </div>
 
         <div class="welcome-cta">
             <div class="cta-content">
-                <h2 class="cta-title">Начните прямо сейчас!</h2>
+                <h2 class="cta-title">{{ t('dashboard.welcome.cta.title') }}</h2>
                 <p class="cta-text">
-                    Создайте своего первого бота или выберите готовое решение из магазина
+                    {{ t('dashboard.welcome.cta.text') }}
                 </p>
                 <div class="cta-buttons">
                     <a href="/frontend/bots" class="btn btn-primary btn-lg" hx-get="/frontend/bots/" hx-target="#content" hx-push-url="true">
                         <i class="bi bi-plus-circle"></i>
-                        Создать бота
+                        {{ t('dashboard.welcome.cta.create_bot') }}
                     </a>
                     <a href="/frontend/store" class="btn btn-outline btn-lg" hx-get="/frontend/store/" hx-target="#content" hx-push-url="true">
                         <i class="bi bi-shop"></i>
-                        Магазин решений
+                        {{ t('dashboard.welcome.cta.store') }}
                     </a>
                 </div>
             </div>
@@ -108,35 +106,35 @@
         <div class="welcome-quickstart">
             <h3 class="quickstart-title">
                 <i class="bi bi-lightning-charge"></i>
-                Быстрый старт
+                {{ t('dashboard.welcome.quickstart.title') }}
             </h3>
             <div class="quickstart-steps">
                 <div class="quickstart-step">
                     <div class="step-number">1</div>
                     <div class="step-content">
-                        <h4>Перейдите в раздел "Боты"</h4>
-                        <p>Создайте своего первого бота или выберите шаблон из магазина</p>
+                        <h4>{{ t('dashboard.welcome.quickstart.steps.1.title') }}</h4>
+                        <p>{{ t('dashboard.welcome.quickstart.steps.1.description') }}</p>
                     </div>
                 </div>
                 <div class="quickstart-step">
                     <div class="step-number">2</div>
                     <div class="step-content">
-                        <h4>Настройте промпт и способности</h4>
-                        <p>Опишите, что должен делать ваш бот, и добавьте нужные инструменты</p>
+                        <h4>{{ t('dashboard.welcome.quickstart.steps.2.title') }}</h4>
+                        <p>{{ t('dashboard.welcome.quickstart.steps.2.description') }}</p>
                     </div>
                 </div>
                 <div class="quickstart-step">
                     <div class="step-number">3</div>
                     <div class="step-content">
-                        <h4>Подключите каналы</h4>
-                        <p>Добавьте Telegram, WhatsApp или другие каналы связи</p>
+                        <h4>{{ t('dashboard.welcome.quickstart.steps.3.title') }}</h4>
+                        <p>{{ t('dashboard.welcome.quickstart.steps.3.description') }}</p>
                     </div>
                 </div>
                 <div class="quickstart-step">
                     <div class="step-number">4</div>
                     <div class="step-content">
-                        <h4>Тестируйте и запускайте</h4>
-                        <p>Протестируйте бота в встроенном чате и запустите в продакшн</p>
+                        <h4>{{ t('dashboard.welcome.quickstart.steps.4.title') }}</h4>
+                        <p>{{ t('dashboard.welcome.quickstart.steps.4.description') }}</p>
                     </div>
                 </div>
             </div>
