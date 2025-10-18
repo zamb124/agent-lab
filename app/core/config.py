@@ -235,10 +235,9 @@ class MigrationSettings(BaseModel):
 
     default_flows: list[str] = Field(
         default_factory=lambda: [
-            "app.flows.test_flow.test_flow_config",
-            "app.flows.weather_flow.weather_flow_config",
+            "app.flows.faq_flow.faq_flow_config",
         ],
-        description="Список flow для миграции в новую компанию"
+        description="Список flow для автоматической установки в новую компанию"
     )
     default_agents: list[str] = Field(
         default_factory=lambda: [

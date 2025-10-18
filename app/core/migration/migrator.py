@@ -198,17 +198,18 @@ class Migrator:
 
     async def migrate_defaults_for_company(self, company: Company):
         """
-        Мигрирует ТОЛЬКО публичные tools для новой компании.
-        
-        Flows НЕ мигрируются - устанавливаются через Store.
+        Мигрирует дефолтные сущности для новой компании:
+        - Публичные tools
+        - Flows из settings.migration.default_flows
         
         Args:
             company: Компания для миграции
         """
-        logger.info(f"Миграция публичных tools для {company.company_id}...")
+        logger.info(f"Миграция дефолтных сущностей для {company.company_id}...")
         
         await self._set_company_context(company)
 
+        # 1. Мигрируем публичные tools
         packages_to_scan = ["app.tools", "app.custom_flows"]
         all_tool_functions = []
         
@@ -216,14 +217,32 @@ class Migrator:
             tool_functions = await self.scanner.find_tool_functions(package_name)
             all_tool_functions.extend(tool_functions)
 
-        migrated_count = 0
+        tools_count = 0
         for tool_obj, module_name in all_tool_functions:
             is_public = getattr(tool_obj, '_platform_is_public', False)
             if is_public:
                 await ToolReference.migrate(source=tool_obj, migrator=self)
-                migrated_count += 1
+                tools_count += 1
 
-        logger.info(f"Мигрировано {migrated_count} публичных tools")
+        logger.info(f"✅ Мигрировано {tools_count} публичных tools")
+
+        # 2. Устанавливаем дефолтные flows из конфига
+        from app.core.config import settings
+        
+        default_flows = settings.migration.default_flows
+        if default_flows:
+            logger.info(f"Установка {len(default_flows)} дефолтных flows...")
+            
+            for flow_id in default_flows:
+                try:
+                    await FlowConfig.migrate(flow_id, migrator=self, with_dependencies=True)
+                    logger.info(f"✅ Flow {flow_id} установлен")
+                except Exception as e:
+                    logger.error(f"❌ Ошибка установки flow {flow_id}: {e}")
+            
+            logger.info(f"✅ Установлено {len(default_flows)} дефолтных flows")
+        
+        logger.info(f"✅ Миграция дефолтных сущностей завершена для {company.company_id}")
 
     async def migrate_for_company(
         self,
