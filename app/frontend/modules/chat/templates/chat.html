@@ -57,14 +57,13 @@
 
 {% block scripts %}
 <script>
-    // Чат уже инициализирован в app.js
-    // Можно сразу использовать window.app.chat.open()
     document.addEventListener('DOMContentLoaded', () => {
-        // Привязываем события к агентам
         document.querySelectorAll('.agent-item').forEach(item => {
             item.addEventListener('click', async () => {
                 const agentId = item.dataset.agentId;
-                await window.app.chat.open({agent_id: agentId});
+                if (window.app && window.app.chat) {
+                    await window.app.chat.open({agent_id: agentId});
+                }
             });
         });
     });
