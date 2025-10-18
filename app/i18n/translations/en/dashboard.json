@@ -19,7 +19,8 @@
     "theme_toggle": "Toggle theme",
     "language_toggle": "Select language",
     "logout": "Logout",
-    "collapse_menu": "Collapse menu"
+    "collapse_menu": "Collapse menu",
+    "switch_company": "Switch company"
   },
   "footer": {
     "user": "User",

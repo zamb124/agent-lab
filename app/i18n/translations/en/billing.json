@@ -54,5 +54,6 @@
     "card_payment": "Bank Card Payment",
     "secure_transaction": "Secure Transaction",
     "auto_receipt": "Automatic Receipt Issuance"
-  }
+  },
+  "create_company": "Create Company"
 }

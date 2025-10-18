@@ -26,15 +26,19 @@
 .store-card-image {
     width: 100%;
     height: 220px;
-    overflow: visible;
+    overflow: hidden;
     position: relative;
     background: var(--bg-secondary);
+    border-top-left-radius: var(--radius-xl);
+    border-top-right-radius: var(--radius-xl);
 }
 
 .store-card-image-wrapper {
     width: 100%;
     height: 100%;
     overflow: hidden;
+    border-top-left-radius: var(--radius-xl);
+    border-top-right-radius: var(--radius-xl);
 }
 
 .store-card-image img {

@@ -47,7 +47,7 @@ async def get_current_user():
             if provider_info:
                 email = provider_info.get("email")
                 avatar_url = provider_info.get("avatar_url")
-
+    
     return {
         "user_id": user.user_id,
         "email": email,
@@ -56,6 +56,42 @@ async def get_current_user():
         "provider": provider_value,
         "status": user.status.value,
     }
+
+
+@router.post("/switch-company/{company_id}")
+async def switch_company(company_id: str):
+    """Переключить активную компанию пользователя"""
+    logger.info(f"🔄 Запрос переключения компании на: {company_id}")
+    
+    context = get_context()
+    if not context or not context.user:
+        logger.error("❌ Нет контекста или пользователя")
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    user = context.user
+    logger.info(f"👤 Пользователь: {user.user_id}, текущие компании: {list(user.companies.keys())}")
+    
+    if company_id not in user.companies:
+        logger.error(f"❌ Пользователь {user.user_id} не имеет доступа к компании {company_id}")
+        raise HTTPException(status_code=403, detail=f"У вас нет доступа к компании {company_id}")
+    
+    storage = Storage()
+    user_key = f"user:{user.user_id}"
+    user.active_company_id = company_id
+    user.updated_at = datetime.now(timezone.utc)
+    
+    logger.info(f"💾 Сохраняем active_company_id={company_id} для пользователя {user.user_id}")
+    await storage.set(user_key, user.model_dump_json(), force_global=True)
+    
+    settings = get_settings()
+    
+    if settings.server.env == "local":
+        redirect_url = f"http://{company_id}.localhost:{settings.server.port}/frontend/dashboard"
+    else:
+        redirect_url = f"https://{company_id}.{settings.server.domain}/frontend/dashboard"
+    
+    logger.info(f"✅ Переключение успешно, redirect_url: {redirect_url}")
+    return {"success": True, "redirect_url": redirect_url}
 
 
 @router.get("/agents", response_model=List[str])

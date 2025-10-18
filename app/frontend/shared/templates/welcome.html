@@ -1,0 +1,392 @@
+{% import 'components.html' as c %}
+
+<h1 class="header-title" hx-swap-oob="true" id="page-title">Главная</h1>
+
+<div class="welcome-container">
+    <div class="welcome-hero">
+        <div class="welcome-icon">
+            <i class="bi bi-robot"></i>
+        </div>
+        <h1 class="welcome-title">
+            Добро пожаловать в <span class="langflow-gradient">Agent Lab</span>
+        </h1>
+        <p class="welcome-subtitle">
+            Платформа для создания умных AI-агентов и автоматизации бизнес-процессов
+        </p>
+    </div>
+
+    <div class="welcome-content">
+        <div class="welcome-intro">
+            <p class="welcome-text">
+                Мы рады приветствовать вас на платформе <strong>Agent Lab</strong>! 
+                Здесь вы можете создавать интеллектуальных ботов, автоматизировать рутинные задачи 
+                и подключать их к любимым каналам связи — всё это без единой строчки кода.
+            </p>
+        </div>
+
+        <div class="welcome-features">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="bi bi-magic"></i>
+                </div>
+                <h3 class="feature-title">Создавайте ботов легко</h3>
+                <p class="feature-description">
+                    Визуальный редактор и готовые шаблоны позволят запустить вашего первого бота за считанные минуты
+                </p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="bi bi-diagram-3"></i>
+                </div>
+                <h3 class="feature-title">Builder для сложных сценариев</h3>
+                <p class="feature-description">
+                    Создавайте многоагентные системы с помощью визуального конструктора и настраивайте логику работы
+                </p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="bi bi-chat-dots"></i>
+                </div>
+                <h3 class="feature-title">Множество каналов</h3>
+                <p class="feature-description">
+                    Подключайте Telegram, WhatsApp, Web Chat, API и AmoCRM — всё в одном месте
+                </p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="bi bi-book"></i>
+                </div>
+                <h3 class="feature-title">База знаний (RAG)</h3>
+                <p class="feature-description">
+                    Загружайте документы и ваш бот будет отвечать на основе ваших данных
+                </p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="bi bi-tools"></i>
+                </div>
+                <h3 class="feature-title">Богатый набор инструментов</h3>
+                <p class="feature-description">
+                    Интеграции с внешними сервисами, работа с файлами, API и многое другое
+                </p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="bi bi-graph-up"></i>
+                </div>
+                <h3 class="feature-title">Аналитика и мониторинг</h3>
+                <p class="feature-description">
+                    Отслеживайте эффективность ботов, просматривайте историю диалогов и оптимизируйте работу
+                </p>
+            </div>
+        </div>
+
+        <div class="welcome-cta">
+            <div class="cta-content">
+                <h2 class="cta-title">Начните прямо сейчас!</h2>
+                <p class="cta-text">
+                    Создайте своего первого бота или выберите готовое решение из магазина
+                </p>
+                <div class="cta-buttons">
+                    <a href="/frontend/bots" class="btn btn-primary btn-lg" hx-get="/frontend/bots/" hx-target="#content" hx-push-url="true">
+                        <i class="bi bi-plus-circle"></i>
+                        Создать бота
+                    </a>
+                    <a href="/frontend/store" class="btn btn-outline btn-lg" hx-get="/frontend/store/" hx-target="#content" hx-push-url="true">
+                        <i class="bi bi-shop"></i>
+                        Магазин решений
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="welcome-quickstart">
+            <h3 class="quickstart-title">
+                <i class="bi bi-lightning-charge"></i>
+                Быстрый старт
+            </h3>
+            <div class="quickstart-steps">
+                <div class="quickstart-step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h4>Перейдите в раздел "Боты"</h4>
+                        <p>Создайте своего первого бота или выберите шаблон из магазина</p>
+                    </div>
+                </div>
+                <div class="quickstart-step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h4>Настройте промпт и способности</h4>
+                        <p>Опишите, что должен делать ваш бот, и добавьте нужные инструменты</p>
+                    </div>
+                </div>
+                <div class="quickstart-step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h4>Подключите каналы</h4>
+                        <p>Добавьте Telegram, WhatsApp или другие каналы связи</p>
+                    </div>
+                </div>
+                <div class="quickstart-step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h4>Тестируйте и запускайте</h4>
+                        <p>Протестируйте бота в встроенном чате и запустите в продакшн</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.welcome-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.welcome-hero {
+    text-align: center;
+    padding: 3rem 0;
+}
+
+.welcome-icon {
+    font-size: 5rem;
+    color: var(--accent-primary);
+    margin-bottom: 1.5rem;
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+.welcome-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+.welcome-subtitle {
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+    margin-bottom: 0;
+}
+
+.welcome-content {
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+}
+
+.welcome-intro {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 2rem;
+    border-left: 4px solid var(--accent-primary);
+}
+
+.welcome-text {
+    font-size: 1.1rem;
+    line-height: 1.8;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.welcome-features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.feature-card {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 2rem;
+    transition: all 0.3s ease;
+    border: 1px solid var(--border-primary);
+}
+
+.feature-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
+    border-color: var(--accent-primary);
+}
+
+.feature-icon {
+    font-size: 2.5rem;
+    color: var(--accent-primary);
+    margin-bottom: 1rem;
+}
+
+.feature-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+
+.feature-description {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin: 0;
+}
+
+.welcome-cta {
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    border-radius: var(--radius-xl);
+    padding: 3rem;
+    text-align: center;
+    color: white;
+}
+
+.cta-title {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: white;
+}
+
+.cta-text {
+    font-size: 1.1rem;
+    margin-bottom: 2rem;
+    opacity: 0.95;
+}
+
+.cta-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.cta-buttons .btn {
+    min-width: 200px;
+}
+
+.cta-buttons .btn-primary {
+    background: white;
+    color: var(--accent-primary);
+    border-color: white;
+}
+
+.cta-buttons .btn-primary:hover {
+    background: var(--bg-secondary);
+}
+
+.cta-buttons .btn-outline {
+    border-color: white;
+    color: white;
+    background: transparent;
+}
+
+.cta-buttons .btn-outline:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.welcome-quickstart {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 2.5rem;
+}
+
+.quickstart-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    margin-bottom: 2rem;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.quickstart-title i {
+    color: var(--warning);
+}
+
+.quickstart-steps {
+    display: grid;
+    gap: 1.5rem;
+}
+
+.quickstart-step {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+}
+
+.step-number {
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--accent-primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.step-content h4 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.step-content p {
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+    .welcome-container {
+        padding: 1rem;
+    }
+
+    .welcome-hero {
+        padding: 2rem 0;
+    }
+
+    .welcome-title {
+        font-size: 2rem;
+    }
+
+    .welcome-subtitle {
+        font-size: 1rem;
+    }
+
+    .welcome-features {
+        grid-template-columns: 1fr;
+    }
+
+    .welcome-cta {
+        padding: 2rem 1.5rem;
+    }
+
+    .cta-title {
+        font-size: 1.5rem;
+    }
+
+    .cta-buttons {
+        flex-direction: column;
+    }
+
+    .quickstart-step {
+        flex-direction: column;
+        gap: 1rem;
+    }
+}
+</style>
+

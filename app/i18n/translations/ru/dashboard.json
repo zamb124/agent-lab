@@ -19,7 +19,8 @@
     "theme_toggle": "Переключить тему",
     "language_toggle": "Выбрать язык",
     "logout": "Выйти",
-    "collapse_menu": "Свернуть меню"
+    "collapse_menu": "Свернуть меню",
+    "switch_company": "Переключить компанию"
   },
   "footer": {
     "user": "Пользователь",
