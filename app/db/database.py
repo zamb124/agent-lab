@@ -65,13 +65,20 @@ async def wait_for_db(max_retries: int = 30, retry_interval: int = 2):
 
 
 async def create_tables():
-    """Создает таблицы в БД"""
+    """Создает таблицы в БД если их нет"""
     await wait_for_db()
     
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-    logger.info("Таблицы созданы")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all, checkfirst=True)
+        logger.info("✅ Таблицы проверены/созданы")
+    except Exception as e:
+        error_msg = str(e)
+        if "already exists" in error_msg or "duplicate key" in error_msg:
+            logger.info("ℹ️ Таблицы уже существуют, пропускаем создание")
+        else:
+            logger.error(f"❌ Ошибка при создании таблиц: {e}")
+            raise
 
 
 async def drop_tables():
