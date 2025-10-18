@@ -172,6 +172,15 @@ class TemplateLoader:
                     if module_templates.exists():
                         dirs.append(module_templates)
         
+        # Pages (публичные страницы)
+        pages_dir = frontend_dir / "pages"
+        if pages_dir.exists():
+            for page_dir in sorted(pages_dir.iterdir()):
+                if page_dir.is_dir():
+                    page_templates = page_dir / "templates"
+                    if page_templates.exists():
+                        dirs.append(page_templates)
+        
         # Старые templates для обратной совместимости (последние в приоритете)
         old_templates = frontend_dir / "templates"
         if old_templates.exists():
