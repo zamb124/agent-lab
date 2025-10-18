@@ -10,7 +10,19 @@
         <div class="container">
             <div class="header-content">
                 <div class="brand">
-                    <i class="bi bi-robot icon-lg"></i>
+                    <button class="app-launcher-trigger" onclick="toggleAppLauncher()" title="Все приложения">
+                        <div class="app-launcher-icon-grid">
+                            <i class="bi bi-circle-fill"></i>
+                            <i class="bi bi-circle-fill"></i>
+                            <i class="bi bi-circle-fill"></i>
+                            <i class="bi bi-circle-fill"></i>
+                            <i class="bi bi-circle-fill"></i>
+                            <i class="bi bi-circle-fill"></i>
+                            <i class="bi bi-circle-fill"></i>
+                            <i class="bi bi-circle-fill"></i>
+                            <i class="bi bi-circle-fill"></i>
+                        </div>
+                    </button>
                     <span class="brand-text langflow-gradient">Agents Lab</span>
                 </div>
                 
@@ -67,11 +79,10 @@
     <div class="mobile-menu" id="mobileMenu">
         <div class="mobile-menu-header">
             <div class="brand">
-                <i class="bi bi-robot"></i>
                 <span class="brand-text langflow-gradient">Agents Lab</span>
             </div>
             <button class="mobile-menu-close" onclick="closeMobileMenu()">
-                <i class="bi bi-x-lg"></i>
+                <i class="bi bi-x-circle-fill"></i>
             </button>
         </div>
         <nav class="mobile-menu-nav">
@@ -385,7 +396,7 @@
         <div class="modal-header">
             <h3>{{ t('landing.contact_modal.title') }}</h3>
             <button class="modal-close" onclick="closeContactModal()">
-                <i class="bi bi-x-lg"></i>
+                <i class="bi bi-x-circle-fill"></i>
             </button>
         </div>
         <div class="modal-body">
@@ -415,7 +426,48 @@
     </div>
 </div>
 
+<!-- App Launcher Overlay -->
+<div class="app-launcher-overlay" id="app-launcher" onclick="if(event.target === this) toggleAppLauncher()">
+    <button class="app-launcher-close" onclick="toggleAppLauncher()">
+        <i class="bi bi-x-circle-fill"></i>
+    </button>
+    
+    <div class="app-launcher-container">
+        <h2 class="app-launcher-title-main">{{ t('dashboard.widgets.title') }}</h2>
+        
+        <div class="app-launcher-grid">
+            {% for widget in dashboard_widgets | default([]) %}
+            <div class="app-launcher-item" onclick="window.location.href='{{ widget.url }}'">
+                <div class="app-launcher-icon">
+                    <i class="bi {{ widget.icon }}"></i>
+                </div>
+                <div class="app-launcher-item-title">{{ t(widget.title) if widget.title.startswith('dashboard.') else widget.title }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
 <script>
+// App Launcher
+function toggleAppLauncher() {
+    const launcher = document.getElementById('app-launcher');
+    if (launcher) {
+        launcher.classList.toggle('active');
+        document.body.style.overflow = launcher.classList.contains('active') ? 'hidden' : '';
+    }
+}
+
+// Закрытие по ESC
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const launcher = document.getElementById('app-launcher');
+        if (launcher && launcher.classList.contains('active')) {
+            toggleAppLauncher();
+        }
+    }
+});
+
 function scrollToSection(sectionId) {
     const element = document.getElementById(sectionId);
     if (element) {

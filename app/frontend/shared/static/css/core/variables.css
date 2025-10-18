@@ -1,55 +1,72 @@
-/* Agents Lab - CSS Variables (Linear-inspired dark theme) */
+/* Agents Lab - Матовый пастельный стиль */
 
 :root {
-    /* Основные цвета темной темы */
-    --bg-primary: #0d0d0d;
-    --bg-secondary: #1a1a1a;
-    --bg-tertiary: #262626;
-    --bg-card: #1a1a1a;
-    --bg-hover: #262626;
-    --bg-surface: #141414;
+    /* Основные цвета - мягкие темные тона */
+    --bg-primary: #1a1a20;
+    --bg-secondary: rgba(255, 255, 255, 0.04);
+    --bg-tertiary: rgba(255, 255, 255, 0.07);
+    --bg-card: rgba(255, 255, 255, 0.06);
+    --bg-hover: rgba(255, 255, 255, 0.1);
+    --bg-surface: rgba(26, 26, 32, 0.9);
     
-    /* Текст */
+    /* Glass morphism */
+    --glass-bg: rgba(255, 255, 255, 0.05);
+    --glass-border: rgba(255, 255, 255, 0.4);
+    --glass-border-hover: rgba(255, 255, 255, 0.6);
+    --glass-blur: blur(12px);
+    --glass-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15) inset, 0 2px 8px rgba(0, 0, 0, 0.15);
+    --modal-bg: rgba(26, 26, 32, 0.98);
+    
+    /* Текст - мягкие оттенки */
     --text-primary: #ffffff;
-    --text-secondary: #a1a1a1;
-    --text-muted: #737373;
-    --text-disabled: #525252;
+    --text-secondary: #b4b4c8;
+    --text-muted: #8585a0;
+    --text-disabled: #5a5a6e;
     
-    /* Акцентные цвета (плоские, без градиентов) */
-    --accent-primary: #5e6ad2;
-    --accent-primary-hover: #4e5bc4;
-    --accent-secondary: #7c3aed;
-    --accent-success: #10b981;
-    --accent-warning: #f59e0b;
-    --accent-danger: #ef4444;
-    --accent-info: #06b6d4;
+    /* Пастельные акцентные цвета */
+    --accent-primary: #7c7cf8;
+    --accent-primary-hover: #9696ff;
+    --accent-secondary: #a78bfa;
+    --accent-success: #6ee7b7;
+    --accent-warning: #fbbf24;
+    --accent-danger: #f87171;
+    --accent-info: #67e8f9;
     
-    /* Границы */
-    --border-primary: #2a2a2a;
-    --border-secondary: #3a3a3a;
-    --border-focus: #5e6ad2;
+    /* Градиенты для иконок и кнопок */
+    --gradient-primary: linear-gradient(135deg, #7c7cf8, #a78bfa);
+    --gradient-success: linear-gradient(135deg, #6ee7b7, #34d399);
+    --gradient-warning: linear-gradient(135deg, #fbbf24, #f59e0b);
+    --gradient-danger: linear-gradient(135deg, #f87171, #ef4444);
+    --gradient-info: linear-gradient(135deg, #67e8f9, #06b6d4);
     
-    /* Тени (минимальные) */
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
-    --shadow-md: 0 2px 4px 0 rgba(0, 0, 0, 0.3);
-    --shadow-lg: 0 4px 8px 0 rgba(0, 0, 0, 0.4);
-    --shadow-xl: 0 8px 16px 0 rgba(0, 0, 0, 0.5);
+    /* Границы - мягкие полупрозрачные */
+    --border-primary: rgba(255, 255, 255, 0.08);
+    --border-secondary: rgba(255, 255, 255, 0.12);
+    --border-focus: rgba(124, 124, 248, 0.5);
     
-    /* Скругления */
-    --radius-sm: 6px;
-    --radius-md: 8px;
-    --radius-lg: 12px;
-    --radius-xl: 16px;
-    --radius-2xl: 20px;
+    /* Цветные мягкие тени */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.15);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.2);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.25);
+    --shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.3);
+    --shadow-primary: 0 8px 20px rgba(124, 124, 248, 0.3);
+    --shadow-success: 0 8px 20px rgba(110, 231, 183, 0.2);
+    
+    /* Большие скругления */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-2xl: 24px;
     
     /* Размеры */
     --sidebar-width: 280px;
     --header-height: 52px;
     
-    /* Анимации */
-    --transition-fast: 0.15s ease;
-    --transition-normal: 0.25s ease;
-    --transition-slow: 0.35s ease;
+    /* Плавные анимации */
+    --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     
     /* Z-индексы */
     --z-dropdown: 1000;
@@ -58,29 +75,53 @@
     --z-tooltip: 1030;
 }
 
-/* Светлая тема (для переключения в будущем) */
+/* Светлая тема - пастельный стиль */
 [data-theme="light"] {
-    --bg-primary: #fafafa;
-    --bg-secondary: #f5f5f5;
-    --bg-tertiary: #e8e8e8;
-    --bg-card: #ffffff;
-    --bg-hover: #f3f4f6;
-    --bg-surface: #f9fafb;
+    --bg-primary: #f5f5f8;
+    --bg-secondary: rgba(0, 0, 0, 0.02);
+    --bg-tertiary: rgba(0, 0, 0, 0.04);
+    --bg-card: rgba(255, 255, 255, 0.8);
+    --bg-hover: rgba(0, 0, 0, 0.05);
+    --bg-surface: rgba(255, 255, 255, 0.95);
     
-    --text-primary: #111827;
-    --text-secondary: #6b7280;
-    --text-muted: #9ca3af;
-    --text-disabled: #d1d5db;
+    /* Glass morphism для светлой темы */
+    --glass-bg: rgba(255, 255, 255, 0.85);
+    --glass-border: rgba(0, 0, 0, 0.12);
+    --glass-border-hover: rgba(0, 0, 0, 0.2);
+    --glass-blur: blur(12px);
+    --glass-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05) inset;
+    --modal-bg: rgba(248, 248, 252, 0.98);
     
-    --accent-primary: #5e6ad2;
-    --accent-primary-hover: #4e5bc4;
+    --text-primary: #1a1a1a;
+    --text-secondary: #4a4a5a;
+    --text-muted: #6a6a7a;
+    --text-disabled: #9a9aaa;
     
-    --border-primary: #e5e7eb;
-    --border-secondary: #d1d5db;
-    --border-focus: #5e6ad2;
+    /* Пастельные акценты для светлой темы */
+    --accent-primary: #6b6bf0;
+    --accent-primary-hover: #5a5ad8;
+    --accent-secondary: #9370db;
+    --accent-success: #4ade80;
+    --accent-warning: #fbbf24;
+    --accent-danger: #f87171;
+    --accent-info: #38bdf8;
     
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    --shadow-md: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 4px 8px 0 rgba(0, 0, 0, 0.1);
-    --shadow-xl: 0 8px 16px 0 rgba(0, 0, 0, 0.15);
+    /* Градиенты для светлой темы */
+    --gradient-primary: linear-gradient(135deg, #6b6bf0, #9370db);
+    --gradient-success: linear-gradient(135deg, #4ade80, #22c55e);
+    --gradient-warning: linear-gradient(135deg, #fbbf24, #f59e0b);
+    --gradient-danger: linear-gradient(135deg, #f87171, #ef4444);
+    --gradient-info: linear-gradient(135deg, #38bdf8, #0ea5e9);
+    
+    --border-primary: rgba(0, 0, 0, 0.08);
+    --border-secondary: rgba(0, 0, 0, 0.12);
+    --border-focus: rgba(107, 107, 240, 0.5);
+    
+    /* Мягкие тени для светлой темы */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+    --shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.15);
+    --shadow-primary: 0 8px 20px rgba(107, 107, 240, 0.25);
+    --shadow-success: 0 8px 20px rgba(74, 222, 128, 0.2);
 }

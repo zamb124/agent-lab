@@ -3,7 +3,7 @@
 <div class="store-grid">
     {% if flows %}
         {% for flow in flows %}
-        <div class="store-card {% if flow.installed %}installed{% endif %}" data-flow-id="{{ flow.flow_id }}" onclick="openFlowDetails('{{ flow.flow_id }}')">
+        <div class="card store-card {% if flow.installed %}installed{% endif %}" data-flow-id="{{ flow.flow_id }}" onclick="openFlowDetails('{{ flow.flow_id }}')">
             <div class="store-card-image">
                 {% if flow.installed %}
                 <span class="badge badge-success store-card-badge">

@@ -1,11 +1,12 @@
-/* Хедер */
+/* Хедер - Glass Morphism */
 
 .header {
     height: var(--header-height);
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-sm);
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-md);
     display: flex;
     align-items: center;
     justify-content: space-between;

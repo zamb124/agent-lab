@@ -1,20 +1,46 @@
-/* Карточки */
+/* Карточки - Glass Morphism стиль */
 
 .card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-    transition: all var(--transition-normal);
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
+    background: var(--glass-bg) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: var(--radius-xl) !important;
+    overflow: visible !important;
+    transition: all var(--transition-normal) !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    backdrop-filter: var(--glass-blur) !important;
+    box-shadow: var(--glass-shadow) !important;
+    padding: 1.25rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.875rem !important;
+    position: relative !important;
 }
 
 .card:hover {
-    border-color: var(--border-secondary);
-    box-shadow: var(--shadow-md);
-    transform: translateY(-2px);
+    border-color: var(--glass-border-hover) !important;
+    box-shadow: var(--shadow-lg) !important;
+    transform: translateY(-4px) scale(1.01) !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Иконка карточки - градиентный стиль */
+.card-icon {
+    width: 52px !important;
+    height: 52px !important;
+    background: var(--gradient-primary) !important;
+    border-radius: var(--radius-xl) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+    box-shadow: var(--shadow-primary) !important;
+}
+
+.card-icon i {
+    font-size: 1.625rem !important;
+    color: white !important;
 }
 
 .card-header {

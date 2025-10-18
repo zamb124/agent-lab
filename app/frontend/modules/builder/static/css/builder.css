@@ -20,10 +20,11 @@
     top: 80px;
     width: 240px;
     max-height: calc(100vh - 120px);
-    background: var(--bg-card);
-    border: 1px solid var(--border-primary);
-    border-radius: 12px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 2px solid var(--glass-border);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-lg);
     display: flex;
     flex-direction: column;
     z-index: 100;
@@ -392,7 +393,7 @@
 
 /* Убираем кастомные иконки - будем использовать Bootstrap Icons напрямую */
 
-/* Модальное окно */
+/* Модальное окно - Glass Morphism */
 .modal {
     position: fixed;
     top: 0;
@@ -415,7 +416,8 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(16px);
     z-index: 1;
 }
 
@@ -876,16 +878,16 @@
 }
 
 /* Заголовок карточки */
-.card-header {
+.item-card .card-header {
     display: flex;
     align-items: center;
     gap: 8px;
     margin-bottom: 0;
     padding: 12px;
-    border-radius: calc(var(--radius-md) - 2px) calc(var(--radius-md) - 2px) 0 0; /* Учитываем 2px рамку */
+    border-radius: calc(var(--radius-md) - 2px) calc(var(--radius-md) - 2px) 0 0;
 }
 
-.card-icon {
+.item-card .card-icon {
     width: 20px;
     height: 20px;
     display: flex;
@@ -894,7 +896,7 @@
     font-size: 16px;
 }
 
-.card-title {
+.item-card .card-title {
     flex: 1;
     font-weight: 500;
     font-size: 14px;

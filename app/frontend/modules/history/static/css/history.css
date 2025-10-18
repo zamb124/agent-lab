@@ -109,13 +109,15 @@
 }
 
 .user .message-body {
-    background: var(--accent-primary);
+    background: var(--gradient-primary);
     color: white;
+    box-shadow: var(--shadow-primary);
 }
 
 .assistant .message-body {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-primary);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    border: 2px solid var(--glass-border);
     color: var(--text-primary);
 }
 

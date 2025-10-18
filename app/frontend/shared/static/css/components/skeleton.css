@@ -19,13 +19,15 @@
     }
 }
 
-/* Базовый skeleton элемент */
+/* Базовый skeleton элемент - Glass Morphism */
 .skeleton {
-    background: var(--bg-tertiary);
-    border-radius: var(--radius-md);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
     position: relative;
     overflow: hidden;
-    animation: skeleton-pulse 1.5s ease-in-out infinite;
+    animation: skeleton-pulse 1.8s ease-in-out infinite;
 }
 
 .skeleton::after {
@@ -38,10 +40,10 @@
     background: linear-gradient(
         90deg,
         transparent,
-        rgba(255, 255, 255, 0.1),
+        rgba(124, 124, 248, 0.15),
         transparent
     );
-    animation: skeleton-wave 1.5s ease-in-out infinite;
+    animation: skeleton-wave 2s ease-in-out infinite;
 }
 
 /* Типы skeleton */
@@ -103,9 +105,10 @@
 }
 
 .skeleton-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-lg);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    border: 2px solid var(--glass-border);
+    border-radius: var(--radius-xl);
     padding: 1.5rem;
 }
 

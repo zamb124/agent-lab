@@ -71,21 +71,25 @@
 }
 
 .tariff-card {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius-lg);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    border: 2px solid var(--glass-border);
+    border-radius: var(--radius-xl);
     padding: 2rem;
-    transition: all 0.3s ease;
+    transition: all var(--transition-normal);
 }
 
 .tariff-card:hover {
+    border-color: var(--glass-border-hover);
     box-shadow: var(--shadow-lg);
-    transform: translateY(-2px);
+    transform: translateY(-4px) scale(1.01);
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .current-tariff {
-    border: 2px solid var(--primary);
-    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+    border: 2px solid var(--accent-primary);
+    background: linear-gradient(135deg, rgba(124, 124, 248, 0.1), rgba(167, 139, 250, 0.1));
+    box-shadow: var(--shadow-primary);
 }
 
 .tariff-badge {
@@ -93,11 +97,12 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem 1rem;
-    background: var(--primary);
+    background: var(--gradient-primary);
     color: #ffffff !important;
-    border-radius: 8px;
+    border-radius: var(--radius-xl);
     font-weight: 600;
     font-size: 0.875rem;
+    box-shadow: var(--shadow-primary);
     margin-bottom: 1.5rem;
 }
 
