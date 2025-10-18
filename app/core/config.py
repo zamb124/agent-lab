@@ -88,7 +88,7 @@ class ServerConfig(BaseModel):
     domain: str = "agents-lab.ru"  # Основной домен для поддоменов
 
     # Gunicorn настройки для продакшена
-    workers: int = 4  # Количество воркеров (по умолчанию = CPU cores * 2 + 1)
+    workers: int = 4  # Количество воркеров (автоопределение: min(CPU cores * 2 + 1, 8))
     worker_class: str = "uvicorn.workers.UvicornWorker"
     worker_connections: int = 1000
     max_requests: int = 1000
