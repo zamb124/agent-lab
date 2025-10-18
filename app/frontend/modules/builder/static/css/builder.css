@@ -191,15 +191,9 @@
     top: 80px;
     width: 400px;
     max-height: calc(100vh - 120px);
-    background: var(--bg-card);
-    border: 1px solid var(--border-primary);
-    border-radius: 16px;
-    box-shadow: var(--shadow-lg);
     z-index: 100;
-    overflow: hidden;
     animation: fadeIn 0.2s ease;
-    display: flex;
-    flex-direction: column;
+    padding: 0;
 }
 
 @keyframes fadeIn {
@@ -213,67 +207,41 @@
     }
 }
 
-.properties-header {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border-primary);
-    background: var(--bg-subtle);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-shrink: 0;
-}
-
-.properties-icon {
-    font-size: 20px;
-    display: flex;
-    align-items: center;
-}
-
-.properties-name {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-.properties-body {
-    flex: 1;
-    overflow-y: auto;
-    max-height: calc(100vh - 180px);
-}
-
-.properties-footer {
-    padding: 12px 20px;
-    border-top: 1px solid var(--border-primary);
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    flex-shrink: 0;
-}
-
-/* Шапка формы фиксируется */
-.properties-panel .card {
-    display: flex;
-    flex-direction: column;
+/* Карточка внутри панели заполняет весь контейнер */
+.properties-panel > .card {
     max-height: calc(100vh - 120px);
+    border-radius: 16px;
+    box-shadow: var(--shadow-lg);
+    margin: 0 !important;
+    padding: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    border: none;
     overflow: hidden;
 }
 
-.properties-panel .card-header {
+.properties-panel > .card .card-header {
     flex-shrink: 0;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: inherit;
+    margin: 0;
+    border-radius: 16px 16px 0 0;
 }
 
-.properties-panel .card-body {
+.properties-panel > .card .card-body {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
+    padding: 1rem !important;
+    min-height: 0;
 }
 
-/* Фиксированный крестик закрытия */
-.properties-close-btn {
+.properties-panel > .card .card-footer {
+    flex-shrink: 0;
+    margin: 0;
+    border-radius: 0 0 16px 16px;
+}
+
+/* Крестик закрытия */
+.properties-panel > .properties-close-btn {
     position: absolute;
     top: 12px;
     right: 12px;
@@ -288,16 +256,21 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: 1001;
     font-size: 14px;
 }
 
-.properties-close-btn:hover {
+.properties-panel > .properties-close-btn:hover {
     background: rgba(0, 0, 0, 0.7);
     transform: scale(1.1);
 }
 
 .properties-empty {
+    background: var(--bg-card);
+    border: 1px solid var(--border-primary);
+    border-radius: 16px;
+    box-shadow: var(--shadow-lg);
+    height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -319,7 +292,7 @@
 }
 
 .properties-form {
-    padding: 20px;
+    padding: 0;
 }
 
 .properties-form h4 {
