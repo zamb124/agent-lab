@@ -190,15 +190,15 @@
 
 {% macro platform_badge(platform, class_='') %}
 {% set platforms = {
-    'telegram': {'icon': 'telegram', 'text': 'Telegram', 'variant': 'primary'},
-    'whatsapp': {'icon': 'whatsapp', 'text': 'WhatsApp', 'variant': 'success'},
-    'web': {'icon': 'globe', 'text': 'Web', 'variant': 'info'},
-    'api': {'icon': 'code-slash', 'text': 'API', 'variant': 'success'},
-    'amocrm': {'icon': 'building', 'text': 'AmoCRM', 'variant': 'warning'}
+    'telegram': {'icon': 'telegram', 'text': 'Telegram'},
+    'whatsapp': {'icon': 'whatsapp', 'text': 'WhatsApp'},
+    'web': {'icon': 'globe', 'text': 'Web'},
+    'api': {'icon': 'code-slash', 'text': 'API'},
+    'amocrm': {'icon': 'building', 'text': 'AmoCRM'}
 } %}
-{% set config = platforms.get(platform, {'icon': 'gear', 'text': platform, 'variant': 'secondary'}) %}
-<span class="badge bg-{{ config.variant }} {{ class_ }}">
-    <i class="bi bi-{{ config.icon }}"></i>&nbsp;{{ config.text }}
+{% set config = platforms.get(platform, {'icon': 'gear', 'text': platform}) %}
+<span class="platform-badge platform-badge-{{ platform }} {{ class_ }}">
+    <i class="bi bi-{{ config.icon }}"></i> {{ config.text }}
 </span>
 {% endmacro %}
 

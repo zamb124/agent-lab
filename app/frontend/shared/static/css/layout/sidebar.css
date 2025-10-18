@@ -1,11 +1,12 @@
-/* Сайдбар */
+/* Сайдбар - Glass Morphism */
 
 .sidebar {
     width: var(--sidebar-width);
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-sm);
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-2xl);
+    box-shadow: var(--shadow-lg);
     display: flex;
     flex-direction: column;
     position: fixed;
@@ -114,12 +115,15 @@
 }
 
 .sidebar-nav-link.active {
-    background: var(--accent-primary);
+    background: var(--gradient-primary);
     color: white;
+    box-shadow: var(--shadow-primary);
+    border-radius: var(--radius-lg);
 }
 
 .sidebar-nav-link.active:hover {
-    background: var(--accent-primary-hover);
+    transform: translateX(4px);
+    box-shadow: 0 8px 24px rgba(124, 124, 248, 0.4);
 }
 
 .sidebar-nav-text {

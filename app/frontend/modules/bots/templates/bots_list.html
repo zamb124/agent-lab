@@ -3,7 +3,7 @@
 {% if bots %}
 <div class="bots-grid">
     {# Карточка "Создать бота" #}
-    <div class="bot-card bot-card-create" onclick="createBot()">
+    <div class="card bot-card bot-card-create" onclick="createBot()">
         <div class="bot-card-body d-flex flex-col align-items-center justify-content-center gap-3 bot-create-card-body">
             <i class="bi bi-plus-circle icon-xl text-primary bot-create-icon"></i>
             <div class="text-center">
@@ -15,14 +15,14 @@
     
     {# Карточки ботов #}
     {% for bot in bots %}
-    <div class="bot-card" data-bot-id="{{ bot.flow_id }}" onclick="expandBot('{{ bot.flow_id }}')"
+    <div class="card bot-card" data-bot-id="{{ bot.flow_id }}" onclick="expandBot('{{ bot.flow_id }}')"
         <button class="btn-icon btn-chat-mini" 
                 onclick="event.stopPropagation(); openBotChat('{{ bot.flow_id }}', '{{ bot.name }}')" 
                 title="Запустить">
             <i class="bi bi-chat-dots"></i>
         </button>
         <div class="bot-card-header">
-            <div class="bot-icon">
+            <div class="card-icon">
                 <i class="bi bi-robot"></i>
             </div>
             <div class="bot-info">

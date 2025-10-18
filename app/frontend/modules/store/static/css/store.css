@@ -18,21 +18,9 @@
 }
 
 .store-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-    transition: all var(--transition-normal);
     cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-}
-
-.store-card:hover {
-    border-color: var(--accent-primary);
-    box-shadow: var(--shadow-md);
-    transform: translateY(-4px);
+    overflow: hidden;
+    padding: 0 !important;
 }
 
 .store-card-image {
