@@ -321,8 +321,8 @@ class TranslationManager:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             
-            # Ищем вызовы t('key') и t("key")
-            t_pattern = r't\([\'"]([^\'"]+)[\'"]\)'
+            # Ищем вызовы t('key') и t("key") - только как вызов функции
+            t_pattern = r'\bt\([\'"]([^\'"]+)[\'"]\)'
             matches = re.findall(t_pattern, content)
             
             for match in matches:
@@ -413,7 +413,7 @@ class TranslationManager:
         for key, translation_key in self._discovered_keys.items():
             # Определяем модуль по ключу
             parts = key.split('.')
-            if len(parts) < 2:
+            if len(parts) < 2 or parts[0] == "":
                 module_name = "misc"
                 relative_key = key
             elif parts[0] == "models":

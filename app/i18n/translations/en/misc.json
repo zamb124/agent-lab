@@ -1,7 +1,8 @@
 {
   "": {
-    "modal-overlay": ".modal-overlay",
-    "notification": ".notification"
+    "modal-overlay": "Modal Overlay",
+    "notification": "Notification",
+    "alert": "Alert"
   },
   "{{ bot": {
     "flow_id }}": "{{ bot.flow_id }}"
