@@ -31,6 +31,17 @@ class AbilitiesPlugin(Plugin):
         }
     ]
     
+    dashboard_widgets = [
+        {
+            "id": "abilities_widget",
+            "title": "dashboard.widgets.abilities",
+            "description": "Библиотека агентов и инструментов",
+            "icon": "bi-star",
+            "url": "/frontend/abilities/",
+            "order": 25
+        }
+    ]
+    
     def get_router(self):
         from .router import router
         return router

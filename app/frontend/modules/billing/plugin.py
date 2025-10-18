@@ -22,6 +22,17 @@ class BillingPlugin(Plugin):
     
     sidebar_items = []
     
+    dashboard_widgets = [
+        {
+            "id": "billing_widget",
+            "title": "dashboard.widgets.billing",
+            "description": "Тарифы и оплата",
+            "icon": "bi-credit-card",
+            "url": "/frontend/billing/",
+            "order": 50
+        }
+    ]
+    
     footer_items = [
         {
             "id": "billing",

@@ -31,6 +31,17 @@ class ChatsPlugin(Plugin):
         }
     ]
     
+    dashboard_widgets = [
+        {
+            "id": "chats_widget",
+            "title": "dashboard.widgets.chats",
+            "description": "Диалоги с пользователями",
+            "icon": "bi-chat-left-dots",
+            "url": "/frontend/chats/",
+            "order": 35
+        }
+    ]
+    
     def get_router(self):
         from .router import router
         return router

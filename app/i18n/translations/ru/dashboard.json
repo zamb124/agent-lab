@@ -38,8 +38,12 @@
     "title": "Agent Apps",
     "builder": "Flow Builder",
     "bots": "Мои боты",
+    "abilities": "Способности",
     "store": "Магазин",
-    "history": "История"
+    "chats": "Чаты",
+    "history": "История",
+    "variables": "Ключи и переменные",
+    "billing": "Тарифы и оплата"
   },
   "welcome": {
     "title": "Главная",

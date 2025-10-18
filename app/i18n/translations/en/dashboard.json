@@ -38,8 +38,12 @@
     "title": "Agent Apps",
     "builder": "Flow Builder",
     "bots": "My Bots",
+    "abilities": "Abilities",
     "store": "Store",
-    "history": "History"
+    "chats": "Chats",
+    "history": "History",
+    "variables": "Keys and Variables",
+    "billing": "Billing & Plans"
   },
   "welcome": {
     "title": "Welcome",
