@@ -31,6 +31,17 @@ class VariablesPlugin(Plugin):
         }
     ]
     
+    dashboard_widgets = [
+        {
+            "id": "variables_widget",
+            "title": "dashboard.widgets.variables",
+            "description": "Ключи и переменные",
+            "icon": "bi-key",
+            "url": "/frontend/variables/",
+            "order": 45
+        }
+    ]
+    
     def get_router(self):
         from .router import router
         return router
