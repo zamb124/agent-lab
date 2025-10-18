@@ -34,7 +34,7 @@ class BotsPlugin(Plugin):
     dashboard_widgets = [
         {
             "id": "bots_widget",
-            "title": "Мои боты",
+            "title": "dashboard.widgets.bots",
             "description": "Управление ботами и агентами",
             "icon": "bi-robot",
             "url": "/frontend/bots/",

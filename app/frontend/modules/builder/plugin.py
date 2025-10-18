@@ -34,7 +34,7 @@ class BuilderPlugin(Plugin):
     dashboard_widgets = [
         {
             "id": "builder_widget",
-            "title": "Flow Builder",
+            "title": "dashboard.widgets.builder",
             "description": "Визуальный редактор для создания сложных flows",
             "icon": "bi-palette",
             "url": "/frontend/builder/",

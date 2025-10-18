@@ -34,7 +34,7 @@ class HistoryPlugin(Plugin):
     dashboard_widgets = [
         {
             "id": "history",
-            "title": "История",
+            "title": "dashboard.widgets.history",
             "description": "История диалогов и сессий",
             "icon": "bi-clock-history",
             "url": "/frontend/history/",

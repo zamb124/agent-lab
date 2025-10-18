@@ -324,6 +324,14 @@ for module_path in sorted(modules_dir.iterdir()):
         module_static = module_path / "static"
         app.mount(f"/static/{module_name}", StaticFiles(directory=str(module_static)), name=f"static-{module_name}")
 
+# Pages статические файлы
+pages_dir = Path(__file__).parent / "frontend" / "pages"
+for page_path in sorted(pages_dir.iterdir()):
+    if page_path.is_dir() and (page_path / "static").exists():
+        page_name = page_path.name
+        page_static = page_path / "static"
+        app.mount(f"/static/{page_name}", StaticFiles(directory=str(page_static)), name=f"static-{page_name}")
+
 # Основные статические файлы (монтируем после модульных)
 static_dir = Path(__file__).parent / "frontend" / "shared" / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
