@@ -283,11 +283,11 @@
                     <span id="current-language">{{ get_current_language().upper() }}</span>
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('ru');">
+                    <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); if(window.app && window.app.i18n) window.app.i18n.setLanguage('ru');">
                         <i class="bi bi-check invisible" id="lang-ru"></i> 
                         {{ t('languages.ru') }}
                     </a></li>
-                    <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('en');">
+                    <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); if(window.app && window.app.i18n) window.app.i18n.setLanguage('en');">
                         <i class="bi bi-check invisible" id="lang-en"></i> 
                         {{ t('languages.en') }}
                     </a></li>
