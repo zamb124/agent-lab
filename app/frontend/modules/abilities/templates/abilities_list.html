@@ -1,0 +1,90 @@
+{% import 'components.html' as c %}
+
+{% if agents or tools %}
+<div class="abilities-container">
+    <div class="abilities-column">
+        <div class="abilities-column-header">
+            <i class="bi bi-robot"></i>
+            <h3>{{ t('abilities.agents') }}</h3>
+            <span class="count-badge">{{ agents|length }}</span>
+        </div>
+        
+        {% if agents %}
+        <div class="abilities-grid">
+            {% for agent in agents %}
+            <div class="ability-card" data-type="agent" data-id="{{ agent.id }}" onclick="app.abilities.showDetails('{{ agent.id }}', 'agent')">
+                <div class="ability-card-header">
+                    <div class="ability-icon agent-icon">
+                        <i class="bi bi-robot"></i>
+                    </div>
+                    <div class="ability-badge agent-badge">
+                        {{ agent.agent_type }}
+                    </div>
+                </div>
+                
+                <div class="ability-card-body">
+                    <h4 class="ability-name">{{ agent.name }}</h4>
+                    <p class="ability-description" title="{{ agent.description }}">
+                        {{ agent.description }}
+                    </p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        {{ c.empty_state(
+            icon='robot',
+            title=t('abilities.no_agents'),
+            description='Публичные агенты появятся здесь'
+        ) }}
+        {% endif %}
+    </div>
+    
+    <div class="abilities-column">
+        <div class="abilities-column-header">
+            <i class="bi bi-tools"></i>
+            <h3>{{ t('abilities.tools') }}</h3>
+            <span class="count-badge">{{ tools|length }}</span>
+        </div>
+        
+        {% if tools %}
+        <div class="abilities-grid">
+            {% for tool in tools %}
+            <div class="ability-card" data-type="tool" data-id="{{ tool.id }}" onclick="app.abilities.showDetails('{{ tool.id }}', 'tool')">
+                <div class="ability-card-header">
+                    <div class="ability-icon tool-icon">
+                        <i class="bi bi-tools"></i>
+                    </div>
+                    {% if tool.cost > 0 %}
+                    <div class="ability-badge cost-badge">
+                        {{ tool.cost }} ₽
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="ability-card-body">
+                    <h4 class="ability-name">{{ tool.name }}</h4>
+                    <p class="ability-description" title="{{ tool.description }}">
+                        {{ tool.description }}
+                    </p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        {{ c.empty_state(
+            icon='tools',
+            title=t('abilities.no_tools'),
+            description='Публичные инструменты появятся здесь'
+        ) }}
+        {% endif %}
+    </div>
+</div>
+{% else %}
+{{ c.empty_state(
+    icon='star',
+    title=t('abilities.no_abilities'),
+    description='Агенты и инструменты появятся здесь после публикации'
+) }}
+{% endif %}
+

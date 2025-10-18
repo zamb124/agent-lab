@@ -3,6 +3,7 @@
   "welcome_message": "Welcome, {user_name}!",
   "navigation": {
     "bots": "Bots",
+    "abilities": "Abilities",
     "chats": "Chats",
     "store": "Store",
     "history": "History",

@@ -3,6 +3,7 @@
   "welcome_message": "Добро пожаловать, {user_name}!",
   "navigation": {
     "bots": "Боты",
+    "abilities": "Способности",
     "chats": "Чаты",
     "store": "Магазин",
     "history": "История",

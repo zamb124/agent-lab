@@ -1,0 +1,25 @@
+{% import 'components.html' as c %}
+
+<h1 class="header-title" hx-swap-oob="true">
+    <i class="bi bi-star"></i>
+    {{ t('abilities.title') }}
+</h1>
+
+<div class="header-right" hx-swap-oob="true">
+</div>
+
+<div class="abilities-page">
+    <div class="abilities-hero">
+        <div class="abilities-hero-content">
+            <h2>{{ t('abilities.hero_title') }}</h2>
+            <p>{{ t('abilities.hero_description') }}</p>
+        </div>
+    </div>
+    
+    <div hx-get="/frontend/abilities/list" hx-trigger="load" hx-indicator="#abilities-loading">
+        <div id="abilities-loading">
+            {{ c.skeleton(type='card', count=6) }}
+        </div>
+    </div>
+</div>
+

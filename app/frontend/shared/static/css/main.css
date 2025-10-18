@@ -32,6 +32,7 @@
 @import url('/static/css/components/skeleton.css');
 @import url('/static/css/components/empty-state.css');
 @import url('/static/css/components/icons.css');
+@import url('/static/css/components/slider.css?v=10');
 
 /* Utilities */
 @import url('/static/css/utilities/spacing.css');

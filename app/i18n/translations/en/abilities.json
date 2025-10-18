@@ -1,0 +1,12 @@
+{
+  "title": "Abilities",
+  "description": "Library of available agents and tools",
+  "agents": "Agents",
+  "tools": "Tools",
+  "no_agents": "No available agents",
+  "no_tools": "No available tools",
+  "no_abilities": "No available abilities",
+  "details": "Details",
+  "hero_title": "Abilities Library",
+  "hero_description": "Agents and tools to automate your tasks"
+}
