@@ -228,6 +228,7 @@
   "dashboard.navigation.builder": "Agent Builder",
   "dashboard.navigation.admin": "Администрирование",
   "dashboard.navigation.billing": "Тарифы и оплата",
+  "dashboard.navigation.docs": "Документация",
   "dashboard.navigation.agents": "Агенты",
   "dashboard.navigation.flows": "Потоки",
   "dashboard.navigation.tasks": "Задачи",
