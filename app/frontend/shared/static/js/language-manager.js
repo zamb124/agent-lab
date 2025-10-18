@@ -36,17 +36,23 @@ class LanguageManager {
     }
     
     async detectLanguage() {
-        let savedLang = localStorage.getItem('language');
-        if (savedLang && this.isValidLanguage(savedLang)) {
-            this.currentLanguage = savedLang;
-            console.log(`🌐 Язык определен из localStorage: ${savedLang}`);
-            return;
-        }
-        
+        // 1. Cookie (синхронизировано с сервером - высший приоритет)
         let cookieLang = getCookie('language');
         if (cookieLang && this.isValidLanguage(cookieLang)) {
             this.currentLanguage = cookieLang;
+            // Синхронизируем localStorage с cookie
+            localStorage.setItem('language', cookieLang);
             console.log(`🌐 Язык определен из cookie: ${cookieLang}`);
+            return;
+        }
+        
+        // 2. localStorage (быстрый клиентский доступ)
+        let savedLang = localStorage.getItem('language');
+        if (savedLang && this.isValidLanguage(savedLang)) {
+            this.currentLanguage = savedLang;
+            // Устанавливаем cookie для синхронизации с сервером
+            setCookie('language', savedLang, 365);
+            console.log(`🌐 Язык определен из localStorage: ${savedLang}`);
             return;
         }
         
@@ -78,6 +84,7 @@ class LanguageManager {
         
         console.log(`🔄 Смена языка: ${oldLanguage} → ${lang}`);
         
+        // Устанавливаем и cookie, и localStorage для двойной синхронизации
         localStorage.setItem('language', lang);
         setCookie('language', lang, 365);
         
