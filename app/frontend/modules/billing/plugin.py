@@ -20,15 +20,14 @@ class BillingPlugin(Plugin):
     static_css = ["billing.css"]
     static_js = ["billing.module.js"]
     
-    sidebar_items = []
-    
-    footer_items = [
+    sidebar_items = [
         {
             "id": "billing",
             "label": "dashboard.navigation.billing",
             "icon": "bi-credit-card",
             "url": "/frontend/billing/",
-            "order": 20
+            "order": 20,
+            "type": "htmx"
         }
     ]
     

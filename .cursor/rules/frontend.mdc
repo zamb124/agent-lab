@@ -3,6 +3,164 @@ alwaysApply: true
 ---
 # Правила для Frontend
 
+## Плагинная архитектура
+
+### Типы модулей
+
+**ВСЕГДА** следуй строгому разделению типов модулей:
+
+#### Тип A: Полноценные плагины (bots, builder, store, billing, history)
+```
+modules/{name}/
+├── plugin.py          # Полная конфигурация Plugin
+├── router.py          # FastAPI роутер с эндпоинтами
+├── static/
+│   ├── css/{name}.css
+│   └── js/{name}.module.js  # ES6 модуль
+└── templates/         # HTML шаблоны
+```
+
+#### Тип B: Статические страницы (landing)
+```
+pages/{name}/
+├── static/css/{name}.css  # опционально
+└── templates/{name}.html
+```
+
+#### Тип C: Запрещенные (analytics, docs)
+❌ **НЕ создавать** - интегрировать функционал в существующие плагины
+
+### Правила создания плагинов
+
+#### Обязательные правила
+
+<good_example>
+# ✅ Корректная структура плагина
+class BotsPlugin(Plugin):
+    name = "bots"
+    display_name = "Боты"
+    version = "1.0.0"
+
+    static_css = ["bots.css"]
+    static_js = ["bots.module.js"]
+
+    sidebar_items = [{
+        "label": "dashboard.navigation.bots",
+        "icon": "bi-people-fill",
+        "url": "/frontend/bots/",
+        "type": "htmx"
+    }]
+
+    def get_router(self):
+        from .router import router
+        return router
+</good_example>
+
+<bad_example>
+# ❌ Антипаттерн - пустой роутер
+class AnalyticsPlugin(Plugin):
+    def get_router(self):
+        return APIRouter()  # Заглушка!
+</bad_example>
+
+#### Router.py всегда должен быть
+
+**ВСЕГДА** создавай router.py, даже если он пустой:
+
+<good_example>
+# ✅ router.py для плагина без endpoints
+from fastapi import APIRouter
+
+router = APIRouter(prefix="/frontend/analytics", tags=["analytics"])
+# Нет эндпоинтов - только UI плагин
+</good_example>
+
+<bad_example>
+# ❌ НЕ возвращай пустой APIRouter из plugin.py
+def get_router(self):
+    return APIRouter()  # Антипаттерн!
+</bad_example>
+
+#### JS модули - единый стандарт
+
+**ВСЕГДА** следуй ES6 модульной структуре:
+
+<good_example>
+// ✅ Стандартная структура
+export default class {Name}Module {
+    constructor(app) {
+        this.app = app;
+        this.name = '{name}';
+    }
+
+    async init() {
+        this.setupEventListeners();
+        return this;
+    }
+
+    destroy() { /* cleanup */ }
+
+    // Public API
+    doSomething() { /* публичные методы */ }
+}
+</good_example>
+
+<bad_example>
+// ❌ Монолитный код
+window.botsModule = {
+    // Все в глобальном объекте
+};
+</bad_example>
+
+#### Sidebar items - консистентность
+
+**ВСЕГДА** используй типы sidebar_items правильно:
+
+```python
+sidebar_items = [
+    {
+        "id": "unique_id",
+        "label": "translation.key",  # НЕ хардкод текста
+        "icon": "bi-icon-name",
+        "url": "/frontend/path/",
+        "order": 50,
+        "type": "htmx"  # "htmx", "page", "submenu"
+    }
+]
+```
+
+### Запрещенные паттерны
+
+❌ **НЕ создавать** плагины-заглушки без функционала  
+❌ **НЕ дублировать** структуру в разных типах модулей  
+❌ **НЕ использовать** нестандартные JS модули  
+❌ **НЕ хардкодить** тексты в sidebar_items  
+
+### Когда создавать плагин
+
+**Создавай плагин ТОЛЬКО если:**
+- Есть полноценная функциональность (CRUD операции)
+- Нужна навигация в sidebar
+- Есть собственные API endpoints
+- Требуется JS модуль для сложной логики
+
+**НЕ создавай плагин если:**
+- Это просто статическая страница
+- Функционал можно интегрировать в существующий плагин
+- Нет API endpoints
+- Только HTMX загрузка контента
+
+### Проверка структуры
+
+При создании плагина **всегда проверяй:**
+- [ ] plugin.py наследуется от Plugin
+- [ ] get_router() возвращает настроенный роутер
+- [ ] static_js ссылается на ES6 модуль
+- [ ] sidebar_items использует переводы
+- [ ] Нет дублирования с существующими плагинами
+
+---
+
 ## Компонентная система
 
 ### Обязательные принципы

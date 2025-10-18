@@ -21,7 +21,6 @@
             <h1 class="billing-title">{{ t('billing.title') }}</h1>
         </div>
         <div class="billing-header-right">
-            <!-- Dropdown для выбора языка -->
             <div class="dropdown">
                 <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
                     <i class="bi bi-translate"></i>
@@ -46,7 +45,6 @@
     </div>
 
     <div class="billing-content">
-        <!-- Обзор тарифа -->
         <div class="billing-section">
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
@@ -97,7 +95,6 @@
             </div>
         </div>
 
-        <!-- Использование бюджета -->
         <div class="billing-section">
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
@@ -140,7 +137,6 @@
             </div>
         </div>
 
-        <!-- Статистика использования -->
         <div class="billing-section">
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
@@ -172,7 +168,6 @@
             </div>
         </div>
 
-        <!-- Детализация по ресурсам -->
         <div class="billing-section">
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
@@ -218,7 +213,6 @@
             </div>
         </div>
 
-        <!-- Детализация по пользователям -->
         <div class="billing-section">
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
@@ -264,12 +258,11 @@
             </div>
         </div>
 
-        <!-- История пополнений -->
         <div class="billing-section">
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
                     <i class="bi bi-clock-history"></i>
-                    История пополнений
+                    {{ t('billing.payment_history.title') }}
                 </h2>
             </div>
             
@@ -286,11 +279,11 @@
                                 <span class="transaction-amount">+{{ "%.2f"|format(transaction.amount) }} ₽</span>
                                 <span class="transaction-status">
                                     {% if transaction.status == 'success' %}
-                                        <i class="bi bi-check-circle-fill"></i> Успешно
+                                        <i class="bi bi-check-circle-fill"></i> {{ t('billing.status.success') }}
                                     {% elif transaction.status == 'pending' %}
-                                        <i class="bi bi-clock-fill"></i> Ожидание
+                                        <i class="bi bi-clock-fill"></i> {{ t('billing.status.pending') }}
                                     {% elif transaction.status == 'failed' %}
-                                        <i class="bi bi-x-circle-fill"></i> Ошибка
+                                        <i class="bi bi-x-circle-fill"></i> {{ t('billing.status.error') }}
                                     {% endif %}
                                 </span>
                             </div>
@@ -306,9 +299,9 @@
                                 <span class="transaction-provider">
                                     <i class="bi bi-credit-card"></i>
                                     {% if transaction.payment_provider == 'yoomoney' %}
-                                        ЮMoney
+                                        {{ t('billing.payment_methods.yoomoney') }}
                                     {% elif transaction.payment_provider == 'yukassa' %}
-                                        ЮКасса
+                                        {{ t('billing.payment_methods.yookassa') }}
                                     {% endif %}
                                 </span>
                             </div>
@@ -319,8 +312,8 @@
                 {% else %}
                 {{ c.empty_state(
                     icon='inbox',
-                    title='История пополнений пуста',
-                    description='Платежи появятся здесь после пополнения баланса',
+                    title='{{ t("billing.payment_history.empty_title") }}',
+                    description='{{ t("billing.payment_history.empty_description") }}',
                     centered=false
                 ) }}
                 {% endif %}
@@ -329,14 +322,13 @@
     </div>
 </div>
 
-<!-- Модальное окно для оплаты -->
 <div id="payment-modal" class="modal">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
                 <h3 class="modal-title">
                     <i class="bi bi-wallet2"></i>
-                    Пополнить баланс
+                    {{ t('billing.modal.title') }}
                 </h3>
                 <button class="modal-close" onclick="closePaymentModal()">
                     <i class="bi bi-x-lg"></i>
@@ -347,7 +339,7 @@
                     <div class="form-group">
                         <label for="payment-amount">
                             <i class="bi bi-currency-ruble"></i>
-                            Сумма пополнения (₽)
+                            {{ t('billing.modal.amount_label') }} (₽)
                         </label>
                         <input 
                             type="number" 
@@ -358,42 +350,42 @@
                             step="100" 
                             value="1000"
                             required
-                            placeholder="Введите сумму"
+                            placeholder="{{ t('billing.modal.amount_placeholder') }}"
                         >
-                        <small class="form-text">Минимум: 100₽, Максимум: 1,000,000₽</small>
+                        <small class="form-text">{{ t('billing.modal.amount_help', min_amount='100', max_amount='1,000,000') }}</small>
                     </div>
                     
                     <div class="payment-info">
                         <div class="payment-info-item">
                             <i class="bi bi-credit-card"></i>
-                            <span>Оплата картой через ЮMoney</span>
+                            <span>{{ t('billing.modal.card_payment') }}</span>
                         </div>
                         <div class="payment-info-item">
                             <i class="bi bi-shield-check"></i>
-                            <span>Безопасная транзакция</span>
+                            <span>{{ t('billing.modal.secure_transaction') }}</span>
                         </div>
                         <div class="payment-info-item">
                             <i class="bi bi-lightning-charge"></i>
-                            <span>Мгновенное зачисление</span>
+                            <span>{{ t('billing.modal.instant_crediting') }}</span>
                         </div>
                     </div>
                     
                     <div class="payment-notice">
                         <i class="bi bi-info-circle"></i>
                         <div>
-                            <strong>Как это работает:</strong>
-                            <p>После нажатия кнопки вы будете перенаправлены на страницу ЮMoney для безопасной оплаты. После успешной оплаты средства автоматически зачислятся на баланс компании.</p>
+                            <strong>{{ t('billing.modal.how_it_works') }}:</strong>
+                            <p>{{ t('billing.modal.process_description') }}</p>
                         </div>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-ghost" type="button" onclick="closePaymentModal()">
-                    Отмена
+                    {{ t('common.cancel') }}
                 </button>
                 <button class="btn btn-primary" type="button" id="payment-submit-btn" onclick="createPayment()">
                     <i class="bi bi-arrow-right-circle"></i>
-                    Перейти к оплате
+                    {{ t('billing.modal.proceed_to_payment') }}
                 </button>
             </div>
         </div>

@@ -81,9 +81,7 @@ def get_plugins_for_template() -> dict:
     
     return {
         "sidebar_items": registry.get_sidebar_items(user_role, company_subdomain),
-        "footer_items": registry.get_footer_items(user_role, company_subdomain),
         "dashboard_widgets": registry.get_dashboard_widgets(user_role, company_subdomain),
-        "header_actions": registry.get_header_actions(),
         "static_files": registry.get_static_files(),
         "plugin_metadata": registry.get_plugin_metadata()
     }

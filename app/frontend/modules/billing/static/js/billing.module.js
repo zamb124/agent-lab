@@ -1,5 +1,5 @@
 /**
- * Billing Module - Управление биллингом
+ * Billing Module - Billing management
  */
 
 import { showNotification } from '/static/js/components/notification.js';
@@ -14,7 +14,7 @@ export default class BillingModule {
     }
     
     async init() {
-        console.log('💰 Инициализация Billing модуля');
+        console.log('💰 ' + this.app.i18n.t('billing.init_message'));
         
         this.setupGlobalFunctions();
         this.setupEventListeners();
@@ -28,7 +28,7 @@ export default class BillingModule {
         window.openPaymentModal = () => this.openPaymentModal();
         window.closePaymentModal = () => this.closePaymentModal();
         window.createPayment = () => this.handleCreatePayment();
-        console.log('✅ Billing глобальные функции зарегистрированы');
+        console.log('✅ ' + this.app.i18n.t('billing.functions_registered'));
     }
     
     setupEventListeners() {
@@ -69,35 +69,35 @@ export default class BillingModule {
         const amount = parseFloat(amountInput.value);
         
         if (!amount || amount < 100) {
-            showNotification('Минимальная сумма пополнения: 100₽', 'error');
+            showNotification(this.app.i18n.t('billing.validation.min_amount', { amount: '100₽' }), 'error');
             return;
         }
         
         if (amount > 1000000) {
-            showNotification('Максимальная сумма пополнения: 1,000,000₽', 'error');
+            showNotification(this.app.i18n.t('billing.validation.max_amount', { amount: '1,000,000₽' }), 'error');
             return;
         }
         
         const provider = providerSelect ? providerSelect.value : null;
         
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Создание платежа...';
+        submitBtn.textContent = this.app.i18n.t('billing.creating_payment');
         
         try {
             const data = await createPayment(amount, provider);
             
-            showNotification('Переход к оплате...', 'info');
+            showNotification(this.app.i18n.t('billing.redirecting_to_payment'), 'info');
             
             setTimeout(() => {
                 window.location.href = data.payment_url;
             }, 500);
             
         } catch (error) {
-            console.error('Ошибка создания платежа:', error);
+            console.error(this.app.i18n.t('billing.errors.payment_creation'), error);
             showNotification(`Ошибка: ${error.message}`, 'error');
             
             submitBtn.disabled = false;
-            submitBtn.textContent = 'Перейти к оплате';
+            submitBtn.textContent = this.app.i18n.t('billing.modal.proceed_to_payment');
         }
     }
 
@@ -107,7 +107,7 @@ export default class BillingModule {
                 const data = await getBillingStats();
                 this.updateStatsDisplay(data);
             } catch (error) {
-                console.error('Ошибка при обновлении статистики:', error);
+                console.error(this.app.i18n.t('billing.errors.stats_update'), error);
             }
         }, 30000);
     }
@@ -159,7 +159,7 @@ export default class BillingModule {
         const transactionId = urlParams.get('transaction_id');
         
         if (paymentStatus === 'success' && transactionId) {
-            showNotification('Платеж успешно обработан! Баланс будет обновлен в течение минуты.', 'success');
+            showNotification(this.app.i18n.t('billing.payment_success_message'), 'success');
             
             setTimeout(async () => {
                 try {
@@ -171,14 +171,14 @@ export default class BillingModule {
                         balanceElement.textContent = `${data.balance.toFixed(2)} ₽`;
                     }
                 } catch (error) {
-                    console.error('Ошибка обновления статистики:', error);
+                    console.error(this.app.i18n.t('billing.errors.stats_refresh'), error);
                 }
                 
                 window.history.replaceState({}, '', '/frontend/billing');
             }, 2000);
             
         } else if (paymentStatus === 'fail' && transactionId) {
-            showNotification('Ошибка оплаты. Попробуйте еще раз или выберите другой способ.', 'error');
+            showNotification(this.app.i18n.t('billing.payment_error_message'), 'error');
             
             setTimeout(() => {
                 window.history.replaceState({}, '', '/frontend/billing');
@@ -187,7 +187,7 @@ export default class BillingModule {
     }
     
     destroy() {
-        console.log('🧹 Billing модуль выгружен');
+        console.log('🧹 ' + this.app.i18n.t('billing.module_unloaded'));
         this.stopStatsRefresh();
     }
 }
