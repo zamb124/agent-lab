@@ -26,7 +26,7 @@ export default class StoreModule {
         console.log('Installing flow:', flowId);
         
         try {
-            const response = await fetch(`/api/v1/store/flows/${flowId}/install`, {
+            const response = await fetch(`/frontend/api/flows/${flowId}/install`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${this.app.authToken}`,
