@@ -3,7 +3,7 @@
  * Загружает формы через HTMX при клике на ноду
  */
 
-class PropertiesPanel {
+export default class PropertiesPanel {
     constructor(builder) {
         this.builder = builder;
         this.panel = document.getElementById('propertiesPanel');
@@ -582,5 +582,4 @@ class PropertiesPanel {
 }
 
 // Экспортируем класс
-window.PropertiesPanel = PropertiesPanel;
 

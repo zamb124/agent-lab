@@ -2,7 +2,9 @@
  * Компонент для выбора типа элемента (новый/существующий) при drag & drop
  */
 
-class ElementSelector {
+import { FlowLayoutManager } from './drag-drop.js';
+
+export default class ElementSelector {
     constructor(builder) {
         this.builder = builder;
         this.currentModalId = null;
@@ -678,4 +680,3 @@ class ElementSelector {
 }
 
 // Экспортируем класс в глобальную область
-window.ElementSelector = ElementSelector;

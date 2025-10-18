@@ -2,14 +2,14 @@
  * Управление канвасом Builder на базе SVG + Vanilla JS
  */
 
-function escapeHtml(text) {
+export function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
 
-class BuilderCanvas {
+export default class BuilderCanvas {
     constructor(element, builder) {
         this.element = element;
         this.builder = builder;
@@ -1656,4 +1656,3 @@ class BuilderCanvas {
 }
 
 // Экспортируем класс в глобальную область
-window.BuilderCanvas = BuilderCanvas;

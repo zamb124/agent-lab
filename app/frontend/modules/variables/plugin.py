@@ -18,7 +18,7 @@ class VariablesPlugin(Plugin):
     requires_role = "user"
     
     static_css = ["variables.css"]
-    static_js = []
+    static_js = ["variables.module.js"]
     
     sidebar_items = [
         {

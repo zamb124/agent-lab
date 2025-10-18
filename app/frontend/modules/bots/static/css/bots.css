@@ -996,9 +996,8 @@ input:checked + .slider:before {
 }
 
 #add-platform-modal .modal-content {
-    background: var(--glass-bg) !important;
-    backdrop-filter: blur(20px) !important;
-    border: 2px solid var(--glass-border) !important;
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-primary) !important;
     border-radius: var(--radius-2xl) !important;
     box-shadow: var(--shadow-xl) !important;
     width: 90% !important;

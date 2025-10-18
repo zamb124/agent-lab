@@ -118,7 +118,7 @@
 {{ variables|tojson|safe }}
 </script>
 
-<div id="variable-modal" class="modal-overlay modal-hidden variable-modal" hx-preserve="true">
+<div id="variable-modal" class="modal-overlay modal-hidden variable-modal" hx-preserve="true" onclick="closeVariableModal()">
     <div class="modal-content" onclick="event.stopPropagation()">
         <div class="modal-header">
             <h3 id="variable-modal-title">Добавить переменную</h3>

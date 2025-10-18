@@ -87,6 +87,15 @@ class ServerConfig(BaseModel):
     debug: bool = False
     domain: str = "agents-lab.ru"  # Основной домен для поддоменов
 
+    # Gunicorn настройки для продакшена
+    workers: int = 4  # Количество воркеров (по умолчанию = CPU cores * 2 + 1)
+    worker_class: str = "uvicorn.workers.UvicornWorker"
+    worker_connections: int = 1000
+    max_requests: int = 1000
+    max_requests_jitter: int = 50
+    timeout: int = 30
+    keepalive: int = 2
+
 
 class WorkerConfig(BaseModel):
     """Конфигурация воркеров"""

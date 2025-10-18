@@ -18,7 +18,7 @@ class BillingPlugin(Plugin):
     requires_role = "user"
     
     static_css = ["billing.css"]
-    static_js = []
+    static_js = ["billing.module.js"]
     
     sidebar_items = []
     

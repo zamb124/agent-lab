@@ -1,148 +1,166 @@
 /**
  * Bots Module - Управление ботами
+ * Рефакторенная модульная версия
  */
 
-import { slugify, generateUniqueId } from '/static/js/utils/slugify.js';
-import { showNotification } from '/static/js/components/notification.js';
+import { BotModalManager } from './bot-modal/bot-modal.js';
+import { BotSettingsManager } from './bot-modal/bot-settings.js';
+import { ToolsManager } from './bot-editor/tools-manager.js';
+import { BotSaver } from './bot-editor/bot-saver.js';
+import { PlatformManager } from './platform-manager/platform-manager.js';
+import { PlatformSaver } from './platform-manager/platform-saver.js';
+import { KnowledgeBaseManager } from './knowledge-base/kb-manager.js';
+import { KnowledgeBaseUploader } from './knowledge-base/kb-uploader.js';
+import { RemigrationManager } from './utils/remigration.js';
+import { copyToClipboard, togglePlatformCollapse, testApiEndpoint } from './utils/bot-utils.js';
 
 export default class BotsModule {
     constructor(app) {
         this.app = app;
         this.name = 'bots';
-        this.version = '1.0.0';
+        this.version = '2.0.0';
         
-        this.currentBotModal = null;
-        this.promptEditor = null;
+        this.kbManager = new KnowledgeBaseManager(app.authToken);
+        this.toolsManager = new ToolsManager(app.authToken);
+        this.settingsManager = new BotSettingsManager(app, this.toolsManager, this.kbManager);
+        this.modal = new BotModalManager(app, this.settingsManager);
+        this.saver = new BotSaver(app, this.settingsManager, this.modal);
+        this.platformManager = new PlatformManager(app, this.modal);
+        this.platformSaver = new PlatformSaver(app, this.platformManager, this.modal);
+        this.kbUploader = new KnowledgeBaseUploader(this.kbManager);
+        this.remigration = new RemigrationManager(app);
+        
+        app.botsModule = this;
     }
     
     async init() {
-        console.log('🤖 Инициализация Bots модуля');
+        console.log('🤖 Инициализация Bots модуля v2.0');
         
         this.setupGlobalFunctions();
+        this.setupEventListeners();
         
         return this;
     }
     
-    /**
-     * Регистрируем глобальные функции для обратной совместимости
-     */
     setupGlobalFunctions() {
-        window.openBotChat = (botId, botName) => this.openBotChat(botId, botName);
-        window.expandBot = (botId) => this.expandBot(botId);
-        window.closeExpandedBot = () => this.closeExpandedBot();
-        window.editBot = (botId) => this.editBot(botId);
-        window.deleteBot = (botId) => this.deleteBot(botId);
-        window.deployBot = (botId, platform) => this.deployBot(botId, platform);
-    }
-    
-    /**
-     * Открыть чат с ботом
-     */
-    openBotChat(botId, botName) {
-        if (this.app.chat) {
-            this.app.chat.open({
-                agent_id: botId,
-                session_id: null,
-                title: botName
-            });
-        } else {
-            console.error('Chat manager не инициализирован');
-            alert('Чат недоступен. Попробуйте обновить страницу.');
-        }
-    }
-    
-    /**
-     * Развернуть детали бота
-     */
-    async expandBot(botId) {
-        const modal = document.getElementById('bot-expanded-modal');
-        const modalDetails = document.getElementById('modal-bot-details');
+        window.openBotChat = (botId, botName) => this.modal.openBotChat(botId, botName);
+        window.expandBot = (botId) => this.modal.expand(botId);
+        window.closeBotModal = () => this.modal.close();
+        window.toggleChat = (flowId, botName) => this.modal.toggleChat(flowId, botName);
+        window.toggleBotModalFullscreen = () => this.modal.toggleFullscreen();
+        window.toggleMobileActionsMenu = () => this.modal.toggleMobileActionsMenu();
+        window.closeMobileActionsMenu = () => this.modal.closeMobileActionsMenu();
+        window.updateLLMModels = () => this.settingsManager.updateLLMModels();
+        window.saveBotSettings = (botId) => this.saver.save(botId);
+        window.createBot = () => this.modal.expand('new');
         
-        if (!modal || !modalDetails) {
-            console.error('Modal elements not found!');
-            return;
-        }
+        window.addPlatform = (botId) => this.platformManager.openModal(botId);
+        window.editPlatform = (botId, platformType) => this.platformSaver.edit(botId, platformType);
+        window.toggleTokenInput = () => this.platformManager.toggleTokenInput();
+        window.closeAddPlatformModal = () => this.platformManager.closeModal();
+        window.togglePlatformDropdown = () => this.platformManager.toggleDropdown();
+        window.selectPlatform = (value, icon, text) => this.platformManager.selectPlatform(value, icon, text);
+        window.updatePlatformFields = () => this.platformManager.updateFields();
+        window.toggleWhatsAppTokenInput = () => this.platformManager.toggleWhatsAppTokenInput();
+        window.toggleWhatsAppVerifyInput = () => this.platformManager.toggleWhatsAppVerifyInput();
+        window.registerWhatsApp = (flowId) => this.platformManager.registerWhatsApp(flowId);
+        window.addVariableRow = () => this.platformManager.addVariableRow();
+        window.removeVariableRow = (button) => this.platformManager.removeVariableRow(button);
+        window.updateVariableName = (input) => console.log('Variable name updated:', input.value);
+        window.updateVariableValue = (input) => console.log('Variable value updated:', input.value);
+        window.addAllowedUserRow = () => this.platformManager.addAllowedUserRow();
+        window.removeAllowedUserRow = (button) => this.platformManager.removeAllowedUserRow(button);
+        window.updateAllowedUser = (input) => console.log('Allowed user updated:', input.value);
+        window.savePlatform = (botId) => this.platformSaver.save(botId);
+        window.removePlatform = (botId, platformType) => this.platformSaver.remove(botId, platformType);
         
-        modalDetails.innerHTML = `
-            <div class="skeleton-modal" style="padding: 2rem;">
-                <div class="skeleton skeleton-text skeleton-width-60" style="height: 2rem; margin-bottom: 1.5rem;"></div>
-                <div class="skeleton skeleton-text" style="margin-bottom: 0.75rem;"></div>
-                <div class="skeleton skeleton-text skeleton-width-90" style="margin-bottom: 0.75rem;"></div>
-                <div class="skeleton skeleton-text skeleton-width-95" style="margin-bottom: 1.5rem;"></div>
-                <div class="skeleton skeleton-text skeleton-width-85" style="margin-bottom: 0.75rem;"></div>
-                <div class="skeleton skeleton-text skeleton-width-80" style="margin-bottom: 2rem;"></div>
-                <div style="display: flex; gap: 1rem;">
-                    <div class="skeleton skeleton-button" style="width: 150px;"></div>
-                    <div class="skeleton skeleton-button" style="width: 120px;"></div>
-                </div>
-            </div>
-        `;
-        modal.style.display = 'flex';
+        window.openUploadTextModal = () => this.kbUploader.openTextModal();
+        window.closeUploadTextModal = () => this.kbUploader.closeTextModal();
+        window.uploadTextFromModal = (flowId) => this.kbUploader.uploadText(flowId);
+        window.uploadDocumentToKnowledgeBase = (flowId) => this.kbUploader.uploadDocument(flowId);
+        window.loadKnowledgeBaseDocuments = (flowId) => this.kbManager.loadDocuments(flowId);
+        window.deleteKnowledgeBaseDocument = (flowId, documentId, event) => this.kbManager.deleteDocument(flowId, documentId, event);
         
-        try {
-            const response = await fetch(`/frontend/bots/${botId}/details`);
-            const html = await response.text();
-            modalDetails.innerHTML = html;
-        } catch (error) {
-            console.error('Ошибка загрузки деталей бота:', error);
-            modalDetails.innerHTML = '<div class="error">Ошибка загрузки</div>';
-        }
+        window.remigrateFlowWithDeps = (flowId) => this.remigration.openConfirmModal(flowId);
+        window.closeRemigrateModal = () => this.remigration.closeModal();
+        window.confirmRemigrate = () => this.remigration.confirmRemigrate();
+        
+        window.copyToClipboard = (elementIdOrText) => copyToClipboard(elementIdOrText, this.app);
+        window.togglePlatformCollapse = (platformName) => togglePlatformCollapse(platformName);
+        window.testApiEndpoint = (flowId) => testApiEndpoint(flowId, this.app.authToken);
     }
     
-    /**
-     * Закрыть модалку
-     */
-    closeExpandedBot() {
-        const modal = document.getElementById('bot-expanded-modal');
-        if (modal) {
-            modal.style.display = 'none';
-        }
-    }
-    
-    /**
-     * Редактировать бота
-     */
-    async editBot(botId) {
-        console.log('Editing bot:', botId);
-    }
-    
-    /**
-     * Удалить бота
-     */
-    async deleteBot(botId) {
-        if (!confirm('Вы уверены, что хотите удалить этого бота?')) {
-            return;
-        }
-        
-        try {
-            const response = await fetch(`/api/v1/bots/${botId}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${this.app.authToken}`
+    setupEventListeners() {
+        document.body.addEventListener('htmx:beforeSwap', (event) => {
+            if (event.detail.target.id === 'content') {
+                const modal = document.getElementById('bot-expanded-modal');
+                if (modal && modal.style.display === 'flex') {
+                    this.modal.close();
                 }
-            });
-            
-            if (response.ok) {
-                showNotification('Бот успешно удален', 'success');
-                htmx.ajax('GET', '/frontend/bots/', {target: '#content'});
-            } else {
-                throw new Error('Ошибка удаления');
             }
-        } catch (error) {
-            console.error('Ошибка удаления бота:', error);
-            showNotification('Ошибка при удалении бота', 'danger');
-        }
+        });
+        
+        document.addEventListener('fullscreenchange', () => {
+            const btn = document.querySelector('.btn-fullscreen i');
+            if (btn) {
+                if (document.fullscreenElement) {
+                    btn.className = 'bi bi-fullscreen-exit';
+                } else {
+                    btn.className = 'bi bi-fullscreen';
+                }
+            }
+        });
+        
+        document.addEventListener('click', (e) => {
+            const dropdown = document.getElementById('mobile-actions-dropdown');
+            const menu = document.querySelector('.mobile-actions-menu');
+            
+            if (dropdown && dropdown.classList.contains('show') && menu && !menu.contains(e.target)) {
+                dropdown.classList.remove('show');
+            }
+            
+            if (e.target.id === 'bot-expanded-modal') {
+                this.modal.close();
+            }
+            
+            if (e.target.id === 'add-platform-modal') {
+                this.platformManager.closeModal();
+            }
+            
+            if (e.target.id === 'remigrate-confirm-modal') {
+                this.remigration.closeModal();
+            }
+            
+            const platformDropdown = document.getElementById('platform-dropdown');
+            const customSelect = document.getElementById('platform-type-select');
+            
+            if (platformDropdown && customSelect && platformDropdown.classList.contains('show')) {
+                if (!customSelect.contains(e.target)) {
+                    platformDropdown.classList.remove('show');
+                    document.querySelector('.select-value')?.classList.remove('active');
+                }
+            }
+        });
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const remigrateModal = document.getElementById('remigrate-confirm-modal');
+                if (remigrateModal && remigrateModal.style.display === 'flex') {
+                    this.remigration.closeModal();
+                } else if (document.getElementById('add-platform-modal')?.style.display === 'flex') {
+                    this.platformManager.closeModal();
+                } else if (this.modal.currentBotModal) {
+                    this.modal.close();
+                }
+            }
+        });
     }
     
-    /**
-     * Развернуть бота на платформе
-     */
-    async deployBot(botId, platform) {
-        console.log('Deploying bot:', botId, 'to', platform);
+    initBotSettings() {
+        this.settingsManager.init();
     }
     
     destroy() {
         console.log('🧹 Bots модуль выгружен');
     }
 }
-
