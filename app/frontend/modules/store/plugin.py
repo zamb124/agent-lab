@@ -34,7 +34,7 @@ class StorePlugin(Plugin):
     dashboard_widgets = [
         {
             "id": "store_widget",
-            "title": "Магазин",
+            "title": "dashboard.widgets.store",
             "description": "Готовые решения и шаблоны",
             "icon": "bi-shop",
             "url": "/frontend/store/",

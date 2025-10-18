@@ -34,6 +34,10 @@
     "view_agents": "Просмотреть агентов"
   },
   "widgets": {
-    "title": "Agent Apps"
+    "title": "Agent Apps",
+    "builder": "Flow Builder",
+    "bots": "Мои боты",
+    "store": "Магазин",
+    "history": "История"
   }
 }
