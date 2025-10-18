@@ -45,7 +45,7 @@
                         <p class="upload-formats">Supported formats: JPG, PNG, WEBP • Max size: 10MB</p>
                     </div>
                     
-                    <div id="photoPreview" class="photo-preview-section" style="display: none;">
+                    <div id="photoPreview" class="photo-preview-section hidden">
                         <img id="photoImage" class="uploaded-photo" alt="Your photo">
                         <button id="removePhoto" class="remove-btn">
                             <i class="bi bi-x"></i>
@@ -58,13 +58,13 @@
                         </div>
                     </div>
                     
-                    <input type="file" id="photoInput" accept="image/*" style="display: none;">
+                    <input type="file" id="photoInput" accept="image/*" class="hidden">
                 </div>
             </div>
         </div>
 
         <!-- Results Section - moved here to be closer to generate button -->
-        <div class="results-section" id="resultsSection" style="display: none;">
+        <div class="results-section hidden" id="resultsSection">
             <div class="results-header">
                 <h2>Your Styled Images</h2>
                 <p>Here are your AI-generated styled photos</p>
@@ -155,7 +155,7 @@
                             <i class="bi bi-images"></i>
                             <p>Нажмите или перетащите фотографии</p>
                         </div>
-                        <input type="file" id="productImagesInput" accept="image/*" multiple style="display: none;">
+                        <input type="file" id="productImagesInput" accept="image/*" multiple class="hidden">
                     </div>
                     
                     <div class="uploaded-images-preview" id="uploadedImagesPreview">

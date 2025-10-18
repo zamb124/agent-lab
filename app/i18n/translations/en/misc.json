@@ -33,5 +33,14 @@
   "website": "[TODO: website]",
   "github": "[TODO: github]",
   "is_secret": "[TODO: is_secret]",
-  "default_value": "[TODO: default_value]"
+  "default_value": "[TODO: default_value]",
+  "md": "[TODO: md]",
+  "card": "[TODO: card]",
+  "48": "[TODO: 48]",
+  "info": "[TODO: info]",
+  "Empty": "[TODO: Empty]",
+  "default": "[TODO: default]",
+  "primary": "[TODO: primary]",
+  "left": "[TODO: left]",
+  "top": "[TODO: top]"
 }

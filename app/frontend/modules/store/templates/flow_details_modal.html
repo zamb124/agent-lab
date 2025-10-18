@@ -1,14 +1,13 @@
+{% import 'components.html' as c %}
+
 <div class="flow-modal-header">
     <h2 class="flow-modal-title">
         {{ flow.name }}
         {% if flow.installed %}
-        <span class="badge badge-success">
-            <i class="bi bi-check-circle-fill"></i>
-            Установлено
-        </span>
+        {{ c.badge('Установлено', variant='success', icon='check-circle-fill') }}
         {% endif %}
     </h2>
-    <button class="btn-close-modal" onclick="closeFlowModal()">
+    <button class="btn-close" onclick="closeFlowModal()" title="Закрыть">
         <i class="bi bi-x-lg"></i>
     </button>
 </div>

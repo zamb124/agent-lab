@@ -1,3 +1,5 @@
+{% import 'components.html' as c %}
+
 <link rel="stylesheet" href="/static/bots/css/bots.css">
 
 <h1 class="header-title" id="page-title" hx-swap-oob="true">
@@ -17,12 +19,8 @@
 <div class="bots-container" 
      id="bots-list-view"
      hx-get="/frontend/bots/list" 
-     hx-trigger="load" 
-     hx-indicator="#bots-loading">
-    <div id="bots-loading" class="loading-indicator htmx-indicator">
-        <div class="spinner"></div>
-        <span data-i18n="bots.loading">Загрузка ботов...</span>
-    </div>
+     hx-trigger="load">
+    {{ c.skeleton(type='card', count=6) }}
 </div>
 
 <div id="bot-expanded-modal" class="bot-modal" style="display: none;" hx-preserve="true">
@@ -31,28 +29,28 @@
 </div>
 
 <!-- Модальное окно подтверждения перемиграции -->
-<div id="remigrate-confirm-modal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; align-items: center; justify-content: center;">
-    <div class="modal-content" style="max-width: 540px; background: var(--bg-primary, white); border-radius: 0.75rem; box-shadow: 0 4px 20px rgba(0,0,0,0.3);"  onclick="event.stopPropagation()">
-        <div class="modal-header" style="border-bottom: 2px solid var(--warning, #ffc107);">
-            <h3 style="display: flex; align-items: center; gap: 0.5rem; margin: 0;">
-                <i class="bi bi-exclamation-triangle" style="color: var(--warning, #ffc107); font-size: 1.5rem;"></i>
+<div id="remigrate-confirm-modal" class="modal-confirm modal-compact" style="display: none;">
+    <div class="modal-content"  onclick="event.stopPropagation()">
+        <div class="modal-header modal-warning-header">
+            <h3 class="d-flex align-items-center gap-2 m-0">
+                <i class="bi bi-exclamation-triangle text-warning icon-lg"></i>
                 <span>Сброс к коду</span>
             </h3>
             <button class="btn-close" onclick="closeRemigrateModal()" title="Закрыть">
                 <i class="bi bi-x-lg"></i>
             </button>
         </div>
-        <div class="modal-body" style="padding: 1.5rem;">
-            <p style="font-size: 1.05rem; margin-bottom: 1rem;">
+        <div class="modal-body">
+            <p class="mb-3">
                 Вы уверены что хотите сбросить бота к базовому состоянию из кода?
             </p>
             
-            <div style="margin-bottom: 1.25rem; padding: 1rem; border-radius: 0.5rem; background: rgba(255, 193, 7, 0.1); border-left: 4px solid var(--warning, #ffc107);">
-                <div style="font-weight: 600; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+            <div class="warning-box">
+                <div class="fw-bold mb-2 d-flex align-items-center gap-2">
                     <i class="bi bi-info-circle"></i>
                     <span>Будут перемигрированы:</span>
                 </div>
-                <ul style="margin: 0.5rem 0 0 1.5rem; padding: 0; line-height: 1.6;">
+                <ul class="mb-0">
                     <li>Flow и его настройки</li>
                     <li>Entry point агент</li>
                     <li>Все субагенты</li>
@@ -60,19 +58,19 @@
                 </ul>
             </div>
             
-            <div style="padding: 0.75rem; border-radius: 0.5rem; background: rgba(220, 53, 69, 0.1); border-left: 4px solid var(--danger, #dc3545);">
-                <p style="margin: 0; color: var(--danger, #dc3545); font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
+            <div class="danger-box">
+                <p class="m-0 text-danger fw-bold d-flex align-items-center gap-2">
                     <i class="bi bi-exclamation-circle"></i>
                     <span>Все изменения будут потеряны!</span>
                 </p>
             </div>
         </div>
-        <div class="modal-footer" style="padding: 1rem 1.5rem; gap: 0.75rem;">
+        <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeRemigrateModal()">
                 <i class="bi bi-x"></i>
                 Отмена
             </button>
-            <button class="btn btn-warning" id="confirm-remigrate-btn" style="font-weight: 600;">
+            <button class="btn btn-warning fw-bold" id="confirm-remigrate-btn">
                 <i class="bi bi-arrow-counterclockwise"></i>
                 Сбросить к коду
             </button>

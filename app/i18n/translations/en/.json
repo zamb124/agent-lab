@@ -1,4 +1,5 @@
 {
   "modal-overlay": "[TODO: .modal-overlay]",
-  "notification": "[TODO: .notification]"
+  "notification": "[TODO: .notification]",
+  "alert": "[TODO: .alert]"
 }

@@ -1,4 +1,5 @@
 {% extends "base_landing.html" %}
+{% import 'components.html' as c %}
 
 {% block title %}Agents Lab - Лаборатория Агентов{% endblock %}
 
@@ -42,11 +43,11 @@
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setLandingLanguage('ru');">
-                            <i class="bi bi-check" style="visibility: hidden" id="lang-ru"></i> 
+                            <i class="bi bi-check invisible" id="lang-ru"></i> 
                             {{ t('languages.ru') }}
                         </a></li>
                         <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setLandingLanguage('en');">
-                            <i class="bi bi-check" style="visibility: hidden" id="lang-en"></i> 
+                            <i class="bi bi-check invisible" id="lang-en"></i> 
                             {{ t('languages.en') }}
                         </a></li>
                         </ul>
@@ -99,11 +100,11 @@
             <div class="mobile-menu-section">
                 <div class="mobile-menu-section-title">{{ t('dashboard.header.language_toggle') }}</div>
                 <button class="mobile-menu-item" onclick="event.preventDefault(); setLandingLanguage('ru'); closeMobileMenu();">
-                    <i class="bi bi-check" style="visibility: hidden" id="mobile-lang-ru"></i>
+                    <i class="bi bi-check invisible" id="mobile-lang-ru"></i>
                     <span>{{ t('languages.ru') }}</span>
                 </button>
                 <button class="mobile-menu-item" onclick="event.preventDefault(); setLandingLanguage('en'); closeMobileMenu();">
-                    <i class="bi bi-check" style="visibility: hidden" id="mobile-lang-en"></i>
+                    <i class="bi bi-check invisible" id="mobile-lang-en"></i>
                     <span>{{ t('languages.en') }}</span>
                 </button>
             </div>

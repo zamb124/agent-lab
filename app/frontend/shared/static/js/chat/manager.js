@@ -261,8 +261,14 @@ class ChatManager {
         const panel = document.getElementById('chat-agents-panel');
         if (!panel) return;
 
-        const isVisible = panel.style.display !== 'none';
-        panel.style.display = isVisible ? 'none' : 'block';
+        const isVisible = !panel.classList.contains('hidden');
+        if (isVisible) {
+            panel.classList.add('hidden');
+            panel.style.display = 'none';
+        } else {
+            panel.classList.remove('hidden');
+            panel.style.display = 'block';
+        }
         
         console.log(`🔄 Панель агентов ${isVisible ? 'скрыта' : 'показана'}`);
     }
@@ -409,7 +415,8 @@ class ChatManager {
             
             if (!e.target.closest('#chat-widget-agents') && !e.target.closest('#chat-agents-panel')) {
                 const panel = document.getElementById('chat-agents-panel');
-                if (panel && panel.style.display !== 'none') {
+                if (panel && !panel.classList.contains('hidden')) {
+                    panel.classList.add('hidden');
                     panel.style.display = 'none';
                 }
             }
@@ -672,6 +679,7 @@ class ChatManager {
         const minimizeBtn = document.getElementById('chat-widget-minimize');
         
         if (widget) {
+            widget.classList.remove('hidden');
             widget.style.display = 'flex';
             widget.classList.remove('minimized');
             this.isVisible = true;
@@ -716,6 +724,7 @@ class ChatManager {
         const toggle = document.getElementById('chat-widget-toggle');
         
         if (widget) {
+            widget.classList.add('hidden');
             widget.style.display = 'none';
             this.isVisible = false;
         }
@@ -798,6 +807,7 @@ class ChatManager {
     showCommandsMenu() {
         const menu = document.getElementById('chat-commands-menu');
         if (menu) {
+            menu.classList.remove('hidden');
             menu.style.display = 'block';
             console.log('✅ Меню команд показано');
         }
@@ -806,6 +816,7 @@ class ChatManager {
     hideCommandsMenu() {
         const menu = document.getElementById('chat-commands-menu');
         if (menu) {
+            menu.classList.add('hidden');
             menu.style.display = 'none';
         }
     }

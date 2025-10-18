@@ -13,6 +13,12 @@
     min-height: 200px;
 }
 
+.table-responsive {
+    overflow-x: auto;
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
+}
+
 .table-container::-webkit-scrollbar {
     height: 8px;
 }
@@ -79,6 +85,10 @@
 
 .table tr:last-child td {
     border-bottom: none;
+}
+
+.table-empty-icon {
+    opacity: 0.5;
 }
 
 .table-icon {

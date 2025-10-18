@@ -67,18 +67,7 @@
     animation: fadeInLeft 0.3s ease-out;
 }
 
-.htmx-indicator {
-    opacity: 0;
-    transition: opacity var(--transition-fast);
-}
-
-.htmx-request .htmx-indicator {
-    opacity: 1;
-}
-
-.htmx-request.htmx-indicator {
-    opacity: 1;
-}
+/* Отключено - используем skeleton вместо индикаторов */
 
 .htmx-settling {
     transition: all var(--transition-normal);
@@ -105,5 +94,18 @@
 @keyframes slideIn {
     from { transform: translateX(-100%); }
     to { transform: translateX(0); }
+}
+
+/* Cursor utilities */
+.cursor-pointer {
+    cursor: pointer !important;
+}
+
+.cursor-default {
+    cursor: default !important;
+}
+
+.cursor-move {
+    cursor: move !important;
 }
 

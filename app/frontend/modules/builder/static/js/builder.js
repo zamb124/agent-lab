@@ -504,6 +504,12 @@ class Builder {
         const runBtn = document.getElementById('runFlowBtn');
         const resetBtn = document.getElementById('resetToCodeBtn');
         
+        console.log('🔓 Активация кнопок:', {
+            saveBtn: !!saveBtn,
+            runBtn: !!runBtn,
+            resetBtn: !!resetBtn
+        });
+        
         if (saveBtn) saveBtn.disabled = false;
         if (runBtn) runBtn.disabled = false;
         if (resetBtn) resetBtn.disabled = false;
@@ -565,11 +571,11 @@ class Builder {
         const contextMenu = document.getElementById('contextMenu');
         if (!contextMenu) return;
         
+        contextMenu.classList.remove('hidden');
         contextMenu.style.left = x + 'px';
         contextMenu.style.top = y + 'px';
         contextMenu.style.display = 'block';
         
-        // Настраиваем обработчики
         const items = contextMenu.querySelectorAll('.context-menu-item');
         items.forEach(item => {
             item.onclick = () => {
@@ -586,6 +592,7 @@ class Builder {
     hideContextMenu() {
         const contextMenu = document.getElementById('contextMenu');
         if (contextMenu) {
+            contextMenu.classList.add('hidden');
             contextMenu.style.display = 'none';
         }
     }

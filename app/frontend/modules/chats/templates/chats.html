@@ -1,3 +1,5 @@
+{% import 'components.html' as c %}
+
 <h1 class="header-title" id="page-title" hx-swap-oob="true">
     <i class="bi bi-chat-left-dots me-2"></i>
     {{ t('chats.title') }}
@@ -38,10 +40,9 @@
                   hx-get="/frontend/chats/list" 
                   hx-target="#chats-list"
                   hx-trigger="submit, change from:select"
-                  hx-indicator="#loading-indicator"
                   class="d-flex flex-wrap align-items-center gap-2">
                 
-                <select class="form-select form-select-sm" id="filter-platform" name="platform" style="width: 140px;">
+                <select class="form-select form-select-sm w-140" id="filter-platform" name="platform">
                     <option value="">{{ t('chats.filters.platform_placeholder') }}</option>
                     <option value="web">{{ t('chats.platform_values.web') }}</option>
                     <option value="telegram">{{ t('chats.platform_values.telegram') }}</option>
@@ -50,9 +51,9 @@
                     <option value="amocrm">AmoCRM</option>
                 </select>
                 
-                <input type="text" class="form-control form-control-sm" id="filter-flow" name="flow_id" placeholder="{{ t('chats.filters.flow_placeholder') }}" style="width: 150px;">
+                <input type="text" class="form-control form-control-sm w-150" id="filter-flow" name="flow_id" placeholder="{{ t('chats.filters.flow_placeholder') }}">
                 
-                <select class="form-select form-select-sm" id="filter-status" name="status" style="width: 120px;">
+                <select class="form-select form-select-sm w-120" id="filter-status" name="status">
                     <option value="">{{ t('chats.filters.status_placeholder') }}</option>
                     <option value="active">{{ t('chats.status_values.active') }}</option>
                     <option value="inactive">{{ t('chats.status_values.inactive') }}</option>
@@ -60,36 +61,27 @@
                     <option value="waiting_input">{{ t('chats.status_values.waiting_input') }}</option>
                 </select>
                 
-                <button type="submit" class="btn btn-primary btn-sm">
-                    <i class="bi bi-funnel"></i>
-                    {{ t('chats.apply') }}
-                </button>
+                {{ c.button(t('chats.apply'),
+                    variant='primary',
+                    size='sm',
+                    icon='funnel',
+                    type='submit'
+                ) }}
                 
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="
-                    document.getElementById('chats-filters').reset();
-                    htmx.trigger('#chats-filters', 'submit');
-                ">
-                    <i class="bi bi-x-circle"></i>
-                    {{ t('chats.reset') }}
-                </button>
+                {{ c.button(t('chats.reset'),
+                    variant='outline-secondary',
+                    size='sm',
+                    icon='x-circle',
+                    type='button',
+                    onclick='document.getElementById(\'chats-filters\').reset(); htmx.trigger(\'#chats-filters\', \'submit\');'
+                ) }}
             </form>
         </div>
     </div>
 
-    <div style="position: relative; min-height: 400px; margin-top: 1.5rem;">
-        <div id="loading-indicator" class="htmx-indicator">
-            <div class="loading-overlay">
-                <div style="text-align: center;">
-                    <div class="spinner"></div>
-                </div>
-            </div>
-        </div>
-
-        <div id="chats-list" 
-             hx-get="/frontend/chats/list" 
-             hx-trigger="load"
-             hx-indicator="#loading-indicator">
-        </div>
+    <div id="chats-list" 
+         hx-get="/frontend/chats/list" 
+         hx-trigger="load">
+        {{ c.skeleton(type='table', count=5) }}
     </div>
 </div>
-

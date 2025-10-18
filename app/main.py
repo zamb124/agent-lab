@@ -30,15 +30,7 @@ from app.frontend.api import code as frontend_code
 from app.frontend.pages import auth as auth_pages
 from app.frontend.pages import dashboard as dashboard_pages
 from app.frontend.pages import public as public_pages
-from app.frontend.modules.chat import router as chat_module
-from app.frontend.modules.chats.router import router as chats_module
-from app.frontend.modules.builder import router as builder_module
-from app.frontend.modules.billing.router import router as billing_module
-from app.frontend.modules.admin.router import router as admin_module
-from app.frontend.modules.history.router import router as history_module
-from app.frontend.modules.bots.router import router as bots_module
-from app.frontend.modules.variables.router import router as variables_module
-from app.frontend.modules.store.router import router as store_module
+from app.frontend.core.plugin_loader import discover_and_load_plugins
 from app.frontend.websockets import notifications as websocket_notifications
 from app.frontend.websockets import chat as websocket_chat
 from app.frontend.api import websocket_status as websocket_status_api
@@ -178,6 +170,11 @@ async def lifespan(app: FastAPI):
         logger.info("💳 Инициализация платежных провайдеров...")
         PaymentProviderFactory.initialize(settings)
         logger.info("✅ Платежные провайдеры инициализированы")
+        
+        # Автоматическая загрузка плагинов
+        logger.info("🔌 Загрузка плагинов фронтенда...")
+        await discover_and_load_plugins(app)
+        logger.info("✅ Плагины фронтенда загружены")
 
         # Запуск синхронизации транзакций (раз в час)
         logger.info("🔄 Запуск фоновой синхронизации транзакций...")
@@ -310,16 +307,8 @@ app.include_router(public_pages.router, tags=["public-pages"], include_in_schema
 app.include_router(auth_pages.router, tags=["auth-pages"], include_in_schema=False)
 app.include_router(dashboard_pages.router, tags=["dashboard-pages"], include_in_schema=False)
 
-# Frontend Modules - скрыто от публичной документации
-app.include_router(chat_module.router, tags=["chat-module"], include_in_schema=False)
-app.include_router(chats_module, tags=["chats-module"], include_in_schema=False)
-app.include_router(builder_module.router, tags=["builder-module"], include_in_schema=False)
-app.include_router(billing_module, tags=["billing-module"], include_in_schema=False)
-app.include_router(admin_module, tags=["admin-module"], include_in_schema=False)
-app.include_router(history_module, tags=["history-module"], include_in_schema=False)
-app.include_router(bots_module, tags=["bots-module"], include_in_schema=False)
-app.include_router(variables_module, tags=["variables-module"], include_in_schema=False)
-app.include_router(store_module, tags=["store-module"], include_in_schema=False)
+# Frontend Modules загружаются автоматически через плагинную систему
+# (см. discover_and_load_plugins в lifespan)
 
 # WebSockets - скрыто от публичной документации
 app.include_router(websocket_notifications.router, tags=["websocket-notifications"], include_in_schema=False)

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import 'components.html' as c %}
 
 {% block title %}{{ t('billing.title') }} - {{ t('common.app_name') }}{% endblock %}
 
@@ -25,11 +26,11 @@
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end">
                     <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('ru');">
-                        <i class="bi bi-check" style="visibility: hidden" id="lang-ru"></i> 
+                        <i class="bi bi-check invisible" id="lang-ru"></i> 
                         {{ t('languages.ru') }}
                     </a></li>
                     <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('en');">
-                        <i class="bi bi-check" style="visibility: hidden" id="lang-en"></i> 
+                        <i class="bi bi-check invisible" id="lang-en"></i> 
                         {{ t('languages.en') }}
                     </a></li>
                 </ul>
@@ -199,10 +200,11 @@
                     </tbody>
                 </table>
                 {% else %}
-                <div class="empty-state">
-                    <i class="bi bi-inbox"></i>
-                    <p>{{ t('billing.resources.no_data') }}</p>
-                </div>
+                {{ c.empty_state(
+                    icon='inbox',
+                    title=t('billing.resources.no_data'),
+                    centered=false
+                ) }}
                 {% endif %}
             </div>
         </div>
@@ -244,10 +246,11 @@
                     </tbody>
                 </table>
                 {% else %}
-                <div class="empty-state">
-                    <i class="bi bi-inbox"></i>
-                    <p>{{ t('billing.users.no_data') }}</p>
-                </div>
+                {{ c.empty_state(
+                    icon='inbox',
+                    title=t('billing.users.no_data'),
+                    centered=false
+                ) }}
                 {% endif %}
             </div>
         </div>
@@ -305,11 +308,12 @@
                     {% endfor %}
                 </div>
                 {% else %}
-                <div class="empty-state">
-                    <i class="bi bi-inbox"></i>
-                    <p>История пополнений пуста</p>
-                    <p class="text-muted">Платежи появятся здесь после пополнения баланса</p>
-                </div>
+                {{ c.empty_state(
+                    icon='inbox',
+                    title='История пополнений пуста',
+                    description='Платежи появятся здесь после пополнения баланса',
+                    centered=false
+                ) }}
                 {% endif %}
             </div>
         </div>

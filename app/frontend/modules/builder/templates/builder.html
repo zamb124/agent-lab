@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import 'components.html' as c %}
 
 {% block title %}{{ t('builder.title') }} - {{ t('common.app_name') }}{% endblock %}
 
@@ -11,7 +12,7 @@
 <div class="builder-container" id="builderContainer">
     <!-- Палитра нод слева -->
     <aside class="node-palette" id="nodePalette">
-        <div class="palette-header" id="paletteHeader" style="cursor: pointer;">
+        <div class="palette-header cursor-pointer" id="paletteHeader">
             <h3><i class="bi bi-grid-3x3-gap"></i> Components</h3>
             <button class="btn-collapse-palette" id="collapsePaletteBtn" title="Свернуть">
                 <i class="bi bi-chevron-left"></i>
@@ -23,7 +24,7 @@
             
             <!-- Flow Node -->
             <div class="palette-item" data-node-type="flow_node" draggable="true">
-                <div class="palette-icon" style="background: #3b82f6;">
+                <div class="palette-icon palette-icon-flow">
                     <i class="bi bi-diagram-3"></i>
                 </div>
                 <div class="palette-info">
@@ -34,7 +35,7 @@
             
             <!-- Agent Node -->
             <div class="palette-item" data-node-type="agent_node" draggable="true">
-                <div class="palette-icon" style="background: #8b5cf6;">
+                <div class="palette-icon palette-icon-agent">
                     <i class="bi bi-robot"></i>
                 </div>
                 <div class="palette-info">
@@ -45,7 +46,7 @@
             
             <!-- Tool Node -->
             <div class="palette-item" data-node-type="tool_node" draggable="true">
-                <div class="palette-icon" style="background: #10b981;">
+                <div class="palette-icon palette-icon-tool">
                     <i class="bi bi-tools"></i>
                 </div>
                 <div class="palette-info">
@@ -56,7 +57,7 @@
             
             <!-- Function Node -->
             <div class="palette-item" data-node-type="function_node" draggable="true">
-                <div class="palette-icon" style="background: #f59e0b;">
+                <div class="palette-icon palette-icon-function">
                     <i class="bi bi-code-square"></i>
                 </div>
                 <div class="palette-info">
@@ -67,7 +68,7 @@
             
             <!-- Message Node -->
             <div class="palette-item" data-node-type="message_node" draggable="true">
-                <div class="palette-icon" style="background: #06b6d4;">
+                <div class="palette-icon palette-icon-message">
                     <i class="bi bi-chat-dots"></i>
                 </div>
                 <div class="palette-info">
@@ -78,7 +79,7 @@
             
             <!-- Router Node -->
             <div class="palette-item" data-node-type="router_node" draggable="true">
-                <div class="palette-icon" style="background: #ef4444;">
+                <div class="palette-icon palette-icon-router">
                     <i class="bi bi-lightning"></i>
                 </div>
                 <div class="palette-info">
@@ -122,11 +123,11 @@
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('ru');">
-                            <i class="bi bi-check" style="visibility: hidden" id="lang-ru"></i> 
+                            <i class="bi bi-check invisible" id="lang-ru"></i> 
                             {{ t('languages.ru') }}
                         </a></li>
                         <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); app.i18n.setLanguage('en');">
-                            <i class="bi bi-check" style="visibility: hidden" id="lang-en"></i> 
+                            <i class="bi bi-check invisible" id="lang-en"></i> 
                             {{ t('languages.en') }}
                         </a></li>
                     </ul>
@@ -176,14 +177,14 @@
     </main>
     
     <!-- Панель свойств справа -->
-    <aside class="properties-panel" id="propertiesPanel" style="display: none;">
+    <aside class="properties-panel hidden" id="propertiesPanel">
         <!-- Фиксированный крестик закрытия -->
         <button class="properties-close-btn" id="closePanelBtn">
             <i class="bi bi-x-lg"></i>
         </button>
         
         <!-- Заголовок панели (только для inline редакторов) -->
-        <div class="properties-header" id="propertiesTitle" style="display: none;">
+        <div class="properties-header hidden" id="propertiesTitle">
             <span class="properties-name">Properties</span>
         </div>
         
@@ -195,7 +196,7 @@
         </div>
         
         <!-- Footer для кнопок действий -->
-        <div class="properties-footer" id="propertiesFooter" style="display: none;">
+        <div class="properties-footer hidden" id="propertiesFooter">
             <button class="btn btn-sm btn-outline-danger" id="deleteNodeBtn">
                 <i class="bi bi-trash"></i> Delete
             </button>
@@ -210,7 +211,7 @@
 <div id="modalContainer"></div>
 
 <!-- Контекстное меню -->
-<div class="context-menu" id="contextMenu" style="display: none;">
+<div class="context-menu hidden" id="contextMenu">
     <div class="context-menu-item" data-action="edit">
         <i class="bi bi-pencil"></i> {{ t('builder.context_menu.edit') }}
     </div>

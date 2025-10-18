@@ -1,12 +1,19 @@
+{% import 'components.html' as c %}
+<link rel="stylesheet" href="/static/variables/css/variables.css">
+
 <h1 class="header-title" id="page-title" hx-swap-oob="true">
     <i class="bi bi-key me-2"></i>
     Ключи и Переменные
 </h1>
 
 <div class="header-right" hx-swap-oob="true">
-    <button class="btn btn-primary btn-sm" onclick="openAddVariableModal()" data-tooltip="Создать переменную">
-        <i class="bi bi-plus-lg"></i>
-    </button>
+    {{ c.button('',
+        variant='primary',
+        size='sm',
+        icon='plus-lg',
+        onclick='openAddVariableModal()',
+        data_tooltip='Создать переменную'
+    ) }}
     <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="Переключить тему">
         <i class="bi bi-sun"></i>
     </button>
@@ -26,12 +33,12 @@
     {% if variables %}
     <div class="variables-grid">
         <div class="variable-grid-item">
-            <div class="variable-card variable-card-create" onclick="openAddVariableModal()" style="cursor: pointer;">
-                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 0.75rem; padding-top: 1.5rem;">
-                    <i class="bi bi-plus-circle" style="font-size: 2.5rem; color: var(--accent-primary); opacity: 0.7;"></i>
-                    <div style="text-align: center;">
-                        <div style="margin: 0; color: var(--text-primary); font-size: 0.875rem; font-weight: 600;">Создать переменную</div>
-                        <small style="color: var(--text-muted); font-size: 0.75rem;">Добавить новую переменную</small>
+            <div class="variable-card variable-card-create" onclick="openAddVariableModal()">
+                <div class="variable-create-body">
+                    <i class="bi bi-plus-circle variable-create-icon"></i>
+                    <div class="variable-create-content">
+                        <div class="variable-create-title">Создать переменную</div>
+                        <small class="variable-create-subtitle">Добавить новую переменную</small>
                     </div>
                 </div>
             </div>
@@ -92,211 +99,27 @@
         {% endfor %}
     </div>
     
-    <style>
-    .variables-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: 1.25rem;
-        width: 100%;
-    }
-    
-    .variable-card {
-        transition: all var(--transition-normal);
-        border: 1px solid var(--border-primary);
-        background: var(--bg-card);
-        border-radius: var(--radius-lg);
-        padding: 1rem;
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-        min-height: 150px;
-    }
-    
-    .variable-card:hover {
-        border-color: var(--accent-primary);
-        box-shadow: var(--shadow-md);
-        transform: translateY(-2px);
-    }
-    
-    .variable-card-header {
-        display: flex;
-        align-items: flex-start;
-        gap: 0.75rem;
-    }
-    
-    .variable-card-icon {
-        width: 32px;
-        height: 32px;
-        background: var(--accent-primary);
-        border-radius: var(--radius-md);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-    }
-    
-    .variable-card-icon i {
-        font-size: 1rem;
-        color: white;
-    }
-    
-    .variable-card-info {
-        flex: 1;
-        min-width: 0;
-    }
-    
-    .variable-groups {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.25rem;
-    }
-    
-    .variable-group-badge {
-        display: inline-flex;
-        padding: 0.125rem 0.375rem;
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-secondary);
-        border-radius: var(--radius-sm);
-        font-size: 0.625rem;
-        font-weight: 500;
-        color: var(--text-secondary);
-    }
-    
-    .variable-card-actions {
-        display: flex;
-        gap: 0.25rem;
-    }
-    
-    .variable-card-body {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-    
-    .variable-key {
-        font-size: 0.75rem;
-        font-weight: 600;
-    }
-    
-    .variable-key code {
-        display: block;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        color: var(--text-primary);
-        background: none;
-        padding: 0;
-    }
-    
-    .variable-value {
-        font-size: 0.75rem;
-    }
-    
-    .variable-secret-group {
-        display: flex;
-        align-items: center;
-        gap: 0.375rem;
-    }
-    
-    .variable-secret-group input {
-        flex: 1;
-        font-family: monospace;
-        font-size: 0.75rem;
-    }
-    
-    .variable-value-display {
-        padding: 0.375rem 0.5rem;
-        background: var(--bg-secondary);
-        border-radius: var(--radius-sm);
-    }
-    
-    .variable-value-display code {
-        display: block;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        color: var(--text-muted);
-        background: none;
-        padding: 0;
-        font-size: 0.75rem;
-    }
-    
-    .btn-icon-danger {
-        color: var(--accent-danger);
-    }
-    
-    .btn-icon-danger:hover {
-        color: white;
-        background: var(--accent-danger);
-        border-color: var(--accent-danger);
-    }
-    
-    .variable-card-empty {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 3rem;
-        min-height: 250px;
-    }
-    
-    .variable-card-empty i {
-        font-size: 4rem;
-        opacity: 0.7;
-        margin-bottom: 1rem;
-    }
-    
-    .variable-card-empty h3 {
-        margin: 0 0 0.5rem 0;
-        color: var(--text-primary);
-        font-size: 1.25rem;
-        font-weight: 600;
-    }
-    
-    .variable-card-empty p {
-        margin: 0;
-        color: var(--text-secondary);
-        font-size: 0.875rem;
-        text-align: center;
-    }
-    
-    .variable-card-create {
-        border: 1px dashed var(--border-secondary);
-        padding: 0;
-    }
-    
-    .variable-card-create:hover {
-        border-color: var(--accent-primary);
-        box-shadow: var(--shadow-md);
-        transform: translateY(-2px);
-    }
-    
-    .variable-card-create:hover i {
-        opacity: 1 !important;
-        color: var(--accent-primary);
-    }
-    </style>
     {% endif %}
     </div>
 </div>
 
 {% if not variables %}
-<div class="empty-state-centered">
-    <button class="empty-state-add-btn" onclick="openAddVariableModal()">
-        <i class="bi bi-plus-circle"></i>
-    </button>
-    <h3>Нет переменных</h3>
-    <p>Создайте первую переменную для использования в ботах и агентах</p>
-</div>
+{{ c.empty_state(
+    icon='key',
+    title='Нет переменных',
+    description='Создайте первую переменную для использования в ботах и агентах',
+    button_text='Создать переменную',
+    button_icon='plus',
+    button_onclick='openAddVariableModal()'
+) }}
 {% endif %}
 
 <script type="application/json" id="variables-data">
 {{ variables|tojson|safe }}
 </script>
 
-<!-- Модальное окно (вне контейнера чтобы не обновлялось) -->
-<div id="variable-modal" class="modal-overlay" style="display: none;" hx-preserve="true">
-    <div class="modal-content" style="max-width: 500px;" onclick="event.stopPropagation()">
+<div id="variable-modal" class="modal-overlay modal-hidden variable-modal" hx-preserve="true">
+    <div class="modal-content" onclick="event.stopPropagation()">
         <div class="modal-header">
             <h3 id="variable-modal-title">Добавить переменную</h3>
             <div class="modal-header-actions">
@@ -354,7 +177,6 @@
 window.variablesEditingKey = window.variablesEditingKey || null;
 window.variablesCurrentGroups = window.variablesCurrentGroups || [];
 
-// Функция переключения группировки
 window.toggleGrouping = function() {
     const btn = document.getElementById('group-by-tags-btn');
     const contentDiv = document.getElementById('variables-content');
@@ -379,7 +201,6 @@ window.toggleGrouping = function() {
 };
 
 function renderGridView(variables, container) {
-    // Рендерим обычный grid (копируем из серверного шаблона)
     htmx.ajax('GET', '/frontend/variables/list', {
         target: '#variables-container',
         swap: 'outerHTML'
@@ -387,7 +208,6 @@ function renderGridView(variables, container) {
 }
 
 function renderGroupedView(variables, container) {
-    // Собираем все уникальные группы
     const allGroups = new Set();
     const ungrouped = [];
     
@@ -541,7 +361,6 @@ function renderGroupedView(variables, container) {
         </style>
     `;
     
-    // Рендерим каждую группу
     allGroups.forEach(group => {
         const groupVars = Object.entries(variables).filter(([key, data]) => 
             data.groups && data.groups.includes(group)
@@ -549,10 +368,10 @@ function renderGroupedView(variables, container) {
         
         if (groupVars.length > 0) {
             html += `
-                <div style="margin-bottom: 2rem;">
-                    <h5 style="margin-bottom: 1rem; color: var(--text-primary); font-size: 1rem; font-weight: 600;">
-                        <span style="display: inline-flex; padding: 0.25rem 0.625rem; background: var(--accent-primary); border-radius: var(--radius-md); font-size: 0.75rem; color: white;">${group}</span>
-                        <span style="color: var(--text-muted); margin-left: 0.5rem;">(${groupVars.length})</span>
+                <div class="variable-group-header">
+                    <h5 class="variable-group-title">
+                        <span class="variable-group-badge">${group}</span>
+                        <span class="variable-group-count">(${groupVars.length})</span>
                     </h5>
                     <div class="variables-grid">
             `;
@@ -568,13 +387,12 @@ function renderGroupedView(variables, container) {
         }
     });
     
-    // Переменные без групп
     if (ungrouped.length > 0) {
         html += `
-            <div style="margin-bottom: 2rem;">
-                <h5 style="margin-bottom: 1rem; color: var(--text-muted); font-size: 1rem; font-weight: 600;">
+            <div class="empty-group-header">
+                <h5 class="empty-group-title">
                     <span>Без группы</span>
-                    <span style="margin-left: 0.5rem;">(${ungrouped.length})</span>
+                    <span class="variable-group-count">(${ungrouped.length})</span>
                 </h5>
                 <div class="variables-grid">
         `;
@@ -657,7 +475,6 @@ window.openAddVariableModal = function() {
     renderGroups();
     
     const modal = document.getElementById('variable-modal');
-    // Перемещаем модалку в body если она не там
     if (modal.parentElement !== document.body) {
         document.body.appendChild(modal);
     }
@@ -667,7 +484,6 @@ window.openAddVariableModal = function() {
 window.editVariable = async function(key, value, isSecret) {
     window.variablesEditingKey = key;
     
-    // Загружаем полные данные переменной для получения groups, description и реального значения
     try {
         const response = await fetch(`/api/v1/admin/variables/${key}`, {
             headers: {'Authorization': `Bearer ${window.app.authToken}`}
@@ -675,7 +491,7 @@ window.editVariable = async function(key, value, isSecret) {
         if (response.ok) {
             const data = await response.json();
             window.variablesCurrentGroups = data.groups || [];
-            value = data.value; // Реальное значение для секретов
+            value = data.value;
             document.getElementById('variable-description').value = data.description || '';
         } else {
             window.variablesCurrentGroups = [];
@@ -694,7 +510,6 @@ window.editVariable = async function(key, value, isSecret) {
     renderGroups();
     
     const modal = document.getElementById('variable-modal');
-    // Перемещаем модалку в body если она не там
     if (modal.parentElement !== document.body) {
         document.body.appendChild(modal);
     }
@@ -709,14 +524,12 @@ window.closeVariableModal = function() {
     window.variablesEditingKey = null;
 }
 
-// Закрытие по клику на фон
 document.addEventListener('click', (e) => {
     if (e.target.id === 'variable-modal') {
         closeVariableModal();
     }
 });
 
-// Закрытие по Escape
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && document.getElementById('variable-modal').style.display === 'flex') {
         closeVariableModal();
@@ -764,7 +577,6 @@ window.saveVariable = async function() {
             if (window.app && window.app.showNotification) {
                 window.app.showNotification('Переменная сохранена', 'success');
             }
-            // Обновляем весь контейнер чтобы hx-swap-oob работал правильно
             htmx.ajax('GET', '/frontend/variables/list', {
                 target: '#variables-container',
                 swap: 'outerHTML'
@@ -802,7 +614,6 @@ window.deleteVariable = async function(key) {
             if (window.app && window.app.showNotification) {
                 window.app.showNotification('Переменная удалена', 'success');
             }
-            // Обновляем весь контейнер чтобы hx-swap-oob работал правильно
             htmx.ajax('GET', '/frontend/variables/list', {
                 target: '#variables-container',
                 swap: 'outerHTML'
@@ -819,7 +630,6 @@ window.deleteVariable = async function(key) {
     }
 }
 
-// Функции для работы с группами
 window.addGroup = function() {
     const input = document.getElementById('variable-group-input');
     const group = input.value.trim().toLowerCase();
@@ -856,9 +666,9 @@ function renderGroups() {
     }
     
     container.innerHTML = window.variablesCurrentGroups.map(group => `
-        <span class="badge bg-primary me-1 mb-1" style="font-size: 0.85rem;">
+        <span class="badge bg-primary me-1 mb-1 variable-badge-group">
             ${group}
-            <i class="bi bi-x ms-1" onclick="removeGroup('${group}')" style="cursor: pointer;"></i>
+            <i class="bi bi-x variable-badge-remove" onclick="removeGroup('${group}')"></i>
         </span>
     `).join('');
 }
@@ -868,7 +678,6 @@ window.toggleSecret = async function(key, btnElement) {
     const icon = btnElement.querySelector('i');
     
     if (input.type === 'password') {
-        // Загружаем реальное значение
         try {
             const response = await fetch(`/api/v1/admin/variables/${key}`, {
                 headers: {

@@ -1,10 +1,12 @@
+{% import 'components.html' as c %}
+
 <div class="store-grid">
     {% if flows %}
         {% for flow in flows %}
         <div class="store-card {% if flow.installed %}installed{% endif %}" data-flow-id="{{ flow.flow_id }}" onclick="openFlowDetails('{{ flow.flow_id }}')">
             <div class="store-card-image">
                 {% if flow.installed %}
-                <span class="store-card-badge installed">
+                <span class="badge badge-success store-card-badge">
                     <i class="bi bi-check-circle-fill"></i>
                     Установлено
                 </span>
@@ -25,20 +27,17 @@
                     </span>
                     <div class="platform-tags">
                         {% for platform in flow.platforms %}
+                        {% set platform_config = {
+                            'telegram': {'icon': 'telegram', 'text': 'Telegram'},
+                            'whatsapp': {'icon': 'whatsapp', 'text': 'WhatsApp'},
+                            'api': {'icon': 'code-slash', 'text': 'API'},
+                            'web': {'icon': 'globe', 'text': 'Web'},
+                            'amocrm': {'icon': 'building', 'text': 'AmoCRM'}
+                        } %}
+                        {% set config = platform_config.get(platform, {'icon': 'gear', 'text': platform}) %}
+                        
                         <span class="platform-tag platform-{{ platform }}">
-                            {% if platform == 'telegram' %}
-                                <i class="bi bi-telegram"></i> Telegram
-                            {% elif platform == 'whatsapp' %}
-                                <i class="bi bi-whatsapp"></i> WhatsApp
-                            {% elif platform == 'api' %}
-                                <i class="bi bi-code-slash"></i> API
-                            {% elif platform == 'web' %}
-                                <i class="bi bi-globe"></i> Web
-                            {% elif platform == 'amocrm' %}
-                                <i class="bi bi-building"></i> AmoCRM
-                            {% else %}
-                                <i class="bi bi-gear"></i> {{ platform }}
-                            {% endif %}
+                            <i class="bi bi-{{ config.icon }}"></i> {{ config.text }}
                         </span>
                         {% endfor %}
                     </div>
@@ -55,13 +54,11 @@
         </div>
         {% endfor %}
     {% else %}
-        <div class="empty-state">
-            <div class="empty-state-icon">
-                <i class="bi bi-shop display-1"></i>
-            </div>
-            <h3 data-i18n="store.empty_state.title">Магазин пуст</h3>
-            <p data-i18n="store.empty_state.description">Нет доступных flows для установки</p>
-        </div>
+        {# СУПЕР просто с макросом! #}
+        {{ c.empty_state(
+            icon='shop',
+            title='Магазин пуст',
+            description='Нет доступных flows для установки'
+        ) }}
     {% endif %}
 </div>
-

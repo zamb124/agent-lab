@@ -1,10 +1,11 @@
-<!-- WhatsApp Platform Fields Template -->
+{% import 'components.html' as c %}
+
 <div id="whatsapp-fields-container">
-    <div class="alert alert-info mb-3">
-        <i class="bi bi-info-circle"></i>
-        <strong>WhatsApp Business API</strong><br>
-        Получите credentials в <a href="https://developers.facebook.com" target="_blank">Meta for Developers</a>
-    </div>
+    {{ c.alert(
+        type='info',
+        title='WhatsApp Business API',
+        message='Получите credentials в <a href="https://developers.facebook.com" target="_blank">Meta for Developers</a>'
+    ) }}
     
     <div class="form-group">
         <label>Phone Number ID <span class="text-danger">*</span></label>
@@ -32,7 +33,7 @@
                 <option value="">-- Выберите переменную --</option>
             </select>
         </div>
-        <div id="wa-token-hardcoded-group" style="display: none;">
+        <div id="wa-token-hardcoded-group" class="hidden">
             <input type="password" class="form-control" id="whatsapp-access-token" placeholder="EAAxxxx...">
         </div>
         <small class="form-text">Access Token от WhatsApp Business API</small>
@@ -57,7 +58,7 @@
                 <option value="">-- Выберите переменную --</option>
             </select>
         </div>
-        <div id="wa-verify-hardcoded-group" style="display: none;">
+        <div id="wa-verify-hardcoded-group" class="hidden">
             <input type="password" class="form-control" id="whatsapp-verify-token" placeholder="Ваш verify token">
         </div>
         <small class="form-text">Токен для верификации webhook</small>

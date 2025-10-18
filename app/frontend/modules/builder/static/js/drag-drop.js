@@ -599,8 +599,8 @@ class BuilderDragDrop {
      * Создание флоу с рекурсивным разворачиванием
      */
     async createFlowWithExpansion(flowData, position) {
+        console.log('🎯 createFlowWithExpansion вызван:', flowData.name, position);
         try {
-            // Создаем основную ноду флоу
             const flowNodeData = {
                 id: `flow_${flowData.id}_${Date.now()}`,
                 type: 'flow_node',

@@ -1748,7 +1748,11 @@ import { showNotification } from '/static/js/components/notification.js';
         const confirmBtn = document.getElementById('confirm-remigrate-btn');
         
         if (modal) {
+            if (modal.parentElement !== document.body) {
+                document.body.appendChild(modal);
+            }
             modal.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
         }
         
         if (confirmBtn) {
@@ -1760,6 +1764,7 @@ import { showNotification } from '/static/js/components/notification.js';
         const modal = document.getElementById('remigrate-confirm-modal');
         if (modal) {
             modal.style.display = 'none';
+            document.body.style.overflow = '';
         }
         pendingRemigrateFlowId = null;
     };

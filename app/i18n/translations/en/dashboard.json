@@ -30,5 +30,8 @@
     "welcome_description": "Select a section from the left menu to start working with agents and flows",
     "view_flows": "View flows",
     "view_agents": "View agents"
+  },
+  "widgets": {
+    "title": "[TODO: dashboard.widgets.title]"
   }
 }

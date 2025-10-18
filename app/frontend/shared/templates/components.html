@@ -1,0 +1,559 @@
+{#
+  Agent Lab - UI Components Library
+  
+  Использование:
+  {% import 'components.html' as c %}
+  
+  Затем:
+  {{ c.button('Создать', variant='primary', icon='plus') }}
+  {{ c.empty_state(icon='robot', title='Нет данных') }}
+  {{ c.skeleton(type='card', count=6) }}
+  {{ c.platform_badge('telegram') }}
+  {{ c.pagination(offset, limit, total, '/api/list') }}
+  
+  С call blocks:
+  {% call c.card(title='Заголовок') %}Контент{% endcall %}
+  {% call c.modal('id', title='Заголовок') %}Контент{% endcall %}
+  {% call c.table_container() %}<thead>...</thead>{% endcall %}
+#}
+
+{# ========================================
+   BASE COMPONENTS
+   ======================================== #}
+
+{% macro button(text='', variant='primary', size='md', icon='', icon_position='left', disabled=false, type='button', class_='', onclick='', id='', full_width=false, hx_get='', hx_post='', hx_delete='', hx_put='', hx_target='', hx_swap='', hx_trigger='', hx_indicator='', hx_confirm='', hx_ext='', hx_include='', data_tooltip='') %}
+<button 
+    type="{{ type }}"
+    {% if id %}id="{{ id }}"{% endif %}
+    class="btn btn-{{ variant }} {% if size != 'md' %}btn-{{ size }}{% endif %} {{ 'w-100' if full_width else '' }} {{ class_ }}"
+    {% if disabled %}disabled{% endif %}
+    {% if onclick %}onclick="{{ onclick }}"{% endif %}
+    {% if data_tooltip %}data-tooltip="{{ data_tooltip }}"{% endif %}
+    {% if hx_get %}hx-get="{{ hx_get }}"{% endif %}
+    {% if hx_post %}hx-post="{{ hx_post }}"{% endif %}
+    {% if hx_delete %}hx-delete="{{ hx_delete }}"{% endif %}
+    {% if hx_put %}hx-put="{{ hx_put }}"{% endif %}
+    {% if hx_target %}hx-target="{{ hx_target }}"{% endif %}
+    {% if hx_swap %}hx-swap="{{ hx_swap }}"{% endif %}
+    {% if hx_trigger %}hx-trigger="{{ hx_trigger }}"{% endif %}
+    {% if hx_indicator %}hx-indicator="{{ hx_indicator }}"{% endif %}
+    {% if hx_confirm %}hx-confirm="{{ hx_confirm }}"{% endif %}
+    {% if hx_ext %}hx-ext="{{ hx_ext }}"{% endif %}
+    {% if hx_include %}hx-include="{{ hx_include }}"{% endif %}
+>
+    {% if icon and icon_position == 'left' %}<i class="bi bi-{{ icon }}"></i>{% endif %}
+    {{ text if text else caller() if caller }}
+    {% if icon and icon_position == 'right' %}<i class="bi bi-{{ icon }}"></i>{% endif %}
+</button>
+{% endmacro %}
+
+{% macro badge(text='', variant='secondary', icon='', class_='') %}
+<span class="badge bg-{{ variant }} {{ class_ }}">
+    {% if icon %}<i class="bi bi-{{ icon }}"></i>&nbsp;{% endif %}{{ text }}
+</span>
+{% endmacro %}
+
+{% macro icon(name, size='', class_='', style='') %}
+<i class="bi bi-{{ name }} {{ class_ }}" {% if style %}style="{{ style }}"{% endif %}></i>
+{% endmacro %}
+
+{# ========================================
+   FEEDBACK COMPONENTS
+   ======================================== #}
+
+{% macro skeleton(type='card', count=1, class_='') %}
+{% if type == 'card' %}
+    <div class="skeleton-grid {{ class_ }}">
+        {% for i in range(count) %}
+        <div class="skeleton-card">
+            <div class="skeleton-card-header">
+                <div class="skeleton skeleton-circle skeleton-circle-sm"></div>
+                <div class="flex-grow-1">
+                    <div class="skeleton skeleton-text skeleton-width-60"></div>
+                    <div class="skeleton skeleton-text skeleton-sm skeleton-width-40"></div>
+                </div>
+            </div>
+            <div class="skeleton-card-body">
+                <div class="skeleton skeleton-text"></div>
+                <div class="skeleton skeleton-text skeleton-width-80"></div>
+                <div class="skeleton skeleton-text skeleton-width-90"></div>
+            </div>
+            <div class="skeleton-card-footer">
+                <div class="skeleton skeleton-button"></div>
+                <div class="skeleton skeleton-button"></div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+{% elif type == 'table' %}
+    <div class="skeleton-table {{ class_ }}">
+        <div class="skeleton-table-header">
+            {% for i in range(4) %}
+            <div class="skeleton skeleton-text"></div>
+            {% endfor %}
+        </div>
+        {% for i in range(count) %}
+        <div class="skeleton-table-row">
+            {% for j in range(4) %}
+            <div class="skeleton skeleton-text"></div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+
+{% elif type == 'list' %}
+    <div class="skeleton-list {{ class_ }}">
+        {% for i in range(count) %}
+        <div class="skeleton-list-item">
+            <div class="skeleton skeleton-circle skeleton-circle-md"></div>
+            <div class="flex-grow-1">
+                <div class="skeleton skeleton-text skeleton-width-60"></div>
+                <div class="skeleton skeleton-text skeleton-sm skeleton-width-40"></div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+{% elif type == 'text' %}
+    <div class="skeleton-text-block {{ class_ }}">
+        {% for i in range(count) %}
+        <div class="skeleton skeleton-text"></div>
+        {% endfor %}
+    </div>
+{% endif %}
+{% endmacro %}
+
+{% macro empty_state(icon='', title='', description='', button_text='', button_variant='primary', button_icon='', button_onclick='', image='', centered=false, class_='') %}
+<div class="empty-state {{ 'empty-state-centered' if centered else '' }} {{ class_ }}">
+    {% if image %}
+        <div class="empty-state-image">
+            <img src="{{ image }}" alt="{{ title }}" />
+        </div>
+    {% elif icon %}
+        <div class="empty-state-icon">
+            <i class="bi bi-{{ icon }} display-4 text-muted"></i>
+        </div>
+    {% endif %}
+    
+    {% if title %}
+    <div class="empty-state-title">{{ title }}</div>
+    {% endif %}
+    
+    {% if description %}
+    <div class="empty-state-description">{{ description }}</div>
+    {% endif %}
+    
+    {% if button_text %}
+    <div class="empty-state-actions d-flex gap-3 justify-content-center mt-3">
+        <button class="btn btn-{{ button_variant }}" onclick="{{ button_onclick }}">
+            {% if button_icon %}<i class="bi bi-{{ button_icon }}"></i>{% endif %}
+            {{ button_text }}
+        </button>
+    </div>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{% macro alert(type='info', title='', message='', icon='', dismissible=false, class_='') %}
+{% set icon_map = {
+    'info': 'info-circle',
+    'success': 'check-circle',
+    'warning': 'exclamation-triangle',
+    'danger': 'x-circle'
+} %}
+
+<div class="alert alert-{{ type }} {{ class_ }}" role="alert">
+    <div class="d-flex align-items-start gap-2">
+        <i class="bi bi-{{ icon or icon_map.get(type, 'info-circle') }}"></i>
+        <div class="flex-grow-1">
+            {% if title %}<div class="fw-bold">{{ title }}</div>{% endif %}
+            {% if message %}<div>{{ message }}</div>{% endif %}
+        </div>
+        {% if dismissible %}
+        <button type="button" class="btn-close btn-close-white" onclick="this.closest('.alert').remove()" aria-label="Close"></button>
+        {% endif %}
+    </div>
+</div>
+{% endmacro %}
+
+{% macro loading(text='Загрузка...', size='md', centered=true, class_='') %}
+<div class="loading-spinner {{ 'loading-centered' if centered else '' }} {{ class_ }}">
+    <div class="spinner"></div>
+    {% if text %}<div class="loading-text">{{ text }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{# ========================================
+   DATA COMPONENTS
+   ======================================== #}
+
+{% macro platform_badge(platform, class_='') %}
+{% set platforms = {
+    'telegram': {'icon': 'telegram', 'text': 'Telegram', 'variant': 'primary'},
+    'whatsapp': {'icon': 'whatsapp', 'text': 'WhatsApp', 'variant': 'success'},
+    'web': {'icon': 'globe', 'text': 'Web', 'variant': 'info'},
+    'api': {'icon': 'code-slash', 'text': 'API', 'variant': 'success'},
+    'amocrm': {'icon': 'building', 'text': 'AmoCRM', 'variant': 'warning'}
+} %}
+{% set config = platforms.get(platform, {'icon': 'gear', 'text': platform, 'variant': 'secondary'}) %}
+<span class="badge bg-{{ config.variant }} {{ class_ }}">
+    <i class="bi bi-{{ config.icon }}"></i>&nbsp;{{ config.text }}
+</span>
+{% endmacro %}
+
+{% macro status_badge(status, translate=false, class_='') %}
+{% set statuses = {
+    'active': {'text': 'Active', 'variant': 'success'},
+    'inactive': {'text': 'Inactive', 'variant': 'secondary'},
+    'processing': {'text': 'Processing', 'variant': 'warning'},
+    'waiting_input': {'text': 'Waiting', 'variant': 'info'},
+    'draft': {'text': 'Draft', 'variant': 'secondary'},
+    'published': {'text': 'Published', 'variant': 'success'},
+    'error': {'text': 'Error', 'variant': 'danger'}
+} %}
+{% set config = statuses.get(status, {'text': status, 'variant': 'secondary'}) %}
+<span class="badge bg-{{ config.variant }} {{ class_ }}">
+    {% if translate %}{{ t('chats.status_values.' + status) }}{% else %}{{ config.text }}{% endif %}
+</span>
+{% endmacro %}
+
+{% macro pagination(offset, limit, total, hx_get_url, hx_target='#content', hx_include='', prev_text='Назад', next_text='Вперед', class_='') %}
+{% if total > limit %}
+<div class="d-flex justify-content-between align-items-center {{ class_ }}">
+    <div class="text-muted">
+        Показано {{ offset + 1 }}-{{ min(offset + limit, total) }} из {{ total }}
+    </div>
+    <div class="btn-group" role="group">
+        {% if offset > 0 %}
+        <button class="btn btn-outline-secondary btn-sm"
+                hx-get="{{ hx_get_url }}?offset={{ max(0, offset - limit) }}&limit={{ limit }}"
+                hx-target="{{ hx_target }}"
+                {% if hx_include %}hx-include="{{ hx_include }}"{% endif %}>
+            <i class="bi bi-chevron-left"></i> {{ prev_text }}
+        </button>
+        {% endif %}
+        
+        {% if offset + limit < total %}
+        <button class="btn btn-outline-secondary btn-sm"
+                hx-get="{{ hx_get_url }}?offset={{ offset + limit }}&limit={{ limit }}"
+                hx-target="{{ hx_target }}"
+                {% if hx_include %}hx-include="{{ hx_include }}"{% endif %}>
+            {{ next_text }} <i class="bi bi-chevron-right"></i>
+        </button>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro counter_badge(count, variant='primary', class_='') %}
+<span class="badge bg-{{ variant }} {{ class_ }}">{{ count }}</span>
+{% endmacro %}
+
+{# ========================================
+   LAYOUT COMPONENTS
+   ======================================== #}
+
+{% macro card(title='', subtitle='', icon='', hoverable=false, padding='p-3', class_='') %}
+<div class="card {{ 'card-hoverable' if hoverable else '' }} {{ class_ }}">
+    {% if title or icon %}
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-3">
+                {% if icon %}
+                <div class="card-icon">
+                    <i class="bi bi-{{ icon }}"></i>
+                </div>
+                {% endif %}
+                
+                {% if title or subtitle %}
+                <div>
+                    {% if title %}<h5 class="mb-0">{{ title }}</h5>{% endif %}
+                    {% if subtitle %}<small class="text-muted">{{ subtitle }}</small>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+            
+            {{ caller() if caller }}
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="card-body {{ padding if padding != 'none' else 'p-0' }}">
+        {{ caller() if caller }}
+    </div>
+</div>
+{% endmacro %}
+
+{% macro modal(id, title='', subtitle='', icon='', size='md', closeable=true, backdrop=true, class_='') %}
+<div class="modal-overlay modal-hidden" id="{{ id }}" {% if backdrop %}onclick="if(event.target === this) this.remove()"{% endif %}>
+    <div class="modal-content modal-{{ size }} {{ class_ }}" onclick="event.stopPropagation()">
+        {% if title or icon or closeable %}
+        <div class="modal-header">
+            <div class="d-flex align-items-center gap-3 flex-grow-1">
+                {% if icon %}
+                <div class="modal-icon">
+                    <i class="bi bi-{{ icon }}"></i>
+                </div>
+                {% endif %}
+                
+                {% if title or subtitle %}
+                <div class="flex-grow-1">
+                    {% if title %}<h5 class="modal-title mb-0">{{ title }}</h5>{% endif %}
+                    {% if subtitle %}<small class="text-muted">{{ subtitle }}</small>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+            
+            {% if closeable %}
+            <button class="btn btn-ghost btn-sm" onclick="this.closest('.modal-overlay').remove()">
+                <i class="bi bi-x"></i>
+            </button>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        <div class="modal-body">
+            {{ caller() if caller }}
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const modal = document.getElementById('{{ id }}');
+    if (modal) {
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+        modal.addEventListener('remove', function() {
+            document.body.style.overflow = '';
+        });
+    }
+})();
+</script>
+{% endmacro %}
+
+{# ========================================
+   FORM COMPONENTS
+   ======================================== #}
+
+{% macro input(name, value='', type='text', placeholder='', label='', required=false, disabled=false, readonly=false, class_='', id='', help_text='', hx_put='', hx_get='', hx_post='', hx_target='', hx_trigger='', hx_swap='', hx_ext='', hx_indicator='') %}
+{% if label %}
+<div class="mb-3">
+    <label for="{{ id or name }}" class="form-label">
+        {{ label }}
+        {% if required %}<span class="text-danger">*</span>{% endif %}
+    </label>
+{% endif %}
+    <input 
+        type="{{ type }}"
+        class="form-control {{ class_ }}"
+        id="{{ id or name }}"
+        name="{{ name }}"
+        value="{{ value }}"
+        {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+        {% if required %}required{% endif %}
+        {% if disabled %}disabled{% endif %}
+        {% if readonly %}readonly{% endif %}
+        {% if hx_put %}hx-put="{{ hx_put }}"{% endif %}
+        {% if hx_get %}hx-get="{{ hx_get }}"{% endif %}
+        {% if hx_post %}hx-post="{{ hx_post }}"{% endif %}
+        {% if hx_target %}hx-target="{{ hx_target }}"{% endif %}
+        {% if hx_trigger %}hx-trigger="{{ hx_trigger }}"{% endif %}
+        {% if hx_swap %}hx-swap="{{ hx_swap }}"{% endif %}
+        {% if hx_ext %}hx-ext="{{ hx_ext }}"{% endif %}
+        {% if hx_indicator %}hx-indicator="{{ hx_indicator }}"{% endif %}
+    >
+    {% if help_text %}
+    <div class="form-text">{{ help_text }}</div>
+    {% endif %}
+{% if label %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro textarea(name, value='', rows=3, placeholder='', label='', required=false, disabled=false, readonly=false, class_='', id='', help_text='') %}
+{% if label %}
+<div class="mb-3">
+    <label for="{{ id or name }}" class="form-label">
+        {{ label }}
+        {% if required %}<span class="text-danger">*</span>{% endif %}
+    </label>
+{% endif %}
+    <textarea 
+        class="form-control {{ class_ }}"
+        id="{{ id or name }}"
+        name="{{ name }}"
+        rows="{{ rows }}"
+        {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+        {% if required %}required{% endif %}
+        {% if disabled %}disabled{% endif %}
+        {% if readonly %}readonly{% endif %}
+    >{{ value }}</textarea>
+    {% if help_text %}
+    <div class="form-text">{{ help_text }}</div>
+    {% endif %}
+{% if label %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro select(name, options=[], value='', label='', required=false, disabled=false, class_='', id='', help_text='', hx_get='', hx_post='', hx_target='', hx_trigger='', hx_swap='') %}
+{% if label %}
+<div class="mb-3">
+    <label for="{{ id or name }}" class="form-label">
+        {{ label }}
+        {% if required %}<span class="text-danger">*</span>{% endif %}
+    </label>
+{% endif %}
+    <select 
+        class="form-control {{ class_ }}"
+        id="{{ id or name }}"
+        name="{{ name }}"
+        {% if required %}required{% endif %}
+        {% if disabled %}disabled{% endif %}
+        {% if hx_get %}hx-get="{{ hx_get }}"{% endif %}
+        {% if hx_post %}hx-post="{{ hx_post }}"{% endif %}
+        {% if hx_target %}hx-target="{{ hx_target }}"{% endif %}
+        {% if hx_trigger %}hx-trigger="{{ hx_trigger }}"{% endif %}
+        {% if hx_swap %}hx-swap="{{ hx_swap }}"{% endif %}
+    >
+        {% for option in options %}
+            {% if option is mapping %}
+                <option value="{{ option.value }}" {% if option.value == value %}selected{% endif %}>
+                    {{ option.label }}
+                </option>
+            {% else %}
+                <option value="{{ option }}" {% if option == value %}selected{% endif %}>
+                    {{ option }}
+                </option>
+            {% endif %}
+        {% endfor %}
+    </select>
+    {% if help_text %}
+    <div class="form-text">{{ help_text }}</div>
+    {% endif %}
+{% if label %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro checkbox(name, label='', checked=false, disabled=false, class_='', id='', value='1') %}
+<div class="form-check {{ class_ }}">
+    <input 
+        class="form-check-input" 
+        type="checkbox" 
+        id="{{ id or name }}"
+        name="{{ name }}"
+        value="{{ value }}"
+        {% if checked %}checked{% endif %}
+        {% if disabled %}disabled{% endif %}
+    >
+    {% if label %}
+    <label class="form-check-label" for="{{ id or name }}">
+        {{ label }}
+    </label>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{# ========================================
+   TABLE COMPONENTS
+   ======================================== #}
+
+{% macro table_container(responsive=true, class_='', min_width='900px') %}
+{% if responsive %}
+<div class="table-responsive {{ class_ }}">
+    <table class="table table-hover mb-0" {% if min_width %}style="min-width: {{ min_width }};"{% endif %}>
+        {{ caller() if caller }}
+    </table>
+</div>
+{% else %}
+<table class="table table-hover mb-0 {{ class_ }}">
+    {{ caller() if caller }}
+</table>
+{% endif %}
+{% endmacro %}
+
+{% macro table_row(cells=[], class_='', onclick='') %}
+<tr class="{{ class_ }} {% if onclick %}cursor-pointer{% endif %}" {% if onclick %}onclick="{{ onclick }}"{% endif %}>
+    {% for cell in cells %}
+    <td>{{ cell }}</td>
+    {% endfor %}
+</tr>
+{% endmacro %}
+
+{% macro table_empty(message='Нет данных', colspan=5) %}
+<tr>
+    <td colspan="{{ colspan }}" class="text-center text-muted py-5">
+        <i class="bi bi-inbox display-4 d-block mb-2 table-empty-icon"></i>
+        {{ message }}
+    </td>
+</tr>
+{% endmacro %}
+
+{# ========================================
+   NAVIGATION COMPONENTS
+   ======================================== #}
+
+{% macro tabs(items=[], active='', class_='', id='') %}
+<ul class="nav nav-tabs {{ class_ }}" {% if id %}id="{{ id }}"{% endif %}>
+    {% for item in items %}
+    <li class="nav-item">
+        <a class="nav-link {{ 'active' if item.id == active else '' }}" 
+           {% if item.href %}href="{{ item.href }}"{% endif %}
+           {% if item.hx_get %}hx-get="{{ item.hx_get }}" hx-target="{{ item.hx_target or '#content' }}"{% endif %}
+           {% if item.onclick %}onclick="{{ item.onclick }}"{% endif %}>
+            {% if item.icon %}<i class="bi bi-{{ item.icon }}"></i>{% endif %}
+            {{ item.text }}
+        </a>
+    </li>
+    {% endfor %}
+</ul>
+{% endmacro %}
+
+{% macro breadcrumbs(items=[], class_='') %}
+<nav aria-label="breadcrumb" class="{{ class_ }}">
+    <ol class="breadcrumb mb-0">
+        {% for item in items %}
+        <li class="breadcrumb-item {{ 'active' if loop.last else '' }}" {% if loop.last %}aria-current="page"{% endif %}>
+            {% if not loop.last and item.href %}
+                <a href="{{ item.href }}">
+                    {% if item.icon %}<i class="bi bi-{{ item.icon }}"></i>{% endif %}
+                    {{ item.text }}
+                </a>
+            {% else %}
+                {% if item.icon %}<i class="bi bi-{{ item.icon }}"></i>{% endif %}
+                {{ item.text }}
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ol>
+</nav>
+{% endmacro %}
+
+{% macro dropdown(button_text='', button_variant='secondary', button_size='sm', items=[], class_='', align='end') %}
+<div class="dropdown {{ class_ }}">
+    <button class="btn btn-{{ button_variant }} btn-{{ button_size }}" data-bs-toggle="dropdown" aria-expanded="false">
+        {{ button_text }}
+        <i class="bi bi-chevron-down ms-1"></i>
+    </button>
+    <ul class="dropdown-menu dropdown-menu-{{ align }}">
+        {% for item in items %}
+            {% if item.divider %}
+                <li><hr class="dropdown-divider"></li>
+            {% else %}
+                <li>
+                    <a class="dropdown-item" 
+                       {% if item.href %}href="{{ item.href }}"{% else %}href="#"{% endif %}
+                       {% if item.onclick %}onclick="{{ item.onclick }}"{% endif %}>
+                        {% if item.icon %}<i class="bi bi-{{ item.icon }}"></i>{% endif %}
+                        {{ item.text }}
+                    </a>
+                </li>
+            {% endif %}
+        {% endfor %}
+    </ul>
+</div>
+{% endmacro %}
