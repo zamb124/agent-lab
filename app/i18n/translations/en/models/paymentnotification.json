@@ -1,30 +1,32 @@
 {
   "fields": {
     "notification_id": {
-      "title": "[TODO: models.paymentnotification.fields.notification_id.title]",
-      "description": "[TODO: models.paymentnotification.fields.notification_id.description]"
+      "title": "Notification ID",
+      "description": "Unique notification identifier"
     },
     "provider": {
-      "title": "[TODO: models.paymentnotification.fields.provider.title]",
-      "description": "[TODO: models.paymentnotification.fields.provider.description]"
+      "title": "Provider",
+      "description": "Payment provider that sent notification"
     },
     "transaction_id": {
-      "title": "[TODO: models.paymentnotification.fields.transaction_id.title]",
-      "description": "[TODO: models.paymentnotification.fields.transaction_id.description]"
+      "title": "Transaction ID",
+      "description": "Related transaction identifier"
     },
     "external_payment_id": {
-      "title": "[TODO: models.paymentnotification.fields.external_payment_id.title]"
+      "title": "External Payment ID",
+      "description": "Payment ID from external provider"
     },
     "raw_data": {
-      "title": "[TODO: models.paymentnotification.fields.raw_data.title]",
-      "description": "[TODO: models.paymentnotification.fields.raw_data.description]"
+      "title": "Raw Data",
+      "description": "Original notification data from provider"
     },
     "processed": {
-      "title": "[TODO: models.paymentnotification.fields.processed.title]",
-      "description": "[TODO: models.paymentnotification.fields.processed.description]"
+      "title": "Processed",
+      "description": "Whether notification was processed"
     },
     "created_at": {
-      "title": "[TODO: models.paymentnotification.fields.created_at.title]"
+      "title": "Created At",
+      "description": "Notification timestamp"
     }
   }
 }

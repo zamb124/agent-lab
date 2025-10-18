@@ -1,19 +1,19 @@
 {
   "fields": {
     "transaction_id": {
-      "description": "[TODO: models.createpaymentresponse.fields.transaction_id.description]"
+      "description": "Created transaction identifier"
     },
     "payment_url": {
-      "description": "[TODO: models.createpaymentresponse.fields.payment_url.description]"
+      "description": "URL for payment redirect"
     },
     "provider": {
-      "description": "[TODO: models.createpaymentresponse.fields.provider.description]"
+      "description": "Selected payment provider"
     },
     "status": {
-      "description": "[TODO: models.createpaymentresponse.fields.status.description]"
+      "description": "Initial transaction status"
     },
     "amount": {
-      "description": "[TODO: models.createpaymentresponse.fields.amount.description]"
+      "description": "Payment amount"
     }
   }
 }

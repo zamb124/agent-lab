@@ -45,8 +45,8 @@
       "description": "Additional metadata"
     },
     "first_message": {
-      "title": "[TODO: models.sessionlistitem.fields.first_message.title]",
-      "description": "[TODO: models.sessionlistitem.fields.first_message.description]"
+      "title": "First Message",
+      "description": "Content of the first message in session"
     }
   }
 }

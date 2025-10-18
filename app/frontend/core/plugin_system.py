@@ -11,22 +11,25 @@ from fastapi import APIRouter, FastAPI
 
 class Plugin(ABC):
     """Базовый класс для всех плагинов фронтенда"""
-
+    
     name: str
     display_name: str
     version: str = "1.0.0"
     description: str = ""
     author: str = "Agents Lab"
-
+    
+    dependencies: List[str] = []
     requires_auth: bool = True
     requires_role: Optional[str] = None
     requires_company: Optional[str] = None
-
+    
     static_css: List[str] = []
     static_js: List[str] = []
-
+    
     sidebar_items: List[Dict[str, Any]] = []
+    footer_items: List[Dict[str, Any]] = []
     dashboard_widgets: List[Dict[str, Any]] = []
+    header_actions: List[Dict[str, Any]] = []
     
     @abstractmethod
     def get_router(self) -> APIRouter:
@@ -112,6 +115,18 @@ class PluginRegistry:
         
         return sorted(items, key=lambda x: x.get('order', 100))
     
+    def get_footer_items(self, user_role: Optional[str] = None, company_subdomain: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Собрать все пункты footer из плагинов"""
+        items = []
+        for plugin in self.get_enabled():
+            if user_role and plugin.requires_role and plugin.requires_role != user_role:
+                continue
+            if plugin.requires_company and plugin.requires_company != company_subdomain:
+                continue
+            items.extend(plugin.footer_items)
+        
+        return sorted(items, key=lambda x: x.get('order', 100))
+    
     def get_dashboard_widgets(self, user_role: Optional[str] = None, company_subdomain: Optional[str] = None) -> List[Dict[str, Any]]:
         """Собрать все виджеты dashboard"""
         widgets = []
@@ -122,6 +137,13 @@ class PluginRegistry:
                 continue
             widgets.extend(plugin.dashboard_widgets)
         return sorted(widgets, key=lambda x: x.get('order', 100))
+    
+    def get_header_actions(self) -> List[Dict[str, Any]]:
+        """Собрать все действия для header"""
+        actions = []
+        for plugin in self.get_enabled():
+            actions.extend(plugin.header_actions)
+        return sorted(actions, key=lambda x: x.get('order', 100))
     
     def get_static_files(self) -> Dict[str, List[str]]:
         """Собрать все статические файлы"""

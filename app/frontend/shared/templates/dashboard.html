@@ -96,6 +96,16 @@
         </div>
         
         <div class="sidebar-footer">
+            {% for item in footer_items | default([]) %}
+            <div class="sidebar-footer-link">
+                <a href="{{ item.url }}" 
+                   {% if item.target %}target="{{ item.target }}"{% endif %}
+                   class="sidebar-nav-link">
+                    <i class="bi {{ item.icon }}"></i>
+                    <span class="sidebar-nav-text">{{ t(item.label) if item.label.startswith('dashboard.') else item.label }}</span>
+                </a>
+            </div>
+            {% endfor %}
             
             <div class="sidebar-user-profile">
                 <div class="d-flex align-items-center gap-3">

@@ -1,48 +1,48 @@
 {
   "fields": {
     "transaction_id": {
-      "title": "[TODO: models.transaction.fields.transaction_id.title]",
-      "description": "[TODO: models.transaction.fields.transaction_id.description]"
+      "title": "Transaction ID",
+      "description": "Unique transaction identifier"
     },
     "company_id": {
-      "title": "[TODO: models.transaction.fields.company_id.title]",
-      "description": "[TODO: models.transaction.fields.company_id.description]"
+      "title": "Company ID",
+      "description": "Company that initiated the transaction"
     },
     "user_id": {
-      "title": "[TODO: models.transaction.fields.user_id.title]",
-      "description": "[TODO: models.transaction.fields.user_id.description]"
+      "title": "User ID",
+      "description": "User who initiated the transaction"
     },
     "amount": {
-      "title": "[TODO: models.transaction.fields.amount.title]",
-      "description": "[TODO: models.transaction.fields.amount.description]"
+      "title": "Amount",
+      "description": "Transaction amount in rubles"
     },
     "status": {
-      "title": "[TODO: models.transaction.fields.status.title]",
-      "description": "[TODO: models.transaction.fields.status.description]"
+      "title": "Status",
+      "description": "Transaction status (success, pending, failed)"
     },
     "payment_provider": {
-      "title": "[TODO: models.transaction.fields.payment_provider.title]",
-      "description": "[TODO: models.transaction.fields.payment_provider.description]"
+      "title": "Payment Provider",
+      "description": "Payment system used (yoomoney, yukassa)"
     },
     "external_payment_id": {
-      "title": "[TODO: models.transaction.fields.external_payment_id.title]",
-      "description": "[TODO: models.transaction.fields.external_payment_id.description]"
+      "title": "External Payment ID",
+      "description": "Payment ID from external provider"
     },
     "payment_url": {
-      "title": "[TODO: models.transaction.fields.payment_url.title]",
-      "description": "[TODO: models.transaction.fields.payment_url.description]"
+      "title": "Payment URL",
+      "description": "URL for payment redirect"
     },
     "created_at": {
-      "title": "[TODO: models.transaction.fields.created_at.title]",
-      "description": "[TODO: models.transaction.fields.created_at.description]"
+      "title": "Created At",
+      "description": "Transaction creation timestamp"
     },
     "completed_at": {
-      "title": "[TODO: models.transaction.fields.completed_at.title]",
-      "description": "[TODO: models.transaction.fields.completed_at.description]"
+      "title": "Completed At",
+      "description": "Transaction completion timestamp"
     },
     "metadata": {
-      "title": "[TODO: models.transaction.fields.metadata.title]",
-      "description": "[TODO: models.transaction.fields.metadata.description]"
+      "title": "Metadata",
+      "description": "Additional transaction metadata"
     }
   }
 }
