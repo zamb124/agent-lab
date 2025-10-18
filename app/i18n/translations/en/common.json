@@ -19,5 +19,8 @@
   "import": "Import",
   "refresh": "Refresh",
   "back": "Back",
-  "next": "Next"
+  "next": "Next",
+  "fullscreen": "Fullscreen",
+  "copy": "Copy",
+  "default": "Default"
 }
