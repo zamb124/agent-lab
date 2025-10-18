@@ -112,9 +112,15 @@ class ContextWindowManager:
         if llm_config.get("context_window"):
             return llm_config["context_window"]
         
+        logger.info(f"🔍 Доступные модели в settings: {list(self.settings.llm.models.keys())}")
+        
         model_config = self.settings.llm.models.get(model_name)
-        if model_config and model_config.context_window:
-            return model_config.context_window
+        logger.info(f"🔍 model_config для '{model_name}': {model_config}")
+        
+        if model_config:
+            logger.info(f"🔍 context_window из model_config: {model_config.context_window}")
+            if model_config.context_window:
+                return model_config.context_window
         
         raise ValueError(
             f"Размер контекстного окна для модели '{model_name}' не найден! "

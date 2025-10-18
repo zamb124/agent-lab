@@ -7,15 +7,9 @@ export default class PropertiesPanel {
     constructor(builder) {
         this.builder = builder;
         this.panel = document.getElementById('propertiesPanel');
-        this.body = document.getElementById('propertiesBody');
-        this.footer = document.getElementById('propertiesFooter');
-        this.title = document.getElementById('propertiesTitle');
         
         console.log('🔧 PropertiesPanel init:', {
-            panel: !!this.panel,
-            body: !!this.body,
-            footer: !!this.footer,
-            title: !!this.title
+            panel: !!this.panel
         });
         
         this.currentNode = null;
@@ -55,16 +49,6 @@ export default class PropertiesPanel {
         if (closeBtn) {
             closeBtn.addEventListener('click', () => this.hide());
         }
-        
-        const deleteBtn = document.getElementById('deleteNodeBtn');
-        if (deleteBtn) {
-            deleteBtn.addEventListener('click', () => this.deleteCurrentNode());
-        }
-        
-        const duplicateBtn = document.getElementById('duplicateNodeBtn');
-        if (duplicateBtn) {
-            duplicateBtn.addEventListener('click', () => this.duplicateCurrentNode());
-        }
     }
     
     async show(node) {
@@ -72,26 +56,7 @@ export default class PropertiesPanel {
         
         if (this.panel) {
             this.panel.classList.remove('hidden');
-            this.panel.style.display = 'flex';
-        }
-        
-        if (this.footer) {
-            this.footer.classList.remove('hidden');
-            this.footer.style.display = 'flex';
-        }
-        
-        const nodeType = node.data.type;
-        const isInlineEditor = ['message_node', 'router_node', 'function_node'].includes(nodeType);
-        
-        if (this.title) {
-            if (isInlineEditor) {
-                this.title.classList.remove('hidden');
-                this.title.style.display = 'flex';
-                this.updateTitle(node);
-            } else {
-                this.title.classList.add('hidden');
-                this.title.style.display = 'none';
-            }
+            this.panel.style.display = 'block';
         }
         
         await this.loadNodeForm(node);
@@ -107,124 +72,124 @@ export default class PropertiesPanel {
         this.panel.style.display = 'none';
         this.currentNode = null;
         
-        this.body.innerHTML = `
+        this.panel.innerHTML = `
+            <button class="properties-close-btn" id="closePanelBtn">
+                <i class="bi bi-x-circle-fill"></i>
+            </button>
             <div class="properties-empty">
                 <i class="bi bi-cursor"></i>
                 <p>Select a node to edit properties</p>
             </div>
         `;
-    }
-    
-    updateTitle(node) {
-        if (!this.title) {
-            console.warn('⚠️ Title element не найден в properties panel');
-            return;
+        
+        const closeBtn = this.panel.querySelector('#closePanelBtn');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.hide());
         }
-        
-        const nodeType = node.data.type;
-        const nodeName = node.data.params?.name || node.id;
-        
-        const iconMap = {
-            'flow_node': 'bi-diagram-3',
-            'agent_node': 'bi-robot',
-            'tool_node': 'bi-tools',
-            'function_node': 'bi-code-square',
-            'message_node': 'bi-chat-dots',
-            'router_node': 'bi-lightning'
-        };
-        
-        const colorMap = {
-            'flow_node': '#3b82f6',
-            'agent_node': '#8b5cf6',
-            'tool_node': '#10b981',
-            'function_node': '#f59e0b',
-            'message_node': '#06b6d4',
-            'router_node': '#ef4444'
-        };
-        
-        const icon = iconMap[nodeType] || 'bi-square';
-        const color = colorMap[nodeType] || '#666';
-        
-        this.title.innerHTML = `
-            <span class="properties-icon">
-                <i class="bi ${icon}" style="color: ${color};"></i>
-            </span>
-            <span class="properties-name">${nodeName}</span>
-        `;
     }
     
     loadMessageNodeEditor(node) {
-        this.body.innerHTML = `
-            <div class="properties-form">
-                <p class="text-muted mb-3">Отправка фиксированного сообщения пользователю</p>
-                
-                <div class="form-group">
-                    <label>Текст сообщения</label>
-                    <textarea 
-                        class="form-control" 
-                        rows="4" 
-                        id="message-text"
-                        placeholder="Введите текст сообщения..."
-                    >${node.data.params?.message || ''}</textarea>
-                    <small class="form-text">Это сообщение будет добавлено в историю диалога</small>
+        const nodeName = node.data.params?.name || node.id;
+        
+        this.panel.innerHTML = `
+            <button class="properties-close-btn" id="closePanelBtn">
+                <i class="bi bi-x-circle-fill"></i>
+            </button>
+            <div class="card">
+                <div class="card-header" style="background: #06b6d4; color: white;">
+                    <i class="bi bi-chat-dots"></i> ${nodeName}
                 </div>
-                
-                <div class="form-group">
-                    <label>Описание ноды</label>
-                    <input 
-                        type="text" 
-                        class="form-control" 
-                        id="node-description"
-                        value="${node.data.params?.description || ''}"
-                        placeholder="Опишите назначение ноды">
+                <div class="card-body">
+                    <p class="text-muted mb-3">Отправка фиксированного сообщения пользователю</p>
+                    
+                    <div class="form-group mb-3">
+                        <label>Текст сообщения</label>
+                        <textarea 
+                            class="form-control" 
+                            rows="4" 
+                            id="message-text"
+                            placeholder="Введите текст сообщения..."
+                        >${node.data.params?.message || ''}</textarea>
+                        <small class="form-text">Это сообщение будет добавлено в историю диалога</small>
+                    </div>
+                    
+                    <div class="form-group mb-3">
+                        <label>Описание ноды</label>
+                        <input 
+                            type="text" 
+                            class="form-control" 
+                            id="node-description"
+                            value="${node.data.params?.description || ''}"
+                            placeholder="Опишите назначение ноды">
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="window.builderInstance.propertiesPanel.saveMessageNode('${node.id}')">
+                        <i class="bi bi-floppy"></i> Сохранить
+                    </button>
                 </div>
-                
-                <button class="btn btn-primary mt-3" onclick="window.builderInstance.propertiesPanel.saveMessageNode('${node.id}')">
-                    <i class="bi bi-floppy"></i> Сохранить
-                </button>
             </div>
         `;
+        
+        const closeBtn = this.panel.querySelector('#closePanelBtn');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.hide());
+        }
     }
     
     loadRouterNodeEditor(node) {
         console.log('🔧 Loading Router Node editor, data:', node.data);
         
-        this.body.innerHTML = `
-            <div class="properties-form">
-                <p class="text-muted mb-3">Функция-роутер для условных переходов. Возвращает ID следующей ноды на основе state.</p>
-                
-                <div class="form-group">
-                    <label>Путь к функции</label>
-                    <input 
-                        type="text" 
-                        class="form-control font-monospace" 
-                        id="router-function"
-                        value="${node.data.params?.function_path || node.data.function_path || ''}"
-                        placeholder="app.agents.my.router_function">
-                    <small class="form-text">Или используйте inline код ниже</small>
+        const nodeName = node.data.params?.name || node.id;
+        
+        this.panel.innerHTML = `
+            <button class="properties-close-btn" id="closePanelBtn">
+                <i class="bi bi-x-circle-fill"></i>
+            </button>
+            <div class="card">
+                <div class="card-header" style="background: #ef4444; color: white;">
+                    <i class="bi bi-lightning"></i> ${nodeName}
                 </div>
-                
-                <div class="form-group">
-                    <label>Inline код роутера</label>
-                    <div id="router-inline-code-editor"></div>
-                    <small class="form-text mt-2 d-block">Функция должна возвращать ID следующей ноды (строку)</small>
+                <div class="card-body">
+                    <p class="text-muted mb-3">Функция-роутер для условных переходов. Возвращает ID следующей ноды на основе state.</p>
+                    
+                    <div class="form-group mb-3">
+                        <label>Путь к функции</label>
+                        <input 
+                            type="text" 
+                            class="form-control font-monospace" 
+                            id="router-function"
+                            value="${node.data.params?.function_path || node.data.function_path || ''}"
+                            placeholder="app.agents.my.router_function">
+                        <small class="form-text">Или используйте inline код ниже</small>
+                    </div>
+                    
+                    <div class="form-group mb-3">
+                        <label>Inline код роутера</label>
+                        <div id="router-inline-code-editor"></div>
+                        <small class="form-text mt-2 d-block">Функция должна возвращать ID следующей ноды (строку)</small>
+                    </div>
+                    
+                    <div class="form-group mb-3">
+                        <label>Описание</label>
+                        <input 
+                            type="text" 
+                            class="form-control" 
+                            id="node-description"
+                            value="${node.data.params?.description || ''}"
+                            placeholder="Опишите логику роутинга">
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="window.builderInstance.propertiesPanel.saveRouterNode('${node.id}')">
+                        <i class="bi bi-floppy"></i> Сохранить
+                    </button>
                 </div>
-                
-                <div class="form-group">
-                    <label>Описание</label>
-                    <input 
-                        type="text" 
-                        class="form-control" 
-                        id="node-description"
-                        value="${node.data.params?.description || ''}"
-                        placeholder="Опишите логику роутинга">
-                </div>
-                
-                <button class="btn btn-primary mt-3" onclick="window.builderInstance.propertiesPanel.saveRouterNode('${node.id}')">
-                    <i class="bi bi-floppy"></i> Сохранить
-                </button>
             </div>
         `;
+        
+        const closeBtn = this.panel.querySelector('#closePanelBtn');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.hide());
+        }
         
         const defaultCode = node.data.params?.inline_code || node.data.inline_code || `def router_condition(state: dict) -> str:
     """Router function that returns next node ID
@@ -257,42 +222,57 @@ export default class PropertiesPanel {
     loadFunctionNodeEditor(node) {
         console.log('🔧 Loading Function Node editor, data:', node.data);
         
-        this.body.innerHTML = `
-            <div class="properties-form">
-                <p class="text-muted mb-3">Выполнение произвольного Python кода. Функция получает state и возвращает обновлённый state.</p>
-                
-                <div class="form-group">
-                    <label>Путь к функции</label>
-                    <input 
-                        type="text" 
-                        class="form-control font-monospace" 
-                        id="function-path"
-                        value="${node.data.params?.function_path || node.data.function_path || ''}"
-                        placeholder="app.agents.my.my_function">
-                    <small class="form-text">Или используйте inline код ниже</small>
+        const nodeName = node.data.params?.name || node.id;
+        
+        this.panel.innerHTML = `
+            <button class="properties-close-btn" id="closePanelBtn">
+                <i class="bi bi-x-circle-fill"></i>
+            </button>
+            <div class="card">
+                <div class="card-header" style="background: #f59e0b; color: white;">
+                    <i class="bi bi-code-square"></i> ${nodeName}
                 </div>
-                
-                <div class="form-group">
-                    <label>Inline код</label>
-                    <div id="function-inline-code-editor"></div>
-                    <small class="form-text mt-2 d-block">Функция для выполнения в графе</small>
+                <div class="card-body">
+                    <p class="text-muted mb-3">Выполнение произвольного Python кода. Функция получает state и возвращает обновлённый state.</p>
+                    
+                    <div class="form-group mb-3">
+                        <label>Путь к функции</label>
+                        <input 
+                            type="text" 
+                            class="form-control font-monospace" 
+                            id="function-path"
+                            value="${node.data.params?.function_path || node.data.function_path || ''}"
+                            placeholder="app.agents.my.my_function">
+                        <small class="form-text">Или используйте inline код ниже</small>
+                    </div>
+                    
+                    <div class="form-group mb-3">
+                        <label>Inline код</label>
+                        <div id="function-inline-code-editor"></div>
+                        <small class="form-text mt-2 d-block">Функция для выполнения в графе</small>
+                    </div>
+                    
+                    <div class="form-group mb-3">
+                        <label>Описание</label>
+                        <input 
+                            type="text" 
+                            class="form-control" 
+                            id="node-description"
+                            value="${node.data.params?.description || ''}"
+                            placeholder="Опишите что делает функция">
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="window.builderInstance.propertiesPanel.saveFunctionNode('${node.id}')">
+                        <i class="bi bi-floppy"></i> Сохранить
+                    </button>
                 </div>
-                
-                <div class="form-group">
-                    <label>Описание</label>
-                    <input 
-                        type="text" 
-                        class="form-control" 
-                        id="node-description"
-                        value="${node.data.params?.description || ''}"
-                        placeholder="Опишите что делает функция">
-                </div>
-                
-                <button class="btn btn-primary mt-3" onclick="window.builderInstance.propertiesPanel.saveFunctionNode('${node.id}')">
-                    <i class="bi bi-floppy"></i> Сохранить
-                </button>
             </div>
         `;
+        
+        const closeBtn = this.panel.querySelector('#closePanelBtn');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.hide());
+        }
         
         const defaultCode = node.data.params?.inline_code || node.data.inline_code || `async def node_function(state: dict) -> dict:
     """Node function in StateGraph
@@ -385,7 +365,10 @@ export default class PropertiesPanel {
     
     async loadNodeForm(node) {
         try {
-            this.body.innerHTML = `
+            this.panel.innerHTML = `
+                <button class="properties-close-btn" id="closePanelBtn">
+                    <i class="bi bi-x-circle-fill"></i>
+                </button>
                 <div class="properties-loading">
                     <div class="spinner-border text-primary" role="status">
                         <span class="visually-hidden">Loading...</span>
@@ -393,6 +376,11 @@ export default class PropertiesPanel {
                     <p class="mt-2">Loading form...</p>
                 </div>
             `;
+            
+            let closeBtn = this.panel.querySelector('#closePanelBtn');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => this.hide());
+            }
             
             const nodeType = node.data.type;
             let url;
@@ -422,12 +410,20 @@ export default class PropertiesPanel {
                 url = `/frontend/models/tool/${encodeURIComponent(toolId)}?view=form`;
                 console.log('📡 URL для Tool:', url);
             } else {
-                this.body.innerHTML = `
+                this.panel.innerHTML = `
+                    <button class="properties-close-btn" id="closePanelBtn">
+                        <i class="bi bi-x-circle-fill"></i>
+                    </button>
                     <div class="alert alert-info">
                         <i class="bi bi-info-circle"></i>
                         <p>Properties for ${nodeType} will be available soon.</p>
                     </div>
                 `;
+                
+                const closeBtn = this.panel.querySelector('#closePanelBtn');
+                if (closeBtn) {
+                    closeBtn.addEventListener('click', () => this.hide());
+                }
                 return;
             }
             
@@ -439,16 +435,27 @@ export default class PropertiesPanel {
             }
             
             const html = await response.text();
-            this.body.innerHTML = html;
+            
+            this.panel.innerHTML = `
+                <button class="properties-close-btn" id="closePanelBtn">
+                    <i class="bi bi-x-circle-fill"></i>
+                </button>
+                ${html}
+            `;
+            
+            closeBtn = this.panel.querySelector('#closePanelBtn');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => this.hide());
+            }
             
             if (typeof htmx !== 'undefined') {
-                htmx.process(this.body);
+                htmx.process(this.panel);
             }
             
             // Инициализируем Ace Editor через HTMXManager
             if (window.app && window.app.htmxManager) {
                 console.log('🔧 Вызываем HTMXManager.initAceEditors()');
-                window.app.htmxManager.initAceEditors(this.body);
+                window.app.htmxManager.initAceEditors(this.panel);
             } else {
                 console.warn('⚠️ HTMXManager не найден, пробуем локальную инициализацию');
                 this.initAceEditors();
@@ -460,17 +467,25 @@ export default class PropertiesPanel {
             
         } catch (error) {
             console.error('❌ Ошибка загрузки формы:', error);
-            this.body.innerHTML = `
+            this.panel.innerHTML = `
+                <button class="properties-close-btn" id="closePanelBtn">
+                    <i class="bi bi-x-circle-fill"></i>
+                </button>
                 <div class="alert alert-danger">
                     <i class="bi bi-exclamation-triangle"></i>
                     <p>Error loading form: ${error.message}</p>
                 </div>
             `;
+            
+            const closeBtn = this.panel.querySelector('#closePanelBtn');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => this.hide());
+            }
         }
     }
     
     setupAutoSave(node) {
-        const form = this.body.querySelector('form');
+        const form = this.panel.querySelector('form');
         if (!form) return;
         
         const inputs = form.querySelectorAll('input, textarea, select');
@@ -503,7 +518,7 @@ export default class PropertiesPanel {
     
     initAceEditors() {
         // Находим все контейнеры для code-editor
-        const codeContainers = this.body.querySelectorAll('.code-editor-container');
+        const codeContainers = this.panel.querySelectorAll('.code-editor-container');
         
         if (codeContainers.length === 0) {
             return;
@@ -562,22 +577,6 @@ export default class PropertiesPanel {
                 console.error(`❌ Ошибка инициализации Ace для ${fieldName}:`, error);
             }
         });
-    }
-    
-    deleteCurrentNode() {
-        if (!this.currentNode) return;
-        
-        if (confirm('Are you sure you want to delete this node?')) {
-            this.builder.canvas.removeNode(this.currentNode.id, true);
-            this.hide();
-        }
-    }
-    
-    duplicateCurrentNode() {
-        if (!this.currentNode) return;
-        
-        const duplicatedNode = this.builder.canvas.duplicateNode(this.currentNode);
-        this.show(duplicatedNode);
     }
 }
 
