@@ -32,18 +32,7 @@
                 <div class="platform-tags">
                     {% if bot.platforms and bot.platforms|length > 0 %}
                         {% for platform in bot.platforms %}
-                        {% set platform_config = {
-                            'telegram': {'icon': 'telegram', 'text': 'Telegram'},
-                            'whatsapp': {'icon': 'whatsapp', 'text': 'WhatsApp'},
-                            'api': {'icon': 'code-slash', 'text': 'API'},
-                            'web': {'icon': 'globe', 'text': 'Web'},
-                            'amocrm': {'icon': 'building', 'text': 'AmoCRM'}
-                        } %}
-                        {% set config = platform_config.get(platform, {'icon': 'gear', 'text': platform}) %}
-                        
-                        <span class="platform-tag platform-{{ platform }}">
-                            <i class="bi bi-{{ config.icon }}"></i> {{ config.text }}
-                        </span>
+                            {{ c.platform_badge(platform) }}
                         {% endfor %}
                     {% else %}
                         <span class="platform-empty">

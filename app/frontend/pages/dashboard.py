@@ -24,8 +24,15 @@ async def dashboard(request: Request):
     
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
+        "preload_url": "/frontend/dashboard/welcome",
         **plugin_data
     })
+
+
+@router.get("/dashboard/welcome", response_class=HTMLResponse)
+async def dashboard_welcome(request: Request):
+    """Приветственное сообщение на главной странице"""
+    return templates.TemplateResponse("welcome.html", {"request": request})
 
 
 @router.get("/fashn", response_class=HTMLResponse)

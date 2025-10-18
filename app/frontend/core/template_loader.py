@@ -91,6 +91,13 @@ class TemplateLoader:
             
             return False
         
+        def user_companies():
+            """Получить все компании пользователя"""
+            context = get_context()
+            if not context or not context.user_companies:
+                return []
+            return context.user_companies
+        
         def t(key: str, **kwargs) -> str:
             """Функция перевода для шаблонов"""
             try:
@@ -139,6 +146,7 @@ class TemplateLoader:
         templates.env.globals['user_roles'] = user_roles
         templates.env.globals['user_has_role'] = user_has_role
         templates.env.globals['is_system_admin'] = is_system_admin
+        templates.env.globals['user_companies'] = user_companies
         # Функции интернационализации
         templates.env.globals['t'] = t
         templates.env.globals['t_field'] = t_field

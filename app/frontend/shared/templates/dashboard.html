@@ -162,6 +162,32 @@
                 <h1 class="header-title" id="page-title">{{ t('dashboard.title') }}</h1>
             </div>
             <div class="header-right">
+                <!-- Переключатель компаний (только если у пользователя > 1 компании) -->
+                {% set companies = user_companies() %}
+                {% if companies|length > 1 %}
+                <div class="dropdown">
+                    <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.switch_company') }}" style="max-width: 200px;">
+                        <i class="bi bi-building"></i>
+                        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ current_company().name if current_company() else '' }}</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        {% for company in companies %}
+                        <li>
+                            <a class="dropdown-item {% if current_company() and company.company_id == current_company().company_id %}active{% endif %}" 
+                               href="#" 
+                               onclick="event.preventDefault(); switchCompany('{{ company.company_id }}');"
+                               style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;">
+                                {% if current_company() and company.company_id == current_company().company_id %}
+                                <i class="bi bi-check"></i>
+                                {% endif %}
+                                {{ company.name }}
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+                
                 <!-- Dropdown для выбора языка -->
                 <div class="dropdown">
                     <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
@@ -555,5 +581,45 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+async function switchCompany(companyId) {
+    try {
+        console.log('Switching to company:', companyId);
+        const response = await fetch(`/api/v1/admin/switch-company/${companyId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+        
+        console.log('Response status:', response.status);
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log('Response data:', data);
+            if (data.redirect_url) {
+                console.log('Redirecting to:', data.redirect_url);
+                window.location.href = data.redirect_url;
+            } else {
+                window.location.reload();
+            }
+        } else {
+            let errorMessage = `Статус: ${response.status}`;
+            try {
+                const error = await response.json();
+                console.error('Failed to switch company:', error);
+                errorMessage = error.detail || JSON.stringify(error);
+            } catch (e) {
+                const errorText = await response.text();
+                console.error('Failed to parse error response:', errorText);
+                errorMessage = errorText;
+            }
+            alert(`Не удалось переключить компанию: ${errorMessage}`);
+        }
+    } catch (error) {
+        console.error('Error switching company:', error);
+        alert(`Ошибка при переключении компании: ${error.message}`);
+    }
+}
 </script>
 {% endblock %}
