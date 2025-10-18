@@ -180,14 +180,18 @@ export class BotModalManager {
     }
     
     openBotChat(botId, botName) {
-        if (this.app.chat) {
+        if (this.app && this.app.chat && typeof this.app.chat.open === 'function') {
             this.app.chat.open({
                 agent_id: botId,
                 session_id: null,
                 title: botName
             });
         } else {
-            console.error('Chat manager не инициализирован');
+            console.error('Chat manager не инициализирован:', {
+                app: !!this.app,
+                chat: !!this.app?.chat,
+                openMethod: typeof this.app?.chat?.open
+            });
             alert('Чат недоступен. Попробуйте обновить страницу.');
         }
     }

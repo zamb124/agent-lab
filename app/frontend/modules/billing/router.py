@@ -5,6 +5,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from app.frontend.core.template_loader import get_templates
+from app.frontend.core.plugin_loader import get_plugins_for_template
 from app.core.context import get_context
 from app.services.billing_service import BillingService
 from app.services.payment_service import PaymentService
@@ -49,6 +50,8 @@ async def billing_index(request: Request):
     if company.monthly_budget > 0:
         budget_percent = min(100, (company.current_month_spent / company.monthly_budget) * 100)
     
+    plugin_data = get_plugins_for_template()
+    
     return templates.TemplateResponse(
         "billing.html",
         {
@@ -60,6 +63,7 @@ async def billing_index(request: Request):
             "budget_percent": budget_percent,
             "tariff_plans": TariffPlan,
             "payment_history": payment_history,
+            **plugin_data
         }
     )
 

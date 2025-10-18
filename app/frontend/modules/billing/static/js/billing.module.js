@@ -28,6 +28,7 @@ export default class BillingModule {
         window.openPaymentModal = () => this.openPaymentModal();
         window.closePaymentModal = () => this.closePaymentModal();
         window.createPayment = () => this.handleCreatePayment();
+        console.log('✅ Billing глобальные функции зарегистрированы');
     }
     
     setupEventListeners() {
