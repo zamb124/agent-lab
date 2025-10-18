@@ -1832,8 +1832,8 @@ import { showNotification } from '/static/js/components/notification.js';
             const agentData = await agentResponse.json();
             const currentTools = agentData.tools || [];
             
-            const searchToolId = 'app.tools.rag_tools.search_knowledge_base';
-            const listToolId = 'app.tools.rag_tools.list_documents_in_knowledge_base';
+            const searchToolId = 'app.tools.misc.rag_tools.search_knowledge_base';
+            const listToolId = 'app.tools.misc.rag_tools.list_documents_in_knowledge_base';
             
             const hasSearchTool = currentTools.some(t => t.tool_id === searchToolId);
             const hasListTool = currentTools.some(t => t.tool_id === listToolId);
