@@ -33,6 +33,6 @@
     "view_agents": "View agents"
   },
   "widgets": {
-    "title": "[TODO: dashboard.widgets.title]"
+    "title": "Agent Apps"
   }
 }

@@ -1,5 +1,5 @@
 /**
- * Variables Module - Управление переменными
+ * Variables Module - Variable management
  */
 
 export default class VariablesModule {
@@ -13,7 +13,7 @@ export default class VariablesModule {
     }
     
     async init() {
-        console.log('🔑 Инициализация Variables модуля');
+        console.log('🔑 ' + this.app.i18n.t('variables.init_message'));
         
         this.setupGlobalFunctions();
         this.setupEventListeners();
@@ -60,12 +60,12 @@ export default class VariablesModule {
         if (!isGrouped) {
             btn.classList.add('active', 'btn-primary');
             btn.classList.remove('btn-outline-secondary');
-            btn.innerHTML = '<i class="bi bi-grid-fill"></i> Группировано';
+            btn.innerHTML = '<i class="bi bi-grid-fill"></i> ' + this.app.i18n.t('variables.grouped');
             this.renderGroupedView(variables, contentDiv);
         } else {
             btn.classList.remove('active', 'btn-primary');
             btn.classList.add('btn-outline-secondary');
-            btn.innerHTML = '<i class="bi bi-grid"></i> Группировать по тегам';
+            btn.innerHTML = '<i class="bi bi-grid"></i> ' + this.app.i18n.t('variables.group_by_tags');
             this.renderGridView(variables, contentDiv);
         }
     }
@@ -121,7 +121,7 @@ export default class VariablesModule {
             html += `
                 <div class="empty-group-header">
                     <h5 class="empty-group-title">
-                        <span>Без группы</span>
+                        <span>${this.app.i18n.t('variables.no_group')}</span>
                         <span class="variable-group-count">(${ungrouped.length})</span>
                     </h5>
                     <div class="variables-grid">
@@ -153,7 +153,7 @@ export default class VariablesModule {
         const valueDisplay = isSecret ?
             `<div class="variable-secret-group">
                 <input type="password" readonly value="••••••••••••" class="form-control form-control-sm" id="var-${key}" data-secret-key="${key}">
-                <button class="btn-icon" type="button" onclick="toggleSecret('${key}', this)" title="Показать/скрыть">
+                        <button class="btn-icon" type="button" onclick="toggleSecret('${key}', this)" title="${this.app.i18n.t('variables.show_hide')}">
                     <i class="bi bi-eye"></i>
                 </button>
             </div>` :
@@ -172,10 +172,10 @@ export default class VariablesModule {
                             ${groups ? `<div class="variable-groups">${groups}</div>` : ''}
                         </div>
                         <div class="variable-card-actions">
-                            <button class="btn-icon" onclick="event.stopPropagation();editVariable('${key}', '${data.value}', ${isSecret})" title="Изменить">
+                            <button class="btn-icon" onclick="event.stopPropagation();editVariable('${key}', '${data.value}', ${isSecret})" title="${this.app.i18n.t('variables.edit')}">
                                 <i class="bi bi-pencil"></i>
                             </button>
-                            <button class="btn-icon btn-icon-danger" onclick="event.stopPropagation();deleteVariable('${key}')" title="Удалить">
+                            <button class="btn-icon btn-icon-danger" onclick="event.stopPropagation();deleteVariable('${key}')" title="${this.app.i18n.t('variables.delete')}">
                                 <i class="bi bi-trash"></i>
                             </button>
                         </div>
@@ -196,7 +196,7 @@ export default class VariablesModule {
     openAddModal() {
         this.editingKey = null;
         this.currentGroups = [];
-        document.getElementById('variable-modal-title').textContent = 'Добавить переменную';
+        document.getElementById('variable-modal-title').textContent = this.app.i18n.t('variables.add_variable');
         document.getElementById('variable-key').value = '';
         document.getElementById('variable-key').disabled = false;
         document.getElementById('variable-description').value = '';
@@ -232,7 +232,7 @@ export default class VariablesModule {
             document.getElementById('variable-description').value = '';
         }
         
-        document.getElementById('variable-modal-title').textContent = 'Изменить переменную';
+        document.getElementById('variable-modal-title').textContent = this.app.i18n.t('variables.edit_variable');
         document.getElementById('variable-key').value = key;
         document.getElementById('variable-key').disabled = true;
         document.getElementById('variable-value').value = value === '***' ? '' : value;
@@ -263,12 +263,12 @@ export default class VariablesModule {
         const groups = this.currentGroups || [];
         
         if (!key) {
-            this.app.showNotification('Введите ключ переменной', 'warning');
+            this.app.showNotification(this.app.i18n.t('variables.enter_variable_key'), 'warning');
             return;
         }
         
         if (!value && !editingKey) {
-            this.app.showNotification('Введите значение', 'warning');
+            this.app.showNotification(this.app.i18n.t('variables.enter_value'), 'warning');
             return;
         }
         
@@ -284,23 +284,23 @@ export default class VariablesModule {
             
             if (response.ok) {
                 this.closeModal();
-                this.app.showNotification('Переменная сохранена', 'success');
+                this.app.showNotification(this.app.i18n.t('variables.variable_saved'), 'success');
                 htmx.ajax('GET', '/frontend/variables/list', {
                     target: '#variables-container',
                     swap: 'outerHTML'
                 });
             } else {
                 const error = await response.json();
-                this.app.showNotification('Ошибка: ' + (error.detail || 'Не удалось сохранить'), 'danger');
+                this.app.showNotification(this.app.i18n.t('variables.save_error') + ': ' + (error.detail || this.app.i18n.t('variables.save_failed')), 'danger');
             }
         } catch (err) {
-            console.error('Ошибка сохранения:', err);
-            this.app.showNotification('Ошибка сохранения', 'danger');
+            console.error(this.app.i18n.t('variables.save_error') + ':', err);
+            this.app.showNotification(this.app.i18n.t('variables.save_error'), 'danger');
         }
     }
     
     async delete(key) {
-        if (!confirm(`Удалить переменную "${key}"?`)) {
+        if (!confirm(this.app.i18n.t('variables.confirm_delete', { key: key }))) {
             return;
         }
         
@@ -313,16 +313,16 @@ export default class VariablesModule {
             });
             
             if (response.ok) {
-                this.app.showNotification('Переменная удалена', 'success');
+                this.app.showNotification(this.app.i18n.t('variables.variable_deleted'), 'success');
                 htmx.ajax('GET', '/frontend/variables/list', {
                     target: '#variables-container',
                     swap: 'outerHTML'
                 });
             } else {
-                this.app.showNotification('Ошибка удаления', 'danger');
+                this.app.showNotification(this.app.i18n.t('variables.delete_error'), 'danger');
             }
         } catch (err) {
-            console.error('Ошибка удаления:', err);
+            console.error(this.app.i18n.t('variables.delete_error') + ':', err);
         }
     }
     
@@ -333,7 +333,7 @@ export default class VariablesModule {
         if (!group) return;
         
         if (!/^[a-z_][a-z0-9_]*$/.test(group)) {
-            this.app.showNotification('Группа должна быть snake_case', 'warning');
+            this.app.showNotification(this.app.i18n.t('variables.group_snake_case'), 'warning');
             return;
         }
         
@@ -355,7 +355,7 @@ export default class VariablesModule {
         if (!container) return;
         
         if (this.currentGroups.length === 0) {
-            container.innerHTML = '<small class="text-muted">Нет групп</small>';
+                container.innerHTML = '<small class="text-muted">' + this.app.i18n.t('variables.no_groups') + '</small>';
             return;
         }
         
@@ -386,7 +386,7 @@ export default class VariablesModule {
                     icon.className = 'bi bi-eye-slash';
                 }
             } catch (err) {
-                console.error('Ошибка загрузки значения:', err);
+                console.error(this.app.i18n.t('variables.load_value_error') + ':', err);
             }
         } else {
             input.value = '••••••••••••';
@@ -396,7 +396,7 @@ export default class VariablesModule {
     }
     
     destroy() {
-        console.log('🧹 Variables модуль выгружен');
+        console.log('🧹 ' + this.app.i18n.t('variables.module_unloaded'));
     }
 }
 
