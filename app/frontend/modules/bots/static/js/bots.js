@@ -814,7 +814,7 @@ import { showNotification } from '/static/js/components/notification.js';
                 'amocrm': 'AmoCRM'
             };
             
-            selectPlatform(platformType, platformIcons[platformType] || 'bi-gear', platformNames[platformType] || platformType);
+            await selectPlatform(platformType, platformIcons[platformType] || 'bi-gear', platformNames[platformType] || platformType);
             
             await new Promise(resolve => setTimeout(resolve, 100));
             
@@ -1059,55 +1059,94 @@ import { showNotification } from '/static/js/components/notification.js';
         }
     };
 
-    window.selectPlatform = function(value, icon, text) {
+    window.selectPlatform = async function(value, icon, text) {
+        console.log('🎯 selectPlatform вызван:', value, icon, text);
         selectedPlatformType = value;
         
-        // Обновляем отображение выбранной каналы
         const selectText = document.querySelector('.select-text');
         selectText.innerHTML = `<i class="${icon}"></i> ${text}`;
         
-        // Закрываем dropdown
         document.getElementById('platform-dropdown').classList.remove('show');
         document.querySelector('.select-value').classList.remove('active');
         
-        // Вызываем функцию обновления полей
-        updatePlatformFields();
+        console.log('🎯 Вызываем updatePlatformFields для:', selectedPlatformType);
+        await updatePlatformFields();
     };
 
     window.updatePlatformFields = async function() {
         const platformType = selectedPlatformType;
         const configSection = document.getElementById('platform-config-section');
         
+        console.log('📋 updatePlatformFields:', {
+            platformType,
+            configSection: !!configSection,
+            currentDisplay: configSection?.style.display
+        });
+        
+        if (!configSection) {
+            console.error('❌ platform-config-section не найден');
+            return;
+        }
+        
         if (platformType) {
+            console.log('✅ Показываем секцию для платформы:', platformType);
             configSection.style.display = 'block';
+            console.log('✅ Секция display установлен в:', configSection.style.display);
             
-            // Для WhatsApp показываем специальные поля
             if (platformType === 'whatsapp') {
+                console.log('📱 Загружаем поля WhatsApp');
                 await showWhatsAppFields();
             } else {
-                // Для остальных платформ показываем стандартные поля
+                console.log('🔧 Показываем стандартные поля для:', platformType);
                 showStandardPlatformFields(platformType);
             }
         } else {
+            console.log('❌ Платформа не выбрана, скрываем секцию');
             configSection.style.display = 'none';
         }
     };
 
     function showStandardPlatformFields(platformType) {
+        console.log('🔧 showStandardPlatformFields для:', platformType);
+        
         const configSection = document.getElementById('platform-config-section');
         
         const tokenField = document.getElementById('platform-token');
         const usernameField = document.getElementById('platform-username');
         
-        // Показываем стандартные поля
-        document.getElementById('platform-token').closest('.form-group').style.display = 'block';
-        document.getElementById('platform-username').closest('.form-group').style.display = 'block';
+        console.log('🔍 Найденные поля:', {
+            tokenField: !!tokenField,
+            usernameField: !!usernameField
+        });
         
-        // Скрываем WhatsApp поля если они были
+        if (!tokenField || !usernameField) {
+            console.error('❌ Поля токена или username не найдены');
+            return;
+        }
+        
+        const tokenFormGroup = tokenField.closest('.form-group');
+        const usernameFormGroup = usernameField.closest('.form-group');
+        
+        console.log('🔍 Form groups:', {
+            tokenFormGroup: !!tokenFormGroup,
+            usernameFormGroup: !!usernameFormGroup
+        });
+        
+        if (tokenFormGroup) {
+            tokenFormGroup.style.display = 'block';
+            console.log('✅ Token form group показан');
+        }
+        if (usernameFormGroup) {
+            usernameFormGroup.style.display = 'block';
+            console.log('✅ Username form group показан');
+        }
+        
         const whatsappFields = document.getElementById('whatsapp-fields-container');
-        if (whatsappFields) whatsappFields.style.display = 'none';
+        if (whatsappFields) {
+            whatsappFields.style.display = 'none';
+            console.log('🚫 WhatsApp поля скрыты');
+        }
         
-        // Сбрасываем состояние полей
         tokenField.disabled = false;
         
         switch(platformType) {
@@ -1156,9 +1195,17 @@ import { showNotification } from '/static/js/components/notification.js';
     }
 
     async function showWhatsAppFields() {
-        // Скрываем стандартные поля токена и username
-        document.getElementById('platform-token').closest('.form-group').style.display = 'none';
-        document.getElementById('platform-username').closest('.form-group').style.display = 'none';
+        const tokenField = document.getElementById('platform-token');
+        const usernameField = document.getElementById('platform-username');
+        
+        if (tokenField) {
+            const tokenFormGroup = tokenField.closest('.form-group');
+            if (tokenFormGroup) tokenFormGroup.style.display = 'none';
+        }
+        if (usernameField) {
+            const usernameFormGroup = usernameField.closest('.form-group');
+            if (usernameFormGroup) usernameFormGroup.style.display = 'none';
+        }
         
         // Создаем или показываем WhatsApp поля
         let whatsappContainer = document.getElementById('whatsapp-fields-container');
