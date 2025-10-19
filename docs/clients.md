@@ -63,7 +63,7 @@ await client.close()
 
 `POST /api/v1/fashn/try-on` - HTTP API для виртуальной примерки.
 
-Подробнее: [API Reference](api.md)
+Подробнее: [API Reference](api_links.md)
 
 ## См. также
 

@@ -2,7 +2,7 @@
 
 Agent Lab - это современная платформа для создания и управления ИИ-агентами. Создавайте интеллектуальных ботов для автоматизации бизнес-процессов без навыков программирования.
 
-![Главная страница Agent Lab](../../screen_processes/main_page_agents_lab.png)
+![Главная страница Agent Lab](screen_processes/main_page_agents_lab.png)
 
 ## :material-rocket-launch-outline: Быстрый старт
 
@@ -79,7 +79,7 @@ Agent Lab работает по модели pay-as-you-go:
 
 ### :material-bookmark-multiple-outline: Примеры и кейсы
 - [Готовые сценарии](scenarios.md)
-- [Интеграции](integrations.md)
+- [Интеграции](../integrations/amocrm/README.md)
 - [Лучшие практики](best_practices.md)
 
 ## :material-help-circle-outline: Нужна помощь?
