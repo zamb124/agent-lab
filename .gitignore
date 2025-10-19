@@ -18,3 +18,4 @@ sgr-service/__pycache__/
 # MkDocs
 site/
 
+/server.log
