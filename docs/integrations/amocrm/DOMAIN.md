@@ -685,7 +685,7 @@ AmoCRM Event (изменение сделки)
 
 ## 🔗 Связанная документация
 
-- [AMOCRM_README.md](./AMOCRM_README.md) - API клиент и методы
+- [AmoCRM Client API](./README.md) - API клиент и методы
 - [AmoCRM API Reference](https://www.amocrm.ru/developers/content/crm_platform/api-reference)
 - [Предметная область AmoCRM](https://www.amocrm.ru/developers/content/crm_platform/subject_area)
 

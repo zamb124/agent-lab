@@ -1104,7 +1104,7 @@ assert result["messages"][-1].content
 ## См. также
 
 - [Архитектура](architecture.md) - общая архитектура платформы
-- [Flows](flows.md) - создание и управление flows
+- [Flows](user_docs/builder.md) - создание и управление flows
 - [State и переменные](state_and_variables.md) - работа с данными
-- [API Reference](api_reference.md) - документация API
+- [API Reference](api_links.md) - документация API
 

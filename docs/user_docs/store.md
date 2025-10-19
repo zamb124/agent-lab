@@ -19,7 +19,7 @@ Store предоставляет:
 
 В левом боковом меню навигации нажмите на пункт **"Store"**.
 
-![Страница Store](../../screen_processes/store_page.png)
+![Страница Store](screen_processes/store_page.png)
 
 ### :material-selection-multiple: Шаг 2: Выберите бота
 
@@ -39,7 +39,7 @@ Store предоставляет:
 
 Нажмите кнопку **"Установить"**. Бот будет автоматически добавлен в ваш список ботов. Если бот уже установлен, кнопка изменится на **"Удалить"**.
 
-![Установка бота из Store](../../screen_processes/install_from_store/install_bot_from_store.png)
+![Установка бота из Store](screen_processes/install_from_store/install_bot_from_store.png)
 
 ### :material-check-circle-outline: Шаг 5: Проверьте установку
 

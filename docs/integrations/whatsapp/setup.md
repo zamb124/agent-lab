@@ -506,6 +506,6 @@ curl -X GET "https://graph.facebook.com/v18.0/{phone_number_id}" \
 ### Следующие шаги
 
 1. [Использование WhatsApp в агентах](usage.md)
-2. [Работа с template messages](templates.md)
-3. [Обработка медиафайлов](media.md)
+2. [Работа с template messages](usage.md#conversation-windows)
+3. [Обработка медиафайлов](usage.md#типы-контента)
 

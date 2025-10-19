@@ -21,11 +21,11 @@
 
 На странице входа выберите удобный способ авторизации:
 
-![Страница входа](../../screen_processes/auth_page.png)
+![Страница входа](screen_processes/auth_page.png)
 
 Или используйте альтернативную страницу входа:
 
-![Альтернативная страница входа](../../screen_processes/auth_page_2.png)
+![Альтернативная страница входа](screen_processes/auth_page_2.png)
 
 - **Yandex** - для пользователей Яндекса
 - **Google** - для пользователей Google
@@ -37,7 +37,7 @@
 
 После успешной авторизации вам нужно создать компанию:
 
-![Создание компании](../../screen_processes/create_company.png)
+![Создание компании](screen_processes/create_company.png)
 
 <div class="video-container">
     <video controls width="100%">
@@ -58,11 +58,11 @@
 
 После создания вы попадете в дашборд компании.
 
-![Выбор компании](../../screen_processes/choose_company_after_create.png)
+![Выбор компании](screen_processes/choose_company_after_create.png)
 
 Если у вас уже есть компания, вы можете выбрать ее из списка:
 
-![Выбор существующей компании](../../screen_processes/choose_company.png)
+![Выбор существующей компании](screen_processes/choose_company.png)
 
 ## :material-view-dashboard-outline: Шаг 2: Знакомство с дашбордом
 
@@ -70,7 +70,7 @@
 
 ### :material-robot-outline: Основные разделы
 
-![Дашборд Agent Lab](../../screen_processes/dashboard.png)
+![Дашборд Agent Lab](screen_processes/dashboard.png)
 
 #### :material-robot-outline: Боты
 Управляйте всеми вашими ботами. Здесь вы можете создавать новых ботов, просматривать существующие, настраивать их параметры, такие как модель ИИ, промпт, таймауты, количество повторных попыток. Также в этом разделе настраиваются платформы для каждого бота.
@@ -93,7 +93,7 @@
 #### :material-currency-usd: Биллинг
 Управление расходами на платформе. Здесь отображается текущий баланс, лимиты, история платежей и информация о пополнении счета.
 
-![Меню приложений](../../screen_processes/apps_menu.png)
+![Меню приложений](screen_processes/apps_menu.png)
 
 ## :material-brain: Шаг 3: Выбор модели ИИ
 
@@ -198,7 +198,7 @@ Agent Lab поддерживает следующие платформы для 
 
 Все диалоги сохраняются в разделе **"Чаты"**:
 
-![Страница чатов](../../screen_processes/chats.png)
+![Страница чатов](screen_processes/chats.png)
 
 - **Полная переписка** - все сообщения
 - **Поиск** по тексту
@@ -253,7 +253,7 @@ Agent Lab поддерживает следующие платформы для 
 ### :material-book-open-page-variant-outline: Документация
 - **FAQ** - частые вопросы
 - **Видео-гайды** - пошаговые инструкции
-- **[API документация](../api.md)** - для разработчиков
+- **[API документация](../api_links.md)** - для разработчиков
 
 ### :material-account-group-outline: Сообщество
 - **👥 Форум** - обсуждение с другими пользователями
