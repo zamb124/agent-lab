@@ -275,9 +275,30 @@ class GraphBuilder:
         if not tool_id:
             raise ValueError(f"Нода инструмента {node.id} должна содержать tool_id")
 
-        tool_ref = ToolReference(
-            tool_id=tool_id, params=node.params.get("tool_params", {})
-        )
+        # Определяем code_mode по tool_id
+        if tool_id.startswith("mcp:"):
+            code_mode = CodeMode.MCP_TOOL
+        elif "." in tool_id:
+            code_mode = CodeMode.CODE_REFERENCE
+        else:
+            code_mode = CodeMode.INLINE_CODE
+        
+        # Для MCP тулов загружаем ToolReference из БД
+        if code_mode == CodeMode.MCP_TOOL:
+            from app.core.container import get_container
+            tool_repo = get_container().get_tool_repository()
+            tool_ref = await tool_repo.get(tool_id)
+            
+            if not tool_ref:
+                raise ValueError(f"MCP тул {tool_id} не найден в БД. Синхронизируйте MCP сервер.")
+        else:
+            # Создаем ToolReference для обычного тула
+            tool_ref = ToolReference(
+                tool_id=tool_id, 
+                code_mode=code_mode,
+                params=node.params.get("tool_params", {})
+            )
+        
         tools = await self.tool_factory.create_tools([tool_ref])
 
         if not tools:
@@ -287,29 +308,73 @@ class GraphBuilder:
 
         async def tool_node(state: State) -> State:
             """Функция ноды инструмента"""
-            try:
-                # Извлекаем входные данные из состояния
-                tool_input = node.params.get("input_key", "input")
-                input_data = state.get(tool_input, "")
+            # Извлекаем входные данные из состояния
+            # Поддержка вложенных ключей вида "store.key"
+            tool_input_key = node.params.get("input_key", "input")
+            
+            if "." in tool_input_key:
+                # Вложенный ключ вида "store.calc_input"
+                parts = tool_input_key.split(".", 1)
+                input_data = state.get(parts[0], {}).get(parts[1], "")
+            else:
+                input_data = state.get(tool_input_key, "")
+            
+            logger.info(f"🔧 [TOOL_NODE] {node.id}: tool={tool.name if hasattr(tool, 'name') else 'unknown'}")
+            logger.info(f"   Input key: {tool_input_key}")
+            logger.info(f"   Input data: {input_data}")
+            logger.info(f"   State keys: {list(state.keys())}")
 
-                # Вызываем инструмент
-                result = (
-                    await tool.ainvoke(input_data)
-                    if hasattr(tool, "ainvoke")
-                    else tool.invoke(input_data)
-                )
+            # Подготавливаем аргументы для тула
+            # Для StructuredTool (включая MCP) нужен dict с параметрами
+            if hasattr(tool, 'args_schema') and tool.args_schema:
+                # Если input_data уже dict - используем как есть
+                if isinstance(input_data, dict):
+                    tool_args = input_data.copy()
+                else:
+                    # Преобразуем в dict с первым параметром
+                    schema_fields = tool.args_schema.model_fields
+                    # Фильтруем служебные поля state и tool_call_id
+                    param_names = [
+                        name for name in schema_fields.keys() 
+                        if name not in ['state', 'tool_call_id']
+                    ]
+                    
+                    if not param_names:
+                        tool_args = {}
+                    else:
+                        first_param = param_names[0]
+                        tool_args = {first_param: input_data}
+                
+                # Добавляем state и tool_call_id для state_aware тулов
+                # Декоратор @tool извлечет их через kwargs.pop('state')
+                import uuid
+                tool_args['state'] = state
+                tool_args['tool_call_id'] = str(uuid.uuid4())
+            else:
+                tool_args = input_data
 
-                # Сохраняем результат в состояние
-                output_key = node.params.get("output_key", "output")
+            # Вызываем тул через ainvoke для корректной работы @tool декоратора
+            if hasattr(tool, "ainvoke"):
+                result = await tool.ainvoke(tool_args)
+            else:
+                result = tool.invoke(tool_args)
+
+            # Сохраняем результат в состояние
+            # Поддержка вложенных ключей вида "store.key"
+            output_key = node.params.get("output_key", "output")
+            
+            if "." in output_key:
+                # Вложенный ключ вида "store.calc_result"
+                parts = output_key.split(".", 1)
+                if parts[0] not in state:
+                    state[parts[0]] = {}
+                state[parts[0]][parts[1]] = result
+            else:
                 state[output_key] = result
+            
+            logger.info(f"✅ [TOOL_NODE] {node.id}: результат сохранен в {output_key}")
 
-                return state
-            except Exception as e:
-                logger.error(f"Ошибка в ноде инструмента {node.id}: {e}", exc_info=True)
-                if "store" not in state:
-                    state["store"] = {}
-                state["store"]["error"] = str(e)
-                return state
+            return state
 
         return tool_node
 

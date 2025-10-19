@@ -1,0 +1,252 @@
+{% import 'components.html' as c %}
+<link rel="stylesheet" href="/static/mcp/css/mcp.css">
+
+<h1 class="header-title" id="page-title" hx-swap-oob="true">
+    <i class="bi bi-plug me-2"></i>
+    MCP Серверы
+</h1>
+
+<div class="header-right" hx-swap-oob="true">
+    {{ c.button('',
+        variant='primary',
+        size='sm',
+        icon='plus-lg',
+        onclick='openAddServerModal()',
+        data_tooltip='Добавить MCP сервер'
+    ) }}
+    <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="Переключить тему">
+        <i class="bi bi-sun"></i>
+    </button>
+</div>
+
+<div class="container-fluid py-4 page-with-empty-state" id="mcp-servers-container">
+    {% if servers %}
+    <div class="mb-4">
+        <div class="mt-2">
+            {{ c.alert(
+                type='info',
+                message='MCP (Model Context Protocol) позволяет использовать внешние инструменты в ваших агентах. После синхронизации тулы появятся в Builder.',
+                icon='info-circle'
+            ) }}
+        </div>
+    </div>
+    {% endif %}
+
+    <div id="mcp-servers-content">
+    <div class="mcp-servers-grid">
+        <div class="mcp-server-grid-item">
+            <div class="card mcp-server-card mcp-server-card-create" onclick="openAddServerModal()">
+                <div class="mcp-server-create-body">
+                    <i class="bi bi-plus-circle mcp-server-create-icon text-primary"></i>
+                    <div class="mcp-server-create-content">
+                        <div class="mcp-server-create-title">Добавить MCP сервер</div>
+                        <small class="mcp-server-create-subtitle">Подключить внешний сервер</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        {% for server in servers %}
+        <div class="mcp-server-grid-item">
+            <div class="card mcp-server-card {% if not server.is_active %}mcp-server-card-inactive{% endif %}">
+                <div class="mcp-server-card-header">
+                    <div class="card-icon">
+                        <i class="bi {% if server.is_active %}bi-plug-fill text-success{% else %}bi-plug text-muted{% endif %}"></i>
+                    </div>
+                    <div class="mcp-server-card-info">
+                        <div class="mcp-server-status">
+                            {% if server.is_active %}
+                            {{ c.badge('Активен', variant='success', icon='check-circle') }}
+                            {% else %}
+                            {{ c.badge('Неактивен', variant='secondary', icon='x-circle') }}
+                            {% endif %}
+                            
+                            {% if server.transport_type == 'sse' %}
+                            {{ c.badge('SSE', variant='info') }}
+                            {% else %}
+                            {{ c.badge('HTTP', variant='primary') }}
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="mcp-server-card-actions">
+                        <button class="btn-icon" 
+                                onclick="event.stopPropagation();syncServer('{{ server.server_id }}')" 
+                                title="Синхронизировать тулы"
+                                id="sync-btn-{{ server.server_id }}">
+                            <i class="bi bi-arrow-repeat"></i>
+                        </button>
+                        <button class="btn-icon" 
+                                onclick="event.stopPropagation();testServer('{{ server.server_id }}')" 
+                                title="Тест подключения">
+                            <i class="bi bi-wifi"></i>
+                        </button>
+                        <button class="btn-icon" 
+                                onclick="event.stopPropagation();editServer('{{ server.server_id }}')" 
+                                title="Редактировать">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn-icon btn-icon-danger" 
+                                onclick="event.stopPropagation();deleteServer('{{ server.server_id }}')" 
+                                title="Удалить">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="mcp-server-card-body" onclick="toggleServerDetails('{{ server.server_id }}')">
+                    <div class="mcp-server-name">
+                        {{ server.name }}
+                    </div>
+                    
+                    {% if server.description %}
+                    <div class="mcp-server-description">
+                        {{ server.description }}
+                    </div>
+                    {% endif %}
+                    
+                    <div class="mcp-server-url">
+                        <i class="bi bi-globe"></i>
+                        <code>{{ server.url }}</code>
+                    </div>
+                    
+                    <div class="mcp-server-tools-info">
+                        <i class="bi bi-tools"></i>
+                        <span>{{ server.cached_tools|length }} инструментов</span>
+                        {% if server.last_sync_at %}
+                        <span class="text-muted ms-2">
+                            <i class="bi bi-clock"></i>
+                            {{ server.last_sync_at.strftime('%d.%m.%Y %H:%M') if server.last_sync_at else 'Не синхронизировано' }}
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="mcp-server-details" id="details-{{ server.server_id }}" style="display: none;">
+                    <div class="mcp-server-details-content">
+                        <h6>Синхронизированные тулы:</h6>
+                        {% if server.cached_tools %}
+                        <div class="mcp-tools-list">
+                            {% for tool_id in server.cached_tools %}
+                            <div class="mcp-tool-item">
+                                <i class="bi bi-wrench"></i>
+                                <code>{{ tool_id }}</code>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <p class="text-muted">Тулы не синхронизированы. Нажмите кнопку синхронизации.</p>
+                        {% endif %}
+                        
+                        {% if server.headers %}
+                        <h6 class="mt-3">Заголовки:</h6>
+                        <div class="mcp-headers-list">
+                            {% for key, value in server.headers.items() %}
+                            <div class="mcp-header-item">
+                                <strong>{{ key }}:</strong>
+                                {% if value.startswith('@var:') %}
+                                <code class="text-info">{{ value }}</code>
+                                {% else %}
+                                <code>{{ value[:20] }}...</code>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        
+                        <div class="mt-3">
+                            <small class="text-muted">
+                                <strong>ID:</strong> {{ server.server_id }}<br>
+                                <strong>Таймаут:</strong> {{ server.timeout }}с<br>
+                                <strong>Автосинхронизация:</strong> {{ 'Да' if server.auto_sync_tools else 'Нет' }}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    </div>
+</div>
+
+<div id="mcp-server-modal" class="modal-overlay modal-hidden mcp-modal" hx-preserve="true" onclick="closeServerModal()">
+    <div class="modal-content modal-content-large" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3 id="mcp-server-modal-title">Добавить MCP сервер</h3>
+            <div class="modal-header-actions">
+                <button class="btn-icon" onclick="saveServer()" title="Сохранить">
+                    <i class="bi bi-floppy-fill"></i>
+                </button>
+                <button class="btn-close" onclick="closeServerModal()" title="Закрыть">
+                    <i class="bi bi-x-circle-fill"></i>
+                </button>
+            </div>
+        </div>
+        <div class="modal-body">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">ID сервера *</label>
+                    <input type="text" class="form-control" id="server-id" placeholder="context7">
+                    <div class="form-text">Уникальный идентификатор (латиница, нижний регистр)</div>
+                </div>
+                
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Название *</label>
+                    <input type="text" class="form-control" id="server-name" placeholder="Context7 Documentation">
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Описание</label>
+                <input type="text" class="form-control" id="server-description" placeholder="AI-powered documentation search">
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">URL *</label>
+                <input type="text" class="form-control" id="server-url" placeholder="https://mcp.context7.com/mcp">
+                <div class="form-text">Адрес MCP сервера</div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Тип транспорта</label>
+                    <select class="form-select" id="server-transport-type">
+                        <option value="http">HTTP</option>
+                        <option value="sse">SSE (Server-Sent Events)</option>
+                    </select>
+                </div>
+                
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Таймаут (секунды)</label>
+                    <input type="number" class="form-control" id="server-timeout" value="30" min="5" max="300">
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">HTTP заголовки (JSON)</label>
+                <textarea class="form-control font-monospace" id="server-headers" rows="4" placeholder='{"Authorization": "@var:context7_api_key"}'></textarea>
+                <div class="form-text">
+                    Используйте <code>@var:key</code> для ссылок на переменные. 
+                    <button class="btn btn-sm btn-link p-0 ms-2" onclick="event.preventDefault();insertSampleHeaders()">
+                        <i class="bi bi-code"></i> Вставить пример
+                    </button>
+                </div>
+            </div>
+            
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" id="server-is-active" checked>
+                <label class="form-check-label" for="server-is-active">
+                    Активен
+                </label>
+            </div>
+            
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="server-auto-sync" checked>
+                <label class="form-check-label" for="server-auto-sync">
+                    Автоматическая синхронизация при старте
+                </label>
+            </div>
+        </div>
+    </div>
+</div>
+

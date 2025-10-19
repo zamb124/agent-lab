@@ -50,79 +50,188 @@ class CanvasService:
     
     async def update_agents_from_canvas(self, canvas_data: Dict[str, Any]):
         """
-        Обновляет агентов в БД на основе связей на канвасе
+        Обновляет агентов в БД на основе связей на канвасе.
+        Для ReAct агентов - обновляет tools[].
+        Для StateGraph агентов - НЕ трогает graph_definition (управляется отдельно).
         
         Args:
             canvas_data: Данные канваса с нодами и связями
         """
-        agent_connections = {}
+        # Находим flow ноду для определения entry_point агента
+        flow_node = None
+        for node in canvas_data.get("nodes", []):
+            if node.get("type") == "flow_node":
+                flow_node = node
+                break
+        
+        if not flow_node:
+            logger.info("Не найдена flow нода на канвасе, пропускаем обновление агентов")
+            return
+        
+        # Находим entry_point агента (нода связанная с flow)
+        entry_point_agent_id = None
+        entry_point_node_id = None
         
         for edge in canvas_data.get("edges", []):
-            source_id = edge.get("source")
-            target_id = edge.get("target")
-            
-            if not source_id or not target_id:
-                continue
-            
-            source_node = None
-            target_node = None
-            
-            for node in canvas_data.get("nodes", []):
-                if node.get("id") == source_id:
-                    source_node = node
-                elif node.get("id") == target_id:
-                    target_node = node
-            
-            if not source_node or not target_node:
-                continue
-            
-            if source_node.get("type") == "agent_node":
-                agent_id = source_node.get("params", {}).get("agent_id")
-                if agent_id:
-                    if agent_id not in agent_connections:
-                        agent_connections[agent_id] = []
-                    
-                    if target_node.get("type") == "tool_node":
-                        tool_id = target_node.get("params", {}).get("tool_id")
-                        if tool_id:
-                            agent_connections[agent_id].append({
-                                "type": "tool",
-                                "id": tool_id
-                            })
-                    elif target_node.get("type") == "agent_node":
-                        sub_agent_id = target_node.get("params", {}).get("agent_id")
-                        if sub_agent_id:
-                            agent_connections[agent_id].append({
-                                "type": "agent",
-                                "id": sub_agent_id
-                            })
+            if edge.get("source") == flow_node.get("id"):
+                target_node_id = edge.get("target")
+                for node in canvas_data.get("nodes", []):
+                    if node.get("id") == target_node_id and node.get("type") == "agent_node":
+                        entry_point_agent_id = node.get("params", {}).get("agent_id")
+                        entry_point_node_id = target_node_id
+                        break
+                break
         
-        for agent_id, connections in agent_connections.items():
-            try:
-                agent = await self.storage.get_agent_config(agent_id)
-                if agent:
-                    new_tools = []
+        if not entry_point_agent_id:
+            logger.info("Не найден entry_point агент, пропускаем обновление")
+            return
+        
+        # Получаем данные entry_point агента
+        entry_point_agent = await self.storage.get_agent_config(entry_point_agent_id)
+        if not entry_point_agent:
+            logger.warning(f"Entry point агент {entry_point_agent_id} не найден в БД")
+            return
+        
+        # Для StateGraph агентов обновляем graph_definition из canvas
+        from app.models import AgentType, GraphDefinition, GraphNode, GraphEdge
+        
+        if entry_point_agent.type == AgentType.STATEGRAPH:
+            logger.info(f"StateGraph агент {entry_point_agent_id} - обновляем graph_definition из canvas")
+            
+            # Собираем ВСЕ ноды связанные с entry_point агентом рекурсивно
+            graph_node_ids = set()
+            
+            def find_connected_nodes(node_id, visited):
+                if node_id in visited:
+                    return
+                visited.add(node_id)
+                
+                for edge in canvas_data.get("edges", []):
+                    if edge.get("source") == node_id:
+                        target = edge.get("target")
+                        if target:
+                            find_connected_nodes(target, visited)
+            
+            # Находим все ноды начиная от entry_point агента
+            find_connected_nodes(entry_point_node_id, graph_node_ids)
+            logger.info(f"Найдено {len(graph_node_ids)} связанных нод: {graph_node_ids}")
+            
+            # Собираем ноды для graph_definition (кроме flow и entry_point agent)
+            graph_nodes = []
+            for node in canvas_data.get("nodes", []):
+                node_id = node.get("id")
+                
+                # Пропускаем flow и entry_point agent ноду
+                if node.get("type") == "flow_node" or node_id == entry_point_node_id:
+                    logger.info(f"Пропускаем ноду {node_id} (type={node.get('type')})")
+                    continue
+                
+                # Добавляем только ноды связанные с entry_point агентом
+                if node_id in graph_node_ids:
+                    node_name = node.get("params", {}).get("name") or node_id
+                    logger.info(f"Добавляем ноду {node_id} (name={node_name}) в graph_definition")
                     
-                    for connection in connections:
-                        if connection["type"] == "tool":
-                            tool_ref = ToolReference(
-                                tool_id=connection["id"],
-                                params={}
-                            )
-                            new_tools.append(tool_ref)
-                        elif connection["type"] == "agent":
-                            agent_tool_ref = ToolReference(
-                                tool_id=f"agent:{connection['id']}",
-                                params={}
-                            )
-                            new_tools.append(agent_tool_ref)
+                    # Копируем params и добавляем UI координаты
+                    node_params = node.get("params", {}).copy()
+                    if node.get("ui"):
+                        node_params["ui"] = node.get("ui")
                     
-                    agent.tools = new_tools
-                    await self.storage.set_agent_config(agent)
+                    graph_nodes.append(GraphNode(
+                        id=node_name,
+                        type=node.get("type"),
+                        params=node_params,
+                        code_mode=node.get("code_mode", "code_reference"),
+                        inline_code=node.get("inline_code"),
+                        function_path=node.get("function_path")
+                    ))
+                else:
+                    logger.info(f"Пропускаем несвязанную ноду {node_id}")
+            
+            # Собираем связи для graph_definition
+            graph_edges = []
+            first_node_id = None
+            
+            for edge in canvas_data.get("edges", []):
+                source = edge.get("source")
+                target = edge.get("target")
+                
+                # Связь от entry_point агента - это START
+                if source == entry_point_node_id:
+                    source_node = None
+                    for n in canvas_data.get("nodes", []):
+                        if n.get("id") == target:
+                            source_node = n
+                            first_node_id = n.get("params", {}).get("name") or n.get("id")
+                            break
                     
-            except Exception as e:
-                logger.error(f"Ошибка обновления агента {agent_id}: {e}")
-                continue
+                    if first_node_id:
+                        graph_edges.append(GraphEdge(
+                            source="START",
+                            target=first_node_id,
+                            condition=None,
+                            condition_type=None
+                        ))
+                
+                # Обычные связи между нодами
+                elif source in graph_node_ids and target in graph_node_ids:
+                    source_node_name = None
+                    target_node_name = None
+                    
+                    for n in canvas_data.get("nodes", []):
+                        if n.get("id") == source:
+                            source_node_name = n.get("params", {}).get("name") or n.get("id")
+                        if n.get("id") == target:
+                            target_node_name = n.get("params", {}).get("name") or n.get("id")
+                    
+                    if source_node_name and target_node_name:
+                        edge_type = "router" if edge.get("type") == "conditional" else None
+                        graph_edges.append(GraphEdge(
+                            source=source_node_name,
+                            target=target_node_name,
+                            condition=None,
+                            condition_type=edge_type
+                        ))
+            
+            # Обновляем graph_definition
+            entry_point_agent.graph_definition = GraphDefinition(
+                nodes=graph_nodes,
+                edges=graph_edges,
+                entry_point=first_node_id or "START"
+            )
+            
+            await self.storage.set_agent_config(entry_point_agent)
+            logger.info(f"✅ Обновлено {len(graph_nodes)} нод в graph_definition StateGraph агента {entry_point_agent_id}")
+            return
+        
+        # Для ReAct агентов - собираем tools из связей
+        logger.info(f"ReAct агент {entry_point_agent_id} - обновляем tools[] из canvas")
+        
+        tools = []
+        for edge in canvas_data.get("edges", []):
+            if edge.get("source") == entry_point_node_id:
+                target_node_id = edge.get("target")
+                for node in canvas_data.get("nodes", []):
+                    if node.get("id") == target_node_id:
+                        if node.get("type") == "tool_node":
+                            tool_id = node.get("params", {}).get("tool_id")
+                            if tool_id:
+                                tools.append(ToolReference(
+                                    tool_id=tool_id,
+                                    code_mode=node.get("params", {}).get("code_mode", "code_reference"),
+                                    params={}
+                                ))
+                        elif node.get("type") == "agent_node":
+                            sub_agent_id = node.get("params", {}).get("agent_id")
+                            if sub_agent_id:
+                                tools.append(ToolReference(
+                                    tool_id=f"agent:{sub_agent_id}",
+                                    code_mode="code_reference",
+                                    params={}
+                                ))
+        
+        entry_point_agent.tools = tools
+        await self.storage.set_agent_config(entry_point_agent)
+        logger.info(f"✅ Обновлено {len(tools)} тулов для ReAct агента {entry_point_agent_id}")
     
     async def save_canvas_data(
         self, 

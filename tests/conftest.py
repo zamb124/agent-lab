@@ -177,6 +177,13 @@ async def tool_repo(storage):
 
 
 @pytest_asyncio.fixture
+async def mcp_repo(storage):
+    """MCPServerRepository для тестов"""
+    from app.db.repositories.mcp_repository import MCPServerRepository
+    return MCPServerRepository(storage)
+
+
+@pytest_asyncio.fixture
 async def flow_factory():
     """FlowFactory для каждого теста"""
     return FlowFactory()
@@ -255,6 +262,42 @@ async def save_test_company(storage: Storage, test_company: Company):
         await storage.delete(f"subdomain:{test_company.subdomain}")
     except:
         pass
+
+
+@pytest_asyncio.fixture
+async def setup_mcp_servers(mcp_repo, test_company: Company):
+    """
+    Создает тестовые MCP серверы для интеграционных тестов.
+    
+    Создает Context7 MCP сервер с тестовым API ключом.
+    """
+    from app.models.mcp_models import MCPServerConfig, MCPTransportType
+    import os
+    
+    servers = []
+    
+    # Context7 - используем предоставленный API ключ
+    context7_api_key = os.getenv("CONTEXT7_API_KEY", "ctx7sk-00fdd198-322d-4fe7-b63d-43a479dd5ff0")
+    
+    context7 = MCPServerConfig(
+        server_id="context7",
+        company_id=test_company.company_id,
+        name="Context7 Documentation",
+        description="AI-powered documentation search",
+        url="https://mcp.context7.com/mcp",
+        transport_type=MCPTransportType.HTTP,
+        headers={"Authorization": f"Bearer {context7_api_key}"},
+        is_active=True,
+        auto_sync_tools=False
+    )
+    await mcp_repo.set(context7)
+    servers.append(context7)
+    
+    yield servers
+    
+    # Очистка
+    for server in servers:
+        await mcp_repo.delete(server.server_id, test_company.company_id)
 
 
 @pytest_asyncio.fixture

@@ -223,7 +223,7 @@ export default class BuilderSidebar {
             return;
         }
         
-        const filteredTools = this.filterItems(this.tools, ['name', 'description', 'category']);
+        const filteredTools = this.filterItems(this.tools, ['name', 'description', 'category', 'group', 'server']);
         
         // Для тулов оставляем простые карточки (они только для чтения)
         container.innerHTML = filteredTools.map(tool => this.renderToolCard(tool)).join('');
@@ -489,12 +489,15 @@ export default class BuilderSidebar {
      */
     renderToolCard(tool) {
         const requiredParams = tool.parameters?.required?.length || 0;
+        const isMcp = tool.code_mode === 'mcp_tool' || tool.server;
+        const groupOrServer = isMcp ? (tool.server || tool.group) : (tool.group || tool.category);
+        const iconClass = isMcp ? 'bi-plugin' : 'bi-wrench';
         
         return `
             <div class="item-card tool-card" data-tool-id="${tool.id}" draggable="true">
                 <div class="card-header">
                     <div class="card-icon">
-                        <i class="bi bi-wrench"></i>
+                        <i class="bi ${iconClass}"></i>
                     </div>
                     <div class="card-title">${tool.name}</div>
                     <div class="card-actions">
@@ -508,8 +511,8 @@ export default class BuilderSidebar {
                 
                 <div class="card-meta">
                     <span class="meta-item">
-                        <i class="bi bi-folder"></i>
-                        ${tool.category}
+                        <i class="bi ${isMcp ? 'bi-server' : 'bi-folder'}"></i>
+                        ${groupOrServer || (isMcp ? 'MCP' : 'general')}
                     </span>
                     <span class="meta-item">
                         <i class="bi bi-gear"></i>
@@ -519,6 +522,7 @@ export default class BuilderSidebar {
                 
                 <div class="card-tags">
                     <span class="tag tag-${tool.category}">${tool.category}</span>
+                    ${isMcp ? '<span class="tag tag-mcp">MCP</span>' : ''}
                 </div>
             </div>
         `;

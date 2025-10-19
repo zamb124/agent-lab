@@ -360,11 +360,47 @@ export default class BuilderDragDrop {
             return;
         }
 
+        // Валидация перед дропом
+        const validationError = this.validateDrop(dropData);
+        if (validationError) {
+            this.builder.showNotification(validationError, 'warning');
+            return;
+        }
+
         // Вычисляем позицию на канвасе
         const position = this.getCanvasPosition(e);
 
         // Создаем элемент на канвасе
         await this.createCanvasElement(dropData, position, e);
+    }
+    
+    /**
+     * Валидация дропа элементов
+     */
+    validateDrop(dropData) {
+        // Flow можно дропать всегда
+        const isFlow = dropData.nodeType === 'flow_node' || dropData.type === 'flow' || dropData.type === 'flow_node';
+        if (isFlow) return null;
+        
+        // Для всех остальных элементов нужен flow
+        if (!this.builder.currentFlow) {
+            return 'Сначала выберите или создайте flow';
+        }
+        
+        // Agent Node можно дропать для создания entry_point
+        const isAgentForEntryPoint = dropData.nodeType === 'agent_node' && !this.builder.currentFlow.entry_point_agent;
+        const isAgentFromSidebar = dropData.type === 'agent' && !this.builder.currentFlow.entry_point_agent;
+        
+        if (isAgentForEntryPoint || isAgentFromSidebar) {
+            return null;
+        }
+        
+        // Для остальных элементов нужен entry_point
+        if (!this.builder.currentFlow.entry_point_agent || !this.builder.entryPointAgentType) {
+            return 'Сначала создайте entry_point агент для flow';
+        }
+        
+        return null;
     }
 
     /**
@@ -482,6 +518,14 @@ export default class BuilderDragDrop {
             const flowData = await response.json();
             nodeData.params.flow_id = flowData.flow_id;
             nodeData.params.name = flowData.name;
+            
+            // Устанавливаем currentFlow
+            this.builder.currentFlow = flowData;
+            this.builder.updateFlowInfo();
+            this.builder.enableFlowActions();
+            
+            // Обновляем тип entry_point агента и фильтруем палитру
+            await this.builder.updateEntryPointAgentType();
         } else if (nodeType === 'agent_node') {
             const response = await fetch('/frontend/api/agents/', {
                 method: 'POST',
@@ -622,45 +666,36 @@ export default class BuilderDragDrop {
             
             const flowNode = await this.builder.canvas.addNode(flowNodeData);
             
-            // Устанавливаем текущий флоу в Builder, если еще не установлен
-            if (!this.builder.currentFlow || this.builder.currentFlow.flow_id !== flowData.id) {
-                this.builder.currentFlow = { flow_id: flowData.id, name: flowData.name };
-                this.builder.updateFlowInfo();
-                this.builder.enableFlowActions();
+            // Всегда загружаем полные данные флоу с сервера
+            const flowResponse = await fetch(`/frontend/api/flows/${encodeURIComponent(flowData.id)}`);
+            if (!flowResponse.ok) {
+                throw new Error(`Не удалось загрузить флоу: ${flowResponse.statusText}`);
             }
+            const fullFlowData = await flowResponse.json();
             
-            // Получаем данные флоу с сервера, если еще не загружены
-            let fullFlowData;
-            if (this.builder.currentFlow && this.builder.currentFlow.flow_id === flowData.id && this.builder.currentFlow.entry_point_agent !== undefined) {
-                // Используем уже загруженные данные
-                fullFlowData = this.builder.currentFlow;
-                console.log('📦 Используем уже загруженные данные флоу');
-            } else {
-                const flowResponse = await fetch(`/frontend/api/flows/${encodeURIComponent(flowData.id)}`);
-                if (!flowResponse.ok) {
-                    throw new Error(`Не удалось загрузить флоу: ${flowResponse.statusText}`);
-                }
-                fullFlowData = await flowResponse.json();
-            }
+            // Устанавливаем currentFlow с полными данными (включая entry_point_agent)
+            this.builder.currentFlow = fullFlowData;
+            this.builder.updateFlowInfo();
+            this.builder.enableFlowActions();
+            
+            // Обновляем тип entry_point агента и фильтруем палитру
+            await this.builder.updateEntryPointAgentType();
             
             // Если у флоу есть entry_point_agent, начинаем рекурсивное разворачивание
             console.log('🔍 Проверка entry_point_agent:', fullFlowData.entry_point_agent);
             
             if (fullFlowData.entry_point_agent) {
-                console.log('✅ Entry point agent найден, начинаем разворачивание');
+                console.log('✅ Entry point agent найден, разворачиваем агента');
                 
                 const layoutManager = new FlowLayoutManager();
                 layoutManager.setBuilder(this.builder);
-                console.log('🔧 FlowLayoutManager создан с builder:', !!this.builder, 'canvas:', !!this.builder?.canvas);
                 
                 // Проверяем, есть ли сохраненные позиции на канвасе
                 let shouldUseSavedPositions = false;
                 if (fullFlowData.canvas_data && fullFlowData.canvas_data.nodes) {
                     shouldUseSavedPositions = true;
-                    console.log('Найдены сохраненные позиции элементов, используем их вместо автоматического размещения');
+                    console.log('Найдены сохраненные позиции элементов, используем их');
                 }
-                
-                console.log('🚀 Запускаем expandAgentRecursively для:', fullFlowData.entry_point_agent);
                 
                 await this.expandAgentRecursively(
                     fullFlowData.entry_point_agent,
@@ -798,10 +833,13 @@ export default class BuilderDragDrop {
                     // Проверяем сохраненные позиции
                     if (savedCanvasData && savedCanvasData.nodes) {
                         const savedToolNode = savedCanvasData.nodes.find(node => 
-                            node.type === 'tool_node' && node.params.tool_id === toolRef.tool_id
+                            node.type === 'tool_node' && node.params?.tool_id === toolRef.tool_id
                         );
                         if (savedToolNode && savedToolNode.ui) {
                             toolPosition = { x: savedToolNode.ui.x, y: savedToolNode.ui.y };
+                            console.log(`Используем сохраненную позицию для тула ${toolRef.tool_id}: (${toolPosition.x}, ${toolPosition.y})`);
+                        } else {
+                            console.log(`Нет сохраненной позиции для тула ${toolRef.tool_id}, используем автоматическую`);
                         }
                     }
                     
@@ -871,8 +909,15 @@ export default class BuilderDragDrop {
                 console.log(`🔄 ${nodeId}: function_node → router_node (есть router edges)`);
             }
             
-            // Рассчитываем позицию
-            let nodePosition = layoutManager.getNextPosition(basePosition, 'agent', depth + 1, i);
+            // Рассчитываем позицию (используем сохраненную из params.ui если есть)
+            let nodePosition;
+            if (graphNode.params && graphNode.params.ui) {
+                nodePosition = { x: graphNode.params.ui.x, y: graphNode.params.ui.y };
+                console.log(`✅ Используем сохраненную позицию для ${nodeId}: (${nodePosition.x}, ${nodePosition.y})`);
+            } else {
+                nodePosition = layoutManager.getNextPosition(basePosition, 'agent', depth + 1, i);
+                console.log(`⚠️ Нет сохраненной позиции для ${nodeId}, используем автоматическую`);
+            }
             
             // Определяем тип ноды и параметры
             let nodeData = {
@@ -883,15 +928,14 @@ export default class BuilderDragDrop {
                     description: graphNode.description || this.getDefaultNodeDescription(nodeType),
                     ...graphNode.params
                 },
-                // Копируем поля из GraphNode на верхний уровень
                 inline_code: graphNode.inline_code || null,
                 function_path: graphNode.function_path || null,
                 code_mode: graphNode.code_mode || 'code_reference',
                 ui: {
                     x: nodePosition.x,
                     y: nodePosition.y,
-                    width: 180,
-                    height: 80
+                    width: graphNode.params?.ui?.width || 180,
+                    height: graphNode.params?.ui?.height || 80
                 }
             };
             
@@ -986,7 +1030,7 @@ export default class BuilderDragDrop {
                 }
             }
             
-            // Создаем ноду тула
+            // Создаем ноду тула (тип всегда tool_node, различие в code_mode)
             const toolNodeData = {
                 id: `tool_${toolId}_${Date.now()}`,
                 type: 'tool_node',
@@ -994,7 +1038,9 @@ export default class BuilderDragDrop {
                     name: toolData.name,
                     tool_id: toolId,
                     description: toolData.description,
-                    category: toolData.category
+                    category: toolData.category,
+                    code_mode: toolData.code_mode,
+                    server: toolData.server
                 },
                 ui: {
                     x: finalPosition.x,

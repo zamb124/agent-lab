@@ -1,0 +1,255 @@
+/* MCP Module Styles */
+
+.mcp-servers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+.mcp-server-grid-item {
+    min-width: 0;
+}
+
+.mcp-server-card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.2s ease;
+    border: 1px solid var(--border-color);
+    background: var(--bg-primary);
+}
+
+.mcp-server-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: var(--primary);
+}
+
+.mcp-server-card-inactive {
+    opacity: 0.6;
+}
+
+.mcp-server-card-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.mcp-server-card-header .card-icon {
+    flex-shrink: 0;
+    font-size: 1.5rem;
+}
+
+.mcp-server-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.mcp-server-status {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.mcp-server-card-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.mcp-server-card-body {
+    padding: 1rem;
+    flex: 1;
+    cursor: pointer;
+}
+
+.mcp-server-card-body:hover {
+    background: var(--bg-secondary);
+}
+
+.mcp-server-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.mcp-server-description {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+}
+
+.mcp-server-url {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.mcp-server-url code {
+    font-size: 0.8rem;
+    background: var(--bg-secondary);
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mcp-server-tools-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.mcp-server-details {
+    padding: 1rem;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+}
+
+.mcp-server-details-content h6 {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+
+.mcp-tools-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.mcp-tool-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background: var(--bg-primary);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+}
+
+.mcp-tool-item code {
+    color: var(--primary);
+}
+
+.mcp-headers-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.mcp-header-item {
+    padding: 0.5rem;
+    background: var(--bg-primary);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+}
+
+.mcp-server-card-create {
+    border: 2px dashed var(--border-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    transition: all 0.2s ease;
+}
+
+.mcp-server-card-create:hover {
+    border-color: var(--primary);
+    background: var(--bg-hover);
+}
+
+.mcp-server-create-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem;
+}
+
+.mcp-server-create-icon {
+    font-size: 3rem;
+}
+
+.mcp-server-create-content {
+    text-align: center;
+}
+
+.mcp-server-create-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.mcp-server-create-subtitle {
+    color: var(--text-secondary);
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.spinning {
+    animation: spin 1s linear infinite;
+}
+
+.modal-content-large {
+    max-width: 800px;
+    width: 90vw;
+}
+
+/* Стили для форм в модальных окнах */
+.mcp-modal .form-select {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 2.25rem 0.5rem 0.75rem;
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--text-primary);
+    background-color: var(--bg-primary);
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 16px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    appearance: none;
+    cursor: pointer;
+}
+
+.mcp-modal .form-select:focus {
+    border-color: var(--primary);
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(var(--primary-rgb), 0.25);
+}
+
+.mcp-modal .form-select:disabled {
+    background-color: var(--bg-secondary);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+@media (max-width: 768px) {
+    .mcp-servers-grid {
+        grid-template-columns: 1fr;
+    }
+}
+

@@ -60,9 +60,11 @@ async def list_tools(
                 "name": tool_data.get("tool_id", tool_id).split(".")[-1],
                 "title": tool_data.get("title") or tool_data.get("tool_id", tool_id).split(".")[-1],
                 "description": tool_data.get("description", ""),
-                "group": tool_data.get("group"),  # Добавляем поле group
+                "group": tool_data.get("group"),
+                "server": tool_data.get("server"),
                 "type": "tool",
                 "category": _get_tool_category_from_path(tool_id),
+                "code_mode": tool_data.get("code_mode", "code_reference"),
                 "parameters": tool_data.get("params", {}),
                 "cost": tool_data.get("cost", 0.0),
                 "is_public": is_public,
@@ -131,9 +133,11 @@ async def get_tool(tool_id: str, storage: StorageDep) -> Dict[str, Any]:
                     "name": tool_data.get("tool_id", tool_id).split(".")[-1],
                     "title": tool_data.get("title") or tool_data.get("tool_id", tool_id).split(".")[-1],
                     "description": tool_data.get("description", ""),
-                    "group": tool_data.get("group"),  # Добавляем поле group
+                    "group": tool_data.get("group"),
+                    "server": tool_data.get("server"),
                     "type": "tool",
                     "category": _get_tool_category_from_path(tool_id),
+                    "code_mode": tool_data.get("code_mode", "code_reference"),
                     "parameters": tool_data.get("params", {}),
                     "cost": tool_data.get("cost", 0.0),
                     "source_path": tool_id

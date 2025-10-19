@@ -1,0 +1,29 @@
+{% import 'components.html' as c %}
+<link rel="stylesheet" href="/static/mcp/css/mcp.css">
+
+<h1 class="header-title" id="page-title" hx-swap-oob="true">
+    <i class="bi bi-plug me-2"></i>
+    MCP Серверы
+</h1>
+
+<div class="header-right" hx-swap-oob="true">
+    {{ c.button('',
+        variant='primary',
+        size='sm',
+        icon='plus-lg',
+        onclick='openAddServerModal()',
+        data_tooltip='Добавить MCP сервер'
+    ) }}
+    <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="Переключить тему">
+        <i class="bi bi-sun"></i>
+    </button>
+</div>
+
+<div hx-get="/frontend/mcp/list" 
+     hx-trigger="load" 
+     hx-target="this" 
+     hx-swap="outerHTML"
+     class="container-fluid py-4">
+    {{ c.skeleton(type='card', count=6) }}
+</div>
+

@@ -6,6 +6,7 @@
 import { BotModalManager } from './bot-modal/bot-modal.js';
 import { BotSettingsManager } from './bot-modal/bot-settings.js';
 import { ToolsManager } from './bot-editor/tools-manager.js';
+import { MCPManager } from './bot-editor/mcp-manager.js';
 import { BotSaver } from './bot-editor/bot-saver.js';
 import { PlatformManager } from './platform-manager/platform-manager.js';
 import { PlatformSaver } from './platform-manager/platform-saver.js';
@@ -22,7 +23,8 @@ export default class BotsModule {
         
         this.kbManager = new KnowledgeBaseManager(app.authToken);
         this.toolsManager = new ToolsManager(app.authToken);
-        this.settingsManager = new BotSettingsManager(app, this.toolsManager, this.kbManager);
+        this.mcpManager = new MCPManager(app.authToken);
+        this.settingsManager = new BotSettingsManager(app, this.toolsManager, this.kbManager, this.mcpManager);
         this.modal = new BotModalManager(app, this.settingsManager);
         this.saver = new BotSaver(app, this.settingsManager, this.modal);
         this.platformManager = new PlatformManager(app, this.modal);

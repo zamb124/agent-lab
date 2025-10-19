@@ -634,14 +634,33 @@ export default class BuilderCanvas {
                 </div>
             `;
         } else if (nodeType === 'tool_node') {
-            // Tool: только входной порт
-            portsHTML = `
-                <div class="input-ports">
-                    <div class="port input-port" data-port-type="input" data-port-id="input">
-                        <div class="port-dot"></div>
+            // Tool: для StateGraph - оба порта, для ReAct - только input
+            const agentType = this.builder.entryPointAgentType;
+            
+            if (agentType === 'stategraph') {
+                // StateGraph: tool может соединяться дальше
+                portsHTML = `
+                    <div class="input-ports">
+                        <div class="port input-port" data-port-type="input" data-port-id="input">
+                            <div class="port-dot"></div>
+                        </div>
                     </div>
-                </div>
-            `;
+                    <div class="output-ports">
+                        <div class="port output-port" data-port-type="output" data-port-id="output">
+                            <div class="port-dot"></div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // ReAct: tool - конечная нода
+                portsHTML = `
+                    <div class="input-ports">
+                        <div class="port input-port" data-port-type="input" data-port-id="input">
+                            <div class="port-dot"></div>
+                        </div>
+                    </div>
+                `;
+            }
         } else if (nodeType === 'agent_node') {
             // Проверяем тип агента из данных ноды
             const node = this.nodes.get(element.dataset.nodeId);
@@ -1335,10 +1354,13 @@ export default class BuilderCanvas {
         
         console.log(`🔍 Валидация: ${sourceType} -> ${targetType}`);
         
+        // Получаем тип entry_point агента из builder
+        const entryPointAgentType = this.builder.entryPointAgentType;
+        
         // Правила подключений для StateGraph нод:
         // Flow -> любая нода с input портом
         // Agent, Function, Router, Message -> любая нода с input портом
-        // Tool -> ничего (конечная нода, нет output порта)
+        // Tool, ToolMcp -> ничего (конечная нода, нет output порта)
         
         if (sourceType === 'flow_node') {
             // Flow может подключаться к любой ноде кроме другого Flow
@@ -1361,9 +1383,16 @@ export default class BuilderCanvas {
         }
         
         if (sourceType === 'tool_node') {
-            // Tool - конечная нода, не может быть источником
-            console.warn('Tool не может быть источником подключения');
-            return false;
+            // Для StateGraph tool может быть источником, для ReAct - нет
+            const agentType = this.builder.entryPointAgentType;
+            
+            if (agentType === 'react') {
+                console.warn('Tool в ReAct агенте не может быть источником подключения');
+                return false;
+            }
+            
+            // Для StateGraph разрешаем (tool → другая нода в графе)
+            console.log('Tool в StateGraph может быть источником');
         }
         
         // Для всех остальных типов (agent, function, router, message) - разрешаем

@@ -146,6 +146,10 @@
                 <i class="bi bi-tools"></i>
                 {{ t('bots.tabs.abilities') }}
             </button>
+            <button class="settings-tab" data-tab="mcp">
+                <i class="bi bi-plugin"></i>
+                MCP
+            </button>
             <button class="settings-tab" data-tab="knowledge">
                 <i class="bi bi-book"></i>
                 {{ t('bots.tabs.knowledge_base') }}
@@ -218,6 +222,21 @@
                 </h4>
 
                 <div id="bot-tools-selector" class="tools-selector">
+                    {{ c.skeleton(type='card', count=6) }}
+                </div>
+            </div>
+            
+            <div class="settings-panel" data-panel="mcp">
+                <h4>
+                    <i class="bi bi-plugin"></i>
+                    MCP инструменты
+                </h4>
+                
+                <div class="panel-description">
+                    <p>MCP (Model Context Protocol) — инструменты от внешних серверов. Выберите инструменты, которые должен использовать бот.</p>
+                </div>
+
+                <div id="bot-mcp-selector" class="mcp-selector">
                     {{ c.skeleton(type='card', count=6) }}
                 </div>
             </div>

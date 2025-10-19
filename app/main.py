@@ -27,6 +27,7 @@ from app.frontend.api import tools as frontend_tools
 from app.frontend.api import variables as frontend_variables
 from app.frontend.api import i18n as frontend_i18n
 from app.frontend.api import code as frontend_code
+from app.frontend.api import mcp as frontend_mcp
 from app.frontend.pages import auth as auth_pages
 from app.frontend.pages import dashboard as dashboard_pages
 from app.frontend.pages import public as public_pages
@@ -155,10 +156,17 @@ async def lifespan(app: FastAPI):
         logger.info("🔄 Инициализация checkpointer...")
         await init_checkpointer()
 
-        # Запуск миграций
-        logger.info("🔄 Запуск миграций...")
-        migrator = Migrator()
-        await migrator.run_full_migration()
+        # Запуск миграций в фоне (неблокирующая операция)
+        logger.info("🔄 Запуск миграций в фоновом режиме...")
+        async def run_migration():
+            try:
+                migrator = Migrator()
+                await migrator.run_full_migration()
+                logger.info("✅ Миграция завершена успешно")
+            except Exception as e:
+                logger.error(f"❌ Ошибка миграции: {e}")
+        
+        asyncio.create_task(run_migration())
 
         # Инициализация системы переводов
         logger.info("🌐 Инициализация системы интернационализации...")
@@ -175,6 +183,26 @@ async def lifespan(app: FastAPI):
         logger.info("🔌 Загрузка плагинов фронтенда...")
         await discover_and_load_plugins(app)
         logger.info("✅ Плагины фронтенда загружены")
+        
+        # Синхронизация MCP серверов (неблокирующая, периодическая)
+        logger.info("🔌 Запуск фоновой синхронизации MCP серверов...")
+        from app.workers.mcp_sync_worker import MCPSyncWorker
+        
+        # Первая синхронизация сразу (в фоне)
+        async def initial_mcp_sync():
+            try:
+                from app.core.mcp_sync import sync_all_companies_mcp_servers
+                await sync_all_companies_mcp_servers()
+                logger.info("✅ Начальная синхронизация MCP завершена")
+            except Exception as e:
+                logger.warning(f"⚠️ Ошибка начальной синхронизации MCP: {e}")
+        
+        asyncio.create_task(initial_mcp_sync())
+        
+        # Периодическая синхронизация (каждый час)
+        mcp_sync_worker = MCPSyncWorker(sync_interval=3600)
+        asyncio.create_task(mcp_sync_worker.start())
+        logger.info("✅ MCP sync worker запущен (ресинхронизация каждый час)")
 
         # Запуск синхронизации транзакций (раз в час)
         logger.info("🔄 Запуск фоновой синхронизации транзакций...")
@@ -301,6 +329,7 @@ app.include_router(frontend_tools.router, prefix="/frontend/api", tags=["fronten
 app.include_router(frontend_variables.router, prefix="/frontend/api", tags=["frontend-variables"], include_in_schema=False)
 app.include_router(frontend_i18n.router, prefix="/frontend/api/i18n", tags=["frontend-i18n"], include_in_schema=False)
 app.include_router(frontend_code.router, prefix="/frontend/api", tags=["frontend-code"], include_in_schema=False)
+app.include_router(frontend_mcp.router, tags=["frontend-mcp"], include_in_schema=False)
 
 # Frontend Pages (HTML) - скрыто от публичной документации
 app.include_router(public_pages.router, tags=["public-pages"], include_in_schema=False)

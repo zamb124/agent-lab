@@ -168,6 +168,7 @@
     line-height: 1.5;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
     height: 2.4375rem;
@@ -1723,6 +1724,7 @@ input:checked + .slider:before {
     
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2245,6 +2247,7 @@ input:checked + .slider:before {
     margin: 0;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
@@ -2262,4 +2265,195 @@ input:checked + .slider:before {
     border: 1px solid rgba(99, 102, 241, 0.2);
     align-self: flex-start;
     margin-top: 0.5rem;
+}
+
+/* MCP Инструменты в боте */
+.mcp-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.mcp-empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-secondary);
+}
+
+.mcp-empty i {
+    font-size: 3rem;
+    color: var(--text-tertiary);
+    margin-bottom: 1rem;
+    display: block;
+}
+
+.mcp-empty p {
+    margin: 0.5rem 0;
+    font-size: 0.9375rem;
+}
+
+.mcp-server-section {
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    overflow: hidden;
+}
+
+.mcp-server-header {
+    padding: 1rem 1.5rem;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-primary);
+}
+
+.mcp-server-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.mcp-server-title i {
+    font-size: 1.25rem;
+}
+
+.mcp-server-title h5 {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.mcp-server-count {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    font-weight: normal;
+}
+
+.mcp-tools-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+    padding: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .mcp-tools-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.mcp-tool-card {
+    position: relative;
+}
+
+.mcp-tool-checkbox {
+    position: absolute;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    cursor: pointer;
+    z-index: 1;
+}
+
+.mcp-tool-label {
+    display: block;
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    height: 100%;
+}
+
+.mcp-tool-label:hover {
+    border-color: var(--accent-primary);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+    transform: translateY(-2px);
+}
+
+.mcp-tool-checkbox:checked + .mcp-tool-label {
+    border-color: var(--accent-primary);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(168, 85, 247, 0.05));
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+}
+
+.mcp-tool-label.checked {
+    border-color: var(--accent-primary);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(168, 85, 247, 0.05));
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+}
+
+.mcp-tool-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.mcp-tool-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.mcp-tool-check {
+    color: var(--text-tertiary);
+    font-size: 1.5rem;
+    opacity: 0.3;
+    transition: all 0.2s ease;
+}
+
+.mcp-tool-checkbox:checked + .mcp-tool-label .mcp-tool-check,
+.mcp-tool-label.checked .mcp-tool-check {
+    color: var(--accent-primary);
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+.mcp-tool-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.mcp-tool-name {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+}
+
+.mcp-tool-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.4;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.mcp-tool-server-tag {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--accent-primary);
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    align-self: flex-start;
 }

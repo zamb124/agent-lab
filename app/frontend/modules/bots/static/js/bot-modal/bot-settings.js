@@ -3,10 +3,11 @@
  */
 
 export class BotSettingsManager {
-    constructor(app, toolsManager, kbManager) {
+    constructor(app, toolsManager, kbManager, mcpManager) {
         this.app = app;
         this.toolsManager = toolsManager;
         this.kbManager = kbManager;
+        this.mcpManager = mcpManager;
         this.promptEditor = null;
         this.llmModelsData = null;
     }
@@ -36,6 +37,14 @@ export class BotSettingsManager {
                         if (toolsSelector && !toolsSelector.dataset.loaded) {
                             this.toolsManager.loadTools();
                             toolsSelector.dataset.loaded = 'true';
+                        }
+                    }
+                    
+                    if (targetPanel === 'mcp') {
+                        const mcpSelector = document.getElementById('bot-mcp-selector');
+                        if (mcpSelector && !mcpSelector.dataset.loaded) {
+                            this.mcpManager.loadMCPTools();
+                            mcpSelector.dataset.loaded = 'true';
                         }
                     }
                     

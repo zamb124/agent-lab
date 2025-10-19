@@ -149,4 +149,13 @@ class WeatherAgent(ReActAgent):
         list_documents_in_knowledge_base,
         "app.tools.session.session_tools.session_set",
         "app.tools.session.session_tools.session_get",
+        
+        # MCP инструменты (добавляются после синхронизации MCP сервера)
+        # Чтобы добавить MCP тулы:
+        # 1. Создай MCP сервер через Admin UI или API
+        # 2. Синхронизируй тулы (POST /api/mcp/servers/{server_id}/sync)
+        # 3. Добавь tool_id сюда, например:
+        #    "mcp:context7:search_docs",
+        #    "mcp:context7:get_library_docs",
+        #    "mcp:github:create_issue",
     ]

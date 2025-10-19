@@ -450,11 +450,15 @@ export default class ElementSelector {
         const flowNode = await this.builder.canvas.addNode(flowNodeData);
         console.log('Flow node created:', flowNode);
 
+        // Сохраняем полные данные flow
         if (!this.builder.currentFlow || this.builder.currentFlow.flow_id !== flowData.flow_id) {
-            this.builder.currentFlow = { flow_id: flowData.flow_id, name: flowData.name };
+            this.builder.currentFlow = flowData; // Сохраняем все данные, включая entry_point_agent
             this.builder.updateFlowInfo();
             this.builder.enableFlowActions();
         }
+        
+        // Обновляем тип entry_point агента и фильтруем палитру
+        await this.builder.updateEntryPointAgentType();
 
         if (flowData.entry_point_agent) {
             console.log('Expanding flow recursively, entry_point_agent:', flowData.entry_point_agent);
@@ -469,7 +473,7 @@ export default class ElementSelector {
                 console.log('Using saved positions from canvas_data');
             }
 
-            // Разворачиваем entry point agent
+            // Разворачиваем entry point agent из graph_definition с сохраненными позициями
             await this.builder.dragDrop.expandAgentRecursively(
                 flowData.entry_point_agent,
                 layoutManager.getNextPosition(position, 'agent', 0),

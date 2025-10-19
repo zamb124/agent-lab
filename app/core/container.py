@@ -22,6 +22,7 @@ class Container:
         self._task_repository = None
         self._session_repository = None
         self._tool_repository = None
+        self._mcp_server_repository = None
     
     def get_storage(self):
         """Получает Storage (lazy loading)"""
@@ -92,6 +93,13 @@ class Container:
             from app.db.repositories import ToolRepository
             self._tool_repository = ToolRepository(self.get_storage())
         return self._tool_repository
+    
+    def get_mcp_server_repository(self):
+        """Получает MCPServerRepository (lazy loading)"""
+        if self._mcp_server_repository is None:
+            from app.db.repositories.mcp_repository import MCPServerRepository
+            self._mcp_server_repository = MCPServerRepository(self.get_storage())
+        return self._mcp_server_repository
 
 
 # Глобальный контейнер

@@ -96,7 +96,7 @@ class ToolFactory:
         tool_id = ref.tool_id
 
         # Создаем базовый инструмент
-        if tool_id.startswith("mcp:"):
+        if ref.code_mode == CodeMode.MCP_TOOL:
             tool = await self._create_mcp_tool(ref)
         elif tool_id.startswith("agent:") or "agents" in tool_id:
             tool = await self._create_agent_tool(ref)
@@ -104,8 +104,10 @@ class ToolFactory:
             tool = await self._create_flow_tool(ref)
         elif ref.code_mode == CodeMode.INLINE_CODE:
             tool = await self._create_inline_code_tool(ref)
-        else:
+        elif ref.code_mode == CodeMode.CODE_REFERENCE:
             tool = await self._create_function_tool(ref)
+        else:
+            raise ValueError(f"Неизвестный тип тула: code_mode={ref.code_mode}, tool_id={ref.tool_id}")
         
         # Оборачиваем в биллинг если есть стоимость или лимиты
         if ref.cost > 0 or ref.tariff_limits or ref.free_for_plans:
@@ -279,11 +281,119 @@ class ToolFactory:
             raise
 
     async def _create_mcp_tool(self, ref: ToolReference) -> Any:
-        """Создает MCP инструмент"""
-        # Заглушка для MCP инструментов
-        # В будущем здесь будет интеграция с Model Context Protocol
-        logger.warning(f"MCP инструменты пока не поддерживаются: {ref.tool_id}")
-        return None
+        """
+        Создает MCP инструмент через @tool декоратор.
+        
+        Динамически создает функцию и оборачивает её в @tool для 
+        единообразия с остальными тулами платформы.
+        """
+        from app.core.mcp_client import get_mcp_client, format_mcp_result
+        from app.core.tool_decorator import tool
+        from pydantic import create_model, Field as PydanticField
+        
+        # Проверяем CodeMode для безопасности
+        if ref.code_mode != CodeMode.MCP_TOOL:
+            raise ValueError(f"Ожидался CodeMode.MCP_TOOL для {ref.tool_id}, получен {ref.code_mode}")
+        
+        # Парсим tool_id: "mcp:server_id:tool_name"
+        parts = ref.tool_id.split(":", 2)
+        if len(parts) != 3 or parts[0] != "mcp":
+            raise ValueError(f"Невалидный MCP tool_id: {ref.tool_id}")
+        
+        _, server_id, tool_name = parts
+        
+        # Получаем company_id из params
+        company_id = ref.params.get("company_id")
+        
+        # Получаем HTTP клиент для этого MCP сервера
+        mcp_client = await get_mcp_client(server_id, company_id)
+        
+        # Получаем схему из params
+        input_schema = ref.params.get("input_schema", {})
+        
+        # Создаем Pydantic модель из JSON Schema
+        args_schema = self._json_schema_to_pydantic(input_schema, tool_name)
+        
+        # Создаем функцию с валидным Python именем
+        safe_tool_name = tool_name.replace("-", "_").replace(".", "_")
+        
+        # Создаем функцию с нужным именем ДО применения декоратора
+        async def dynamic_mcp_func(**kwargs):
+            """Динамически созданная функция для вызова MCP тула"""
+            try:
+                # Вызываем MCP тул через HTTP/SSE
+                result = await mcp_client.call_tool(tool_name, kwargs)
+                
+                # Обрабатываем ошибки
+                if result.get("isError"):
+                    error_msg = format_mcp_result(result.get("content", []))
+                    logger.error(f"MCP тул {tool_name} вернул ошибку: {error_msg}")
+                    return f"❌ Ошибка: {error_msg}"
+                
+                # Форматируем успешный результат
+                formatted = format_mcp_result(result.get("content", []))
+                logger.info(f"✅ MCP тул {tool_name} выполнен")
+                
+                return formatted
+                
+            except Exception as e:
+                logger.error(f"Ошибка вызова MCP тула {tool_name}: {e}", exc_info=True)
+                raise ValueError(f"Ошибка MCP тула: {str(e)}") from e
+        
+        # Устанавливаем имя ДО декоратора
+        dynamic_mcp_func.__name__ = safe_tool_name
+        dynamic_mcp_func.__qualname__ = safe_tool_name
+        
+        # Применяем @tool декоратор
+        mcp_tool = tool(
+            description=ref.description or f"MCP тул {tool_name}",
+            args_schema=args_schema,
+            cost=ref.cost,
+            billing_name=ref.billing_name or f"mcp_{server_id}_{tool_name}",
+            is_public=ref.is_public,
+            state_aware=True,
+            group=ref.group
+        )(dynamic_mcp_func)
+        
+        return mcp_tool
+    
+    def _json_schema_to_pydantic(self, schema: Dict[str, Any], model_name: str):
+        """Конвертирует JSON Schema в Pydantic модель для args_schema"""
+        from pydantic import create_model, Field as PydanticField
+        
+        properties = schema.get("properties", {})
+        required = schema.get("required", [])
+        
+        if not properties:
+            # Пустая модель если нет параметров
+            return create_model(f"{model_name}Input")
+        
+        fields = {}
+        for field_name, field_spec in properties.items():
+            field_type = self._json_type_to_python(field_spec.get("type", "string"))
+            field_description = field_spec.get("description", "")
+            
+            is_required = field_name in required
+            default = ... if is_required else None
+            
+            fields[field_name] = (
+                field_type,
+                PydanticField(default=default, description=field_description)
+            )
+        
+        return create_model(f"{model_name}Input", **fields)
+    
+    def _json_type_to_python(self, json_type: str) -> type:
+        """JSON Schema тип → Python тип"""
+        mapping = {
+            "string": str,
+            "number": float,
+            "integer": int,
+            "boolean": bool,
+            "array": list,
+            "object": dict,
+        }
+        return mapping.get(json_type, str)
     
     def _wrap_tool_with_billing(self, tool, tool_ref: ToolReference):
         """Оборачивает инструмент в биллинг логику"""

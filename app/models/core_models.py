@@ -32,7 +32,7 @@ class NodeType(str, Enum):
     """Типы нод в графе"""
 
     AGENT_NODE = "agent_node"          # Вызов субагента
-    TOOL_NODE = "tool_node"            # Вызов инструмента
+    TOOL_NODE = "tool_node"            # Вызов инструмента (обычный или MCP, различается по code_mode)
     FUNCTION_NODE = "function_node"    # Вызов функции (обычная функция)
     ROUTER_NODE = "router_node"        # Функция-роутер для условных переходов
     FLOW_NODE = "flow_node"            # Вызов другого flow
@@ -50,7 +50,8 @@ class CodeMode(str, Enum):
     """Режим хранения кода"""
 
     CODE_REFERENCE = "code_reference"  # Ссылка на код в файлах
-    INLINE_CODE = "inline_code"  # Код хранится в БД
+    INLINE_CODE = "inline_code"        # Код хранится в БД
+    MCP_TOOL = "mcp_tool"              # Внешний MCP инструмент (HTTP/SSE)
 
 
 class ConditionType(str, Enum):

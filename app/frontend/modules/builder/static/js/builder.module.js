@@ -22,6 +22,7 @@ export default class BuilderModule {
         this.sidebar = null;
         
         this.currentFlow = null;
+        this.entryPointAgentType = null; // 'react' или 'stategraph'
         this.selectedNodes = new Set();
         this.selectedEdges = new Set();
         this.isInitialized = false;
@@ -122,6 +123,9 @@ export default class BuilderModule {
         await this.palette.init();
         console.log('✅ Palette создана');
         
+        // Инициализируем палитру в активном состоянии (нет flow)
+        this.updatePaletteForAgentType(null);
+        
         this.propertiesPanel = new this.PropertiesPanel(this);
         await this.propertiesPanel.init();
         console.log('✅ PropertiesPanel создана');
@@ -199,27 +203,18 @@ export default class BuilderModule {
             
             this.currentFlow = await response.json();
             
-            const canvasResponse = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}/canvas`);
-            if (canvasResponse.ok) {
-                const canvasData = await canvasResponse.json();
-                
-                const hasNonFlowNodes = canvasData.nodes?.some(node => 
-                    node.type !== 'flow_node'
-                ) || false;
-                
-                if (!hasNonFlowNodes) {
-                    const centerPos = this.currentCanvas.getCenterPosition();
-                    await this.currentDragDrop.createFlowWithExpansion(
-                        { 
-                            id: this.currentFlow.flow_id, 
-                            name: this.currentFlow.name 
-                        }, 
-                        centerPos
-                    );
-                } else {
-                    await this.currentCanvas.loadGraph(canvasData);
-                }
-            }
+            // Получаем тип entry_point агента
+            await this.updateEntryPointAgentType();
+            
+            // Всегда разворачиваем из graph_definition (позиции берем из canvas_data)
+            const centerPos = this.currentCanvas.getCenterPosition();
+            await this.currentDragDrop.createFlowWithExpansion(
+                { 
+                    id: this.currentFlow.flow_id, 
+                    name: this.currentFlow.name 
+                }, 
+                centerPos
+            );
             
             this.updateFlowInfo();
             this.enableFlowActions();
@@ -232,6 +227,75 @@ export default class BuilderModule {
         }
     }
     
+    async updateEntryPointAgentType() {
+        if (!this.currentFlow || !this.currentFlow.entry_point_agent) {
+            this.entryPointAgentType = null;
+            this.updatePaletteForAgentType(null);
+            return;
+        }
+        
+        try {
+            const agentResponse = await fetch(`/frontend/api/agents/${encodeURIComponent(this.currentFlow.entry_point_agent)}`);
+            if (agentResponse.ok) {
+                const agent = await agentResponse.json();
+                this.entryPointAgentType = agent.type; // 'react' или 'stategraph'
+                console.log('🎯 Entry point agent type:', this.entryPointAgentType);
+                this.updatePaletteForAgentType(this.entryPointAgentType);
+            } else {
+                this.entryPointAgentType = null;
+                this.updatePaletteForAgentType(null);
+            }
+        } catch (error) {
+            console.error('Ошибка получения типа агента:', error);
+            this.entryPointAgentType = null;
+            this.updatePaletteForAgentType(null);
+        }
+    }
+    
+    updatePaletteForAgentType(agentType) {
+        console.log('🎨 updatePaletteForAgentType вызван, тип агента:', agentType);
+        
+        if (!this.palette) {
+            console.warn('⚠️ Palette не инициализирована');
+            return;
+        }
+        
+        const paletteElement = document.getElementById('nodePalette');
+        if (!paletteElement) {
+            console.warn('⚠️ Элемент nodePalette не найден');
+            return;
+        }
+        
+        const paletteItems = paletteElement.querySelectorAll('.palette-item');
+        console.log('📋 Найдено элементов палитры:', paletteItems.length);
+        
+        paletteItems.forEach(item => {
+            const nodeType = item.dataset.nodeType;
+            let isEnabled = false;
+            
+            if (!agentType) {
+                // null: flow для создания, agent для entry_point
+                isEnabled = (nodeType === 'flow_node' || nodeType === 'agent_node');
+            } else if (agentType === 'react') {
+                // react: tool, agent (визуально ноды, но сохраняются в tools[])
+                isEnabled = (nodeType === 'tool_node' || nodeType === 'agent_node');
+            } else if (agentType === 'stategraph') {
+                // stategraph: все ноды кроме flow
+                isEnabled = (nodeType !== 'flow_node');
+            }
+            
+            if (isEnabled) {
+                item.classList.remove('disabled');
+                item.setAttribute('draggable', 'true');
+            } else {
+                item.classList.add('disabled');
+                item.setAttribute('draggable', 'false');
+            }
+        });
+        
+        console.log('✅ updatePaletteForAgentType завершен');
+    }
+    
     async saveCurrentFlow() {
         if (!this.currentFlow) {
             this.showNotification('Нет активного флоу для сохранения', 'warning');
@@ -241,6 +305,7 @@ export default class BuilderModule {
         try {
             const canvasData = this.currentCanvas.getGraphData();
             
+            // Backend сам обработает преобразование для ReAct/StateGraph
             const response = await fetch(`/frontend/api/flows/${encodeURIComponent(this.currentFlow.flow_id)}/canvas`, {
                 method: 'PUT',
                 headers: {
@@ -597,8 +662,11 @@ export default class BuilderModule {
         if (confirm('Вы уверены, что хотите очистить канвас? Несохраненные изменения будут потеряны.')) {
             this.currentCanvas.clearGraph();
             this.currentFlow = null;
+            this.entryPointAgentType = null;
             this.updateFlowInfo();
             this.disableFlowActions();
+            // Сбрасываем палитру в активное состояние
+            this.updatePaletteForAgentType(null);
             this.showNotification('Канвас очищен', 'success');
         }
     }

@@ -160,6 +160,23 @@ export class BotSaver {
             }
         });
         
+        document.querySelectorAll('#bot-mcp-selector input[type="checkbox"]:checked').forEach(checkbox => {
+            const mcpToolId = checkbox.dataset.mcpToolId;
+            const serverName = checkbox.dataset.serverName;
+            const toolName = checkbox.dataset.toolName;
+            
+            if (mcpToolId && serverName && toolName) {
+                selectedTools.push({
+                    tool_id: mcpToolId,
+                    params: {},
+                    code_mode: "mcp",
+                    is_public: true,
+                    server_name: serverName,
+                    tool_name: toolName
+                });
+            }
+        });
+        
         if (selectedTools.length > 0) {
             agentUpdates.tools = selectedTools;
         }
