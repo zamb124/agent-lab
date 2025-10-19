@@ -265,6 +265,9 @@ export default class ElementSelector {
             name: tool.title || tool.name,
             description: tool.description || '',
             category: tool.category,
+            code_mode: tool.code_mode,
+            server: tool.server,
+            group: tool.group,
             type: 'tool'
         }));
     }
@@ -287,18 +290,42 @@ export default class ElementSelector {
                     <i class="bi bi-search"></i>
                     <input type="text" class="search-input" placeholder="Поиск..." id="elementSearch">
                 </div>
+                ${elementType === 'tool' ? `
+                    <div class="filter-badges">
+                        <button class="filter-badge active" data-filter="all">
+                            <i class="bi bi-list"></i> Все
+                        </button>
+                        <button class="filter-badge" data-filter="tools">
+                            <i class="bi bi-tools"></i> Tools
+                        </button>
+                        <button class="filter-badge" data-filter="mcp">
+                            <i class="bi bi-plugin"></i> MCP
+                        </button>
+                    </div>
+                ` : ''}
             </div>
 
             <div class="elements-list" id="elementsList" style="max-height: ${maxHeight}; overflow-y: auto;">
                 ${elements.map(element => `
-                    <div class="element-item" data-element-id="${element.id}" data-element-type="${element.type}">
+                    <div class="element-item" 
+                         data-element-id="${element.id}" 
+                         data-element-type="${element.type}"
+                         data-code-mode="${element.code_mode || ''}"
+                         data-group="${element.group || ''}"
+                         data-server="${element.server || ''}"
+                         data-is-mcp="${element.code_mode === 'mcp_tool' || element.server ? 'true' : 'false'}">
                         <div class="element-icon">
                             <i class="bi ${this.getElementIcon(element.type)}"></i>
                         </div>
                         <div class="element-info">
-                            <div class="element-name">${element.name}</div>
+                            <div class="element-name">
+                                ${element.name}
+                                ${element.code_mode === 'mcp_tool' || element.server ? '<span class="badge badge-mcp">MCP</span>' : ''}
+                            </div>
                             <div class="element-description">${element.description || ''}</div>
-                            ${element.category ? `<div class="element-category">${element.category}</div>` : ''}
+                            ${element.category ? `<div class="element-category"><i class="bi bi-folder"></i> ${element.category}</div>` : ''}
+                            ${element.group ? `<div class="element-group"><i class="bi bi-collection"></i> ${element.group}</div>` : ''}
+                            ${element.server ? `<div class="element-server"><i class="bi bi-server"></i> ${element.server}</div>` : ''}
                         </div>
                     </div>
                 `).join('')}
@@ -364,12 +391,43 @@ export default class ElementSelector {
             items.forEach(item => {
                 const name = item.querySelector('.element-name').textContent.toLowerCase();
                 const description = item.querySelector('.element-description').textContent.toLowerCase();
+                const group = item.dataset.group || '';
+                const server = item.dataset.server || '';
 
-                if (name.includes(searchTerm) || description.includes(searchTerm)) {
+                if (name.includes(searchTerm) || 
+                    description.includes(searchTerm) || 
+                    group.toLowerCase().includes(searchTerm) ||
+                    server.toLowerCase().includes(searchTerm) ||
+                    (searchTerm === 'mcp' && item.dataset.isMcp === 'true')) {
                     item.style.display = '';
                 } else {
                     item.style.display = 'none';
                 }
+            });
+        });
+        
+        // Фильтры (для тулов)
+        const filterBadges = this.currentModalElement.querySelectorAll('.filter-badge');
+        filterBadges.forEach(badge => {
+            badge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const filter = badge.dataset.filter;
+                
+                // Обновляем активный фильтр
+                filterBadges.forEach(b => b.classList.remove('active'));
+                badge.classList.add('active');
+                
+                // Фильтруем элементы
+                const items = elementsList.querySelectorAll('.element-item');
+                items.forEach(item => {
+                    if (filter === 'all') {
+                        item.style.display = '';
+                    } else if (filter === 'mcp') {
+                        item.style.display = item.dataset.isMcp === 'true' ? '' : 'none';
+                    } else if (filter === 'tools') {
+                        item.style.display = item.dataset.isMcp === 'false' ? '' : 'none';
+                    }
+                });
             });
         });
 

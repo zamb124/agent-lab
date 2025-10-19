@@ -203,35 +203,62 @@ class CanvasService:
             logger.info(f"✅ Обновлено {len(graph_nodes)} нод в graph_definition StateGraph агента {entry_point_agent_id}")
             return
         
-        # Для ReAct агентов - собираем tools из связей
-        logger.info(f"ReAct агент {entry_point_agent_id} - обновляем tools[] из canvas")
+        # Для ReAct агентов - собираем tools из связей для ВСЕХ агентов на canvas
+        logger.info(f"ReAct агент {entry_point_agent_id} - обновляем tools[] для всех агентов из canvas")
         
-        tools = []
+        # Собираем tools для каждого агента
+        agent_tools_map = {}
+        
         for edge in canvas_data.get("edges", []):
-            if edge.get("source") == entry_point_node_id:
-                target_node_id = edge.get("target")
-                for node in canvas_data.get("nodes", []):
-                    if node.get("id") == target_node_id:
-                        if node.get("type") == "tool_node":
-                            tool_id = node.get("params", {}).get("tool_id")
-                            if tool_id:
-                                tools.append(ToolReference(
-                                    tool_id=tool_id,
-                                    code_mode=node.get("params", {}).get("code_mode", "code_reference"),
-                                    params={}
-                                ))
-                        elif node.get("type") == "agent_node":
-                            sub_agent_id = node.get("params", {}).get("agent_id")
-                            if sub_agent_id:
-                                tools.append(ToolReference(
-                                    tool_id=f"agent:{sub_agent_id}",
-                                    code_mode="code_reference",
-                                    params={}
-                                ))
+            source_id = edge.get("source")
+            target_id = edge.get("target")
+            
+            # Находим source ноду
+            source_node = None
+            target_node = None
+            for node in canvas_data.get("nodes", []):
+                if node.get("id") == source_id:
+                    source_node = node
+                if node.get("id") == target_id:
+                    target_node = node
+            
+            if not source_node or not target_node:
+                continue
+            
+            # Если source - это agent нода
+            if source_node.get("type") == "agent_node":
+                agent_id = source_node.get("params", {}).get("agent_id")
+                if not agent_id:
+                    continue
+                
+                if agent_id not in agent_tools_map:
+                    agent_tools_map[agent_id] = []
+                
+                # Добавляем tool или субагента
+                if target_node.get("type") == "tool_node":
+                    tool_id = target_node.get("params", {}).get("tool_id")
+                    if tool_id:
+                        agent_tools_map[agent_id].append(ToolReference(
+                            tool_id=tool_id,
+                            code_mode=target_node.get("params", {}).get("code_mode", "code_reference"),
+                            params={}
+                        ))
+                elif target_node.get("type") == "agent_node":
+                    sub_agent_id = target_node.get("params", {}).get("agent_id")
+                    if sub_agent_id:
+                        agent_tools_map[agent_id].append(ToolReference(
+                            tool_id=f"agent:{sub_agent_id}",
+                            code_mode="code_reference",
+                            params={}
+                        ))
         
-        entry_point_agent.tools = tools
-        await self.storage.set_agent_config(entry_point_agent)
-        logger.info(f"✅ Обновлено {len(tools)} тулов для ReAct агента {entry_point_agent_id}")
+        # Сохраняем tools для каждого агента
+        for agent_id, tools in agent_tools_map.items():
+            agent = await self.storage.get_agent_config(agent_id)
+            if agent:
+                agent.tools = tools
+                await self.storage.set_agent_config(agent)
+                logger.info(f"✅ Обновлено {len(tools)} тулов для ReAct агента {agent_id}")
     
     async def save_canvas_data(
         self, 
