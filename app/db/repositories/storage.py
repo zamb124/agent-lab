@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.models import AgentConfig, FlowConfig, TaskConfig, SessionConfig, SessionStatus
 from app.db.database import AsyncSessionLocal
-from app.db.models import Storage as StorageModel, Users as UsersModel, Variables as VariablesModel
+from app.db.models import Storage as StorageModel, Users as UsersModel, Variables as VariablesModel, Tasks as TasksModel
 from app.core.context import get_context
 
 logger = logging.getLogger(__name__)
@@ -23,6 +23,7 @@ TABLE_ROUTING = {
     "auth_session:": {"table": "users", "company_specific": False},
     "auth_state:": {"table": "users", "company_specific": False},
     "var:": {"table": "variables", "company_specific": False},
+    "task:": {"table": "tasks", "company_specific": False},
     
     "_default": {"table": "storage", "company_specific": False}
 }
@@ -94,6 +95,10 @@ class Storage:
         if table_name == "variables":
             self._table_cache[table_name] = VariablesModel
             return VariablesModel
+        
+        if table_name == "tasks":
+            self._table_cache[table_name] = TasksModel
+            return TasksModel
         
         table = Table(
             table_name,
@@ -170,6 +175,10 @@ class Storage:
         elif table_name == "variables":
             result = await session.execute(
                 select(VariablesModel.value).where(VariablesModel.key == key)
+            )
+        elif table_name == "tasks":
+            result = await session.execute(
+                select(TasksModel.value).where(TasksModel.key == key)
             )
         else:
             query = text(f"SELECT value FROM {table_name} WHERE key = :key")

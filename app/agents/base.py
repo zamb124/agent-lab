@@ -162,11 +162,24 @@ class BaseAgent(ABC):
             # Есть thread_id - загружаем полный контекст из checkpoint
             state = await graph.aget_state(run_config)
             
-            if state and state.values and state.values.get("messages"):
-                # Мержим messages из checkpoint + новые из input
-                checkpoint_messages = state.values["messages"]
-                all_messages = checkpoint_messages + messages_from_input
-                logger.info(f"🔍 Загружено из checkpoint: {len(checkpoint_messages)} + новых: {len(messages_from_input)} = {len(all_messages)}")
+            
+            if state and state.values:
+                # Загружаем store из checkpointer если не передан в input
+                if "store" not in input_data or not input_data["store"]:
+                    checkpoint_store = state.values.get("store", {})
+                    if checkpoint_store:
+                        input_data["store"] = checkpoint_store
+                        logger.debug(f"✅ Store загружен из checkpointer: {list(checkpoint_store.keys())}")
+                
+                if state.values.get("messages"):
+                    # Мержим messages из checkpoint + новые из input
+                    checkpoint_messages = state.values["messages"]
+                    all_messages = checkpoint_messages + messages_from_input
+                    logger.info(f"🔍 Загружено из checkpoint: {len(checkpoint_messages)} + новых: {len(messages_from_input)} = {len(all_messages)}")
+                else:
+                    # Checkpoint пустой - используем только новые
+                    all_messages = messages_from_input
+                    logger.info(f"🔍 Checkpoint без messages, используем {len(all_messages)} новых")
             else:
                 # Checkpoint пустой - используем только новые
                 all_messages = messages_from_input
@@ -234,12 +247,11 @@ class BaseAgent(ABC):
             result = await graph.ainvoke(input_data, config=run_config)
             
             # Синхронизируем изменения из context.state обратно в result
-            # (нужно для session_set/session_get которые модифицируют контекст)
             context_after = get_context()
             if context_after and context_after.state and isinstance(result, dict):
                 context_store = context_after.state.get("store", {})
+                
                 if context_store and context_store != result.get("store", {}):
-                    # Мержим изменения из контекста в результат
                     if "store" not in result:
                         result["store"] = {}
                     result["store"].update(context_store)

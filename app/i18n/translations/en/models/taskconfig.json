@@ -39,6 +39,14 @@
     "completed_at": {
       "title": "Completed",
       "description": "Execution completion time"
+    },
+    "execute_at": {
+      "title": "[TODO: models.taskconfig.fields.execute_at.title]",
+      "description": "[TODO: models.taskconfig.fields.execute_at.description]"
+    },
+    "skip_agent": {
+      "title": "[TODO: models.taskconfig.fields.skip_agent.title]",
+      "description": "[TODO: models.taskconfig.fields.skip_agent.description]"
     }
   }
 }
