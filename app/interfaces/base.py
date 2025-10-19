@@ -367,11 +367,11 @@ class BaseInterface(ABC):
         logger.info(f"  - Компания в контексте: {company_id}")
         
         logger.info(f"🔵 ПЕРЕД storage.set: key={task_key}")
-        await storage.set(task_key, task_config.model_dump_json())
+        await storage.set(task_key, task_config.model_dump_json(), force_global=True)
         logger.info(f"🟢 ПОСЛЕ storage.set: key={task_key}")
         
         # Проверяем что задача реально сохранилась
-        saved_task = await storage.get(task_key)
+        saved_task = await storage.get(task_key, force_global=True)
         if saved_task:
             logger.info(f"✅ Задача {task_id} сохранена и проверена в БД")
         else:

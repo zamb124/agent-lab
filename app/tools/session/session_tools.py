@@ -1,6 +1,8 @@
 """
 Инструменты для работы с сессионным хранилищем.
 Позволяют агентам сохранять и получать данные между запросами.
+
+Декоратор @tool автоматически оборачивает в Command если state изменился.
 """
 
 import logging
@@ -11,7 +13,7 @@ from app.core.variables import get_state
 logger = logging.getLogger(__name__)
 
 
-@tool
+@tool(state_aware=True)
 def session_set(key: str, value: str) -> str:
     """
     Сохраняет значение в сессионное хранилище.
@@ -30,18 +32,19 @@ def session_set(key: str, value: str) -> str:
     """
     state = get_state()
     if not state:
-        logger.error("session_set: State недоступен из контекста")
-        return "Ошибка: State недоступен"
+        raise ValueError("State недоступен")
     
     if "store" not in state:
         state["store"] = {}
     
     state["store"][key] = value
     logger.info(f"📦 Сохранено в сессию: {key} = {value}")
+    
+    # Декоратор автоматически обернет в Command если state изменился!
     return f"Сохранено: {key}"
 
 
-@tool
+@tool(state_aware=True)
 def session_get(key: str) -> str:
     """
     Получает значение из сессионного хранилища.
@@ -58,8 +61,7 @@ def session_get(key: str) -> str:
     """
     state = get_state()
     if not state:
-        logger.error("session_get: State недоступен из контекста")
-        return "Ошибка: State недоступен"
+        raise ValueError("State недоступен из контекста")
     
     store = state.get("store", {})
     value = store.get(key)
@@ -113,8 +115,7 @@ def session_delete(key: str) -> str:
     """
     state = get_state()
     if not state:
-        logger.error("session_delete: State недоступен из контекста")
-        return "Ошибка: State недоступен"
+        raise ValueError("State недоступен из контекста")
     
     store = state.get("store", {})
     if key in store:

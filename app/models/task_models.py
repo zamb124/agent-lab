@@ -75,6 +75,16 @@ class TaskConfig(BaseModel):
         description="Время завершения выполнения",
         readonly=True,
     )
+    execute_at: Optional[datetime] = Field(
+        default=None,
+        title="Время выполнения",
+        description="Когда задача должна быть выполнена (для отложенных задач). None = выполнить сразу",
+    )
+    skip_agent: bool = Field(
+        default=False,
+        title="Пропустить агента",
+        description="Если True, сообщение отправляется напрямую без вызова агента (для напоминаний)",
+    )
     
     @field_validator('context', mode='before')
     @classmethod

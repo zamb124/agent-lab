@@ -17,7 +17,7 @@ from app.interfaces.factory import InterfaceFactory
 from app.interfaces.base import Message
 from app.exceptions import TariffError, BillingError
 from langgraph.errors import GraphInterrupt
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.types import Command
 from app.services.variables_service import get_variables_service
 
@@ -116,6 +116,41 @@ class TaskProcessor:
             task.status = TaskStatus.PROCESSING
             task.started_at = datetime.now(timezone.utc)
             await self.task_repository.set(task)
+            
+            # Если skip_agent=True, просто отправляем сообщение напрямую
+            if hasattr(task, 'skip_agent') and task.skip_agent:
+                logger.info(f"📬 {task.task_id}: skip_agent=True, отправляем напрямую без агента")
+                
+                # Формируем сообщение от ассистента
+                response_text = task.input_data.get("message", "")
+                
+                # Сохраняем результат
+                task.status = TaskStatus.COMPLETED
+                task.output_data = {"message": response_text, "skipped_agent": True}
+                task.completed_at = datetime.now(timezone.utc)
+                
+                await self.task_repository.set(task)
+                logger.info(f"✅ {task.task_id} завершена (без агента)")
+                
+                # Помечаем задачу как executed в state (нужно получить граф для доступа к state)
+                # TODO: Для задач с skip_agent нужно обновить state через API или напрямую
+                # Пока задача удаляется из БД, а в state остается (можно очистить вручную)
+                
+                # Обновляем статистику сессии
+                await self._update_session_stats(task.session_id, user_msg)
+                
+                # Возвращаем сессию в статус ACTIVE
+                await self._set_session_active(task.session_id, task.context.platform)
+                
+                # Отправляем уведомление об окончании печати
+                if interface:
+                    await interface.stop_typing_indicator(task.session_id)
+                
+                # Отправляем сообщение через интерфейс
+                result = {"messages": [AIMessage(content=response_text)]}
+                await self._send_result_via_interface(task, result)
+                
+                return
 
             flow_config = await self.storage.get_flow_config(task.flow_id)
             if not flow_config:
@@ -139,7 +174,18 @@ class TaskProcessor:
             input_data_with_context = dict(task.input_data)
             input_data_with_context["task_id"] = task.task_id
             input_data_with_context["session_id"] = task.session_id
-            user_message = input_data_with_context.get("message", "")
+            
+            # Проверяем тип задачи - message или tool_call
+            if "tool_call" in task.input_data:
+                # Это задача на вызов тула - формируем сообщение для агента
+                tool_call_info = task.input_data["tool_call"]
+                tool_name = tool_call_info["tool_name"]
+                tool_args = tool_call_info.get("tool_args", {})
+                user_message = f"Выполнить отложенную задачу: {tool_name} с аргументами {tool_args}"
+                input_data_with_context["message"] = user_message
+                logger.info(f"📋 {task.task_id}: отложенный вызов тула {tool_name}")
+            else:
+                user_message = input_data_with_context.get("message", "")
             
             compiled_graph = await entry_agent.compile_graph()
             state = await compiled_graph.aget_state(config)
@@ -221,6 +267,10 @@ class TaskProcessor:
 
             await self.task_repository.set(task)
             logger.info(f"✅ {task.task_id} завершена")
+            
+            # Если это была отложенная задача - помечаем как executed в сессионной памяти
+            if task.execute_at:
+                await self._mark_delayed_task_as_executed(task.task_id, compiled_graph, config)
             
             # ВАЖНО: Обновляем статистику сессии (Database-First)
             await self._update_session_stats(task.session_id, user_message)
@@ -328,6 +378,29 @@ class TaskProcessor:
             logger.info(f"🔄 Сессия {session_id} переведена в WAITING_INPUT")
         else:
             logger.warning(f"Сессия {session_id} не найдена для перевода в WAITING_INPUT")
+    
+    async def _mark_delayed_task_as_executed(self, task_id: str, compiled_graph, config):
+        """Помечает отложенную задачу как executed в сессионной памяти"""
+        try:
+            graph_state = await compiled_graph.aget_state(config)
+            
+            if graph_state and graph_state.values:
+                state = graph_state.values
+                
+                if "store" in state and "delayed_tasks" in state["store"]:
+                    tasks = state["store"]["delayed_tasks"]
+                    if task_id in tasks:
+                        tasks[task_id]["status"] = "executed"
+                        tasks[task_id]["executed_at"] = datetime.now(timezone.utc).isoformat()
+                        
+                        await compiled_graph.aupdate_state(config, {"store": state["store"]})
+                        logger.info(f"✅ Задача {task_id} помечена как executed в сессионной памяти")
+                    else:
+                        logger.debug(f"⚠️ Задача {task_id} не найдена в delayed_tasks сессии")
+                else:
+                    logger.debug(f"⚠️ В state нет delayed_tasks для пометки задачи {task_id}")
+        except Exception as e:
+            logger.warning(f"⚠️ Не удалось пометить задачу {task_id} как executed в памяти: {e}")
     
     async def _update_session_stats(self, session_id: str, user_message: str):
         """Обновляет статистику сессии: message_count и first_message"""

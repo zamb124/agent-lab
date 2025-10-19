@@ -7,13 +7,13 @@ import json
 from typing import Optional, List
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, or_
 
 from app.db.repositories.base import BaseRepository
 from app.db.repositories.storage import Storage
 from app.models import TaskConfig
 from app.db.database import AsyncSessionLocal
-from app.db.models import Storage as StorageModel
+from app.db.models import Tasks as TasksModel
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class TaskRepository(BaseRepository[TaskConfig]):
             TaskConfig или None если не найдена
         """
         key = self._get_key(task_id)
-        data = await self.storage.get(key)
+        data = await self.storage.get(key, force_global=True)
         if data:
             try:
                 return TaskConfig.model_validate_json(data)
@@ -68,7 +68,7 @@ class TaskRepository(BaseRepository[TaskConfig]):
 
         key = self._get_key(config.task_id)
         data = config.model_dump_json()
-        return await self.storage.set(key, data)
+        return await self.storage.set(key, data, force_global=True)
 
     async def delete(self, task_id: str) -> bool:
         """
@@ -81,30 +81,38 @@ class TaskRepository(BaseRepository[TaskConfig]):
             True если удаление успешно
         """
         key = self._get_key(task_id)
-        return await self.storage.delete(key)
+        return await self.storage.delete(key, force_global=True)
 
     async def list_pending(self, limit: int = 10) -> List[TaskConfig]:
         """
-        Получает список задач в статусе pending.
-        Используется воркером для получения задач на обработку.
+        Получает список задач в статусе pending готовых к выполнению.
+        Фильтрует по execute_at: задачи без execute_at или с execute_at <= now().
         
         Args:
             limit: Максимальное количество результатов
             
         Returns:
-            Список задач в статусе pending
+            Список задач в статусе pending готовых к выполнению
         """
+        now = datetime.now(timezone.utc).isoformat()
+        
         async with AsyncSessionLocal() as session:
             result = await session.execute(
-                select(StorageModel.key, StorageModel.value)
-                .where(StorageModel.key.like("%task:%"))
-                .where(StorageModel.value["status"].astext == "pending")
+                select(TasksModel.key, TasksModel.value)
+                .where(TasksModel.value["status"].astext == "pending")
+                .where(
+                    or_(
+                        TasksModel.value["execute_at"].astext.is_(None),
+                        TasksModel.value["execute_at"].astext <= now
+                    )
+                )
+                .order_by(TasksModel.value["execute_at"].astext.asc().nullsfirst())
                 .limit(limit)
             )
 
             tasks = []
             rows = list(result)
-            logger.info(f"Найдено {len(rows)} pending задач")
+            logger.info(f"Найдено {len(rows)} pending задач готовых к выполнению")
             
             for row in rows:
                 try:
@@ -133,11 +141,10 @@ class TaskRepository(BaseRepository[TaskConfig]):
         """
         async with AsyncSessionLocal() as session:
             result = await session.execute(
-                select(StorageModel.key, StorageModel.value)
-                .where(StorageModel.key.like("%task:%"))
-                .where(StorageModel.value["status"].astext == "waiting_for_input")
-                .where(StorageModel.value["session_id"].astext == session_id)
-                .where(StorageModel.value["flow_id"].astext == flow_id)
+                select(TasksModel.key, TasksModel.value)
+                .where(TasksModel.value["status"].astext == "waiting_for_input")
+                .where(TasksModel.value["session_id"].astext == session_id)
+                .where(TasksModel.value["flow_id"].astext == flow_id)
                 .limit(1)
             )
 
@@ -163,11 +170,10 @@ class TaskRepository(BaseRepository[TaskConfig]):
         """
         async with AsyncSessionLocal() as session:
             result = await session.execute(
-                select(StorageModel.key, StorageModel.value)
-                .where(StorageModel.key.like("%task:%"))
-                .where(StorageModel.value["status"].astext == "pending")
-                .where(StorageModel.value["session_id"].astext == session_id)
-                .where(StorageModel.value["flow_id"].astext == flow_id)
+                select(TasksModel.key, TasksModel.value)
+                .where(TasksModel.value["status"].astext == "pending")
+                .where(TasksModel.value["session_id"].astext == session_id)
+                .where(TasksModel.value["flow_id"].astext == flow_id)
                 .limit(1)
             )
 
