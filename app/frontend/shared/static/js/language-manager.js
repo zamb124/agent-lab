@@ -180,7 +180,9 @@ class LanguageManager {
         if (params && Object.keys(params).length > 0) {
             Object.keys(params).forEach(param => {
                 const placeholder = `{${param}}`;
-                translation = translation.replace(new RegExp(placeholder, 'g'), params[param]);
+                // Экранируем специальные символы для RegExp
+                const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                translation = translation.replace(new RegExp(escapedPlaceholder, 'g'), params[param]);
             });
         }
         

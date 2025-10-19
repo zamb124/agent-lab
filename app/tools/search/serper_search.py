@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 @tool(
     is_public=True,
+    group="Поиск и исследование",
     title="Google поиск (Serper)",
     cost=0.03,
     billing_name="serper_search"

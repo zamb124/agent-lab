@@ -4,14 +4,14 @@
 
 import json
 from typing import Optional
-from langchain_core.tools import tool
+from app.core.tool_decorator import tool
 
 from app.db.repositories import Storage
 from app.core.core_clients.s3_client import get_default_s3_client
 from app.core.config import settings
 
 
-@tool
+@tool(group="Файлы")
 async def read_file(file_id: str, provider: Optional[str] = None) -> str:
     """
     Читает содержимое файла по его ID.

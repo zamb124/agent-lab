@@ -36,6 +36,9 @@ help:
 	@echo "  make sgr-up       - Запустить sgr"
 	@echo "  make sgr-logs     - Логи sgr"
 	@echo ""
+	@echo "Миграции:"
+	@echo "  make remigrate COMPANY=<id>  - Перемигрировать компанию (тулы и flows)"
+	@echo ""
 	@echo "Документация:"
 	@echo "  make doc          - Локальная сборка документации"
 	@echo "  make doc-serve    - Запустить dev-сервер (http://127.0.0.1:8000)"
@@ -51,6 +54,7 @@ include mk/app.mk
 include mk/worker.mk
 include mk/sgr.mk
 include mk/test.mk
+include mk/migrate.mk
 
 # Документация
 .PHONY: doc doc-serve doc-docker doc-clean docs-build docs-serve docs-clean docs-docker-build

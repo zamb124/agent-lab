@@ -34,6 +34,7 @@ async def _get_tavily_client() -> httpx.AsyncClient:
 
 @tool(
     is_public=True,
+    group="Поиск и исследование",
     title="Поиск Tavily",
     cost=0.05,
     billing_name="tavily_search"

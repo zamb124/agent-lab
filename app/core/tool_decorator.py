@@ -21,20 +21,21 @@ def tool(
     *,
     # Параметры отображения
     title: Optional[str] = None,          # Название для UI (по умолчанию имя функции)
-    
+    group: Optional[str] = None,          # Группа тулов для UI группировки
+
     # Параметры биллинга
     cost: float = 0.0,                    # Стоимость за вызов в RUB
     billing_name: Optional[str] = None,   # Название для биллинга (по умолчанию имя функции)
     free_for_plans: Optional[List[str]] = None, # Для каких планов бесплатно
-    
+
     # Параметры доступа
     is_public: bool = False,                      # Доступен ли тул в публичном редакторе
     required_permissions: Optional[List[str]] = None,  # Требуемые разрешения
     max_calls_per_hour: Optional[int] = None,         # Лимит вызовов в час
-    
+
     # Параметры state
     state_aware: bool = False,                        # Автоматически инжектить state из графа
-    
+
     # Стандартные параметры langchain tool
     name: Optional[str] = None,
     description: Optional[str] = None,
@@ -44,9 +45,10 @@ def tool(
 ):
     """
     Расширенный декоратор @tool для платформы Agent Lab
-    
+
     Args:
         title: Название для UI (по умолчанию имя функции)
+        group: Группа тулов для UI группировки (например, "Коммуникации", "Анализ данных")
         cost: Стоимость вызова в RUB (0.0 = бесплатно)
         billing_name: Название для биллинга и лимитов (по умолчанию имя функции)
         free_for_plans: Список планов для которых функция бесплатна
@@ -54,12 +56,12 @@ def tool(
         required_permissions: Список требуемых разрешений
         max_calls_per_hour: Максимум вызовов в час
         state_aware: Автоматически инжектить state из LangGraph (по умолчанию True для всех тулов)
-    
+
     Examples:
-        @tool(is_public=True, title="Погода")
+        @tool(is_public=True, group="Погода", title="Погода")
         def get_weather(city: str) -> str:
             pass
-            
+
         @tool(is_public=True, state_aware=True, title="Сохранить в сессию")
         def session_set(key: str, value: str) -> str:
             state = get_state()  # Актуальный state благодаря state_aware=True
@@ -279,13 +281,14 @@ def tool(
         
         # Добавляем метаданные платформы к инструменту
         langchain_decorated._platform_title = title or func.__name__
+        langchain_decorated._platform_group = group
         langchain_decorated._platform_cost = cost
         langchain_decorated._platform_billing_name = billing_name or func.__name__
         langchain_decorated._platform_free_for_plans = free_for_plans or []
         langchain_decorated._platform_is_public = is_public
         langchain_decorated._platform_required_permissions = required_permissions or []
         langchain_decorated._platform_max_calls_per_hour = max_calls_per_hour
-        
+
         # Маркируем как инструмент платформы
         langchain_decorated._is_platform_tool = True
         

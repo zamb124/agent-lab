@@ -42,7 +42,7 @@ from app.core.container import get_container
 logger = logging.getLogger(__name__)
 
 
-@tool(is_public=False, title="Создать отложенную задачу", state_aware=True)
+@tool(is_public=True, group="Планирование задач и напоминаний", title="Создать отложенную задачу", state_aware=True)
 async def create_delayed_task(
     delay_seconds: int,
     message: Optional[str] = None,
@@ -182,7 +182,7 @@ async def create_delayed_task(
         return f"✅ Создана отложенная задача {task_id}\n⏰ Выполнится: {execute_at_str}\n🔧 Тул: {tool_name}({tool_args})"
 
 
-@tool(is_public=True, title="Список отложенных задач", state_aware=True)
+@tool(is_public=True, group="Планирование задач и напоминаний", title="Список отложенных задач", state_aware=True)
 def list_delayed_tasks() -> str:
     """
     Показывает список всех отложенных задач текущей сессии из state.
@@ -267,7 +267,7 @@ def list_delayed_tasks() -> str:
     return "\n".join(result_lines)
 
 
-@tool(is_public=False, title="Отменить отложенную задачу")
+@tool(is_public=True, group="Автоматизация", title="Отменить отложенную задачу")
 async def cancel_delayed_task(task_id: str) -> str:
     """
     Отменяет отложенную задачу.

@@ -8,5 +8,21 @@
   "no_abilities": "No available abilities",
   "details": "Details",
   "hero_title": "Abilities Library",
-  "hero_description": "Agents and tools to automate your tasks"
+  "hero_description": "Agents and tools to automate your tasks",
+  "groups": {
+    "Математика": "Math",
+    "Погода": "Weather",
+    "Путешествия": "Travel",
+    "Автоматизация": "Automation",
+    "Хранение данных": "Data Storage",
+    "База знаний": "Knowledge Base",
+    "Анализ данных": "Data Analysis",
+    "Поиск и исследование": "Search & Research",
+    "Файлы": "Files",
+    "Изображения": "Images",
+    "Аудио": "Audio",
+    "CRM": "CRM",
+    "Социальные сети": "Social Media",
+    "Система": "System"
+  }
 }

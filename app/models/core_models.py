@@ -394,6 +394,12 @@ class ToolReference(BuilderEntity):
         description="Название для отображения в UI",
         placeholder="Красивое название функции"
     )
+    group: Optional[str] = Field(
+        default=None,
+        title="Группа",
+        description="Группа тулов для UI группировки",
+        placeholder="Коммуникации, Анализ данных, Погода..."
+    )
     params: Dict[str, Any] = Field(
         default_factory=dict,
         title="Параметры",
@@ -548,14 +554,16 @@ class ToolReference(BuilderEntity):
                         }
 
             platform_title = getattr(func, '_platform_title', None)
+            platform_group = getattr(func, '_platform_group', None)
             platform_cost = getattr(func, '_platform_cost', 0.0)
             platform_billing_name = getattr(func, '_platform_billing_name', None)
             platform_free_for_plans = getattr(func, '_platform_free_for_plans', [])
             platform_is_public = getattr(func, '_platform_is_public', False)
-            
+
             return cls(
                 tool_id=function_path,
                 title=platform_title,
+                group=platform_group,
                 code_mode=CodeMode.CODE_REFERENCE,
                 function_path=function_path,
                 inline_code=source_code,
