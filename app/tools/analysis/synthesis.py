@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 @tool(
     is_public=True,
+    group="Анализ данных",
     title="Синтезировать отчет",
     cost=0.05,
     billing_name="synthesize_report"

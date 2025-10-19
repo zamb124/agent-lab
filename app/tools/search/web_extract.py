@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 @tool(
     is_public=True,
+    group="Поиск и исследование",
     title="Извлечь контент страницы",
     cost=0.01,
     billing_name="extract_web_content"

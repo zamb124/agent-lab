@@ -24,14 +24,14 @@ TODO: Add tests
 import json
 import logging
 from typing import Optional
-from langchain_core.tools import tool
+from app.core.tool_decorator import tool
 
 from app.clients.amo_crm_integration import get_amocrm_client
 
 logger = logging.getLogger(__name__)
 
 
-@tool
+@tool(group="CRM")
 async def get_amocrm_leads(subdomain: str, limit: int = 50, query: Optional[str] = None) -> str:
     """
     Получает список сделок из AmoCRM.
@@ -68,7 +68,7 @@ async def get_amocrm_leads(subdomain: str, limit: int = 50, query: Optional[str]
     return json.dumps({"success": True, "count": len(leads_data), "leads": leads_data}, ensure_ascii=False, indent=2)
 
 
-@tool
+@tool(group="CRM")
 async def get_amocrm_lead_info(subdomain: str, lead_id: int) -> str:
     """
     Получает детальную информацию о конкретной сделке AmoCRM.
@@ -107,7 +107,7 @@ async def get_amocrm_lead_info(subdomain: str, lead_id: int) -> str:
     )
 
 
-@tool
+@tool(group="CRM")
 async def get_amocrm_contacts(subdomain: str, limit: int = 50, query: Optional[str] = None) -> str:
     """
     Получает список контактов из AmoCRM.
@@ -143,7 +143,7 @@ async def get_amocrm_contacts(subdomain: str, limit: int = 50, query: Optional[s
     return json.dumps({"success": True, "count": len(contacts_data), "contacts": contacts_data}, ensure_ascii=False, indent=2)
 
 
-@tool
+@tool(group="CRM")
 async def get_amocrm_tasks(
     subdomain: str, limit: int = 50, entity_type: Optional[str] = None, entity_id: Optional[int] = None
 ) -> str:
@@ -185,7 +185,7 @@ async def get_amocrm_tasks(
     return json.dumps({"success": True, "count": len(tasks_data), "tasks": tasks_data}, ensure_ascii=False, indent=2)
 
 
-@tool
+@tool(group="CRM")
 async def get_amocrm_account_info(subdomain: str, with_amojo_id: bool = False) -> str:
     """
     Получает информацию об аккаунте AmoCRM.
@@ -226,7 +226,7 @@ async def get_amocrm_account_info(subdomain: str, with_amojo_id: bool = False) -
     )
 
 
-@tool
+@tool(group="CRM")
 async def get_amocrm_users(subdomain: str, limit: int = 50, with_amojo_id: bool = False) -> str:
     """
     Получает список пользователей аккаунта AmoCRM.
@@ -264,7 +264,7 @@ async def get_amocrm_users(subdomain: str, limit: int = 50, with_amojo_id: bool 
     return json.dumps({"success": True, "count": len(users_data), "users": users_data}, ensure_ascii=False, indent=2)
 
 
-@tool
+@tool(group="CRM")
 async def get_amocrm_notes(subdomain: str, entity_type: str, entity_id: int, limit: int = 50) -> str:
     """
     Получает примечания/комментарии к сущности AmoCRM (сделка/контакт).
@@ -306,7 +306,7 @@ async def get_amocrm_notes(subdomain: str, entity_type: str, entity_id: int, lim
     )
 
 
-@tool
+@tool(group="CRM")
 async def create_amocrm_note(subdomain: str, entity_type: str, entity_id: int, text: str, note_type: str = "common") -> str:
     """
     Создает примечание/комментарий к сущности AmoCRM.
@@ -350,7 +350,7 @@ async def create_amocrm_note(subdomain: str, entity_type: str, entity_id: int, t
     )
 
 
-@tool
+@tool(group="CRM")
 async def send_amocrm_chat_message(
     scope_id: str,
     secret_key: str,
@@ -405,7 +405,7 @@ async def send_amocrm_chat_message(
     return json.dumps({"success": True, "conversation_id": conversation_id, "result": result}, ensure_ascii=False, indent=2)
 
 
-@tool
+@tool(group="CRM")
 async def update_amocrm_message_status(
     scope_id: str,
     secret_key: str,
@@ -440,7 +440,7 @@ async def update_amocrm_message_status(
 # ========== ИНСТРУМЕНТЫ ДЛЯ РАБОТЫ С БЕСЕДАМИ (TALKS) ==========
 
 
-@tool
+@tool(group="CRM")
 async def get_amocrm_talks(
     subdomain: str,
     limit: int = 50,
@@ -497,7 +497,7 @@ async def get_amocrm_talks(
     )
 
 
-@tool
+@tool(group="CRM")
 async def get_amocrm_talk_info(
     subdomain: str,
     talk_id: int,
@@ -525,7 +525,7 @@ async def get_amocrm_talk_info(
     )
 
 
-@tool
+@tool(group="CRM")
 async def close_amocrm_talk(
     subdomain: str,
     talk_id: int,

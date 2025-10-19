@@ -1560,6 +1560,7 @@ input:checked + .slider:before {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 1rem;
+    padding: 1.5rem;
 }
 
 @media (max-width: 768px) {
@@ -1575,7 +1576,11 @@ input:checked + .slider:before {
 .ability-selector-checkbox {
     position: absolute;
     opacity: 0;
-    pointer-events: none;
+    pointer-events: auto; /* Разрешаем клики по чекбоксу */
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    cursor: pointer;
 }
 
 .ability-selector-label {
@@ -1599,6 +1604,19 @@ input:checked + .slider:before {
     transform: translateY(-2px);
 }
 
+.ability-selector-label.checked {
+    border-color: var(--accent-primary);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.15));
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.ability-selector-label.checked .ability-selector-check {
+    opacity: 1;
+    transform: scale(1);
+    color: var(--accent-primary);
+}
+
+/* Поддержка старого селектора для совместимости */
 .ability-selector-checkbox:checked + .ability-selector-label {
     border-color: var(--accent-primary);
     background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.15));
@@ -1991,27 +2009,257 @@ input:checked + .slider:before {
     .header-left h2 {
         font-size: 1rem;
     }
-    
+
     .header-left h2 i {
         font-size: 1.125rem;
     }
-    
+
     .settings-tab {
         font-size: 0.875rem;
         padding: 0.625rem 0.875rem;
     }
-    
+
     .settings-tab i {
         font-size: 0.875rem;
     }
-    
+
     .form-group label {
         font-size: 0.75rem;
     }
-    
+
     .btn-icon {
         width: 32px;
         height: 32px;
         font-size: 0.875rem;
     }
+}
+
+/* Новые стили для группировки тулов */
+
+.tools-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.tools-section {
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    overflow: hidden;
+}
+
+.tools-section-title {
+    margin: 0;
+    padding: 1rem 1.5rem;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-primary);
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.tools-section-title i {
+    color: var(--accent-primary);
+}
+
+/* Группы возможностей */
+.abilities-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+    padding: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .abilities-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.ability-group-card {
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.ability-group-card.selected {
+    border-color: var(--accent-primary);
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(168, 85, 247, 0.05));
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+}
+
+.ability-group-card:hover {
+    border-color: var(--accent-primary);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+    transform: translateY(-2px);
+}
+
+.ability-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.ability-group-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-md);
+    background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.ability-group-info {
+    flex: 1;
+    margin-left: 1rem;
+}
+
+.ability-group-name {
+    margin: 0 0 0.25rem 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+}
+
+.ability-group-count {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.ability-group-selector {
+    position: relative;
+}
+
+.ability-group-checkbox {
+    position: absolute;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    cursor: pointer;
+}
+
+.ability-group-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    background: var(--bg-tertiary);
+    border: 2px solid var(--border-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.ability-group-card:hover .ability-group-label {
+    border-color: var(--accent-primary);
+    background: rgba(99, 102, 241, 0.05);
+}
+
+.ability-group-label.checked {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
+.ability-group-label.checked .ability-group-check {
+    color: white;
+    transform: scale(1.1);
+}
+
+/* Поддержка старого селектора для совместимости */
+.ability-group-checkbox:checked + .ability-group-label {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+
+.ability-group-check {
+    color: var(--text-tertiary);
+    font-size: 1.25rem;
+    transition: all 0.2s ease;
+}
+
+.ability-group-checkbox:checked + .ability-group-label .ability-group-check {
+    color: white;
+    transform: scale(1.1);
+}
+
+/* Для чекбоксов с partial состоянием показываем содержимое ability-group-check */
+.ability-group-checkbox[data-partial="true"] + .ability-group-label .ability-group-check {
+    opacity: 1;
+}
+
+.ability-group-checkbox[data-partial="true"] + .ability-group-label .partial {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+.partial {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.9);
+    opacity: 0;
+    transition: all 0.2s ease;
+    color: black; /* Черный цвет для частично выбранных групп */
+    font-size: 1rem;
+}
+
+/* Индикатор частичного выбора группы */
+.ability-group-check .partial-indicator {
+    color: var(--accent-primary);
+    font-size: 1.25rem;
+    font-weight: bold;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 50%;
+    padding: 2px;
+    border: 2px solid var(--accent-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+}
+
+.ability-group-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.4;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Тег группы в индивидуальных тулах */
+.ability-group-tag {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--accent-primary);
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    align-self: flex-start;
+    margin-top: 0.5rem;
 }

@@ -6,7 +6,7 @@ from app.core.tool_decorator import tool
 import random
 
 
-@tool(is_public=True, title="Подбор места для путешествия", cost=0.002, billing_name="travel_suggest")
+@tool(is_public=True, group="Путешествия", title="Подбор места для путешествия", cost=0.002, billing_name="travel_suggest")
 async def suggest_travel(preferences: str = "") -> str:
     """
     Предложить место для путешествия.
@@ -31,7 +31,7 @@ async def suggest_travel(preferences: str = "") -> str:
         return f"Рекомендую: {destination}"
 
 
-@tool(is_public=True, title="Погода в городе", cost=0.001, billing_name="weather_api")
+@tool(is_public=True, group="Погода", title="Погода в городе", cost=0.001, billing_name="weather_api")
 async def get_weather(city: str) -> str:
     """
     Получить погоду в городе.

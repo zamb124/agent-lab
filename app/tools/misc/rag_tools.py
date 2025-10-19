@@ -31,7 +31,7 @@ def _get_rag_config_from_context(context):
     return None
 
 
-@tool(is_public=True, title="Поиск в базе знаний")
+@tool(is_public=True, group="База знаний", title="Поиск в базе знаний")
 async def search_knowledge_base(
     query: str,
     limit: int = 5,
@@ -109,7 +109,7 @@ async def search_knowledge_base(
     return header + "\n".join(formatted)
 
 
-@tool
+@tool(group="База знаний")
 async def upload_document_to_knowledge_base(
     file_id: str,
     description: Optional[str] = None,
@@ -183,7 +183,7 @@ async def upload_document_to_knowledge_base(
     )
 
 
-@tool(is_public=True, title="Загрузить текст в базу знаний")
+@tool(is_public=True, group="База знаний", title="Загрузить текст в базу знаний")
 async def upload_text_to_knowledge_base(
     text: str,
     document_name: Optional[str] = None,
@@ -247,7 +247,7 @@ async def upload_text_to_knowledge_base(
     )
 
 
-@tool(is_public=True, title="Список документов")
+@tool(is_public=True, group="База знаний", title="Список документов")
 async def list_documents_in_knowledge_base(
     config: RunnableConfig = None
 ) -> str:

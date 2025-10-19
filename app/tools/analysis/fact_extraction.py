@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 @tool(
     is_public=True,
+    group="Анализ данных",
     title="Извлечь факты",
     cost=0.03,
     billing_name="extract_facts"

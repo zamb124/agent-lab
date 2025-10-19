@@ -13,7 +13,7 @@ from app.core.variables import get_state
 logger = logging.getLogger(__name__)
 
 
-@tool(state_aware=True)
+@tool(state_aware=True, group="Хранение данных")
 def session_set(key: str, value: str) -> str:
     """
     Сохраняет значение в сессионное хранилище.
@@ -44,7 +44,7 @@ def session_set(key: str, value: str) -> str:
     return f"Сохранено: {key}"
 
 
-@tool(state_aware=True)
+@tool(state_aware=True, group="Хранение данных")
 def session_get(key: str) -> str:
     """
     Получает значение из сессионного хранилища.
@@ -74,7 +74,7 @@ def session_get(key: str) -> str:
     return str(value)
 
 
-@tool
+@tool(group="Хранение данных")
 def session_has(key: str) -> str:
     """
     Проверяет существует ли ключ в сессионном хранилище.
@@ -99,7 +99,7 @@ def session_has(key: str) -> str:
     return "yes" if exists else "no"
 
 
-@tool
+@tool(group="Хранение данных")
 def session_delete(key: str) -> str:
     """
     Удаляет значение из сессионного хранилища.
@@ -126,7 +126,7 @@ def session_delete(key: str) -> str:
     return f"Ключ '{key}' не найден"
 
 
-@tool
+@tool(group="Хранение данных")
 def session_keys() -> str:
     """
     Возвращает список всех ключей в сессионном хранилище.
@@ -151,7 +151,7 @@ def session_keys() -> str:
     return ", ".join(keys)
 
 
-@tool
+@tool(group="Хранение данных")
 def get_variable(name: str) -> str:
     """
     Получает переменную из flow или компании.

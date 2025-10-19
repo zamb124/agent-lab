@@ -7,7 +7,7 @@ from langgraph.types import interrupt
 from app.core.tool_decorator import tool
 
 
-@tool
+@tool(group="Система")
 def ask_user(question: str) -> str:
     """
     ⚠️ ОБЯЗАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ВОПРОСОВ К ПОЛЬЗОВАТЕЛЮ ⚠️

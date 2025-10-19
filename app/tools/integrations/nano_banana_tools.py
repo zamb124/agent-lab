@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @tool(
+    group="Изображения",
     cost=5.0,  # 5 рублей за генерацию изображения
     billing_name="nano_banana_generation",
     free_for_plans=["premium", "enterprise"]

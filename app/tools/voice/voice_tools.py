@@ -6,7 +6,7 @@
 import logging
 import uuid
 from pathlib import Path
-from langchain_core.tools import tool
+from app.core.tool_decorator import tool
 
 from app.core.core_clients import get_default_cloud_voice_client
 from app.core.audio_processor import get_default_audio_processor
@@ -14,7 +14,7 @@ from app.core.audio_processor import get_default_audio_processor
 logger = logging.getLogger(__name__)
 
 
-@tool
+@tool(group="Аудио")
 async def recognize_speech_from_file(
     file_path: str, 
     content_type: str = "audio/wave"
@@ -50,7 +50,7 @@ async def recognize_speech_from_file(
         return f"❌ Ошибка распознавания речи: {str(e)}"
 
 
-@tool
+@tool(group="Аудио")
 async def recognize_speech_from_bytes(
     audio_data_hex: str, 
     content_type: str = "audio/wave"
@@ -89,7 +89,7 @@ async def recognize_speech_from_bytes(
         return f"❌ Ошибка распознавания речи: {str(e)}"
 
 
-@tool
+@tool(group="Аудио")
 async def synthesize_speech(
     text: str,
     model_name: str = "katherine",
@@ -162,7 +162,7 @@ async def synthesize_speech(
         return f"❌ Ошибка синтеза речи: {str(e)}"
 
 
-@tool
+@tool(group="Аудио")
 async def synthesize_speech_to_file(
     text: str,
     output_path: str,
@@ -207,7 +207,7 @@ async def synthesize_speech_to_file(
         return f"❌ Ошибка синтеза речи: {str(e)}"
 
 
-@tool
+@tool(group="Аудио")
 async def create_speech_recognition_stream() -> str:
     """
     Создает задачу для потокового распознавания речи.
@@ -230,7 +230,7 @@ async def create_speech_recognition_stream() -> str:
         return f"❌ Ошибка создания задачи: {str(e)}"
 
 
-@tool
+@tool(group="Аудио")
 async def add_audio_chunk_to_stream(
     task_id: str,
     task_token: str,
@@ -272,7 +272,7 @@ async def add_audio_chunk_to_stream(
         return f"❌ Ошибка обработки чанка: {str(e)}"
 
 
-@tool
+@tool(group="Аудио")
 async def get_stream_recognition_result(task_id: str, task_token: str) -> str:
     """
     Получает финальный результат потокового распознавания.
@@ -301,7 +301,7 @@ async def get_stream_recognition_result(task_id: str, task_token: str) -> str:
         return f"❌ Ошибка получения результата: {str(e)}"
 
 
-@tool
+@tool(group="Аудио")
 async def get_audio_transcript(audio_id: str) -> str:
     """
     Получает распознанный текст из загруженного аудиофайла по ID.
@@ -336,7 +336,7 @@ async def get_audio_transcript(audio_id: str) -> str:
         return f"❌ Ошибка получения транскрипта: {str(e)}"
 
 
-@tool
+@tool(group="Аудио")
 async def recognize_uploaded_audio(audio_id: str) -> str:
     """
     Запускает распознавание речи для загруженного аудиофайла.
@@ -366,7 +366,7 @@ async def recognize_uploaded_audio(audio_id: str) -> str:
         return f"❌ Ошибка распознавания аудио: {str(e)}"
 
 
-@tool
+@tool(group="Аудио")
 async def get_audio_info(audio_id: str) -> str:
     """
     Получает подробную информацию об аудиофайле.
@@ -391,7 +391,7 @@ async def get_audio_info(audio_id: str) -> str:
         return f"❌ Ошибка получения информации об аудио: {str(e)}"
 
 
-@tool
+@tool(group="Аудио")
 async def download_audio_file(audio_id: str, output_path: str) -> str:
     """
     Скачивает аудиофайл из системы в указанное место.
@@ -424,7 +424,7 @@ async def download_audio_file(audio_id: str, output_path: str) -> str:
         return f"❌ Ошибка скачивания аудиофайла: {str(e)}"
 
 
-@tool
+@tool(group="Аудио")
 async def upload_audio_file(file_path: str, auto_recognize: bool = True) -> str:
     """
     Загружает аудиофайл в систему из локального пути.

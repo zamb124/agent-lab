@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 @tool(
     is_public=True,
+    group="Анализ данных",
     title="Анализ текста",
     cost=0.02,
     billing_name="analyze_text"

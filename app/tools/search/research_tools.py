@@ -41,6 +41,7 @@ async def _get_sgr_client() -> SGRClient:
 
 @tool(
     is_public=True,
+    group="Поиск и исследование",
     title="SGR Исследование",
     cost=0.5,
     billing_name="sgr_research"

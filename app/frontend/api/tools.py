@@ -53,12 +53,14 @@ async def list_tools(
             is_public = tool_data.get("is_public", False)
             if public_only and not is_public:
                 continue
-            
+
+
             tool_info = {
                 "id": tool_id,
                 "name": tool_data.get("tool_id", tool_id).split(".")[-1],
                 "title": tool_data.get("title") or tool_data.get("tool_id", tool_id).split(".")[-1],
                 "description": tool_data.get("description", ""),
+                "group": tool_data.get("group"),  # Добавляем поле group
                 "type": "tool",
                 "category": _get_tool_category_from_path(tool_id),
                 "parameters": tool_data.get("params", {}),
@@ -129,6 +131,7 @@ async def get_tool(tool_id: str, storage: StorageDep) -> Dict[str, Any]:
                     "name": tool_data.get("tool_id", tool_id).split(".")[-1],
                     "title": tool_data.get("title") or tool_data.get("tool_id", tool_id).split(".")[-1],
                     "description": tool_data.get("description", ""),
+                    "group": tool_data.get("group"),  # Добавляем поле group
                     "type": "tool",
                     "category": _get_tool_category_from_path(tool_id),
                     "parameters": tool_data.get("params", {}),

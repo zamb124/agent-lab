@@ -8,7 +8,7 @@ import httpx
 import logging
 from typing import Optional
 from datetime import datetime, timezone
-from langchain_core.tools import tool
+from app.core.tool_decorator import tool
 
 from app.clients.fashn_client import get_fashn_client
 from app.db.repositories import Storage
@@ -20,7 +20,7 @@ from app.core.context import get_context
 logger = logging.getLogger(__name__)
 
 
-@tool
+@tool(group="Изображения")
 async def virtual_try_on(
     model_image_file_id: str,
     product_image_file_id: str,

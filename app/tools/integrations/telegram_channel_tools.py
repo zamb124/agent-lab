@@ -15,7 +15,7 @@ from app.interfaces.telegram_interface import TelegramInterface
 logger = logging.getLogger(__name__)
 
 
-@tool(cost=0.0, billing_name="telegram_publish_post")
+@tool(group="Социальные сети", cost=0.0, billing_name="telegram_publish_post")
 async def publish_to_telegram_channel(
     channel_id: str,
     text: str,
