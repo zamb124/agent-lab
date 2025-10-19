@@ -15,7 +15,8 @@
     "flows": "Flows",
     "tasks": "Tasks",
     "users": "Users",
-    "company_management": "Company Management"
+    "company_management": "Company Management",
+    "mcp": "MCP"
   },
   "header": {
     "theme_toggle": "Toggle theme",
@@ -43,7 +44,8 @@
     "chats": "Chats",
     "history": "History",
     "variables": "Keys and Variables",
-    "billing": "Billing & Plans"
+    "billing": "Billing & Plans",
+    "mcp": "MCP"
   },
   "welcome": {
     "title": "Welcome",

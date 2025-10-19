@@ -15,7 +15,8 @@
     "flows": "Потоки",
     "tasks": "Задачи",
     "users": "Пользователи",
-    "company_management": "Управление компаниями"
+    "company_management": "Управление компаниями",
+    "mcp": "MCP"
   },
   "header": {
     "theme_toggle": "Переключить тему",
@@ -43,7 +44,8 @@
     "chats": "Чаты",
     "history": "История",
     "variables": "Ключи и переменные",
-    "billing": "Тарифы и оплата"
+    "billing": "Тарифы и оплата",
+    "mcp": "MCP"
   },
   "welcome": {
     "title": "Главная",
