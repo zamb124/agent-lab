@@ -82,22 +82,27 @@ class MCPHttpClient:
                 headers={"Mcp-Session-Id": self._session_id}
             )
             
+            response.raise_for_status()
+            
+            # Проверяем session ID в response headers (GitHub Copilot возвращает его)
+            session_from_response = response.headers.get("mcp-session-id") or response.headers.get("Mcp-Session-Id")
+            if session_from_response:
+                self._session_id = session_from_response
+                logger.info(f"✅ MCP сессия получена от сервера: {self._session_id}")
+            
             # Для SSE читаем event stream
             if self.transport_type == MCPTransportType.SSE:
-                # Читаем первое событие с результатом initialize
                 lines = response.text.split("\n")
                 for line in lines:
                     if line.startswith("data: "):
                         data = json.loads(line[6:])
                         if "result" in data:
-                            logger.info(f"✅ MCP сессия инициализирована: {self._session_id}")
+                            logger.info(f"✅ MCP сессия инициализирована (SSE): {self._session_id}")
                             return
             else:
-                # Для HTTP обычный JSON ответ
-                response.raise_for_status()
                 data = response.json()
                 if "result" in data:
-                    logger.info(f"✅ MCP сессия инициализирована: {self._session_id}")
+                    logger.info(f"✅ MCP сессия инициализирована (HTTP): {self._session_id}")
                 elif "error" in data:
                     logger.warning(f"⚠️ Ошибка инициализации MCP: {data['error']}")
         
