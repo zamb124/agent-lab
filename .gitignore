@@ -19,3 +19,6 @@ sgr-service/__pycache__/
 site/
 
 /server.log
+
+# Video files
+docs/video/*.mov
