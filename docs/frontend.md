@@ -10,6 +10,7 @@
 
 - [Архитектура](#-архитектура)
 - [Структура директорий](#-структура-директорий)
+- [🔌 Плагинная система](#-плагинная-система)
 - [Детальное описание файлов](#-детальное-описание-файлов)
 - [Принципы работы](#-принципы-работы)
 - [Добавление нового модуля](#-добавление-нового-модуля)
@@ -82,27 +83,35 @@ app/frontend/
 ├── 📄 Корневые файлы (ядро системы)
 │   ├── __init__.py                    # Инициализация пакета
 │   ├── field_extensions.py            # ⭐ ЯДРО: Monkey patch для BaseModel/Field
-│   ├── environment.py                 # Jinja2 для backend рендеринга
 │   ├── model_registry.py              # Реестр моделей по storage_prefix
-│   └── wrappers.py                    # ModelListWrapper для списков
+│   ├── wrappers.py                    # ModelListWrapper для списков
+│   └── dependencies.py                # FastAPI зависимости для DI
 │
 ├── 🔧 CORE/ (инфраструктура)
 │   ├── __init__.py
+│   ├── plugin_system.py               # Плагинная система (Plugin, PluginRegistry)
+│   ├── plugin_loader.py               # Автозагрузка плагинов
 │   ├── template_loader.py             # ✅ Единый Jinja2Templates для всех
-│   └── websocket_manager.py           # Менеджер WebSocket соединений
+│   ├── websocket_manager.py           # Менеджер WebSocket соединений
+│   └── utils.py                       # Утилиты фронтенда
 │
 ├── 🔌 API/ (JSON CRUD endpoints)
 │   ├── __init__.py
 │   ├── models.py                      # CRUD операции для моделей
 │   ├── flows.py                       # API для flows (GET/POST/PUT/DELETE)
 │   ├── agents.py                      # API для agents
-│   └── tools.py                       # API для tools
+│   ├── tools.py                       # API для tools
+│   ├── variables.py                   # API для переменных
+│   ├── code.py                        # API для кода (code execution)
+│   ├── i18n.py                        # API для интернационализации
+│   └── websocket_status.py            # API для статуса WebSocket
 │
 ├── 📄 PAGES/ (HTML страницы)
 │   ├── __init__.py
 │   ├── public.py                      # Landing page (/)
 │   ├── auth.py                        # Авторизация, выбор/создание компании
-│   └── dashboard.py                   # Dashboard, модели, FASHN
+│   ├── dashboard.py                   # Dashboard, модели, FASHN
+│   └── landing/                       # Специализированные landing pages
 │
 ├── 🔗 WEBSOCKETS/ (WebSocket endpoints)
 │   ├── __init__.py
@@ -242,7 +251,261 @@ app/frontend/
         └── landing/                   # Модульные файлы Landing
             └── css/
                 └── landing.css        # Стили landing page
+
+├── 🔧 SERVICES/ (сервисы фронтенда)
+│   ├── __init__.py
+│   └── canvas_service.py             # Сервис для работы с canvas
+
+├── 📄 PLUGIN_SYSTEM.md               # Документация плагинной системы
 ```
+
+---
+
+## 🔌 Плагинная система
+
+Плагинная система позволяет создавать модульные расширения фронтенда без изменения кода в `shared/`.
+
+### Архитектура плагинов
+
+```
+app/frontend/
+├── core/
+│   ├── plugin_system.py       # Базовые классы (Plugin, PluginRegistry)
+│   └── plugin_loader.py       # Автозагрузка плагинов
+├── modules/
+│   └── {module_name}/
+│       ├── plugin.py          # Описание плагина
+│       ├── router.py          # FastAPI роутер
+│       ├── static/
+│       │   ├── js/
+│       │   │   └── {module_name}.module.js  # JS модуль
+│       │   └── css/
+│       │       └── {module_name}.css
+│       └── templates/
+└── shared/
+    └── static/js/
+        └── plugin-manager.js  # JS менеджер плагинов
+```
+
+### Создание плагина
+
+#### Шаг 1: Создать структуру
+
+```bash
+mkdir -p app/frontend/modules/my_module/{static/{js,css},templates}
+touch app/frontend/modules/my_module/{__init__.py,plugin.py,router.py}
+```
+
+#### Шаг 2: Описать плагин (plugin.py)
+
+```python
+from app.frontend.core.plugin_system import Plugin
+
+class MyModulePlugin(Plugin):
+    """Описание плагина"""
+
+    name = "my_module"
+    display_name = "Мой модуль"
+    version = "1.0.0"
+    description = "Краткое описание"
+    author = "Agents Lab"
+
+    requires_auth = True
+    requires_role = "user"
+
+    static_css = ["my_module.css"]
+    static_js = ["my_module.module.js"]
+
+    sidebar_items = [
+        {
+            "id": "my_module",
+            "label": "my_module.title",
+            "icon": "bi-star",
+            "url": "/frontend/my_module/",
+            "order": 100,
+            "type": "htmx"  # или "page"
+        }
+    ]
+
+    def get_router(self):
+        from .router import router
+        return router
+```
+
+#### Шаг 3: Создать роутер (router.py)
+
+```python
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse
+from app.frontend.core.template_loader import get_templates
+
+router = APIRouter(prefix="/frontend/my_module", tags=["my_module"])
+templates = get_templates()
+
+@router.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    return templates.TemplateResponse("my_module.html", {"request": request})
+```
+
+#### Шаг 4: Создать JS модуль (static/js/my_module.module.js)
+
+```javascript
+export default class MyModuleModule {
+    constructor(app) {
+        this.app = app;
+        this.name = 'my_module';
+        this.version = '1.0.0';
+    }
+
+    async init() {
+        console.log('✅ MyModule инициализирован');
+        return this;
+    }
+
+    doSomething() {
+        console.log('MyModule doing something');
+    }
+
+    destroy() {
+        console.log('🧹 MyModule выгружен');
+    }
+}
+```
+
+### Использование
+
+После перезапуска сервера плагин автоматически:
+
+✅ Зарегистрируется в системе  
+✅ Добавится в sidebar  
+✅ Подключит роутер  
+✅ Загрузит CSS/JS  
+✅ Станет доступен через `app.my_module.doSomething()`
+
+### Публичный API модуля
+
+```javascript
+// В любом месте кода
+app.my_module.doSomething();
+app.builder.openFlow('flow_id');
+app.bots.openBotChat('bot_id', 'Bot Name');
+```
+
+### Sidebar Items
+
+Опции для `sidebar_items`:
+
+```python
+sidebar_items = [
+    {
+        "id": "unique_id",           # Уникальный ID
+        "label": "translation.key",  # Ключ перевода
+        "icon": "bi-icon-name",      # Bootstrap Icon
+        "url": "/frontend/path/",    # URL
+        "order": 50,                 # Порядок (меньше = выше)
+        "type": "htmx"               # "htmx" или "page"
+    }
+]
+```
+
+- **type: "htmx"** - загрузка через HTMX в `#content`
+- **type: "page"** - обычный переход на страницу
+
+### Dashboard Widgets
+
+```python
+dashboard_widgets = [
+    {
+        "id": "stats_widget",
+        "title": "Статистика",
+        "description": "Описание виджета",
+        "icon": "bi-graph-up",
+        "url": "/frontend/stats/",
+        "order": 10
+    }
+]
+```
+
+### Lazy Loading
+
+JS модули загружаются только когда нужны:
+
+```javascript
+export default class MyModuleModule {
+    async init() {
+        if (this.isMyModulePage()) {
+            await this.loadDependencies();
+        }
+        return this;
+    }
+
+    async loadDependencies() {
+        const [Dep1, Dep2] = await Promise.all([
+            import('/static/my_module/js/dep1.js'),
+            import('/static/my_module/js/dep2.js')
+        ]);
+
+        this.Dep1 = Dep1.default;
+        this.Dep2 = Dep2.default;
+    }
+
+    isMyModulePage() {
+        return window.location.pathname.startsWith('/frontend/my_module');
+    }
+}
+```
+
+### Хуки жизненного цикла
+
+```python
+class MyModulePlugin(Plugin):
+    async def on_load(self, app: FastAPI):
+        """Вызывается при загрузке плагина"""
+        print(f"Loading {self.name}...")
+
+    async def on_enable(self):
+        """Вызывается при включении плагина"""
+        pass
+
+    async def on_disable(self):
+        """Вызывается при отключении плагина"""
+        pass
+```
+
+### Примеры плагинов
+
+#### Builder Plugin
+```python
+class BuilderPlugin(Plugin):
+    name = "builder"
+    display_name = "Flow Builder"
+    version = "1.0.0"
+
+    static_css = ["builder.css", "element-selector.css"]
+    static_js = ["builder.module.js"]
+
+    sidebar_items = [{
+        "id": "builder",
+        "label": "dashboard.navigation.builder",
+        "icon": "bi-palette",
+        "url": "/frontend/builder/",
+        "order": 50,
+        "type": "page"
+    }]
+
+    def get_router(self):
+        from .router import router
+        return router
+```
+
+### Преимущества
+
+✅ **Модульность** - каждый плагин независим  
+✅ **Изоляция** - изменения не затрагивают `shared/`  
+✅ **Расширяемость** - sidebar, widgets, header  
+✅ **Единый API** - `app.{module}.{method}()`  
+✅ **Lazy Loading** - JS загружается по требованию  
+✅ **Hot Reload** - для разработки  
 
 ---
 
@@ -324,6 +587,28 @@ app/frontend/
 <div>Ваши роли: {{ user_roles() }}</div>
 ```
 
+#### `core/plugin_system.py`
+**Плагинная система фронтенда**
+
+- Базовый класс `Plugin` для создания плагинов
+- `PluginRegistry` для регистрации и управления плагинами
+- Автоматическая загрузка плагинов из `modules/`
+- Управление sidebar items, dashboard widgets, header actions
+- Поддержка ролей и прав доступа
+
+**Основные методы PluginRegistry:**
+- `register(plugin)` - регистрация плагина
+- `get_sidebar_items()` - сбор всех пунктов меню с учетом прав
+- `get_static_files()` - сбор статических файлов всех плагинов
+
+#### `core/plugin_loader.py`
+**Автозагрузка плагинов**
+
+- Сканирует директорию `modules/` на наличие плагинов
+- Автоматически импортирует `plugin.py` из каждого модуля
+- Регистрирует роутеры плагинов в FastAPI приложении
+- Вызывает `on_load()` хуки при загрузке
+
 #### `core/websocket_manager.py`
 **Менеджер WebSocket соединений** (legacy, можно удалить)
 
@@ -365,6 +650,31 @@ app/frontend/
 **API для работы с tools**
 
 Аналогично `flows.py`, но для tools.
+
+#### `api/variables.py`
+**API для работы с переменными**
+
+- `GET /frontend/variables/` - список переменных
+- `POST /frontend/variables/` - создание переменной
+- `PUT /frontend/variables/{key}` - обновление
+- `DELETE /frontend/variables/{key}` - удаление
+
+#### `api/code.py`
+**API для выполнения кода**
+
+- `POST /frontend/code/execute` - выполнение Python кода
+- Поддержка безопасного выполнения с таймаутами
+
+#### `api/i18n.py`
+**API для интернационализации**
+
+- `GET /frontend/i18n/translations/{lang}` - получение переводов
+- `POST /frontend/i18n/translations/{lang}` - обновление переводов
+
+#### `api/websocket_status.py`
+**API для статуса WebSocket соединений**
+
+- `GET /frontend/ws/status` - статус активных соединений
 
 ---
 
