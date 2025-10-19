@@ -617,10 +617,7 @@ async def remigrate_all_public_for_company(company_id: str):
     company = Company.model_validate_json(company_data)
     
     migrator = Migrator()
-    await migrator.migrate_for_company(
-        company=company,
-        copy_all_public=True
-    )
+    await migrator.migrate_defaults_for_company(company)
     
     return {
         "status": "success",
