@@ -169,7 +169,7 @@ export class BotSaver {
                 selectedTools.push({
                     tool_id: mcpToolId,
                     params: {},
-                    code_mode: "mcp",
+                    code_mode: "mcp_tool",
                     is_public: true,
                     server_name: serverName,
                     tool_name: toolName
