@@ -81,7 +81,6 @@ export class ElementSelector extends EventEmitter {
                     if (nodeType === 'agent_node') {
                         this.showNewAgentTypeMenu(position);
                     } else {
-                        // Для tool и flow пока создаем простые
                         await this.createSimpleNode(nodeType, position);
                     }
                 } else if (action === 'existing') {
@@ -613,7 +612,10 @@ export class ElementSelector extends EventEmitter {
         const nodeData = {
             id: `flow_${Date.now()}`,
             type: 'flow_node',
-            params: { flow_id: flowId },
+            params: { 
+                flow_id: flowId,
+                isEntryPoint: true
+            },
             ui: {
                 x: this.currentContext.position.x,
                 y: this.currentContext.position.y,
@@ -631,17 +633,25 @@ export class ElementSelector extends EventEmitter {
      */
     async createSimpleNode(nodeType, position) {
         const typeNames = {
+            'flow_node': 'Flow',
             'message_node': 'Message',
             'function_node': 'Function',
             'router_node': 'Router'
         };
         
+        const params = {
+            name: typeNames[nodeType] || 'Node'
+        };
+        
+        // Для FlowNode добавляем isEntryPoint
+        if (nodeType === 'flow_node') {
+            params.isEntryPoint = true;
+        }
+        
         const nodeData = {
             id: `${nodeType}_${Date.now()}`,
             type: nodeType,
-            params: {
-                name: typeNames[nodeType] || 'Node'
-            },
+            params,
             ui: {
                 x: position.x,
                 y: position.y,

@@ -17,7 +17,8 @@ export class AgentNode extends BaseNode {
         element.className = 'canvas-node agent-node';
         
         const agentId = this.data.params?.agent_id;
-        if (agentId) {
+        // Загружаем данные только если их еще нет и agent_id существует в БД
+        if (agentId && !this.agentData && !agentId.startsWith('new_')) {
             this.agentData = await this.fetchAgentData(agentId);
         }
         
@@ -35,17 +36,9 @@ export class AgentNode extends BaseNode {
         // Входной порт есть всегда
         this.createPort('input', 'input');
         
-        // Выходной порт зависит от типа агента
-        if (agentType === 'react') {
-            // ReAct Agent может передавать управление дальше
-            this.createPort('output', 'output');
-        } else if (agentType === 'stategraph') {
-            // StateGraph - законченный граф, только входной порт
-            // Выходной порт не нужен
-        } else {
-            // По умолчанию оба порта
-            this.createPort('output', 'output');
-        }
+        // Выходной порт для подключения дочерних нод
+        // И для ReAct (тулы/субагенты), и для StateGraph (строим граф)
+        this.createPort('output', 'output');
         
         this.mountPorts();
     }
@@ -264,23 +257,59 @@ export class AgentNode extends BaseNode {
      * Сохранение агента с рекурсивным сохранением детей
      */
     async save() {
-        const agentId = this.data.params?.agent_id;
-        if (!agentId) {
-            console.warn('⚠️ Нет agent_id для сохранения');
-            return { success: true };
-        }
+        let agentId = this.data.params?.agent_id;
+        const isNewAgent = !agentId || agentId.startsWith('new_');
         
-        console.log('💾 AgentNode.save():', agentId);
+        console.log('💾 AgentNode.save():', isNewAgent ? 'создание нового' : agentId);
         
         try {
-            // Загружаем текущие данные агента
-            const response = await fetch(`/frontend/api/agents/${encodeURIComponent(agentId)}`);
-            if (!response.ok) {
-                console.warn('⚠️ Не удалось загрузить агента:', agentId);
-                return { success: false, error: 'Agent not found' };
+            let agentData;
+            
+            // Если новый агент - создаем в БД
+            if (isNewAgent) {
+                const agentType = this.data.params?.type || 'react';
+                console.log('🆕 Создание агента в БД:', {
+                    'agentType': agentType,
+                    'data.params': this.data.params
+                });
+                
+                const createResponse = await fetch('/frontend/api/agents/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: this.data.params?.name || `Новый ${agentType} агент`,
+                        description: this.data.params?.description || 'Создан через Builder',
+                        agent_type: agentType,  // API ожидает agent_type, не type
+                        tools: [],
+                        prompt: 'Ты helpful ассистент'
+                    })
+                });
+                
+                if (!createResponse.ok) {
+                    throw new Error(`HTTP ${createResponse.status}`);
+                }
+                
+                agentData = await createResponse.json();
+                agentId = agentData.agent_id;
+                
+                this.data.params.agent_id = agentId;
+                this.agentData = agentData;
+                
+                // Обновляем текст ноды с новыми данными
+                this.updateNodeContent();
+                
+                console.log('✅ Агент создан в БД:', agentId);
+            } else {
+                // Загружаем существующего агента
+                const response = await fetch(`/frontend/api/agents/${encodeURIComponent(agentId)}`);
+                if (!response.ok) {
+                    console.warn('⚠️ Не удалось загрузить агента:', agentId);
+                    return { success: false, error: 'Agent not found' };
+                }
+                
+                agentData = await response.json();
             }
             
-            const agentData = await response.json();
             const childNodes = this.getChildNodes();
             
             // Для ReAct: обновляем tools из дочерних tool_node и agent_node
@@ -358,6 +387,40 @@ export class AgentNode extends BaseNode {
         } catch (error) {
             console.error('❌ Ошибка сохранения агента:', error);
             return { success: false, error: error.message };
+        }
+    }
+    
+    /**
+     * Обновление контента ноды (без перерисовки портов)
+     */
+    updateNodeContent() {
+        if (!this.element) return;
+        
+        const name = this.agentData?.name || this.data.params?.name || 'Agent';
+        const description = this.agentData?.description || this.data.params?.description || '';
+        const agentType = this.agentData?.type || this.data.params?.type || 'unknown';
+        
+        console.log('🔄 updateNodeContent():', {
+            'agentType': agentType,
+            'agentData.type': this.agentData?.type,
+            'params.type': this.data.params?.type,
+            'name': name
+        });
+        
+        const displayName = name.length > 30 ? name.substring(0, 27) + '...' : name;
+        const displayDesc = description.length > 25 ? description.substring(0, 22) + '...' : description;
+        
+        const titleEl = this.element.querySelector('.node-simple-title');
+        const descEl = this.element.querySelector('.node-simple-desc');
+        const metaEl = this.element.querySelector('.node-simple-meta');
+        
+        if (titleEl) titleEl.textContent = displayName;
+        if (descEl) descEl.textContent = displayDesc;
+        if (metaEl) {
+            metaEl.innerHTML = `<span class="agent-type-badge">${agentType}</span>`;
+            console.log('✅ Бейдж типа обновлен:', agentType);
+        } else {
+            console.warn('⚠️ Не найден .node-simple-meta элемент');
         }
     }
     

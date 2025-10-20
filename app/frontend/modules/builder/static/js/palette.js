@@ -212,6 +212,13 @@ export default class NodePalette {
         const hasAgent = Array.from(this.canvas.nodes.values()).some(n => n.type === 'agent_node');
         const entryPointAgentType = this.builder.entryPointAgentType;
         
+        console.log(`🔍 canDragNodeType(${nodeType}):`, {
+            nodesCount,
+            hasFlow,
+            hasAgent,
+            entryPointAgentType
+        });
+        
         // Правило 1: Первым может быть только flow
         if (nodesCount === 0 && nodeType !== 'flow_node') {
             return { 
@@ -255,6 +262,11 @@ export default class NodePalette {
             }
         }
         
+        // Правило 6: Для StateGraph - все доступно (кроме второго flow который уже проверен выше)
+        if (entryPointAgentType === 'stategraph') {
+            return { allowed: true };
+        }
+        
         return { allowed: true };
     }
     
@@ -270,8 +282,10 @@ export default class NodePalette {
      * Обновление палитры для типа агента
      */
     updateForAgentType(agentType) {
-        console.log('🎯 Обновление палитры для агента:', agentType);
+        console.log('🎯 Palette.updateForAgentType вызван:', agentType);
+        console.log('🎯 Builder.entryPointAgentType:', this.builder.entryPointAgentType);
         this.updatePaletteState();
+        console.log('✅ Palette.updatePaletteState() завершен');
     }
     
     /**

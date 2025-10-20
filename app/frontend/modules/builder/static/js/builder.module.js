@@ -193,12 +193,48 @@ export default class BuilderModule {
             console.log('Нода добавлена:', node.id);
             this.palette?.updatePaletteState();
             
-            // Если добавлен FlowNode - устанавливаем currentFlow и активируем кнопки
-            if (node.type === 'flow_node' && node.flowData) {
-                this.currentFlow = node.flowData;
+            // Если добавлен FlowNode
+            if (node.type === 'flow_node') {
+                // Если новый Flow (без flow_id) - сразу сохраняем чтобы создать в БД
+                if (!node.data.params?.flow_id) {
+                    const result = await node.save();
+                    if (!result.success) {
+                        this.showNotification('Ошибка создания Flow: ' + result.error, 'danger');
+                        return;
+                    }
+                }
+                
+                // Обновляем состояние после сохранения
+                if (node.flowData) {
+                    this.currentFlow = node.flowData;
+                } else if (node.data.params?.flow_id) {
+                    node.flowData = await node.fetchFlowData(node.data.params.flow_id);
+                    this.currentFlow = node.flowData;
+                }
+                
                 this.updateFlowInfo();
                 this.enableFlowActions();
                 await this.updateEntryPointAgentType();
+                
+                // Автосохранение canvas_data
+                await this.saveCanvasData();
+            }
+            
+            // Если добавлен AgentNode
+            if (node.type === 'agent_node') {
+                // Если новый агент - сразу сохраняем чтобы создать в БД
+                const agentId = node.data.params?.agent_id;
+                if (!agentId || agentId.startsWith('new_')) {
+                    const result = await node.save();
+                    if (!result.success) {
+                        this.showNotification('Ошибка создания агента: ' + result.error, 'danger');
+                    }
+                }
+            }
+            
+            // Если есть currentFlow - автосохранение при добавлении любой ноды
+            if (this.currentFlow && node.type !== 'flow_node') {
+                await this.saveCanvasData();
             }
         });
         
@@ -464,6 +500,53 @@ export default class BuilderModule {
     }
     
     /**
+     * Быстрое сохранение canvas_data (только позиции нод)
+     */
+    async saveCanvasData() {
+        if (!this.currentFlow) {
+            return;
+        }
+        
+        try {
+            console.log('💾 Автосохранение canvas_data...');
+            
+            const graphData = this.canvas.getGraphData();
+            
+            const canvasData = {
+                zoom: this.canvas.zoom,
+                panX: this.canvas.panX,
+                panY: this.canvas.panY,
+                nodes: {}
+            };
+            
+            this.canvas.nodes.forEach((node, nodeId) => {
+                canvasData.nodes[nodeId] = {
+                    x: node.x,
+                    y: node.y,
+                    width: node.width,
+                    height: node.height
+                };
+            });
+            
+            const response = await fetch(`/frontend/api/flows/${encodeURIComponent(this.currentFlow.flow_id)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    graph_definition: graphData,
+                    canvas_data: canvasData
+                })
+            });
+            
+            if (response.ok) {
+                console.log('✅ Canvas data автосохранен');
+            }
+            
+        } catch (error) {
+            console.error('❌ Ошибка автосохранения canvas_data:', error);
+        }
+    }
+    
+    /**
      * Сохранение flow
      */
     async saveFlow() {
@@ -514,9 +597,20 @@ export default class BuilderModule {
      * Обновление entry_point при создании связи
      */
     async updateFlowEntryPointIfNeeded(edge) {
-        if (!this.currentFlow) return;
+        console.log('🔗 updateFlowEntryPointIfNeeded вызван:', edge);
+        
+        if (!this.currentFlow) {
+            console.log('⚠️ Нет currentFlow');
+            return;
+        }
         
         const sourceNode = this.canvas.nodes.get(edge.source);
+        console.log('🔍 Source node:', {
+            id: edge.source,
+            node: sourceNode,
+            type: sourceNode?.type,
+            isEntryPoint: sourceNode?.data.params?.isEntryPoint
+        });
         
         if (sourceNode?.type === 'flow_node' && sourceNode.data.params?.isEntryPoint) {
             const targetNode = this.canvas.nodes.get(edge.target);
@@ -524,8 +618,15 @@ export default class BuilderModule {
             if (targetNode?.type === 'agent_node') {
                 const agentId = targetNode.data.params?.agent_id;
                 
+                console.log('🔗 Создана связь Flow → Agent:', {
+                    agentId,
+                    'agentData': targetNode.agentData,
+                    'params.type': targetNode.data.params?.type,
+                    'agentData.type': targetNode.agentData?.type
+                });
+                
                 if (agentId && agentId !== this.currentFlow.entry_point_agent) {
-                    await this.updateFlowEntryPointAgent(this.currentFlow.flow_id, agentId);
+                    await this.updateFlowEntryPointAgent(this.currentFlow.flow_id, agentId, targetNode);
                 }
             }
         }
@@ -534,7 +635,7 @@ export default class BuilderModule {
     /**
      * Обновление entry_point_agent у flow
      */
-    async updateFlowEntryPointAgent(flowId, agentId) {
+    async updateFlowEntryPointAgent(flowId, agentId, agentNode = null) {
         try {
             const response = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}`, {
                 method: 'PUT',
@@ -544,7 +645,27 @@ export default class BuilderModule {
             
             if (response.ok) {
                 this.currentFlow.entry_point_agent = agentId;
-                await this.updateEntryPointAgentType();
+                
+                // Если есть агент-нода, берем тип из неё напрямую
+                if (agentNode) {
+                    const agentType = agentNode.agentData?.type || agentNode.data.params?.type;
+                    console.log('🎯 Обновление entryPointAgentType:', {
+                        'agentType': agentType,
+                        'agentData': agentNode.agentData,
+                        'params': agentNode.data.params
+                    });
+                    
+                    if (agentType) {
+                        this.entryPointAgentType = agentType;
+                        this.palette?.updateForAgentType(agentType);
+                        console.log('✅ Entry point agent type установлен:', agentType);
+                    } else {
+                        console.warn('⚠️ Тип агента не найден, загружаем из API');
+                        await this.updateEntryPointAgentType();
+                    }
+                } else {
+                    await this.updateEntryPointAgentType();
+                }
                 
                 console.log('✅ Entry point обновлен:', agentId);
             }

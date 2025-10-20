@@ -20,8 +20,9 @@ export class MessageNode extends BaseNode {
      * Создание портов
      */
     async createPorts() {
-        // Message имеет только входной порт (конечная точка)
+        // Message имеет оба порта - может быть промежуточной нодой в графе
         this.createPort('input', 'input');
+        this.createPort('output', 'output');
         this.mountPorts();
     }
     

@@ -17,7 +17,8 @@ export class FlowNode extends BaseNode {
         element.className = 'canvas-node flow-node';
         
         const flowId = this.data.params?.flow_id;
-        if (flowId) {
+        // Загружаем данные только если их еще нет
+        if (flowId && !this.flowData) {
             this.flowData = await this.fetchFlowData(flowId);
         }
         
@@ -122,15 +123,39 @@ export class FlowNode extends BaseNode {
      * Сохранение flow с рекурсивным сохранением детей
      */
     async save() {
-        const flowId = this.data.params?.flow_id;
-        if (!flowId) {
-            console.error('❌ Нет flow_id для сохранения');
-            return { success: false, error: 'No flow_id' };
-        }
+        let flowId = this.data.params?.flow_id;
+        const isNewFlow = !flowId;
         
-        console.log('💾 FlowNode.save():', flowId);
+        console.log('💾 FlowNode.save():', isNewFlow ? 'создание нового' : flowId);
         
         try {
+            // Если нового Flow - сначала создаем его в БД
+            if (isNewFlow) {
+                const createResponse = await fetch('/frontend/api/flows/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: this.data.params?.name || `Новый Flow ${new Date().toLocaleString('ru')}`,
+                        description: this.data.params?.description || 'Создан через Builder'
+                    })
+                });
+                
+                if (!createResponse.ok) {
+                    throw new Error(`HTTP ${createResponse.status}`);
+                }
+                
+                const newFlow = await createResponse.json();
+                flowId = newFlow.flow_id;
+                
+                this.data.params.flow_id = flowId;
+                this.flowData = newFlow;
+                
+                // Обновляем текст ноды с новыми данными
+                this.updateNodeContent();
+                
+                console.log('✅ Flow создан в БД:', flowId);
+            }
+            
             // Получаем все ноды и связи на canvas
             const graphData = this.canvas.getGraphData();
             
@@ -157,7 +182,7 @@ export class FlowNode extends BaseNode {
                 await agentNode.save();
             }
             
-            // Затем сохраняем сам flow
+            // Затем обновляем сам flow
             const response = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -172,12 +197,31 @@ export class FlowNode extends BaseNode {
             }
             
             console.log('✅ Flow сохранен:', flowId);
-            return { success: true };
+            return { success: true, flowId };
             
         } catch (error) {
             console.error('❌ Ошибка сохранения flow:', error);
             return { success: false, error: error.message };
         }
+    }
+    
+    /**
+     * Обновление контента ноды (без перерисовки портов)
+     */
+    updateNodeContent() {
+        if (!this.element) return;
+        
+        const name = this.flowData?.name || this.data.params?.name || 'Flow';
+        const description = this.flowData?.description || this.data.params?.description || 'Entry point';
+        
+        const displayName = name.length > 30 ? name.substring(0, 27) + '...' : name;
+        const displayDesc = description.length > 25 ? description.substring(0, 22) + '...' : description;
+        
+        const titleEl = this.element.querySelector('.node-simple-title');
+        const descEl = this.element.querySelector('.node-simple-desc');
+        
+        if (titleEl) titleEl.textContent = displayName;
+        if (descEl) descEl.textContent = displayDesc;
     }
     
     escapeHtml(text) {

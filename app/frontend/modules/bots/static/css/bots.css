@@ -1004,10 +1004,12 @@ input:checked + .slider:before {
     width: 90% !important;
     max-width: 600px !important;
     max-height: 90vh !important;
-    overflow: visible !important;
+    overflow: hidden !important;
     position: relative !important;
     margin: 0 !important;
     transform: none !important;
+    display: flex !important;
+    flex-direction: column !important;
 }
 
 #add-platform-modal .modal-header {
@@ -1016,6 +1018,7 @@ input:checked + .slider:before {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0;
 }
 
 #add-platform-modal .modal-header h3 {
@@ -1059,7 +1062,61 @@ input:checked + .slider:before {
 
 #add-platform-modal .modal-body {
     padding: 1.25rem;
-    overflow: visible !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    flex: 1 !important;
+}
+
+#upload-text-modal {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: rgba(0, 0, 0, 0.6) !important;
+    align-items: center !important;
+    justify-content: center !important;
+    z-index: 9999 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+#upload-text-modal .modal-content {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-primary) !important;
+    border-radius: var(--radius-2xl) !important;
+    box-shadow: var(--shadow-xl) !important;
+    width: 90% !important;
+    max-width: 700px !important;
+    max-height: 90vh !important;
+    overflow: hidden !important;
+    position: relative !important;
+    margin: 0 !important;
+    transform: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+#upload-text-modal .modal-header {
+    padding: 1.25rem;
+    border-bottom: 1px solid var(--border-primary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+#upload-text-modal .modal-body {
+    padding: 1.25rem;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    flex: 1 !important;
+}
+
+.modal-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .variable-row {

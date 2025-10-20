@@ -30,17 +30,45 @@ export class ToolNode extends BaseNode {
      * Создание портов
      */
     async createPorts() {
-        const agentType = this.canvas.builder?.entryPointAgentType;
+        // Проверяем тип агента: либо entryPointAgentType, либо смотрим агентов на canvas
+        let agentType = this.canvas.builder?.entryPointAgentType;
+        
+        console.log('🔌 ToolNode.createPorts():', {
+            'entryPointAgentType': agentType,
+            'canvas.nodes.size': this.canvas.nodes.size
+        });
+        
+        // Если entryPointAgentType не установлен, ищем агентов на canvas
+        if (!agentType) {
+            const agents = Array.from(this.canvas.nodes.values()).filter(n => n.type === 'agent_node');
+            console.log('🔍 Найдено агентов на canvas:', agents.length);
+            
+            if (agents.length > 0) {
+                // Берем тип первого агента
+                const firstAgent = agents[0];
+                agentType = firstAgent.agentData?.type || firstAgent.data.params?.type;
+                console.log('🎯 Тип первого агента:', {
+                    'agentData.type': firstAgent.agentData?.type,
+                    'params.type': firstAgent.data.params?.type,
+                    'final agentType': agentType
+                });
+            }
+        }
         
         // Входной порт есть всегда
         this.createPort('input', 'input');
         
         // Выходной порт только для StateGraph (не для ReAct)
-        if (agentType !== 'react') {
+        const shouldCreateOutput = agentType !== 'react';
+        console.log('🔌 Создаем output порт?', shouldCreateOutput, '(agentType:', agentType, ')');
+        
+        if (shouldCreateOutput) {
             this.createPort('output', 'output');
         }
         
         this.mountPorts();
+        
+        console.log('✅ Порты созданы:', Array.from(this.ports.keys()));
     }
     
     /**

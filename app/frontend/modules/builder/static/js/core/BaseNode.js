@@ -75,6 +75,22 @@ export class BaseNode extends EventEmitter {
     }
     
     /**
+     * Обновление отображения ноды (перерисовка контента)
+     */
+    async updateDisplay() {
+        if (!this.element) return;
+        
+        // Создаем временный элемент для получения нового HTML
+        const tempElement = await this.createDOMElement();
+        
+        // Обновляем только innerHTML, не трогая сам элемент
+        this.element.innerHTML = tempElement.innerHTML;
+        
+        // Перемонтируем порты на обновленный элемент
+        this.ports.forEach(port => port.mount(this.element));
+    }
+    
+    /**
      * Lifecycle: Уничтожение ноды
      */
     destroy() {

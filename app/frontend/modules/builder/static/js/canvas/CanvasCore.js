@@ -142,6 +142,11 @@ export class CanvasCore extends EventEmitter {
         this.contextMenuManager.on('node:edit', ({ node }) => {
             this.emit('node:edit', { node });
         });
+        
+        // События связей - пробрасываем от ConnectionManager
+        this.connectionManager.on('edge:created', (data) => {
+            this.emit('edge:created', data);
+        });
     }
     
     /**

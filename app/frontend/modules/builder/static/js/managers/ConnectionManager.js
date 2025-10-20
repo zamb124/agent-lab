@@ -73,7 +73,14 @@ export class ConnectionManager extends EventEmitter {
             return;
         }
         
-        this.createEdge(sourceNode.id, targetNode.id);
+        const edge = this.createEdge(sourceNode.id, targetNode.id);
+        
+        // Если связь не создалась (например, превышен лимит), отменяем
+        if (!edge) {
+            this.cancelConnection();
+            return;
+        }
+        
         this.cleanupConnection();
     }
     
@@ -175,9 +182,58 @@ export class ConnectionManager extends EventEmitter {
     }
     
     /**
+     * Проверка лимита исходящих связей для ноды
+     */
+    getMaxOutgoingConnections(node) {
+        if (node.type === 'agent_node') {
+            const agentType = node.agentData?.type || node.data.params?.type;
+            // ReAct - много выходов, StateGraph - 1 выход
+            return agentType === 'react' ? Infinity : 1;
+        }
+        
+        if (node.type === 'router_node') {
+            return 2; // Условный переход (true/false)
+        }
+        
+        // Все остальные - 1 выход
+        return 1;
+    }
+    
+    /**
      * Создание связи
      */
     createEdge(sourceId, targetId) {
+        const sourceNode = this.canvas.nodes.get(sourceId);
+        const targetNode = this.canvas.nodes.get(targetId);
+        
+        if (!sourceNode || !targetNode) {
+            console.error('Исходная или целевая нода не найдена');
+            return null;
+        }
+        
+        // Проверяем лимит исходящих связей
+        const outgoingEdges = Array.from(this.edges.values()).filter(e => e.source === sourceId);
+        const maxOutgoing = this.getMaxOutgoingConnections(sourceNode);
+        
+        if (outgoingEdges.length >= maxOutgoing) {
+            const nodeTypeName = sourceNode.type === 'router_node' ? 'Router' : 
+                               sourceNode.type === 'agent_node' ? 'StateGraph Agent' : 
+                               sourceNode.type.replace('_node', '').replace('_', ' ');
+            
+            const message = maxOutgoing === 1 
+                ? `${nodeTypeName} может иметь только 1 исходящую связь`
+                : `${nodeTypeName} может иметь максимум ${maxOutgoing} исходящих связей`;
+            
+            console.warn(`⚠️ ${message}`);
+            
+            // Показываем уведомление пользователю
+            if (this.canvas.builder?.showNotification) {
+                this.canvas.builder.showNotification(message, 'warning');
+            }
+            
+            return null;
+        }
+        
         const edgeId = `edge_${sourceId}_${targetId}_${Date.now()}`;
         
         const edge = {
@@ -192,16 +248,11 @@ export class ConnectionManager extends EventEmitter {
         
         this.edges.set(edgeId, edge);
         
-        const sourceNode = this.canvas.nodes.get(sourceId);
-        const targetNode = this.canvas.nodes.get(targetId);
+        const outputPort = sourceNode.getPort('output');
+        const inputPort = targetNode.getPort('input');
         
-        if (sourceNode && targetNode) {
-            const outputPort = sourceNode.getPort('output');
-            const inputPort = targetNode.getPort('input');
-            
-            if (outputPort) outputPort.addConnection(edgeId);
-            if (inputPort) inputPort.addConnection(edgeId);
-        }
+        if (outputPort) outputPort.addConnection(edgeId);
+        if (inputPort) inputPort.addConnection(edgeId);
         
         this.updateEdgePosition(edge);
         
