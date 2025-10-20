@@ -52,7 +52,8 @@ async def whatsapp_webhook_verify(
     storage = Storage()
     
     # Устанавливаем контекст компании для резолва переменных
-    company_data = await storage.get(f"subdomain:{company_id}", force_global=True)
+    company_key = f"company:{company_id}"
+    company_data = await storage.get(company_key, force_global=True)
     if company_data:
         company_dict = json.loads(company_data)
         company = Company(**company_dict)
@@ -61,7 +62,7 @@ async def whatsapp_webhook_verify(
         context.active_company = company
         logger.info(f"✅ Установлен контекст компании: {company.name} ({company.company_id})")
     else:
-        logger.warning(f"⚠️ Компания {company_id} не найдена, контекст не установлен")
+        logger.warning(f"⚠️ Компания {company_id} не найдена по ключу {company_key}, контекст не установлен")
     
     flow_data = await storage.get(flow_key, force_global=True)
     
@@ -130,7 +131,8 @@ async def whatsapp_webhook(flow_key: str, request: Request):
     storage = Storage()
     
     # Устанавливаем контекст компании для резолва переменных
-    company_data = await storage.get(f"subdomain:{company_id}", force_global=True)
+    company_key = f"company:{company_id}"
+    company_data = await storage.get(company_key, force_global=True)
     if company_data:
         company_dict = json.loads(company_data)
         company = Company(**company_dict)
@@ -139,7 +141,7 @@ async def whatsapp_webhook(flow_key: str, request: Request):
         context.active_company = company
         logger.info(f"✅ Установлен контекст компании: {company.name} ({company.company_id})")
     else:
-        logger.warning(f"⚠️ Компания {company_id} не найдена, контекст не установлен")
+        logger.warning(f"⚠️ Компания {company_id} не найдена по ключу {company_key}, контекст не установлен")
     
     flow_data = await storage.get(flow_key, force_global=True)
     
