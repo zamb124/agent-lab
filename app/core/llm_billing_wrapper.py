@@ -235,14 +235,14 @@ class ChatOpenAIWithBilling(BaseChatModel):
         
         # Получаем прокси из конфигурации
         settings = get_settings()
-        proxies = settings.proxy.get_proxies_dict()
+        proxy_url = settings.proxy.get_proxy_url("https")
         
         # Логируем если прокси используется
-        if proxies:
-            logger.info(f"🌐 Используем прокси для LLM запроса: {list(proxies.keys())}")
+        if proxy_url:
+            logger.info(f"🌐 Используем прокси для LLM запроса: {proxy_url}")
         
         # HTTP запрос к OpenRouter
-        async with httpx.AsyncClient(timeout=self.timeout, proxies=proxies) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, proxy=proxy_url) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
