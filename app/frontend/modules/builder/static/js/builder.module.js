@@ -1,152 +1,72 @@
 /**
- * Builder Module - Визуальный редактор flows
+ * Builder Module v3.0 - Визуальный редактор flows
+ * Полностью переписан на ООП архитектуре
  */
 
 export default class BuilderModule {
     constructor(app) {
         this.app = app;
         this.name = 'builder';
-        this.version = '2.0.0';
+        this.version = '3.0.0';
         
-        this.Canvas = null;
-        this.DragDrop = null;
+        // Зависимости (lazy load)
+        this.CanvasCore = null;
         this.Palette = null;
         this.PropertiesPanel = null;
-        this.ElementSelector = null;
         this.Sidebar = null;
         
-        this.currentCanvas = null;
-        this.currentDragDrop = null;
+        // Компоненты
+        this.canvas = null;
         this.palette = null;
         this.propertiesPanel = null;
         this.sidebar = null;
         
+        // Состояние
         this.currentFlow = null;
-        this.entryPointAgentType = null; // 'react' или 'stategraph'
-        this.selectedNodes = new Set();
-        this.selectedEdges = new Set();
+        this.entryPointAgentType = null;
         this.isInitialized = false;
     }
     
+    /**
+     * Инициализация модуля
+     */
     async init() {
-        console.log('🎨 Инициализация Builder модуля v2.0');
+        console.log('🎨 Builder Module v3.0 - Новая ООП архитектура');
+        console.log('📍 Current path:', window.location.pathname);
         
         this.setupGlobalFunctions();
         this.setupEventListeners();
         
         if (this.isBuilderPage()) {
-            this.setupButtonListeners();
-            await this.loadDependencies();
-            await this.initializeBuilder();
+            console.log('✅ На странице Builder, загружаем...');
+            await this.onPageLoad();
+        } else {
+            console.log('⏭️ Не страница Builder, пропускаем инициализацию');
         }
         
         return this;
     }
     
+    /**
+     * Глобальные функции
+     */
     setupGlobalFunctions() {
         window.builder = this;
+        window.openFlow = (flowId) => this.openFlow(flowId);
+        window.saveFlow = () => this.saveFlow();
+        window.clearCanvas = () => this.clearCanvas();
     }
     
+    /**
+     * Проверка страницы Builder
+     */
     isBuilderPage() {
         return window.location.pathname.startsWith('/frontend/builder');
     }
     
-    async loadDependencies() {
-        if (this.Canvas) {
-            return;
-        }
-        
-        console.log('📦 Загружаем зависимости Builder...');
-        
-        try {
-            const [Canvas, Palette, PropertiesPanel, ElementSelector, DragDrop, Sidebar] = await Promise.all([
-                import('/static/builder/js/canvas.js'),
-                import('/static/builder/js/palette.js'),
-                import('/static/builder/js/properties-panel.js'),
-                import('/static/builder/js/element-selector.js'),
-                import('/static/builder/js/drag-drop.js'),
-                import('/static/builder/js/sidebar.js')
-            ]);
-            
-            this.Canvas = Canvas.default;
-            this.Palette = Palette.default;
-            this.PropertiesPanel = PropertiesPanel.default;
-            this.ElementSelector = ElementSelector.default;
-            this.DragDrop = DragDrop.default;
-            this.Sidebar = Sidebar.default;
-            
-            console.log('✅ Зависимости Builder загружены');
-        } catch (error) {
-            console.error('❌ Ошибка загрузки зависимостей Builder:', error);
-            throw error;
-        }
-    }
-    
-    async initializeBuilder() {
-        if (this.isInitialized) return;
-        
-        console.log('🎨 Инициализация Builder на странице');
-        
-        const container = document.getElementById('builderContainer');
-        const canvasEl = document.getElementById('builderCanvas');
-        
-        if (!container || !canvasEl) {
-            console.warn('⚠️ Builder DOM элементы не найдены');
-            return;
-        }
-        
-        try {
-            await this.loadDependencies();
-            
-            await this.initComponents();
-            
-            const flowId = this.getFlowIdFromPage();
-            if (flowId) {
-                await this.loadFlow(flowId);
-            }
-            
-            this.initTheme();
-            this.isInitialized = true;
-            
-            this.showNotification('Builder инициализирован', 'success');
-            
-        } catch (error) {
-            console.error('❌ Ошибка инициализации Builder:', error);
-            this.showNotification('Ошибка инициализации Builder: ' + error.message, 'error');
-        }
-    }
-    
-    async initComponents() {
-        console.log('🔧 Инициализация компонентов Builder...');
-        
-        this.palette = new this.Palette(this);
-        await this.palette.init();
-        console.log('✅ Palette создана');
-        
-        // Инициализируем палитру в активном состоянии (нет flow)
-        this.updatePaletteForAgentType(null);
-        
-        this.propertiesPanel = new this.PropertiesPanel(this);
-        await this.propertiesPanel.init();
-        console.log('✅ PropertiesPanel создана');
-        
-        const canvasEl = document.getElementById('builderCanvas');
-        this.currentCanvas = new this.Canvas(canvasEl, this);
-        this.canvas = this.currentCanvas;
-        await this.currentCanvas.init();
-        console.log('✅ Canvas создан');
-        
-        this.currentDragDrop = new this.DragDrop(this);
-        this.dragDrop = this.currentDragDrop;
-        await this.currentDragDrop.init();
-        console.log('✅ DragDrop создан и инициализирован');
-    }
-    
-    getFlowIdFromPage() {
-        const match = window.location.pathname.match(/\/frontend\/builder\/flow\/([^\/]+)/);
-        return match ? match[1] : null;
-    }
-    
+    /**
+     * Event listeners для HTMX навигации
+     */
     setupEventListeners() {
         document.addEventListener('htmx:afterSettle', (e) => {
             if (e.target.id === 'content' && this.isBuilderPage()) {
@@ -161,717 +81,549 @@ export default class BuilderModule {
                 this.onPageUnload();
             }
         });
-        
-        document.addEventListener('keydown', (e) => this.handleKeydown(e));
-        document.addEventListener('contextmenu', (e) => this.handleContextMenu(e));
-        document.addEventListener('click', () => this.hideContextMenu());
     }
     
-    setupButtonListeners() {
-        const saveBtn = document.getElementById('saveFlowBtn');
-        const runBtn = document.getElementById('runFlowBtn');
-        const themeToggleBtn = document.getElementById('themeToggleBtn');
-        const clearCanvasBtn = document.getElementById('clearCanvasBtn');
-        const searchAddBtn = document.getElementById('searchAddBtn');
-        const resetToCodeBtn = document.getElementById('resetToCodeBtn');
+    /**
+     * Загрузка зависимостей
+     */
+    async loadDependencies() {
+        if (this.CanvasCore) return;
         
-        if (saveBtn) saveBtn.addEventListener('click', () => this.saveCurrentFlow());
-        if (runBtn) runBtn.addEventListener('click', () => this.runCurrentFlow());
-        if (searchAddBtn) searchAddBtn.addEventListener('click', () => this.handleCreateNew());
-        if (themeToggleBtn) themeToggleBtn.addEventListener('click', () => this.toggleTheme());
-        if (clearCanvasBtn) clearCanvasBtn.addEventListener('click', () => this.clearCanvas());
-        if (resetToCodeBtn) resetToCodeBtn.addEventListener('click', () => this.resetToCode());
+        console.log('📦 Загружаем компоненты Builder...');
+        
+        const [CanvasCore, Palette, PropertiesPanel, Sidebar] = await Promise.all([
+            import('/static/builder/js/canvas/CanvasCore.js'),
+            import('/static/builder/js/palette.js'),
+            import('/static/builder/js/properties-panel.js'),
+            import('/static/builder/js/sidebar.js')
+        ]);
+        
+        this.CanvasCore = CanvasCore.CanvasCore;
+        this.Palette = Palette.default;
+        this.PropertiesPanel = PropertiesPanel.default;
+        this.Sidebar = Sidebar.default;
+        
+        console.log('✅ Компоненты Builder загружены');
     }
     
+    /**
+     * Загрузка страницы Builder
+     */
     async onPageLoad() {
         console.log('📄 Builder страница загружена');
+        
         this.setupButtonListeners();
         await this.initializeBuilder();
     }
     
+    /**
+     * Выгрузка страницы
+     */
     onPageUnload() {
         console.log('👋 Уход со страницы Builder');
         this.cleanup();
     }
     
-    async loadFlow(flowId) {
+    /**
+     * Инициализация Builder
+     */
+    async initializeBuilder() {
+        if (this.isInitialized) {
+            console.log('⏭️ Builder уже инициализирован');
+            return;
+        }
+        
+        console.log('🎨 Инициализация Builder...');
+        
+        const container = document.getElementById('builderContainer');
+        const canvasEl = document.getElementById('builderCanvas');
+        
+        console.log('🔍 DOM элементы:', { container: !!container, canvasEl: !!canvasEl });
+        
+        if (!container || !canvasEl) {
+            console.warn('⚠️ Builder DOM элементы не найдены');
+            return;
+        }
+
         try {
+            console.log('📦 Начинаем загрузку зависимостей...');
+            await this.loadDependencies();
+            console.log('✅ Зависимости загружены');
+            console.log('🔍 CanvasCore class:', this.CanvasCore);
+            
+            // Создаем Canvas (ООП архитектура)
+            console.log('🏗️ Создаем экземпляр CanvasCore...');
+            this.canvas = new this.CanvasCore(canvasEl, this);
+            console.log('✅ Экземпляр создан, вызываем init()...');
+            await this.canvas.init();
+            console.log('✅ Canvas.init() завершен');
+            
+            // Создаем UI компоненты
+            console.log('🎨 Создаем UI компоненты...');
+            this.palette = new this.Palette(this);
+            this.propertiesPanel = new this.PropertiesPanel(this);
+            this.sidebar = new this.Sidebar(this);
+            
+            // Подписываемся на события Canvas
+            console.log('🔗 Подписываемся на события...');
+            this.subscribeToCanvasEvents();
+            
+            // Кнопки управления
+            console.log('🔘 Настраиваем кнопки zoom...');
+            this.setupZoomButtons();
+            
+            this.isInitialized = true;
+            
+            console.log('✅ Builder полностью инициализирован');
+            
+            // Автозагрузка flow из URL
+            await this.loadFlowFromURL();
+            
+        } catch (error) {
+            console.error('❌ Ошибка инициализации Builder:', error);
+            this.showNotification('Ошибка инициализации Builder', 'danger');
+        }
+    }
+    
+    /**
+     * Подписка на события Canvas
+     */
+    subscribeToCanvasEvents() {
+        this.canvas.on('node:added', async ({ node }) => {
+            console.log('Нода добавлена:', node.id);
+            this.palette?.updatePaletteState();
+            
+            // Если добавлен FlowNode - устанавливаем currentFlow и активируем кнопки
+            if (node.type === 'flow_node' && node.flowData) {
+                this.currentFlow = node.flowData;
+                this.updateFlowInfo();
+                this.enableFlowActions();
+                await this.updateEntryPointAgentType();
+            }
+        });
+        
+        this.canvas.on('node:removed', ({ nodeId }) => {
+            console.log('Нода удалена:', nodeId);
+            this.palette?.updatePaletteState();
+            
+            // Если удален FlowNode - деактивируем кнопки
+            const hasFlow = Array.from(this.canvas.nodes.values()).some(n => n.type === 'flow_node');
+            if (!hasFlow) {
+                this.currentFlow = null;
+                this.disableFlowActions();
+            }
+        });
+        
+        this.canvas.on('selection:changed', ({ nodes, edges }) => {
+            if (nodes.length === 1) {
+                this.propertiesPanel?.show(nodes[0]);
+            } else if (nodes.length === 0) {
+                this.propertiesPanel?.hide();
+            }
+        });
+        
+        this.canvas.on('edge:created', ({ edge }) => {
+            console.log('Связь создана:', edge.id);
+            this.updateFlowEntryPointIfNeeded(edge);
+            this.palette?.updatePaletteState();
+        });
+        
+        this.canvas.on('graph:loaded', () => {
+            console.log('Граф загружен');
+            this.palette?.updatePaletteState();
+        });
+        
+        this.canvas.on('node:edit', ({ node }) => {
+            console.log('✏️ Редактирование ноды:', node.id);
+            this.propertiesPanel?.show(node);
+        });
+    }
+    
+    /**
+     * Настройка кнопок zoom
+     */
+    setupZoomButtons() {
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const fitToScreenBtn = document.getElementById('fitToScreenBtn');
+        
+        if (zoomInBtn) {
+            zoomInBtn.addEventListener('click', () => {
+                this.canvas.interactionManager.zoomIn();
+            });
+        }
+        
+        if (zoomOutBtn) {
+            zoomOutBtn.addEventListener('click', () => {
+                this.canvas.interactionManager.zoomOut();
+            });
+        }
+        
+        if (fitToScreenBtn) {
+            fitToScreenBtn.addEventListener('click', () => {
+                this.canvas.interactionManager.fitToScreen();
+            });
+        }
+    }
+    
+    /**
+     * Настройка кнопок в header
+     */
+    setupButtonListeners() {
+        const saveBtn = document.getElementById('saveFlowBtn');
+        const runBtn = document.getElementById('runFlowBtn');
+        const clearBtn = document.getElementById('clearCanvasBtn');
+        
+        if (saveBtn) {
+            saveBtn.addEventListener('click', () => this.saveFlow());
+        }
+        
+        if (runBtn) {
+            runBtn.addEventListener('click', () => this.runFlow());
+        }
+        
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => this.clearCanvas());
+        }
+    }
+    
+    /**
+     * Запуск flow для тестирования
+     */
+    async runFlow() {
+        if (!this.currentFlow) {
+            this.showNotification('Нет открытого flow', 'warning');
+            return;
+        }
+        
+        console.log('▶️ Запуск flow:', this.currentFlow.flow_id);
+        
+        // TODO: Интеграция с тестовым запуском flow
+        this.showNotification('Функция запуска в разработке', 'info');
+    }
+    
+    /**
+     * Загрузка flow из URL
+     */
+    async loadFlowFromURL() {
+        // Проверяем URL: /frontend/builder/flow/{flow_id}
+        const pathMatch = window.location.pathname.match(/\/frontend\/builder\/flow\/([^/]+)/);
+        
+        if (pathMatch) {
+            const flowId = pathMatch[1];
+            console.log('🔗 Обнаружен flow в URL:', flowId);
+            await this.openAndExpandFlow(flowId);
+            return;
+        }
+        
+        // Или через query параметр
+        const urlParams = new URLSearchParams(window.location.search);
+        const flowIdParam = urlParams.get('flow_id');
+        
+        if (flowIdParam) {
+            console.log('🔗 Обнаружен flow в параметрах:', flowIdParam);
+            await this.openAndExpandFlow(flowIdParam);
+        }
+    }
+    
+    /**
+     * Открытие и рекурсивное разворачивание flow
+     */
+    async openAndExpandFlow(flowId) {
+        try {
+            console.log('📂 Загружаем и разворачиваем flow:', flowId);
+            
             const response = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}`);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            this.currentFlow = await response.json();
-
-            // Получаем тип entry_point агента
-            await this.updateEntryPointAgentType();
-
-            // Всегда разворачиваем из graph_definition
-            const centerPos = this.currentCanvas.getCenterPosition();
-            await this.currentDragDrop.createFlowWithExpansion(
-                {
-                    id: this.currentFlow.flow_id,
-                    name: this.currentFlow.name
-                },
-                centerPos
-            );
-
-            // Применяем визуальные данные из canvas_data
-            if (this.currentFlow.canvas_data) {
-                console.log('🎨 Применяем визуальные данные canvas:', this.currentFlow.canvas_data);
-                await this.applyCanvasVisualData(this.currentFlow.canvas_data);
-            }
-
-            // Обновляем порты нод в зависимости от типа агента
-            this.updateNodePortsForAgentType(this.entryPointAgentType);
-
-            this.updateFlowInfo();
-            this.enableFlowActions();
-            
-            this.showNotification(`Флоу "${this.currentFlow.name}" загружен`, 'success');
-            
-        } catch (error) {
-            console.error('Ошибка загрузки флоу:', error);
-            this.showNotification('Ошибка загрузки флоу: ' + error.message, 'error');
-        }
-    }
-    
-    async updateEntryPointAgentType() {
-        console.log('🔍 updateEntryPointAgentType вызван, currentFlow:', this.currentFlow);
-        console.log('🔍 entry_point_agent:', this.currentFlow?.entry_point_agent);
-
-        const oldAgentType = this.entryPointAgentType;
-
-        if (!this.currentFlow || !this.currentFlow.entry_point_agent) {
-            console.log('⚠️ Нет entry_point_agent, сбрасываем палитру');
-            this.entryPointAgentType = null;
-            this.updatePaletteForAgentType(null);
-            this.updateNodePortsForAgentType(null);
-            return;
-        }
-
-        try {
-            console.log('🔄 Запрашиваем агента:', this.currentFlow.entry_point_agent);
-            const agentResponse = await fetch(`/frontend/api/agents/${encodeURIComponent(this.currentFlow.entry_point_agent)}`);
-            console.log('📡 Ответ агента:', agentResponse.status);
-
-            if (agentResponse.ok) {
-                const agent = await agentResponse.json();
-                console.log('🤖 Получен агент:', agent);
-                console.log('🏷️ Тип агента:', agent.type);
-                console.log('🔍 Все поля агента:', Object.keys(agent));
-
-                this.entryPointAgentType = agent.type; // 'react' или 'stategraph'
-                console.log('🎯 Entry point agent type установлен:', this.entryPointAgentType);
-
-                this.updatePaletteForAgentType(this.entryPointAgentType);
-
-                // Если тип агента изменился, обновляем порты нод
-                if (oldAgentType !== this.entryPointAgentType) {
-                    console.log('🔄 Тип агента изменился, обновляем порты нод');
-                    this.updateNodePortsForAgentType(this.entryPointAgentType);
-                }
-            } else {
-                console.log('❌ Агент не найден, сбрасываем');
-                this.entryPointAgentType = null;
-                this.updatePaletteForAgentType(null);
-                this.updateNodePortsForAgentType(null);
-            }
-        } catch (error) {
-            console.error('❌ Ошибка получения типа агента:', error);
-            this.entryPointAgentType = null;
-            this.updatePaletteForAgentType(null);
-            this.updateNodePortsForAgentType(null);
-        }
-    }
-    
-    updateNodePortsForAgentType(agentType) {
-        console.log('🔌 updateNodePortsForAgentType вызван, тип агента:', agentType);
-
-        // Обновляем порты всех tool_node на canvas
-        for (const [nodeId, node] of this.currentCanvas.nodes) {
-            if (node.data.type === 'tool_node') {
-                console.log('🔄 Обновляем порты tool_node:', nodeId);
-                this.currentCanvas.updateNodePorts(node, agentType);
-            }
-        }
-    }
-
-    updatePaletteForAgentType(agentType) {
-        console.log('🎨 updatePaletteForAgentType вызван, тип агента:', agentType);
-        console.log('🎨 Текущий entryPointAgentType:', this.entryPointAgentType);
-
-        if (!this.palette) {
-            console.warn('⚠️ Palette не инициализирована');
-            return;
-        }
-
-        const paletteElement = document.getElementById('nodePalette');
-        if (!paletteElement) {
-            console.warn('⚠️ Элемент nodePalette не найден');
-            return;
-        }
-
-        const paletteItems = paletteElement.querySelectorAll('.palette-item');
-        console.log('📋 Найдено элементов палитры:', paletteItems.length);
-
-        paletteItems.forEach(item => {
-            const nodeType = item.dataset.nodeType;
-            let isEnabled = false;
-
-            console.log(`🔍 Проверяем элемент ${nodeType} для типа агента ${agentType}`);
-
-            if (!agentType) {
-                // null: flow для создания, agent для entry_point
-                isEnabled = (nodeType === 'flow_node' || nodeType === 'agent_node');
-                console.log(`  📝 Для null: ${nodeType} -> ${isEnabled ? 'enabled' : 'disabled'}`);
-            } else if (agentType === 'react') {
-                // react: tool, agent (визуально ноды, но сохраняются в tools[])
-                isEnabled = (nodeType === 'tool_node' || nodeType === 'agent_node');
-                console.log(`  ⚛️ Для react: ${nodeType} -> ${isEnabled ? 'enabled' : 'disabled'}`);
-            } else if (agentType === 'stategraph') {
-                // stategraph: все ноды кроме flow
-                isEnabled = (nodeType !== 'flow_node');
-                console.log(`  📊 Для stategraph: ${nodeType} -> ${isEnabled ? 'enabled' : 'disabled'}`);
-            }
-
-            if (isEnabled) {
-                item.classList.remove('disabled');
-                item.setAttribute('draggable', 'true');
-                console.log(`  ✅ ${nodeType} включен`);
-            } else {
-                item.classList.add('disabled');
-                item.setAttribute('draggable', 'false');
-                console.log(`  ❌ ${nodeType} отключен`);
-            }
-        });
-
-        console.log('✅ updatePaletteForAgentType завершен');
-    }
-    
-    async applyCanvasVisualData(canvasData) {
-        console.log('🎨 Применяем визуальные данные canvas:', canvasData);
-
-        // Применяем позиции и размеры к существующим нодам
-        for (const nodeData of canvasData.nodes || []) {
-            const existingNode = this.currentCanvas.nodes.get(nodeData.id);
-            if (existingNode && nodeData.ui) {
-                console.log('📍 Применяем позицию к ноде:', nodeData.id, nodeData.ui);
-                existingNode.x = nodeData.ui.x || existingNode.x;
-                existingNode.y = nodeData.ui.y || existingNode.y;
-                existingNode.width = nodeData.ui.width || existingNode.width;
-                existingNode.height = nodeData.ui.height || existingNode.height;
-                existingNode.element.style.left = `${existingNode.x}px`;
-                existingNode.element.style.top = `${existingNode.y}px`;
-                existingNode.element.style.width = `${existingNode.width}px`;
-                existingNode.element.style.height = `${existingNode.height}px`;
-            }
-        }
-
-        // Восстанавливаем дополнительные ноды (например, tool_node), которые не входят в graph_definition
-        const existingNodeIds = new Set(this.currentCanvas.nodes.keys());
-        for (const nodeData of canvasData.nodes || []) {
-            if (!existingNodeIds.has(nodeData.id)) {
-                console.log('📦 Восстанавливаем дополнительную ноду:', nodeData.id);
-
-                const position = {
-                    x: nodeData.ui?.x || 100,
-                    y: nodeData.ui?.y || 100
-                };
-
-                const size = {
-                    width: nodeData.ui?.width || 180,
-                    height: nodeData.ui?.height || 80
-                };
-
-                // Создаем дополнительную ноду
-                if (this.currentDragDrop && typeof this.currentDragDrop.createNodeFromData === 'function') {
-                    await this.currentDragDrop.createNodeFromData(nodeData, position, size);
-                } else {
-                    console.error('❌ createNodeFromData method not found on currentDragDrop');
-                }
-            }
-        }
-
-        // Восстанавливаем связи
-        for (const edgeData of canvasData.edges || []) {
-            console.log('🔗 Восстанавливаем связь:', edgeData);
-
-            const sourceNode = this.currentCanvas.nodes.get(edgeData.source);
-            const targetNode = this.currentCanvas.nodes.get(edgeData.target);
-
-            if (sourceNode && targetNode) {
-                // Проверяем, нет ли уже такой связи
-                const existingEdge = Array.from(this.currentCanvas.edges.values()).find(
-                    edge => edge.source === edgeData.source && edge.target === edgeData.target
-                );
-
-                if (!existingEdge) {
-                    this.currentCanvas.createConnection(edgeData.source, edgeData.target);
-                }
-            } else {
-                console.warn('⚠️ Не найдены ноды для связи:', edgeData.source, edgeData.target);
-            }
-        }
-
-        console.log('✅ Визуальные данные canvas применены');
-    }
-
-    async saveCurrentFlow() {
-        if (!this.currentFlow) {
-            this.showNotification('Нет активного флоу для сохранения', 'warning');
-            return;
-        }
-        
-        try {
-            const canvasData = this.currentCanvas.getGraphData();
-
-            // Backend сам обработает преобразование для ReAct/StateGraph
-            const response = await fetch(`/frontend/api/flows/${encodeURIComponent(this.currentFlow.flow_id)}/canvas`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(canvasData)
-            });
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            
-            this.showNotification('Флоу сохранен', 'success');
-            
-        } catch (error) {
-            console.error('Ошибка сохранения флоу:', error);
-            this.showNotification('Ошибка сохранения: ' + error.message, 'error');
-        }
-    }
-    
-    async runCurrentFlow() {
-        if (!this.currentFlow) {
-            this.showNotification('Нет активного флоу для запуска', 'warning');
-            return;
-        }
-        
-        if (this.app.chat) {
-            this.app.chat.open({
-                agent_id: this.currentFlow.flow_id,
-                session_id: null,
-                title: this.currentFlow.name
-            });
-        } else {
-            console.error('Chat manager не инициализирован');
-            this.showNotification('Чат недоступен. Попробуйте обновить страницу.', 'error');
-        }
-    }
-    
-    async handleCreateNew() {
-        const activeTab = document.querySelector('.tab-button.active');
-        if (!activeTab) return;
-        
-        const tabType = activeTab.dataset.tab;
-        
-        switch (tabType) {
-            case 'flows':
-                await this.createEmptyFlowOnCanvas();
-                break;
-            case 'agents':
-                await this.createEmptyAgentOnCanvas();
-                break;
-            case 'tools':
-                await this.createEmptyToolOnCanvas();
-                break;
-            default:
-                console.warn('Неизвестный тип вкладки:', tabType);
-        }
-    }
-    
-    async createEmptyFlowOnCanvas() {
-        try {
-            const hasFlow = Array.from(this.currentCanvas.nodes.values())
-                .some(node => node.data.type === 'flow_node');
-            
-            if (hasFlow) {
-                this.showNotification('На канвасе уже есть Flow', 'warning');
-                return;
-            }
-            
-            const response = await fetch('/frontend/api/flows/', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({})
-            });
-            
-            if (!response.ok) throw new Error('Ошибка создания Flow');
-            
-            const flowData = await response.json();
-            
-            const centerPos = this.currentCanvas.getCenterPosition();
-            await this.currentCanvas.addNode({
-                id: `flow_${flowData.flow_id}_${Date.now()}`,
-                type: 'flow_node',
-                params: {
-                    name: flowData.name,
-                    flow_id: flowData.flow_id,
-                    description: flowData.description,
-                    entry_point_agent: flowData.entry_point_agent,
-                    isEntryPoint: true
-                },
-                ui: { x: centerPos.x, y: centerPos.y, width: 380, height: 200 }
-            });
-            
-            this.currentFlow = { flow_id: flowData.flow_id, name: flowData.name };
-            this.updateFlowInfo();
-            this.enableFlowActions();
-            
-            this.showNotification('Flow добавлен на канвас', 'success');
-            
-        } catch (error) {
-            console.error('Ошибка создания Flow на канвасе:', error);
-            this.showNotification('Ошибка создания Flow: ' + error.message, 'error');
-        }
-    }
-    
-    async createEmptyAgentOnCanvas() {
-        try {
-            const response = await fetch('/frontend/api/agents/', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({})
-            });
-            
-            if (!response.ok) throw new Error('Ошибка создания Agent');
-            
-            const agentData = await response.json();
-            
-            const centerPos = this.currentCanvas.getCenterPosition();
-            await this.currentCanvas.addNode({
-                id: `agent_${agentData.agent_id}_${Date.now()}`,
-                type: 'agent_node',
-                params: {
-                    name: agentData.name,
-                    agent_id: agentData.agent_id,
-                    description: agentData.description
-                },
-                ui: { x: centerPos.x, y: centerPos.y, width: 380, height: 200 }
-            });
-            
-            this.showNotification('Agent добавлен на канвас', 'success');
-            
-        } catch (error) {
-            console.error('Ошибка создания Agent на канвасе:', error);
-            this.showNotification('Ошибка создания Agent: ' + error.message, 'error');
-        }
-    }
-    
-    async createEmptyToolOnCanvas() {
-        try {
-            const response = await fetch('/frontend/api/tools/', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({})
-            });
-            
-            if (!response.ok) throw new Error('Ошибка создания Tool');
-            
-            const toolData = await response.json();
-            
-            const centerPos = this.currentCanvas.getCenterPosition();
-            await this.currentCanvas.addNode({
-                id: `tool_${toolData.tool_id}_${Date.now()}`,
-                type: 'tool_node',
-                params: {
-                    name: toolData.name || "Новый инструмент",
-                    tool_id: toolData.tool_id,
-                    description: toolData.description
-                },
-                ui: { x: centerPos.x, y: centerPos.y, width: 380, height: 200 }
-            });
-            
-            this.showNotification('Tool добавлен на канвас', 'success');
-            
-        } catch (error) {
-            console.error('Ошибка создания Tool на канвасе:', error);
-            this.showNotification('Ошибка создания Tool: ' + error.message, 'error');
-        }
-    }
-    
-    updateFlowInfo() {
-        const nameEl = document.getElementById('currentFlowName');
-        if (nameEl) {
-            nameEl.textContent = this.currentFlow ? this.currentFlow.name : 'Выберите или создайте Flow';
-        }
-    }
-    
-    enableFlowActions() {
-        const saveBtn = document.getElementById('saveFlowBtn');
-        const runBtn = document.getElementById('runFlowBtn');
-        const resetBtn = document.getElementById('resetToCodeBtn');
-        
-        if (saveBtn) saveBtn.disabled = false;
-        if (runBtn) runBtn.disabled = false;
-        if (resetBtn) resetBtn.disabled = false;
-    }
-    
-    disableFlowActions() {
-        const saveBtn = document.getElementById('saveFlowBtn');
-        const runBtn = document.getElementById('runFlowBtn');
-        const resetBtn = document.getElementById('resetToCodeBtn');
-        
-        if (saveBtn) saveBtn.disabled = true;
-        if (runBtn) runBtn.disabled = true;
-        if (resetBtn) resetBtn.disabled = true;
-    }
-    
-    handleKeydown(e) {
-        if (e.ctrlKey && e.key === 's') {
-            e.preventDefault();
-            this.saveCurrentFlow();
-        }
-        
-        if (e.key === 'Delete') {
-            this.deleteSelected();
-        }
-        
-        if (e.key === 'Escape') {
-            this.clearSelection();
-            this.hideContextMenu();
-        }
-        
-        if (e.ctrlKey && e.key === 'a') {
-            e.preventDefault();
-            this.selectAll();
-        }
-    }
-    
-    handleContextMenu(e) {
-        if (!this.isBuilderPage()) {
-            return;
-        }
-        
-        const target = e.target.closest('.canvas-node, .edge');
-        
-        if (target) {
-            e.preventDefault();
-            this.showContextMenu(e.clientX, e.clientY, target);
-        } else {
-            this.hideContextMenu();
-        }
-    }
-    
-    showContextMenu(x, y, target) {
-        const contextMenu = document.getElementById('contextMenu');
-        if (!contextMenu) return;
-        
-        contextMenu.classList.remove('hidden');
-        contextMenu.style.left = x + 'px';
-        contextMenu.style.top = y + 'px';
-        contextMenu.style.display = 'block';
-        
-        const items = contextMenu.querySelectorAll('.context-menu-item');
-        items.forEach(item => {
-            item.onclick = () => {
-                const action = item.dataset.action;
-                this.handleContextAction(action, target);
-                this.hideContextMenu();
-            };
-        });
-    }
-    
-    hideContextMenu() {
-        const contextMenu = document.getElementById('contextMenu');
-        if (contextMenu) {
-            contextMenu.classList.add('hidden');
-            contextMenu.style.display = 'none';
-        }
-    }
-    
-    handleContextAction(action, target) {
-        switch (action) {
-            case 'edit':
-                this.editElement(target);
-                break;
-            case 'duplicate':
-                this.duplicateElement(target);
-                break;
-            case 'delete':
-                this.deleteElement(target);
-                break;
-        }
-    }
-    
-    editElement(target) {
-        console.log('Редактирование элемента:', target);
-    }
-    
-    duplicateElement(target) {
-        console.log('Дублирование элемента:', target);
-    }
-    
-    deleteElement(target) {
-        if (target.classList.contains('canvas-node')) {
-            const nodeId = target.dataset.nodeId;
-            this.currentCanvas.removeNode(nodeId);
-        } else if (target.classList.contains('edge')) {
-            const edgeId = target.dataset.edgeId;
-            this.currentCanvas.removeEdge(edgeId);
-        }
-    }
-    
-    deleteSelected() {
-        this.selectedNodes.forEach(nodeId => {
-            this.currentCanvas.removeNode(nodeId);
-        });
-        
-        this.selectedEdges.forEach(edgeId => {
-            this.currentCanvas.removeEdge(edgeId);
-        });
-        
-        this.clearSelection();
-    }
-    
-    clearSelection() {
-        this.selectedNodes.clear();
-        this.selectedEdges.clear();
-        
-        document.querySelectorAll('.canvas-node.selected').forEach(node => {
-            node.classList.remove('selected');
-        });
-        
-        document.querySelectorAll('.edge.selected').forEach(edge => {
-            edge.classList.remove('selected');
-        });
-    }
-    
-    selectAll() {
-        this.clearSelection();
-        
-        document.querySelectorAll('.canvas-node').forEach(node => {
-            const nodeId = node.dataset.nodeId;
-            this.selectedNodes.add(nodeId);
-            node.classList.add('selected');
-        });
-        
-        document.querySelectorAll('.edge').forEach(edge => {
-            const edgeId = edge.dataset.edgeId;
-            this.selectedEdges.add(edgeId);
-            edge.classList.add('selected');
-        });
-    }
-    
-    initTheme() {
-        const savedTheme = localStorage.getItem('theme') || 'dark';
-        document.documentElement.setAttribute('data-theme', savedTheme);
-    }
-    
-    toggleTheme() {
-        const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
-        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        
-        document.documentElement.setAttribute('data-theme', newTheme);
-        localStorage.setItem('theme', newTheme);
-        
-        this.showNotification(`Тема переключена на ${newTheme === 'dark' ? 'темную' : 'светлую'}`, 'info', 2000);
-    }
-    
-    clearCanvas() {
-        if (this.currentCanvas.nodes.size === 0) {
-            this.showNotification('Канвас уже пуст', 'info');
-            return;
-        }
-        
-        if (confirm('Вы уверены, что хотите очистить канвас? Несохраненные изменения будут потеряны.')) {
-            this.currentCanvas.clearGraph();
-            this.currentFlow = null;
-            this.entryPointAgentType = null;
-            this.updateFlowInfo();
-            this.disableFlowActions();
-            // Сбрасываем палитру в активное состояние
-            this.updatePaletteForAgentType(null);
-            this.showNotification('Канвас очищен', 'success');
-        }
-    }
-    
-    async resetToCode() {
-        if (!this.currentFlow) {
-            this.showNotification('Нет активного флоу', 'warning');
-            return;
-        }
-        
-        if (!confirm('Сбросить к коду? Canvas будет пересоздан из graph_definition.')) {
-            return;
-        }
-        
-        try {
-            const flowId = this.currentFlow.flow_id;
-            
-            const response = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}/canvas`, {
-                method: 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({nodes: [], edges: [], entry_point: null})
-            });
-            
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }
             
-            this.currentCanvas.clearGraph();
+            this.currentFlow = await response.json();
             
-            await this.loadFlow(flowId);
-            this.showNotification('Canvas сброшен к коду и перезагружен', 'success');
+            // Обновляем тип entry_point агента
+            await this.updateEntryPointAgentType();
+            
+            // Очищаем canvas
+            this.canvas.clearGraph();
+            
+            // Создаем FlowNode в центре
+            const centerPos = this.canvas.getCenterPosition();
+            
+            const flowNodeData = {
+                id: `flow_${Date.now()}`,
+                type: 'flow_node',
+                params: {
+                    flow_id: flowId,
+                    isEntryPoint: true
+                },
+                ui: {
+                    x: centerPos.x - 100,
+                    y: centerPos.y - 50,
+                    width: 200,
+                    height: 100
+                }
+            };
+            
+            // Добавляем FlowNode (автоматически развернется через autoExpand)
+            const flowNode = await this.canvas.addNode(flowNodeData);
+            
+            // Fit to screen после разворачивания
+            setTimeout(() => {
+                this.canvas.interactionManager.fitToScreen();
+            }, 500);
+            
+            this.updateFlowInfo();
+            this.enableFlowActions();
+            this.showNotification(`Flow "${this.currentFlow.name}" развернут`, 'success');
             
         } catch (error) {
-            console.error('Ошибка сброса:', error);
-            this.showNotification('Ошибка: ' + error.message, 'error');
+            console.error('❌ Ошибка разворачивания flow:', error);
+            this.showNotification('Ошибка загрузки flow', 'danger');
         }
     }
     
-    showNotification(message, type = 'info', duration = 3000) {
-        if (this.app && this.app.showNotification) {
-            const appType = {
-                'success': 'success',
-                'error': 'danger',
-                'warning': 'warning',
-                'info': 'info'
-            }[type] || 'info';
+    /**
+     * Открытие flow (без разворачивания)
+     */
+    async openFlow(flowId) {
+        try {
+            console.log('📂 Загружаем flow:', flowId);
             
-            const appDuration = (type === 'error' || type === 'warning') ? 8000 : duration;
+            const response = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
             
-            this.app.showNotification(message, appType, appDuration);
-        } else {
-            const icon = {
-                'success': '✅',
-                'error': '❌',
-                'warning': '⚠️',
-                'info': 'ℹ️'
-            }[type] || 'ℹ️';
+            this.currentFlow = await response.json();
             
-            console.log(`${icon} ${message}`);
+            // Обновляем тип entry_point агента
+            await this.updateEntryPointAgentType();
+            
+            // Загружаем граф из graph_definition
+            if (this.currentFlow.graph_definition) {
+                await this.canvas.loadGraph(this.currentFlow.graph_definition);
+            }
+            
+            // Применяем визуальные данные из canvas_data
+            if (this.currentFlow.canvas_data) {
+                this.applyCanvasVisualData(this.currentFlow.canvas_data);
+            }
+            
+            this.updateFlowInfo();
+            this.enableFlowActions();
+            this.showNotification(`Flow "${this.currentFlow.name}" загружен`, 'success');
+            
+        } catch (error) {
+            console.error('❌ Ошибка загрузки flow:', error);
+            this.showNotification('Ошибка загрузки flow', 'danger');
         }
     }
     
-    openFlow(flowId) {
-        window.location.href = `/frontend/builder/flow/${flowId}`;
-    }
-    
-    createNewFlow() {
-        console.log('Creating new flow');
-    }
-    
-    cleanup() {
-        if (this.currentCanvas && typeof this.currentCanvas.destroy === 'function') {
-            this.currentCanvas.destroy();
-        }
-        if (this.currentDragDrop && typeof this.currentDragDrop.destroy === 'function') {
-            this.currentDragDrop.destroy();
+    /**
+     * Обновление типа entry_point агента
+     */
+    async updateEntryPointAgentType() {
+        if (!this.currentFlow?.entry_point_agent) {
+            this.entryPointAgentType = null;
+            this.palette?.updateForAgentType(null);
+            return;
         }
         
-        this.currentCanvas = null;
-        this.currentDragDrop = null;
+        try {
+            const response = await fetch(`/frontend/api/agents/${encodeURIComponent(this.currentFlow.entry_point_agent)}`);
+            
+            if (response.ok) {
+                const agent = await response.json();
+                this.entryPointAgentType = agent.type;
+                this.palette?.updateForAgentType(agent.type);
+                
+                console.log('🎯 Entry point agent type:', this.entryPointAgentType);
+            }
+        } catch (error) {
+            console.error('❌ Ошибка получения типа агента:', error);
+        }
     }
     
+    /**
+     * Применение визуальных данных
+     */
+    applyCanvasVisualData(canvasData) {
+        if (canvasData.zoom) {
+            this.canvas.zoom = canvasData.zoom;
+        }
+        
+        if (canvasData.panX !== undefined) {
+            this.canvas.panX = canvasData.panX;
+        }
+        
+        if (canvasData.panY !== undefined) {
+            this.canvas.panY = canvasData.panY;
+        }
+        
+        this.canvas.updateTransform();
+    }
+    
+    /**
+     * Сохранение flow
+     */
+    async saveFlow() {
+        if (!this.currentFlow) {
+            this.showNotification('Нет открытого flow', 'warning');
+            return;
+        }
+        
+        try {
+            console.log('💾 Сохранение flow...');
+            
+            // Находим FlowNode на canvas
+            const flowNode = Array.from(this.canvas.nodes.values()).find(n => n.type === 'flow_node');
+            
+            if (!flowNode) {
+                this.showNotification('На canvas нет FlowNode', 'warning');
+                return;
+            }
+            
+            // Вызываем рекурсивное сохранение у FlowNode
+            const result = await flowNode.save();
+            
+            if (result.success) {
+                this.showNotification('Flow сохранен', 'success');
+            } else {
+                this.showNotification('Ошибка сохранения: ' + result.error, 'danger');
+            }
+            
+        } catch (error) {
+            console.error('❌ Ошибка сохранения flow:', error);
+            this.showNotification('Ошибка сохранения flow', 'danger');
+        }
+    }
+    
+    /**
+     * Очистка canvas
+     */
+    clearCanvas() {
+        if (confirm('Очистить canvas? Несохраненные изменения будут потеряны.')) {
+            this.canvas.clearGraph();
+            this.currentFlow = null;
+            this.disableFlowActions();
+            this.showNotification('Canvas очищен', 'success');
+        }
+    }
+    
+    /**
+     * Обновление entry_point при создании связи
+     */
+    async updateFlowEntryPointIfNeeded(edge) {
+        if (!this.currentFlow) return;
+        
+        const sourceNode = this.canvas.nodes.get(edge.source);
+        
+        if (sourceNode?.type === 'flow_node' && sourceNode.data.params?.isEntryPoint) {
+            const targetNode = this.canvas.nodes.get(edge.target);
+            
+            if (targetNode?.type === 'agent_node') {
+                const agentId = targetNode.data.params?.agent_id;
+                
+                if (agentId && agentId !== this.currentFlow.entry_point_agent) {
+                    await this.updateFlowEntryPointAgent(this.currentFlow.flow_id, agentId);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Обновление entry_point_agent у flow
+     */
+    async updateFlowEntryPointAgent(flowId, agentId) {
+        try {
+            const response = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ entry_point_agent: agentId })
+            });
+            
+            if (response.ok) {
+                this.currentFlow.entry_point_agent = agentId;
+                await this.updateEntryPointAgentType();
+                
+                console.log('✅ Entry point обновлен:', agentId);
+            }
+        } catch (error) {
+            console.error('❌ Ошибка обновления entry_point:', error);
+        }
+    }
+    
+    /**
+     * Обновление информации о flow
+     */
+    updateFlowInfo() {
+        const flowNameEl = document.getElementById('currentFlowName');
+        if (flowNameEl && this.currentFlow) {
+            flowNameEl.textContent = this.currentFlow.name;
+        }
+    }
+    
+    /**
+     * Активация кнопок flow
+     */
+    enableFlowActions() {
+        const saveBtn = document.getElementById('saveFlowBtn');
+        const runBtn = document.getElementById('runFlowBtn');
+        
+        if (saveBtn) saveBtn.disabled = false;
+        if (runBtn) runBtn.disabled = false;
+    }
+    
+    /**
+     * Деактивация кнопок flow
+     */
+    disableFlowActions() {
+        const saveBtn = document.getElementById('saveFlowBtn');
+        const runBtn = document.getElementById('runFlowBtn');
+        
+        if (saveBtn) saveBtn.disabled = true;
+        if (runBtn) runBtn.disabled = true;
+    }
+    
+    /**
+     * Показ уведомления
+     */
+    showNotification(message, type = 'info') {
+        console.log(`[${type.toUpperCase()}] ${message}`);
+        
+        // Используем глобальную систему уведомлений
+        if (window.app && window.app.showNotification) {
+            window.app.showNotification(message, type);
+        } else {
+            // Fallback если app не загружен
+            if (type === 'error' || type === 'danger') {
+                alert(message);
+            }
+        }
+    }
+    
+    /**
+     * Cleanup при выгрузке
+     */
+    cleanup() {
+        if (this.canvas) {
+            this.canvas.destroy();
+            this.canvas = null;
+        }
+        
+        this.palette = null;
+        this.propertiesPanel = null;
+        this.sidebar = null;
+        this.currentFlow = null;
+        this.isInitialized = false;
+    }
+    
+    /**
+     * Destroy модуля
+     */
     destroy() {
         console.log('🧹 Builder модуль выгружен');
         this.cleanup();
     }
 }
+

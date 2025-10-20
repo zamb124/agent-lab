@@ -62,6 +62,109 @@ export default class PropertiesPanel {
         await this.loadNodeForm(node);
     }
     
+    /**
+     * Загрузка формы для ноды
+     */
+    async loadNodeForm(node) {
+        console.log('📝 Загрузка формы для ноды:', node.type, node.id);
+        
+        // Для разных типов нод - разные редакторы
+        switch (node.type) {
+            case 'message_node':
+                this.loadMessageNodeEditor(node);
+                break;
+            case 'router_node':
+                this.loadRouterNodeEditor(node);
+                break;
+            case 'function_node':
+                this.loadFunctionNodeEditor(node);
+                break;
+            case 'agent_node':
+            case 'tool_node':
+            case 'flow_node':
+                await this.loadModelForm(node);
+                break;
+            default:
+                this.loadDefaultEditor(node);
+        }
+    }
+    
+    /**
+     * Загрузка формы для agent/tool/flow через API
+     */
+    async loadModelForm(node) {
+        const typeMap = {
+            'agent_node': 'agent',
+            'tool_node': 'tool',
+            'flow_node': 'flow'
+        };
+        
+        const modelType = typeMap[node.type];
+        const modelId = node.data.params?.agent_id || node.data.params?.tool_id || node.data.params?.flow_id;
+        
+        if (!modelId) {
+            this.loadDefaultEditor(node);
+            return;
+        }
+        
+        try {
+            const url = `/frontend/models/${modelType}/${encodeURIComponent(modelId)}?view=form`;
+            const response = await fetch(url);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            const formHtml = await response.text();
+            
+            this.panel.innerHTML = `
+                <button class="properties-close-btn" id="closePanelBtn">
+                    <i class="bi bi-x-circle-fill"></i>
+                </button>
+                ${formHtml}
+            `;
+            
+            // Переустановим обработчик закрытия
+            const closeBtn = this.panel.querySelector('#closePanelBtn');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => this.hide());
+            }
+            
+            // HTMX обработка
+            if (typeof htmx !== 'undefined') {
+                htmx.process(this.panel);
+            }
+            
+        } catch (error) {
+            console.error('❌ Ошибка загрузки формы:', error);
+            this.loadDefaultEditor(node);
+        }
+    }
+    
+    /**
+     * Дефолтный редактор
+     */
+    loadDefaultEditor(node) {
+        this.panel.innerHTML = `
+            <button class="properties-close-btn" id="closePanelBtn">
+                <i class="bi bi-x-circle-fill"></i>
+            </button>
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-gear"></i> ${node.data.params?.name || node.type}
+                </div>
+                <div class="card-body">
+                    <p>Редактирование ${node.type} пока не реализовано</p>
+                </div>
+            </div>
+        `;
+        
+        const closeBtn = this.panel.querySelector('#closePanelBtn');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => this.hide());
+        }
+    }
+    
     hide() {
         if (this.codeEditor) {
             this.codeEditor.destroy();
