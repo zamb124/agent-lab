@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from app.frontend.core.template_loader import get_templates
 from app.frontend.core.utils import render_with_dashboard
-from app.db.repositories import Storage
+from app.db.repositories import Storage, FlowRepository
 from app.models import FlowConfig
 
 router = APIRouter(prefix="/frontend/bots", tags=["bots-pages"])
@@ -27,27 +27,20 @@ async def bots_page(request: Request):
 @router.get("/list", response_class=HTMLResponse)
 async def bots_list(request: Request):
     """Список ботов в виде карточек"""
-    storage = Storage()
+    flow_repo = FlowRepository()
     
-    all_keys = await storage.list_by_prefix("flow:", limit=1000)
+    flows = await flow_repo.list_all(limit=1000)
     bots = []
     
-    for key in all_keys:
-        try:
-            flow_data = await storage.get(key)
-            if flow_data:
-                flow_config = FlowConfig.model_validate_json(flow_data)
-                
-                bot_info = {
-                    "flow_id": flow_config.flow_id,
-                    "name": flow_config.name,
-                    "description": flow_config.description if flow_config.description else '<span data-i18n="bots.no_description">Описание отсутствует</span>',
-                    "platforms": list(flow_config.platforms.keys()),
-                    "entry_point": flow_config.entry_point_agent,
-                }
-                bots.append(bot_info)
-        except Exception:
-            continue
+    for flow_config in flows:
+        bot_info = {
+            "flow_id": flow_config.flow_id,
+            "name": flow_config.name,
+            "description": flow_config.description if flow_config.description else '<span data-i18n="bots.no_description">Описание отсутствует</span>',
+            "platforms": list(flow_config.platforms.keys()),
+            "entry_point": flow_config.entry_point_agent,
+        }
+        bots.append(bot_info)
     
     return templates.TemplateResponse(
         "bots_list.html",

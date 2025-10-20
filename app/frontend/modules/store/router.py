@@ -30,19 +30,23 @@ async def store_page(request: Request):
 
 @router.get("/list", response_class=HTMLResponse)
 async def store_list(request: Request):
-    """Список публичных flows из кода"""
+    """Список публичных flows из кода (оптимизировано)"""
     storage = Storage()
     migrator = Migrator()
     
     flows_with_ids = await migrator.get_public_flows()
     
+    # Оптимизация: получаем все flows за 1 запрос
+    all_flows_data = await storage.get_all_by_prefix("flow:", limit=1000)
+    
     flows = []
     for full_flow_id, flow_config in flows_with_ids:
         flow_id_for_check = flow_config.flow_id or flow_config.name.lower().replace(' ', '_')
-        installed = (
-            await storage.get_flow_config(full_flow_id) is not None or
-            await storage.get_flow_config(flow_id_for_check) is not None
-        )
+        
+        # Проверяем установку без дополнительных запросов
+        full_key = f"flow:{full_flow_id}"
+        check_key = f"flow:{flow_id_for_check}"
+        installed = full_key in all_flows_data or check_key in all_flows_data
         
         author_dict = None
         if hasattr(flow_config, 'author') and flow_config.author:

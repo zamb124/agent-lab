@@ -5,6 +5,7 @@ Storage - простой key-value storage для всех сущностей п
 
 import logging
 import json
+import asyncio
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, delete, Table, MetaData, text
@@ -14,6 +15,7 @@ from app.models import AgentConfig, FlowConfig, TaskConfig, SessionConfig, Sessi
 from app.db.database import AsyncSessionLocal
 from app.db.models import Storage as StorageModel, Users as UsersModel, Variables as VariablesModel, Tasks as TasksModel
 from app.core.context import get_context
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +164,9 @@ class Storage:
 
     async def _get_with_session(self, key: str, table_name: str, session) -> Optional[str]:
         """Получает значение с использованием переданной сессии"""
+        if settings.server.env == "local":
+            await asyncio.sleep(0.1)
+        
         self._get_table_model(table_name)
         
         if table_name == "storage":
@@ -212,10 +217,8 @@ class Storage:
         Returns:
             True, если сохранение успешно
         """
-        logger.info(f"🟣 Storage.set ВХОД: key={key}")
         final_key, company_id = self._get_company_key(key, force_global)
         table_name = self._get_table_name(key, company_id)
-        logger.info(f"🟣 Storage.set: final_key={final_key}, table={table_name}")
         
         
         if db_session:
@@ -225,17 +228,16 @@ class Storage:
         async with session_factory() as session:
             result = await self._set_with_session(final_key, value, ttl, table_name, session)
             await session.commit()
-            logger.info(f"✅ Storage.set закоммичен: key={final_key}, table={table_name}")
             return result
 
     async def _set_with_session(
         self, key: str, value: str, ttl: Optional[int], table_name: str, session
     ) -> bool:
         """Сохраняет значение с использованием переданной сессии"""
-        json_value = json.loads(value)
+        if settings.server.env == "local":
+            await asyncio.sleep(0.1)
         
-        # Логируем все записи
-        logger.info(f"💾 Storage.set: key={key}, table={table_name}")
+        json_value = json.loads(value)
 
         expired_at = None
         if ttl is not None:
@@ -308,7 +310,6 @@ class Storage:
                 "updated_at": now
             })
 
-        logger.info(f"✅ Storage.set выполнен: key={key}")
         return True
 
     async def delete(self, key: str, db_session=None, force_global: bool = False) -> bool:
@@ -336,6 +337,9 @@ class Storage:
 
     async def _delete_with_session(self, key: str, table_name: str, session) -> bool:
         """Удаляет значение с использованием переданной сессии"""
+        if settings.server.env == "local":
+            await asyncio.sleep(0.1)
+        
         if table_name == "storage":
             result = await session.execute(
                 delete(StorageModel).where(StorageModel.key == key)
@@ -549,6 +553,132 @@ class Storage:
                 query = text(f"SELECT key FROM {table_name} WHERE key LIKE :prefix LIMIT :limit")
                 result = await session.execute(query, {"prefix": f"{final_prefix}%", "limit": limit})
                 return [row[0] for row in result]
+
+    async def get_all_by_prefix(self, prefix: str, limit: int = 1000, force_global: bool = False) -> dict[str, str]:
+        """
+        Получает все данные по префиксу за один запрос (оптимизация N+1).
+
+        Args:
+            prefix: Префикс для поиска
+            limit: Максимальное количество результатов
+            force_global: Принудительно использовать глобальный поиск
+
+        Returns:
+            Словарь {key: value_json}
+        """
+        if settings.server.env == "local":
+            await asyncio.sleep(0.1)
+        
+        final_prefix, company_id = self._get_company_key(prefix, force_global)
+        table_name = self._get_table_name(prefix, company_id)
+        
+        async with AsyncSessionLocal() as session:
+            if table_name == "storage":
+                result = await session.execute(
+                    select(StorageModel.key, StorageModel.value)
+                    .where(StorageModel.key.like(f"{final_prefix}%"))
+                    .limit(limit)
+                )
+            elif table_name == "users":
+                result = await session.execute(
+                    select(UsersModel.key, UsersModel.value)
+                    .where(UsersModel.key.like(f"{final_prefix}%"))
+                    .limit(limit)
+                )
+            elif table_name == "variables":
+                result = await session.execute(
+                    select(VariablesModel.key, VariablesModel.value)
+                    .where(VariablesModel.key.like(f"{final_prefix}%"))
+                    .limit(limit)
+                )
+            else:
+                query = text(f"SELECT key, value FROM {table_name} WHERE key LIKE :prefix LIMIT :limit")
+                result = await session.execute(query, {"prefix": f"{final_prefix}%", "limit": limit})
+            
+            # Формируем словарь {key: value_json}
+            data = {}
+            for row in result:
+                key = row.key if hasattr(row, 'key') else row[0]
+                value = row.value if hasattr(row, 'value') else row[1]
+                
+                # JSONB поля уже dict, сериализуем в строку
+                if isinstance(value, dict):
+                    data[key] = json.dumps(value)
+                elif isinstance(value, str):
+                    data[key] = value
+                else:
+                    data[key] = json.dumps(value)
+            
+            return data
+
+    async def get_many(self, keys: List[str], force_global: bool = False) -> dict[str, str]:
+        """
+        Получает множество значений по списку ключей за один запрос.
+
+        Args:
+            keys: Список ключей для получения
+            force_global: Принудительно использовать глобальный поиск
+
+        Returns:
+            Словарь {key: value_json}
+        """
+        if not keys:
+            return {}
+        
+        if settings.server.env == "local":
+            await asyncio.sleep(0.1)
+        
+        # Применяем company prefix к ключам
+        final_keys = []
+        key_mapping = {}  # original_key -> final_key
+        for key in keys:
+            final_key, _ = self._get_company_key(key, force_global)
+            final_keys.append(final_key)
+            key_mapping[final_key] = key
+        
+        # Определяем таблицу по первому ключу
+        table_name = self._get_table_name(keys[0], None)
+        
+        async with AsyncSessionLocal() as session:
+            if table_name == "storage":
+                result = await session.execute(
+                    select(StorageModel.key, StorageModel.value)
+                    .where(StorageModel.key.in_(final_keys))
+                )
+            elif table_name == "users":
+                result = await session.execute(
+                    select(UsersModel.key, UsersModel.value)
+                    .where(UsersModel.key.in_(final_keys))
+                )
+            elif table_name == "variables":
+                result = await session.execute(
+                    select(VariablesModel.key, VariablesModel.value)
+                    .where(VariablesModel.key.in_(final_keys))
+                )
+            else:
+                placeholders = ','.join([f':key{i}' for i in range(len(final_keys))])
+                query = text(f"SELECT key, value FROM {table_name} WHERE key IN ({placeholders})")
+                params = {f'key{i}': k for i, k in enumerate(final_keys)}
+                result = await session.execute(query, params)
+            
+            # Формируем словарь {original_key: value_json}
+            data = {}
+            for row in result:
+                final_key = row.key if hasattr(row, 'key') else row[0]
+                value = row.value if hasattr(row, 'value') else row[1]
+                
+                # Получаем оригинальный ключ
+                original_key = key_mapping.get(final_key, final_key)
+                
+                # JSONB поля уже dict, сериализуем в строку
+                if isinstance(value, dict):
+                    data[original_key] = json.dumps(value)
+                elif isinstance(value, str):
+                    data[original_key] = value
+                else:
+                    data[original_key] = json.dumps(value)
+            
+            return data
 
     async def get_pending_tasks(self, limit: int = 10) -> List[TaskConfig]:
         """

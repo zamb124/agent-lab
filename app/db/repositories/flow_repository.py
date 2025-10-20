@@ -76,9 +76,9 @@ class FlowRepository(BaseRepository[FlowConfig]):
         key = self._get_key(flow_id)
         return await self.storage.delete(key)
 
-    async def list_all(self, limit: int = 100) -> List[FlowConfig]:
+    async def list_all(self, limit: int = 1000) -> List[FlowConfig]:
         """
-        Возвращает список всех flows.
+        Возвращает список всех flows (оптимизировано - 1 запрос вместо N).
         
         Args:
             limit: Максимальное количество результатов
@@ -87,18 +87,17 @@ class FlowRepository(BaseRepository[FlowConfig]):
             Список конфигураций flows
         """
         prefix = self._get_prefix()
-        keys = await self.storage.list_by_prefix(prefix, limit=limit)
+        # Оптимизация: получаем все данные за 1 запрос вместо N
+        all_data = await self.storage.get_all_by_prefix(prefix, limit=limit)
         
         flows = []
-        for key in keys:
-            data = await self.storage.get(key)
-            if data:
-                try:
-                    flow = FlowConfig.model_validate_json(data)
-                    flows.append(flow)
-                except Exception as e:
-                    logger.error(f"Ошибка парсинга flow {key}: {e}")
-                    continue
+        for key, data in all_data.items():
+            try:
+                flow = FlowConfig.model_validate_json(data)
+                flows.append(flow)
+            except Exception as e:
+                logger.error(f"Ошибка парсинга flow {key}: {e}")
+                continue
         
         return flows
 

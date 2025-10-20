@@ -695,33 +695,23 @@ class AgentConfig(BuilderEntity):
         """Автоматически определяет тип агента на основе graph_definition"""
         data = info.data
 
-        print(f"DEBUG: auto_determine_type called with v={v}, data keys: {list(data.keys()) if data else 'None'}")
         if 'graph_definition' in data:
             graph_def = data.get('graph_definition')
-            print(f"DEBUG: graph_definition present: {graph_def}")
             # Если graph_definition есть и не пустая → StateGraph
             if graph_def and (isinstance(graph_def, dict) and graph_def.get('nodes')):
-                print("DEBUG: Setting StateGraph due to non-empty graph_definition")
                 return AgentType.STATEGRAPH
 
         # Если передан тип явно, используем его
         if v:
-            print(f"DEBUG: Using explicitly passed type: {v}")
             return v
 
         # По умолчанию ReAct
-        print("DEBUG: Using default React type")
         return AgentType.REACT
     
     def __init__(self, **data):
         """Инициализация с автоопределением типа"""
-        print(f"DEBUG: AgentConfig.__init__ called with data keys: {list(data.keys())}")
-        print(f"DEBUG: type in data: {'type' in data}, type value: {data.get('type')}")
-        print(f"DEBUG: graph_definition in data: {'graph_definition' in data}")
-
         # Если type не передан, но есть graph_definition → STATEGRAPH
         if 'type' not in data and data.get('graph_definition'):
-            print("DEBUG: Setting type to StateGraph in __init__")
             data['type'] = AgentType.STATEGRAPH
         super().__init__(**data)
 

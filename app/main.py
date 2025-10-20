@@ -19,7 +19,7 @@ from app.core.checkpointer import init_checkpointer, close_checkpointer
 from app.db.database import create_tables, close_db
 from app.core.migration import Migrator
 from app.api.amocrm import router as amocrm_router
-from app.api.v1 import webhooks, admin, telegram, whatsapp, tokens, auth, flows, fashn, files, leads, history, payments, admin_payments, variables, knowledge_base
+from app.api.v1 import webhooks, admin, telegram, whatsapp, tokens, auth, flows, fashn, files, leads, history, payments, admin_payments, variables, knowledge_base, profiling
 from app.frontend.api import models as frontend_models
 from app.frontend.api import flows as frontend_flows
 from app.frontend.api import agents as frontend_agents
@@ -36,6 +36,7 @@ from app.frontend.websockets import notifications as websocket_notifications
 from app.frontend.websockets import chat as websocket_chat
 from app.frontend.api import websocket_status as websocket_status_api
 from app.middleware.auth import AuthMiddleware
+from app.middleware.profiling import ProfilingMiddleware
 from app.services.cleanup_service import CleanupService
 from app.core.translation_manager import get_translation_manager
 from app.core.clients.payment_providers.factory import PaymentProviderFactory
@@ -48,7 +49,7 @@ if settings.server.env == "local":
 
 # Настройка логирования
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
 # Игнорируем предупреждения о незакрытых сессиях aiohttp (от Google Gemini SDK)
@@ -114,9 +115,22 @@ logging.getLogger("app.core.llm_factory").setLevel(
 # Убираем детальные DEBUG логи uvicorn и websocket
 logging.getLogger("uvicorn.protocols.websockets").setLevel(logging.WARNING)
 logging.getLogger("uvicorn.protocols.http").setLevel(logging.WARNING)
-logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logging.getLogger("websockets.protocol").setLevel(logging.WARNING)
 logging.getLogger("websockets.server").setLevel(logging.WARNING)
+
+# Включаем INFO только для профилирования и старта приложения
+logging.getLogger("app.middleware.profiling").setLevel(logging.INFO)
+logging.getLogger("uvicorn.error").setLevel(logging.INFO)
+logging.getLogger("__main__").setLevel(logging.INFO)
+
+# Отключаем шумные INFO логи
+logging.getLogger("app.workers.task_processor").setLevel(logging.WARNING)
+logging.getLogger("app.db.repositories.task_repository").setLevel(logging.WARNING)
+logging.getLogger("app.middleware.auth").setLevel(logging.WARNING)
+logging.getLogger("app.identity.auth_service").setLevel(logging.WARNING)
+logging.getLogger("app.frontend.websockets.chat").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 
@@ -280,6 +294,13 @@ app.add_middleware(
     trusted_hosts=["*"] if settings.server.debug else [settings.server.domain, f"*.{settings.server.domain}"]
 )
 
+# Profiling middleware (замер времени обработки запросов)
+app.add_middleware(
+    ProfilingMiddleware,
+    log_slow_requests=True,
+    slow_threshold_ms=500
+)
+
 # Auth middleware (заглушка)
 app.add_middleware(AuthMiddleware)
 
@@ -337,6 +358,7 @@ app.include_router(tokens.router, prefix="/api/v1", tags=["tokens"], include_in_
 app.include_router(auth.router, prefix="/auth", tags=["auth"], include_in_schema=False)
 app.include_router(admin_payments.router, prefix="/api/v1", tags=["admin-payments"], include_in_schema=False)
 app.include_router(variables.router, prefix="/api/v1", tags=["variables"], include_in_schema=False)
+app.include_router(profiling.router, tags=["profiling"], include_in_schema=False)
 
 # Frontend API (JSON CRUD) - скрыто от публичной документации
 app.include_router(frontend_models.router, tags=["frontend-models"], include_in_schema=False)

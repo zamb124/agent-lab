@@ -239,14 +239,11 @@ class FlowFactory:
         
         from app.models import SessionConfig
         
-        session_keys = await self.storage.list_by_prefix("session:", limit=1000)
+        # Оптимизация: получаем все сессии за 1 запрос
+        all_sessions_data = await self.storage.get_all_by_prefix("session:", limit=1000)
         
         filtered_sessions = []
-        for key in session_keys:
-            session_json = await self.storage.get(key)
-            if not session_json:
-                continue
-            
+        for key, session_json in all_sessions_data.items():
             session = SessionConfig.model_validate_json(session_json)
             
             if platform and session.platform != platform:
@@ -266,34 +263,45 @@ class FlowFactory:
         
         logger.info(f"🔍 Отфильтровано {len(filtered_sessions)} сессий, начинаем параллельную обработку")
         
-        user_cache: Dict[str, Optional[str]] = {}
+        # Оптимизация: предзагружаем все flows и users за 2 запроса
+        unique_flow_ids = {s.flow_id for s in filtered_sessions if s.flow_id}
+        unique_user_ids = {s.user_id for s in filtered_sessions if s.user_id}
+        
+        # Загружаем flows
         flow_cache: Dict[str, Optional[str]] = {}
+        if unique_flow_ids:
+            all_flows_data = await self.storage.get_all_by_prefix("flow:", limit=1000)
+            for flow_id in unique_flow_ids:
+                flow_key = f"flow:{flow_id}"
+                if flow_key in all_flows_data:
+                    try:
+                        from app.models import FlowConfig
+                        flow_config = FlowConfig.model_validate_json(all_flows_data[flow_key])
+                        flow_cache[flow_id] = flow_config.name
+                    except Exception:
+                        flow_cache[flow_id] = None
+                else:
+                    flow_cache[flow_id] = None
+        
+        # Загружаем users
+        user_cache: Dict[str, Optional[str]] = {}
+        if unique_user_ids:
+            user_keys = [f"user:{uid}" for uid in unique_user_ids]
+            users_data = await self.storage.get_many(user_keys, force_global=True)
+            for user_id in unique_user_ids:
+                user_key = f"user:{user_id}"
+                if user_key in users_data:
+                    try:
+                        user = User.model_validate_json(users_data[user_key])
+                        user_cache[user_id] = user.name
+                    except Exception:
+                        user_cache[user_id] = None
+                else:
+                    user_cache[user_id] = None
         
         async def process_session(session: Any) -> SessionListItem:
-            # Database-First: все данные берем из SessionConfig (БД), не обращаемся к checkpointer
-            
-            flow_name = None
-            if session.flow_id:
-                if session.flow_id not in flow_cache:
-                    flow_config = await self.flow_repository.get(session.flow_id)
-                    flow_cache[session.flow_id] = flow_config.name if flow_config and hasattr(flow_config, 'name') else None
-                flow_name = flow_cache[session.flow_id]
-            
-            user_name = None
-            if session.user_id:
-                if session.user_id not in user_cache:
-                    try:
-                        user_key = f"user:{session.user_id}"
-                        user_json = await self.storage.get(user_key, force_global=True)
-                        if user_json:
-                            user = User.model_validate_json(user_json)
-                            user_cache[session.user_id] = user.name
-                        else:
-                            user_cache[session.user_id] = None
-                    except Exception as e:
-                        logger.error(f"❌ Ошибка загрузки пользователя {session.user_id}: {e}")
-                        user_cache[session.user_id] = None
-                user_name = user_cache[session.user_id]
+            flow_name = flow_cache.get(session.flow_id) if session.flow_id else None
+            user_name = user_cache.get(session.user_id) if session.user_id else None
             
             return SessionListItem(
                 session_id=session.session_id,

@@ -148,13 +148,13 @@ class BillingService:
         return final_cost
     
     async def get_company_usage_stats(self, company_id: str) -> Dict[str, Any]:
-        """Получает статистику использования компании за месяц"""
+        """Получает статистику использования компании за месяц (оптимизировано)"""
         
         current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         
-        # Эффективный поиск только записей этой компании
+        # Оптимизация: получаем все данные usage за 1 запрос
         company_usage_prefix = f"usage:{company_id}:"
-        usage_keys = await self.storage.list_by_prefix(company_usage_prefix, force_global=True)
+        all_usage_data = await self.storage.get_all_by_prefix(company_usage_prefix, limit=10000, force_global=True)
         
         stats = {
             "total_cost": 0.0,
@@ -163,11 +163,9 @@ class BillingService:
             "by_user": {}
         }
         
-        for key in usage_keys:
-            data = await self.storage.get(key, force_global=True)
-            if not data:
-                continue
-            
+        user_ids = set()
+        
+        for key, data in all_usage_data.items():
             record = UsageRecord.model_validate_json(data)
             
             if record.timestamp < current_month:
@@ -188,15 +186,19 @@ class BillingService:
                 stats["by_user"][record.user_id] = {"cost": 0.0, "calls": 0, "user_name": None}
             stats["by_user"][record.user_id]["cost"] += record.cost
             stats["by_user"][record.user_id]["calls"] += record.quantity
+            user_ids.add(record.user_id)
         
-        # Обогащаем данные пользователей именами
-        for user_id in stats["by_user"].keys():
-            user_data = await self.storage.get(f"user:{user_id}", force_global=True)
-            if user_data:
-                user = User.model_validate_json(user_data)
-                stats["by_user"][user_id]["user_name"] = user.name
-            else:
-                stats["by_user"][user_id]["user_name"] = user_id
+        # Оптимизация: получаем только нужных пользователей за 1 запрос
+        if user_ids:
+            user_keys = [f"user:{uid}" for uid in user_ids]
+            users_data = await self.storage.get_many(user_keys, force_global=True)
+            for user_id in user_ids:
+                user_key = f"user:{user_id}"
+                if user_key in users_data:
+                    user = User.model_validate_json(users_data[user_key])
+                    stats["by_user"][user_id]["user_name"] = user.name
+                else:
+                    stats["by_user"][user_id]["user_name"] = user_id
         
         return stats
     

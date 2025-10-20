@@ -76,11 +76,12 @@ class VariablesService:
         return await self.storage.delete(storage_key)
     
     async def list_vars(self) -> Dict[str, Any]:
-        """Получает все переменные компании"""
-        all_keys = await self.storage.list_by_prefix("var:")
+        """Получает все переменные компании (оптимизировано)"""
+        # Оптимизация: получаем все переменные за 1 запрос
+        all_vars_data = await self.storage.get_all_by_prefix("var:", limit=1000)
         
         variables = {}
-        for full_key in all_keys:
+        for full_key, data in all_vars_data.items():
             # full_key = "company:test_company_1:var:test_key"
             # Извлекаем только имя переменной
             if ":var:" in full_key:
@@ -88,17 +89,13 @@ class VariablesService:
             else:
                 var_key = full_key.split(":")[-1]
             
-            # Используем force_global чтобы не добавлять префикс компании снова
-            data = await self.storage.get(full_key, force_global=True)
-            
-            if data:
-                var_data = json.loads(data)
-                variables[var_key] = {
-                    "value": var_data["value"] if not var_data.get("secret") else "***",
-                    "secret": var_data.get("secret", False),
-                    "groups": var_data.get("groups", []),
-                    "description": var_data.get("description", "")
-                }
+            var_data = json.loads(data)
+            variables[var_key] = {
+                "value": var_data["value"] if not var_data.get("secret") else "***",
+                "secret": var_data.get("secret", False),
+                "groups": var_data.get("groups", []),
+                "description": var_data.get("description", "")
+            }
         
         return variables
     
