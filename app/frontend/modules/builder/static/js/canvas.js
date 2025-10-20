@@ -225,35 +225,21 @@ export default class BuilderCanvas {
             modelType = 'tool';
             modelId = node.data.params?.tool_id;
         }
-        
+
         if (!modelId) {
             await this.createSimpleNodeElement(element, node);
             return;
         }
-        
+
         // Сохраняем данные для загрузки формы
         element.dataset.modelType = modelType;
         element.dataset.modelId = modelId;
-        
-        // Показываем загрузчик
+
+        // Показываем загрузчик (порты добавятся после загрузки формы)
         element.innerHTML = `
             <div class="node-loading">
                 <div class="loader"></div>
                 <span>Загрузка...</span>
-            </div>
-            
-            <!-- Порты для подключения -->
-            <div class="node-ports">
-                <div class="input-ports">
-                    <div class="port input-port" data-port-type="input" data-port-id="input">
-                        <div class="port-dot"></div>
-                    </div>
-                </div>
-                <div class="output-ports">
-                    <div class="port output-port" data-port-type="output" data-port-id="output">
-                        <div class="port-dot"></div>
-                    </div>
-                </div>
             </div>
         `;
         
@@ -282,7 +268,7 @@ export default class BuilderCanvas {
             if (response.ok) {
                 const toolData = await response.json();
                 
-                // Создаем расширенную карточку тула с информацией
+                // Создаем расширенную карточку тула с информацией (порты добавятся отдельно)
                 element.innerHTML = `
                     <div class="tool-node-content">
                         <div class="node-header">
@@ -313,21 +299,10 @@ export default class BuilderCanvas {
                             ` : ''}
                         </div>
                     </div>
-                    
-                    <!-- Порты для подключения -->
-                    <div class="node-ports">
-                        <div class="input-ports">
-                            <div class="port input-port" data-port-type="input" data-port-id="input">
-                                <div class="port-dot"></div>
-                            </div>
-                        </div>
-                        <div class="output-ports">
-                            <div class="port output-port" data-port-type="output" data-port-id="output">
-                                <div class="port-dot"></div>
-                            </div>
-                        </div>
-                    </div>
                 `;
+                
+                // Добавляем порты через централизованный метод
+                this.addPortsToNodeElement(element, node);
             } else {
                 // Если тул не найден в БД, используем простую ноду
                 await this.createSimpleNodeElement(element, node);
@@ -362,60 +337,6 @@ export default class BuilderCanvas {
         const escapedName = escapeHtml(displayName);
         const escapedDesc = escapeHtml(nodeDesc);
         
-        // Определяем какие порты нужны
-        let portsHtml = '';
-        
-        if (nodeType === 'flow_node') {
-            // Flow: только выходной порт (entry point)
-            portsHtml = `
-                <div class="node-ports">
-                    <div class="output-ports">
-                        <div class="port output-port" data-port-type="output" data-port-id="output">
-                            <div class="port-dot"></div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        } else if (nodeType === 'tool_node') {
-            // Tool: только входной порт (конечная нода)
-            portsHtml = `
-                <div class="node-ports">
-                    <div class="input-ports">
-                        <div class="port input-port" data-port-type="input" data-port-id="input">
-                            <div class="port-dot"></div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        } else if (nodeType === 'message_node') {
-            // Message: только входной порт
-            portsHtml = `
-                <div class="node-ports">
-                    <div class="input-ports">
-                        <div class="port input-port" data-port-type="input" data-port-id="input">
-                            <div class="port-dot"></div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        } else {
-            // Agent, Function, Conditional: оба порта
-            portsHtml = `
-                <div class="node-ports">
-                    <div class="input-ports">
-                        <div class="port input-port" data-port-type="input" data-port-id="input">
-                            <div class="port-dot"></div>
-                        </div>
-                    </div>
-                    <div class="output-ports">
-                        <div class="port output-port" data-port-type="output" data-port-id="output">
-                            <div class="port-dot"></div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-        
         element.innerHTML = `
             <div class="node-simple-content">
                 <div class="node-simple-icon ${iconType}">
@@ -426,9 +347,10 @@ export default class BuilderCanvas {
                     <div class="node-simple-desc">${escapedDesc}</div>
                 </div>
             </div>
-            
-            ${portsHtml}
         `;
+        
+        // Добавляем порты через централизованный метод
+        this.addPortsToNodeElement(element, node);
     }
     
     /**
@@ -454,6 +376,14 @@ export default class BuilderCanvas {
             console.log('📄 Получен HTML длиной:', formHtml.length);
             
             element.innerHTML = formHtml;
+
+            // После загрузки формы добавляем порты в зависимости от типа ноды и агента
+            const node = this.nodes.get(element.dataset.nodeId);
+            if (node) {
+                this.addPortsToNodeElement(element, node);
+            } else {
+                console.warn('⚠️ Нода не найдена при загрузке формы:', element.dataset.nodeId);
+            }
             
             // Инициализируем HTMX для новых элементов
             if (typeof htmx !== 'undefined') {
@@ -465,9 +395,6 @@ export default class BuilderCanvas {
             
             // Настраиваем автосохранение для полей
             this.setupAutoSave(element, modelType, modelId);
-            
-            // Добавляем порты для соединений
-            this.addNodePorts(element);
             
             // Обновляем размеры ноды после загрузки формы (с задержкой для рендеринга)
             setTimeout(() => {
@@ -484,21 +411,13 @@ export default class BuilderCanvas {
                     <span>Ошибка загрузки</span>
                     <small>${error.message}</small>
                 </div>
-                
-                <!-- Порты для подключения -->
-                <div class="node-ports">
-                    <div class="input-ports">
-                        <div class="port input-port" data-port-type="input" data-port-id="input">
-                            <div class="port-dot"></div>
-                        </div>
-                    </div>
-                    <div class="output-ports">
-                        <div class="port output-port" data-port-type="output" data-port-id="output">
-                            <div class="port-dot"></div>
-                        </div>
-                    </div>
-                </div>
             `;
+            
+            // Добавляем порты даже при ошибке
+            const node = this.nodes.get(element.dataset.nodeId);
+            if (node) {
+                this.addPortsToNodeElement(element, node);
+            }
         }
     }
     
@@ -611,104 +530,6 @@ export default class BuilderCanvas {
     /**
      * Добавление портов к ноде
      */
-    addNodePorts(element) {
-        // Проверяем, что порты еще не добавлены
-        if (element.querySelector('.node-ports')) return;
-        
-        const nodeType = element.dataset.nodeType;
-        
-        // Создаем контейнер портов
-        const portsContainer = document.createElement('div');
-        portsContainer.className = 'node-ports';
-        
-        let portsHTML = '';
-        
-        // Определяем какие порты нужны для каждого типа
-        if (nodeType === 'flow_node') {
-            // Flow: только выходной порт (entry point)
-            portsHTML = `
-                <div class="output-ports">
-                    <div class="port output-port" data-port-type="output" data-port-id="output">
-                        <div class="port-dot"></div>
-                    </div>
-                </div>
-            `;
-        } else if (nodeType === 'tool_node') {
-            // Tool: для StateGraph - оба порта, для ReAct - только input
-            const agentType = this.builder.entryPointAgentType;
-            
-            if (agentType === 'stategraph') {
-                // StateGraph: tool может соединяться дальше
-                portsHTML = `
-                    <div class="input-ports">
-                        <div class="port input-port" data-port-type="input" data-port-id="input">
-                            <div class="port-dot"></div>
-                        </div>
-                    </div>
-                    <div class="output-ports">
-                        <div class="port output-port" data-port-type="output" data-port-id="output">
-                            <div class="port-dot"></div>
-                        </div>
-                    </div>
-                `;
-            } else {
-                // ReAct: tool - конечная нода
-                portsHTML = `
-                    <div class="input-ports">
-                        <div class="port input-port" data-port-type="input" data-port-id="input">
-                            <div class="port-dot"></div>
-                        </div>
-                    </div>
-                `;
-            }
-        } else if (nodeType === 'agent_node') {
-            // Проверяем тип агента из данных ноды
-            const node = this.nodes.get(element.dataset.nodeId);
-            const agentType = node?.data?.params?.type;
-            
-            if (agentType === 'stategraph') {
-                // StateGraph: только входной порт (законченный граф)
-                portsHTML = `
-                    <div class="input-ports">
-                        <div class="port input-port" data-port-type="input" data-port-id="input">
-                            <div class="port-dot"></div>
-                        </div>
-                    </div>
-                `;
-            } else {
-                // ReAct Agent: оба порта (может принимать и отдавать)
-                portsHTML = `
-                    <div class="input-ports">
-                        <div class="port input-port" data-port-type="input" data-port-id="input">
-                            <div class="port-dot"></div>
-                        </div>
-                    </div>
-                    <div class="output-ports">
-                        <div class="port output-port" data-port-type="output" data-port-id="output">
-                            <div class="port-dot"></div>
-                        </div>
-                    </div>
-                `;
-            }
-        }
-        
-        portsContainer.innerHTML = portsHTML;
-        
-        // Добавляем порты к ноде
-        element.appendChild(portsContainer);
-        
-        // Настраиваем обработчики для портов
-        const ports = portsContainer.querySelectorAll('.port');
-        ports.forEach(port => {
-            port.addEventListener('mousedown', (e) => {
-                const node = this.nodes.get(element.dataset.nodeId);
-                if (node) {
-                    this.handlePortMouseDown(e, node, port);
-                }
-            });
-        });
-    }
-    
     /**
      * Получение центральной позиции канваса
      */
@@ -879,9 +700,6 @@ export default class BuilderCanvas {
         const path = this.createBezierPath(sourcePoint, targetPoint);
         
         edge.element.setAttribute('d', path);
-        
-        // Отладка
-        console.log('🔗 Обновлена связь:', edge.id, 'path:', path);
     }
     
     /**
@@ -1315,27 +1133,42 @@ export default class BuilderCanvas {
      * Завершение соединения
      */
     finishConnection(e) {
-        if (!this.isConnecting || !this.connectionStart) return;
-        
+        console.log('🎯 finishConnection вызван');
+        if (!this.isConnecting || !this.connectionStart) {
+            console.log('❌ Нет активного соединения');
+            return;
+        }
+
         // Ищем целевой порт
         const targetPort = e.target.closest('.port');
         const targetNode = e.target.closest('.canvas-node');
-        
+
+        console.log('🎯 targetPort:', targetPort, 'targetNode:', targetNode);
+
         if (targetPort && targetNode && targetPort.dataset.portType === 'input') {
             const targetNodeId = targetNode.dataset.nodeId;
             const sourceNodeId = this.connectionStart.node.id;
-            
+
+            console.log('🔗 Попытка соединения:', sourceNodeId, '->', targetNodeId);
+
             if (targetNodeId !== sourceNodeId) {
                 // Валидируем подключение
+                console.log('🔍 Валидируем подключение...');
                 if (this.validateConnection(sourceNodeId, targetNodeId)) {
+                    console.log('✅ Валидация прошла, создаем соединение');
                     this.createConnection(sourceNodeId, targetNodeId);
                 } else {
+                    console.log('❌ Валидация не прошла');
                     // Показываем ошибку валидации
                     this.builder.showNotification('Недопустимое подключение', 'error');
                 }
+            } else {
+                console.log('⚠️ Попытка соединить нод с самим собой');
             }
+        } else {
+            console.log('❌ Целевой порт не найден или не input');
         }
-        
+
         // Очищаем временные элементы
         this.cleanupConnection();
     }
@@ -1344,91 +1177,545 @@ export default class BuilderCanvas {
      * Валидация подключения между нодами
      */
     validateConnection(sourceId, targetId) {
+        console.log(`🚀 validateConnection вызвана: ${sourceId} -> ${targetId}`);
+
         const sourceNode = this.nodes.get(sourceId);
         const targetNode = this.nodes.get(targetId);
-        
-        if (!sourceNode || !targetNode) return false;
-        
+
+        if (!sourceNode || !targetNode) {
+            console.log('❌ Один из нодов не найден');
+            return false;
+        }
+
         const sourceType = sourceNode.data.type;
         const targetType = targetNode.data.type;
-        
+
         console.log(`🔍 Валидация: ${sourceType} -> ${targetType}`);
-        
+
         // Получаем тип entry_point агента из builder
         const entryPointAgentType = this.builder.entryPointAgentType;
-        
-        // Правила подключений для StateGraph нод:
-        // Flow -> любая нода с input портом
-        // Agent, Function, Router, Message -> любая нода с input портом
-        // Tool, ToolMcp -> ничего (конечная нода, нет output порта)
-        
+        const targetAgentId = targetNode.data.params?.agent_id;
+        const entryPointAgentId = this.builder.currentFlow?.entry_point_agent;
+
+        // ЕДИНАЯ КАРТА ПРАВИЛ СОЕДИНЕНИЙ
+        const CONNECTION_RULES = {
+            // ReAct агент правила
+            react: {
+                // Агент может соединяться с множеством tools и агентов
+                agent_node: {
+                    can_connect_to: ['tool_node', 'agent_node'],
+                    max_incoming: -1, // неограничено
+                    max_outgoing: 1   // выходной порт может иметь только 1 соединение
+                },
+                // Tool не имеет выходного порта (конечная нода)
+                tool_node: {
+                    can_connect_to: [], // tool не может быть источником
+                    max_incoming: 1,
+                    max_outgoing: 0
+                }
+            },
+
+            // StateGraph агент правила
+            stategraph: {
+                // StateGraph агент может быть соединен только с 1 нодой любого типа
+                agent_node: {
+                    can_connect_to: ['tool_node', 'agent_node', 'function_node', 'router_node', 'message_node'],
+                    max_incoming: entryPointAgentId && targetAgentId === entryPointAgentId ? 1 : -1,
+                    max_outgoing: 1
+                },
+                // Все ноды могут иметь выходной порт, но выходной порт может иметь только 1 соединение
+                tool_node: {
+                    can_connect_to: ['tool_node', 'agent_node', 'function_node', 'router_node', 'message_node'],
+                    max_incoming: 1,
+                    max_outgoing: 1
+                },
+                function_node: {
+                    can_connect_to: ['tool_node', 'agent_node', 'function_node', 'router_node', 'message_node'],
+                    max_incoming: 1,
+                    max_outgoing: 1
+                },
+                router_node: {
+                    can_connect_to: ['tool_node', 'agent_node', 'function_node', 'router_node', 'message_node'],
+                    max_incoming: 2, // роутер может иметь множество входящих соединений
+                    max_outgoing: 1
+                },
+                message_node: {
+                    can_connect_to: ['tool_node', 'agent_node', 'function_node', 'router_node', 'message_node'],
+                    max_incoming: 1,
+                    max_outgoing: 1
+                }
+            },
+
+            // Общие правила для всех типов агентов
+            common: {
+                flow_node: {
+                    can_connect_to: ['tool_node', 'agent_node', 'function_node', 'router_node', 'message_node'],
+                    max_incoming: 0, // flow не может быть целью
+                    max_outgoing: 1  // flow может иметь только 1 entry point
+                }
+            }
+        };
+
+        // Определяем правила для текущего типа агента
+        const agentRules = CONNECTION_RULES[entryPointAgentType] || {};
+        const sourceRules = agentRules[sourceType] || CONNECTION_RULES.common[sourceType];
+        const targetRules = agentRules[targetType] || CONNECTION_RULES.common[targetType];
+
+        // Проверяем базовые правила
         if (sourceType === 'flow_node') {
             // Flow может подключаться к любой ноде кроме другого Flow
             if (targetType === 'flow_node') {
                 console.warn(`Flow не может подключаться к другому Flow`);
                 return false;
             }
-            
+
             // У Flow может быть только одно подключение (entry point)
             const existingConnections = Array.from(this.edges.values())
                 .filter(edge => edge.data.source === sourceId);
-            
+
             if (existingConnections.length > 0) {
                 console.warn('У Flow уже есть подключение (entry point)');
                 this.builder.showNotification('У Flow может быть только один entry point', 'warning');
                 return false;
             }
-            
+
             return true;
         }
-        
-        if (sourceType === 'tool_node') {
-            // Для StateGraph tool может быть источником, для ReAct - нет
-            const agentType = this.builder.entryPointAgentType;
-            
-            if (agentType === 'react') {
-                console.warn('Tool в ReAct агенте не может быть источником подключения');
-                return false;
-            }
-            
-            // Для StateGraph разрешаем (tool → другая нода в графе)
-            console.log('Tool в StateGraph может быть источником');
-        }
-        
-        // Для всех остальных типов (agent, function, router, message) - разрешаем
-        // Они могут подключаться к любой ноде кроме flow и самих себя
-        if (targetType === 'flow_node') {
-            console.warn(`${sourceType} не может подключаться к Flow`);
-            return false;
-        }
-        
+
         if (sourceId === targetId) {
             console.warn('Нельзя подключить ноду к самой себе');
             return false;
         }
-        
+
+        if (targetType === 'flow_node') {
+            console.warn(`${sourceType} не может подключаться к Flow`);
+            return false;
+        }
+
+        // Проверяем правила для source типа
+        if (sourceRules) {
+            // Проверяем, может ли source подключаться к target типу
+            if (!sourceRules.can_connect_to.includes(targetType)) {
+                console.warn(`${sourceType} не может подключаться к ${targetType}`);
+                return false;
+            }
+
+            // Проверяем исходящие соединения source
+            if (sourceRules.max_outgoing >= 0) {
+                const outgoingConnections = Array.from(this.edges.values())
+                    .filter(edge => edge.data.source === sourceId);
+
+                if (outgoingConnections.length >= sourceRules.max_outgoing) {
+                    console.warn(`${sourceType} может иметь максимум ${sourceRules.max_outgoing} исходящих соединений`);
+                    this.builder.showNotification(`${sourceType} может иметь максимум ${sourceRules.max_outgoing} исходящих соединений`, 'warning');
+                    return false;
+                }
+            }
+        }
+
+        // Проверяем правила для target типа
+        if (targetRules) {
+            // Проверяем входящие соединения target
+            if (targetRules.max_incoming >= 0) {
+                const incomingConnections = Array.from(this.edges.values())
+                    .filter(edge => edge.data.target === targetId);
+
+                if (incomingConnections.length >= targetRules.max_incoming) {
+                    console.warn(`${targetType} может иметь максимум ${targetRules.max_incoming} входящих соединений`);
+                    this.builder.showNotification(`${targetType} может иметь максимум ${targetRules.max_incoming} входящих соединений`, 'warning');
+                    return false;
+                }
+            }
+        }
+
+        console.log('✅ Соединение разрешено по правилам');
         return true;
     }
     
     /**
+     * Добавление портов к элементу ноды
+     */
+    addPortsToNodeElement(element, node) {
+        const nodeType = node.data.type;
+        const agentType = this.builder.entryPointAgentType;
+
+        console.log('🔌 Добавляем порты к ноде:', node.id, 'тип ноды:', nodeType, 'тип агента:', agentType);
+
+        // Удаляем старые порты если есть
+        const existingPorts = element.querySelector('.node-ports');
+        if (existingPorts) {
+            console.log('🗑️ Удаляем существующие порты');
+            existingPorts.remove();
+        }
+
+        let portsHtml = '';
+
+        if (nodeType === 'flow_node') {
+            portsHtml = `
+                <div class="node-ports">
+                    <div class="output-ports">
+                        <div class="port output-port" data-port-type="output" data-port-id="output">
+                            <div class="port-dot"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else if (nodeType === 'tool_node') {
+            // Для tool_node: если агент ReAct - только входной порт, иначе оба
+            // По умолчанию (если тип агента неизвестен) - создаем оба порта
+            if (agentType === 'react') {
+                console.log('🔧 Tool node для ReAct агента - только входной порт');
+                portsHtml = `
+                    <div class="node-ports">
+                        <div class="input-ports">
+                            <div class="port input-port" data-port-type="input" data-port-id="input">
+                                <div class="port-dot"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                console.log('🔧 Tool node для StateGraph агента или тип неизвестен - оба порта');
+                portsHtml = `
+                    <div class="node-ports">
+                        <div class="input-ports">
+                            <div class="port input-port" data-port-type="input" data-port-id="input">
+                                <div class="port-dot"></div>
+                            </div>
+                        </div>
+                        <div class="output-ports">
+                            <div class="port output-port" data-port-type="output" data-port-id="output">
+                                <div class="port-dot"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        } else {
+            // Для agent, function, router, message - оба порта
+            portsHtml = `
+                <div class="node-ports">
+                    <div class="input-ports">
+                        <div class="port input-port" data-port-type="input" data-port-id="input">
+                            <div class="port-dot"></div>
+                        </div>
+                    </div>
+                    <div class="output-ports">
+                        <div class="port output-port" data-port-type="output" data-port-id="output">
+                            <div class="port-dot"></div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        if (!portsHtml) {
+            console.error('❌ Не удалось создать HTML для портов, тип ноды:', nodeType);
+            return;
+        }
+
+        console.log('📝 Добавляем порты, HTML:', portsHtml.substring(0, 100) + '...');
+
+        // Добавляем порты в конец элемента
+        element.insertAdjacentHTML('beforeend', portsHtml);
+
+        // Проверяем, что порты добавились
+        const addedPorts = element.querySelector('.node-ports');
+        if (addedPorts) {
+            const inputPorts = addedPorts.querySelectorAll('.input-port');
+            const outputPorts = addedPorts.querySelectorAll('.output-port');
+            console.log('✅ Порты добавлены:', {
+                input: inputPorts.length,
+                output: outputPorts.length
+            });
+            
+            // Настраиваем обработчики только для портов (не для всей ноды)
+            // Обработчики для самой ноды устанавливаются в addNode
+            const ports = addedPorts.querySelectorAll('.port');
+            ports.forEach(port => {
+                port.addEventListener('mousedown', (e) => this.handlePortMouseDown(e, node, port));
+            });
+        } else {
+            console.error('❌ Порты НЕ добавились к элементу!');
+        }
+    }
+
+    /**
+     * Обновление портов ноды при изменении типа агента
+     */
+    updateNodePorts(node, agentType) {
+        console.log('🔧 updateNodePorts для ноды:', node.id, 'тип агента:', agentType, 'тип ноды:', node.data.type);
+
+        if (node.data.type !== 'tool_node') {
+            return; // Пока только для tool_node
+        }
+
+        const portsContainer = node.element.querySelector('.node-ports');
+        if (!portsContainer) {
+            console.warn('⚠️ Контейнер портов не найден для ноды:', node.id);
+            return;
+        }
+
+        // Определяем, какие порты должны быть
+        const shouldHaveOutputPort = agentType !== 'react';
+        const hasOutputPort = portsContainer.querySelector('.output-ports') !== null;
+
+        console.log('🔍 Проверка портов:', { shouldHaveOutputPort, hasOutputPort });
+
+        // Если порты уже правильные, ничего не делаем
+        if (shouldHaveOutputPort === hasOutputPort) {
+            console.log('✅ Порты уже правильные, пропускаем обновление');
+            return;
+        }
+
+        console.log('🔄 Порты нужно обновить, пересоздаем...');
+
+        // Очищаем старые порты
+        portsContainer.innerHTML = '';
+
+        // Создаем новые порты
+        let newPortsHtml = '';
+
+        if (agentType === 'react') {
+            // В ReAct tool - конечная нода, только входной порт
+            console.log('🔧 Создаем порты для ReAct: только входной');
+            newPortsHtml = `
+                <div class="input-ports">
+                    <div class="port input-port" data-port-type="input" data-port-id="input">
+                        <div class="port-dot"></div>
+                    </div>
+                </div>
+            `;
+        } else if (agentType === 'stategraph') {
+            // В StateGraph tool может быть промежуточной нодой, оба порта
+            console.log('🔧 Создаем порты для StateGraph: оба порта');
+            newPortsHtml = `
+                <div class="input-ports">
+                    <div class="port input-port" data-port-type="input" data-port-id="input">
+                        <div class="port-dot"></div>
+                    </div>
+                </div>
+                <div class="output-ports">
+                    <div class="port output-port" data-port-type="output" data-port-id="output">
+                        <div class="port-dot"></div>
+                    </div>
+                </div>
+            `;
+        } else {
+            // По умолчанию оба порта (на случай, если тип агента не определен)
+            console.log('🔧 Создаем порты по умолчанию (agentType =', agentType, '): оба порта');
+            newPortsHtml = `
+                <div class="input-ports">
+                    <div class="port input-port" data-port-type="input" data-port-id="input">
+                        <div class="port-dot"></div>
+                    </div>
+                </div>
+                <div class="output-ports">
+                    <div class="port output-port" data-port-type="output" data-port-id="output">
+                        <div class="port-dot"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        portsContainer.innerHTML = newPortsHtml;
+
+        // Перепривязываем обработчики событий к новым портам
+        this.setupNodeHandlers(node);
+
+        console.log('✅ Порты ноды обновлены:', node.id);
+    }
+
+    /**
      * Создание соединения
      */
     createConnection(sourceId, targetId) {
+        console.log('🔗 createConnection вызван:', sourceId, '->', targetId);
         const edgeId = `${sourceId}-${targetId}`;
-        
+
         // Проверяем, что связь не существует
-        if (this.edges.has(edgeId)) return;
-        
+        if (this.edges.has(edgeId)) {
+            console.log('⚠️ Связь уже существует:', edgeId);
+            return;
+        }
+
         const edgeData = {
             id: edgeId,
             source: sourceId,
             target: targetId,
             type: 'default'
         };
-        
+
         this.addEdge(edgeData);
+        console.log('✅ Связь создана:', edgeId);
+
+        // Проверяем, нужно ли обновить entry_point_agent
+        console.log('🔄 Вызываем updateFlowEntryPointIfNeeded');
+        this.updateFlowEntryPointIfNeeded(sourceId, targetId);
     }
     
+    /**
+     * Обновление entry_point_agent при создании связи flow -> agent
+     */
+    updateFlowEntryPointIfNeeded(sourceId, targetId) {
+        console.log('🎯 updateFlowEntryPointIfNeeded вызван:', sourceId, '->', targetId);
+
+        const sourceNode = this.nodes.get(sourceId);
+        const targetNode = this.nodes.get(targetId);
+
+        console.log('📦 sourceNode:', sourceNode);
+        console.log('📦 targetNode:', targetNode);
+
+        if (!sourceNode || !targetNode) {
+            console.log('❌ Один из нодов не найден');
+            return;
+        }
+
+        console.log('🏷️ sourceNode.type:', sourceNode.type, 'targetNode.type:', targetNode.type);
+        console.log('🏷️ sourceNode.data:', sourceNode.data, 'targetNode.data:', targetNode.data);
+
+        // Проверяем типы нодов (может быть в data или напрямую)
+        const sourceType = sourceNode.type || sourceNode.data?.type;
+        const targetType = targetNode.type || targetNode.data?.type;
+
+        console.log('🏷️ sourceType:', sourceType, 'targetType:', targetType);
+
+        // Проверяем, что source - flow_node, а target - agent_node
+        if (sourceType === 'flow_node' && targetType === 'agent_node') {
+            const flowId = sourceNode.params?.flow_id || sourceNode.data?.params?.flow_id;
+            const agentId = targetNode.params?.agent_id || targetNode.data?.params?.agent_id;
+
+            console.log('🔍 flowId:', flowId, 'agentId:', agentId);
+
+            if (flowId && agentId) {
+                console.log('🔄 Обновляю entry_point_agent для flow:', flowId, 'на agent:', agentId);
+                this.updateFlowEntryPointAgent(flowId, agentId);
+            } else {
+                console.log('❌ flowId или agentId пустые');
+            }
+        } else {
+            console.log('❌ Типы нодов не подходят для обновления entry_point_agent');
+        }
+    }
+
+    /**
+     * Сброс entry_point_agent при удалении связи flow -> agent
+     */
+    resetFlowEntryPointIfNeeded(sourceId, targetId) {
+        console.log('🎯 resetFlowEntryPointIfNeeded вызван:', sourceId, '->', targetId);
+
+        const sourceNode = this.nodes.get(sourceId);
+        const targetNode = this.nodes.get(targetId);
+
+        if (!sourceNode || !targetNode) return;
+
+        // Проверяем типы нодов (может быть в data или напрямую)
+        const sourceType = sourceNode.type || sourceNode.data?.type;
+        const targetType = targetNode.type || targetNode.data?.type;
+
+        console.log('🏷️ reset - sourceType:', sourceType, 'targetType:', targetType);
+
+        // Проверяем, что удаляется связь flow_node -> agent_node
+        if (sourceType === 'flow_node' && targetType === 'agent_node') {
+            const flowId = sourceNode.params?.flow_id || sourceNode.data?.params?.flow_id;
+            const agentId = targetNode.params?.agent_id || targetNode.data?.params?.agent_id;
+
+            if (flowId && agentId) {
+                console.log('🔄 Сбрасываю entry_point_agent для flow:', flowId, '(был agent:', agentId, ')');
+                this.resetFlowEntryPointAgent(flowId, agentId);
+            }
+        }
+    }
+
+    /**
+     * Обновление entry_point_agent во флоу
+     */
+    async updateFlowEntryPointAgent(flowId, agentId) {
+        try {
+            // Получаем текущий флоу
+            const response = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}`);
+            if (!response.ok) {
+                throw new Error('Не удалось получить данные флоу');
+            }
+
+            const flowData = await response.json();
+
+            // Обновляем entry_point_agent
+            flowData.entry_point_agent = agentId;
+
+            // Сохраняем обновленный флоу
+            const updateResponse = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(flowData)
+            });
+
+            if (!updateResponse.ok) {
+                throw new Error('Не удалось обновить entry_point_agent');
+            }
+
+            // Обновляем currentFlow в builder
+            this.builder.currentFlow = flowData;
+
+            // Обновляем тип entry_point агента и фильтруем палитру
+            await this.builder.updateEntryPointAgentType();
+
+            console.log('✅ entry_point_agent успешно обновлен:', agentId);
+
+        } catch (error) {
+            console.error('❌ Ошибка обновления entry_point_agent:', error);
+            this.builder.showNotification('Ошибка обновления entry_point_agent: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * Сброс entry_point_agent во флоу
+     */
+    async resetFlowEntryPointAgent(flowId, removedAgentId) {
+        try {
+            // Получаем текущий флоу
+            const response = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}`);
+            if (!response.ok) {
+                throw new Error('Не удалось получить данные флоу');
+            }
+
+            const flowData = await response.json();
+
+            // Проверяем, что удаляемый агент действительно был entry_point_agent
+            if (flowData.entry_point_agent === removedAgentId) {
+                // Сбрасываем entry_point_agent
+                flowData.entry_point_agent = null;
+
+                // Сохраняем обновленный флоу
+                const updateResponse = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(flowData)
+                });
+
+                if (!updateResponse.ok) {
+                    throw new Error('Не удалось сбросить entry_point_agent');
+                }
+
+                // Обновляем currentFlow в builder
+                this.builder.currentFlow = flowData;
+
+                // Обновляем тип entry_point агента и фильтруем палитру
+                await this.builder.updateEntryPointAgentType();
+
+                console.log('✅ entry_point_agent успешно сброшен');
+            }
+
+        } catch (error) {
+            console.error('❌ Ошибка сброса entry_point_agent:', error);
+            this.builder.showNotification('Ошибка сброса entry_point_agent: ' + error.message, 'error');
+        }
+    }
+
     /**
      * Очистка соединения
      */
@@ -1521,9 +1808,14 @@ export default class BuilderCanvas {
     removeEdge(edgeId) {
         const edge = this.edges.get(edgeId);
         if (!edge) return;
-        
+
+        // Проверяем, нужно ли сбросить entry_point_agent
+        this.resetFlowEntryPointIfNeeded(edge.source, edge.target);
+
         edge.element.remove();
         this.edges.delete(edgeId);
+
+        console.log('🗑️ Связь удалена:', edgeId);
     }
     
     /**

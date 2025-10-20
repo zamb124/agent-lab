@@ -179,15 +179,18 @@ async def update_flow(
         raise HTTPException(status_code=404, detail="Flow not found")
     
     # Создаем обновленные данные с валидацией через модель
-    flow_dict = flow.model_dump()
-    
+    # Исключаем frozen поля из model_dump
+    flow_dict = flow.model_dump(exclude={'flow_id'})
+
     # Обновляем только разрешенные поля
     allowed_fields = {"name", "description", "entry_point_agent", "platforms", "timeout", "max_retries", "canvas_data", "variables", "store", "enable_reasoning", "rag_config"}
     for field, value in updates.items():
         if field in allowed_fields:
             flow_dict[field] = value
-    
+
     # Валидируем через модель - валидаторы автоматически преобразуют типы
+    # Устанавливаем flow_id явно, так как он frozen
+    flow_dict['flow_id'] = flow_id
     validated_flow = FlowConfig(**flow_dict)
     
     # Если обновили platforms - проверяем уникальность username

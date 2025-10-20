@@ -279,7 +279,7 @@ class CanvasService:
         logger.info(f"Сохраняем данные канваса для флоу {flow_id}")
         logger.info(f"Количество нод: {len(canvas_data.get('nodes', []))}")
         logger.info(f"Количество связей: {len(canvas_data.get('edges', []))}")
-        
+
         await self.update_flow_entry_point(flow, canvas_data)
         
         flow.canvas_data = canvas_data

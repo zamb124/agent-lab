@@ -1272,6 +1272,32 @@ export class FlowLayoutManager {
     }
     
     /**
+     * Создать ноду из сохраненных данных canvas
+     */
+    async createNodeFromData(nodeData, position, size) {
+        console.log('🏗️ Создаем ноду из данных:', nodeData);
+
+        // Создаем полные данные ноды
+        const fullNodeData = {
+            id: nodeData.id,
+            type: nodeData.type,
+            params: nodeData.params || {},
+            ui: {
+                x: position.x,
+                y: position.y,
+                width: size.width,
+                height: size.height
+            }
+        };
+
+        // Добавляем ноду на canvas
+        const node = await this.builder.canvas.addNode(fullNodeData);
+        console.log('✅ Нода создана:', node.id);
+
+        return node;
+    }
+
+    /**
      * Вычислить оптимальное расположение для дерева элементов
      */
     calculateTreeLayout(rootPosition, treeData) {

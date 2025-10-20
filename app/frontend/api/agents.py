@@ -51,24 +51,53 @@ async def get_agent(agent_id: str, agent_repo: AgentRepositoryDep) -> AgentConfi
 
 @router.post("/", response_model=AgentConfig)
 async def create_agent(
-    agent_repo: AgentRepositoryDep,
-    name: str = "Новый Agent",
-    description: Optional[str] = None,
-    agent_type: AgentType = AgentType.REACT,
-    prompt: Optional[str] = None
+    request_data: Dict[str, Any],
+    agent_repo: AgentRepositoryDep
 ) -> AgentConfig:
     """Создать нового агента и сразу сохранить в БД"""
+
+    print(f"DEBUG API: Raw request data: {request_data}")
+
+    agent_type = request_data.get('agent_type', 'react')
+    name = request_data.get('name', 'Новый Agent')
+    description = request_data.get('description', '')
+    prompt = request_data.get('prompt')
+
+    print(f"DEBUG API: Extracted agent_type={agent_type} (type: {type(agent_type)})")
+
+    # Преобразуем строку в enum если нужно
+    if isinstance(agent_type, str):
+        agent_type = AgentType(agent_type.lower())
+        print(f"DEBUG API: Converted string to enum: {agent_type}")
+
     agent_id = f"agent_{uuid.uuid4().hex[:8]}"
-    
+
+    print(f"DEBUG API: Creating agent with type={agent_type}")
+
+    from app.models.core_models import LLMConfig
+    from app.core.config import get_settings
+
+    settings = get_settings()
+
+    # Создаем дефолтную LLM конфигурацию из настроек
+    llm_config = LLMConfig(
+        model=settings.llm.default_model,  # Дефолтная модель из конфига
+        temperature=0.2
+    )
+
     agent_config = AgentConfig(
         agent_id=agent_id,
         name=name,
         description=description or "",
         type=agent_type,
         prompt=prompt or "Вы полезный ассистент.",
+        llm_config=llm_config,
         code_mode=CodeMode.INLINE_CODE,
         source="canvas_created"
     )
+
+    print(f"DEBUG API: Created agent config with type={agent_config.type}")
+    print(f"DEBUG API: Agent config dict: {agent_config.model_dump()}")
     
     # Сохраняем в БД через репозиторий
     await agent_repo.set(agent_config)
@@ -88,19 +117,22 @@ async def update_agent(
         raise HTTPException(status_code=404, detail="Agent not found")
     
     # Создаем обновленные данные с валидацией через модель
-    agent_dict = agent.model_dump()
-    
+    # Исключаем frozen поля из model_dump
+    agent_dict = agent.model_dump(exclude={'agent_id'})
+
     # Обновляем только разрешенные поля
     allowed_fields = {
-        "name", "description", "type", "prompt", "code_mode", 
+        "name", "description", "type", "prompt", "code_mode",
         "function_class", "inline_code", "tools", "llm_config", "history_from",
         "local_variables", "store"
     }
     for field, value in updates.items():
         if field in allowed_fields:
             agent_dict[field] = value
-    
+
     # Валидируем через модель - валидаторы автоматически преобразуют типы
+    # Устанавливаем agent_id явно, так как он frozen
+    agent_dict['agent_id'] = agent_id
     validated_agent = AgentConfig(**agent_dict)
     
     await agent_repo.set(validated_agent)

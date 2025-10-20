@@ -270,12 +270,9 @@ async def update_model(
         if field_name in ModelClass.model_fields:
             field_info = ModelClass.model_fields[field_name]
 
-            # Запрещаем изменение frozen полей
+            # Пропускаем frozen поля (они неизменяемы)
             if field_info.frozen:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Поле '{field_name}' является неизменяемым (frozen) и не может быть обновлено"
-                )
+                continue
 
             annotation = field_info.annotation
 
@@ -298,27 +295,58 @@ async def update_model(
                     # Пустая строка или JSON для dict
                     elif field_value == "{}" or (get_origin(annotation) is dict or annotation is dict):
                         if field_value:
-                            parsed_value = json.loads(field_value)
+                            # Обрабатываем как одинарные, так и двойные кавычки
+                            try:
+                                # Сначала пробуем стандартный JSON
+                                parsed_value = json.loads(field_value)
+                            except json.JSONDecodeError:
+                                # Если не получилось, пробуем заменить одинарные кавычки на двойные
+                                try:
+                                    fixed_value = field_value.replace("'", '"')
+                                    parsed_value = json.loads(fixed_value)
+                                except json.JSONDecodeError:
+                                    # Если совсем не JSON, оставляем как есть
+                                    parsed_value = field_value
                             existing_model_data[field_name] = parsed_value
                         else:
                             existing_model_data[field_name] = {}
                     # Пустая строка или JSON для list
                     elif field_value == "[]" or (get_origin(annotation) is list or annotation is list):
                         if field_value:
-                            parsed_value = json.loads(field_value)
+                            try:
+                                # Сначала пробуем стандартный JSON
+                                parsed_value = json.loads(field_value)
+                            except json.JSONDecodeError:
+                                # Если не получилось, пробуем заменить одинарные кавычки на двойные
+                                try:
+                                    fixed_value = field_value.replace("'", '"')
+                                    parsed_value = json.loads(fixed_value)
+                                except json.JSONDecodeError:
+                                    # Если совсем не JSON, оставляем как есть
+                                    parsed_value = field_value
                             existing_model_data[field_name] = parsed_value
                         else:
                             existing_model_data[field_name] = []
                     # Проверяем, является ли это BaseModel
                     elif inspect.isclass(annotation) and issubclass(annotation, BaseModel):
-                        parsed_value = json.loads(field_value)
+                        try:
+                            parsed_value = json.loads(field_value)
+                        except json.JSONDecodeError:
+                            # Если не получилось, пробуем заменить одинарные кавычки на двойные
+                            fixed_value = field_value.replace("'", '"')
+                            parsed_value = json.loads(fixed_value)
                         existing_model_data[field_name] = parsed_value
                     # Проверяем, является ли это List[BaseModel]
                     elif (hasattr(annotation, '__origin__') and
                           annotation.__origin__ is list and
                           len(annotation.__args__) > 0 and
                           issubclass(annotation.__args__[0], BaseModel)):
-                        parsed_value = json.loads(field_value)
+                        try:
+                            parsed_value = json.loads(field_value)
+                        except json.JSONDecodeError:
+                            # Если не получилось, пробуем заменить одинарные кавычки на двойные
+                            fixed_value = field_value.replace("'", '"')
+                            parsed_value = json.loads(fixed_value)
                         existing_model_data[field_name] = parsed_value
                     else:
                         existing_model_data[field_name] = field_value

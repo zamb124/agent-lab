@@ -137,6 +137,12 @@ export default class ElementSelector {
 
         console.log('Creating new element:', dropData);
 
+        // Для агентов показываем меню выбора типа
+        if (dropData.nodeType === 'agent_node' || dropData.type === 'agent' || dropData.type === 'agent_node') {
+            await this.showAgentTypeSelector(position);
+            return;
+        }
+
         // Определяем, какой тип создания использовать
         if (dropData.nodeType) {
             // Это palette node (новый формат) - у него есть nodeType
@@ -144,10 +150,6 @@ export default class ElementSelector {
         } else {
             // Старый формат (из сайдбара)
             switch (dropData.type) {
-                case 'agent':
-                case 'agent_node':
-                    await this.builder.dragDrop.createAgentNode(dropData.data, position);
-                    break;
                 case 'tool':
                 case 'tool_node':
                     await this.builder.dragDrop.createToolNode(dropData.data, position);
@@ -158,6 +160,187 @@ export default class ElementSelector {
                     break;
                 default:
                     console.warn('Неизвестный тип элемента для создания:', dropData.type);
+            }
+        }
+    }
+
+    /**
+     * Показать меню выбора типа агента
+     */
+    async showAgentTypeSelector(position) {
+        return new Promise((resolve, reject) => {
+            this.pendingAgentTypePosition = position;
+            this.resolveAgentTypePromise = resolve;
+            this.rejectAgentTypePromise = reject;
+
+            const menuElement = document.createElement('div');
+            menuElement.className = 'agent-type-context-menu';
+            menuElement.innerHTML = `
+                <div class="menu-layout">
+                    <div class="menu-icon-column">
+                        <i class="bi bi-robot menu-main-icon"></i>
+                    </div>
+                    <div class="menu-options-column">
+                        <button class="context-menu-item" data-action="react">
+                            <div class="menu-item-title">React Agent</div>
+                            <div class="menu-item-description">Агент с инструментами для выполнения задач</div>
+                        </button>
+                        <button class="context-menu-item" data-action="stategraph">
+                            <div class="menu-item-title">StateGraph Agent</div>
+                            <div class="menu-item-description">Агент с графом состояний для сложных сценариев</div>
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            // Позиционируем меню рядом с курсором
+            let screenX = this.pendingEvent.clientX + 10;
+            let screenY = this.pendingEvent.clientY + 10;
+
+            const menuWidth = 280;
+            const menuHeight = 120;
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+
+            if (screenX + menuWidth > viewportWidth) {
+                screenX = this.pendingEvent.clientX - menuWidth - 10;
+            }
+            if (screenY + menuHeight > viewportHeight) {
+                screenY = this.pendingEvent.clientY - menuHeight - 10;
+            }
+
+            menuElement.style.position = 'fixed';
+            menuElement.style.left = Math.max(10, screenX) + 'px';
+            menuElement.style.top = Math.max(10, screenY) + 'px';
+            menuElement.style.zIndex = '10000';
+
+            document.body.appendChild(menuElement);
+            this.currentAgentTypeMenuElement = menuElement;
+
+            this.setupAgentTypeSelectionHandlers();
+
+            setTimeout(() => {
+                document.addEventListener('click', this.handleOutsideAgentTypeMenuClick.bind(this), { once: true });
+            }, 10);
+        });
+    }
+
+    /**
+     * Настройка обработчиков для выбора типа агента
+     */
+    setupAgentTypeSelectionHandlers() {
+        if (!this.currentAgentTypeMenuElement) return;
+
+        const buttons = this.currentAgentTypeMenuElement.querySelectorAll('.context-menu-item');
+        buttons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const action = button.dataset.action;
+                this.handleAgentTypeSelection(action);
+            });
+        });
+    }
+
+    /**
+     * Обработка выбора типа агента
+     */
+    async handleAgentTypeSelection(agentType) {
+        console.log('Selected agent type:', agentType);
+        this.hideAgentTypeMenu();
+
+        try {
+            // Создаем агента выбранного типа
+            await this.createAgentOfType(agentType, this.pendingAgentTypePosition);
+            this.resolvePromise(true);
+            if (this.resolveAgentTypePromise) {
+                this.resolveAgentTypePromise(true);
+            }
+        } catch (error) {
+            console.error('Ошибка создания агента:', error);
+            if (this.rejectAgentTypePromise) {
+                this.rejectAgentTypePromise(error);
+            }
+            this.rejectPromise(error);
+        }
+    }
+
+    /**
+     * Создание агента выбранного типа
+     */
+    async createAgentOfType(agentType, position) {
+        console.log('Creating agent of type:', agentType, 'at position:', position);
+
+        try {
+            const requestData = {
+                agent_type: agentType,
+                name: agentType === 'react' ? 'Новый React Agent' : 'Новый StateGraph Agent',
+                description: agentType === 'react' ? 'Агент с инструментами для выполнения задач' : 'Агент с графом состояний для сложных сценариев'
+            };
+
+            console.log('📤 Отправляем в API:', requestData);
+
+            // Создаем агента через API с указанием типа
+            const response = await fetch('/frontend/api/agents/', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(requestData)
+            });
+
+            if (!response.ok) throw new Error('Ошибка создания агента');
+
+            const agentData = await response.json();
+            console.log('🤖 Создан агент через API:', agentData);
+            console.log('🏷️ Тип агента из API:', agentData.type);
+
+            // Создаем ноду на канвасе
+            const nodeData = {
+                id: `agent_${agentData.agent_id}_${Date.now()}`,
+                type: 'agent_node',
+                params: {
+                    name: agentData.name,
+                    agent_id: agentData.agent_id,
+                    description: agentData.description,
+                    type: agentType
+                },
+                ui: {
+                    x: position.x,
+                    y: position.y,
+                    width: 180,
+                    height: 80
+                }
+            };
+
+            await this.builder.canvas.addNode(nodeData);
+
+            const typeName = agentType === 'react' ? 'React Agent' : 'StateGraph Agent';
+            this.builder.showNotification(`${typeName} "${agentData.name}" добавлен на канвас`, 'success');
+
+        } catch (error) {
+            console.error('Ошибка создания агента типа', agentType, ':', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Скрытие меню выбора типа агента
+     */
+    hideAgentTypeMenu() {
+        if (this.currentAgentTypeMenuElement) {
+            if (document.body.contains(this.currentAgentTypeMenuElement)) {
+                document.body.removeChild(this.currentAgentTypeMenuElement);
+            }
+            this.currentAgentTypeMenuElement = null;
+        }
+    }
+
+    /**
+     * Обработчик клика вне меню выбора типа агента
+     */
+    handleOutsideAgentTypeMenuClick(event) {
+        if (this.currentAgentTypeMenuElement && !this.currentAgentTypeMenuElement.contains(event.target)) {
+            this.hideAgentTypeMenu();
+            if (this.rejectAgentTypePromise) {
+                this.rejectAgentTypePromise(new Error('Меню выбора типа агента закрыто без выбора'));
             }
         }
     }

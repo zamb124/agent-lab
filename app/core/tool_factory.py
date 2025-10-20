@@ -108,11 +108,15 @@ class ToolFactory:
             tool = await self._create_function_tool(ref)
         else:
             raise ValueError(f"Неизвестный тип тула: code_mode={ref.code_mode}, tool_id={ref.tool_id}")
-        
+
+        if tool is None:
+            logger.warning(f"⚠️ Tool {tool_id} returned None - не создан")
+            return None
+
         # Оборачиваем в биллинг если есть стоимость или лимиты
         if ref.cost > 0 or ref.tariff_limits or ref.free_for_plans:
             tool = self._wrap_tool_with_billing(tool, ref)
-        
+
         return tool
 
     async def _create_inline_code_tool(self, ref: ToolReference) -> Any:
@@ -209,13 +213,33 @@ class ToolFactory:
         function_path = ref.function_path or ref.tool_id
 
         try:
-            # Разделяем путь на модуль и имя объекта
-            if "." not in function_path:
-                raise ValueError(f"function_path должен содержать точку (модуль.функция): {function_path}")
-            
-            module_path, name = function_path.rsplit(".", 1)
-            module = self._get_cached_module(module_path)
-            tool_obj = getattr(module, name)
+            # Специальная обработка для MCP tools
+            if function_path.startswith("mcp:"):
+                # MCP tools обрабатываются отдельно, возвращаем None для пропуска
+                return None
+
+            # Для INLINE_CODE точка не обязательна (может быть просто именем функции)
+            if ref.code_mode == CodeMode.INLINE_CODE:
+                # Inline code - ищем функцию в глобальном пространстве или создаем динамически
+                if "." in function_path:
+                    module_path, name = function_path.rsplit(".", 1)
+                    module = self._get_cached_module(module_path)
+                    tool_obj = getattr(module, name)
+                else:
+                    # Ищем в глобальном пространстве имен
+                    tool_obj = globals().get(function_path)
+                    if tool_obj is None:
+                        # Для inline code функция может создаваться динамически
+                        # Возвращаем None, чтобы инструмент создался другим способом
+                        return None
+            else:
+                # Для CODE_REFERENCE точка обязательна
+                if "." not in function_path:
+                    raise ValueError(f"function_path должен содержать точку (модуль.функция): {function_path}")
+
+                module_path, name = function_path.rsplit(".", 1)
+                module = self._get_cached_module(module_path)
+                tool_obj = getattr(module, name)
 
             # Если это класс, создаем экземпляр
             if inspect.isclass(tool_obj):
@@ -283,30 +307,40 @@ class ToolFactory:
     async def _create_mcp_tool(self, ref: ToolReference) -> Any:
         """
         Создает MCP инструмент через @tool декоратор.
-        
-        Динамически создает функцию и оборачивает её в @tool для 
+
+        Динамически создает функцию и оборачивает её в @tool для
         единообразия с остальными тулами платформы.
         """
+        logger.info(f"🎯 Создание MCP tool: {ref.tool_id}")
         from app.core.mcp_client import get_mcp_client, format_mcp_result
         from app.core.tool_decorator import tool
         from pydantic import create_model, Field as PydanticField
-        
+
         # Проверяем CodeMode для безопасности
         if ref.code_mode != CodeMode.MCP_TOOL:
+            logger.warning(f"⚠️ Ожидался CodeMode.MCP_TOOL для {ref.tool_id}, получен {ref.code_mode}")
             raise ValueError(f"Ожидался CodeMode.MCP_TOOL для {ref.tool_id}, получен {ref.code_mode}")
-        
+
         # Парсим tool_id: "mcp:server_id:tool_name"
         parts = ref.tool_id.split(":", 2)
         if len(parts) != 3 or parts[0] != "mcp":
+            logger.error(f"❌ Невалидный MCP tool_id: {ref.tool_id}")
             raise ValueError(f"Невалидный MCP tool_id: {ref.tool_id}")
-        
+
         _, server_id, tool_name = parts
-        
+        logger.info(f"📦 Разобран MCP tool: server={server_id}, tool={tool_name}")
+
         # Получаем company_id из params
         company_id = ref.params.get("company_id")
-        
+        logger.info(f"🏢 Company ID: {company_id}")
+
         # Получаем HTTP клиент для этого MCP сервера
-        mcp_client = await get_mcp_client(server_id, company_id)
+        try:
+            mcp_client = await get_mcp_client(server_id, company_id)
+            logger.info(f"🌐 MCP клиент получен для сервера {server_id}")
+        except Exception as e:
+            logger.error(f"❌ Не удалось получить MCP клиент: {e}")
+            return None
         
         # Получаем схему из params
         input_schema = ref.params.get("input_schema", {})
@@ -345,17 +379,23 @@ class ToolFactory:
         dynamic_mcp_func.__qualname__ = safe_tool_name
         
         # Применяем @tool декоратор
-        mcp_tool = tool(
-            description=ref.description or f"MCP тул {tool_name}",
-            args_schema=args_schema,
-            cost=ref.cost,
-            billing_name=ref.billing_name or f"mcp_{server_id}_{tool_name}",
-            is_public=ref.is_public,
-            state_aware=True,
-            group=ref.group
-        )(dynamic_mcp_func)
-        
-        return mcp_tool
+        try:
+            mcp_tool = tool(
+                description=ref.description or f"MCP тул {tool_name}",
+                args_schema=args_schema,
+                cost=ref.cost,
+                billing_name=ref.billing_name or f"mcp_{server_id}_{tool_name}",
+                is_public=ref.is_public,
+                state_aware=True,
+                group=ref.group
+            )(dynamic_mcp_func)
+
+            logger.info(f"✅ MCP tool {ref.tool_id} успешно создан")
+            return mcp_tool
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания MCP tool {ref.tool_id}: {e}")
+            return None
     
     def _json_schema_to_pydantic(self, schema: Dict[str, Any], model_name: str):
         """Конвертирует JSON Schema в Pydantic модель для args_schema"""

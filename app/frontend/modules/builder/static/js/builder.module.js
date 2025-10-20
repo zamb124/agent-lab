@@ -202,20 +202,29 @@ export default class BuilderModule {
             }
             
             this.currentFlow = await response.json();
-            
+
             // Получаем тип entry_point агента
             await this.updateEntryPointAgentType();
-            
-            // Всегда разворачиваем из graph_definition (позиции берем из canvas_data)
+
+            // Всегда разворачиваем из graph_definition
             const centerPos = this.currentCanvas.getCenterPosition();
             await this.currentDragDrop.createFlowWithExpansion(
-                { 
-                    id: this.currentFlow.flow_id, 
-                    name: this.currentFlow.name 
-                }, 
+                {
+                    id: this.currentFlow.flow_id,
+                    name: this.currentFlow.name
+                },
                 centerPos
             );
-            
+
+            // Применяем визуальные данные из canvas_data
+            if (this.currentFlow.canvas_data) {
+                console.log('🎨 Применяем визуальные данные canvas:', this.currentFlow.canvas_data);
+                await this.applyCanvasVisualData(this.currentFlow.canvas_data);
+            }
+
+            // Обновляем порты нод в зависимости от типа агента
+            this.updateNodePortsForAgentType(this.entryPointAgentType);
+
             this.updateFlowInfo();
             this.enableFlowActions();
             
@@ -228,74 +237,186 @@ export default class BuilderModule {
     }
     
     async updateEntryPointAgentType() {
+        console.log('🔍 updateEntryPointAgentType вызван, currentFlow:', this.currentFlow);
+        console.log('🔍 entry_point_agent:', this.currentFlow?.entry_point_agent);
+
+        const oldAgentType = this.entryPointAgentType;
+
         if (!this.currentFlow || !this.currentFlow.entry_point_agent) {
+            console.log('⚠️ Нет entry_point_agent, сбрасываем палитру');
             this.entryPointAgentType = null;
             this.updatePaletteForAgentType(null);
+            this.updateNodePortsForAgentType(null);
             return;
         }
-        
+
         try {
+            console.log('🔄 Запрашиваем агента:', this.currentFlow.entry_point_agent);
             const agentResponse = await fetch(`/frontend/api/agents/${encodeURIComponent(this.currentFlow.entry_point_agent)}`);
+            console.log('📡 Ответ агента:', agentResponse.status);
+
             if (agentResponse.ok) {
                 const agent = await agentResponse.json();
+                console.log('🤖 Получен агент:', agent);
+                console.log('🏷️ Тип агента:', agent.type);
+                console.log('🔍 Все поля агента:', Object.keys(agent));
+
                 this.entryPointAgentType = agent.type; // 'react' или 'stategraph'
-                console.log('🎯 Entry point agent type:', this.entryPointAgentType);
+                console.log('🎯 Entry point agent type установлен:', this.entryPointAgentType);
+
                 this.updatePaletteForAgentType(this.entryPointAgentType);
+
+                // Если тип агента изменился, обновляем порты нод
+                if (oldAgentType !== this.entryPointAgentType) {
+                    console.log('🔄 Тип агента изменился, обновляем порты нод');
+                    this.updateNodePortsForAgentType(this.entryPointAgentType);
+                }
             } else {
+                console.log('❌ Агент не найден, сбрасываем');
                 this.entryPointAgentType = null;
                 this.updatePaletteForAgentType(null);
+                this.updateNodePortsForAgentType(null);
             }
         } catch (error) {
-            console.error('Ошибка получения типа агента:', error);
+            console.error('❌ Ошибка получения типа агента:', error);
             this.entryPointAgentType = null;
             this.updatePaletteForAgentType(null);
+            this.updateNodePortsForAgentType(null);
         }
     }
     
+    updateNodePortsForAgentType(agentType) {
+        console.log('🔌 updateNodePortsForAgentType вызван, тип агента:', agentType);
+
+        // Обновляем порты всех tool_node на canvas
+        for (const [nodeId, node] of this.currentCanvas.nodes) {
+            if (node.data.type === 'tool_node') {
+                console.log('🔄 Обновляем порты tool_node:', nodeId);
+                this.currentCanvas.updateNodePorts(node, agentType);
+            }
+        }
+    }
+
     updatePaletteForAgentType(agentType) {
         console.log('🎨 updatePaletteForAgentType вызван, тип агента:', agentType);
-        
+        console.log('🎨 Текущий entryPointAgentType:', this.entryPointAgentType);
+
         if (!this.palette) {
             console.warn('⚠️ Palette не инициализирована');
             return;
         }
-        
+
         const paletteElement = document.getElementById('nodePalette');
         if (!paletteElement) {
             console.warn('⚠️ Элемент nodePalette не найден');
             return;
         }
-        
+
         const paletteItems = paletteElement.querySelectorAll('.palette-item');
         console.log('📋 Найдено элементов палитры:', paletteItems.length);
-        
+
         paletteItems.forEach(item => {
             const nodeType = item.dataset.nodeType;
             let isEnabled = false;
-            
+
+            console.log(`🔍 Проверяем элемент ${nodeType} для типа агента ${agentType}`);
+
             if (!agentType) {
                 // null: flow для создания, agent для entry_point
                 isEnabled = (nodeType === 'flow_node' || nodeType === 'agent_node');
+                console.log(`  📝 Для null: ${nodeType} -> ${isEnabled ? 'enabled' : 'disabled'}`);
             } else if (agentType === 'react') {
                 // react: tool, agent (визуально ноды, но сохраняются в tools[])
                 isEnabled = (nodeType === 'tool_node' || nodeType === 'agent_node');
+                console.log(`  ⚛️ Для react: ${nodeType} -> ${isEnabled ? 'enabled' : 'disabled'}`);
             } else if (agentType === 'stategraph') {
                 // stategraph: все ноды кроме flow
                 isEnabled = (nodeType !== 'flow_node');
+                console.log(`  📊 Для stategraph: ${nodeType} -> ${isEnabled ? 'enabled' : 'disabled'}`);
             }
-            
+
             if (isEnabled) {
                 item.classList.remove('disabled');
                 item.setAttribute('draggable', 'true');
+                console.log(`  ✅ ${nodeType} включен`);
             } else {
                 item.classList.add('disabled');
                 item.setAttribute('draggable', 'false');
+                console.log(`  ❌ ${nodeType} отключен`);
             }
         });
-        
+
         console.log('✅ updatePaletteForAgentType завершен');
     }
     
+    async applyCanvasVisualData(canvasData) {
+        console.log('🎨 Применяем визуальные данные canvas:', canvasData);
+
+        // Применяем позиции и размеры к существующим нодам
+        for (const nodeData of canvasData.nodes || []) {
+            const existingNode = this.currentCanvas.nodes.get(nodeData.id);
+            if (existingNode && nodeData.ui) {
+                console.log('📍 Применяем позицию к ноде:', nodeData.id, nodeData.ui);
+                existingNode.x = nodeData.ui.x || existingNode.x;
+                existingNode.y = nodeData.ui.y || existingNode.y;
+                existingNode.width = nodeData.ui.width || existingNode.width;
+                existingNode.height = nodeData.ui.height || existingNode.height;
+                existingNode.element.style.left = `${existingNode.x}px`;
+                existingNode.element.style.top = `${existingNode.y}px`;
+                existingNode.element.style.width = `${existingNode.width}px`;
+                existingNode.element.style.height = `${existingNode.height}px`;
+            }
+        }
+
+        // Восстанавливаем дополнительные ноды (например, tool_node), которые не входят в graph_definition
+        const existingNodeIds = new Set(this.currentCanvas.nodes.keys());
+        for (const nodeData of canvasData.nodes || []) {
+            if (!existingNodeIds.has(nodeData.id)) {
+                console.log('📦 Восстанавливаем дополнительную ноду:', nodeData.id);
+
+                const position = {
+                    x: nodeData.ui?.x || 100,
+                    y: nodeData.ui?.y || 100
+                };
+
+                const size = {
+                    width: nodeData.ui?.width || 180,
+                    height: nodeData.ui?.height || 80
+                };
+
+                // Создаем дополнительную ноду
+                if (this.currentDragDrop && typeof this.currentDragDrop.createNodeFromData === 'function') {
+                    await this.currentDragDrop.createNodeFromData(nodeData, position, size);
+                } else {
+                    console.error('❌ createNodeFromData method not found on currentDragDrop');
+                }
+            }
+        }
+
+        // Восстанавливаем связи
+        for (const edgeData of canvasData.edges || []) {
+            console.log('🔗 Восстанавливаем связь:', edgeData);
+
+            const sourceNode = this.currentCanvas.nodes.get(edgeData.source);
+            const targetNode = this.currentCanvas.nodes.get(edgeData.target);
+
+            if (sourceNode && targetNode) {
+                // Проверяем, нет ли уже такой связи
+                const existingEdge = Array.from(this.currentCanvas.edges.values()).find(
+                    edge => edge.source === edgeData.source && edge.target === edgeData.target
+                );
+
+                if (!existingEdge) {
+                    this.currentCanvas.createConnection(edgeData.source, edgeData.target);
+                }
+            } else {
+                console.warn('⚠️ Не найдены ноды для связи:', edgeData.source, edgeData.target);
+            }
+        }
+
+        console.log('✅ Визуальные данные canvas применены');
+    }
+
     async saveCurrentFlow() {
         if (!this.currentFlow) {
             this.showNotification('Нет активного флоу для сохранения', 'warning');
@@ -304,7 +425,7 @@ export default class BuilderModule {
         
         try {
             const canvasData = this.currentCanvas.getGraphData();
-            
+
             // Backend сам обработает преобразование для ReAct/StateGraph
             const response = await fetch(`/frontend/api/flows/${encodeURIComponent(this.currentFlow.flow_id)}/canvas`, {
                 method: 'PUT',
