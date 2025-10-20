@@ -25,12 +25,14 @@ class MCPHttpClient:
         url: str, 
         headers: Optional[Dict[str, str]] = None, 
         timeout: int = 30,
-        transport_type: MCPTransportType = MCPTransportType.HTTP
+        transport_type: MCPTransportType = MCPTransportType.HTTP,
+        use_proxy: bool = True
     ):
         self.url = url.rstrip("/")
         self.headers = headers or {}
         self.timeout = timeout
         self.transport_type = transport_type
+        self.use_proxy = use_proxy
         self._client: Optional[httpx.AsyncClient] = None
         self._session_id: Optional[str] = None
         self._request_id = 0
@@ -44,11 +46,15 @@ class MCPHttpClient:
             }
             base_headers.update(self.headers)
             
-            settings = get_settings()
-            proxy_url = settings.proxy.get_proxy_url("https")
-            
-            if proxy_url:
-                logger.info(f"🌐 Используем прокси для MCP клиента: {proxy_url}")
+            proxy_url = None
+            if self.use_proxy:
+                settings = get_settings()
+                proxy_url = settings.proxy.get_proxy_url("https")
+                
+                if proxy_url:
+                    logger.info(f"🌐 Используем прокси для MCP клиента: {proxy_url}")
+            else:
+                logger.info(f"🚫 Прокси отключен для MCP сервера: {self.url}")
             
             self._client = httpx.AsyncClient(
                 headers=base_headers,
@@ -56,7 +62,6 @@ class MCPHttpClient:
                 proxy=proxy_url
             )
             
-            # Инициализируем MCP сессию
             await self._initialize_session()
         
         return self._client
@@ -409,12 +414,12 @@ async def get_mcp_client(server_id: str, company_id: Optional[str] = None) -> MC
     variables_service = get_variables_service()
     resolved_headers = await variables_service.resolve(server_config.headers)
     
-    # Создаем и кэшируем клиент
     client = MCPHttpClient(
         url=server_config.url,
         headers=resolved_headers,
         timeout=server_config.timeout,
-        transport_type=server_config.transport_type
+        transport_type=server_config.transport_type,
+        use_proxy=server_config.use_proxy
     )
     
     _mcp_clients[cache_key] = client

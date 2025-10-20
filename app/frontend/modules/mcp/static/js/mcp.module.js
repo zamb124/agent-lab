@@ -57,6 +57,7 @@ export default class MCPModule {
         document.getElementById('server-transport-type').value = 'http';
         document.getElementById('server-timeout').value = '30';
         document.getElementById('server-headers').value = '{}';
+        document.getElementById('server-use-proxy').checked = true;
         document.getElementById('server-is-active').checked = true;
         document.getElementById('server-auto-sync').checked = true;
         
@@ -91,6 +92,7 @@ export default class MCPModule {
             document.getElementById('server-transport-type').value = server.transport_type;
             document.getElementById('server-timeout').value = server.timeout;
             document.getElementById('server-headers').value = JSON.stringify(server.headers || {}, null, 2);
+            document.getElementById('server-use-proxy').checked = server.use_proxy !== false;
             document.getElementById('server-is-active').checked = server.is_active;
             document.getElementById('server-auto-sync').checked = server.auto_sync_tools;
             
@@ -121,6 +123,7 @@ export default class MCPModule {
         const transportType = document.getElementById('server-transport-type').value;
         const timeout = parseInt(document.getElementById('server-timeout').value);
         const headersText = document.getElementById('server-headers').value.trim();
+        const useProxy = document.getElementById('server-use-proxy').checked;
         const isActive = document.getElementById('server-is-active').checked;
         const autoSync = document.getElementById('server-auto-sync').checked;
         
@@ -157,6 +160,7 @@ export default class MCPModule {
             transport_type: transportType,
             timeout: timeout,
             headers: headers,
+            use_proxy: useProxy,
             is_active: isActive,
             auto_sync_tools: autoSync
         };

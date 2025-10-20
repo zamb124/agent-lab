@@ -72,6 +72,11 @@ class MCPServerConfig(BuilderEntity):
         ge=5,
         le=300
     )
+    use_proxy: bool = Field(
+        default=True,
+        title="Использовать прокси",
+        description="Использовать глобальный прокси для запросов к серверу"
+    )
     
     # Метаданные
     is_active: bool = Field(
