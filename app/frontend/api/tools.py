@@ -19,58 +19,48 @@ async def list_tools(
     storage: StorageDep,
     public_only: bool = False
 ) -> List[Dict[str, Any]]:
-    """Получить список всех доступных тулов
+    """Получить список всех доступных тулов (оптимизировано)
     
     Args:
-        public_only: Если True, возвращает только публичные тулы (для редактора ботов)
+        public_only: Если True, возвращает только публичные тулы
     """
     tools_data = []
     
-    # Получаем тулы из БД
-    tool_keys = await storage.list_by_prefix("tool:")
+    # Оптимизация: получаем все тулы за 1 запрос
+    all_tools_data = await storage.get_all_by_prefix("tool:", limit=1000)
     
-    for key in tool_keys:
-        # Извлекаем tool_id из ключа (убираем префикс компании и "tool:")
-        # Формат ключа: company:system:tool:app.tools.voice_tools.get_audio_transcript
+    for key, tool_data_json in all_tools_data.items():
         tool_prefix_index = key.find(":tool:")
         if tool_prefix_index != -1:
-            tool_id = key[tool_prefix_index + 6:]  # +6 для ":tool:"
+            tool_id = key[tool_prefix_index + 6:]
         else:
-            print(f"Неожиданный формат ключа тула: {key}")
             continue
         
+        if isinstance(tool_data_json, str):
+            tool_data = json.loads(tool_data_json)
+        else:
+            tool_data = tool_data_json
+        
+        is_public = tool_data.get("is_public", False)
+        if public_only and not is_public:
+            continue
 
-        # Получаем данные тула из БД (используем полный ключ)
-        tool_data_json = await storage.get(key)
-        if tool_data_json:
-            # Парсим JSON, который уже возвращается методом get
-            if isinstance(tool_data_json, str):
-                tool_data = json.loads(tool_data_json)
-            else:
-                tool_data = tool_data_json
-            
-            # Фильтруем по публичности если нужно
-            is_public = tool_data.get("is_public", False)
-            if public_only and not is_public:
-                continue
-
-
-            tool_info = {
-                "id": tool_id,
-                "name": tool_data.get("tool_id", tool_id).split(".")[-1],
-                "title": tool_data.get("title") or tool_data.get("tool_id", tool_id).split(".")[-1],
-                "description": tool_data.get("description", ""),
-                "group": tool_data.get("group"),
-                "server": tool_data.get("server"),
-                "type": "tool",
-                "category": _get_tool_category_from_path(tool_id),
-                "code_mode": tool_data.get("code_mode", "code_reference"),
-                "parameters": tool_data.get("params", {}),
-                "cost": tool_data.get("cost", 0.0),
-                "is_public": is_public,
-                "source_path": tool_id
-            }
-            tools_data.append(tool_info)
+        tool_info = {
+            "id": tool_id,
+            "name": tool_data.get("tool_id", tool_id).split(".")[-1],
+            "title": tool_data.get("title") or tool_data.get("tool_id", tool_id).split(".")[-1],
+            "description": tool_data.get("description", ""),
+            "group": tool_data.get("group"),
+            "server": tool_data.get("server"),
+            "type": "tool",
+            "category": _get_tool_category_from_path(tool_id),
+            "code_mode": tool_data.get("code_mode", "code_reference"),
+            "parameters": tool_data.get("params", {}),
+            "cost": tool_data.get("cost", 0.0),
+            "is_public": is_public,
+            "source_path": tool_id
+        }
+        tools_data.append(tool_info)
     
     return tools_data
 

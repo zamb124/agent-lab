@@ -18,24 +18,23 @@ async def list_agents(
     storage: StorageDep,
     public_only: bool = False
 ) -> List[AgentConfig]:
-    """Получить список всех агентов
+    """Получить список всех агентов (оптимизировано)
     
     Args:
-        public_only: Если True, возвращает только публичные агенты (для редактора ботов)
+        public_only: Если True, возвращает только публичные агенты
     """
-    # Получаем все ключи с префиксом "agent:"
-    agent_keys = await storage.list_by_prefix("agent:")
+    # Оптимизация: получаем всех агентов за 1 запрос
+    all_agents_data = await storage.get_all_by_prefix("agent:", limit=1000)
     
     agents = []
-    for key in agent_keys:
-        # Извлекаем agent_id из ключа (убираем префикс компании и "agent:")
-        agent_id = key.split(":")[-1]  # Берем последнюю часть после ":"
-        agent = await agent_repo.get(agent_id)
-        if agent:
-            # Фильтруем по публичности если нужно
+    for key, agent_data_json in all_agents_data.items():
+        try:
+            agent = AgentConfig.model_validate_json(agent_data_json)
             if public_only and not getattr(agent, 'is_public', False):
                 continue
             agents.append(agent)
+        except Exception:
+            continue
     
     return agents
 
