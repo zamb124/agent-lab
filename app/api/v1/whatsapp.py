@@ -10,9 +10,10 @@ from fastapi import APIRouter, Request, HTTPException, Query
 from app.db.repositories import Storage
 from app.interfaces.whatsapp_interface import WhatsAppInterface
 from app.frontend.dependencies import FlowRepositoryDep
-from app.core.context import get_context
+from app.core.context import get_context, set_context
 from app.identity.models import Company
 from app.models import FlowConfig
+from app.models.context_models import Context
 from app.services.variables_service import get_variables_service
 
 logger = logging.getLogger(__name__)
@@ -59,10 +60,15 @@ async def whatsapp_webhook_verify(
         company = Company(**company_dict)
         
         context = get_context()
+        if not context:
+            context = Context()
+            set_context(context)
+            logger.info(f"🔧 Создан новый контекст для webhook")
+        
         context.active_company = company
         logger.info(f"✅ Установлен контекст компании: {company.name} ({company.company_id})")
     else:
-        logger.warning(f"⚠️ Компания {company_id} не найдена по ключу {company_key}, контекст не установлен")
+        logger.warning(f"⚠️ Компания {company_id} не найдена по ключу {company_key}")
     
     flow_data = await storage.get(flow_key, force_global=True)
     
@@ -138,10 +144,15 @@ async def whatsapp_webhook(flow_key: str, request: Request):
         company = Company(**company_dict)
         
         context = get_context()
+        if not context:
+            context = Context()
+            set_context(context)
+            logger.info(f"🔧 Создан новый контекст для webhook")
+        
         context.active_company = company
         logger.info(f"✅ Установлен контекст компании: {company.name} ({company.company_id})")
     else:
-        logger.warning(f"⚠️ Компания {company_id} не найдена по ключу {company_key}, контекст не установлен")
+        logger.warning(f"⚠️ Компания {company_id} не найдена по ключу {company_key}")
     
     flow_data = await storage.get(flow_key, force_global=True)
     
