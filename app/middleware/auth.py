@@ -192,14 +192,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
         elif path == "/api/openapi.json":
             logger.info("📋 OpenAPI spec контекст")
             return await self._create_anonymous_context(request, requested_company)
-        elif path == "/":
-            logger.info("🏠 Корневой путь - проверяем авторизацию")
-            # Для главной страницы пытаемся создать frontend контекст, но без ошибки если пользователь не авторизован
+        elif path == "/" or path == "/privacy":
+            logger.info(f"🏠 Публичная страница {path} - проверяем авторизацию")
+            # Для публичных страниц пытаемся создать frontend контекст, но без ошибки если пользователь не авторизован
             try:
                 return await self._create_frontend_context(request, requested_company, allow_no_company=True, has_subdomain=has_subdomain)
             except HTTPException:
                 # Если авторизация не удалась, создаем анонимный контекст
-                logger.info("🏠 Пользователь не авторизован, создаем анонимный контекст")
+                logger.info(f"🏠 Пользователь не авторизован для {path}, создаем анонимный контекст")
                 return await self._create_anonymous_context(request, requested_company)
         else:
             logger.warning(f"❌ Неизвестный путь: {path}")

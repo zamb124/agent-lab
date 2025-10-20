@@ -300,6 +300,31 @@ class SGRConfig(BaseModel):
     max_results: int = 10
 
 
+class LegalConfig(BaseModel):
+    """Конфигурация юридической информации компании"""
+    
+    company_name_ru: str = "ООО «Энжилабс»"
+    company_name_en: str = "Angilabs LLC"
+    legal_form_ru: str = "Общество с ограниченной ответственностью"
+    legal_form_en: str = "Limited Liability Company"
+    inn: Optional[str] = None
+    ogrn: Optional[str] = None
+    legal_address_ru: Optional[str] = None
+    legal_address_en: Optional[str] = None
+    contact_email: str = "info@angilabs.ru"
+    support_email: str = "support@angilabs.ru"
+    dpo_email: str = "dpo@angilabs.ru"
+    phone: Optional[str] = None
+    min_age: int = 18
+    retention_logs: str = "30 дней / 30 days"
+    retention_messages: str = "1 год / 1 year"
+    retention_accounts: str = "3 года после последней активности / 3 years after last activity"
+    cloud_provider: str = "AWS/Yandex Cloud"
+    cloud_region: str = "EU/RU"
+    analytics_tools: str = "Internal analytics"
+    billing_provider: Optional[str] = None
+
+
 class Settings(BaseSettings):
     """Настройки приложения с поддержкой JSON конфигурации"""
 
@@ -321,6 +346,7 @@ class Settings(BaseSettings):
     migration: MigrationSettings = Field(default_factory=MigrationSettings)
     rag: RAGConfig = Field(default_factory=RAGConfig)
     sgr: SGRConfig = Field(default_factory=SGRConfig)
+    legal: LegalConfig = Field(default_factory=LegalConfig)
 
     def __init__(self, **data):
         # Загружаем JSON конфигурацию

@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+{% import 'components.html' as c %}
+
+{% block title %}{{ t('privacy.title') }} — {{ company_name }}{% endblock %}
+
+{% block head %}
+<style>
+.privacy-container {
+    max-width: 900px;
+    margin: 48px auto;
+    padding: 0 24px;
+}
+
+.privacy-header {
+    margin-bottom: 32px;
+}
+
+.privacy-header h1 {
+    font-size: clamp(28px, 4vw, 42px);
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+.privacy-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
+.privacy-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.privacy-section {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-sm);
+}
+
+.privacy-section h2 {
+    font-size: clamp(20px, 3vw, 26px);
+    font-weight: 600;
+    margin: 0 0 16px 0;
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.privacy-section h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 20px 0 10px 0;
+    color: var(--text-primary);
+}
+
+.privacy-section p {
+    line-height: 1.7;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+.privacy-section ul {
+    padding-left: 24px;
+    margin: 12px 0;
+}
+
+.privacy-section li {
+    line-height: 1.7;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.privacy-note {
+    background: color-mix(in srgb, var(--primary) 6%, transparent);
+    border-left: 4px solid var(--primary);
+    padding: 16px;
+    border-radius: var(--radius-md);
+    margin: 16px 0;
+}
+
+.privacy-note p {
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.privacy-footer {
+    text-align: center;
+    padding: 24px 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.privacy-contact-box {
+    background: color-mix(in srgb, var(--info) 6%, transparent);
+    padding: 16px;
+    border-radius: var(--radius-md);
+    margin: 12px 0;
+    border-left: 4px solid var(--info);
+}
+
+.privacy-contact-box p {
+    margin: 0;
+}
+
+.privacy-contact-box a {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.privacy-contact-box a:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+    .privacy-container {
+        margin: 24px auto;
+        padding: 0 16px;
+    }
+    
+    .privacy-section {
+        padding: 20px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="privacy-container">
+    <header class="privacy-header">
+        <h1>{{ t('privacy.title') }}</h1>
+        <div class="privacy-meta">
+            <span>{{ t('privacy.updated') }}: <strong>{{ current_date }}</strong></span>
+        </div>
+        <div class="privacy-badges">
+            {{ c.badge(t('privacy.badges.gdpr'), variant='info', icon='shield-check') }}
+            {{ c.badge(t('privacy.badges.federal_law'), variant='success', icon='award') }}
+            {{ c.badge(t('privacy.badges.uae'), variant='warning', icon='globe') }}
+            {{ c.badge(t('privacy.badges.whatsapp'), variant='primary', icon='whatsapp') }}
+        </div>
+        
+        {% if flow_info %}
+        <div class="privacy-note" style="margin-top: 20px;">
+            <p><i class="bi bi-info-circle"></i> <strong>{{ flow_info.name }}</strong>{% if flow_info.description %} — {{ flow_info.description }}{% endif %}</p>
+        </div>
+        {% endif %}
+    </header>
+
+    <!-- Секция 1: Кто мы -->
+    <section class="privacy-section">
+        <h2><i class="bi bi-building"></i> 1. {{ t('privacy.section_1.title') }}</h2>
+        <p><strong>{{ company_name }}</strong>, {{ legal_form }}{% if inn %} (ИНН/ОГРН: {{ inn }}{% if ogrn %}/{{ ogrn }}{% endif %}){% endif %}{% if legal_address %}; {{ t('privacy.section_1.registered_address') if lang == 'ru' else 'registered address' }}: {{ legal_address }}{% endif %}, {{ t('privacy.section_1.content') }}</p>
+        <div class="privacy-contact-box">
+            <p>{{ t('privacy.section_1.contact') }} <a href="mailto:{{ dpo_email }}">{{ dpo_email }}</a>{% if phone %}, {{ phone }}{% endif %}</p>
+        </div>
+    </section>
+
+    <!-- Секция 2: Термины -->
+    <section class="privacy-section">
+        <h2><i class="bi bi-journal-text"></i> 2. {{ t('privacy.section_2.title') }}</h2>
+        <ul>
+            <li>{{ t('privacy.section_2.personal_data') }}</li>
+            <li>{{ t('privacy.section_2.legal_basis') }}</li>
+            <li>{{ t('privacy.section_2.compliance') }}</li>
+        </ul>
+    </section>
+
+    <!-- Секция 3: Какие данные -->
+    <section class="privacy-section">
+        <h2><i class="bi bi-database"></i> 3. {{ t('privacy.section_3.title') }}</h2>
+        <h3>3.1. {{ t('privacy.section_3.whatsapp_title') }}</h3>
+        <ul>
+            <li>{{ t('privacy.section_3.whatsapp_ids') }}</li>
+            <li>{{ t('privacy.section_3.whatsapp_messages') }}</li>
+            <li>{{ t('privacy.section_3.whatsapp_events') }}</li>
+        </ul>
+        <h3>3.2. {{ t('privacy.section_3.website_title') }}</h3>
+        <ul>
+            <li>{{ t('privacy.section_3.website_cookies') }}</li>
+            <li>{{ t('privacy.section_3.website_forms') }}</li>
+            <li>{{ t('privacy.section_3.website_analytics') }}</li>
+        </ul>
+        <h3>3.3. {{ t('privacy.section_3.external_title') }}</h3>
+        <ul>
+            <li>{{ t('privacy.section_3.external_content') }}</li>
+        </ul>
+    </section>
+
+    <!-- Секция 4: Для чего -->
+    <section class="privacy-section">
+        <h2><i class="bi bi-gear"></i> 4. {{ t('privacy.section_4.title') }}</h2>
+        <ul>
+            <li>{{ t('privacy.section_4.service') }}</li>
+            <li>{{ t('privacy.section_4.identification') }}</li>
+            <li>{{ t('privacy.section_4.support') }}</li>
+            <li>{{ t('privacy.section_4.marketing') }}</li>
+            <li>{{ t('privacy.section_4.legal') }}</li>
+        </ul>
+    </section>
+
+    <!-- Секция 5: Правовые основания -->
+    <section class="privacy-section">
+        <h2><i class="bi bi-file-earmark-law"></i> 5. {{ t('privacy.section_5.title') }}</h2>
+        <ul>
+            <li>{{ t('privacy.section_5.contract') }}</li>
+            <li>{{ t('privacy.section_5.legitimate') }}</li>
+            <li>{{ t('privacy.section_5.consent') }}</li>
+            <li>{{ t('privacy.section_5.obligation') }}</li>
+        </ul>
+    </section>
+
+    <!-- Секция 6: Хранение -->
+    <section class="privacy-section">
+        <h2><i class="bi bi-clock-history"></i> 6. {{ t('privacy.section_6.title') }}</h2>
+        <p>{{ t('privacy.section_6.intro') }}</p>
+        <ul>
+            <li>{{ t('privacy.section_6.logs') }} <strong>{{ retention_logs }}</strong></li>
+            <li>{{ t('privacy.section_6.messages') }} <strong>{{ retention_messages }}</strong></li>
+            <li>{{ t('privacy.section_6.accounts') }} <strong>{{ retention_accounts }}</strong></li>
+        </ul>
+    </section>
+
+    <!-- Секция 7: Третьи стороны -->
+    <section class="privacy-section">
+        <h2><i class="bi bi-share"></i> 7. {{ t('privacy.section_7.title') }}</h2>
+        <p>{{ t('privacy.section_7.intro') }}</p>
+        <ul>
+            <li>{{ t('privacy.section_7.meta') }}</li>
+            <li>{{ t('privacy.section_7.cloud') }} <strong>{{ cloud_provider }}</strong> ({{ t('privacy.region') }}: {{ cloud_region }});</li>
+            <li>{{ t('privacy.section_7.analytics') }} <strong>{{ analytics_tools }}</strong>;</li>
+            <li>{{ t('privacy.section_7.billing') }} <strong>{{ billing_provider }}</strong>;</li>
+            <li>{{ t('privacy.section_7.government') }}</li>
+        </ul>
+        <div class="privacy-note">
+            <p>{{ t('privacy.section_7.dpa') }}</p>
+        </div>
+    </section>
+
+    <!-- Секция 8: Трансграничная передача -->
+    <section class="privacy-section">
+        <h2><i class="bi bi-globe2"></i> 8. {{ t('privacy.section_8.title') }}</h2>
+        <p>{{ t('privacy.section_8.content') }}</p>
+    </section>
+
+    <!-- Секция 9: Безопасность -->
+    <section class="privacy-section">
+        <h2><i class="bi bi-shield-lock"></i> 9. {{ t('privacy.section_9.title') }}</h2>
+        <ul>
+            <li>{{ t('privacy.section_9.encryption') }}</li>
+            <li>{{ t('privacy.section_9.access') }}</li>
+            <li>{{ t('privacy.section_9.secrets') }}</li>
+            <li>{{ t('privacy.section_9.masking') }}</li>
+        </ul>
+    </section>
+
+    <!-- Секция 10: Права -->
+    <section class="privacy-section">
+        <h2><i class="bi bi-hand-thumbs-up"></i> 10. {{ t('privacy.section_10.title') }}</h2>
+        <ul>
+            <li>{{ t('privacy.section_10.access') }}</li>
+            <li>{{ t('privacy.section_10.withdrawal') }}</li>
+            <li>{{ t('privacy.section_10.objection') }}</li>
+            <li>{{ t('privacy.section_10.portability') }}</li>
+            <li>{{ t('privacy.section_10.complaint') }}</li>
+        </ul>
+        <div class="privacy-contact-box">
+            <p>{{ t('privacy.section_10.request') }} <a href="mailto:{{ dpo_email }}">{{ dpo_email }}</a>. {{ t('privacy.section_10.response_time') }}</p>
+        </div>
+    </section>
+
+    <!-- Секция 11: Дети -->
+    <section class="privacy-section">
+        <h2><i class="bi bi-people"></i> 11. {{ t('privacy.section_11.title') }}</h2>
+        <p>{{ t('privacy.section_11.content').replace('{min_age}', min_age|string) }}</p>
+    </section>
+
+    <!-- Секция 12: Cookie -->
+    <section class="privacy-section">
+        <h2><i class="bi bi-cookie"></i> 12. {{ t('privacy.section_12.title') }}</h2>
+        <p>{{ t('privacy.section_12.content') }}</p>
+    </section>
+
+    <!-- Секция 13: Изменения -->
+    <section class="privacy-section">
+        <h2><i class="bi bi-arrow-clockwise"></i> 13. {{ t('privacy.section_13.title') }}</h2>
+        <p>{{ t('privacy.section_13.content') }}</p>
+    </section>
+
+    <!-- Секция 14: Контакты -->
+    <section class="privacy-section">
+        <h2><i class="bi bi-envelope"></i> 14. {{ t('privacy.section_14.title') }}</h2>
+        <p>{{ t('privacy.section_14.content') }} <a href="mailto:{{ dpo_email }}">{{ dpo_email }}</a>{% if legal_address %} {{ t('privacy.section_14.or') }} {{ legal_address }}{% endif %}.</p>
+    </section>
+
+    <footer class="privacy-footer">
+        &copy; <span id="year"></span> {{ company_name }}. {{ t('privacy.footer') }}.
+    </footer>
+</div>
+
+<script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+</script>
+{% endblock %}
+
