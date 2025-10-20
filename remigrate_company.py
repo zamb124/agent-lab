@@ -8,7 +8,7 @@ import sys
 import logging
 
 from app.db.repositories import Storage
-from app.core.migrator import Migrator
+from app.core.migration import Migrator
 from app.identity.models import Company
 
 logging.basicConfig(

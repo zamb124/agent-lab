@@ -45,7 +45,7 @@ class TestRealOpenRouterToolsIntegration:
         
         # Мигрируем агента с tools
         from app.models.core_models import AgentConfig
-        from app.core.migrator import Migrator
+        from app.core.migration import Migrator
         
         migrator = Migrator()
         await migrator._set_company_context(test_company)

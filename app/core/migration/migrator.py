@@ -7,12 +7,15 @@ import logging
 from typing import List, Optional
 
 from app.db.repositories import Storage
+from app.db.repositories.mcp_repository import MCPServerRepository
 from app.core.migration.scanner import CodeScanner
 from app.core.migration.persister import ConfigPersister
 from app.models import AgentConfig, FlowConfig, ToolReference
+from app.models.mcp_models import MCPServerConfig, MCPTransportType
 from app.identity.models import Company, User, AuthProvider, UserStatus
 from app.core.context import set_context
 from app.models.context_models import Context
+from app.services.variables_service import get_variables_service
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +171,71 @@ class Migrator:
         set_context(context)
         logger.info(f"✅ Установлен контекст компании {company.company_id} для миграции")
 
+    async def _create_default_mcp_servers(self, company: Company):
+        """
+        Создает дефолтные MCP серверы для новой компании:
+        - Context7
+        - GitHub Copilot
+        
+        Также создает переменные для API ключей.
+        """
+        logger.info(f"Создание дефолтных MCP серверов для {company.company_id}...")
+        
+        mcp_repo = MCPServerRepository(self.storage)
+        variables_service = get_variables_service()
+        
+        # 1. Context7
+        context7_var_key = "mcp_context7_api_key"
+        await variables_service.set_var(
+            key=context7_var_key,
+            value="",
+            is_secret=True,
+            description="API ключ для Context7 MCP",
+            groups=["mcp", "mcp:context7"]
+        )
+        
+        context7_server = MCPServerConfig(
+            server_id="context7",
+            company_id=company.company_id,
+            name="Context7 Documentation",
+            description="AI-powered documentation search",
+            url="https://mcp.context7.com/mcp",
+            transport_type=MCPTransportType.HTTP,
+            headers={"Authorization": "Bearer @var:mcp_context7_api_key"},
+            use_proxy=False,
+            is_active=False,
+            auto_sync_tools=True
+        )
+        await mcp_repo.set(context7_server)
+        logger.info(f"✅ Создан MCP сервер: context7")
+        
+        # 2. GitHub Copilot
+        copilot_var_key = "mcp_copilot_api_key"
+        await variables_service.set_var(
+            key=copilot_var_key,
+            value="",
+            is_secret=True,
+            description="API ключ для GitHub Copilot MCP",
+            groups=["mcp", "mcp:copilot"]
+        )
+        
+        copilot_server = MCPServerConfig(
+            server_id="copilot",
+            company_id=company.company_id,
+            name="GitHub Copilot",
+            description="GitHub Copilot MCP server",
+            url="https://api.githubcopilot.com/mcp",
+            transport_type=MCPTransportType.HTTP,
+            headers={"Authorization": "Bearer @var:mcp_copilot_api_key"},
+            use_proxy=True,
+            is_active=False,
+            auto_sync_tools=True
+        )
+        await mcp_repo.set(copilot_server)
+        logger.info(f"✅ Создан MCP сервер: copilot")
+        
+        logger.info(f"✅ Создано 2 дефолтных MCP сервера для {company.company_id}")
+
     async def get_public_flows(self) -> List[tuple[str, FlowConfig]]:
         """
         Находит все публичные FlowConfig объекты в коде.
@@ -241,6 +309,9 @@ class Migrator:
                     logger.error(f"❌ Ошибка установки flow {flow_id}: {e}")
             
             logger.info(f"✅ Установлено {len(default_flows)} дефолтных flows")
+        
+        # 3. Создаем дефолтные MCP серверы
+        await self._create_default_mcp_servers(company)
         
         logger.info(f"✅ Миграция дефолтных сущностей завершена для {company.company_id}")
 

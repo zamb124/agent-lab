@@ -1,5 +1,25 @@
 {% import 'components.html' as c %}
 
+<link rel="stylesheet" href="/static/variables/css/variables.css">
+
+<h1 class="header-title" id="page-title" hx-swap-oob="true">
+    <i class="bi bi-key me-2"></i>
+    Ключи и Переменные
+</h1>
+
+<div class="header-right" hx-swap-oob="true">
+    {{ c.button('',
+        variant='primary',
+        size='sm',
+        icon='plus-lg',
+        onclick='openAddVariableModal()',
+        data_tooltip='Создать переменную'
+    ) }}
+    <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="Переключить тему">
+        <i class="bi bi-sun"></i>
+    </button>
+</div>
+
 <div hx-get="/frontend/variables/list" 
      hx-trigger="load" 
      hx-target="this" 

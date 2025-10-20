@@ -1,36 +1,16 @@
 {% import 'components.html' as c %}
-<link rel="stylesheet" href="/static/variables/css/variables.css">
-
-<h1 class="header-title" id="page-title" hx-swap-oob="true">
-    <i class="bi bi-key me-2"></i>
-    Ключи и Переменные
-</h1>
-
-<div class="header-right" hx-swap-oob="true">
-    {{ c.button('',
-        variant='primary',
-        size='sm',
-        icon='plus-lg',
-        onclick='openAddVariableModal()',
-        data_tooltip='Создать переменную'
-    ) }}
-    <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="Переключить тему">
-        <i class="bi bi-sun"></i>
-    </button>
-</div>
 
 <div class="container-fluid py-4 page-with-empty-state" id="variables-container">
-    {% if variables %}
     <div class="mb-4 d-flex justify-content-between align-items-center">
         <p class="text-muted mb-0">Управление секретами и переменными компании. Используйте <code>@var:key</code> для ссылок в конфигурации.</p>
+        {% if variables %}
         <button class="btn btn-sm btn-outline-secondary" id="group-by-tags-btn" onclick="toggleGrouping()">
             <i class="bi bi-grid"></i> Группировать по тегам
         </button>
+        {% endif %}
     </div>
-    {% endif %}
 
     <div id="variables-content">
-    {% if variables %}
     <div class="variables-grid">
         <div class="variable-grid-item">
             <div class="card variable-card variable-card-create" onclick="openAddVariableModal()">
@@ -43,6 +23,8 @@
                 </div>
             </div>
         </div>
+        
+        {% if variables %}
         
         {% for key, var_data in variables.items() %}
         <div class="variable-grid-item">
@@ -97,22 +79,10 @@
             </div>
         </div>
         {% endfor %}
+        {% endif %}
     </div>
-    
-    {% endif %}
     </div>
 </div>
-
-{% if not variables %}
-{{ c.empty_state(
-    icon='key',
-    title='Нет переменных',
-    description='Создайте первую переменную для использования в ботах и агентах',
-    button_text='Создать переменную',
-    button_icon='plus',
-    button_onclick='openAddVariableModal()'
-) }}
-{% endif %}
 
 <script type="application/json" id="variables-data">
 {{ variables|tojson|safe }}
