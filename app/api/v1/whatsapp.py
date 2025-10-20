@@ -65,8 +65,12 @@ async def whatsapp_webhook_verify(
     from app.services.variables_service import get_variables_service
     variables_service = get_variables_service()
     
-    expected_verify_token = whatsapp_config.get("verify_token", "")
-    expected_verify_token = await variables_service.resolve(expected_verify_token)
+    expected_verify_token_raw = whatsapp_config.get("verify_token", "")
+    logger.info(f"🔍 Raw verify_token из конфига: '{expected_verify_token_raw}'")
+    
+    expected_verify_token = await variables_service.resolve(expected_verify_token_raw)
+    logger.info(f"🔍 Resolved verify_token: '{expected_verify_token}'")
+    logger.info(f"🔍 Пришел verify_token от WhatsApp: '{hub_verify_token}'")
 
     # Проверяем режим и токен
     if hub_mode != "subscribe":
@@ -74,7 +78,10 @@ async def whatsapp_webhook_verify(
         raise HTTPException(status_code=403, detail="Invalid hub.mode")
 
     if hub_verify_token != expected_verify_token:
-        logger.error("❌ Неверный verify_token")
+        logger.error(f"❌ Неверный verify_token")
+        logger.error(f"❌ Ожидалось: '{expected_verify_token}' (тип: {type(expected_verify_token).__name__}, длина: {len(expected_verify_token)})")
+        logger.error(f"❌ Получено: '{hub_verify_token}' (тип: {type(hub_verify_token).__name__}, длина: {len(hub_verify_token)})")
+        logger.error(f"❌ Равны: {hub_verify_token == expected_verify_token}")
         raise HTTPException(status_code=403, detail="Invalid verify_token")
 
     logger.info(f"✅ WhatsApp webhook верифицирован для flow {flow_id}")
