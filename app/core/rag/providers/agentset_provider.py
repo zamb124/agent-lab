@@ -14,8 +14,9 @@ from urllib.parse import urlparse, unquote
 
 from ..base_provider import BaseRAGProvider
 from app.models.rag_models import RAGDocument, RAGSearchResult, RAGNamespace
-from ...core_clients.s3_client import get_default_s3_client
-from ...slug_utils import generate_slug
+from app.core.http_utils import get_proxy_url
+from app.core.core_clients.s3_client import get_default_s3_client
+from app.core.slug_utils import generate_slug
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +38,19 @@ class AgentsetRAGProvider(BaseRAGProvider):
         self.embedding_model = config.get("embedding_model", "text-embedding-3-small")
         self.embedding_api_key = config.get("embedding_api_key")
         
+        proxy_url = get_proxy_url()
+        
+        if proxy_url:
+            logger.info(f"🌐 Используем прокси для Agentset RAG: {proxy_url}")
+        
         self._client = httpx.AsyncClient(
             base_url=self.base_url,
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
             },
-            timeout=self.timeout
+            timeout=self.timeout,
+            proxy=proxy_url
         )
         
         logger.info(f"Agentset RAG провайдер инициализирован: {self.base_url}")
@@ -491,10 +498,8 @@ class AgentsetRAGProvider(BaseRAGProvider):
             # Генерируем signed URL если есть s3_key
             signed_url = None
             if s3_key:
-                from app.core.core_clients.s3_client import get_default_s3_client
                 s3_client = await get_default_s3_client()
                 if s3_client:
-                    # Signed URL на 1 час (3600 секунд)
                     signed_url = await s3_client.generate_presigned_url(
                         key=s3_key,
                         expiration=3600

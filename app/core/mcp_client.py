@@ -8,6 +8,11 @@ import logging
 from typing import Dict, Any, List, Optional
 
 from app.models.mcp_models import MCPTransportType
+from app.core.config import get_settings
+from app.db.repositories.mcp_repository import MCPServerRepository
+from app.core.container import get_container
+from app.core.context import get_context
+from app.services.variables_service import get_variables_service
 
 logger = logging.getLogger(__name__)
 
@@ -33,16 +38,22 @@ class MCPHttpClient:
     async def _get_client(self) -> httpx.AsyncClient:
         """Получить или создать HTTP клиент с инициализацией сессии"""
         if self._client is None:
-            # Базовые заголовки для MCP
             base_headers = {
                 "Content-Type": "application/json",
                 "Accept": "application/json, text/event-stream",
             }
             base_headers.update(self.headers)
             
+            settings = get_settings()
+            proxy_url = settings.proxy.get_proxy_url("https")
+            
+            if proxy_url:
+                logger.info(f"🌐 Используем прокси для MCP клиента: {proxy_url}")
+            
             self._client = httpx.AsyncClient(
                 headers=base_headers,
-                timeout=self.timeout
+                timeout=self.timeout,
+                proxy=proxy_url
             )
             
             # Инициализируем MCP сессию
@@ -373,11 +384,6 @@ async def get_mcp_client(server_id: str, company_id: Optional[str] = None) -> MC
     Returns:
         MCPHttpClient для работы с сервером
     """
-    from app.db.repositories.mcp_repository import MCPServerRepository
-    from app.core.container import get_container
-    from app.core.context import get_context
-    
-    # Определяем company_id
     if company_id is None:
         context = get_context()
         if not context or not context.active_company:
@@ -390,7 +396,6 @@ async def get_mcp_client(server_id: str, company_id: Optional[str] = None) -> MC
     if cache_key in _mcp_clients:
         return _mcp_clients[cache_key]
     
-    # Загружаем конфиг сервера
     storage = get_container().get_storage()
     mcp_repo = MCPServerRepository(storage)
     
@@ -401,8 +406,6 @@ async def get_mcp_client(server_id: str, company_id: Optional[str] = None) -> MC
     if not server_config.is_active:
         raise ValueError(f"MCP сервер {server_id} неактивен")
     
-    # Резолвим переменные в headers (переменные берутся из scope компании)
-    from app.services.variables_service import get_variables_service
     variables_service = get_variables_service()
     resolved_headers = await variables_service.resolve(server_config.headers)
     
