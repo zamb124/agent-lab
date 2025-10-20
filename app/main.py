@@ -131,6 +131,11 @@ logging.getLogger("app.middleware.auth").setLevel(logging.WARNING)
 logging.getLogger("app.identity.auth_service").setLevel(logging.WARNING)
 logging.getLogger("app.frontend.websockets.chat").setLevel(logging.WARNING)
 
+# Включаем INFO для WhatsApp для отладки
+logging.getLogger("app.api.v1.whatsapp").setLevel(logging.INFO)
+logging.getLogger("app.interfaces.whatsapp_interface").setLevel(logging.INFO)
+logging.getLogger("app.services.variables_service").setLevel(logging.INFO)
+
 logger = logging.getLogger(__name__)
 
 

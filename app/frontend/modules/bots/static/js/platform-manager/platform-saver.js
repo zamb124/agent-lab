@@ -261,102 +261,125 @@ export class PlatformSaver {
             
             await this.platformManager.selectPlatform(platformType, platformIcons[platformType] || 'bi-gear', platformNames[platformType] || platformType);
             
-            await new Promise(resolve => setTimeout(resolve, 100));
+            console.log('🔧 Ждем 300мс перед заполнением формы...');
+            await new Promise(resolve => setTimeout(resolve, 300));
             
+            console.log('🔧 Заполняем форму данными:', platformConfig);
             this.fillFormData(platformConfig, platformType);
+            console.log('✅ Форма заполнена успешно');
             
         } catch (error) {
-            console.error('Ошибка загрузки данных каналы:', error);
+            console.error('❌ Ошибка загрузки данных каналы:', error);
             showNotification('Не удалось загрузить настройки каналы: ' + error.message, 'danger');
         }
     }
     
     fillFormData(platformConfig, platformType) {
-        if (platformConfig.allowed_users && Array.isArray(platformConfig.allowed_users)) {
-            const container = document.getElementById('allowed-users-container');
-            if (container) {
-                container.innerHTML = '';
-                platformConfig.allowed_users.forEach(user => {
-                    const row = document.createElement('div');
-                    row.className = 'allowed-user-row';
-                    row.innerHTML = `
-                        <input type="text" class="form-control" placeholder="User ID или username" 
-                               value="${user}" onchange="updateAllowedUser(this)">
-                        <button class="btn btn-outline-danger btn-sm" onclick="removeAllowedUserRow(this)">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                    `;
-                    container.appendChild(row);
-                });
+        try {
+            console.log(`🔧 fillFormData: platformType=${platformType}, config=`, platformConfig);
+            
+            if (platformConfig.allowed_users && Array.isArray(platformConfig.allowed_users)) {
+                const container = document.getElementById('allowed-users-container');
+                if (container) {
+                    container.innerHTML = '';
+                    platformConfig.allowed_users.forEach(user => {
+                        const row = document.createElement('div');
+                        row.className = 'allowed-user-row';
+                        row.innerHTML = `
+                            <input type="text" class="form-control" placeholder="User ID или username" 
+                                   value="${user}" onchange="updateAllowedUser(this)">
+                            <button class="btn btn-outline-danger btn-sm" onclick="removeAllowedUserRow(this)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        `;
+                        container.appendChild(row);
+                    });
+                    
+                    if (platformConfig.allowed_users.length === 0) {
+                        this.platformManager.addAllowedUserRow();
+                    }
+                }
+            }
+            
+            if (platformType === 'whatsapp') {
+                if (platformConfig.phone_number_id) {
+                    const phoneInput = document.getElementById('whatsapp-phone-number-id');
+                    if (phoneInput) phoneInput.value = platformConfig.phone_number_id;
+                }
                 
-                if (platformConfig.allowed_users.length === 0) {
-                    this.platformManager.addAllowedUserRow();
+                if (platformConfig.access_token) {
+                    if (platformConfig.access_token.startsWith('@var:')) {
+                        const radio = document.getElementById('wa-token-type-var');
+                        if (radio) {
+                            radio.checked = true;
+                            this.platformManager.toggleWhatsAppTokenInput();
+                            const select = document.getElementById('whatsapp-access-token-select');
+                            if (select) select.value = platformConfig.access_token;
+                        }
+                    } else {
+                        const radio = document.getElementById('wa-token-type-hardcoded');
+                        if (radio) {
+                            radio.checked = true;
+                            this.platformManager.toggleWhatsAppTokenInput();
+                            const input = document.getElementById('whatsapp-access-token');
+                            if (input) input.value = platformConfig.access_token;
+                        }
+                    }
+                }
+                
+                if (platformConfig.verify_token) {
+                    if (platformConfig.verify_token.startsWith('@var:')) {
+                        const radio = document.getElementById('wa-verify-type-var');
+                        if (radio) {
+                            radio.checked = true;
+                            this.platformManager.toggleWhatsAppVerifyInput();
+                            const select = document.getElementById('whatsapp-verify-token-select');
+                            if (select) select.value = platformConfig.verify_token;
+                        }
+                    } else {
+                        const radio = document.getElementById('wa-verify-type-hardcoded');
+                        if (radio) {
+                            radio.checked = true;
+                            this.platformManager.toggleWhatsAppVerifyInput();
+                            const input = document.getElementById('whatsapp-verify-token');
+                            if (input) input.value = platformConfig.verify_token;
+                        }
+                    }
+                }
+                
+                if (platformConfig.business_account_id) {
+                    const businessInput = document.getElementById('whatsapp-business-account-id');
+                    if (businessInput) businessInput.value = platformConfig.business_account_id;
+                }
+                
+                if (platformConfig.display_name) {
+                    const displayInput = document.getElementById('whatsapp-display-name');
+                    if (displayInput) displayInput.value = platformConfig.display_name;
+                }
+            } else {
+                if (platformConfig.username) {
+                    const usernameInput = document.getElementById('platform-username');
+                    if (usernameInput) usernameInput.value = platformConfig.username;
+                }
+                
+                if (platformConfig.token) {
+                    if (platformConfig.token.startsWith('@var:')) {
+                        document.getElementById('token-type-var').checked = true;
+                        this.platformManager.toggleTokenInput();
+                        const select = document.getElementById('platform-token-select');
+                        if (select) select.value = platformConfig.token;
+                    } else {
+                        document.getElementById('token-type-hardcoded').checked = true;
+                        this.platformManager.toggleTokenInput();
+                        const input = document.getElementById('platform-token');
+                        if (input) input.value = platformConfig.token;
+                    }
                 }
             }
-        }
-        
-        if (platformType === 'whatsapp') {
-            if (platformConfig.phone_number_id) {
-                const phoneInput = document.getElementById('whatsapp-phone-number-id');
-                if (phoneInput) phoneInput.value = platformConfig.phone_number_id;
-            }
             
-            if (platformConfig.access_token) {
-                if (platformConfig.access_token.startsWith('@var:')) {
-                    document.getElementById('wa-token-type-var').checked = true;
-                    this.platformManager.toggleWhatsAppTokenInput();
-                    const select = document.getElementById('whatsapp-access-token-select');
-                    if (select) select.value = platformConfig.access_token;
-                } else {
-                    document.getElementById('wa-token-type-hardcoded').checked = true;
-                    this.platformManager.toggleWhatsAppTokenInput();
-                    const input = document.getElementById('whatsapp-access-token');
-                    if (input) input.value = platformConfig.access_token;
-                }
-            }
-            
-            if (platformConfig.verify_token) {
-                if (platformConfig.verify_token.startsWith('@var:')) {
-                    document.getElementById('wa-verify-type-var').checked = true;
-                    this.platformManager.toggleWhatsAppVerifyInput();
-                    const select = document.getElementById('whatsapp-verify-token-select');
-                    if (select) select.value = platformConfig.verify_token;
-                } else {
-                    document.getElementById('wa-verify-type-hardcoded').checked = true;
-                    this.platformManager.toggleWhatsAppVerifyInput();
-                    const input = document.getElementById('whatsapp-verify-token');
-                    if (input) input.value = platformConfig.verify_token;
-                }
-            }
-            
-            if (platformConfig.business_account_id) {
-                const businessInput = document.getElementById('whatsapp-business-account-id');
-                if (businessInput) businessInput.value = platformConfig.business_account_id;
-            }
-            
-            if (platformConfig.display_name) {
-                const displayInput = document.getElementById('whatsapp-display-name');
-                if (displayInput) displayInput.value = platformConfig.display_name;
-            }
-        } else {
-            if (platformConfig.username) {
-                const usernameInput = document.getElementById('platform-username');
-                if (usernameInput) usernameInput.value = platformConfig.username;
-            }
-            
-            if (platformConfig.token) {
-                if (platformConfig.token.startsWith('@var:')) {
-                    document.getElementById('token-type-var').checked = true;
-                    this.platformManager.toggleTokenInput();
-                    const select = document.getElementById('platform-token-select');
-                    if (select) select.value = platformConfig.token;
-                } else {
-                    document.getElementById('token-type-hardcoded').checked = true;
-                    this.platformManager.toggleTokenInput();
-                    const input = document.getElementById('platform-token');
-                    if (input) input.value = platformConfig.token;
-                }
-            }
+        } catch (error) {
+            console.error('❌ Ошибка в fillFormData:', error);
+            throw error;
         }
     }
 }

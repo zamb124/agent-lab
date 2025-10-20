@@ -272,15 +272,16 @@ export class PlatformManager {
                 
                 const customVarsSection = document.getElementById('custom-variables').closest('.form-group');
                 customVarsSection.insertAdjacentHTML('beforebegin', html);
-                
-                await this.loadVariablesForWhatsApp();
             } catch (error) {
                 console.error('Ошибка загрузки WhatsApp полей:', error);
                 showNotification('Не удалось загрузить поля для WhatsApp', 'error');
+                return;
             }
         } else {
             whatsappContainer.style.display = 'block';
         }
+        
+        await this.loadVariablesForWhatsApp();
     }
     
     async loadVariablesForWhatsApp() {
