@@ -10,6 +10,8 @@ from app.frontend.core.template_loader import get_templates
 from app.core.config import settings
 from app.db.repositories import Storage
 from app.models.core_models import FlowConfig
+from app.models.i18n_models import Language
+from app.core.context import get_context
 
 router = APIRouter(tags=["public-pages"])
 templates = get_templates()
@@ -55,7 +57,12 @@ async def privacy_policy(
         # Берем из контекста если есть
         lang = getattr(request.state, 'language', 'ru')
     
-    # Устанавливаем язык в request.state для работы t()
+    # Обновляем язык в контексте для работы t()
+    context = get_context()
+    if context:
+        context.language = Language.RU if lang == "ru" else Language.EN
+    
+    # Также устанавливаем в request.state
     request.state.language = lang
     
     company_name = settings.legal.company_name_ru if lang == "ru" else settings.legal.company_name_en
@@ -97,6 +104,64 @@ async def privacy_policy(
             "cloud_region": settings.legal.cloud_region,
             "analytics_tools": settings.legal.analytics_tools,
             "billing_provider": settings.legal.billing_provider or "N/A",
+            "current_date": datetime.now().strftime("%d.%m.%Y" if lang == "ru" else "%B %d, %Y"),
+            "flow_info": flow_info
+        }
+    )
+
+
+@router.get("/terms", response_class=HTMLResponse)
+async def terms_of_service(
+    request: Request,
+    flow_id: Optional[str] = Query(None, description="ID flow для специфичного соглашения"),
+    lang: Optional[str] = Query(None, description="Язык (ru/en)")
+):
+    """Страница пользовательского соглашения"""
+    
+    # Определяем язык из параметра или из контекста
+    if lang:
+        if lang not in ["ru", "en"]:
+            lang = "ru"
+    else:
+        lang = getattr(request.state, 'language', 'ru')
+    
+    # Обновляем язык в контексте для работы t()
+    context = get_context()
+    if context:
+        context.language = Language.RU if lang == "ru" else Language.EN
+    
+    request.state.language = lang
+    
+    company_name = settings.legal.company_name_ru if lang == "ru" else settings.legal.company_name_en
+    legal_form = settings.legal.legal_form_ru if lang == "ru" else settings.legal.legal_form_en
+    legal_address = settings.legal.legal_address_ru if lang == "ru" else settings.legal.legal_address_en
+    
+    flow_info = None
+    if flow_id:
+        storage = Storage()
+        flow_data = await storage.get(flow_id, force_global=True)
+        if flow_data:
+            flow_config = FlowConfig.model_validate_json(flow_data)
+            flow_info = {
+                "name": flow_config.name,
+                "description": flow_config.description
+            }
+    
+    return templates.TemplateResponse(
+        "terms.html",
+        {
+            "request": request,
+            "lang": lang,
+            "company_name": company_name,
+            "legal_form": legal_form,
+            "legal_address": legal_address or "",
+            "inn": settings.legal.inn or "",
+            "ogrn": settings.legal.ogrn or "",
+            "contact_email": settings.legal.contact_email,
+            "support_email": settings.legal.support_email,
+            "phone": settings.legal.phone or "",
+            "site_url": f"https://{settings.server.domain}",
+            "domain": settings.server.domain,
             "current_date": datetime.now().strftime("%d.%m.%Y" if lang == "ru" else "%B %d, %Y"),
             "flow_info": flow_info
         }

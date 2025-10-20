@@ -192,7 +192,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         elif path == "/api/openapi.json":
             logger.info("📋 OpenAPI spec контекст")
             return await self._create_anonymous_context(request, requested_company)
-        elif path == "/" or path == "/privacy":
+        elif path == "/" or path == "/privacy" or path == "/terms":
             logger.info(f"🏠 Публичная страница {path} - проверяем авторизацию")
             # Для публичных страниц пытаемся создать frontend контекст, но без ошибки если пользователь не авторизован
             try:
