@@ -1428,16 +1428,12 @@ export default class BuilderCanvas {
                 input: inputPorts.length,
                 output: outputPorts.length
             });
-            
-            // Настраиваем обработчики только для портов (не для всей ноды)
-            // Обработчики для самой ноды устанавливаются в addNode
-            const ports = addedPorts.querySelectorAll('.port');
-            ports.forEach(port => {
-                port.addEventListener('mousedown', (e) => this.handlePortMouseDown(e, node, port));
-            });
         } else {
             console.error('❌ Порты НЕ добавились к элементу!');
         }
+        
+        // Обработчики портов устанавливаются в setupNodeHandlers
+        // который вызывается в addNode после создания элемента
     }
 
     /**
