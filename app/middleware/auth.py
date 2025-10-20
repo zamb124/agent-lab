@@ -30,6 +30,37 @@ class AuthMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         self.storage = Storage()
+    
+    async def _setup_webhook_context(self, request: Request, platform: str) -> None:
+        """Устанавливает контекст для webhook запросов (Telegram/WhatsApp)"""
+        flow_key = request.url.path.split(f"/api/v1/webhook/{platform}/")[1]
+        
+        parts = flow_key.split(":")
+        if len(parts) < 4 or parts[0] != "company" or parts[2] != "flow":
+            raise HTTPException(status_code=400, detail=f"Invalid flow key format: {flow_key}")
+        
+        company_id = parts[1]
+        
+        company_data = await self.storage.get(f"company:{company_id}", force_global=True)
+        if not company_data:
+            raise HTTPException(status_code=404, detail=f"Company {company_id} not found")
+        
+        requested_company = Company.model_validate_json(company_data)
+        
+        # Для GET (верификация WhatsApp) используем анонимный контекст
+        # Для остальных создаем контекст с реальным пользователем
+        if platform == "whatsapp" and request.method == "GET":
+            context = await self._create_anonymous_context(request, requested_company)
+        elif platform == "telegram":
+            context = await self._create_telegram_context(request, requested_company)
+        else:
+            context = await self._create_whatsapp_context(request, requested_company)
+        
+        set_context(context)
+        request.state.context = context
+        request.state.user = context.user
+        request.state.language = context.language.value
+        logger.info(f"✅ {platform.title()} webhook: компания {company_id}")
 
     async def dispatch(self, request: Request, call_next):
         # Пропускаем middleware для статики и служебных путей
@@ -42,59 +73,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
         ):
             return await call_next(request)
         
-        # Пропускаем middleware для GET запросов верификации WhatsApp webhook
-        if request.url.path.startswith("/api/v1/webhook/whatsapp") and request.method == "GET":
-            logger.info("🔍 WhatsApp webhook verification (GET) - пропускаем авторизацию")
-            return await call_next(request)
-
-        # Для Telegram webhook - извлекаем company_id из полного ключа
+        # Для Telegram webhook
         if request.url.path.startswith("/api/v1/webhook/telegram/"):
-            flow_key = request.url.path.split("/api/v1/webhook/telegram/")[1]
-
-            # Формат ключа: company:{company_id}:flow:{flow_id}
-            parts = flow_key.split(":")
-            if len(parts) < 4 or parts[0] != "company" or parts[2] != "flow":
-                raise HTTPException(status_code=400, detail=f"Invalid flow key format: {flow_key}")
-
-            company_id = parts[1]
-
-            company_data = await self.storage.get(f"company:{company_id}", force_global=True)
-            if not company_data:
-                raise HTTPException(status_code=404, detail=f"Company {company_id} not found")
-
-            requested_company = Company.model_validate_json(company_data)
-
-            context = await self._create_telegram_context(request, requested_company)
-            set_context(context)
-            request.state.context = context
-            request.state.user = context.user
-            request.state.language = context.language.value
-            logger.info(f"📨 Telegram webhook: key={flow_key}, company={company_id}")
+            await self._setup_webhook_context(request, "telegram")
             return await call_next(request)
         
-        # Для WhatsApp webhook - извлекаем company_id из полного ключа (POST запросы)
-        if request.url.path.startswith("/api/v1/webhook/whatsapp/") and request.method == "POST":
-            flow_key = request.url.path.split("/api/v1/webhook/whatsapp/")[1]
-
-            # Формат ключа: company:{company_id}:flow:{flow_id}
-            parts = flow_key.split(":")
-            if len(parts) < 4 or parts[0] != "company" or parts[2] != "flow":
-                raise HTTPException(status_code=400, detail=f"Invalid flow key format: {flow_key}")
-
-            company_id = parts[1]
-
-            company_data = await self.storage.get(f"company:{company_id}", force_global=True)
-            if not company_data:
-                raise HTTPException(status_code=404, detail=f"Company {company_id} not found")
-
-            requested_company = Company.model_validate_json(company_data)
-
-            context = await self._create_whatsapp_context(request, requested_company)
-            set_context(context)
-            request.state.context = context
-            request.state.user = context.user
-            request.state.language = context.language.value
-            logger.info(f"📨 WhatsApp webhook: key={flow_key}, company={company_id}")
+        # Для WhatsApp webhook
+        if request.url.path.startswith("/api/v1/webhook/whatsapp/"):
+            await self._setup_webhook_context(request, "whatsapp")
             return await call_next(request)
         # Для скачивания файлов - создаем минимальный контекст с компанией из поддомена
         if request.url.path.startswith("/api/v1/files/download/"):

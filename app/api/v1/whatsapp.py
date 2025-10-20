@@ -4,16 +4,12 @@ WhatsApp webhook endpoints.
 """
 
 import logging
-import json
 from fastapi import APIRouter, Request, HTTPException, Query
 
 from app.db.repositories import Storage
 from app.interfaces.whatsapp_interface import WhatsAppInterface
 from app.frontend.dependencies import FlowRepositoryDep
-from app.core.context import get_context, set_context
-from app.identity.models import Company
 from app.models import FlowConfig
-from app.models.context_models import Context
 from app.services.variables_service import get_variables_service
 
 logger = logging.getLogger(__name__)
@@ -33,83 +29,30 @@ async def whatsapp_webhook_verify(
     
     WhatsApp отправляет GET запрос с параметрами для верификации.
     Необходимо вернуть hub.challenge если verify_token совпадает.
-    
-    Args:
-        flow_key: Полный ключ flow включая company (company:ssd:flow:...)
-        hub_mode: Должен быть "subscribe"
-        hub_verify_token: Токен для верификации
-        hub_challenge: Значение которое нужно вернуть
     """
-    # Парсим flow_key: company:{company_id}:flow:{flow_id}
-    parts = flow_key.split(":")
-    if len(parts) != 4 or parts[0] != "company" or parts[2] != "flow":
-        raise HTTPException(status_code=400, detail=f"Invalid flow_key format: {flow_key}")
-    
-    company_id = parts[1]
-    flow_id = parts[3]
-    
-    logger.info(f"🔍 WhatsApp webhook verification: flow={flow_id}, company={company_id}")
-    
     storage = Storage()
-    
-    # Устанавливаем контекст компании для резолва переменных
-    company_key = f"company:{company_id}"
-    company_data = await storage.get(company_key, force_global=True)
-    if company_data:
-        company_dict = json.loads(company_data)
-        company = Company(**company_dict)
-        
-        context = get_context()
-        if not context:
-            context = Context()
-            set_context(context)
-            logger.info(f"🔧 Создан новый контекст для webhook")
-        
-        context.active_company = company
-        logger.info(f"✅ Установлен контекст компании: {company.name} ({company.company_id})")
-    else:
-        logger.warning(f"⚠️ Компания {company_id} не найдена по ключу {company_key}")
-    
     flow_data = await storage.get(flow_key, force_global=True)
     
     if not flow_data:
-        logger.error(f"Flow {flow_id} не найден в БД по ключу {flow_key}")
-        raise HTTPException(status_code=404, detail=f"Flow {flow_id} not found")
+        raise HTTPException(status_code=404, detail=f"Flow not found")
     
     flow_config = FlowConfig.model_validate_json(flow_data)
-
     whatsapp_config = flow_config.platforms.get("whatsapp")
+    
     if not whatsapp_config:
-        logger.error(f"Flow {flow_id} не поддерживает WhatsApp")
-        raise HTTPException(
-            status_code=400, detail=f"Flow {flow_id} does not support WhatsApp"
-        )
+        raise HTTPException(status_code=400, detail="Flow does not support WhatsApp")
 
-    # Получаем verify_token из конфигурации
-    variables_service = get_variables_service()
-    
-    expected_verify_token_raw = whatsapp_config.get("verify_token", "")
-    logger.info(f"🔍 Raw verify_token из конфига: '{expected_verify_token_raw}'")
-    
-    expected_verify_token = await variables_service.resolve(expected_verify_token_raw)
-    logger.info(f"🔍 Resolved verify_token: '{expected_verify_token}'")
-    logger.info(f"🔍 Пришел verify_token от WhatsApp: '{hub_verify_token}'")
-
-    # Проверяем режим и токен
     if hub_mode != "subscribe":
-        logger.error(f"❌ Неверный hub.mode: {hub_mode}")
         raise HTTPException(status_code=403, detail="Invalid hub.mode")
 
+    variables_service = get_variables_service()
+    expected_verify_token = await variables_service.resolve(whatsapp_config.get("verify_token", ""))
+
     if hub_verify_token != expected_verify_token:
-        logger.error(f"❌ Неверный verify_token")
-        logger.error(f"❌ Ожидалось: '{expected_verify_token}' (тип: {type(expected_verify_token).__name__}, длина: {len(expected_verify_token)})")
-        logger.error(f"❌ Получено: '{hub_verify_token}' (тип: {type(hub_verify_token).__name__}, длина: {len(hub_verify_token)})")
-        logger.error(f"❌ Равны: {hub_verify_token == expected_verify_token}")
+        logger.error(f"❌ Неверный verify_token: ожидалось '{expected_verify_token}', получено '{hub_verify_token}'")
         raise HTTPException(status_code=403, detail="Invalid verify_token")
 
-    logger.info(f"✅ WhatsApp webhook верифицирован для flow {flow_id}")
-    
-    # Возвращаем challenge для подтверждения
+    logger.info(f"✅ WhatsApp webhook верифицирован")
     return int(hub_challenge)
 
 
@@ -117,87 +60,28 @@ async def whatsapp_webhook_verify(
 async def whatsapp_webhook(flow_key: str, request: Request):
     """
     Обработка webhook от WhatsApp Business API.
-    
     Получает входящие сообщения, статусы доставки и другие события.
-    
-    Args:
-        flow_key: Полный ключ flow включая company
-        request: FastAPI Request с webhook payload
     """
-    # Парсим flow_key: company:{company_id}:flow:{flow_id}
-    parts = flow_key.split(":")
-    if len(parts) != 4 or parts[0] != "company" or parts[2] != "flow":
-        raise HTTPException(status_code=400, detail=f"Invalid flow_key format: {flow_key}")
-    
-    company_id = parts[1]
-    flow_id = parts[3]
-    
-    logger.info(f"📨 WhatsApp webhook: flow={flow_id}, company={company_id}")
-    
     storage = Storage()
-    
-    # Устанавливаем контекст компании для резолва переменных
-    company_key = f"company:{company_id}"
-    company_data = await storage.get(company_key, force_global=True)
-    if company_data:
-        company_dict = json.loads(company_data)
-        company = Company(**company_dict)
-        
-        context = get_context()
-        if not context:
-            context = Context()
-            set_context(context)
-            logger.info(f"🔧 Создан новый контекст для webhook")
-        
-        context.active_company = company
-        logger.info(f"✅ Установлен контекст компании: {company.name} ({company.company_id})")
-    else:
-        logger.warning(f"⚠️ Компания {company_id} не найдена по ключу {company_key}")
-    
     flow_data = await storage.get(flow_key, force_global=True)
     
     if not flow_data:
-        logger.error(f"Flow {flow_id} не найден в БД по ключу {flow_key}")
-        raise HTTPException(status_code=404, detail=f"Flow {flow_id} not found")
+        raise HTTPException(status_code=404, detail="Flow not found")
     
     flow_config = FlowConfig.model_validate_json(flow_data)
-    
     whatsapp_config = flow_config.platforms.get("whatsapp")
+    
     if not whatsapp_config:
-        logger.error(f"Flow {flow_id} не поддерживает WhatsApp")
-        raise HTTPException(
-            status_code=400, detail=f"Flow {flow_id} does not support WhatsApp"
-        )
+        raise HTTPException(status_code=400, detail="Flow does not support WhatsApp")
 
-    # Получаем access token
-    access_token = await WhatsAppInterface.get_access_token_for_flow(
-        flow_id, whatsapp_config
-    )
+    flow_id = flow_key.split(":flow:")[-1]
+    access_token = await WhatsAppInterface.get_access_token_for_flow(flow_id, whatsapp_config)
     if not access_token:
-        logger.error(f"Не найден access token для WhatsApp flow {flow_id}")
         raise HTTPException(status_code=500, detail="Access token not found")
 
-    # Создаем WhatsApp интерфейс
     whatsapp_interface = WhatsAppInterface(access_token, whatsapp_config)
-
-    # Парсим webhook payload
     raw_data = await request.json()
     
-    # Опциональная верификация подписи webhook
-    # signature = request.headers.get("x-hub-signature-256", "")
-    # app_secret = whatsapp_config.get("app_secret")
-    # if app_secret and signature:
-    #     body_bytes = await request.body()
-    #     is_valid = await WhatsAppInterface.verify_webhook_signature(
-    #         body_bytes, signature, app_secret
-    #     )
-    #     if not is_valid:
-    #         logger.error("❌ Неверная подпись webhook")
-    #         raise HTTPException(status_code=403, detail="Invalid signature")
-
-    logger.info(f"📨 WhatsApp webhook для {flow_key}: {raw_data.get('entry', [{}])[0].get('id', 'unknown')}")
-
-    # Обрабатываем сообщение через интерфейс
     message = await whatsapp_interface.handle_message(raw_data, flow_id)
 
     if message:
