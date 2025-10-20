@@ -73,6 +73,7 @@
                        hx-get="{{ item.url }}" 
                        hx-target="#content"
                        hx-push-url="true"
+                       hx-sync="closest .app-container:replace"
                        onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
                        class="sidebar-nav-link">
                         <i class="bi {{ item.icon }}"></i>

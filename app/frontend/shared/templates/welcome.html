@@ -91,11 +91,11 @@
                     {{ t('dashboard.welcome.cta.text') }}
                 </p>
                 <div class="cta-buttons">
-                    <a href="/frontend/bots" class="btn btn-primary btn-lg" hx-get="/frontend/bots/" hx-target="#content" hx-push-url="true">
+                    <a href="/frontend/bots" class="btn btn-primary btn-lg" hx-get="/frontend/bots/" hx-target="#content" hx-push-url="true" hx-sync="closest .app-container:replace">
                         <i class="bi bi-plus-circle"></i>
                         {{ t('dashboard.welcome.cta.create_bot') }}
                     </a>
-                    <a href="/frontend/store" class="btn btn-outline btn-lg" hx-get="/frontend/store/" hx-target="#content" hx-push-url="true">
+                    <a href="/frontend/store" class="btn btn-outline btn-lg" hx-get="/frontend/store/" hx-target="#content" hx-push-url="true" hx-sync="closest .app-container:replace">
                         <i class="bi bi-shop"></i>
                         {{ t('dashboard.welcome.cta.store') }}
                     </a>

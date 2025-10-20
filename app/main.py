@@ -300,6 +300,23 @@ async def utf8_response_middleware(request: Request, call_next):
         response.headers["content-type"] = "application/json; charset=utf-8"
     return response
 
+
+# Cache-Control middleware для статических файлов
+@app.middleware("http")
+async def static_cache_middleware(request: Request, call_next):
+    response = await call_next(request)
+
+    # Добавляем кеширование для статических файлов плагинов и shared
+    if request.url.path.startswith("/static/"):
+        # Для JS/CSS файлов - кешируем на 1 год
+        if request.url.path.endswith(('.js', '.css')):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        # Для изображений и других ресурсов - кешируем на 1 час
+        else:
+            response.headers["Cache-Control"] = "public, max-age=3600"
+
+    return response
+
 # Подключение роутеров
 
 # API v1 - Публичное Platform API
