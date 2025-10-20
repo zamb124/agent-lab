@@ -21,7 +21,7 @@ from app.exceptions import TariffError, BillingError
 from app.core.file_processor import get_default_file_processor
 from app.core.audio_processor import get_default_audio_processor
 from app.models import FileRecord, AudioRecord
-
+from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 
@@ -233,8 +233,16 @@ class ChatOpenAIWithBilling(BaseChatModel):
         # Логируем запрос
         logger.info(f"LLM запрос:\n{json.dumps(payload, ensure_ascii=False, indent=2)}")
         
+        # Получаем прокси из конфигурации
+        settings = get_settings()
+        proxies = settings.proxy.get_proxies_dict()
+        
+        # Логируем если прокси используется
+        if proxies:
+            logger.info(f"🌐 Используем прокси для LLM запроса: {list(proxies.keys())}")
+        
         # HTTP запрос к OpenRouter
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, proxies=proxies) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
@@ -542,7 +550,7 @@ class ChatOpenAIWithBilling(BaseChatModel):
         total_tokens = result.response_metadata.get("total_tokens", 0)
         
         # Получаем стоимость из конфигурации
-        from app.core.config import get_settings
+        
         settings = get_settings()
         model_config = settings.llm.models.get(self._billing_model)
         
