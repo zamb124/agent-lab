@@ -314,6 +314,30 @@ export class PlatformSaver {
                     if (input) input.value = platformConfig.access_token;
                 }
             }
+            
+            if (platformConfig.verify_token) {
+                if (platformConfig.verify_token.startsWith('@var:')) {
+                    document.getElementById('wa-verify-type-var').checked = true;
+                    this.platformManager.toggleWhatsAppVerifyInput();
+                    const select = document.getElementById('whatsapp-verify-token-select');
+                    if (select) select.value = platformConfig.verify_token;
+                } else {
+                    document.getElementById('wa-verify-type-hardcoded').checked = true;
+                    this.platformManager.toggleWhatsAppVerifyInput();
+                    const input = document.getElementById('whatsapp-verify-token');
+                    if (input) input.value = platformConfig.verify_token;
+                }
+            }
+            
+            if (platformConfig.business_account_id) {
+                const businessInput = document.getElementById('whatsapp-business-account-id');
+                if (businessInput) businessInput.value = platformConfig.business_account_id;
+            }
+            
+            if (platformConfig.display_name) {
+                const displayInput = document.getElementById('whatsapp-display-name');
+                if (displayInput) displayInput.value = platformConfig.display_name;
+            }
         } else {
             if (platformConfig.username) {
                 const usernameInput = document.getElementById('platform-username');
