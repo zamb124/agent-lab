@@ -9,8 +9,8 @@ import base64
 from typing import List, Optional
 
 from ..config import settings
-from app.db.repositories import Storage
 from .s3_client import S3ClientFactory
+from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class NanoBananaClient:
     ):
         self.model_name = model_name
         self.timeout = timeout
-        self._storage = Storage()
+        self._storage = get_container().storage
         self._llm = None
     
     async def _get_llm(self):

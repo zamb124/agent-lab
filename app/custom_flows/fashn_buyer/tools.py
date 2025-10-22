@@ -7,7 +7,7 @@ import json
 from datetime import datetime
 from langchain_core.tools import tool
 
-from app.db.repositories import Storage
+from app.core.container import get_container
 from app.core.file_processor import get_default_file_processor
 from app.core.context import get_context
 from .models import (
@@ -29,7 +29,7 @@ async def _generate_human_readable_id() -> str:
     date_prefix = now.strftime("%Y-%m-%d")
     
     # Ищем последний номер за сегодня
-    storage = Storage()
+    storage = get_container().storage
     
     # Ищем все заявки за сегодня
     all_keys = await storage.list_by_prefix("fashn_issue:", 1000)
@@ -91,8 +91,8 @@ async def save_fashn_issue_card(
     context = get_context()
     telegram_user_id = context.metadata.get("telegram_user_id") or context.user.provider_user_id
     logger.info(f"🔍 save_fashn_issue_card получил telegram_user_id из контекста: {telegram_user_id}")
-    
-    storage = Storage()
+
+    storage = get_container().storage
     await get_default_file_processor()
         
     # Парсим фотографии
@@ -186,8 +186,8 @@ async def get_fashn_issue_status(issue_id: str) -> str:
             
         if not telegram_user_id:
             return "❌ Не удалось получить Telegram ID пользователя"
-        
-        storage = Storage()
+
+        storage = get_container().storage
         
         # Формируем ключ для поиска заявки
         issue_key = f"fashn_issue:{telegram_user_id}:{issue_id}"
@@ -263,8 +263,8 @@ async def add_fashn_issue_comment(issue_id: str, comment: str) -> str:
         
     if not telegram_user_id:
         return "❌ Не удалось получить Telegram ID пользователя"
-    
-    storage = Storage()
+
+    storage = get_container().storage
     
     # Формируем ключ для поиска заявки
     issue_key = f"fashn_issue:{telegram_user_id}:{issue_id}"

@@ -18,8 +18,8 @@ import httpx
 from datetime import datetime, timedelta, timezone
 
 from ..config import settings
-from app.db.repositories import Storage
 from ...models.file_models import CloudVoiceTokenConfig
+from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ class CloudVoiceClient:
         self.timeout = timeout
         self._token_config: Optional[CloudVoiceTokenConfig] = None
         self._client: Optional[httpx.AsyncClient] = None
-        self._storage = Storage()
+        self._storage = get_container().storage
         self._token_key = f"cloud_voice_token:{self.client_id}"
 
     async def _get_client(self) -> httpx.AsyncClient:

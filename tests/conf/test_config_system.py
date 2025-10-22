@@ -392,7 +392,9 @@ class TestAuthFlow:
     
     async def test_auth_url_generation(self):
         """Тест генерации URL авторизации"""
-        from app.identity.auth_service import auth_service
+        from app.core.container import get_container
+        container = get_container()
+        auth_service = container.auth_service
         from app.identity.models import AuthProvider
         
         providers = auth_service.get_available_providers()

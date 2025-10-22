@@ -8,6 +8,8 @@
 4. Выполнение хуков install/uninstall
 """
 import pytest
+import pytest_asyncio
+import logging
 from datetime import datetime, timezone
 
 from app.core.context import set_context, clear_context
@@ -15,11 +17,27 @@ from app.identity.models import Company, User, AuthProvider, UserStatus
 from app.models.context_models import Context
 from app.models import ToolReference
 
+logger = logging.getLogger(__name__)
 
-@pytest.fixture
-def test_store_company(storage):
-    """Создает тестовую компанию для store тестов"""
-    def _set_company_context(company: Company):
+
+@pytest_asyncio.fixture
+async def create_test_company(storage):
+    """Создает тестовую компанию (с автоочисткой)"""
+    created_companies = []
+    
+    async def _create(company_id: str = "test_store_company"):
+        company = Company(
+            company_id=company_id,
+            subdomain=f"test_store_{company_id}",
+            name=f"Test Store Company {company_id}",
+            status="active",
+            created_at=datetime.now(timezone.utc)
+        )
+        
+        await storage.set(f"company:{company.company_id}", company.model_dump_json(), force_global=True)
+        created_companies.append(company)
+        
+        # Создаем и устанавливаем контекст для компании
         user = User(
             user_id="test_user",
             provider=AuthProvider.YANDEX,
@@ -38,27 +56,44 @@ def test_store_company(storage):
             active_company=company,
             user_companies=[company]
         )
-        set_context(context)
-    
-    async def _create(company_id: str = "test_store_company"):
-        company = Company(
-            company_id=company_id,
-            subdomain=f"test_store_{company_id}",
-            name=f"Test Store Company {company_id}",
-            status="active",
-            created_at=datetime.now(timezone.utc)
-        )
+        await set_context(context)
         
-        await storage.set(f"company:{company.company_id}", company.model_dump_json(), force_global=True)
         return company
     
-    async def _cleanup(company: Company):
+    yield _create
+    
+    # Очистка после теста
+    for company in created_companies:
+        # Сначала удаляем все установленные flows (чтобы выполнились uninstall hooks)
+        from app.core.container import get_container
+        flow_factory = get_container().flow_factory
+        
+        # Получаем список установленных flows этой компании
+        flow_keys = await storage.list_by_prefix(f"company:{company.company_id}:flow:")
+        for flow_key in flow_keys:
+            # Извлекаем flow_id из ключа: company:XXX:flow:YYY -> YYY
+            flow_id = flow_key.split(":", 3)[3] if len(flow_key.split(":")) > 3 else None
+            if flow_id:
+                try:
+                    # Переключаем контекст на эту компанию для uninstall
+                    from app.core.context import get_context
+                    ctx = get_context()
+                    if ctx:
+                        ctx.active_company = company
+                        await set_context(ctx)
+                    
+                    await flow_factory.uninstall_flow(flow_id)
+                    logger.info(f"🧹 Удален flow {flow_id} из компании {company.company_id}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Не удалось удалить flow {flow_id}: {e}")
+        
+        # Затем удаляем оставшиеся данные
         prefixes = [
-            "flow:",
-            "agent:",
-            "tool:",
-            "session:",
-            f"company:{company.company_id}:",
+            f"company:{company.company_id}:flow:",
+            f"company:{company.company_id}:agent:",
+            f"company:{company.company_id}:tool:",
+            f"company:{company.company_id}:session:",
+            f"company:{company.company_id}:var:",
         ]
         
         for prefix in prefixes:
@@ -68,11 +103,11 @@ def test_store_company(storage):
         
         await storage.delete(f"company:{company.company_id}", force_global=True)
     
-    return _create, _cleanup, _set_company_context
+    clear_context()
 
 
 @pytest.mark.asyncio
-async def test_new_company_only_tools(migrated_db, storage, migrator, test_store_company, agent_repo, flow_repo):
+async def test_new_company_only_tools(migrated_db, storage, migrator, create_test_company, agent_repo, flow_repo):
     """
     Тест 1: При создании компании мигрируются только публичные tools.
     
@@ -81,10 +116,7 @@ async def test_new_company_only_tools(migrated_db, storage, migrator, test_store
     - Flows НЕ мигрируются
     - Агенты НЕ мигрируются
     """
-    create_company, cleanup_company, set_company_context = test_store_company
-    test_company = await create_company("new_company_1")
-    
-    set_company_context(test_company)
+    test_company = await create_test_company("new_company_1")
     
     await migrator.migrate_defaults_for_company(test_company)
     
@@ -101,12 +133,10 @@ async def test_new_company_only_tools(migrated_db, storage, migrator, test_store
     assert tool_data is not None, "Публичные tools должны быть мигрированы"
     
     print("✅ Тест new_company_only_tools пройден!")
-    clear_context()
-    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_install_flow_creates_dependencies(migrated_db, storage, flow_factory, migrator, test_store_company, agent_repo, flow_repo):
+async def test_install_flow_creates_dependencies(migrated_db, storage, flow_factory, migrator, create_test_company, agent_repo, flow_repo):
     """
     Тест 2: Установка flow создает все зависимости.
     
@@ -116,10 +146,7 @@ async def test_install_flow_creates_dependencies(migrated_db, storage, flow_fact
     - Создаются все приватные tools
     - Выполняется install hook
     """
-    create_company, cleanup_company, set_company_context = test_store_company
-    test_company = await create_company("install_test_company")
-    
-    set_company_context(test_company)
+    test_company = await create_test_company("install_test_company")
     
     await migrator.migrate_defaults_for_company(test_company)
     
@@ -144,12 +171,10 @@ async def test_install_flow_creates_dependencies(migrated_db, storage, flow_fact
     assert variable_json is not None, "install hook должен создать переменную default_city"
     
     print("✅ Тест install_flow_creates_dependencies пройден!")
-    clear_context()
-    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
-async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_factory, migrator, test_store_company, agent_repo, flow_repo):
+async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_factory, migrator, create_test_company, agent_repo, flow_repo):
     """
     Тест 3: Удаление flow удаляет все зависимости.
     
@@ -159,10 +184,7 @@ async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_fa
     - Удаляются агенты flow
     - Публичные tools остаются
     """
-    create_company, cleanup_company, set_company_context = test_store_company
-    test_company = await create_company("uninstall_test_company")
-    
-    set_company_context(test_company)
+    test_company = await create_test_company("uninstall_test_company")
     
     await migrator.migrate_defaults_for_company(test_company)
     
@@ -190,8 +212,6 @@ async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_fa
     assert tool_data is not None, "Публичные tools должны остаться"
     
     print("✅ Тест uninstall_flow_removes_dependencies пройден!")
-    clear_context()
-    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
@@ -220,16 +240,13 @@ async def test_flow_hooks_execution(migrated_db, storage, agent_repo, flow_repo)
 
 
 @pytest.mark.asyncio
-async def test_hooks_actually_execute(migrated_db, storage, flow_factory, migrator, test_store_company, agent_repo, flow_repo):
+async def test_hooks_actually_execute(migrated_db, storage, flow_factory, migrator, create_test_company, agent_repo, flow_repo):
     """
-    Тест 4.5: Проверка ФАКТИЧЕСКОГО выполнения хуков install и uninstall.
+    Тест 4.5: Проверка ФАКТИЧЕСКОГО выполнения хуков install and uninstall.
     
     Проверяет что хуки реально выполняются, а не просто извлекаются из кода.
     """
-    create_company, cleanup_company, set_company_context = test_store_company
-    test_company = await create_company("hooks_test_company")
-    
-    set_company_context(test_company)
+    test_company = await create_test_company("hooks_test_company")
     
     await migrator.migrate_defaults_for_company(test_company)
 
@@ -265,8 +282,13 @@ async def test_hooks_actually_execute(migrated_db, storage, flow_factory, migrat
     
     print("✅ uninstall hook выполнился! Переменная удалена")
     print("✅ Тест hooks_actually_execute пройден!")
+    
+    # Даем время завершиться всем асинхронным задачам
+    import asyncio
+    await asyncio.sleep(0.1)
+    
+    # Очищаем контекст
     clear_context()
-    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
@@ -288,24 +310,30 @@ async def test_flow_with_image(migrated_db, storage, agent_repo, flow_repo):
 
 
 @pytest.mark.asyncio
-async def test_multiple_flows_isolation(migrated_db, storage, flow_factory, migrator, test_store_company, agent_repo, flow_repo):
+async def test_multiple_flows_isolation(migrated_db, storage, flow_factory, migrator, create_test_company, agent_repo, flow_repo):
     """
     Тест 6: Изоляция flows между компаниями.
     
     Проверяет что flows в одной компании не видны в другой.
     """
-    create_company, cleanup_company, set_company_context = test_store_company
-    company1 = await create_company("isolation_company_1")
-    company2 = await create_company("isolation_company_2")
+    company1 = await create_test_company("isolation_company_1")
+    company2 = await create_test_company("isolation_company_2")
     
-    set_company_context(company1)
+    # Контекст уже установлен для последней созданной компании (company2)
+    # Переключаемся на company1
+    from app.core.context import get_context
+    context = get_context()
+    context.active_company = company1
+    await set_context(context)
     await migrator.migrate_defaults_for_company(company1)
     await flow_factory.install_flow("app.flows.weather_flow.weather_flow_config")
     
     flow_in_company1 = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert flow_in_company1 is not None, "Flow должен быть в компании 1"
     
-    set_company_context(company2)
+    # Переключаемся на company2
+    context.active_company = company2
+    await set_context(context)
     await migrator.migrate_defaults_for_company(company2)
     
     flow_in_company2 = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
@@ -316,20 +344,21 @@ async def test_multiple_flows_isolation(migrated_db, storage, flow_factory, migr
     flow_in_company2_after = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert flow_in_company2_after is not None, "Flow должен быть установлен в компании 2"
     
-    set_company_context(company1)
+    # Переключаемся обратно на company1
+    context.active_company = company1
+    await set_context(context)
     await flow_factory.uninstall_flow("app.flows.weather_flow.weather_flow_config")
     
     flow_in_company1_after = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert flow_in_company1_after is None, "Flow должен быть удален из компании 1"
     
-    set_company_context(company2)
+    # Переключаемся на company2
+    context.active_company = company2
+    await set_context(context)
     flow_still_in_company2 = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert flow_still_in_company2 is not None, "Flow должен остаться в компании 2"
     
     print("✅ Тест multiple_flows_isolation пройден!")
-    clear_context()
-    await cleanup_company(company1)
-    await cleanup_company(company2)
 
 
 @pytest.mark.asyncio
@@ -352,16 +381,13 @@ async def test_flow_author_extraction(migrated_db, storage, agent_repo, flow_rep
 
 
 @pytest.mark.asyncio
-async def test_install_twice_should_succeed(migrated_db, storage, flow_factory, migrator, test_store_company, agent_repo, flow_repo):
+async def test_install_twice_should_succeed(migrated_db, storage, flow_factory, migrator, create_test_company, agent_repo, flow_repo):
     """
     Тест 8: Повторная установка flow должна перезаписывать существующий.
     
     Проверяет что можно переустановить flow (перемиграция).
     """
-    create_company, cleanup_company, set_company_context = test_store_company
-    test_company = await create_company("double_install_company")
-    
-    set_company_context(test_company)
+    test_company = await create_test_company("double_install_company")
     
     await migrator.migrate_defaults_for_company(test_company)
     
@@ -372,6 +398,30 @@ async def test_install_twice_should_succeed(migrated_db, storage, flow_factory, 
     assert flow1 is not None
     created_at_first = flow1.created_at
     
+    # Очищаем контекст перед вторым вызовом
+    clear_context()
+    
+    # Восстанавливаем контекст для второго вызова
+    user = User(
+        user_id="test_user",
+        provider=AuthProvider.YANDEX,
+        provider_user_id="test",
+        email="test@test.com",
+        name="Test User",
+        status=UserStatus.ACTIVE,
+        groups=["admin"],
+        companies={test_company.company_id: ["admin"]},
+        active_company_id=test_company.company_id
+    )
+    
+    context = Context(
+        user=user,
+        platform="test",
+        active_company=test_company,
+        user_companies=[test_company]
+    )
+    await set_context(context)
+    
     result2 = await flow_factory.install_flow("app.flows.weather_flow.weather_flow_config")
     assert result2["flow_id"] == "app.flows.weather_flow.weather_flow_config"
     
@@ -380,21 +430,20 @@ async def test_install_twice_should_succeed(migrated_db, storage, flow_factory, 
     assert flow2.created_at == created_at_first, "created_at должен сохраниться при перемиграции"
     
     print("✅ Тест install_twice_should_succeed пройден!")
-    clear_context()
-    await cleanup_company(test_company)
+    
+    # Даем время завершиться всем асинхронным задачам
+    import asyncio
+    await asyncio.sleep(0.1)
 
 
 @pytest.mark.asyncio
-async def test_uninstall_not_installed_should_fail(migrated_db, storage, flow_factory, migrator, test_store_company, agent_repo, flow_repo):
+async def test_uninstall_not_installed_should_fail(migrated_db, storage, flow_factory, migrator, create_test_company, agent_repo, flow_repo):
     """
     Тест 9: Удаление неустановленного flow должно вызывать ошибку.
     
     Проверяет что нельзя удалить flow который не установлен.
     """
-    create_company, cleanup_company, set_company_context = test_store_company
-    test_company = await create_company("uninstall_empty_company")
-    
-    set_company_context(test_company)
+    test_company = await create_test_company("uninstall_empty_company")
     
     await migrator.migrate_defaults_for_company(test_company)
     
@@ -408,8 +457,6 @@ async def test_uninstall_not_installed_should_fail(migrated_db, storage, flow_fa
     assert error_raised, "Удаление несуществующего flow должно вызывать ошибку"
     
     print("✅ Тест uninstall_not_installed_should_fail пройден!")
-    clear_context()
-    await cleanup_company(test_company)
 
 
 @pytest.mark.asyncio
@@ -507,204 +554,169 @@ async def test_variables_definitions_validation(migrated_db, storage, caplog):
 
 
 @pytest.mark.asyncio
-async def test_flow_variables_definitions_install(migrated_db, storage, migrator, test_store_company):
+async def test_flow_variables_definitions_install(migrated_db, storage, migrator, create_test_company, variables_service):
     """Тест установки flow с variables_definitions через API"""
-    from app.services.variables_service import VariablesService
     from app.frontend.api.flows import install_flow
     from pydantic import BaseModel
 
-    create_company, cleanup_company, set_company_context = test_store_company
-    test_company = await create_company("test_vars_api_company")
+    test_company = await create_test_company("test_vars_api_company")
+    
+    # Используем реальный flow с variables_definitions - lawyer_flow
+    flow_id = "app.flows.lawyer_flow.lawyer_flow"
 
-    try:
-        # Используем реальный flow с variables_definitions - lawyer_flow
-        flow_id = "app.flows.lawyer_flow.lawyer_flow"
+    # Создаем request с переменными
+    class InstallFlowRequest(BaseModel):
+        variables: dict = None
 
-        # Создаем request с переменными
-        class InstallFlowRequest(BaseModel):
-            variables: dict = None
+    request = InstallFlowRequest(variables={
+        "lawyer_bot": "test_bot",
+        "lawyer_bot_telegram_token": "test_token_123",
+        "company_short_name": "Test Company"
+    })
 
-        request = InstallFlowRequest(variables={
-            "lawyer_bot": "test_bot",
-            "lawyer_bot_telegram_token": "test_token_123",
-            "company_short_name": "Test Company"
-        })
+    # Устанавливаем flow
+    result = await install_flow(
+        flow_id=flow_id,
+        storage=storage,
+        flow_repo=None,
+        variables_service=variables_service,
+        request=request
+    )
 
-        # Устанавливаем flow
-        result = await install_flow(
-            flow_id=flow_id,
-            storage=storage,
-            flow_repo=None,
-            request=request
-        )
+    # Проверяем что flow установлен
+    assert result["flow_id"] == flow_id
 
-        # Проверяем что flow установлен
-        assert result["flow_id"] == flow_id
+    # Проверяем что переменные созданы с правильными значениями
+    lawyer_bot = await variables_service.get_var("lawyer_bot")
+    token = await variables_service.get_var("lawyer_bot_telegram_token")
+    company_name = await variables_service.get_var("company_short_name")
 
-        # Проверяем что переменные созданы с правильными значениями
-        variables_service = VariablesService()
-        lawyer_bot = await variables_service.get_var("lawyer_bot")
-        token = await variables_service.get_var("lawyer_bot_telegram_token")
-        company_name = await variables_service.get_var("company_short_name")
+    assert lawyer_bot == "test_bot"
+    assert token == "test_token_123"
+    assert company_name == "Test Company"
 
-        assert lawyer_bot == "test_bot"
-        assert token == "test_token_123"
-        assert company_name == "Test Company"
-
-        print("✅ Тест flow_variables_definitions_install пройден!")
-
-    finally:
-        clear_context()
-        await cleanup_company(test_company)
+    print("✅ Тест flow_variables_definitions_install пройден!")
 
 
 
 
 @pytest.mark.asyncio
-async def test_variables_resolution_after_install(migrated_db, storage, migrator, test_store_company):
+async def test_variables_resolution_after_install(migrated_db, storage, migrator, create_test_company, variables_service):
     """Тест резолюции @var: ссылок после установки flow с переменными"""
-    from app.services.variables_service import VariablesService
     from app.frontend.api.flows import install_flow
     from pydantic import BaseModel
 
-    create_company, cleanup_company, set_company_context = test_store_company
-    test_company = await create_company("test_resolution_company")
+    test_company = await create_test_company("test_resolution_company")
+    
+    # Используем weather_flow для тестирования резолюции
+    flow_id = "app.flows.weather_flow.weather_flow_config"
 
-    try:
-        # Используем weather_flow для тестирования резолюции
-        flow_id = "app.flows.weather_flow.weather_flow_config"
+    # Создаем request с переменными
+    class InstallFlowRequest(BaseModel):
+        variables: dict = None
 
-        # Создаем request с переменными
-        class InstallFlowRequest(BaseModel):
-            variables: dict = None
+    request = InstallFlowRequest(variables={
+        "weather_api_key": "test_api_key_123",
+        "bot_name": "Test Weather Bot"
+    })
 
-        request = InstallFlowRequest(variables={
-            "weather_api_key": "test_api_key_123",
-            "bot_name": "Test Weather Bot"
-        })
+    # Устанавливаем flow
+    result = await install_flow(
+        flow_id=flow_id,
+        storage=storage,
+        flow_repo=None,
+        variables_service=variables_service,
+        request=request
+    )
 
-        # Устанавливаем flow
-        result = await install_flow(
-            flow_id=flow_id,
-            storage=storage,
-            flow_repo=None,
-            request=request
-        )
+    # Проверяем что переменные созданы
+    api_key = await variables_service.get_var("weather_api_key")
+    bot_name = await variables_service.get_var("bot_name")
 
-        # Проверяем резолюцию переменных через VariablesService
-        variables_service = VariablesService()
+    assert api_key == "test_api_key_123"
+    assert bot_name == "Test Weather Bot"
 
-        # Проверяем что переменные созданы
-        api_key = await variables_service.get_var("weather_api_key")
-        bot_name = await variables_service.get_var("bot_name")
+    # Проверяем резолюцию - берем flow config и резолвим его variables
+    from app.flows.weather_flow import weather_flow_config
+    resolved_vars = await variables_service.resolve(weather_flow_config.variables)
 
-        assert api_key == "test_api_key_123"
-        assert bot_name == "Test Weather Bot"
+    # bot_name должен быть резолвен
+    assert resolved_vars["bot_name"] == "Test Weather Bot"
 
-        # Проверяем резолюцию - берем flow config и резолвим его variables
-        from app.flows.weather_flow import weather_flow_config
-        resolved_vars = await variables_service.resolve(weather_flow_config.variables)
-
-        # bot_name должен быть резолвен
-        assert resolved_vars["bot_name"] == "Test Weather Bot"
-
-        print("✅ Тест variables_resolution_after_install пройден!")
-
-    finally:
-        clear_context()
-        await cleanup_company(test_company)
+    print("✅ Тест variables_resolution_after_install пройден!")
 
 
 @pytest.mark.asyncio
-async def test_flow_install_skip_empty_variables(migrated_db, storage, migrator, test_store_company):
+async def test_flow_install_skip_empty_variables(migrated_db, storage, migrator, create_test_company, variables_service):
     """Тест установки flow с пропуском пустых переменных"""
-    from app.services.variables_service import VariablesService
     from app.frontend.api.flows import install_flow
     from pydantic import BaseModel
 
-    create_company, cleanup_company, set_company_context = test_store_company
-    test_company = await create_company("test_skip_empty_vars_company")
+    test_company = await create_test_company("test_skip_empty_vars_company")
+    
+    # Используем lawyer_flow для тестирования пропуска пустых переменных
+    flow_id = "app.flows.lawyer_flow.lawyer_flow"
 
+    # Создаем request с одной заполненной и одной пустой переменной
+    class InstallFlowRequest(BaseModel):
+        variables: dict = None
+
+    request = InstallFlowRequest(variables={
+        "lawyer_bot": "test_bot",
+        "company_short_name_en": "",
+        "lawyer_bot_telegram_token": "test_token"
+    })
+
+    # Устанавливаем flow
+    result = await install_flow(
+        flow_id=flow_id,
+        storage=storage,
+        flow_repo=None,
+        variables_service=variables_service,
+        request=request
+    )
+
+    # Проверяем что flow установлен
+    assert result["flow_id"] == flow_id
+
+    # Сначала удалим переменную если она существует от предыдущих тестов
     try:
-        # Используем lawyer_flow для тестирования пропуска пустых переменных
-        flow_id = "app.flows.lawyer_flow.lawyer_flow"
+        await variables_service.delete_var("company_short_name_en")
+    except:
+        pass
 
-        # Создаем request с одной заполненной и одной пустой переменной
-        class InstallFlowRequest(BaseModel):
-            variables: dict = None
+    filled_var = await variables_service.get_var("lawyer_bot")
+    empty_var = await variables_service.get_var("company_short_name_en")
+    token_var = await variables_service.get_var("lawyer_bot_telegram_token")
 
-        request = InstallFlowRequest(variables={
-            "lawyer_bot": "test_bot",  # Заполненная
-            "company_short_name_en": "",  # Пустая (без default_value)
-            "lawyer_bot_telegram_token": "test_token"
-        })
+    assert filled_var == "test_bot"
+    assert token_var == "test_token"
+    assert empty_var is None, "Empty variable should not be created"
 
-        # Устанавливаем flow
-        result = await install_flow(
-            flow_id=flow_id,
-            storage=storage,
-            flow_repo=None,
-            request=request
-        )
-
-        # Проверяем что flow установлен
-        assert result["flow_id"] == flow_id
-
-        # Проверяем что только заполненные переменные созданы
-        variables_service = VariablesService()
-
-        # Сначала удалим переменную если она существует от предыдущих тестов
-        try:
-            await variables_service.delete_var("company_short_name_en")
-        except:
-            pass
-
-        filled_var = await variables_service.get_var("lawyer_bot")
-        empty_var = await variables_service.get_var("company_short_name_en")
-        token_var = await variables_service.get_var("lawyer_bot_telegram_token")
-
-        assert filled_var == "test_bot"
-        assert token_var == "test_token"
-        assert empty_var is None, "Empty variable should not be created"
-
-        print("✅ Тест flow_install_skip_empty_variables пройден!")
-
-    finally:
-        clear_context()
-        await cleanup_company(test_company)
+    print("✅ Тест flow_install_skip_empty_variables пройден!")
 
 
 @pytest.mark.asyncio
-async def test_variables_service_operations(migrated_db, storage, test_store_company):
+async def test_variables_service_operations(migrated_db, storage, create_test_company, variables_service):
     """Тест базовых операций с переменными через VariablesService"""
-    from app.services.variables_service import VariablesService
+    test_company = await create_test_company("test_vars_service_company")
 
-    create_company, cleanup_company, set_company_context = test_store_company
-    test_company = await create_company("test_vars_service_company")
+    # Создаем переменную
+    await variables_service.set_var("test_key", "test_value", is_secret=False, description="Test variable")
+    var = await variables_service.get_var("test_key")
+    assert var == "test_value"
 
-    try:
-        variables_service = VariablesService()
+    # Обновляем переменную
+    await variables_service.set_var("test_key", "updated_value", is_secret=False, description="Updated variable")
+    var = await variables_service.get_var("test_key")
+    assert var == "updated_value"
 
-        # Создаем переменную
-        await variables_service.set_var("test_key", "test_value", is_secret=False, description="Test variable")
-        var = await variables_service.get_var("test_key")
-        assert var == "test_value"
+    # Удаляем переменную
+    await variables_service.delete_var("test_key")
+    var = await variables_service.get_var("test_key")
+    assert var is None
 
-        # Обновляем переменную
-        await variables_service.set_var("test_key", "updated_value", is_secret=False, description="Updated variable")
-        var = await variables_service.get_var("test_key")
-        assert var == "updated_value"
-
-        # Удаляем переменную
-        await variables_service.delete_var("test_key")
-        var = await variables_service.get_var("test_key")
-        assert var is None
-
-        print("✅ Тест variables_service_operations пройден!")
-
-    finally:
-        clear_context()
-        await cleanup_company(test_company)
+    print("✅ Тест variables_service_operations пройден!")
 
 
 if __name__ == "__main__":

@@ -8,8 +8,9 @@ from typing import List, Dict, Any
 import uuid
 
 from app.models import FlowConfig
-from app.frontend.dependencies import StorageDep, CanvasServiceDep, FlowRepositoryDep, AgentRepositoryDep
+from app.frontend.dependencies import StorageDep, CanvasServiceDep, FlowRepositoryDep, AgentRepositoryDep, VariablesServiceDep, InterfaceFactoryDep
 from app.core.migration import Migrator
+from app.core.container import get_container
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 logger = logging.getLogger(__name__)
@@ -171,7 +172,8 @@ async def update_flow(
     flow_id: str,
     updates: Dict[str, Any],
     storage: StorageDep,
-    flow_repo: FlowRepositoryDep
+    flow_repo: FlowRepositoryDep,
+    interface_factory: InterfaceFactoryDep
 ) -> FlowConfig:
     """Обновить флоу"""
     flow = await flow_repo.get(flow_id)
@@ -225,10 +227,6 @@ async def update_flow(
     
     # Если обновили platforms - регистрируем их
     if "platforms" in updates:
-        from app.interfaces.factory import InterfaceFactory
-        
-        factory = InterfaceFactory()
-        
         for platform_name, platform_config in updates["platforms"].items():
             username = platform_config.get("username")
             if not username:
@@ -241,7 +239,7 @@ async def update_flow(
                     continue
             
             try:
-                registration_result = await factory.register_platform(
+                registration_result = await interface_factory.register_platform(
                     platform=platform_name,
                     username=username,
                     flow_id=validated_flow.flow_id
@@ -284,6 +282,7 @@ async def install_flow(
     flow_id: str,
     storage: StorageDep,
     flow_repo: FlowRepositoryDep,
+    variables_service: VariablesServiceDep,
     request: Optional[InstallFlowRequest] = None,
 ):
     """
@@ -292,9 +291,6 @@ async def install_flow(
 
     Принимает переменные для создания в компании.
     """
-    from app.core.flow_factory import FlowFactory
-    from app.services.variables_service import VariablesService
-
     migrator = Migrator()
     migrator.storage = storage
 
@@ -311,7 +307,6 @@ async def install_flow(
 
     # Создаем переменные если они переданы
     if request and request.variables:
-        variables_service = VariablesService()
         for key, value in request.variables.items():
             # Пропускаем пустые значения
             if value is None or value == "":
@@ -337,7 +332,7 @@ async def install_flow(
             )
             logger.info(f"✅ Создана переменная {key} для flow {flow_id}")
 
-    flow_factory = FlowFactory()
+    flow_factory = get_container().flow_factory
     result = await flow_factory.install_flow(flow_id)
 
     logger.info(f"✅ Flow {flow_id} успешно установлен")

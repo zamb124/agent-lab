@@ -20,14 +20,17 @@ from ..models.payment_models import (
     PaymentProviderType
 )
 from ..identity.models import Company, User
+from ..core.container import get_container
 logger = logging.getLogger(__name__)
 
 
 class PaymentService:
     """Сервис для работы с платежами"""
     
-    def __init__(self):
-        self.storage = Storage()
+    def __init__(self, storage: Storage = None):
+        if storage is None:
+            storage = get_container().storage
+        self.storage = storage
     
     async def create_payment(
         self,

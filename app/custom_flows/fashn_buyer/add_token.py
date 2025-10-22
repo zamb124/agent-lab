@@ -5,7 +5,7 @@
 import asyncio
 import json
 import logging
-from app.db.repositories import Storage
+from app.core.container import get_container
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 async def add_bot_token():
     """Добавляет токен бота fashn_agents_lab_test_bot в БД"""
     
-    storage = Storage()
+    storage = get_container().storage
     
     # Данные бота
     username = "fashn_agents_lab_test_bot"

@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Any
 
-from app.services.variables_service import get_variables_service
+from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ async def set_variable(request: VariableRequest):
     - key=telegram_bot_token, value=123:ABC..., secret=true
     - key=bot_name, value=My Bot, secret=false
     """
-    variables_service = get_variables_service()
+    variables_service = get_container().variables_service
     
     await variables_service.set_var(
         key=request.key,
@@ -57,14 +57,14 @@ async def set_variable(request: VariableRequest):
 @router.get("/admin/variables")
 async def list_variables() -> Dict[str, Any]:
     """Получает все переменные компании"""
-    variables_service = get_variables_service()
+    variables_service = get_container().variables_service
     return await variables_service.list_vars()
 
 
 @router.get("/admin/variables/{key}")
 async def get_variable(key: str) -> Dict[str, Any]:
     """Получает переменную компании со всеми данными"""
-    variables_service = get_variables_service()
+    variables_service = get_container().variables_service
     storage_key = f"var:{key}"
     import json
     data = await variables_service.storage.get(storage_key)
@@ -86,7 +86,7 @@ async def get_variable(key: str) -> Dict[str, Any]:
 @router.delete("/admin/variables/{key}")
 async def delete_variable(key: str):
     """Удаляет переменную компании"""
-    variables_service = get_variables_service()
+    variables_service = get_container().variables_service
     success = await variables_service.delete_var(key)
     
     if not success:

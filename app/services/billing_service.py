@@ -12,14 +12,17 @@ from app.db.repositories import Storage
 from ..core.context import get_context
 from ..identity.models import User, Company
 from ..models.billing_models import UsageRecord, UsageType, TARIFF_PRICES
+from ..core.container import get_container
 logger = logging.getLogger(__name__)
 
 
 class BillingService:
     """Сервис биллинга и контроля лимитов"""
     
-    def __init__(self):
-        self.storage = Storage()
+    def __init__(self, storage: Storage = None):
+        if storage is None:
+            storage = get_container().storage
+        self.storage = storage
     
     async def can_use_resource(self, user: User, company: Company, resource_name: str) -> tuple[bool, str]:
         """

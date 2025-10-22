@@ -32,7 +32,7 @@ class TestTelegramAccessControl:
         }
     
     @pytest.mark.asyncio
-    async def test_access_allowed_empty_list(self, telegram_config_open):
+    async def test_access_allowed_empty_list(self, telegram_config_open, test_context):
         """Тест: пустой список allowed_users → доступ для всех"""
         interface = TelegramInterface("test_token", telegram_config_open)
         
@@ -61,7 +61,7 @@ class TestTelegramAccessControl:
         print("✅ Пустой список allowed_users → доступ разрешен")
     
     @pytest.mark.asyncio
-    async def test_access_allowed_by_username(self, telegram_config_restricted):
+    async def test_access_allowed_by_username(self, telegram_config_restricted, test_context):
         """Тест: пользователь в списке по username → доступ разрешен"""
         interface = TelegramInterface("test_token", telegram_config_restricted)
         
@@ -89,7 +89,7 @@ class TestTelegramAccessControl:
         print("✅ Доступ по username разрешен")
     
     @pytest.mark.asyncio
-    async def test_access_allowed_by_user_id(self, telegram_config_restricted):
+    async def test_access_allowed_by_user_id(self, telegram_config_restricted, test_context):
         """Тест: пользователь в списке по user_id → доступ разрешен"""
         interface = TelegramInterface("test_token", telegram_config_restricted)
         
@@ -117,7 +117,7 @@ class TestTelegramAccessControl:
         print("✅ Доступ по user_id разрешен")
     
     @pytest.mark.asyncio
-    async def test_access_denied(self, telegram_config_restricted):
+    async def test_access_denied(self, telegram_config_restricted, test_context):
         """Тест: пользователя нет в списке → доступ запрещен"""
         interface = TelegramInterface("test_token", telegram_config_restricted)
         
@@ -153,7 +153,7 @@ class TestTelegramAccessControl:
         print("✅ Доступ запрещен и отправлено сообщение об ошибке")
     
     @pytest.mark.asyncio
-    async def test_access_denied_no_username(self, telegram_config_restricted):
+    async def test_access_denied_no_username(self, telegram_config_restricted, test_context):
         """Тест: пользователь без username не в списке → доступ запрещен"""
         interface = TelegramInterface("test_token", telegram_config_restricted)
         
@@ -210,7 +210,7 @@ class TestWhatsAppAccessControl:
         }
     
     @pytest.mark.asyncio
-    async def test_access_allowed_empty_list(self, whatsapp_config_open):
+    async def test_access_allowed_empty_list(self, whatsapp_config_open, test_context):
         """Тест: пустой список allowed_users → доступ для всех"""
         interface = WhatsAppInterface("test_token", whatsapp_config_open)
         
@@ -240,7 +240,7 @@ class TestWhatsAppAccessControl:
         print("✅ WhatsApp: пустой список → доступ разрешен")
     
     @pytest.mark.asyncio
-    async def test_access_allowed_by_phone(self, whatsapp_config_restricted):
+    async def test_access_allowed_by_phone(self, whatsapp_config_restricted, test_context):
         """Тест: номер телефона в списке → доступ разрешен"""
         interface = WhatsAppInterface("test_token", whatsapp_config_restricted)
         
@@ -270,7 +270,7 @@ class TestWhatsAppAccessControl:
         print("✅ WhatsApp: доступ по номеру телефона разрешен")
     
     @pytest.mark.asyncio
-    async def test_access_allowed_by_name(self, whatsapp_config_restricted):
+    async def test_access_allowed_by_name(self, whatsapp_config_restricted, test_context):
         """Тест: имя профиля в списке → доступ разрешен"""
         interface = WhatsAppInterface("test_token", whatsapp_config_restricted)
         
@@ -300,7 +300,7 @@ class TestWhatsAppAccessControl:
         print("✅ WhatsApp: доступ по имени профиля разрешен")
     
     @pytest.mark.asyncio
-    async def test_access_denied(self, whatsapp_config_restricted):
+    async def test_access_denied(self, whatsapp_config_restricted, test_context):
         """Тест: пользователя нет в списке → доступ запрещен"""
         interface = WhatsAppInterface("test_token", whatsapp_config_restricted)
         

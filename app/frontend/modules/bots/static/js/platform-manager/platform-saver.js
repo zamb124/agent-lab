@@ -71,13 +71,37 @@ export class PlatformSaver {
                 }
             } else {
                 const input = document.getElementById('platform-token');
+                console.log('🔍 Platform token input element:', input);
+                console.log('🔍 Platform token input value:', input?.value);
+                console.log('🔍 Platform token input value trimmed:', input?.value?.trim());
                 finalToken = input?.value?.trim() || '';
-                
+
+                console.log('🔍 Final token:', finalToken);
+
+                // Проверяем что токен не содержит подозрительных строк
+                const suspiciousPatterns = [
+                    'WebSocket connection',
+                    'failed:',
+                    'Event {',
+                    'htmx.org',
+                    'console',
+                    'error'
+                ];
+
+                const tokenLower = finalToken.toLowerCase();
+                for (const pattern of suspiciousPatterns) {
+                    if (tokenLower.includes(pattern.toLowerCase())) {
+                        showNotification('Токен содержит недопустимые символы. Пожалуйста, введите корректный токен бота.', 'danger');
+                        console.error('❌ Токен содержит подозрительные строки:', pattern);
+                        return;
+                    }
+                }
+
                 if (!finalToken) {
                     showNotification('Введите токен для каналы', 'warning');
                     return;
                 }
-                
+
                 savedToken = finalToken;
             }
             

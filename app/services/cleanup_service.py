@@ -11,6 +11,7 @@ from app.db.repositories import Storage
 from app.core.core_clients.s3_client import S3ClientFactory
 from app.db.database import AsyncSessionLocal
 from app.db.models import Storage as StorageModel
+from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +19,10 @@ logger = logging.getLogger(__name__)
 class CleanupService:
     """Сервис для очистки истекших данных"""
 
-    def __init__(self):
-        self.storage = Storage()
+    def __init__(self, storage: Storage = None):
+        if storage is None:
+            storage = get_container().storage
+        self.storage = storage
 
     async def cleanup_expired(self) -> int:
         """

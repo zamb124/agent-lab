@@ -11,10 +11,10 @@ from datetime import datetime
 import httpx
 import json
 from app.interfaces.base import BaseInterface, Message
-from app.db.repositories import Storage
 from app.core.config import settings
 from app.core.audio_processor import get_default_audio_processor
 from app.services.variables_service import get_variables_service
+from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -677,7 +677,7 @@ class TelegramInterface(BaseInterface):
             raise ValueError(f"No token configured for flow {flow_id}")
         
         
-        variables_service = get_variables_service()
+        variables_service = get_container().variables_service
         resolved_token = await variables_service.resolve(token_value)
         logger.info(f"✅ Токен резолвнут для flow {flow_id}")
         return resolved_token
@@ -722,7 +722,7 @@ class TelegramInterface(BaseInterface):
         variables_service = get_variables_service()
         resolved_username = await variables_service.resolve(username)
         
-        storage = Storage()
+        storage = get_container().storage
         
         # Получаем токен через get_bot_token_for_flow (поддерживает @var:)
         token = await cls.get_bot_token_for_flow(flow_id, platform_config)
@@ -804,7 +804,7 @@ class TelegramInterface(BaseInterface):
     ) -> Optional[Message]:
         """Обрабатывает группу медиафайлов с задержкой для накопления"""
         
-        storage = Storage()
+        storage = get_container().storage
         media_group_key = f"media_group:{media_group_id}"
         
         # Получаем существующую группу или создаем новую
@@ -843,7 +843,7 @@ class TelegramInterface(BaseInterface):
         """Обрабатывает накопленную медиа-группу после задержки"""
         await asyncio.sleep(2.0)  # Ждем 2 секунды
         
-        storage = Storage()
+        storage = get_container().storage
         media_group_key = f"media_group:{media_group_id}"
         processing_key = f"media_group_processing:{media_group_id}"
         

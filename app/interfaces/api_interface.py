@@ -246,5 +246,6 @@ class APIInterface(BaseInterface):
             logger.error(f"Ошибка обновления активности сессии {session_id}: {e}")
 
 
-# Глобальный экземпляр для использования в API
-api_interface = APIInterface({})
+def get_api_interface() -> APIInterface:
+    """Получает APIInterface (создается при первом обращении)"""
+    return APIInterface({})

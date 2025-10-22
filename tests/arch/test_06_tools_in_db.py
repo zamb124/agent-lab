@@ -18,13 +18,10 @@ async def test_migrate_and_add_inline_tool(migrated_db, storage, flow_factory, m
     
     # 1. Создаем inline tool "покажи сахару"
     show_sugar_code = '''
-from langchain_core.tools import tool
-
-@tool
-def show_sugar(request: str) -> str:
+def show_sugar(request):
     """
     Показывает сахар по запросу пользователя.
-    
+
     Args:
         request: Запрос пользователя про сахар
     """
@@ -50,9 +47,9 @@ def show_sugar(request: str) -> str:
     
     # 3. Настраиваем mock LLM
     mock_llm.configure(
-        responses={
-            "покажи": "ВОТ САХАРА!! 🍯🧂✨",
-            "сахар": "ВОТ САХАРА!! 🍯🧂✨",
+        tool_responses={
+            "покажи": {"tool": "show_sugar", "args": {"request": "покажи сахару"}},
+            "сахар": {"tool": "show_sugar", "args": {"request": "покажи сахару"}},
         }
     )
     

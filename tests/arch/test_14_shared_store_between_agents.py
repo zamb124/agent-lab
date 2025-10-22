@@ -91,14 +91,19 @@ async def save_warehouse(state):
                     inline_code="""
 async def call_subagent(state):
     '''Вызывает субагента'''
-    from app.core.agent_factory import AgentFactory
+    from app.core.container import get_container
     from langchain_core.messages import HumanMessage, AIMessage
     
-    factory = AgentFactory()
+    factory = get_container().agent_factory
     subagent = await factory.get_agent("test_warehouse_subagent")
     
-    # Вызываем субагента с текущим state
-    result = await subagent.ainvoke(state, config={"configurable": {"thread_id": None}})
+    # Вызываем субагента с тем же thread_id что и у координатора
+    thread_id = state.get("thread_id")
+    if thread_id:
+        result = await subagent.ainvoke(state, config={"configurable": {"thread_id": thread_id}})
+    else:
+        # Если thread_id нет в state, используем None (новый checkpoint)
+        result = await subagent.ainvoke(state, config={"configurable": {"thread_id": None}})
     
     # Субагент изменил store - эти изменения в result["store"]
     # Обновляем store в координаторе
@@ -136,6 +141,7 @@ async def call_subagent(state):
         "session_id": "test_session",
         "task_id": "task_1",
         "user_id": "user_1",
+        "thread_id": thread_id,  # Передаем thread_id в state
     }
     
     result = await coordinator.ainvoke(input_data, config=config)
@@ -218,7 +224,7 @@ async def read_store(state):
                     inline_code="""
 async def set_data_and_call(state):
     '''Устанавливает данные и вызывает субагента'''
-    from app.core.agent_factory import AgentFactory
+    from app.core.container import get_container
     from langchain_core.messages import AIMessage
     
     # Устанавливаем данные в store
@@ -230,10 +236,16 @@ async def set_data_and_call(state):
     state["store"]["context_data"] = "User test_user_999 in session test_session_999"
     
     # Вызываем субагента
-    factory = AgentFactory()
+    factory = get_container().agent_factory
     subagent = await factory.get_agent("test_reader_subagent")
     
-    result = await subagent.ainvoke(state, config={"configurable": {"thread_id": None}})
+    # Вызываем субагента с тем же thread_id что и у координатора
+    thread_id = state.get("thread_id")
+    if thread_id:
+        result = await subagent.ainvoke(state, config={"configurable": {"thread_id": thread_id}})
+    else:
+        # Если thread_id нет в state, используем None (новый checkpoint)
+        result = await subagent.ainvoke(state, config={"configurable": {"thread_id": None}})
     
     # Обновляем state
     state["store"] = result["store"]
@@ -268,6 +280,7 @@ async def set_data_and_call(state):
         "session_id": "test_session",
         "task_id": "task_1",
         "user_id": "user_1",
+        "thread_id": thread_id,  # Передаем thread_id в state
     }
     
     result = await coordinator.ainvoke(input_data, config=config)

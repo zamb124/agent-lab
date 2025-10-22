@@ -12,13 +12,13 @@ from datetime import datetime, timezone
 
 from app.models import AgentConfig, FlowConfig
 from app.identity.models import Company
-from app.db.repositories import Storage
 from app.core.file_processor import FileProcessor
 from app.core.context import get_context
 from app.core.migration import Migrator
 from app.core.config import get_settings
-from app.identity.auth_service import auth_service
-from app.frontend.dependencies import AgentRepositoryDep, FlowRepositoryDep, StorageDep
+from app.core.container import get_container
+from app.frontend.dependencies import AgentRepositoryDep, FlowRepositoryDep, StorageDep, VariablesServiceDep
+from app.frontend.dependencies import AuthServiceDep
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ router = APIRouter()
 
 
 @router.get("/me")
-async def get_current_user():
+async def get_current_user(auth_service: AuthServiceDep):
     """
     Возвращает информацию о текущем пользователе из контекста.
     Middleware уже установил контекст с авторизованным пользователем.
@@ -59,7 +59,7 @@ async def get_current_user():
 
 
 @router.post("/switch-company/{company_id}")
-async def switch_company(company_id: str):
+async def switch_company(company_id: str, storage: StorageDep):
     """Переключить активную компанию пользователя"""
     logger.info(f"🔄 Запрос переключения компании на: {company_id}")
     
@@ -74,8 +74,6 @@ async def switch_company(company_id: str):
     if company_id not in user.companies:
         logger.error(f"❌ Пользователь {user.user_id} не имеет доступа к компании {company_id}")
         raise HTTPException(status_code=403, detail=f"У вас нет доступа к компании {company_id}")
-    
-    storage = Storage()
     user_key = f"user:{user.user_id}"
     user.active_company_id = company_id
     user.updated_at = datetime.now(timezone.utc)
@@ -111,9 +109,8 @@ async def get_agent(agent_id: str, agent_repo: AgentRepositoryDep):
 
 
 @router.post("/agents")
-async def create_agent(config: AgentConfig):
+async def create_agent(config: AgentConfig, storage: StorageDep):
     """Создать нового агента"""
-    storage = Storage()
     success = await storage.set_agent_config(config)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to create agent")
@@ -121,9 +118,8 @@ async def create_agent(config: AgentConfig):
 
 
 @router.get("/flows", response_model=List[str])
-async def list_flows():
+async def list_flows(storage: StorageDep):
     """Получить список всех флоу"""
-    storage = Storage()
     keys = await storage.list_by_prefix("flow:", limit=100)
     return [key.replace("flow:", "") for key in keys]
 
@@ -455,7 +451,7 @@ async def upload_file(file: UploadFile = File(...)):
 # === Создание компании текущим пользователем ===
 
 @router.post("/create-my-company")
-async def create_my_company(request: Request):
+async def create_my_company(request: Request, storage: StorageDep):
     """Создать компанию для текущего авторизованного пользователя"""
     
     # Получаем данные из формы
@@ -470,7 +466,6 @@ async def create_my_company(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
     
     user = context.user
-    storage = Storage()
     
     # Отладка: проверим что в контексте
     logger.info(f"🐛 DEBUG: user.companies = {user.companies}")
@@ -591,7 +586,7 @@ async def remigrate_flow_with_dependencies(flow_id: str):
 
 
 @router.post("/remigrate-all-public/{company_id}")
-async def remigrate_all_public_for_company(company_id: str):
+async def remigrate_all_public_for_company(company_id: str, storage: StorageDep):
     """
     Перемигрирует все публичные (is_public=True) flows, агенты и тулы для компании.
     Используется для обновления компании до актуального состояния из кода.
@@ -606,8 +601,6 @@ async def remigrate_all_public_for_company(company_id: str):
     # Проверяем что пользователь - system admin
     if "system" not in context.user.companies or "admin" not in context.user.companies["system"]:
         raise HTTPException(status_code=403, detail="Access denied. System admin required.")
-    
-    storage = Storage()
     company_data = await storage.get(f"company:{company_id}", force_global=True)
     
     if not company_data:

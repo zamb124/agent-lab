@@ -11,12 +11,12 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from typing import Dict, Any, get_origin, get_args, Union, Optional
 from pydantic import BaseModel
-from app.db.repositories import Storage
 from app.frontend.wrappers import ModelListWrapper
 from app.frontend.model_registry import ModelRegistry
 from app.frontend.core.template_loader import render_template, get_templates
 from app.frontend.websockets.notifications import notify_model_updated
 from app.frontend.core.utils import is_htmx_request
+from app.frontend.dependencies import StorageDep
 
 # ПРИНУДИТЕЛЬНЫЙ импорт field_extensions для применения monkey patches
 
@@ -27,7 +27,7 @@ templates = get_templates()
 
 
 @router.post("/show-inline-modal")
-async def show_inline_modal(request_data: Dict[str, Any]) -> HTMLResponse:
+async def show_inline_modal(request_data: Dict[str, Any], storage: StorageDep) -> HTMLResponse:
     """Показать вложенную модель в модальном окне"""
     # Получаем данные
     field_name = request_data.get("field_name", "unknown")
@@ -35,7 +35,6 @@ async def show_inline_modal(request_data: Dict[str, Any]) -> HTMLResponse:
     parent_model_id = request_data.get("parent_model_id", "unknown")
 
     # Загружаем родительскую модель из storage
-    storage = Storage()
     key = f"{parent_model_type}:{parent_model_id}"
     data = await storage.get(key)
 
@@ -93,7 +92,7 @@ async def show_inline_modal(request_data: Dict[str, Any]) -> HTMLResponse:
 
 
 @router.get("/{model_type}")
-async def get_models(request: Request, model_type: str, view: str = "table") -> HTMLResponse:
+async def get_models(request: Request, storage: StorageDep, model_type: str, view: str = "table") -> HTMLResponse:
     """Получить список моделей в указанном виде"""
 
     # При прямом переходе (не HTMX) возвращаем dashboard с preload_url
@@ -140,7 +139,7 @@ async def get_models(request: Request, model_type: str, view: str = "table") -> 
 
 @router.get("/{model_type}/{model_id}")
 async def get_model(
-    model_type: str, model_id: str, view: str = "table", parent_view_mode: str = None
+    storage: StorageDep, model_type: str, model_id: str, view: str = "table", parent_view_mode: str = None
 ) -> HTMLResponse:
     """Получить конкретную модель как HTML"""
 
@@ -191,7 +190,6 @@ async def get_model(
         return HTMLResponse(content=html)
 
     # Обычный случай: загрузка существующей модели
-    storage = Storage()
     key = f"{model_type}:{model_id}"
     data = await storage.get(key)
 
@@ -221,9 +219,8 @@ async def get_model(
 
 
 @router.post("/{model_type}")
-async def create_model(model_type: str, model_data: Dict[str, Any]) -> HTMLResponse:
+async def create_model(model_type: str, model_data: Dict[str, Any], storage: StorageDep) -> HTMLResponse:
     """Создать новую модель и вернуть HTML"""
-    storage = Storage()
 
     # Генерируем ID если его нет
     model_id = model_data.get(f"{model_type}_id")
@@ -244,10 +241,9 @@ async def create_model(model_type: str, model_data: Dict[str, Any]) -> HTMLRespo
 
 @router.put("/{model_type}/{model_id}")
 async def update_model(
-    model_type: str, model_id: str, model_data: Dict[str, Any], view: str = "form"
+    storage: StorageDep, model_type: str, model_id: str, model_data: Dict[str, Any], view: str = "form"
 ) -> HTMLResponse:
     """Обновить модель и вернуть обновленную строку таблицы"""
-    storage = Storage()
     key = f"{model_type}:{model_id}"
 
     # Получаем существующие данные
@@ -371,9 +367,8 @@ async def update_model(
 
 
 @router.delete("/{model_type}/{model_id}")
-async def delete_model(model_type: str, model_id: str) -> Dict[str, Any]:
+async def delete_model(model_type: str, model_id: str, storage: StorageDep) -> Dict[str, Any]:
     """Удалить модель"""
-    storage = Storage()
     key = f"{model_type}:{model_id}"
 
     # Проверяем что модель существует

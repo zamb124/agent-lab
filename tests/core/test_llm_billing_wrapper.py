@@ -43,40 +43,16 @@ async def get_weather(city: str, units: str = "celsius") -> str:
 
 @pytest.fixture
 def llm_with_billing():
-    """Создает LLM с биллингом для тестов"""
+    """Создает LLM с биллингом для тестов
+    
+    Зависит от глобальной фикстуры test_context (autouse=True) из conftest.py
+    """
     return ChatOpenAIWithBilling(
         api_key="test-key",
         model="anthropic/claude-sonnet-4.5",
         temperature=0.2,
         max_tokens=8192
     )
-
-
-@pytest.fixture
-def test_context():
-    """Создает тестовый контекст с пользователем и компанией"""
-    user = User(
-        user_id="test_user",
-        name="Test User",
-        username="test_user",
-        email="test@example.com",
-        balance=1000.0
-    )
-    company = Company(
-        company_id="test_company",
-        subdomain="test",
-        name="Test Company",
-        tariff_plan="pro",
-        owner_id="test_user",
-        balance=1000.0
-    )
-    context = Context(
-        user=user,
-        active_company=company,
-        platform="test"
-    )
-    set_context(context)
-    return context
 
 
 class TestToolsInPayload:

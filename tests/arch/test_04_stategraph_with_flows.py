@@ -49,7 +49,7 @@ def super_router_condition(state):
 async def math_flow_node(state):
     """Нода которая вызывает математический флоу"""
     from app.core.flow_factory import FlowFactory
-    factory = FlowFactory()
+    factory = get_container().flow_factory
     smart_flow = await factory.get_flow("smart_flow")  # Используем существующий smart_flow
     
     result = await smart_flow.ainvoke(
@@ -67,7 +67,7 @@ async def math_flow_node(state):
 async def weather_flow_node(state):
     """Нода которая вызывает погодный флоу"""
     from app.core.flow_factory import FlowFactory
-    factory = FlowFactory()
+    factory = get_container().flow_factory
     weather_flow = await factory.get_flow("weather_flow")  # Используем существующий weather_flow
     
     result = await weather_flow.ainvoke(

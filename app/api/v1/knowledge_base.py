@@ -9,7 +9,6 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
 
 from app.core.context import get_context
-from app.db.repositories import Storage
 from app.core.file_processor import FileProcessor
 from app.models.rag_models import RAGDocument
 from app.tools.misc.rag_tools import upload_document_to_knowledge_base, upload_text_to_knowledge_base

@@ -43,8 +43,22 @@ class Storage:
     
     def _get_session(self):
         """Создает новую сессию БД"""
-        session_factory = self.session_factory or AsyncSessionLocal
-        return session_factory()
+        if self.session_factory:
+            return self.session_factory()
+        
+        # Fallback для случаев когда Storage создан напрямую
+        # В ленивой инициализации контейнера session_factory может быть None
+        # Используем AsyncSessionLocal как fallback
+        try:
+            return AsyncSessionLocal()
+        except RuntimeError as e:
+            if "Session factory не инициализирован" in str(e):
+                raise RuntimeError(
+                    "Session factory не инициализирован! "
+                    "Storage должен быть создан через get_container().storage "
+                    "или вызовите await get_session_factory() для инициализации"
+                ) from e
+            raise
     
     def _get_table_name(self, key: str, company_id: Optional[str] = None) -> str:
         """
@@ -158,14 +172,11 @@ class Storage:
         if db_session:
             return await self._get_with_session(final_key, table_name, db_session)
 
-        session_factory = self.session_factory or AsyncSessionLocal
-        async with session_factory() as session:
+        async with self._get_session() as session:
             return await self._get_with_session(final_key, table_name, session)
 
     async def _get_with_session(self, key: str, table_name: str, session) -> Optional[str]:
         """Получает значение с использованием переданной сессии"""
-        if settings.server.env == "local":
-            await asyncio.sleep(0.1)
         
         self._get_table_model(table_name)
         
@@ -224,8 +235,7 @@ class Storage:
         if db_session:
             return await self._set_with_session(final_key, value, ttl, table_name, db_session)
 
-        session_factory = self.session_factory or AsyncSessionLocal
-        async with session_factory() as session:
+        async with self._get_session() as session:
             result = await self._set_with_session(final_key, value, ttl, table_name, session)
             await session.commit()
             return result
@@ -234,8 +244,6 @@ class Storage:
         self, key: str, value: str, ttl: Optional[int], table_name: str, session
     ) -> bool:
         """Сохраняет значение с использованием переданной сессии"""
-        if settings.server.env == "local":
-            await asyncio.sleep(0.1)
         
         json_value = json.loads(value)
 
@@ -330,15 +338,13 @@ class Storage:
         if db_session:
             return await self._delete_with_session(final_key, table_name, db_session)
 
-        async with AsyncSessionLocal() as session:
+        async with self._get_session() as session:
             result = await self._delete_with_session(final_key, table_name, session)
             await session.commit()
             return result
 
     async def _delete_with_session(self, key: str, table_name: str, session) -> bool:
         """Удаляет значение с использованием переданной сессии"""
-        if settings.server.env == "local":
-            await asyncio.sleep(0.1)
         
         if table_name == "storage":
             result = await session.execute(
@@ -527,7 +533,7 @@ class Storage:
         final_prefix, company_id = self._get_company_key(prefix, force_global)
         table_name = self._get_table_name(prefix, company_id)
         
-        async with AsyncSessionLocal() as session:
+        async with self._get_session() as session:
             if table_name == "storage":
                 result = await session.execute(
                     select(StorageModel.key)
@@ -566,13 +572,11 @@ class Storage:
         Returns:
             Словарь {key: value_json}
         """
-        if settings.server.env == "local":
-            await asyncio.sleep(0.1)
         
         final_prefix, company_id = self._get_company_key(prefix, force_global)
         table_name = self._get_table_name(prefix, company_id)
         
-        async with AsyncSessionLocal() as session:
+        async with self._get_session() as session:
             if table_name == "storage":
                 result = await session.execute(
                     select(StorageModel.key, StorageModel.value)
@@ -625,8 +629,6 @@ class Storage:
         if not keys:
             return {}
         
-        if settings.server.env == "local":
-            await asyncio.sleep(0.1)
         
         # Применяем company prefix к ключам
         final_keys = []
@@ -639,7 +641,7 @@ class Storage:
         # Определяем таблицу по первому ключу
         table_name = self._get_table_name(keys[0], None)
         
-        async with AsyncSessionLocal() as session:
+        async with self._get_session() as session:
             if table_name == "storage":
                 result = await session.execute(
                     select(StorageModel.key, StorageModel.value)
@@ -685,7 +687,7 @@ class Storage:
         Получает список задач в статусе pending.
         Это специальный метод для воркера.
         """
-        async with AsyncSessionLocal() as session:
+        async with self._get_session() as session:
             # Сначала получаем все ключи с task: во ВСЕХ компаниях
             all_tasks_result = await session.execute(
                 select(StorageModel.key, StorageModel.value)
@@ -730,7 +732,7 @@ class Storage:
         """
         Находит прерванную задачу (в статусе waiting_for_input) для указанной сессии и флоу.
         """
-        async with AsyncSessionLocal() as session:
+        async with self._get_session() as session:
             # Ищем задачу в статусе waiting_for_input для данной сессии и флоу - во ВСЕХ компаниях
             result = await session.execute(
                 select(StorageModel.key, StorageModel.value)
@@ -754,7 +756,7 @@ class Storage:
         """
         Находит pending задачу для указанной сессии и флоу.
         """
-        async with AsyncSessionLocal() as session:
+        async with self._get_session() as session:
             result = await session.execute(
                 select(StorageModel.key, StorageModel.value)
                 .where(StorageModel.key.like("%task:%"))

@@ -4,25 +4,6 @@
 
 import pytest
 from app.models.mcp_models import MCPServerConfig, MCPTransportType
-from app.db.repositories.mcp_repository import MCPServerRepository
-from app.db.repositories.storage import Storage
-
-
-@pytest.fixture
-async def storage():
-    """Фикстура для Storage"""
-    storage = Storage()
-    yield storage
-    # Очистка после тестов
-    keys = await storage.list_by_prefix("mcp_server:", limit=1000)
-    for key in keys:
-        await storage.delete(key)
-
-
-@pytest.fixture
-def mcp_repo(storage):
-    """Фикстура для MCPServerRepository"""
-    return MCPServerRepository(storage)
 
 
 @pytest.fixture
@@ -80,13 +61,20 @@ async def test_delete_server(mcp_repo, sample_server_config):
 
 
 @pytest.mark.asyncio
-async def test_list_all_servers(mcp_repo):
+async def test_list_all_servers(mcp_repo, test_company):
     """Тест получения списка всех серверов компании"""
+    # Очищаем все серверы test_company перед тестом
+    from app.core.container import get_container
+    storage = get_container().storage
+    existing_keys = await storage.list_by_prefix(f"mcp_server:{test_company.company_id}:", limit=100)
+    for key in existing_keys:
+        await storage.delete(key)
+    
     # Создаем несколько серверов
     servers = [
         MCPServerConfig(
             server_id=f"server_{i}",
-            company_id="test_company",
+            company_id=test_company.company_id,
             name=f"Server {i}",
             url=f"https://mcp{i}.example.com/mcp"
         )
@@ -97,7 +85,7 @@ async def test_list_all_servers(mcp_repo):
         await mcp_repo.set(server)
     
     # Получаем список
-    all_servers = await mcp_repo.list_all(company_id="test_company")
+    all_servers = await mcp_repo.list_all(company_id=test_company.company_id)
     assert len(all_servers) == 3
     
     server_ids = {s.server_id for s in all_servers}
@@ -105,12 +93,19 @@ async def test_list_all_servers(mcp_repo):
 
 
 @pytest.mark.asyncio
-async def test_list_active_servers(mcp_repo):
+async def test_list_active_servers(mcp_repo, test_company):
     """Тест получения только активных серверов"""
+    # Очищаем все серверы test_company перед тестом
+    from app.core.container import get_container
+    storage = get_container().storage
+    existing_keys = await storage.list_by_prefix(f"mcp_server:{test_company.company_id}:", limit=100)
+    for key in existing_keys:
+        await storage.delete(key)
+    
     # Создаем активный и неактивный серверы
     active_server = MCPServerConfig(
         server_id="active_server",
-        company_id="test_company",
+        company_id=test_company.company_id,
         name="Active Server",
         url="https://mcp1.example.com/mcp",
         is_active=True
@@ -118,7 +113,7 @@ async def test_list_active_servers(mcp_repo):
     
     inactive_server = MCPServerConfig(
         server_id="inactive_server",
-        company_id="test_company",
+        company_id=test_company.company_id,
         name="Inactive Server",
         url="https://mcp2.example.com/mcp",
         is_active=False
@@ -128,7 +123,7 @@ async def test_list_active_servers(mcp_repo):
     await mcp_repo.set(inactive_server)
     
     # Получаем только активные
-    active_servers = await mcp_repo.list_active(company_id="test_company")
+    active_servers = await mcp_repo.list_active(company_id=test_company.company_id)
     assert len(active_servers) == 1
     assert active_servers[0].server_id == "active_server"
 

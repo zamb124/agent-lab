@@ -6,11 +6,11 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
 import logging
 import asyncio
-from app.db.repositories import Storage
-from app.interfaces.web_interface import web_interface
+from app.interfaces.web_interface import get_web_interface
 from app.core.context import get_context, set_context, clear_context
+from app.core.container import get_system_container, get_container
 from app.models import Context
-from app.identity.auth_service import AuthService
+from app.identity.auth_service import get_auth_service
 from app.identity.models import Company
 from app.frontend.core.websocket_manager import websocket_manager
 
@@ -27,9 +27,9 @@ async def _poll_notifications(session_id: str, context: Context):
         context: Контекст пользователя (передается явно, т.к. asyncio.create_task теряет contextvars)
     """
     
-    set_context(context)
+    await set_context(context)
     
-    storage = Storage()
+    storage = get_container().storage
     processed_notifications = set()
     
     logger.info(f"🔄 Начинаем polling уведомлений для сессии {session_id}")
@@ -121,7 +121,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str = None):
             return
 
         # Получаем пользователя по сессии (как в AuthMiddleware)
-        auth_service = AuthService()
+        auth_service = get_auth_service()
         user = await auth_service.get_user_by_session(auth_session_id)
 
         if not user:
@@ -130,7 +130,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str = None):
             return
 
         # Получаем активную компанию пользователя
-        storage = Storage()
+        storage = get_system_container().storage
         
         if not user.active_company_id:
             await websocket.close(code=4003, reason="User has no active company")
@@ -159,7 +159,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str = None):
             user_companies=user_companies,
             metadata={"websocket": True, "authenticated": True},
         )
-        set_context(context)
+        await set_context(context)
 
         # Используем auth_session_id как session_id для чата
         chat_session_id = auth_session_id
@@ -253,6 +253,7 @@ async def process_user_message(
         "files": files_data,  # Добавляем файлы в данные сообщения
     }
 
+    web_interface = get_web_interface()
     message = await web_interface.handle_message(raw_message_data, flow_id)
     if message:
         logger.info(

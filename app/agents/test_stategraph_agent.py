@@ -128,7 +128,7 @@ test_stategraph_agent_config = AgentConfig(
                 code_mode=CodeMode.CODE_REFERENCE,
                 params={
                     "tool_id": "app.tools.calc.calc_tools.calculate",
-                    "input_key": "messages",
+                    "args": {"expression": "2+2"},
                     "output_key": "tool_result",
                     "description": "Вызов tool калькулятора"
                 }

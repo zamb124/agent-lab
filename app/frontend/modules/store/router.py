@@ -8,7 +8,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
 from app.frontend.core.template_loader import get_templates
 from app.frontend.core.utils import render_with_dashboard
-from app.db.repositories import Storage
+from app.frontend.dependencies import StorageDep
 from app.core.migration import Migrator
 from app.models import FlowConfig
 
@@ -29,9 +29,8 @@ async def store_page(request: Request):
 
 
 @router.get("/list", response_class=HTMLResponse)
-async def store_list(request: Request):
+async def store_list(request: Request, storage: StorageDep):
     """Список публичных flows из кода (оптимизировано)"""
-    storage = Storage()
     migrator = Migrator()
     
     flows_with_ids = await migrator.get_public_flows()
@@ -76,11 +75,10 @@ async def store_list(request: Request):
 
 
 @router.get("/{flow_id:path}/details", response_class=HTMLResponse)
-async def flow_details(request: Request, flow_id: str):
+async def flow_details(request: Request, flow_id: str, storage: StorageDep):
     """Детальная информация о flow из кода (для модалки)"""
     logger.info(f"Flow details requested for: {flow_id}")
 
-    storage = Storage()
     migrator = Migrator()
 
     flows_with_ids = await migrator.get_public_flows()

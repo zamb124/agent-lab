@@ -17,21 +17,33 @@ alwaysApply: true
 
 <good_example>
 # Создание агента через фабрику из БД
-agent_factory = get_container().get_agent_factory()
+agent_factory = get_container().agent_factory
 agent = await agent_factory.get_agent(agent_id)
 
 # Работа с конфигурацией через репозиторий
-agent_repo = get_container().get_agent_repository()
+agent_repo = get_container().agent_repository
 config = await agent_repo.get(agent_id)
+
+# В FastAPI роутах используй DI через dependencies
+from app.frontend.dependencies import AgentRepositoryDep
+
+@router.get("/{agent_id}")
+async def get_agent(agent_id: str, agent_repo: AgentRepositoryDep):
+    config = await agent_repo.get(agent_id)
+    return config
 </good_example>
 
 <bad_example>
 # Не хардкодь конфигурацию в коде
 agent = MyAgent(prompt="...", tools=[...])
 
-# Не используй Storage напрямую для моделей
-storage = Storage()
-data = await storage.get("agent:agent_id")  # Используй репозиторий!
+# Не используй прямые импорты сущностей контейнера
+from app.core.agent_factory import AgentFactory  # НЕТ!
+from app.db.repositories import Storage  # НЕТ!
+
+# Не создавай объекты напрямую
+storage = Storage()  # НЕТ!
+agent_factory = AgentFactory()  # НЕТ!
 </bad_example>
 
 ## Асинхронность

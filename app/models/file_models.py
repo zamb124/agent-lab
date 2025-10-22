@@ -163,9 +163,14 @@ class FileRecord(BaseModel):
         """Прямой S3 URL для доступа к файлу"""
         if not self.s3_endpoint or not self.s3_bucket or not self.s3_key:
             return None
-        
+
         endpoint = self.s3_endpoint.rstrip('/')
         return f"{endpoint}/{self.s3_bucket}/{self.s3_key}"
+
+    @property
+    def audio_id(self) -> str:
+        """Алиас для file_id для обратной совместимости с AudioRecord"""
+        return self.file_id
 
 
 class AudioRecord(FileRecord):
@@ -194,5 +199,20 @@ class AudioRecord(FileRecord):
     )
     audio_format: Optional[str] = Field(
         default=None, title="Формат", description="Формат аудио (mp3, wav, ogg)"
+    )
+    recognition_text: Optional[str] = Field(
+        default=None,
+        title="Распознанный текст",
+        description="Текст, распознанный из аудио"
+    )
+    recognition_confidence: Optional[float] = Field(
+        default=None,
+        title="Уверенность распознавания",
+        description="Уверенность в правильности распознавания (0.0-1.0)"
+    )
+    recognition_qid: Optional[str] = Field(
+        default=None,
+        title="ID запроса распознавания",
+        description="ID запроса к сервису распознавания речи для отладки"
     )
 

@@ -11,21 +11,6 @@ from app.models import ToolReference
 from app.models.core_models import CodeMode
 from app.db.repositories.mcp_repository import MCPServerRepository
 from app.db.repositories.tool_repository import ToolRepository
-from app.db.repositories.storage import Storage
-
-
-@pytest.fixture
-async def storage():
-    """Фикстура для Storage"""
-    storage = Storage()
-    yield storage
-    # Очистка после тестов
-    keys = await storage.list_by_prefix("mcp_server:", limit=1000)
-    for key in keys:
-        await storage.delete(key)
-    keys = await storage.list_by_prefix("tool:", limit=1000)
-    for key in keys:
-        await storage.delete(key)
 
 
 @pytest.fixture
@@ -92,7 +77,7 @@ async def test_sync_mcp_server_tools(storage, sample_server_config):
         assert tools[0].params["server_id"] == "test_server"
         assert tools[0].params["company_id"] == "test_company"
         assert tools[0].params["tool_name"] == "search_docs"
-        assert "inputSchema" in tools[0].params
+        assert "input_schema" in tools[0].params
         
         # Проверяем второй тул
         assert tools[1].tool_id == "mcp:test_server:get_file"

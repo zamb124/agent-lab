@@ -92,26 +92,27 @@ class MockLLM(BaseChatModel):
             message = AIMessage(content=content)
             logger.debug("MockLLM: нет messages, возвращаем default")
         else:
-            # Проверяем есть ли ToolMessage - если да, значит tool выполнился
-            has_tool_message = any(isinstance(msg, ToolMessage) for msg in messages)
+            # Проверяем последнее сообщение - если это ToolMessage, значит tool только что выполнился
+            last_message = messages[-1]
+            is_tool_result = isinstance(last_message, ToolMessage)
             
-            if has_tool_message:
+            if is_tool_result:
                 # После tool возвращаем текстовый ответ
-                last_tool_msg = next((msg for msg in reversed(messages) if isinstance(msg, ToolMessage)), None)
-                if last_tool_msg and last_tool_msg.content:
-                    message = AIMessage(content=last_tool_msg.content)
-                    logger.debug(f"MockLLM: возвращаем результат tool: {last_tool_msg.content[:50]}...")
+                if last_message.content:
+                    message = AIMessage(content=last_message.content)
+                    logger.debug(f"MockLLM: возвращаем результат tool: {last_message.content[:50]}...")
                 else:
                     message = AIMessage(content=self._default_response)
                     logger.debug("MockLLM: нет content в ToolMessage, возвращаем default")
             else:
                 # Нет ToolMessage - проверяем нужен ли tool call
-                last_message = messages[-1]
                 content_str = last_message.content if isinstance(last_message, BaseMessage) else str(last_message)
                 
                 # Проверяем tool responses с использованием счетчика
                 tool_call_found = False
+                logger.info(f"MockLLM: ищем tool для сообщения '{content_str}' в {list(self._tool_responses.keys())}")
                 for key, tool_config in self._tool_responses.items():
+                    logger.info(f"MockLLM: проверяем ключ '{key}' в '{content_str.lower()}'")
                     if key.lower() in content_str.lower():
                         # Получаем счетчик для этого ключа
                         call_count = self._call_count.get(key, 0)
@@ -122,11 +123,10 @@ class MockLLM(BaseChatModel):
                             tool_calls = [{
                                 "name": tool_config["tool"],
                                 "args": tool_config.get("args", {}),
-                                "id": f"call_mock_{tool_config['tool']}_{call_count}",
-                                "type": "tool_call"
+                                "id": f"call_mock_{tool_config['tool']}_{call_count}"
                             }]
                             message = AIMessage(content="", tool_calls=tool_calls)
-                            logger.debug(f"MockLLM: [вызов #{call_count}] вызываем tool {tool_config['tool']} для '{key}'")
+                            logger.info(f"MockLLM: [вызов #{call_count}] вызываем tool {tool_config['tool']} для '{key}'")
                         else:
                             # Второй и последующие - возвращаем текст
                             content = self._responses.get(key, self._default_response)

@@ -1,4 +1,5 @@
 """
+from app.core.container import get_container
 End-to-end тест: AgentFactory + MCP тулы + мок LLM.
 
 Проверяем что агент может использовать MCP тулы через мокированный LLM.
@@ -84,7 +85,7 @@ async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_com
         for t in saved_config.tools:
             print(f"      • {t.tool_id} (code_mode: {t.code_mode})")
         
-        agent_factory = AgentFactory()
+        agent_factory = get_container().agent_factory
         
         # Включаем DEBUG логирование для отладки
         import logging
@@ -303,7 +304,7 @@ async def test_weather_agent_with_mcp_real_execution(setup_mcp_servers, test_com
         
         # 3. Загружаем через фабрику
         print("\n3️⃣ Загрузка агента через AgentFactory...")
-        agent_factory = AgentFactory()
+        agent_factory = get_container().agent_factory
         agent = await agent_factory.get_agent("weather_mcp_test")
         print(f"   ✅ Агент загружен с {len(agent.tools)} тулами")
         
@@ -462,7 +463,7 @@ async def test_agent_with_multiple_mcp_tools(test_company):
         )
         await agent_repo.set(agent_config)
         
-        agent_factory = AgentFactory()
+        agent_factory = get_container().agent_factory
         agent = await agent_factory.get_agent("multi_mcp_test")
         
         print(f"✅ Агент создан с {len(agent.tools)} тулами")

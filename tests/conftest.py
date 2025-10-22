@@ -7,10 +7,13 @@ import pytest_asyncio
 import os
 import uuid
 import threading
+import logging
 from pathlib import Path
 from typing import Callable, Dict, Optional
 from unittest.mock import MagicMock
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 from app.db.repositories import Storage
 from app.core.migration import Migrator
@@ -19,6 +22,7 @@ from app.core.flow_factory import FlowFactory
 from app.core.tool_factory import ToolFactory
 from app.core.llm_factory import get_llm
 from app.core.context import set_context, clear_context
+from app.core.container import get_container
 from app.identity.models import User, Company
 from app.models.context_models import Context
 from app.models import (
@@ -77,122 +81,106 @@ def setup_mock_llm_configs():
     return mock_llm_config
 
 
-@pytest_asyncio.fixture(scope="function")
+@pytest_asyncio.fixture(scope="session")
 async def migrated_db():
-    """Миграция БД для каждого теста (для изоляции)
+    """Миграция БД один раз для всей сессии тестов
     
-    Контекст НЕ устанавливается здесь - используется test_context с autouse=True
-    Миграция выполняется только один раз на тред pytest, но проверяется наличие данных
+    Создает временный контекст для миграции, затем очищает его
     """
-    from app.db.database import engine
+    # Инициализируем системный контейнер
+    from app.core.container import initialize_system_container
+    initialize_system_container()
+    
+    migration_context = Context(
+        user=User(
+            user_id="migration_user",
+            provider="system",
+            provider_user_id="sys_001",
+            email="migration@system.local",
+            name="Migration User",
+            status="active",
+            groups=["admin"],
+            companies={"system": ["admin"]},
+            active_company_id="system"
+        ),
+        session_id="migration_session",
+        platform="system",
+        metadata={}
+    )
+    
+    await set_context(migration_context)
+    
+    from app.db.database import create_tables
+    await create_tables()
     
     migrator = Migrator()
+    await migrator.run_full_migration()
+    logger.info("✅ Миграция БД выполнена успешно")
     
-    should_migrate = not getattr(_migration_done, 'value', False)
-    
-    if not should_migrate:
-        storage = Storage()
-        try:
-            flows = await storage.list_flow_configs()
-            if not flows:
-                should_migrate = True
-        except Exception:
-            should_migrate = True
-        finally:
-            if hasattr(storage, '_pool') and storage._pool:
-                await storage._pool.close()
-    
-    if should_migrate:
-        await migrator.run_full_migration()
-        _migration_done.value = True
-    
+    clear_context()
+
     yield
-    
-    if hasattr(migrator, 'storage') and hasattr(migrator.storage, '_pool'):
-        if migrator.storage._pool:
-            await migrator.storage._pool.close()
-    
-    await engine.dispose()
-    
-    import gc
-    gc.collect()
 
 
 @pytest_asyncio.fixture
 async def storage(migrated_db):
-    """Чистый Storage для каждого теста"""
-    from app.db.database import engine
-    
-    storage_instance = Storage()
-    yield storage_instance
-    
-    if hasattr(storage_instance, '_pool') and storage_instance._pool:
-        await storage_instance._pool.close()
-    
-    await engine.dispose()
-    
-    import gc
-    gc.collect()
+    """Storage из контекста для каждого теста"""
+    from app.core.container import get_container
+    return get_container().storage
 
 
 @pytest_asyncio.fixture
 async def agent_factory():
-    """AgentFactory для каждого теста"""
-    return AgentFactory()
+    """AgentFactory из контекста для каждого теста"""
+    return get_container().agent_factory
 
 
 @pytest_asyncio.fixture
-async def agent_repo(storage):
-    """AgentRepository для тестов"""
-    from app.db.repositories import AgentRepository
-    return AgentRepository(storage)
+async def agent_repo(migrated_db):
+    """AgentRepository из контекста для тестов"""
+    return get_container().agent_repository
 
 
 @pytest_asyncio.fixture
-async def flow_repo(storage):
-    """FlowRepository для тестов"""
-    from app.db.repositories import FlowRepository
-    return FlowRepository(storage)
+async def flow_repo(migrated_db):
+    """FlowRepository из контекста для тестов"""
+    return get_container().flow_repository
 
 
 @pytest_asyncio.fixture
-async def task_repo(storage):
-    """TaskRepository для тестов"""
-    from app.db.repositories import TaskRepository
-    return TaskRepository(storage)
+async def task_repo(migrated_db):
+    """TaskRepository из контекста для тестов"""
+    return get_container().task_repository
 
 
 @pytest_asyncio.fixture
-async def session_repo(storage):
-    """SessionRepository для тестов"""
-    from app.db.repositories import SessionRepository
-    return SessionRepository(storage)
+async def session_repo(migrated_db):
+    """SessionRepository из контекста для тестов"""
+    return get_container().session_repository
 
 
 @pytest_asyncio.fixture
-async def tool_repo(storage):
-    """ToolRepository для тестов"""
-    from app.db.repositories import ToolRepository
-    return ToolRepository(storage)
+async def tool_repo(migrated_db):
+    """ToolRepository из контекста для тестов"""
+    return get_container().tool_repository
 
 
 @pytest_asyncio.fixture
-async def mcp_repo(storage):
-    """MCPServerRepository для тестов"""
-    from app.db.repositories.mcp_repository import MCPServerRepository
-    return MCPServerRepository(storage)
+async def mcp_repo(migrated_db):
+    """MCPServerRepository из контекста для тестов"""
+    return get_container().mcp_server_repository
 
 
 @pytest_asyncio.fixture
 async def flow_factory():
-    """FlowFactory для каждого теста"""
-    return FlowFactory()
+    """FlowFactory из контекста для каждого теста"""
+    return get_container().flow_factory
 
 
 @pytest_asyncio.fixture
 async def tool_factory():
-    """ToolFactory для каждого теста"""
-    return ToolFactory()
+    """ToolFactory из контекста для каждого теста"""
+    return get_container().tool_factory
 
 
 @pytest_asyncio.fixture
@@ -234,7 +222,7 @@ def test_user(test_company: Company) -> User:
 
 @pytest_asyncio.fixture(autouse=True)
 async def test_context(test_user: User, test_company: Company):
-    """Тестовый контекст для каждого теста (автоматически)"""
+    """Тестовый контекст с изолированными сервисами для каждого теста"""
     context = Context(
         user=test_user,
         session_id="test_session",
@@ -244,8 +232,9 @@ async def test_context(test_user: User, test_company: Company):
         metadata={}
     )
     
-    set_context(context)
+    await set_context(context)
     yield context
+
     clear_context()
 
 
@@ -307,8 +296,9 @@ async def variables_service(migrated_db):
     Контекст будет доступен через get_context() благодаря test_context с autouse=True
     Зависит от migrated_db для инициализации БД в правильном event loop
     """
-    from app.services.variables_service import VariablesService
-    return VariablesService()
+    from app.core.container import get_container
+    container = get_container()
+    return container.variables_service
 
 
 @pytest.fixture
@@ -538,15 +528,17 @@ def test_helpers():
 @pytest_asyncio.fixture
 async def payment_service(migrated_db):
     """PaymentService для тестов"""
-    from app.services.payment_service import PaymentService
-    return PaymentService()
+    from app.core.container import get_container
+    container = get_container()
+    return container.payment_service
 
 
 @pytest_asyncio.fixture
 async def billing_service(migrated_db):
     """BillingService для тестов"""
-    from app.services.billing_service import BillingService
-    return BillingService()
+    from app.core.container import get_container
+    container = get_container()
+    return container.billing_service
 
 
 @pytest.fixture
@@ -567,8 +559,9 @@ def yoomoney_provider():
 @pytest_asyncio.fixture
 async def auth_service(storage: Storage):
     """AuthService для тестов аутентификации"""
-    from app.identity.auth_service import AuthService
-    return AuthService()
+    from app.core.container import get_container
+    container = get_container()
+    return container.auth_service
 
 
 @pytest.fixture

@@ -1,4 +1,5 @@
 """
+from app.core.container import get_container
 Интеграционные тесты с Context7 MCP сервером.
 
 Context7 - AI-powered documentation MCP сервер.
@@ -370,7 +371,7 @@ async def test_context7_in_agent(setup_mcp_servers, test_company):
         
         # Создаем агента через фабрику
         print("\n🏭 Шаг 3: Загружаем агента через AgentFactory")
-        agent_factory = AgentFactory()
+        agent_factory = get_container().agent_factory
         agent = await agent_factory.get_agent("test_mcp_agent")
         
         print(f"✅ Агент загружен")

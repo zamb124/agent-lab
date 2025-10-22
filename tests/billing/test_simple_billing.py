@@ -23,8 +23,9 @@ def test_billing_models_import():
 
 def test_tool_decorator():
     """Тест платформенного декоратора @tool"""
-    from app.core.tool_decorator import tool
+    from app.core.tool_decorator import tool, ToolReturn
     
+    # Тест обычного tool
     @tool(cost=0.5, billing_name="test_tool")
     def test_function(text: str) -> str:
         """Тестовая функция"""
@@ -36,9 +37,26 @@ def test_tool_decorator():
     assert test_function._platform_billing_name == "test_tool"
     assert test_function._is_platform_tool
     
-    # Проверяем что функция работает
+    # Проверяем что функция работает в обычном Python коде
     result = test_function.invoke({"text": "hello"})
     assert "Result: hello" in result
+    
+    # Тест универсального tool с ToolReturn
+    @tool(cost=0.1, billing_name="universal_tool", title="Универсальный тул")
+    def universal_function(key: str, value: str) -> ToolReturn:
+        """Универсальная функция"""
+        return ToolReturn(
+            delta={"store": {key: value}},  # Для LangGraph
+            result=f"Сохранено: {key} = {value}"  # Для Python кода
+        )
+    
+    # Проверяем метаданные
+    assert universal_function._platform_cost == 0.1
+    assert universal_function._platform_title == "Универсальный тул"
+    
+    # Проверяем что в Python коде возвращается только result
+    result = universal_function.invoke({"key": "test", "value": "data"})
+    assert "Сохранено: test = data" in result
 
 
 def test_company_model_with_billing():

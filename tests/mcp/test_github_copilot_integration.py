@@ -1,4 +1,5 @@
 """
+from app.core.container import get_container
 Интеграционные тесты с GitHub Copilot MCP сервером.
 
 GitHub Copilot MCP - сервер для работы с AI-ассистентом GitHub.
@@ -193,7 +194,7 @@ async def test_github_copilot_in_agent(mcp_repo, test_company):
         print(f"✅ Агент создан с {len(tools)} MCP тулами")
         
         print("\n🏭 Шаг 3: Загружаем агента через AgentFactory")
-        agent_factory = AgentFactory()
+        agent_factory = get_container().agent_factory
         agent = await agent_factory.get_agent("test_github_copilot_agent")
         
         print(f"✅ Агент загружен")
@@ -364,7 +365,7 @@ async def test_github_copilot_with_mock_llm(test_company):
         print("3️⃣ Загрузка агента через AgentFactory")
         print("="*70)
         
-        agent_factory = AgentFactory()
+        agent_factory = get_container().agent_factory
         agent = await agent_factory.get_agent("copilot_test_agent")
         
         loaded_tools = await agent.get_tools()

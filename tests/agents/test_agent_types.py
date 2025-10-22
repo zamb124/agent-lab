@@ -7,7 +7,7 @@ import pytest
 from app.agents.react_agent import ReActAgent
 from app.agents.stategraph_agent import StateGraphAgent
 from app.models import AgentConfig, AgentType
-from app.core.agent_factory import AgentFactory
+from app.core.container import get_container
 
 
 @pytest.mark.asyncio
@@ -93,7 +93,7 @@ async def test_agent_factory_creates_react_agent():
         tools=[]
     )
     
-    factory = AgentFactory()
+    factory = get_container().agent_factory
     agent = await factory._create_agent_instance(config)
     
     assert isinstance(agent, ReActAgent)
@@ -120,7 +120,7 @@ async def test_agent_factory_creates_stategraph_agent():
         }
     )
     
-    factory = AgentFactory()
+    factory = get_container().agent_factory
     agent = await factory._create_agent_instance(config)
     
     assert isinstance(agent, StateGraphAgent)

@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, PrivateAttr, field_validator
 from typing import Optional, Dict, Any, List
 
 from app.identity.models import User, Company
@@ -13,7 +13,7 @@ from app.models.i18n_models import Language
 
 
 class Context(BaseModel):
-    """Глобальный контекст запроса"""
+    """Глобальный контекст запроса с изолированными сервисами"""
 
     user: User = Field(
         title="Пользователь",
@@ -83,6 +83,13 @@ class Context(BaseModel):
         default=None,
         title="Интерфейс",
         description="Интерфейс BaseInterface для отправки промежуточных сообщений (reasoning, thinking, etc)",
+        exclude=True,
+    )
+    
+    container: Optional[Any] = Field(
+        default=None,
+        title="Container",
+        description="Контейнер с изолированными сервисами для данного контекста",
         exclude=True,
     )
     

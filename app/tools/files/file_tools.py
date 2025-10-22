@@ -6,7 +6,7 @@ import json
 from typing import Optional
 from app.core.tool_decorator import tool
 
-from app.db.repositories import Storage
+from app.core.container import get_container
 from app.core.core_clients.s3_client import get_default_s3_client
 from app.core.config import settings
 
@@ -45,7 +45,7 @@ async def read_file(file_id: str, provider: Optional[str] = None) -> str:
                 return "❌ Нет доступных S3 провайдеров"
 
     # Получаем информацию о файле из хранилища
-    storage = Storage()
+    storage = get_container().storage
     file_data = await storage.get(key)
 
     if not file_data:

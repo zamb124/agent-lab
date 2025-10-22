@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.frontend.core.template_loader import get_templates
 from app.identity.models import AuthProvider
+from app.frontend.dependencies import StorageDep
 
 router = APIRouter(prefix="/frontend", tags=["auth-pages"])
 templates = get_templates()

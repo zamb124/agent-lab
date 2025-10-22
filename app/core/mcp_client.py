@@ -401,7 +401,7 @@ async def get_mcp_client(server_id: str, company_id: Optional[str] = None) -> MC
     if cache_key in _mcp_clients:
         return _mcp_clients[cache_key]
     
-    storage = get_container().get_storage()
+    storage = get_container().storage
     mcp_repo = MCPServerRepository(storage)
     
     server_config = await mcp_repo.get(server_id, company_id)

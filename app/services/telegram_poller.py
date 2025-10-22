@@ -9,9 +9,9 @@ import traceback
 from typing import Dict, List
 import httpx
 
-from app.db.repositories import Storage
 from app.core.config import settings
 from app.models import FlowConfig
+from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +95,7 @@ class TelegramPoller:
 
     async def _discover_bots(self):
         """Находит всех ботов с токенами в БД"""
-        storage = Storage()
+        storage = get_container().storage
 
         # Получаем все flows динамически - ищем во всех компаниях
         all_keys = await storage.list_by_prefix("", 1000, force_global=True)
@@ -145,7 +145,7 @@ class TelegramPoller:
                 user_companies=[company],
                 language=Language.RU
             )
-            set_context(context)
+            await set_context(context)
             
             # Резолвим telegram_config
             variables_service = get_variables_service()

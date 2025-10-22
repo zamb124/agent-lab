@@ -22,6 +22,7 @@ from .providers.yandex import YandexProvider
 from .providers.google import GoogleProvider
 from ..core.config import settings
 from app.db.repositories import Storage
+from ..core.container import get_system_container
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +33,10 @@ class AuthService:
     Управляет провайдерами, пользователями и сессиями.
     """
 
-    def __init__(self):
-        self.storage = Storage()
+    def __init__(self, storage: Storage = None):
+        if storage is None:
+            storage = get_container().storage
+        self.storage = storage
         self._providers: Dict[AuthProvider, BaseAuthProvider] = {}
         self._initialize_providers()
 
@@ -408,5 +411,6 @@ class AuthService:
         await self.storage.delete(f"auth_session:{session_id}")
 
 
-# Глобальный экземпляр сервиса авторизации
-auth_service = AuthService()
+def get_auth_service() -> AuthService:
+    """Получает AuthService из системного контейнера"""
+    return get_system_container().auth_service

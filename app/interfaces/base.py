@@ -10,7 +10,6 @@ from typing import Dict, Any, Optional, Tuple, List
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from app.db.repositories import Storage
 from app.models import TaskConfig, TaskStatus, SessionConfig, SessionStatus
 from app.core.file_processor import get_default_file_processor
 from app.core.audio_processor import get_default_audio_processor
@@ -47,11 +46,12 @@ class BaseInterface(ABC):
     def __init__(self, platform_config: Dict[str, Any]):
         self.platform_config = platform_config
         self.platform_name = self.__class__.__name__.replace("Interface", "").lower()
-        self.storage = Storage()
+        
         container = get_container()
-        self.flow_repository = container.get_flow_repository()
-        self.task_repository = container.get_task_repository()
-        self.session_repository = container.get_session_repository()
+        self.storage = container.storage
+        self.flow_repository = container.flow_repository
+        self.task_repository = container.task_repository
+        self.session_repository = container.session_repository
 
     def check_user_access(self, user_identifier: str, username: str = None) -> Tuple[bool, Optional[str]]:
         """
@@ -236,7 +236,7 @@ class BaseInterface(ABC):
 
         logger.info(f"🔄 create_task вызван для session_id={message.session_id}")
 
-        storage = Storage()
+        storage = get_container().storage
 
         # Получаем правильный ключ сессии с учетом flow_id
         session_key = self._get_session_storage_key(message.session_id, flow_id)

@@ -236,7 +236,9 @@ async def counter_node(state):
     assert result_1["store"]["counter"] == 1
     assert result_1["store"]["last_message"] == "Первое сообщение"
     
-    # Второй вызов (должен сохранить state)
+    # Второй вызов (должен восстановить state из checkpointer)
+    # LangGraph с checkpointer требует либо передать все поля, либо не передавать их вообще
+    # Передаем только messages, остальное восстановится из checkpointer
     input_data_2 = {
         "messages": [HumanMessage(content="Второе сообщение")],
     }

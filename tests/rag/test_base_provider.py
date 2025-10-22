@@ -64,6 +64,17 @@ class MockRAGProvider(BaseRAGProvider):
             metadata=metadata or {}
         )
     
+    async def upload_document_from_text(
+        self, namespace_id, text, document_name=None, metadata=None, **kwargs
+    ):
+        return RAGDocument(
+            document_id="doc_text_789",
+            name=document_name or "text_document.txt",
+            namespace=namespace_id,
+            status="processing",
+            metadata=metadata or {}
+        )
+    
     async def get_document(self, namespace_id, document_id):
         if document_id == "doc_123":
             return RAGDocument(

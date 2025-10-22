@@ -10,10 +10,10 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List
 
-from app.interfaces.api_interface import api_interface
-from app.db.repositories import Storage
+from app.interfaces.api_interface import get_api_interface
 from app.models import TaskStatus
-from app.frontend.dependencies import FlowRepositoryDep
+from app.frontend.dependencies import FlowRepositoryDep, StorageDep
+from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ class TaskResponse(BaseModel):
 
 
 @router.post("/{flow_id}/message", response_model=FlowMessageResponse, summary="Отправить сообщение боту")
-async def send_message_to_flow(flow_id: str, request: FlowMessageRequest, flow_repo: FlowRepositoryDep):
+async def send_message_to_flow(flow_id: str, storage: StorageDep, request: FlowMessageRequest, flow_repo: FlowRepositoryDep):
     """
     Отправляет текстовое сообщение боту для обработки.
     
@@ -125,13 +125,13 @@ async def send_message_to_flow(flow_id: str, request: FlowMessageRequest, flow_r
     }
 
     # Обрабатываем через API интерфейс
+    api_interface = get_api_interface()
     message = await api_interface.handle_message(api_data, flow_id)
 
     if not message:
         raise HTTPException(status_code=400, detail="Не удалось обработать сообщение")
 
     # ПРОВЕРЯЕМ: есть ли прерванная задача для этой сессии
-    storage = Storage()
     interrupted_task = await storage.find_interrupted_task(message.session_id, flow_id)
 
     if interrupted_task:
@@ -162,6 +162,7 @@ async def send_message_to_flow(flow_id: str, request: FlowMessageRequest, flow_r
         logger.info(f"📋 Продолжаем прерванную задачу {task_id} для флоу {flow_id}")
     else:
         # Создаем новую задачу как обычно
+        api_interface = get_api_interface()
         task_id = await api_interface.create_task(message, flow_id)
 
     logger.info(f"📋 Создана API задача {task_id} для флоу {flow_id}")
@@ -201,7 +202,7 @@ async def get_task_result(flow_id: str, task_id: str):
         Статус задачи и результат (если completed)
     """
     try:
-        storage = Storage()
+        storage = get_container().storage
 
         # Получаем задачу
         task_data = await storage.get(f"task:{task_id}")
@@ -305,7 +306,7 @@ async def clear_session(flow_id: str, session_id: str):
     """
     try:
         # Деактивируем сессию
-        storage = Storage()
+        storage = get_container().storage
 
         # Ищем сессию по разным возможным ключам
         session_keys = [f"session:api:{session_id}", session_id]

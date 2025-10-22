@@ -8,9 +8,9 @@ from app.models import AgentConfig, AgentType
 
 
 @pytest.mark.asyncio
-async def test_agent_repository_save_and_find(storage):
+async def test_agent_repository_save_and_find(agent_repo):
     """Тест сохранения и поиска агента через репозиторий"""
-    repo = AgentRepository(storage)
+    repo = agent_repo
     
     config = AgentConfig(
         agent_id="test.repo.agent",
@@ -31,9 +31,9 @@ async def test_agent_repository_save_and_find(storage):
 
 
 @pytest.mark.asyncio
-async def test_agent_repository_delete(storage):
+async def test_agent_repository_delete(agent_repo):
     """Тест удаления агента через репозиторий"""
-    repo = AgentRepository(storage)
+    repo = agent_repo
     
     config = AgentConfig(
         agent_id="test.repo.delete",
@@ -54,9 +54,9 @@ async def test_agent_repository_delete(storage):
 
 
 @pytest.mark.asyncio
-async def test_agent_repository_list_all(storage):
+async def test_agent_repository_list_all(agent_repo):
     """Тест получения списка всех агентов"""
-    repo = AgentRepository(storage)
+    repo = agent_repo
     
     # Создаем несколько агентов
     agent_ids = []

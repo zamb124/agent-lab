@@ -8,7 +8,7 @@ import json
 import logging
 from langchain_core.messages import HumanMessage
 
-from app.core.agent_factory import AgentFactory
+from app.core.container import get_container
 from app.core.context import set_context
 from app.models.context_models import Context
 from app.models import LLMConfig
@@ -20,6 +20,7 @@ pytestmark = pytest.mark.asyncio
 class TestRealOpenRouterToolsIntegration:
     """Интеграционные тесты с РЕАЛЬНЫМ OpenRouter API"""
     
+    @pytest.mark.skip(reason="OpenRouter отключен в тестах")
     async def test_weather_agent_with_real_openrouter(
         self, 
         migrated_db,
@@ -41,7 +42,7 @@ class TestRealOpenRouterToolsIntegration:
             active_company=test_company,
             platform="test"
         )
-        set_context(context)
+        await set_context(context)
         
         # Мигрируем агента с tools
         from app.models.core_models import AgentConfig
@@ -58,7 +59,7 @@ class TestRealOpenRouterToolsIntegration:
         )
         
         # Загружаем агента
-        agent_factory = AgentFactory()
+        agent_factory = get_container().agent_factory
         weather_agent = await agent_factory.get_agent("app.agents.weather.agent.WeatherAgent")
         
         # Меняем на реальную модель OpenRouter

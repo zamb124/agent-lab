@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from app.frontend.core.template_loader import get_templates
 from app.core.context import get_context
-from app.db.repositories import Storage
+from app.frontend.dependencies import StorageDep
 from app.identity.models import Company
 from app.models.billing_models import TariffPlan
 
@@ -40,8 +40,6 @@ async def admin_companies(request: Request):
     
     context = get_context()
     user = context.user if context else None
-    
-    storage = Storage()
     
     # Получаем все компании через subdomain маппинг
     companies = []
@@ -78,7 +76,7 @@ async def admin_companies(request: Request):
 
 
 @router.post("/api/companies/{company_id}/balance", response_class=JSONResponse)
-async def update_company_balance(request: Request, company_id: str):
+async def update_company_balance(request: Request, company_id: str, storage: StorageDep):
     """Пополнить баланс компании"""
     
     if not is_system_admin(request):
@@ -89,8 +87,6 @@ async def update_company_balance(request: Request, company_id: str):
     
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Сумма пополнения должна быть больше 0")
-    
-    storage = Storage()
     company_data = await storage.get(f"company:{company_id}", force_global=True)
     
     if not company_data:
@@ -112,7 +108,7 @@ async def update_company_balance(request: Request, company_id: str):
 
 
 @router.post("/api/companies/{company_id}/monthly-limit", response_class=JSONResponse)
-async def update_company_monthly_limit(request: Request, company_id: str):
+async def update_company_monthly_limit(request: Request, company_id: str, storage: StorageDep):
     """Установить месячный лимит компании"""
     
     if not is_system_admin(request):
@@ -123,8 +119,6 @@ async def update_company_monthly_limit(request: Request, company_id: str):
     
     if new_limit < 0:
         raise HTTPException(status_code=400, detail="Лимит не может быть отрицательным")
-    
-    storage = Storage()
     company_data = await storage.get(f"company:{company_id}", force_global=True)
     
     if not company_data:
@@ -144,7 +138,7 @@ async def update_company_monthly_limit(request: Request, company_id: str):
 
 
 @router.post("/api/companies/{company_id}/tariff", response_class=JSONResponse)
-async def update_company_tariff(request: Request, company_id: str):
+async def update_company_tariff(request: Request, company_id: str, storage: StorageDep):
     """Изменить тариф компании"""
     
     if not is_system_admin(request):
@@ -158,8 +152,6 @@ async def update_company_tariff(request: Request, company_id: str):
         TariffPlan(new_tariff)
     except ValueError:
         raise HTTPException(status_code=400, detail="Неверный тарифный план")
-    
-    storage = Storage()
     company_data = await storage.get(f"company:{company_id}", force_global=True)
     
     if not company_data:

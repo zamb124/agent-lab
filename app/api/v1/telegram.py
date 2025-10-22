@@ -6,9 +6,8 @@ Telegram webhook endpoints.
 import logging
 from fastapi import APIRouter, Request, HTTPException
 
-from app.db.repositories import Storage
 from app.interfaces.telegram_interface import TelegramInterface
-from app.frontend.dependencies import FlowRepositoryDep
+from app.frontend.dependencies import FlowRepositoryDep, StorageDep
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +15,7 @@ router = APIRouter()
 
 
 @router.post("/webhook/telegram/{flow_key:path}")
-async def telegram_webhook(flow_key: str, request: Request, flow_repo: FlowRepositoryDep):
+async def telegram_webhook(flow_key: str, storage: StorageDep, request: Request, flow_repo: FlowRepositoryDep):
     """
     Universal Telegram webhook для любого flow.
     Создает TelegramInterface на лету.
@@ -30,8 +29,7 @@ async def telegram_webhook(flow_key: str, request: Request, flow_repo: FlowRepos
     else:
         flow_id = flow_key
     
-    storage = Storage()
-    flow_config = await storage.get_flow_config(flow_id)
+    flow_config = await flow_repo.get(flow_id)
 
     if not flow_config:
         logger.error(f"Flow {flow_id} не найден в БД")
@@ -125,11 +123,9 @@ async def set_telegram_webhook(flow_id: str, webhook_base_url: str, flow_repo: F
 
 
 @router.post("/admin/telegram/setup_commands/{flow_id}")
-async def setup_telegram_commands(flow_id: str):
+async def setup_telegram_commands(flow_id: str, flow_repo: FlowRepositoryDep):
     """Устанавливает команды для Telegram бота"""
-    # Получаем flow config из БД
-    storage = Storage()
-    flow_config = await storage.get_flow_config(flow_id)
+    flow_config = await flow_repo.get(flow_id)
 
     if not flow_config:
         raise HTTPException(status_code=404, detail=f"Flow {flow_id} not found")

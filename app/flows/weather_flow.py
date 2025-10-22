@@ -20,7 +20,8 @@ async def install(flow_config: FlowConfig, company_id: str):
     Хук установки Weather Flow.
     Создает дефолтные переменные для компании (если не созданы через UI).
     """
-    variables_service = VariablesService()
+    from app.core.container import get_container
+    variables_service = get_container().variables_service
 
     # Создаем переменные с дефолтными значениями из variables_definitions
     if hasattr(flow_config, 'variables_definitions') and flow_config.variables_definitions:
@@ -46,7 +47,8 @@ async def uninstall(flow_config: FlowConfig, company_id: str):
     Удаляет созданные переменные.
     """
     logger.info(f"🔄 НАЧАЛО uninstall hook для Weather Flow, company_id: {company_id}")
-    variables_service = VariablesService()
+    from app.core.container import get_container
+    variables_service = get_container().variables_service
 
     # Удаляем переменные из variables_definitions
     if hasattr(flow_config, 'variables_definitions') and flow_config.variables_definitions:

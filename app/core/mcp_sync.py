@@ -41,7 +41,7 @@ async def sync_mcp_server_tools(server_id: str, company_id: Optional[str] = None
             raise ValueError("Не удалось определить company_id для синхронизации")
         company_id = context.active_company.company_id
     
-    storage = get_container().get_storage()
+    storage = get_container().storage
     mcp_repo = MCPServerRepository(storage)
     
     server_config = await mcp_repo.get(server_id, company_id)
@@ -61,7 +61,7 @@ async def sync_mcp_server_tools(server_id: str, company_id: Optional[str] = None
     
     # Создаем ToolReference для каждого тула
     tool_references = []
-    tool_repo = get_container().get_tool_repository()
+    tool_repo = get_container().tool_repository
     
     for mcp_tool in tools_data:
         tool_name = mcp_tool.get("name")
@@ -124,7 +124,7 @@ async def sync_all_mcp_servers_for_company(company_id: Optional[str] = None):
             raise ValueError("Не удалось определить company_id")
         company_id = context.active_company.company_id
     
-    storage = get_container().get_storage()
+    storage = get_container().storage
     mcp_repo = MCPServerRepository(storage)
     
     active_servers = await mcp_repo.list_active(company_id=company_id)
@@ -157,7 +157,7 @@ async def sync_all_companies_mcp_servers():
     """
     from app.db.repositories.mcp_repository import MCPServerRepository
     
-    storage = get_container().get_storage()
+    storage = get_container().storage
     mcp_repo = MCPServerRepository(storage)
     
     # Получаем список всех MCP серверов

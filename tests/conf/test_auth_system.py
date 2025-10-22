@@ -13,6 +13,7 @@ from app.identity.base_provider import BaseAuthProvider
 from app.identity.providers.yandex import YandexProvider
 from app.identity.auth_service import AuthService
 from app.core.config import AuthProviderConfig
+from app.core.container import get_container
 
 
 class TestAuthModels:
@@ -215,7 +216,7 @@ class TestYandexProvider:
 class TestAuthService:
     """Тесты сервиса авторизации"""
     
-    async def test_auth_service_initialization_with_config(self):
+    async def test_auth_service_initialization_with_config(self, test_context):
         """Тест инициализации AuthService"""
         # Создаем тестовую конфигурацию
         from app.core.config import AuthConfig, AuthProviderConfig
@@ -242,7 +243,9 @@ class TestAuthService:
         with patch('app.identity.auth_service.settings') as mock_settings:
             mock_settings.auth = test_auth_config
             
-            auth_service = AuthService()
+            # Получаем AuthService через контейнер
+            container = get_container()
+            auth_service = container.auth_service
             
             # Проверяем инициализацию
             providers = auth_service.get_available_providers()
@@ -252,7 +255,7 @@ class TestAuthService:
             assert yandex_provider is not None
             assert yandex_provider.client_id == "test-client-id"
     
-    async def test_start_auth_flow(self):
+    async def test_start_auth_flow(self, test_context):
         """Тест начала процесса авторизации"""
         # Создаем тестовый AuthService
         from app.core.config import AuthConfig, AuthProviderConfig
@@ -275,7 +278,9 @@ class TestAuthService:
         with patch('app.identity.auth_service.settings') as mock_settings:
             mock_settings.auth = test_auth_config
             
-            auth_service = AuthService()
+            # Получаем AuthService через контейнер
+            container = get_container()
+            auth_service = container.auth_service
             
             # Мокаем Storage
             auth_service.storage = AsyncMock()
@@ -296,7 +301,7 @@ class TestAuthService:
             # Проверяем что state сохранен
             auth_service.storage.set.assert_called_once()
     
-    async def test_complete_auth_flow_success(self):
+    async def test_complete_auth_flow_success(self, test_context):
         """Тест успешного завершения авторизации"""
         from app.core.config import AuthConfig, AuthProviderConfig
         
@@ -319,7 +324,9 @@ class TestAuthService:
         with patch('app.identity.auth_service.settings') as mock_settings:
             mock_settings.auth = test_auth_config
             
-            auth_service = AuthService()
+            # Получаем AuthService через контейнер
+            container = get_container()
+            auth_service = container.auth_service
             
             # Мокаем Storage
             auth_service.storage = AsyncMock()
@@ -398,7 +405,7 @@ class TestAuthService:
             assert result.session.provider == AuthProvider.YANDEX
             assert result.session.access_token == "access_token"
     
-    async def test_complete_auth_invalid_state(self):
+    async def test_complete_auth_invalid_state(self, test_context):
         """Тест завершения авторизации с недействительным state"""
         from app.core.config import AuthConfig, AuthProviderConfig
         
@@ -420,7 +427,9 @@ class TestAuthService:
         with patch('app.identity.auth_service.settings') as mock_settings:
             mock_settings.auth = test_auth_config
             
-            auth_service = AuthService()
+            # Получаем AuthService через контейнер
+            container = get_container()
+            auth_service = container.auth_service
             
             # Мокаем Storage - возвращаем None для недействительного state
             auth_service.storage = AsyncMock()
@@ -441,9 +450,10 @@ class TestAuthService:
             assert result.user is None
             assert result.session is None
     
-    async def test_get_user_by_session(self):
+    async def test_get_user_by_session(self, test_context):
         """Тест получения пользователя по сессии"""
-        auth_service = AuthService()
+        container = get_container()
+        auth_service = container.auth_service
         
         # Мокаем Storage
         auth_service.storage = AsyncMock()
@@ -473,9 +483,10 @@ class TestAuthService:
         assert user.user_id == "test_user"
         assert user.name == "Тест Пользователь"
     
-    async def test_logout(self):
+    async def test_logout(self, test_context):
         """Тест завершения сессии"""
-        auth_service = AuthService()
+        container = get_container()
+        auth_service = container.auth_service
         
         # Мокаем Storage
         auth_service.storage = AsyncMock()

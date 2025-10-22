@@ -1,4 +1,5 @@
 """
+from app.core.container import get_container
 End-to-end тест: StateGraph агент + MCP тулы + обычные тулы.
 
 Проверяем что StateGraph агент может использовать:
@@ -102,7 +103,7 @@ async def test_stategraph_agent_with_mcp_and_regular_tools(setup_mcp_servers, te
         print("🏭 Шаг 3: Загружаем агента через AgentFactory")
         print("="*70)
         
-        agent_factory = AgentFactory()
+        agent_factory = get_container().agent_factory
         agent = await agent_factory.get_agent("stategraph_with_mcp")
         
         print(f"✅ Агент загружен: {type(agent).__name__}")
@@ -240,7 +241,7 @@ async def test_stategraph_with_only_mcp_tools(setup_mcp_servers, test_company):
         print(f"✅ Агент создан с 2 MCP нодами")
         
         # Загружаем и компилируем
-        agent_factory = AgentFactory()
+        agent_factory = get_container().agent_factory
         agent = await agent_factory.get_agent("two_mcp_nodes")
         compiled_graph = await agent.compile_graph()
         
@@ -371,7 +372,7 @@ async def test_stategraph_mixed_tools_complex_graph(setup_mcp_servers, test_comp
         print(f"   Граф: START → calc → (mcp_resolve, mcp_docs) → END")
         
         # Загружаем и выполняем
-        agent_factory = AgentFactory()
+        agent_factory = get_container().agent_factory
         agent = await agent_factory.get_agent("complex_stategraph_mcp")
         compiled_graph = await agent.compile_graph()
         

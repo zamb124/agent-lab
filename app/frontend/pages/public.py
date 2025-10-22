@@ -8,7 +8,7 @@ from typing import Optional
 from datetime import datetime
 from app.frontend.core.template_loader import get_templates
 from app.core.config import settings
-from app.db.repositories import Storage
+from app.frontend.dependencies import StorageDep
 from app.models.core_models import FlowConfig
 from app.models.i18n_models import Language
 from app.core.context import get_context
@@ -43,9 +43,10 @@ async def landing_page(request: Request):
 
 @router.get("/privacy", response_class=HTMLResponse)
 async def privacy_policy(
+    storage: StorageDep,
     request: Request,
     flow_id: Optional[str] = Query(None, description="ID flow для специфичной политики"),
-    lang: Optional[str] = Query(None, description="Язык (ru/en)")
+    lang: Optional[str] = Query(None, description="Язык (ru/en)"),
 ):
     """Страница политики конфиденциальности"""
     
@@ -71,7 +72,6 @@ async def privacy_policy(
     
     flow_info = None
     if flow_id:
-        storage = Storage()
         flow_data = await storage.get(flow_id, force_global=True)
         if flow_data:
             flow_config = FlowConfig.model_validate_json(flow_data)
@@ -112,9 +112,10 @@ async def privacy_policy(
 
 @router.get("/terms", response_class=HTMLResponse)
 async def terms_of_service(
+    storage: StorageDep,
     request: Request,
     flow_id: Optional[str] = Query(None, description="ID flow для специфичного соглашения"),
-    lang: Optional[str] = Query(None, description="Язык (ru/en)")
+    lang: Optional[str] = Query(None, description="Язык (ru/en)"),
 ):
     """Страница пользовательского соглашения"""
     
@@ -138,7 +139,6 @@ async def terms_of_service(
     
     flow_info = None
     if flow_id:
-        storage = Storage()
         flow_data = await storage.get(flow_id, force_global=True)
         if flow_data:
             flow_config = FlowConfig.model_validate_json(flow_data)

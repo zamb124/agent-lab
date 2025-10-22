@@ -380,4 +380,12 @@ class WebInterface(BaseInterface):
         return audio_record
 
 
-web_interface = WebInterface({})
+_web_interface = None
+
+
+def get_web_interface() -> WebInterface:
+    """Получает глобальный экземпляр WebInterface"""
+    global _web_interface
+    if _web_interface is None:
+        _web_interface = WebInterface({})
+    return _web_interface

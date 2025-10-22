@@ -7,13 +7,13 @@ import logging
 from datetime import datetime, timezone
 
 from app.core.config import settings
-from app.db.repositories import Storage
 from app.core.container import get_container
 from app.models import TaskStatus, SessionConfig, SessionStatus
 from app.core.context import set_context, clear_context, get_context
 from app.db.database import create_tables
 from app.core.checkpointer import init_checkpointer
 from app.interfaces.factory import InterfaceFactory
+from app.db.repositories import Storage
 from app.interfaces.base import Message
 from app.exceptions import TariffError, BillingError
 from langgraph.errors import GraphInterrupt
@@ -28,11 +28,39 @@ class TaskProcessor:
     """Воркер для обработки задач"""
 
     def __init__(self):
-        self.storage = Storage()
-        container = get_container()
-        self.agent_factory = container.get_agent_factory()
-        self.task_repository = container.get_task_repository()
+        self._storage = None
+        self._agent_factory = None
+        self._task_repository = None
+        self._interface_factory = None
         self.running = False
+    
+    @property
+    def storage(self) -> Storage:
+        """Ленивая инициализация storage"""
+        if self._storage is None:
+            self._storage = Storage()
+        return self._storage
+    
+    @property
+    def agent_factory(self):
+        """Ленивая инициализация agent_factory из контейнера"""
+        if self._agent_factory is None:
+            self._agent_factory = get_container().agent_factory
+        return self._agent_factory
+    
+    @property
+    def task_repository(self):
+        """Ленивая инициализация task_repository из контейнера"""
+        if self._task_repository is None:
+            self._task_repository = get_container().task_repository
+        return self._task_repository
+    
+    @property
+    def interface_factory(self):
+        """Ленивая инициализация interface_factory из контейнера"""
+        if self._interface_factory is None:
+            self._interface_factory = get_container().interface_factory
+        return self._interface_factory
 
     async def start(self):
         """Запуск воркера"""
@@ -92,9 +120,9 @@ class TaskProcessor:
             f"📨 {task.task_id}: '{user_msg[:50]}' | {task.context.user.name} → {task.flow_id}"
         )
 
-        set_context(task.context)
+        await set_context(task.context)
 
-        interface_factory = InterfaceFactory()
+        interface_factory = get_container().interface_factory
         metadata = task.input_data.get("metadata", {})
         
         # Добавляем flow_id для telegram интерфейса
@@ -425,11 +453,10 @@ class TaskProcessor:
 
     async def _send_error_message_to_user(self, task, error_message: str):
         """Отправляет сообщение об ошибке пользователю"""
-        factory = InterfaceFactory()
         metadata = task.input_data.get("metadata", {})
         
         config = {**metadata, "flow_id": task.flow_id}
-        interface = await factory.create_interface(task.platform, config)
+        interface = await self.interface_factory.create_interface(task.platform, config)
 
         if interface is None:
             logger.error("❌ Не удалось создать интерфейс для отправки ошибки")
@@ -449,11 +476,10 @@ class TaskProcessor:
 
     async def _send_result_via_interface(self, task, result):
         """Отправляет результат через соответствующий интерфейс платформы"""
-        factory = InterfaceFactory()
         metadata = task.input_data.get("metadata", {})
         
         config = {**metadata, "flow_id": task.flow_id}
-        interface = await factory.create_interface(task.platform, config)
+        interface = await self.interface_factory.create_interface(task.platform, config)
 
         if interface is None:
             # Для API или если интерфейс не нужен

@@ -51,6 +51,10 @@
     "interface": {
       "title": "Interface",
       "description": "Communication interface for responses"
+    },
+    "container": {
+      "title": "[TODO: models.context.fields.container.title]",
+      "description": "[TODO: models.context.fields.container.description]"
     }
   }
 }

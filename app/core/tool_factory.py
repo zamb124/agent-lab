@@ -124,50 +124,86 @@ class ToolFactory:
         if not ref.inline_code:
             raise ValueError(f"INLINE_CODE инструмент {ref.tool_id} не содержит inline_code")
         
-        try:
-            logger.debug(f"🔥 Создаем INLINE_CODE инструмент: {ref.tool_id}")
-            logger.debug(f"🔥 Inline код: {ref.inline_code[:100]}...")
+        logger.debug(f"🔥 Создаем INLINE_CODE инструмент: {ref.tool_id}")
+        logger.debug(f"🔥 Inline код: {ref.inline_code[:100]}...")
+        
+        # Создаем namespace для выполнения кода с необходимыми импортами
+        # Используем тот же namespace, что и для документации
+        namespace = self.get_tool_namespace()
+        
+        # Проверяем есть ли уже @tool декоратор в коде
+        has_tool_decorator = '@tool' in ref.inline_code
+        
+        # Если нет @tool декоратора, добавляем его автоматически
+        if not has_tool_decorator:
+            logger.debug("🔥 @tool декоратор не найден, добавляем автоматически")
             
-            # Создаем namespace для выполнения кода с необходимыми импортами
-            # Используем тот же namespace, что и для документации
-            namespace = self.get_tool_namespace()
+            # Добавляем импорт и декоратор
+            enhanced_code = f'''
+from app.core.tool_decorator import tool
+
+@tool
+{ref.inline_code.strip()}
+'''
+            logger.debug(f"🔥 Улучшенный код: {enhanced_code[:200]}...")
             
-            # Выполняем inline код
+            # Выполняем улучшенный код
+            exec(enhanced_code, namespace, namespace)
+        else:
+            logger.debug("🔥 @tool декоратор уже есть в коде")
+            # Выполняем оригинальный код
             exec(ref.inline_code, namespace, namespace)
+        
+        # Ищем функцию main или первую функцию через регулярку
+        tool_function = namespace.get('main')
+        if not tool_function:
+            # Ищем первую функцию через регулярные выражения
+            import re
             
-            # Ищем функцию main или первую async функцию
-            tool_function = namespace.get('main')
-            if not tool_function:
-                # Ищем первую async функцию или tool объект
-                for name, obj in namespace.items():
-                    if name.startswith('_'):
-                        continue
-                    if asyncio.iscoroutinefunction(obj) or callable(obj):
-                        tool_function = obj
-                        logger.debug(f"🔥 Найдена функция: {name}")
+            # Паттерн для поиска def или async def функций
+            function_pattern = r'^(async\s+)?def\s+(\w+)\s*\('
+            
+            code_to_search = enhanced_code if not has_tool_decorator else ref.inline_code
+            lines = code_to_search.strip().split('\n')
+            for line in lines:
+                line = line.strip()
+                match = re.match(function_pattern, line)
+                if match:
+                    function_name = match.group(2)
+                    if function_name in namespace:
+                        tool_function = namespace[function_name]
+                        logger.debug(f"🔥 Найдена функция через регулярку: {function_name}")
                         break
-            
-            if not tool_function:
-                raise ValueError(f"❌ Функция не найдена в inline коде для {ref.tool_id}")
-            
-            # Проверяем, является ли функция уже tool объектом (после @tool декоратора)
-            if hasattr(tool_function, '_is_platform_tool') or isinstance(tool_function, StructuredTool):
-                logger.debug("🔥 Функция уже является tool объектом, возвращаем напрямую")
-                return tool_function
-            
-            # Создаем StructuredTool из обычной функции
-            logger.debug("🔥 Создаем StructuredTool из функции")
-            tool_name = ref.tool_id.replace(".", "_")
-            return StructuredTool.from_function(
-                coroutine=tool_function if asyncio.iscoroutinefunction(tool_function) else None,
-                func=tool_function if not asyncio.iscoroutinefunction(tool_function) else None,
-                name=tool_name,
-                description=ref.description or "Кастомный инструмент"
-            )
-            
-        except Exception as e:
-            logger.error(f"❌ Ошибка создания INLINE_CODE инструмента {ref.tool_id}: {e}")
-            raise
+        
+        if not tool_function:
+            raise ValueError(f"❌ Функция не найдена в inline коде для {ref.tool_id}")
+        
+        # Проверяем, является ли функция уже tool объектом (после @tool декоратора)
+        if hasattr(tool_function, '_is_platform_tool') or isinstance(tool_function, StructuredTool):
+            logger.debug("🔥 Функция уже является tool объектом, возвращаем напрямую")
+            return tool_function
+        
+        # Создаем StructuredTool из обычной функции
+        logger.debug("🔥 Создаем StructuredTool из функции")
+        tool_name = ref.tool_id.replace(".", "_")
+        
+        # Создаем простую схему без типизации
+        from pydantic import create_model, Field
+        
+        # Простая схема только с request параметром
+        SimpleSchema = create_model(
+            f"{tool_name}Input",
+            request=(str, Field(description="Запрос пользователя"))
+        )
+        
+        return StructuredTool.from_function(
+            coroutine=tool_function if asyncio.iscoroutinefunction(tool_function) else None,
+            func=tool_function if not asyncio.iscoroutinefunction(tool_function) else None,
+            name=tool_name,
+            description=ref.description or "Кастомный инструмент",
+            args_schema=SimpleSchema,
+            infer_schema=False  # Отключаем автоматическое инферирование схемы
+        )
 
     def get_tool_namespace(self) -> Dict[str, Any]:
         """
@@ -186,6 +222,13 @@ class ToolFactory:
             'Any': typing.Any,
             '__builtins__': __builtins__,
         }
+        
+        # Добавляем импорты для типов, которые могут использоваться в inline коде
+        try:
+            from app.models.context_models import Context
+            namespace['Context'] = Context
+        except ImportError:
+            pass
 
         # Добавляем платформенные функции
         platform_functions = {
@@ -264,7 +307,7 @@ class ToolFactory:
 
             # Получаем агента через контейнер
             container = get_container()
-            agent_factory = container.get_agent_factory()
+            agent_factory = container.agent_factory
             agent = await agent_factory.get_agent(agent_class_path)
 
             # Превращаем агента в инструмент
@@ -281,7 +324,7 @@ class ToolFactory:
             input: str = Field(description="Входные данные для флоу")
 
         try:
-            flow_factory = FlowFactory()
+            flow_factory = get_container().flow_factory
 
             async def flow_func(input: str) -> str:
                 """Функция-обертка для вызова флоу как инструмента"""

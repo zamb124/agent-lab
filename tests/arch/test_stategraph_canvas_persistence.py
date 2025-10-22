@@ -13,9 +13,9 @@ async def test_stategraph_canvas_persistence():
     Проверяет что canvas для StateGraph flow сохраняется и загружается правильно
     """
     container = get_container()
-    storage = container.get_storage()
-    flow_repo = container.get_flow_repository()
-    agent_repo = container.get_agent_repository()
+    storage = container.storage
+    flow_repo = container.flow_repository
+    agent_repo = container.agent_repository
     
     # Создаем тестовый StateGraph агент
     agent_id = "test_stategraph_agent_canvas"

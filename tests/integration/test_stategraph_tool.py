@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""
+Тест для проверки работы @tool декоратора в StateGraph агенте
+"""
+
+import asyncio
+import logging
+import pytest
+from app.core.tool_decorator import tool
+from app.core.variables import get_state, set_state_in_context
+from app.models.core_models import AgentConfig, AgentType
+from app.core.context import get_context, set_context
+from app.models.context_models import Context
+
+logger = logging.getLogger(__name__)
+
+@tool
+def test_state_tool(message: str) -> str:
+    """Тестовая функция, которая изменяет state"""
+    logger.info(f"🔧 test_state_tool вызвана с: {message}")
+    
+    # Получаем текущий state
+    state = get_state()
+    logger.info(f"🔍 Получен state: {state}")
+    
+    # Изменяем state
+    if state:
+        if "test_data" not in state:
+            state["test_data"] = []
+        state["test_data"].append(message)
+        logger.info(f"✅ Добавлено в state: {message}")
+    
+    return f"Обработано: {message}"
+
+@pytest.mark.asyncio
+async def test_stategraph_tool(test_user, test_company):
+    """Тест работы tool в StateGraph контексте"""
+    logger.info("🚀 Начинаем тест StateGraph tool")
+    
+    # Создаем контекст с обязательными полями
+    context = Context(
+        user=test_user,
+        platform="test"
+    )
+    await set_context(context)
+    
+    # Создаем mock state (как в StateGraph)
+    mock_state = {
+        "messages": [],
+        "store": {},
+        "test_data": []
+    }
+    
+    # Устанавливаем state в контекст
+    set_state_in_context(mock_state)
+    
+    # Создаем mock agent_config для StateGraph
+    context.agent_config = AgentConfig(
+        agent_id="test_stategraph",
+        name="Test StateGraph Agent",
+        type=AgentType.STATEGRAPH,
+        prompt="Test agent"
+    )
+    await set_context(context)
+    
+    logger.info("📋 Исходный state:", mock_state)
+    
+    # Вызываем tool как StateGraph node (с state параметром)
+    result = test_state_tool.invoke({"message": "Привет StateGraph!", "state": mock_state})
+    
+    logger.info("📋 Результат:", result)
+    logger.info("📋 Обновленный state:", mock_state)
+    
+    # Проверяем, что state изменился
+    assert "test_data" in mock_state, "test_data должен быть в state"
+    assert len(mock_state["test_data"]) > 0, "test_data должен содержать данные"
+    assert mock_state["test_data"][0] == "Привет StateGraph!", "Данные должны совпадать"
+    
+    # Проверяем, что результат - это delta для StateGraph
+    assert isinstance(result, dict), "Результат должен быть словарем (delta)"
+    assert "test_data" in result, "Delta должен содержать test_data"
+    
+    logger.info("✅ State успешно обновлен в StateGraph!")

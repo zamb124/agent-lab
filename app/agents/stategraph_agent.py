@@ -40,7 +40,7 @@ class StateGraphAgent(BaseAgent):
             )
 
         container = get_container()
-        builder = container.get_graph_builder()
+        builder = container.graph_builder
         graph = await builder.build_from_definition(
             self.config.graph_definition, 
             self.config.llm_config

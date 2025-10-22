@@ -13,27 +13,83 @@ from app.db.models import Base
 
 logger = logging.getLogger(__name__)
 
-# Создаем асинхронный движок
-engine = create_async_engine(
-    settings.database.url,
-    echo=False,
-    pool_pre_ping=True,
-    pool_recycle=3600,
-    pool_size=5,
-    max_overflow=10,
-)
+# Глобальные переменные для ленивой инициализации
+_engine = None
+_AsyncSessionLocal = None
+_current_loop = None
 
-# Создаем фабрику сессий
-AsyncSessionLocal = async_sessionmaker(
-    engine, class_=AsyncSession, expire_on_commit=False
-)
+
+async def get_engine():
+    """Лениво создает engine в текущем event loop"""
+    global _engine, _current_loop
+    import asyncio
+    
+    current = asyncio.get_event_loop()
+    
+    # Если engine создан в другом event loop, пересоздаем
+    if _engine is not None and _current_loop is not None and _current_loop != current:
+        await _engine.dispose()
+        _engine = None
+    
+    if _engine is None:
+        _engine = create_async_engine(
+            settings.database.url,
+            echo=False,
+            pool_pre_ping=True,
+            pool_recycle=3600,
+            pool_size=5,
+            max_overflow=10,
+        )
+        _current_loop = current
+        
+    return _engine
+
+
+async def get_session_factory():
+    """Лениво создает session factory в текущем event loop"""
+    global _AsyncSessionLocal
+    
+    engine = await get_engine()
+    
+    # Всегда пересоздаем session_factory для текущего engine
+    _AsyncSessionLocal = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    
+    return _AsyncSessionLocal
+
+
+class AsyncSessionLocalProxy:
+    """Proxy для ленивой инициализации session factory"""
+    
+    def __call__(self):
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if _AsyncSessionLocal is None:
+                raise RuntimeError(
+                    "Session factory не инициализирован. "
+                    "Используйте await get_session_factory() или get_container().session_factory"
+                )
+            return _AsyncSessionLocal()
+        except RuntimeError as e:
+            if "no running event loop" in str(e) or "no current event loop" in str(e):
+                raise RuntimeError(
+                    "AsyncSessionLocal требует event loop. "
+                    "Используйте get_container().session_factory в async контексте"
+                )
+            raise
+
+
+AsyncSessionLocal = AsyncSessionLocalProxy()
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     Dependency для получения сессии БД в FastAPI.
     """
-    async with AsyncSessionLocal() as session:
+    session_factory = await get_session_factory()
+    async with session_factory() as session:
         try:
             yield session
         except Exception as e:
@@ -48,6 +104,7 @@ async def wait_for_db(max_retries: int = 30, retry_interval: int = 2):
     """Ожидает готовности БД с повторными попытками"""
     for attempt in range(1, max_retries + 1):
         try:
+            engine = await get_engine()
             async with engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
             logger.info(f"✅ БД готова к работе (попытка {attempt}/{max_retries})")
@@ -69,6 +126,7 @@ async def create_tables():
     await wait_for_db()
     
     try:
+        engine = await get_engine()
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all, checkfirst=True)
         logger.info("✅ Таблицы проверены/созданы")
@@ -83,6 +141,7 @@ async def create_tables():
 
 async def drop_tables():
     """Удаляет все таблицы"""
+    engine = await get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 
@@ -91,5 +150,10 @@ async def drop_tables():
 
 async def close_db():
     """Закрывает соединения с БД"""
-    await engine.dispose()
+    global _engine
+    if _engine is not None:
+        await _engine.dispose()
+        _engine = None
     logger.info("Соединения с БД закрыты")
+
+

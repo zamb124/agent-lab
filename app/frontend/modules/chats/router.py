@@ -8,7 +8,7 @@ from typing import Optional
 
 from app.frontend.core.template_loader import get_templates
 from app.frontend.core.utils import render_with_dashboard
-from app.core.flow_factory import FlowFactory
+from app.core.container import get_container
 
 router = APIRouter(prefix="/frontend/chats", tags=["chats"])
 templates = get_templates()
@@ -36,7 +36,7 @@ async def get_chats_list(
 ):
     """Получает список чатов (сессий) с фильтрацией"""
     
-    flow_factory = FlowFactory()
+    flow_factory = get_container().flow_factory
     sessions = await flow_factory.get_flow_sessions(
         platform=platform,
         flow_id=flow_id,

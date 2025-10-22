@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 class AgentFactory:
     """Фабрика для создания агентов"""
 
-    def __init__(self):
-        self.repository = get_container().get_agent_repository()
+    def __init__(self, agent_repository):
+        self.agent_repository = agent_repository
 
     async def get_agent(self, agent_id: str) -> BaseAgent:
         """
@@ -37,9 +37,8 @@ class AgentFactory:
         """
         logger.debug(f"🔥 ВЫЗВАН AgentFactory.get_agent для {agent_id}")
         
-        # Загружаем конфигурацию из БД через репозиторий
         logger.debug(f"🔍 Ищем конфигурацию агента в БД: {agent_id}")
-        config = await self.repository.get(agent_id)
+        config = await self.agent_repository.get(agent_id)
         logger.debug(f"🔍 Результат поиска config: {config is not None}")
         
         if not config:

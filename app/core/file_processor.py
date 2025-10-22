@@ -15,8 +15,8 @@ import httpx
 
 from .core_clients.s3_client import S3ClientFactory, get_default_s3_client
 from app.models import FileRecord, FileStatus
-from app.db.repositories import Storage
 from .config import settings
+from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class FileProcessor:
             bucket_name: Имя S3 бакета (если не указан, используется дефолтный)
         """
         self.bucket_name = bucket_name
-        self.storage = Storage()
+        self.storage = get_container().storage
         self._s3_client = None
 
     async def _get_s3_client(self):

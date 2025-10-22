@@ -8,10 +8,10 @@ import json
 from datetime import datetime, timezone
 from typing import Dict, Any
 
-from app.db.repositories import Storage
 from ..core.clients.payment_providers.factory import PaymentProviderFactory
 from ..models.payment_models import PaymentStatus
 from .payment_service import PaymentService
+from ..core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +19,15 @@ logger = logging.getLogger(__name__)
 class PaymentSyncService:
     """Сервис для синхронизации статусов транзакций с провайдерами"""
     
-    def __init__(self):
-        self.storage = Storage()
-        self.payment_service = PaymentService()
+    def __init__(self, storage=None):
+        self._storage = storage
+    
+    @property
+    def storage(self):
+        """Ленивая инициализация storage из контейнера"""
+        if self._storage is None:
+            self._storage = get_container().storage
+        return self._storage
     
     async def sync_pending_transactions(self, company_id: str) -> Dict[str, Any]:
         """

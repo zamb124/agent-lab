@@ -10,10 +10,10 @@ from datetime import datetime, timezone
 
 from langchain_core.messages import HumanMessage, AIMessage
 from app.interfaces.base import BaseInterface, Message
-from app.db.repositories import Storage
 from app.clients.amo_crm_integration import get_amocrm_client
 from app.core.config import settings
 from app.core.checkpointer import get_checkpointer
+from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -360,7 +360,7 @@ class AmoCRMInterface(BaseInterface):
         - account_id
         - bot_amojo_id
         """
-        storage = Storage()
+        storage = get_container().storage
 
         subdomain = platform_config.get("subdomain")
         if not subdomain:

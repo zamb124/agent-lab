@@ -41,7 +41,7 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
     # Устанавливаем flow_config в контекст
     current_context = get_context()
     current_context.flow_config = flow_config
-    set_context(current_context)
+    await set_context(current_context)
     
     # Загружаем агента
     agent = await agent_factory.get_agent("state_test_agent")
@@ -82,6 +82,8 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
     print("ШАГ 2: Список задач")
     print("="*60)
     
+    # Настраиваем MockLLM для второго вызова
+    mock_llm.reset_call_counts()  # Сбрасываем счетчики
     mock_llm.configure(
         tool_responses={
             "покажи": {
@@ -92,7 +94,7 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
     )
     
     result2 = await agent.ainvoke({
-        "messages": [HumanMessage(content="Покажи задачи")]
+        "messages": [HumanMessage(content="покажи")]
     }, config)
     
     print(f"\n✅ Результат 2:")

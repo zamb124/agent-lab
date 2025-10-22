@@ -25,9 +25,9 @@ class InterfaceFactory:
         "whatsapp": WhatsAppInterface,
     }
 
-    def __init__(self):
-        self.storage = Storage()
-        self.flow_repository = get_container().get_flow_repository()
+    def __init__(self, storage, flow_repository):
+        self.storage = storage
+        self.flow_repository = flow_repository
 
     async def create_interface(
         self, platform: str, config: Dict[str, Any]

@@ -248,7 +248,7 @@ class TestAuthMiddlewareContextCreation:
     @patch.object(AuthMiddleware, '_detect_user_language')  
     @patch.object(AuthMiddleware, '_get_user_companies')
     @pytest.mark.asyncio
-    async def test_create_api_context_with_language(self, mock_get_companies, mock_detect_lang):
+    async def test_create_api_context_with_language(self, mock_get_companies, mock_detect_lang, migrated_db):
         """Проверяем создание API контекста с языком"""
         mock_detect_lang.return_value = Language.EN
         mock_get_companies.return_value = [self.test_company]
@@ -271,10 +271,8 @@ class TestAuthMiddlewareContextCreation:
         request.cookies.get.return_value = "test_session"
         request.headers.get.return_value = ""
         
-        with patch('app.middleware.auth.AuthService') as mock_auth_service:
-            mock_auth_instance = Mock()
-            mock_auth_instance.get_user_by_session = AsyncMock(return_value=test_user)
-            mock_auth_service.return_value = mock_auth_instance
+        with patch.object(self.middleware, '_get_user_by_session', new_callable=AsyncMock) as mock_get_user:
+            mock_get_user.return_value = test_user
             
             with patch.object(self.middleware, '_update_user_active_company', new_callable=AsyncMock):
                 context = await self.middleware._create_api_context(request, self.test_company)
@@ -301,7 +299,7 @@ class TestAuthMiddlewareContextCreation:
     @patch.object(AuthMiddleware, '_detect_user_language')
     @patch.object(AuthMiddleware, '_get_user_companies')
     @pytest.mark.asyncio
-    async def test_create_frontend_context_with_language(self, mock_get_companies, mock_detect_lang):
+    async def test_create_frontend_context_with_language(self, mock_get_companies, mock_detect_lang, migrated_db):
         """Проверяем создание frontend контекста с языком"""
         mock_detect_lang.return_value = Language.RU
         mock_get_companies.return_value = [self.test_company]
@@ -326,10 +324,8 @@ class TestAuthMiddlewareContextCreation:
         }.get(key, default)
         request.cookies.keys.return_value = ["session_id"]
         
-        with patch('app.middleware.auth.AuthService') as mock_auth_service:
-            mock_auth_instance = Mock()
-            mock_auth_instance.get_user_by_session = AsyncMock(return_value=test_user)
-            mock_auth_service.return_value = mock_auth_instance
+        with patch.object(self.middleware, '_get_user_by_session', new_callable=AsyncMock) as mock_get_user:
+            mock_get_user.return_value = test_user
             
             with patch.object(self.middleware, '_update_user_active_company', new_callable=AsyncMock):
                 context = await self.middleware._create_frontend_context(request, self.test_company, has_subdomain=True)

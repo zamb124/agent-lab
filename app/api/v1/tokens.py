@@ -8,7 +8,7 @@ import json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.db.repositories import Storage
+from app.frontend.dependencies import StorageDep
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class TokenResponse(BaseModel):
 
 
 @router.post("/admin/tokens", response_model=TokenResponse)
-async def set_platform_token(request: TokenRequest):
+async def set_platform_token(request: TokenRequest, storage: StorageDep):
     """
     Устанавливает токен для платформы.
 
@@ -41,8 +41,6 @@ async def set_platform_token(request: TokenRequest):
     - platform=telegram, username=agents_lab_bot → token:telegram:agents_lab_bot
     - platform=api, username=default → token:api:default
     """
-    storage = Storage()
-
     token_key = f"token:{request.platform}:{request.username}"
 
     await storage.set(token_key, json.dumps(request.token), force_global=True)
@@ -58,11 +56,10 @@ async def set_platform_token(request: TokenRequest):
 
 
 @router.get("/admin/tokens/{platform}/{username}")
-async def get_platform_token(platform: str, username: str):
+async def get_platform_token(platform: str, username: str, storage: StorageDep):
     """
     Получает токен для платформы (без самого токена в ответе).
     """
-    storage = Storage()
     token_key = f"token:{platform}:{username}"
 
     token_json = await storage.get(token_key, force_global=True)
@@ -85,11 +82,10 @@ async def get_platform_token(platform: str, username: str):
 
 
 @router.delete("/admin/tokens/{platform}/{username}")
-async def delete_platform_token(platform: str, username: str):
+async def delete_platform_token(platform: str, username: str, storage: StorageDep):
     """
     Удаляет токен для платформы.
     """
-    storage = Storage()
     token_key = f"token:{platform}:{username}"
 
     token_json = await storage.get(token_key, force_global=True)

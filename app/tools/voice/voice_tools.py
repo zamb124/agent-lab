@@ -14,7 +14,7 @@ from app.core.audio_processor import get_default_audio_processor
 logger = logging.getLogger(__name__)
 
 
-@tool(group="Аудио")
+@tool(group="Аудио", is_public=True)
 async def recognize_speech_from_file(
     file_path: str, 
     content_type: str = "audio/wave"
@@ -50,7 +50,7 @@ async def recognize_speech_from_file(
         return f"❌ Ошибка распознавания речи: {str(e)}"
 
 
-@tool(group="Аудио")
+@tool(group="Аудио", is_public=True)
 async def recognize_speech_from_bytes(
     audio_data_hex: str, 
     content_type: str = "audio/wave"
@@ -89,7 +89,7 @@ async def recognize_speech_from_bytes(
         return f"❌ Ошибка распознавания речи: {str(e)}"
 
 
-@tool(group="Аудио")
+@tool(group="Аудио", is_public=True)
 async def synthesize_speech(
     text: str,
     model_name: str = "katherine",
@@ -162,7 +162,7 @@ async def synthesize_speech(
         return f"❌ Ошибка синтеза речи: {str(e)}"
 
 
-@tool(group="Аудио")
+@tool(group="Аудио", is_public=True)
 async def synthesize_speech_to_file(
     text: str,
     output_path: str,

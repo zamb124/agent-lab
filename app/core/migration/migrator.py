@@ -10,6 +10,7 @@ from app.db.repositories import Storage
 from app.db.repositories.mcp_repository import MCPServerRepository
 from app.core.migration.scanner import CodeScanner
 from app.core.migration.persister import ConfigPersister
+from app.core.container import get_container
 from app.models import AgentConfig, FlowConfig, ToolReference
 from app.models.mcp_models import MCPServerConfig, MCPTransportType
 from app.identity.models import Company, User, AuthProvider, UserStatus
@@ -24,9 +25,8 @@ class Migrator:
     """Оркестратор миграции агентов и флоу из кода в БД"""
 
     def __init__(self):
-        self.storage = Storage()
         self.scanner = CodeScanner()
-        self.persister = ConfigPersister(self.storage)
+        self.persister = ConfigPersister()
 
     async def run_full_migration(self):
         """
@@ -50,7 +50,7 @@ class Migrator:
         logger.info("Проверка системной компании...")
         
         # Проверяем существует ли системная компания
-        company_data = await self.storage.get("company:system", force_global=True)
+        company_data = await get_container().storage.get("company:system", force_global=True)
         if company_data:
             logger.info("Системная компания уже существует")
             return
@@ -63,8 +63,8 @@ class Migrator:
             status="active"
         )
         
-        await self.storage.set("company:system", system_company.model_dump_json(), force_global=True)
-        await self.storage.set("subdomain:system", '"system"', force_global=True)
+        await get_container().storage.set("company:system", system_company.model_dump_json(), force_global=True)
+        await get_container().storage.set("subdomain:system", '"system"', force_global=True)
         
         logger.info("✅ Создана системная компания: system")
 
@@ -135,7 +135,7 @@ class Migrator:
     async def _set_system_context(self):
         """Устанавливает контекст системной компании для миграции"""
         # Получаем системную компанию
-        company_data = await self.storage.get("company:system", force_global=True)
+        company_data = await get_container().storage.get("company:system", force_global=True)
         system_company = Company.model_validate_json(company_data)
         
         # Используем общий метод
@@ -168,7 +168,7 @@ class Migrator:
             user_companies=[company]
         )
         
-        set_context(context)
+        await set_context(context)
         logger.info(f"✅ Установлен контекст компании {company.company_id} для миграции")
 
     async def _create_default_mcp_servers(self, company: Company):
@@ -181,7 +181,7 @@ class Migrator:
         """
         logger.info(f"Создание дефолтных MCP серверов для {company.company_id}...")
         
-        mcp_repo = MCPServerRepository(self.storage)
+        mcp_repo = MCPServerRepository(get_container().storage)
         variables_service = get_variables_service()
         
         # 1. Context7

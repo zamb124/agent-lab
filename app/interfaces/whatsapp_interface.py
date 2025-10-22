@@ -10,10 +10,9 @@ import hmac
 from typing import Dict, Any, Optional, List
 import httpx
 from app.interfaces.base import BaseInterface, Message
-from app.db.repositories import Storage
 from app.core.config import settings
 from app.core.audio_processor import get_default_audio_processor
-from app.services.variables_service import get_variables_service
+from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -794,7 +793,7 @@ class WhatsAppInterface(BaseInterface):
         if not token_value:
             raise ValueError(f"No access_token configured for flow {flow_id}")
         
-        variables_service = get_variables_service()
+        variables_service = get_container().variables_service
         resolved_token = await variables_service.resolve(token_value)
         logger.info(f"✅ WhatsApp токен резолвнут для flow {flow_id}")
         return resolved_token
@@ -839,7 +838,7 @@ class WhatsAppInterface(BaseInterface):
         4. Возвращает информацию о регистрации
         """
         
-        storage = Storage()
+        storage = get_container().storage
         
         # Получаем access token
         access_token = await cls.get_access_token_for_flow(flow_id, platform_config)

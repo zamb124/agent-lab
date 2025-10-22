@@ -13,11 +13,8 @@ logger = logging.getLogger(__name__)
 class ConfigPersister:
     """Сохранение конфигураций в БД через репозитории"""
 
-    def __init__(self, storage: Storage = None):
-        self.storage = storage or Storage()
-        self.agent_repository = get_container().get_agent_repository()
-        self.flow_repository = get_container().get_flow_repository()
-        self.tool_repository = get_container().get_tool_repository()
+    def __init__(self):
+        pass
 
     async def save_agent(self, config: AgentConfig) -> bool:
         """
@@ -29,7 +26,7 @@ class ConfigPersister:
         Returns:
             True если сохранение успешно
         """
-        return await self.agent_repository.set(config)
+        return await get_container().agent_repository.set(config)
 
     async def save_flow(self, config: FlowConfig) -> bool:
         """
@@ -41,7 +38,7 @@ class ConfigPersister:
         Returns:
             True если сохранение успешно
         """
-        return await self.flow_repository.set(config)
+        return await get_container().flow_repository.set(config)
 
     async def save_tool(self, config: ToolReference) -> bool:
         """
@@ -53,5 +50,5 @@ class ConfigPersister:
         Returns:
             True если сохранение успешно
         """
-        return await self.tool_repository.set(config)
+        return await get_container().tool_repository.set(config)
 

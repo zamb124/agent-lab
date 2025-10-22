@@ -82,11 +82,17 @@ class CheckpointerManager:
 
             async def aget_tuple(self, config):
                 cp = await self._get_connection()
-                return await cp.aget_tuple(config)
+                logger.info(f"🔍 checkpointer.aget_tuple: config={config}")
+                result = await cp.aget_tuple(config)
+                logger.info(f"🔍 checkpointer.aget_tuple: result={result}")
+                return result
 
             async def aput(self, config, checkpoint, metadata, new_versions):
                 cp = await self._get_connection()
-                return await cp.aput(config, checkpoint, metadata, new_versions)
+                logger.info(f"🔍 checkpointer.aput: config={config}, checkpoint keys={list(checkpoint.keys()) if isinstance(checkpoint, dict) else 'not dict'}")
+                result = await cp.aput(config, checkpoint, metadata, new_versions)
+                logger.info(f"🔍 checkpointer.aput: result={result}")
+                return result
 
             async def alist(self, config, *, limit=None, before=None):
                 cp = await self._get_connection()
@@ -162,7 +168,54 @@ async def get_checkpointer():
     if _checkpointer is None:
         await init_checkpointer()
 
+    logger.info(f"🔍 get_checkpointer: возвращаем checkpointer {type(_checkpointer)}")
     return _checkpointer
+
+
+async def update_checkpointer_with_store_changes(checkpointer, run_config: dict, store_data: dict):
+    """
+    Обновляет checkpointer с изменениями store, сделанными в tools.
+    Это лаконичная архитектура для персистентности state.
+    """
+    # Получаем текущий checkpoint
+    checkpoint_tuple = await checkpointer.aget_tuple(run_config)
+    if checkpoint_tuple and checkpoint_tuple.checkpoint:
+        # Обновляем channel_values с новыми данными store
+        updated_channel_values = checkpoint_tuple.checkpoint.get("channel_values", {})
+        updated_channel_values["store"] = store_data
+        
+        # Создаем новый checkpoint с обновленными данными
+        updated_checkpoint = checkpoint_tuple.checkpoint.copy()
+        updated_checkpoint["channel_values"] = updated_channel_values
+        
+        # Обновляем channel_versions для store
+        channel_versions = checkpoint_tuple.checkpoint.get("channel_versions", {})
+        if "store" in channel_versions:
+            # Инкрементируем версию store
+            current_version = channel_versions["store"]
+            if isinstance(current_version, str):
+                try:
+                    new_version = f"{int(current_version.split('.')[0]) + 1:032d}"
+                except:
+                    new_version = "00000000000000000000000000000002"
+            else:
+                new_version = "00000000000000000000000000000002"
+            channel_versions["store"] = new_version
+        else:
+            channel_versions["store"] = "00000000000000000000000000000001"
+        
+        # Сохраняем обновленный checkpoint
+        # Используем checkpoint_tuple.config для сохранения (содержит checkpoint_ns)
+        await checkpointer.aput(
+            checkpoint_tuple.config,
+            updated_checkpoint,
+            checkpoint_tuple.metadata,
+            channel_versions
+        )
+        
+        logger.info(f"✅ Store обновлен в checkpointer: {list(store_data.keys())}")
+    else:
+        logger.warning("⚠️ Не удалось получить checkpoint для обновления store")
 
 
 async def close_checkpointer() -> None:

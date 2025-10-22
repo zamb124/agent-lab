@@ -27,7 +27,7 @@ class Flow:
         """Инициализирует entry агента"""
         # Получаем entry point агента
         container = get_container()
-        agent_factory = container.get_agent_factory()
+        agent_factory = container.agent_factory
         self.entry_agent = await agent_factory.get_agent(self.config.entry_point_agent)
 
     async def ainvoke(

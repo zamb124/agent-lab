@@ -5,7 +5,7 @@
 import asyncio
 import json
 import logging
-from app.db.repositories import Storage
+from app.core.container import get_container
 from app.core.file_processor import get_default_file_processor
 
 logging.basicConfig(level=logging.INFO)
@@ -23,7 +23,7 @@ async def test_file_search():
         "file_4e33c8955ada"
     ]
     
-    storage = Storage()
+    storage = get_container().storage
     file_processor = await get_default_file_processor()
     
     for file_id in test_file_ids:

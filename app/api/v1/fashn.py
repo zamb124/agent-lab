@@ -21,7 +21,7 @@ from ...core.file_processor import FileProcessor, get_default_file_processor
 from ...tools.integrations.fashn_tools import virtual_try_on
 from ...tools.integrations.nano_banana_tools import generate_images
 from ...core.context import get_context
-from app.db.repositories import Storage
+from app.frontend.dependencies import StorageDep
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
@@ -385,8 +385,7 @@ A single, high-quality edited image that is 98-99.5% identical to the original I
                     "variations": request.variations
                 }
             }
-            
-            storage = Storage()
+
             await storage.set(try_on_id, json.dumps(try_on_record))
             logger.info(f"✅ Примерка сохранена в историю: {try_on_id}")
         else:
@@ -407,7 +406,7 @@ A single, high-quality edited image that is 98-99.5% identical to the original I
 
 
 @router.post("/try-on", response_model=TryOnResponse, summary="Виртуальная примерка")
-async def virtual_try_on_api(request: TryOnRequest):
+async def virtual_try_on_api(request: TryOnRequest, storage: StorageDep):
     """
     Создает изображение с виртуальной примеркой одежды или аксессуаров.
     
@@ -645,7 +644,7 @@ async def get_fashn_help():
 
 
 @router.get("/history", response_model=List[dict])
-async def get_try_on_history(limit: int = 20, offset: int = 0):
+async def get_try_on_history(storage: StorageDep, limit: int = 20, offset: int = 0):
     """
     Получает историю примерок текущего пользователя
     
@@ -700,7 +699,7 @@ async def get_try_on_history(limit: int = 20, offset: int = 0):
 
 
 @router.get("/history/{try_on_id}")
-async def get_try_on_details(try_on_id: str):
+async def get_try_on_details(try_on_id: str, storage: StorageDep):
     """
     Получает детали конкретной примерки
     
@@ -724,7 +723,6 @@ async def get_try_on_details(try_on_id: str):
         raise HTTPException(status_code=403, detail="Access denied to this try-on record")
     
     try:
-        storage = Storage()
         data = await storage.get(try_on_id)
         
         if not data:
@@ -741,7 +739,7 @@ async def get_try_on_details(try_on_id: str):
 
 
 @router.get("/history-panel")
-async def get_history_panel():
+async def get_history_panel(storage: StorageDep):
     """
     Возвращает HTML панель с историей примерок для HTMX
     """
@@ -768,10 +766,8 @@ async def get_history_panel():
     
     user_id = context.user.user_id
     logger.info(f"📜 Запрос истории примерок для пользователя: {user_id}")
-    
+
     try:
-        storage = Storage()
-        
         # Получаем все ключи примерок для пользователя
         prefix = f"try_on:{user_id}:"
         logger.info(f"🔍 Ищем ключи по префиксу: {prefix}")

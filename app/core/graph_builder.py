@@ -19,6 +19,7 @@ from app.models import (
     ConditionType,
     CodeMode,
 )
+from app.core.container import get_container
 from app.core.tool_factory import ToolFactory
 from app.core.checkpointer import get_checkpointer
 from app.core.agent_factory import AgentFactory
@@ -243,7 +244,7 @@ class GraphBuilder:
                 f"Доступные поля: params={node.params}, function_class={node.function_class}"
             )
 
-        agent_factory = AgentFactory()
+        agent_factory = get_container().agent_factory
         
         try:
             agent = await agent_factory.get_agent(agent_id)
@@ -285,8 +286,7 @@ class GraphBuilder:
         
         # Для MCP тулов загружаем ToolReference из БД
         if code_mode == CodeMode.MCP_TOOL:
-            from app.core.container import get_container
-            tool_repo = get_container().get_tool_repository()
+            tool_repo = get_container().tool_repository
             tool_ref = await tool_repo.get(tool_id)
             
             if not tool_ref:
@@ -308,50 +308,66 @@ class GraphBuilder:
 
         async def tool_node(state: State) -> State:
             """Функция ноды инструмента"""
-            # Извлекаем входные данные из состояния
-            # Поддержка вложенных ключей вида "store.key"
-            tool_input_key = node.params.get("input_key", "input")
-            
-            if "." in tool_input_key:
-                # Вложенный ключ вида "store.calc_input"
-                parts = tool_input_key.split(".", 1)
-                input_data = state.get(parts[0], {}).get(parts[1], "")
-            else:
-                input_data = state.get(tool_input_key, "")
-            
             logger.info(f"🔧 [TOOL_NODE] {node.id}: tool={tool.name if hasattr(tool, 'name') else 'unknown'}")
-            logger.info(f"   Input key: {tool_input_key}")
-            logger.info(f"   Input data: {input_data}")
-            logger.info(f"   State keys: {list(state.keys())}")
-
-            # Подготавливаем аргументы для тула
-            # Для StructuredTool (включая MCP) нужен dict с параметрами
-            if hasattr(tool, 'args_schema') and tool.args_schema:
-                # Если input_data уже dict - используем как есть
-                if isinstance(input_data, dict):
-                    tool_args = input_data.copy()
-                else:
-                    # Преобразуем в dict с первым параметром
-                    schema_fields = tool.args_schema.model_fields
-                    # Фильтруем служебные поля state и tool_call_id
-                    param_names = [
-                        name for name in schema_fields.keys() 
-                        if name not in ['state', 'tool_call_id']
-                    ]
-                    
-                    if not param_names:
-                        tool_args = {}
-                    else:
-                        first_param = param_names[0]
-                        tool_args = {first_param: input_data}
-                
-                # Добавляем state и tool_call_id для state_aware тулов
-                # Декоратор @tool извлечет их через kwargs.pop('state')
-                import uuid
-                tool_args['state'] = state
-                tool_args['tool_call_id'] = str(uuid.uuid4())
+            
+            # Если в params есть args - используем их напрямую
+            if "args" in node.params:
+                tool_args = node.params["args"].copy() if isinstance(node.params["args"], dict) else {}
+                logger.info(f"   Используем args из params: {tool_args}")
             else:
-                tool_args = input_data
+                # Извлекаем входные данные из состояния
+                # Поддержка вложенных ключей вида "store.key"
+                tool_input_key = node.params.get("input_key", "input")
+                
+                if "." in tool_input_key:
+                    # Вложенный ключ вида "store.calc_input"
+                    parts = tool_input_key.split(".", 1)
+                    input_data = state.get(parts[0], {}).get(parts[1], "")
+                else:
+                    input_data = state.get(tool_input_key, "")
+                
+                logger.info(f"   Input key: {tool_input_key}")
+                logger.info(f"   Input data type: {type(input_data)}")
+                logger.info(f"   State keys: {list(state.keys())}")
+
+                # Подготавливаем аргументы для тула
+                # Для StructuredTool (включая MCP) нужен dict с параметрами
+                if hasattr(tool, 'args_schema') and tool.args_schema:
+                    # Если input_data уже dict - используем как есть
+                    if isinstance(input_data, dict):
+                        tool_args = input_data.copy()
+                    else:
+                        # Преобразуем в dict с первым параметром
+                        schema_fields = tool.args_schema.model_fields
+                        # Фильтруем служебные поля state и tool_call_id
+                        param_names = [
+                            name for name in schema_fields.keys() 
+                            if name not in ['state', 'tool_call_id']
+                        ]
+                        
+                        if not param_names:
+                            tool_args = {}
+                        else:
+                            first_param = param_names[0]
+                            tool_args = {first_param: input_data}
+                else:
+                    tool_args = input_data
+            
+            # Проверяем нужны ли тулу state и tool_call_id
+            # (Декоратор @tool с state_aware=True добавляет их в args_schema)
+            if hasattr(tool, 'args_schema') and tool.args_schema:
+                import uuid
+                schema_fields = tool.args_schema.model_fields if hasattr(tool.args_schema, 'model_fields') else {}
+                
+                # Добавляем state только если он есть в схеме (state_aware=True)
+                if 'state' in schema_fields and 'state' not in tool_args:
+                    tool_args['state'] = state
+                    logger.debug(f"   Добавляем state в аргументы тула (state_aware)")
+                
+                # Добавляем tool_call_id только если он есть в схеме
+                if 'tool_call_id' in schema_fields and 'tool_call_id' not in tool_args:
+                    tool_args['tool_call_id'] = str(uuid.uuid4())
+                    logger.debug(f"   Добавляем tool_call_id в аргументы тула")
 
             # Вызываем тул через ainvoke для корректной работы @tool декоратора
             if hasattr(tool, "ainvoke"):
@@ -574,7 +590,7 @@ class GraphBuilder:
                 f"Доступные поля: {node.params}"
             )
 
-        flow_factory = FlowFactory()
+        flow_factory = get_container().flow_factory
         
         try:
             flow = await flow_factory.get_flow(flow_id)

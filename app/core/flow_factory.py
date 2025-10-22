@@ -35,10 +35,10 @@ logger = logging.getLogger(__name__)
 class FlowFactory:
     """Фабрика для Flow и управления историей выполнения"""
 
-    def __init__(self):
-        self.storage = Storage()
-        self.flow_repository = get_container().get_flow_repository()
-        self.session_repository = get_container().get_session_repository()
+    def __init__(self, flow_repository, session_repository, storage):
+        self.flow_repository = flow_repository
+        self.session_repository = session_repository
+        self.storage = storage
 
     async def get_flow(self, flow_id: str) -> Flow:
         """

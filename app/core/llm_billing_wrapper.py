@@ -251,8 +251,13 @@ class ChatOpenAIWithBilling(BaseChatModel):
             
             if response.status_code != 200:
                 raise ValueError(f"OpenRouter API error: {response.status_code} - {response.text}")
-            
-            data = response.json()
+
+            try:
+                data = response.json()
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ Ошибка парсинга JSON ответа от OpenRouter: {e}")
+                logger.error(f"Ответ сервера (первые 500 символов): {response.text[:500]}...")
+                raise ValueError(f"OpenRouter вернул некорректный JSON: {e}")
         
         # Логируем ответ
         logger.info(f"LLM ответ:\n{json.dumps(data, ensure_ascii=False, indent=2)}")

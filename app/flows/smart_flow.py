@@ -7,7 +7,7 @@ from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph import StateGraph, START, END
 from app.agents.stategraph_agent import StateGraphAgent
 from app.models import FlowConfig
-from app.core.agent_factory import AgentFactory
+from app.core.container import get_container
 
 
 class RouterState(TypedDict):
@@ -41,7 +41,7 @@ def router_condition(state: RouterState) -> str:
 
 async def calculator_node(state: RouterState) -> RouterState:
     """Вызов калькулятора"""
-    factory = AgentFactory()
+    factory = get_container().agent_factory
     calculator = await factory.get_agent("app.agents.calculator.agent.CalculatorAgent")
     result = await calculator.ainvoke(
         {"messages": [{"role": "user", "content": state["original_question"]}]}
@@ -52,7 +52,7 @@ async def calculator_node(state: RouterState) -> RouterState:
 
 async def weather_node(state: RouterState) -> RouterState:
     """Вызов погодного агента"""
-    factory = AgentFactory()
+    factory = get_container().agent_factory
     weather = await factory.get_agent("app.agents.weather.agent.WeatherAgent")
     result = await weather.ainvoke({"messages": state["messages"]})
     state["messages"] = result["messages"]
@@ -61,7 +61,7 @@ async def weather_node(state: RouterState) -> RouterState:
 
 async def explainer_node(state: RouterState) -> RouterState:
     """Вызов объяснителя"""
-    factory = AgentFactory()
+    factory = get_container().agent_factory
     explainer = await factory.get_agent("app.agents.explainer.agent.ExplainerAgent")
 
     # Формируем правильный запрос для ExplainerAgent

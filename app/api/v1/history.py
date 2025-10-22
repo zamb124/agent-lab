@@ -7,7 +7,7 @@ from typing import Optional
 from datetime import datetime
 from fastapi import APIRouter, Query
 
-from app.core.flow_factory import FlowFactory
+from app.core.container import get_container
 from app.models.history_models import MessageHistoryResponse, SessionListResponse
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,7 @@ async def get_sessions(
         f"📋 API: Запрос списка сессий (platform={platform}, flow={flow_id}, limit={limit}, offset={offset})"
     )
     
-    flow_factory = FlowFactory()
+    flow_factory = get_container().flow_factory
     
     result = await flow_factory.get_flow_sessions(
         platform=platform,
@@ -103,7 +103,7 @@ async def get_session_messages(
     """
     logger.info(f"📜 API: Запрос истории для сессии {session_id}")
     
-    flow_factory = FlowFactory()
+    flow_factory = get_container().flow_factory
     
     history = await flow_factory.get_flow_history(
         session_id=session_id,

@@ -36,84 +36,104 @@ def sse_client():
 async def test_list_tools_http(http_client):
     """Тест получения списка тулов через HTTP"""
     mock_response = MagicMock()
+    mock_response.text = '{"jsonrpc": "2.0", "id": 1, "result": {"tools": [{"name": "search_docs", "description": "Search documentation", "inputSchema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}]}}'
     mock_response.json.return_value = {
-        "tools": [
-            {
-                "name": "search_docs",
-                "description": "Search documentation",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string"}
-                    },
-                    "required": ["query"]
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+            "tools": [
+                {
+                    "name": "search_docs",
+                    "description": "Search documentation",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string"}
+                        },
+                        "required": ["query"]
+                    }
                 }
-            }
-        ]
+            ]
+        }
     }
     mock_response.raise_for_status = MagicMock()
     
-    with patch.object(http_client, '_get_client', return_value=AsyncMock()) as mock_get_client:
-        mock_client = await mock_get_client()
-        mock_client.post = AsyncMock(return_value=mock_response)
-        
-        tools = await http_client.list_tools()
-        
-        assert len(tools) == 1
-        assert tools[0]["name"] == "search_docs"
-        assert tools[0]["description"] == "Search documentation"
-        mock_client.post.assert_called_once_with("https://mcp.example.com/mcp/list_tools", json={})
+    # Устанавливаем мок клиента напрямую
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    http_client._client = mock_client
+    http_client._session_id = "test_session"
+    
+    tools = await http_client.list_tools()
+    
+    assert len(tools) == 1
+    assert tools[0]["name"] == "search_docs"
+    assert tools[0]["description"] == "Search documentation"
 
 
 @pytest.mark.asyncio
 async def test_call_tool_http_success(http_client):
     """Тест успешного вызова тула через HTTP"""
     mock_response = MagicMock()
+    mock_response.text = '{"jsonrpc": "2.0", "id": 1, "result": {"content": [{"type": "text", "text": "Search results here"}]}}'
     mock_response.json.return_value = {
-        "isError": False,
-        "content": [
-            {
-                "type": "text",
-                "text": "Search results here"
-            }
-        ]
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Search results here"
+                }
+            ]
+        }
     }
     mock_response.raise_for_status = MagicMock()
     
-    with patch.object(http_client, '_get_client', return_value=AsyncMock()) as mock_get_client:
-        mock_client = await mock_get_client()
-        mock_client.post = AsyncMock(return_value=mock_response)
-        
-        result = await http_client.call_tool("search_docs", {"query": "test"})
-        
-        assert result["isError"] is False
-        assert len(result["content"]) == 1
-        assert result["content"][0]["text"] == "Search results here"
+    # Устанавливаем мок клиента напрямую
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    http_client._client = mock_client
+    http_client._session_id = "test_session"
+    
+    result = await http_client.call_tool("search_docs", {"query": "test"})
+    
+    assert result["isError"] is False
+    assert len(result["content"]) == 1
+    assert result["content"][0]["text"] == "Search results here"
 
 
 @pytest.mark.asyncio
 async def test_call_tool_http_error(http_client):
     """Тест вызова тула с ошибкой"""
     mock_response = MagicMock()
+    mock_response.text = '{"jsonrpc": "2.0", "id": 1, "result": {"content": [{"type": "text", "text": "Error: Invalid query"}], "isError": true}}'
     mock_response.json.return_value = {
-        "isError": True,
-        "content": [
-            {
-                "type": "text",
-                "text": "Error: Invalid query"
-            }
-        ]
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Error: Invalid query"
+                }
+            ],
+            "isError": True
+        }
     }
     mock_response.raise_for_status = MagicMock()
     
-    with patch.object(http_client, '_get_client', return_value=AsyncMock()) as mock_get_client:
-        mock_client = await mock_get_client()
-        mock_client.post = AsyncMock(return_value=mock_response)
-        
-        result = await http_client.call_tool("search_docs", {"query": ""})
-        
-        assert result["isError"] is True
-        assert "Invalid query" in result["content"][0]["text"]
+    # Устанавливаем мок клиента напрямую
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    http_client._client = mock_client
+    http_client._session_id = "test_session"
+    
+    result = await http_client.call_tool("search_docs", {"query": ""})
+    
+    assert result["isError"] is True
+    assert len(result["content"]) >= 1
+    assert "Invalid query" in result["content"][0]["text"]
 
 
 def test_format_mcp_result_text():

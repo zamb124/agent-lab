@@ -9,6 +9,7 @@ import re
 from typing import Optional, Dict, Any, Set, List
 
 from app.db.repositories import Storage
+from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +17,10 @@ logger = logging.getLogger(__name__)
 class VariablesService:
     """Управление переменными компании с поддержкой ссылок @var:key"""
     
-    def __init__(self):
-        self.storage = Storage()
+    def __init__(self, storage: Storage = None):
+        if storage is None:
+            storage = get_container().storage
+        self.storage = storage
     
     async def set_var(self, key: str, value: str, is_secret: bool = False, groups: list = None, description: str = None) -> bool:
         """

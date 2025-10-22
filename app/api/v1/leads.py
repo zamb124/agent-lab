@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, EmailStr
 import json
 
-from app.db.repositories import Storage
+from app.frontend.dependencies import StorageDep
 from app.core.config import settings
 
 router = APIRouter(
@@ -35,7 +35,7 @@ class LeadResponse(BaseModel):
 
 
 @router.post("/lead", response_model=LeadResponse, summary="Создать лид")
-async def create_lead(lead: LeadRequest):
+async def create_lead(lead: LeadRequest, storage: StorageDep):
     """
     Создает лид (заявку) из формы обратной связи.
     
@@ -75,7 +75,6 @@ async def create_lead(lead: LeadRequest):
         }
         
         # Сохраняем в базу данных
-        storage = Storage()
         await storage.set(f"lead:{lead_id}", json.dumps(lead_data))
         
         # Отправляем уведомление в Telegram

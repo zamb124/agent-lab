@@ -6,11 +6,10 @@ WhatsApp webhook endpoints.
 import logging
 from fastapi import APIRouter, Request, HTTPException, Query
 
-from app.db.repositories import Storage
 from app.interfaces.whatsapp_interface import WhatsAppInterface
-from app.frontend.dependencies import FlowRepositoryDep
+from app.frontend.dependencies import FlowRepositoryDep, StorageDep
 from app.models import FlowConfig
-from app.services.variables_service import get_variables_service
+from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +19,10 @@ router = APIRouter()
 @router.get("/webhook/whatsapp/{flow_key:path}")
 async def whatsapp_webhook_verify(
     flow_key: str,
+    storage: StorageDep,
     hub_mode: str = Query(alias="hub.mode"),
     hub_verify_token: str = Query(alias="hub.verify_token"),
-    hub_challenge: str = Query(alias="hub.challenge")
+    hub_challenge: str = Query(alias="hub.challenge"),
 ):
     """
     Верификация webhook для WhatsApp Business API.
@@ -30,7 +30,6 @@ async def whatsapp_webhook_verify(
     WhatsApp отправляет GET запрос с параметрами для верификации.
     Необходимо вернуть hub.challenge если verify_token совпадает.
     """
-    storage = Storage()
     flow_data = await storage.get(flow_key, force_global=True)
     
     if not flow_data:
@@ -45,7 +44,7 @@ async def whatsapp_webhook_verify(
     if hub_mode != "subscribe":
         raise HTTPException(status_code=403, detail="Invalid hub.mode")
 
-    variables_service = get_variables_service()
+    variables_service = get_container().variables_service
     expected_verify_token = await variables_service.resolve(whatsapp_config.get("verify_token", ""))
 
     if hub_verify_token != expected_verify_token:
@@ -57,12 +56,11 @@ async def whatsapp_webhook_verify(
 
 
 @router.post("/webhook/whatsapp/{flow_key:path}")
-async def whatsapp_webhook(flow_key: str, request: Request):
+async def whatsapp_webhook(flow_key: str, request: Request, storage: StorageDep):
     """
     Обработка webhook от WhatsApp Business API.
     Получает входящие сообщения, статусы доставки и другие события.
     """
-    storage = Storage()
     flow_data = await storage.get(flow_key, force_global=True)
     
     if not flow_data:

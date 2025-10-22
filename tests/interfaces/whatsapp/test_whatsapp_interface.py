@@ -610,10 +610,10 @@ class TestWhatsAppInterfaceCredentials:
             "access_token": "@var:whatsapp_token"
         }
         
-        with patch('app.interfaces.whatsapp_interface.get_variables_service') as mock_service:
+        with patch('app.interfaces.whatsapp_interface.get_container') as mock_container:
             mock_vars = AsyncMock()
             mock_vars.resolve = AsyncMock(return_value="resolved_token_123")
-            mock_service.return_value = mock_vars
+            mock_container.return_value.variables_service = mock_vars
             
             token = await WhatsAppInterface.get_access_token_for_flow("test_flow", platform_config)
         
@@ -627,10 +627,10 @@ class TestWhatsAppInterfaceCredentials:
             "access_token": "hardcoded_token_xyz"
         }
         
-        with patch('app.interfaces.whatsapp_interface.get_variables_service') as mock_service:
+        with patch('app.interfaces.whatsapp_interface.get_container') as mock_container:
             mock_vars = AsyncMock()
             mock_vars.resolve = AsyncMock(return_value="hardcoded_token_xyz")
-            mock_service.return_value = mock_vars
+            mock_container.return_value.variables_service = mock_vars
             
             token = await WhatsAppInterface.get_access_token_for_flow("test_flow", platform_config)
         

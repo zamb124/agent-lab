@@ -18,6 +18,7 @@ from ..core.config import settings
 from ..fields import Field
 from ..core.slug_utils import generate_slug
 from ..core.context import get_context
+from ..core.container import get_container
 
 from .rag_models import AgentRAGConfig
 from .types import HistorySource, PythonCode
@@ -516,7 +517,7 @@ class ToolReference(BuilderEntity):
         tool_ref = cls._from_function(func=tool_obj, module_name=module_name_for_ref)
         
         if migrator:
-            await migrator.storage.set(f"tool:{tool_ref.tool_id}", tool_ref.model_dump_json())
+            await get_container().storage.set(f"tool:{tool_ref.tool_id}", tool_ref.model_dump_json())
         
         return tool_ref
     
@@ -845,8 +846,7 @@ class AgentConfig(BuilderEntity):
                 references.append(ToolReference(tool_id=tool))
             
             elif hasattr(tool, "__class__"):
-                from app.agents.base import BaseAgent
-                if issubclass(tool.__class__, BaseAgent):
+                if hasattr(tool, "as_tool") and hasattr(tool, "agent_id"):
                     agent_class = tool.__class__
                     full_path = f"{agent_class.__module__}.{agent_class.__name__}"
                     references.append(ToolReference(tool_id=full_path))
@@ -901,8 +901,7 @@ class AgentConfig(BuilderEntity):
         
         await migrator.persister.save_agent(agent_config)
         
-        from ..services.variables_service import get_variables_service
-        variables_service = get_variables_service()
+        variables_service = get_container().variables_service
         
         if agent_config.local_variables:
             await variables_service.resolve(agent_config.local_variables, auto_create=True)
@@ -1377,7 +1376,7 @@ class FlowConfig(BuilderEntity):
         if not isinstance(flow_config_orig, cls):
             raise ValueError(f"Объект {flow_id} не является FlowConfig")
         
-        flow_repo = migrator.persister.flow_repository
+        flow_repo = get_container().flow_repository
         existing_flow = await flow_repo.get(flow_id)
         
         flow_config = cls.from_flow_config_object(flow_config_orig, flow_id)
@@ -1395,8 +1394,7 @@ class FlowConfig(BuilderEntity):
         
         await migrator.persister.save_flow(flow_config)
         
-        from ..services.variables_service import get_variables_service
-        variables_service = get_variables_service()
+        variables_service = get_container().variables_service
         
         if flow_config.variables:
             await variables_service.resolve(flow_config.variables, auto_create=True)
@@ -1454,8 +1452,7 @@ class FlowConfig(BuilderEntity):
             logger.warning("flow_id не установлен, пропускаем загрузку картинки")
             return flow_config
         
-        from ..core.core_clients.s3_client import S3ClientFactory
-        s3_client = S3ClientFactory.create_client_for_bucket(settings.s3.default_bucket)
+        s3_client = get_container().s3_factory.create_client_for_bucket(settings.s3.default_bucket)
         
         flow_hash = hashlib.md5(flow_config.flow_id.encode()).hexdigest()[:8]
         extension = image_path.suffix

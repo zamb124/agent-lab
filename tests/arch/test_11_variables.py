@@ -105,10 +105,10 @@ async def test_variables_per_company_isolation(storage, unique_id, flow_repo):
     from app.services.variables_service import VariablesService
     variables_service = VariablesService()
     
-    set_context(context1)
+    await set_context(context1)
     await variables_service.set_var("shared_key", "value_from_company1", is_secret=False)
     
-    set_context(context2)
+    await set_context(context2)
     value = await variables_service.get_var("shared_key")
     assert value is None
     
@@ -116,7 +116,7 @@ async def test_variables_per_company_isolation(storage, unique_id, flow_repo):
     value = await variables_service.get_var("shared_key")
     assert value == "value_from_company2"
     
-    set_context(context1)
+    await set_context(context1)
     value = await variables_service.get_var("shared_key")
     assert value == "value_from_company1"
 

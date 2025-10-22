@@ -51,6 +51,10 @@
     "interface": {
       "title": "Интерфейс",
       "description": "Интерфейс для отправки промежуточных сообщений (reasoning, thinking, etc)"
+    },
+    "container": {
+      "title": "Container",
+      "description": "Контейнер с изолированными сервисами для данного контекста"
     }
   }
 }

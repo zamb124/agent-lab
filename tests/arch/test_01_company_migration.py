@@ -49,7 +49,7 @@ def test_migration_company(storage):
             active_company=company,
             user_companies=[company]
         )
-        set_context(context)
+        await set_context(context)
         
         prefixes = [
             "flow:",
@@ -677,7 +677,7 @@ async def test_company_isolation(migrated_db, storage, migrator, agent_repo, flo
             active_company=company1,
             user_companies=[company1]
         )
-        set_context(context1)
+        await set_context(context1)
         
         await migrator.migrate_for_company(
             company=company1,
@@ -708,7 +708,7 @@ async def test_company_isolation(migrated_db, storage, migrator, agent_repo, flo
             active_company=company2,
             user_companies=[company2]
         )
-        set_context(context2)
+        await set_context(context2)
         
         # 4. Проверяем что flow НЕТ во второй компании
         flow_config_2 = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
@@ -726,7 +726,7 @@ async def test_company_isolation(migrated_db, storage, migrator, agent_repo, flo
         assert agent_config_2 is not None, "Агент должен быть в компании 2"
         
         # 7. Переключаемся обратно на первую компанию
-        set_context(context1)
+        await set_context(context1)
         
         # 8. Проверяем что агента НЕТ в первой компании
         agent_config_1 = await agent_repo.get("app.agents.calculator.agent.CalculatorAgent")

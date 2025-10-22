@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
 from app.core.config import settings
 
-from app.identity.auth_service import auth_service
+from app.identity.auth_service import get_auth_service
 from app.identity.models import AuthProvider, AuthRequest
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ router = APIRouter()
 @router.get("/providers")
 async def get_auth_providers():
     """Возвращает список доступных провайдеров авторизации"""
-    providers = auth_service.get_available_providers()
+    providers = get_auth_service().get_available_providers()
 
     return {
         "providers": [
@@ -52,7 +52,7 @@ async def start_auth(provider_name: str, redirect_uri: str = None):
         redirect_uri = f"https://agents-lab.ru/auth/callback/{provider_name}"
 
     try:
-        auth_url = await auth_service.start_auth(provider, redirect_uri)
+        auth_url = await get_auth_service().start_auth(provider, redirect_uri)
         return RedirectResponse(url=auth_url)
     except Exception as e:
         logger.error(f"Ошибка начала авторизации {provider_name}: {e}", exc_info=True)
@@ -103,7 +103,7 @@ async def auth_callback(
     )
 
     # Завершаем авторизацию
-    result = await auth_service.complete_auth(auth_request)
+    result = await get_auth_service().complete_auth(auth_request)
     
     logger.info(f"🔑 Результат авторизации: success={result.success}, error={result.error_message}")
 
@@ -154,7 +154,7 @@ async def logout(session_id: str):
     if not session_id:
         raise HTTPException(status_code=400, detail="Не указан session_id")
 
-    success = await auth_service.logout(session_id)
+    success = await get_auth_service().logout(session_id)
 
     if success:
         return {"success": True, "message": "Сессия завершена"}
@@ -166,9 +166,9 @@ async def logout(session_id: str):
 async def auth_status():
     """Возвращает статус системы авторизации"""
     return {
-        "auth_enabled": auth_service.storage is not None,
+        "auth_enabled": get_auth_service().storage is not None,
         "available_providers": [
-            p.value for p in auth_service.get_available_providers()
+            p.value for p in get_auth_service().get_available_providers()
         ],
-        "total_providers": len(auth_service._providers),
+        "total_providers": len(get_auth_service()._providers),
     }

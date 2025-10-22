@@ -18,7 +18,7 @@ from app.core.context_window_manager import ContextWindowManager
 from app.core.context import get_context
 from langgraph.errors import GraphInterrupt
 from langchain_core.messages import HumanMessage
-
+from app.core.checkpointer import update_checkpointer_with_store_changes
 logger = logging.getLogger(__name__)
 
 
@@ -66,7 +66,7 @@ class BaseAgent(ABC):
         
         # Загружаем tools через контейнер (без циклических зависимостей)
         container = get_container()
-        agent_factory = container.get_agent_factory()
+        agent_factory = container.agent_factory
         
         tools = []
         for tool_ref in self.config.tools:
@@ -101,6 +101,8 @@ class BaseAgent(ABC):
         Унифицированный метод вызова агента.
         Все агенты должны поддерживать этот интерфейс.
         """
+        from app.core.context import get_context, set_context
+        
         run_config = config or {}
 
         # Инициализируем store из flow_config (общая память всех агентов)
@@ -161,7 +163,6 @@ class BaseAgent(ABC):
         if thread_id:
             # Есть thread_id - загружаем полный контекст из checkpoint
             state = await graph.aget_state(run_config)
-            
             
             if state and state.values:
                 # Загружаем store из checkpointer если не передан в input
@@ -226,6 +227,10 @@ class BaseAgent(ABC):
             if not self.config.llm_config:
                 logger.info("📚 Нет llm_config для проверки контекста")
 
+        # Получаем checkpointer для обновления store
+        from app.core.checkpointer import get_checkpointer
+        checkpointer = await get_checkpointer()
+        
         try:
             messages = input_data.get("messages", [])
             if messages:
@@ -244,22 +249,35 @@ class BaseAgent(ABC):
                     f"🎯 АГЕНТ {self.config.name} ← Вход: {str(input_data)[:50]}..."
                 )
             
+            # Устанавливаем agent_config в контекст для tools
+            current_context = get_context()
+            if current_context:
+                current_context.agent_config = self.config
+                await set_context(current_context)
+            
+            # Загружаем state из checkpointer перед выполнением графа
+            # Это нужно для того, чтобы tools могли получить правильный state
+            if "configurable" in run_config and "thread_id" in run_config["configurable"]:
+                checkpoint_tuple = await checkpointer.aget_tuple(run_config)
+                if checkpoint_tuple and checkpoint_tuple.checkpoint:
+                    # Обновляем контекст с данными из checkpointer
+                    checkpoint_state = checkpoint_tuple.checkpoint.get("channel_values", {})
+                    if checkpoint_state:
+                        set_state_in_context(checkpoint_state)
+                        logger.debug(f"🔄 State загружен из checkpointer в контекст: {list(checkpoint_state.keys())}")
+            
             result = await graph.ainvoke(input_data, config=run_config)
             
-            # Синхронизируем изменения из context.state обратно в result
-            context_after = get_context()
-            if context_after and context_after.state and isinstance(result, dict):
-                context_store = context_after.state.get("store", {})
-                
-                if context_store and context_store != result.get("store", {}):
-                    if "store" not in result:
-                        result["store"] = {}
-                    result["store"].update(context_store)
-                    logger.info(f"🔄 Синхронизированы изменения store из контекста: {list(context_store.keys())}")
-            
-            # Обновляем state в контексте после выполнения
+            # Обновляем state в контексте после выполнения графа
+            # Граф возвращает актуальный state, который мы устанавливаем в контекст
             if isinstance(result, dict):
                 set_state_in_context(result)
+                logger.debug(f"🔄 State обновлен в контексте после выполнения графа")
+                
+                # Если store изменился вручную в tools, записываем в checkpointer
+                # Это лаконичная архитектура для персистентности state
+                if "store" in result and result["store"] and "configurable" in run_config and "thread_id" in run_config["configurable"] and run_config["configurable"]["thread_id"] is not None:
+                    await update_checkpointer_with_store_changes(checkpointer, run_config, result["store"])
             
             logger.info(f"✅ АГЕНТ {self.config.name} → Завершен")
             return result

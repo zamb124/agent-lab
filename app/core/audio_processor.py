@@ -16,8 +16,8 @@ import httpx
 from .core_clients.s3_client import S3ClientFactory, get_default_s3_client
 from .core_clients.cloud_voice_client import get_default_cloud_voice_client
 from app.models import AudioRecord, FileStatus
-from app.db.repositories import Storage
 from .config import settings
+from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class AudioProcessor:
             bucket_name: Имя S3 бакета (если не указан, используется дефолтный)
         """
         self.bucket_name = bucket_name
-        self.storage = Storage()
+        self.storage = get_container().storage
         self._s3_client = None
         self._voice_client = None
 

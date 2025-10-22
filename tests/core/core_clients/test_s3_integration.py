@@ -278,9 +278,8 @@ class TestS3Integration:
 class TestS3WithDatabase:
     """Тесты S3 с сохранением записей в БД"""
     
-    async def test_file_record_creation_and_storage(self):
+    async def test_file_record_creation_and_storage(self, storage):
         """Тест создания и сохранения записи о файле в БД"""
-        storage = Storage()
         
         # Создаем запись о файле
         file_record = FileRecord(
@@ -326,9 +325,8 @@ class TestS3WithDatabase:
         # Очистка
         await storage.delete(file_record.key)
     
-    async def test_full_s3_workflow_with_db(self):
+    async def test_full_s3_workflow_with_db(self, storage):
         """Полный тест: загрузка в S3 + сохранение в БД + скачивание + удаление"""
-        storage = Storage()
         client = S3ClientFactory.create_client_for_bucket('vkbucket')
         
         # Создаем тестовые данные

@@ -36,7 +36,6 @@ from app.core.tool_decorator import tool
 from app.core.context import get_context
 from app.core.variables import get_state
 from app.models import TaskConfig, TaskStatus
-from app.db.repositories import Storage
 from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
@@ -135,8 +134,8 @@ async def create_delayed_task(
         execute_at=execute_at,
         skip_agent=task_skip_agent,
     )
-    
-    storage = Storage()
+
+    storage = get_container().storage
     task_key = f"task:{task_id}"
     
     logger.info(f"📝 Сохраняем задачу: key={task_key}, flow_id={flow_id}")
@@ -195,7 +194,9 @@ def list_delayed_tasks() -> str:
     Examples:
         list_delayed_tasks()
     """
+    logger.info("🔍 list_delayed_tasks: функция вызвана")
     state = get_state()
+    logger.info(f"🔍 list_delayed_tasks: state = {state}")
     
     if not state or "store" not in state or "delayed_tasks" not in state["store"]:
         return "📭 У вас нет отложенных задач"
@@ -290,7 +291,7 @@ async def cancel_delayed_task(task_id: str) -> str:
         return "❌ Сессия не определена"
     
     # Проверяем задачу в БД
-    task_repo = get_container().get_task_repository()
+    task_repo = get_container().task_repository
     task_config = await task_repo.get(task_id)
     
     if not task_config:
@@ -346,8 +347,8 @@ async def get_delayed_task_status(task_id: str) -> str:
         tasks = state["store"]["delayed_tasks"]
         if task_id in tasks:
             task_info = tasks[task_id]
-            
-            storage = Storage()
+
+            storage = get_container().storage
             task_data = await storage.get(f"task:{task_id}", force_global=True)
             
             if task_data:

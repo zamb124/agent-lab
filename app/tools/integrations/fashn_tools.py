@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 from app.core.tool_decorator import tool
 
 from app.clients.fashn_client import get_fashn_client
-from app.db.repositories import Storage
 from app.models import FileRecord
+from app.core.container import get_container
 from app.models.fashn_models import TryOnRecord, TryOnParameters
 from app.core.core_clients.s3_client import get_default_s3_client
 from app.core.context import get_context
@@ -64,7 +64,7 @@ async def virtual_try_on(
         )
 
         # Получаем файлы из хранилища
-        storage = Storage()
+        storage = get_container().storage
 
         model_data = await storage.get(model_image_file_id)
         if not model_data:
@@ -206,7 +206,7 @@ async def virtual_try_on(
         )
         
         # Сохраняем в Storage
-        storage = Storage()
+        storage = get_container().storage
         await storage.set(try_on_id, json.dumps(try_on_record.model_dump()))
         
         logger.info(f"Примерка сохранена в историю: {try_on_id}")
@@ -274,7 +274,7 @@ async def upload_image_for_try_on(image_bytes: bytes, filename: str) -> str:
         file_id = f"fashn_{uuid.uuid4().hex}"
 
         # Сохраняем в хранилище
-        storage = Storage()
+        storage = get_container().storage
         await storage.set(
             file_id,
             {
