@@ -15,7 +15,8 @@ from app.models import AgentConfig
 from app.core.variables import set_state_in_context
 from app.core.container import get_container
 from app.core.context_window_manager import ContextWindowManager
-from app.core.context import get_context
+from app.core.context import get_context, set_context
+from app.core.checkpointer import get_checkpointer
 from langgraph.errors import GraphInterrupt
 from langchain_core.messages import HumanMessage
 from app.core.checkpointer import update_checkpointer_with_store_changes
@@ -101,8 +102,6 @@ class BaseAgent(ABC):
         Унифицированный метод вызова агента.
         Все агенты должны поддерживать этот интерфейс.
         """
-        from app.core.context import get_context, set_context
-        
         run_config = config or {}
 
         # Инициализируем store из flow_config (общая память всех агентов)
@@ -207,7 +206,6 @@ class BaseAgent(ABC):
             
             if was_summarized:
                 # Очищаем checkpoint перед вызовом графа с суммаризированными messages
-                from app.core.checkpointer import get_checkpointer
                 checkpointer = await get_checkpointer()
                 
                 # Удаляем старый thread чтобы начать с чистого листа
@@ -228,7 +226,6 @@ class BaseAgent(ABC):
                 logger.info("📚 Нет llm_config для проверки контекста")
 
         # Получаем checkpointer для обновления store
-        from app.core.checkpointer import get_checkpointer
         checkpointer = await get_checkpointer()
         
         try:

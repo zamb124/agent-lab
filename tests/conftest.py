@@ -125,7 +125,8 @@ async def migrated_db():
 @pytest_asyncio.fixture
 async def storage(migrated_db):
     """Storage из контекста для каждого теста"""
-    from app.core.container import get_container
+    from app.core.container import initialize_system_container, get_container
+    initialize_system_container()
     return get_container().storage
 
 
@@ -186,7 +187,7 @@ async def tool_factory():
 @pytest_asyncio.fixture
 async def migrator():
     """Migrator для каждого теста"""
-    return Migrator()
+    return get_container().migrator
 
 
 @pytest.fixture

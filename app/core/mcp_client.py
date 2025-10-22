@@ -5,6 +5,7 @@ HTTP/SSE клиент для работы с MCP серверами.
 import httpx
 import json
 import logging
+import uuid
 from typing import Dict, Any, List, Optional
 
 from app.models.mcp_models import MCPTransportType
@@ -73,8 +74,6 @@ class MCPHttpClient:
     
     async def _initialize_session(self):
         """Инициализирует MCP сессию через JSON-RPC"""
-        import uuid
-        
         self._session_id = str(uuid.uuid4())
         
         request_data = {
@@ -410,8 +409,8 @@ async def get_mcp_client(server_id: str, company_id: Optional[str] = None) -> MC
     
     if not server_config.is_active:
         raise ValueError(f"MCP сервер {server_id} неактивен")
-    
-    variables_service = get_variables_service()
+
+    variables_service = get_container().variables_service
     resolved_headers = await variables_service.resolve(server_config.headers)
     
     client = MCPHttpClient(

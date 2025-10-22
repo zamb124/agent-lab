@@ -3,6 +3,7 @@
 """
 
 import asyncio
+import aiohttp
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
@@ -15,10 +16,13 @@ from app.core.translation_manager import get_translation_manager
 from app.core.clients.payment_providers.factory import PaymentProviderFactory
 from app.workers.payment_sync_worker import PaymentSyncWorker
 from app.core.context import set_context, clear_context
-from app.core.container import set_system_container
+from app.core.container import set_system_container, get_container
 from app.models.context_models import Context
 from app.identity.models import Company, User
 from app.frontend.core.plugin_loader import discover_and_load_plugins
+from app.workers.mcp_sync_worker import MCPSyncWorker
+from app.core.mcp_sync import sync_all_companies_mcp_servers
+from app.services.cleanup_service import CleanupService
 
 # Условные импорты для локального окружения
 if settings.server.env == "local":
@@ -30,8 +34,6 @@ logger = logging.getLogger(__name__)
 
 async def _periodic_cleanup():
     """Периодическая очистка истекших данных из Storage и S3"""
-
-    from app.services.cleanup_service import CleanupService
 
     cleanup_service = CleanupService()
 
@@ -96,7 +98,7 @@ async def lifespan(app: FastAPI):
         logger.info("🔄 Запуск миграций в фоновом режиме...")
         async def run_migration():
             try:
-                migrator = Migrator()
+                migrator = get_container().migrator
                 await migrator.run_full_migration()
                 logger.info("✅ Миграция завершена успешно")
             except Exception as e:
@@ -122,12 +124,10 @@ async def lifespan(app: FastAPI):
 
         # Синхронизация MCP серверов (неблокирующая, периодическая)
         logger.info("🔌 Запуск фоновой синхронизации MCP серверов...")
-        from app.workers.mcp_sync_worker import MCPSyncWorker
 
         # Первая синхронизация сразу (в фоне)
         async def initial_mcp_sync():
             try:
-                from app.core.mcp_sync import sync_all_companies_mcp_servers
                 await sync_all_companies_mcp_servers()
                 logger.info("✅ Начальная синхронизация MCP завершена")
             except Exception as e:
@@ -185,7 +185,6 @@ async def lifespan(app: FastAPI):
 
         # Закрываем все открытые aiohttp сессии
         try:
-            import aiohttp
             await asyncio.sleep(0.1)  # Даем время на завершение pending запросов
             logger.info("✅ HTTP сессии закрыты")
         except ImportError:

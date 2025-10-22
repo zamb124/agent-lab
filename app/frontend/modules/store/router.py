@@ -11,6 +11,7 @@ from app.frontend.core.utils import render_with_dashboard
 from app.frontend.dependencies import StorageDep
 from app.core.migration import Migrator
 from app.models import FlowConfig
+from app.core.container import get_container
 
 router = APIRouter(prefix="/frontend/store", tags=["store-pages"])
 templates = get_templates()
@@ -31,7 +32,7 @@ async def store_page(request: Request):
 @router.get("/list", response_class=HTMLResponse)
 async def store_list(request: Request, storage: StorageDep):
     """Список публичных flows из кода (оптимизировано)"""
-    migrator = Migrator()
+    migrator = get_container().migrator
     
     flows_with_ids = await migrator.get_public_flows()
     
@@ -79,7 +80,7 @@ async def flow_details(request: Request, flow_id: str, storage: StorageDep):
     """Детальная информация о flow из кода (для модалки)"""
     logger.info(f"Flow details requested for: {flow_id}")
 
-    migrator = Migrator()
+    migrator = get_container().migrator
 
     flows_with_ids = await migrator.get_public_flows()
     logger.info(f"Found {len(flows_with_ids)} public flows")
@@ -130,7 +131,7 @@ async def flow_details(request: Request, flow_id: str, storage: StorageDep):
 @router.get("/flow-image/{flow_id:path}")
 async def get_flow_image(flow_id: str):
     """Отдает картинку flow из проекта"""
-    migrator = Migrator()
+    migrator = get_container().migrator
     flows_with_ids = await migrator.get_public_flows()
     
     flow_config = None

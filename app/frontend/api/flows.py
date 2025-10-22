@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Any
 import uuid
 
-from app.models import FlowConfig
+from app.models import FlowConfig, AgentConfig, AgentType, CodeMode
 from app.frontend.dependencies import StorageDep, CanvasServiceDep, FlowRepositoryDep, AgentRepositoryDep, VariablesServiceDep, InterfaceFactoryDep
 from app.core.migration import Migrator
 from app.core.container import get_container
@@ -51,8 +51,6 @@ async def create_flow(
     entry_point_agent = flow_data.get("entry_point_agent", "")
     
     if entry_point_agent and not await agent_repo.get(entry_point_agent):
-        from app.models import AgentConfig, AgentType, CodeMode
-        
         agent_config = AgentConfig(
             agent_id=entry_point_agent,
             name=flow_data.get("name", "Новый Agent"),
@@ -291,8 +289,7 @@ async def install_flow(
 
     Принимает переменные для создания в компании.
     """
-    migrator = Migrator()
-    migrator.storage = storage
+    migrator = get_container().migrator
 
     flows_with_ids = await migrator.get_public_flows()
 

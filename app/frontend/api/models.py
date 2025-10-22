@@ -17,6 +17,7 @@ from app.frontend.core.template_loader import render_template, get_templates
 from app.frontend.websockets.notifications import notify_model_updated
 from app.frontend.core.utils import is_htmx_request
 from app.frontend.dependencies import StorageDep
+from app.core.container import get_container
 
 # ПРИНУДИТЕЛЬНЫЙ импорт field_extensions для применения monkey patches
 
@@ -106,7 +107,7 @@ async def get_models(request: Request, storage: StorageDep, model_type: str, vie
         )
 
     # При HTMX запросе возвращаем фрагмент
-    storage = Storage()
+    storage = get_container().storage
 
     # Получаем все модели данного типа (Storage автоматически добавит префикс компании)
     keys = await storage.list_by_prefix(f"{model_type}:")

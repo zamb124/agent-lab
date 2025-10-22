@@ -5,9 +5,8 @@
 import pytest
 from datetime import datetime, timezone
 
-from app.models import (
-    MessageRole, SessionConfig, SessionStatus
-)
+from app.models.session_models import SessionConfig, SessionStatus
+from app.models.history_models import MessageRole
 from langchain_core.messages import HumanMessage
 
 

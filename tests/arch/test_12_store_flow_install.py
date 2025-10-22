@@ -171,6 +171,10 @@ async def test_install_flow_creates_dependencies(migrated_db, storage, flow_fact
     assert variable_json is not None, "install hook должен создать переменную default_city"
     
     print("✅ Тест install_flow_creates_dependencies пройден!")
+    
+    # Даем время завершиться всем асинхронным задачам
+    import asyncio
+    await asyncio.sleep(0.1)
 
 
 @pytest.mark.asyncio
@@ -212,6 +216,10 @@ async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_fa
     assert tool_data is not None, "Публичные tools должны остаться"
     
     print("✅ Тест uninstall_flow_removes_dependencies пройден!")
+    
+    # Даем время завершиться всем асинхронным задачам
+    import asyncio
+    await asyncio.sleep(0.1)
 
 
 @pytest.mark.asyncio
@@ -359,6 +367,10 @@ async def test_multiple_flows_isolation(migrated_db, storage, flow_factory, migr
     assert flow_still_in_company2 is not None, "Flow должен остаться в компании 2"
     
     print("✅ Тест multiple_flows_isolation пройден!")
+    
+    # Даем время завершиться всем асинхронным задачам
+    import asyncio
+    await asyncio.sleep(0.1)
 
 
 @pytest.mark.asyncio

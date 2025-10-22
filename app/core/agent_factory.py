@@ -131,6 +131,6 @@ class AgentFactory:
         Делегирует всю логику в ToolFactory.
         """
         logger.debug(f"Создание tool: {tool_ref.tool_id}")
-        
-        tool_factory = ToolFactory()
+
+        tool_factory = get_container().tool_factory
         return await tool_factory._create_single_tool(tool_ref)

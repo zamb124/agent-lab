@@ -2,11 +2,16 @@
 Страницы авторизации и управления компаниями
 """
 
+import json
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from app.frontend.core.template_loader import get_templates
 from app.identity.models import AuthProvider
 from app.frontend.dependencies import StorageDep
+from app.core.config import settings
+from app.core.context import get_context
+from app.db.repositories import Storage
+from app.core.container import get_container
 
 router = APIRouter(prefix="/frontend", tags=["auth-pages"])
 templates = get_templates()
@@ -24,18 +29,13 @@ async def auth_page(request: Request):
 @router.get("/select-company", response_class=HTMLResponse)
 async def select_company_page(request: Request):
     """Страница выбора компании"""
-    from app.core.config import settings
-    from app.core.context import get_context
-    from app.db.repositories import Storage
-    import json
-
     context = get_context()
     user = context.user if context else None
 
     if not user or not user.companies:
         return RedirectResponse(url="/frontend/create-company")
 
-    storage = Storage()
+    storage = get_container().storage
     user_companies = []
 
     for company_id, roles in user.companies.items():
@@ -68,7 +68,6 @@ async def select_company_page(request: Request):
 @router.get("/create-company", response_class=HTMLResponse)
 async def create_company_page(request: Request):
     """Страница создания компании"""
-    from app.core.config import settings
     return templates.TemplateResponse("create_company.html", {
         "request": request,
         "domain": settings.server.domain

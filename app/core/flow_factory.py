@@ -21,6 +21,7 @@ from app.models.history_models import (
     SessionListItem,
     SessionListResponse,
 )
+from app.models.session_models import SessionConfig
 from app.models import FlowConfig, ToolReference
 from app.core.context import get_context
 from app.core.migration import Migrator
@@ -236,9 +237,7 @@ class FlowFactory:
             SessionListResponse со списком сессий
         """
         logger.info(f"📋 Получение списка сессий flow (limit={limit}, offset={offset})")
-        
-        from app.models import SessionConfig
-        
+
         # Оптимизация: получаем все сессии за 1 запрос
         all_sessions_data = await self.storage.get_all_by_prefix("session:", limit=1000)
         
@@ -275,7 +274,6 @@ class FlowFactory:
                 flow_key = f"flow:{flow_id}"
                 if flow_key in all_flows_data:
                     try:
-                        from app.models import FlowConfig
                         flow_config = FlowConfig.model_validate_json(all_flows_data[flow_key])
                         flow_cache[flow_id] = flow_config.name
                     except Exception:
@@ -511,7 +509,7 @@ class FlowFactory:
         
         company = Company.model_validate_json(company_data)
         
-        migrator = Migrator()
+        migrator = get_container().migrator
         await migrator.migrate_for_company(
             company=company,
             flows=[flow_id],
@@ -574,11 +572,14 @@ class FlowFactory:
         if not hook_ref or not hook_ref.inline_code:
             return
         
+        # Используем контейнер для получения сервисов
+        container = get_container()
+        
         namespace = {
             "FlowConfig": FlowConfig,
             "logger": logger,
-            "Storage": Storage,
-            "VariablesService": VariablesService,
+            "storage": container.storage,
+            "variables_service": container.variables_service,
             "datetime": datetime,
         }
         

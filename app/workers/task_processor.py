@@ -4,6 +4,7 @@
 
 import asyncio
 import logging
+import traceback
 from datetime import datetime, timezone
 
 from app.core.config import settings
@@ -38,7 +39,7 @@ class TaskProcessor:
     def storage(self) -> Storage:
         """Ленивая инициализация storage"""
         if self._storage is None:
-            self._storage = Storage()
+            self._storage = get_container().storage
         return self._storage
     
     @property
@@ -190,8 +191,7 @@ class TaskProcessor:
             current_context = get_context()
             if current_context:
                 if hasattr(flow_config, 'variables') and flow_config.variables:
-
-                    variables_service = get_variables_service()
+                    variables_service = get_container().variables_service
                     resolved_variables = await variables_service.resolve(flow_config.variables)
                     current_context.flow_variables = resolved_variables
                     logger.info(f"📝 Переменные flow резолвнуты и установлены в контекст: {list(resolved_variables.keys())}")
@@ -350,7 +350,6 @@ class TaskProcessor:
             
         except Exception as e:
             logger.error(f"❌ {task.task_id} неожиданная ошибка: {e}")
-            import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
             await self._handle_task_error(task, e, interface)
         finally:

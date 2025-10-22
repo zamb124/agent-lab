@@ -12,6 +12,11 @@ import httpx
 from app.core.config import settings
 from app.models import FlowConfig
 from app.core.container import get_container
+from app.services.variables_service import get_variables_service
+from app.core.context import set_context
+from app.models import Context
+from app.identity.models import User, AuthProvider, UserStatus, Company
+from app.models.i18n_models import Language
 
 logger = logging.getLogger(__name__)
 
@@ -114,12 +119,6 @@ class TelegramPoller:
                 continue
             
             # Резолвим весь telegram_config (username и token могут быть @var:key)
-            from app.services.variables_service import get_variables_service
-            from app.core.context import set_context
-            from app.models import Context
-            from app.identity.models import User, AuthProvider, UserStatus, Company
-            from app.models.i18n_models import Language
-            
             # Создаем контекст для резолюции
             company_id = flow_key.split(":")[1] if ":" in flow_key else "system"
             company_data = await storage.get(f"company:{company_id}", force_global=True)
@@ -146,9 +145,9 @@ class TelegramPoller:
                 language=Language.RU
             )
             await set_context(context)
-            
+
             # Резолвим telegram_config
-            variables_service = get_variables_service()
+            variables_service = get_container().variables_service
             resolved_config = await variables_service.resolve(telegram_config, auto_create=True)
             
             username = resolved_config.get("username")

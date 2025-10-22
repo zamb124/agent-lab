@@ -86,6 +86,7 @@ class Container:
         self._billing_service: Optional["BillingService"] = None
         self._payment_service: Optional["PaymentService"] = None
         self._interface_factory: Optional["InterfaceFactory"] = None
+        self._migrator: Optional["Migrator"] = None
         
         # Флаг инициализации базовых зависимостей
         self._initialized = False
@@ -118,6 +119,7 @@ class Container:
             'billing_service': '_billing_service',
             'payment_service': '_payment_service',
             'interface_factory': '_interface_factory',
+            'migrator': '_migrator',
         }
         
         if name not in service_map:
@@ -199,6 +201,10 @@ class Container:
             elif name == 'interface_factory':
                 from app.interfaces.factory import InterfaceFactory
                 service = InterfaceFactory(self.storage, self.flow_repository)
+                
+            elif name == 'migrator':
+                from app.core.migration import Migrator
+                service = Migrator()
             
             # Сохраняем инициализированный сервис
             setattr(self, private_name, service)

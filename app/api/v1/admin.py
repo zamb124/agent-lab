@@ -19,6 +19,8 @@ from app.core.config import get_settings
 from app.core.container import get_container
 from app.frontend.dependencies import AgentRepositoryDep, FlowRepositoryDep, StorageDep, VariablesServiceDep
 from app.frontend.dependencies import AuthServiceDep
+from fastapi.responses import RedirectResponse
+from app.services.telegram_poller import telegram_poller
 
 logger = logging.getLogger(__name__)
 
@@ -504,7 +506,7 @@ async def create_my_company(request: Request, storage: StorageDep):
     logger.info(f"🐛 DEBUG: subdomain:{subdomain} -> {company_id}, saved: {subdomain_saved}")
     
     # Мигрируем базовые сущности для новой компании
-    migrator = Migrator()
+    migrator = get_container().migrator
     logger.info(f"Начинаем миграцию базовых сущностей для компании {company_id}...")
     await migrator.migrate_defaults_for_company(company)
     logger.info(f"✅ Базовые сущности успешно мигрированы для компании {company_id}")
@@ -519,9 +521,6 @@ async def create_my_company(request: Request, storage: StorageDep):
     logger.info(f"🐛 DEBUG: Обновлен глобальный пользователь - добавлена компания {company_id}")
     
     # Редиректим на dashboard
-    from fastapi.responses import RedirectResponse
-    from app.core.config import settings
-    
     # Для локальной разработки редиректим на localhost без поддомена
     if settings.server.env == "local":
         return RedirectResponse(url="/frontend/dashboard", status_code=302)
@@ -535,7 +534,7 @@ async def create_my_company(request: Request, storage: StorageDep):
 async def remigrate_entity(entity_type: str, entity_id: str):
     """
     Перемигрирует сущность из кода для отката к базовому состоянию.
-    
+
     Args:
         entity_type: Тип сущности (flow, agent, tool)
         entity_id: ID сущности (например, app.flows.test_flow.test_flow_config)
@@ -543,8 +542,8 @@ async def remigrate_entity(entity_type: str, entity_id: str):
     context = get_context()
     if not context or not context.active_company:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    migrator = Migrator()
+
+    migrator = get_container().migrator
     company = context.active_company
     
     if entity_type == "flow":
@@ -572,10 +571,10 @@ async def remigrate_flow_with_dependencies(flow_id: str):
     context = get_context()
     if not context or not context.active_company:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    
-    migrator = Migrator()
+
+    migrator = get_container().migrator
     company = context.active_company
-    
+
     await migrator.migrate_for_company(
         company=company,
         flows=[flow_id],
@@ -605,11 +604,10 @@ async def remigrate_all_public_for_company(company_id: str, storage: StorageDep)
     
     if not company_data:
         raise HTTPException(status_code=404, detail=f"Company {company_id} not found")
-    
-    from app.identity.models import Company
+
     company = Company.model_validate_json(company_data)
-    
-    migrator = Migrator()
+
+    migrator = get_container().migrator
     await migrator.migrate_defaults_for_company(company)
     
     return {
@@ -625,8 +623,6 @@ async def reload_telegram_bots():
     Используется после добавления новых платформ.
     Работает только в локальном окружении (ENV=local).
     """
-    from app.core.config import settings
-    
     if settings.server.env != "local":
         raise HTTPException(
             status_code=400,
@@ -634,7 +630,6 @@ async def reload_telegram_bots():
         )
     
     try:
-        from app.services.telegram_poller import telegram_poller
         await telegram_poller.reload()
         return {
             "status": "success",

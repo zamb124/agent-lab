@@ -6,6 +6,7 @@
 import logging
 import inspect
 import importlib
+import uuid
 from typing import Optional
 from langgraph.graph import StateGraph, END
 from langchain_core.runnables import Runnable
@@ -23,6 +24,7 @@ from app.core.container import get_container
 from app.core.tool_factory import ToolFactory
 from app.core.checkpointer import get_checkpointer
 from app.core.agent_factory import AgentFactory
+from app.core.flow_factory import FlowFactory
 from app.core.state import State
 
 logger = logging.getLogger(__name__)
@@ -32,7 +34,7 @@ class GraphBuilder:
     """Построитель графов на основе определений"""
 
     def __init__(self):
-        self.tool_factory = ToolFactory()
+        self.tool_factory = get_container().tool_factory
 
     async def build_from_definition(
         self, graph_def: GraphDefinition, llm_config: Optional[LLMConfig] = None
@@ -356,7 +358,6 @@ class GraphBuilder:
             # Проверяем нужны ли тулу state и tool_call_id
             # (Декоратор @tool с state_aware=True добавляет их в args_schema)
             if hasattr(tool, 'args_schema') and tool.args_schema:
-                import uuid
                 schema_fields = tool.args_schema.model_fields if hasattr(tool.args_schema, 'model_fields') else {}
                 
                 # Добавляем state только если он есть в схеме (state_aware=True)
@@ -581,8 +582,6 @@ class GraphBuilder:
 
     async def _create_flow_node(self, node):
         """Создает ноду для вызова другого flow"""
-        from app.core.flow_factory import FlowFactory
-        
         flow_id = node.params.get("flow_id")
         if not flow_id:
             raise ValueError(

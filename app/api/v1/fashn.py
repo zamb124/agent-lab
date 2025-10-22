@@ -22,6 +22,8 @@ from ...tools.integrations.fashn_tools import virtual_try_on
 from ...tools.integrations.nano_banana_tools import generate_images
 from ...core.context import get_context
 from app.frontend.dependencies import StorageDep
+from app.core.container import get_container
+from . import admin
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
@@ -665,7 +667,7 @@ async def get_try_on_history(storage: StorageDep, limit: int = 20, offset: int =
     user_id = context.user.user_id
     
     try:
-        storage = Storage()
+        storage = get_container().storage
         
         # Получаем все ключи примерок для пользователя
         prefix = f"try_on:{user_id}:"
@@ -828,8 +830,6 @@ async def get_history_panel(storage: StorageDep):
             if record.get('product_url'):
                 try:
                     # Вызываем функцию парсинга напрямую, без HTTP запроса
-                    from . import admin  # Импортируем модуль admin для доступа к функции парсинга
-                    
                     # Вызываем функцию парсинга напрямую
                     product_info = await admin.parse_product_url(record['product_url'])
                     

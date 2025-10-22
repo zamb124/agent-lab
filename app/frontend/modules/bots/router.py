@@ -8,6 +8,7 @@ from app.frontend.core.template_loader import get_templates
 from app.frontend.core.utils import render_with_dashboard
 from app.db.repositories import Storage, FlowRepository
 from app.models import FlowConfig
+from app.core.container import get_container
 
 router = APIRouter(prefix="/frontend/bots", tags=["bots-pages"])
 templates = get_templates()
@@ -78,8 +79,8 @@ async def bot_details(request: Request, bot_id: str):
             "bot_details.html",
             {"request": request, "bot": bot_info}
         )
-    
-    storage = Storage()
+
+    storage = get_container().storage
     flow_config = await storage.get_flow_config(bot_id)
     
     if not flow_config:

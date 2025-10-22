@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 
 from app.core.tool_factory import ToolFactory
+from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
@@ -242,7 +243,7 @@ async def get_library_documentation() -> LibraryDocumentationResponse:
     libraries = []
 
     # Получаем реальный namespace из ToolFactory
-    tool_factory = ToolFactory()
+    tool_factory = get_container().tool_factory
     namespace = tool_factory.get_tool_namespace()
 
     # Анализируем каждый объект в namespace
