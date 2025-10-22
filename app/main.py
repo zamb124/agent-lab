@@ -2,11 +2,7 @@
 Главная точка входа FastAPI приложения.
 """
 
-import logging
 import asyncio
-import json
-import re
-import uvicorn
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Request
@@ -16,6 +12,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.core.config import settings
 from app.core.lifespan import lifespan
+from app.core.logger import setup_app_logging, get_logger
 from app.api.api import router as api_router
 from app.frontend.api_router import router as frontend_api_router
 from app.frontend.pages_router import router as frontend_pages_router
@@ -25,98 +22,13 @@ from app.middleware.auth import AuthMiddleware
 from app.middleware.profiling import ProfilingMiddleware
 
 # Настройка логирования
-logging.basicConfig(
-    level=logging.WARNING, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+setup_app_logging()
 
 # Игнорируем предупреждения о незакрытых сессиях aiohttp (от Google Gemini SDK)
 import warnings
 warnings.filterwarnings("ignore", message=".*Unclosed.*aiohttp.*")
 
-# Отключаем логи asyncio о незакрытых ресурсах (от внешних SDK)
-logging.getLogger("asyncio").setLevel(logging.CRITICAL)
-
-
-# Custom formatter для красивого JSON в логах
-class PrettyJSONFormatter(logging.Formatter):
-    def format(self, record):
-        msg = super().format(record)
-        # Ищем JSON в сообщении и форматируем его
-        if "json_data" in msg or "Request options" in msg or "Response" in msg:
-            try:
-                # Пытаемся найти и отформатировать JSON
-                json_match = re.search(r"\{.*\}", msg, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group(0)
-                    try:
-                        json_obj = eval(json_str)  # Осторожно! Только для логов
-                        pretty_json = json.dumps(json_obj, indent=2, ensure_ascii=False)
-                        msg = msg.replace(json_str, f"\n{pretty_json}")
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-        return msg
-
-
-# Применяем красивый форматтер к OpenAI и HTTP логам
-for logger_name in ["openai._base_client", "openai", "httpx", "httpcore"]:
-    logger_obj = logging.getLogger(logger_name)
-    if logger_obj.handlers:
-        for handler in logger_obj.handlers:
-            handler.setFormatter(PrettyJSONFormatter())
-
-# Включаем только OpenAI логи
-logging.getLogger("httpcore").setLevel(logging.WARNING)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("openai._base_client").setLevel(logging.DEBUG)
-logging.getLogger("openai").setLevel(logging.WARNING)
-logging.getLogger("app.core.migration.migrator").setLevel(logging.WARNING)
-logging.getLogger("app.core.agent_factory").setLevel(logging.WARNING)
-logging.getLogger("app.db.repositories.storage").setLevel(logging.WARNING)
-
-# Оставляем только ключевые логи
-logging.getLogger("app.agents.base").setLevel(
-    logging.WARNING
-)  # Убираем избыточные логи загрузки tools
-logging.getLogger("app.workers.task_processor").setLevel(
-    logging.INFO
-)  # Основные логи воркера
-logging.getLogger("app.tools.misc.standard").setLevel(
-    logging.WARNING
-)  # Убираем технические логи ask_user
-logging.getLogger("app.core.llm_factory").setLevel(
-    logging.WARNING
-)  # Отключаем wrapper логи
-
-# Убираем детальные DEBUG логи uvicorn и websocket
-logging.getLogger("uvicorn.protocols.websockets").setLevel(logging.WARNING)
-logging.getLogger("uvicorn.protocols.http").setLevel(logging.WARNING)
-logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
-logging.getLogger("websockets.protocol").setLevel(logging.WARNING)
-logging.getLogger("websockets.server").setLevel(logging.WARNING)
-
-# Включаем INFO только для профилирования и старта приложения
-logging.getLogger("app.middleware.profiling").setLevel(logging.INFO)
-logging.getLogger("uvicorn.error").setLevel(logging.INFO)
-logging.getLogger("__main__").setLevel(logging.INFO)
-
-# Включаем INFO логи для LLM биллинга
-logging.getLogger("app.core.llm_billing_wrapper").setLevel(logging.INFO)
-
-# Отключаем шумные INFO логи
-logging.getLogger("app.workers.task_processor").setLevel(logging.WARNING)
-logging.getLogger("app.db.repositories.task_repository").setLevel(logging.WARNING)
-logging.getLogger("app.middleware.auth").setLevel(logging.WARNING)
-logging.getLogger("app.identity.auth_service").setLevel(logging.WARNING)
-logging.getLogger("app.frontend.websockets.chat").setLevel(logging.WARNING)
-
-# Включаем INFO для WhatsApp для отладки
-logging.getLogger("app.api.v1.whatsapp").setLevel(logging.INFO)
-logging.getLogger("app.interfaces.whatsapp_interface").setLevel(logging.INFO)
-logging.getLogger("app.services.variables_service").setLevel(logging.INFO)
-
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # Создание FastAPI приложения

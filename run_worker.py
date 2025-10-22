@@ -4,14 +4,13 @@
 """
 
 import asyncio
-import logging
+from app.core.logger import setup_worker_logging, get_logger
 from app.workers.task_processor import main
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+# Настройка логирования
+setup_worker_logging()
+logger = get_logger(__name__)
 
 if __name__ == "__main__":
-    print("🔄 Запуск Task Processor...")
+    logger.info("🔄 Запуск Task Processor...")
     asyncio.run(main())

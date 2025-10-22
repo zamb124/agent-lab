@@ -195,7 +195,7 @@ class TestUploadDocumentToKnowledgeBase:
         with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
             with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
                 result = await upload_document_to_knowledge_base.ainvoke(
-                    {"file_id": "file_123", "tool_call_id": "test_call_456"},
+                    {"file_id": "file_123"},
                     config={}
                 )
         

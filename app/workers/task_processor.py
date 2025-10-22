@@ -3,11 +3,11 @@
 """
 
 import asyncio
-import logging
 import traceback
 from datetime import datetime, timezone
 
 from app.core.config import settings
+from app.core.logger import setup_worker_logging, get_logger
 from app.core.container import get_container
 from app.models import TaskStatus, SessionConfig, SessionStatus
 from app.core.context import set_context, clear_context, get_context
@@ -22,7 +22,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langgraph.types import Command
 from app.services.variables_service import get_variables_service
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class TaskProcessor:
@@ -531,10 +531,7 @@ async def main():
 
 if __name__ == "__main__":
     # Настройка логирования
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
+    setup_worker_logging()
 
     logger.info("🚀 Запуск Task Processor...")
     asyncio.run(main())

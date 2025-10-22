@@ -258,10 +258,26 @@ class GraphBuilder:
         async def agent_node(state: State) -> State:
             """Функция ноды агента"""
             try:
+                # Сохраняем оригинальный state перед вызовом агента
+                original_state = state.copy()
+
                 result = await agent.ainvoke(state)
-                # Обновляем состояние результатом агента
+
+                # Обновляем состояние результатом агента, но сохраняем оригинальные данные
                 if isinstance(result, dict):
+                    # Сохраняем важные данные из оригинального state
+                    preserved_data = {}
+                    for key, value in original_state.items():
+                        if key not in result or key in ['store']:
+                            preserved_data[key] = value
+
+                    # Обновляем state результатом агента
+                    state.clear()
                     state.update(result)
+
+                    # Восстанавливаем сохраненные данные
+                    state.update(preserved_data)
+
                 return state
             except Exception as e:
                 logger.error(f"Ошибка в ноде агента {node.id}: {e}", exc_info=True)

@@ -78,6 +78,51 @@ class LLMConfig(BaseModel):
     default_summarization_model: str = "google/gemini-2.5-flash"  # Дефолтная модель для суммаризации
 
 
+class LoggingConfig(BaseModel):
+    """Конфигурация логирования"""
+
+    level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+    format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    json_format: bool = True  # Использовать JSON формат для структурированных логов
+    file_enabled: bool = True
+    file_path: str = "logs/app.log"
+    file_max_bytes: int = 10 * 1024 * 1024  # 10MB
+    file_backup_count: int = 5
+    console_enabled: bool = True
+
+    # Настройки для отдельных компонентов
+    app_file_path: str = "logs/app.log"
+    worker_file_path: str = "logs/worker.log"
+
+    # Уровни логирования для конкретных логгеров
+    loggers_levels: Dict[str, str] = Field(default_factory=lambda: {
+        "app.core.migration.migrator": "WARNING",
+        "app.core.agent_factory": "WARNING",
+        "app.db.repositories.storage": "WARNING",
+        "app.agents.base": "WARNING",
+        "app.tools.misc.standard": "WARNING",
+        "app.core.llm_factory": "WARNING",
+        "uvicorn.protocols.websockets": "WARNING",
+        "uvicorn.protocols.http": "WARNING",
+        "uvicorn.access": "WARNING",
+        "websockets.protocol": "WARNING",
+        "websockets.server": "WARNING",
+        "httpx": "WARNING",
+        "httpcore": "WARNING",
+        "openai._base_client": "WARNING",
+        "openai": "WARNING",
+        "asyncio": "CRITICAL",
+        "app.workers.task_processor": "INFO",
+        "app.core.llm_billing_wrapper": "INFO",
+        "app.middleware.profiling": "INFO",
+        "uvicorn.error": "INFO",
+        "__main__": "INFO",
+        "app.api.v1.whatsapp": "INFO",
+        "app.interfaces.whatsapp_interface": "INFO",
+        "app.services.variables_service": "INFO"
+    })
+
+
 class ServerConfig(BaseModel):
     """Конфигурация сервера"""
 
@@ -334,6 +379,7 @@ class Settings(BaseSettings):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     server: ServerConfig = Field(default_factory=ServerConfig)
     worker: WorkerConfig = Field(default_factory=WorkerConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
     s3: S3Config = Field(default_factory=S3Config)
     fashn: FashnConfig = Field(default_factory=FashnConfig)
     cloud_voice: CloudVoiceConfig = Field(default_factory=CloudVoiceConfig)
