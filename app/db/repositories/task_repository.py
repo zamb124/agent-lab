@@ -1,5 +1,6 @@
 """
 Репозиторий для работы с TaskConfig.
+Наследуется от Storage, поэтому имеет все его методы + типизированную работу с TaskConfig.
 """
 
 import logging
@@ -19,7 +20,15 @@ logger = logging.getLogger(__name__)
 
 
 class TaskRepository(BaseRepository[TaskConfig]):
-    """Репозиторий для работы с задачами"""
+    """
+    Репозиторий для работы с задачами.
+    Наследуется от Storage, поэтому имеет все его методы (get/set/delete).
+    Добавляет типизированную работу с TaskConfig через Generic[TaskConfig].
+    """
+
+    def __init__(self, storage: Storage = None):
+        # Передаем model_class=TaskConfig для типизации
+        super().__init__(model_class=TaskConfig, storage=storage)
 
     def _get_key(self, task_id: str) -> str:
         """Формирует ключ task:task_id"""
@@ -31,57 +40,46 @@ class TaskRepository(BaseRepository[TaskConfig]):
 
     async def get(self, task_id: str) -> Optional[TaskConfig]:
         """
-        Получает задачу по ID.
-        
+        Получает задачу по ID с типизацией.
+
         Args:
             task_id: Идентификатор задачи
-            
+
         Returns:
             TaskConfig или None если не найдена
         """
-        key = self._get_key(task_id)
-        data = await self.storage.get(key, force_global=True)
-        if data:
-            try:
-                return TaskConfig.model_validate_json(data)
-            except Exception as e:
-                logger.error(f"Ошибка парсинга задачи {task_id}: {e}")
-                return None
-        return None
+        return await self._get_typed(task_id)
 
     async def set(self, config: TaskConfig) -> bool:
         """
-        Сохраняет конфигурацию задачи.
-        
+        Сохраняет конфигурацию задачи с типизацией.
+
         Args:
             config: Конфигурация задачи
-            
+
         Returns:
             True если сохранение успешно
         """
+        # Обновляем timestamps
         now = datetime.now(timezone.utc)
-        
         if config.status.value == "processing" and not config.started_at:
             config.started_at = now
         elif config.status.value in ["completed", "failed"] and not config.completed_at:
             config.completed_at = now
 
-        key = self._get_key(config.task_id)
-        data = config.model_dump_json()
-        return await self.storage.set(key, data, force_global=True)
+        return await self._set_typed(config)
 
     async def delete(self, task_id: str) -> bool:
         """
         Удаляет задачу по ID.
-        
+
         Args:
             task_id: Идентификатор задачи
-            
+
         Returns:
             True если удаление успешно
         """
-        key = self._get_key(task_id)
-        return await self.storage.delete(key, force_global=True)
+        return await self._delete_typed(task_id)
 
     async def list_pending(self, limit: int = 10) -> List[TaskConfig]:
         """

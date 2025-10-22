@@ -1,5 +1,6 @@
 """
 Репозиторий для работы с SessionConfig.
+Наследуется от Storage, поэтому имеет все его методы + типизированную работу с SessionConfig.
 """
 
 import logging
@@ -19,7 +20,15 @@ logger = logging.getLogger(__name__)
 
 
 class SessionRepository(BaseRepository[SessionConfig]):
-    """Репозиторий для работы с сессиями"""
+    """
+    Репозиторий для работы с сессиями.
+    Наследуется от Storage, поэтому имеет все его методы (get/set/delete).
+    Добавляет типизированную работу с SessionConfig через Generic[SessionConfig].
+    """
+
+    def __init__(self, storage: Storage = None):
+        # Передаем model_class=SessionConfig для типизации
+        super().__init__(model_class=SessionConfig, storage=storage)
 
     def _get_key(self, session_id: str) -> str:
         """Формирует ключ session:session_id"""
@@ -31,55 +40,45 @@ class SessionRepository(BaseRepository[SessionConfig]):
 
     async def get(self, session_id: str) -> Optional[SessionConfig]:
         """
-        Получает сессию по ID.
-        
+        Получает сессию по ID с типизацией.
+
         Args:
             session_id: Идентификатор сессии
-            
+
         Returns:
             SessionConfig или None если не найдена
         """
-        key = self._get_key(session_id)
-        data = await self.storage.get(key)
-        if data:
-            try:
-                return SessionConfig.model_validate_json(data)
-            except Exception as e:
-                logger.error(f"Ошибка парсинга сессии {session_id}: {e}")
-                return None
-        return None
+        return await self._get_typed(session_id)
 
     async def set(self, config: SessionConfig) -> bool:
         """
-        Сохраняет конфигурацию сессии.
-        
+        Сохраняет конфигурацию сессии с типизацией.
+
         Args:
             config: Конфигурация сессии
-            
+
         Returns:
             True если сохранение успешно
         """
+        # Обновляем timestamp активности
         now = datetime.now(timezone.utc)
         config.last_activity = now
         if not config.created_at:
             config.created_at = now
 
-        key = self._get_key(config.session_id)
-        data = config.model_dump_json()
-        return await self.storage.set(key, data)
+        return await self._set_typed(config)
 
     async def delete(self, session_id: str) -> bool:
         """
         Удаляет сессию по ID.
-        
+
         Args:
             session_id: Идентификатор сессии
-            
+
         Returns:
             True если удаление успешно
         """
-        key = self._get_key(session_id)
-        return await self.storage.delete(key)
+        return await self._delete_typed(session_id)
 
     async def find_active(
         self, platform: str, user_id: str, flow_id: str

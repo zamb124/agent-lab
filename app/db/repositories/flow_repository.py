@@ -1,5 +1,6 @@
 """
 Репозиторий для работы с FlowConfig.
+Наследуется от Storage[FlowConfig] для работы с flows.
 """
 
 import logging
@@ -16,6 +17,10 @@ logger = logging.getLogger(__name__)
 class FlowRepository(BaseRepository[FlowConfig]):
     """Репозиторий для работы с конфигурациями flows"""
 
+    def __init__(self, storage: Storage = None):
+        """Инициализирует репозиторий для работы с FlowConfig"""
+        super().__init__(model_class=FlowConfig, storage=storage)
+
     def _get_key(self, flow_id: str) -> str:
         """Формирует ключ flow:flow_id"""
         return f"flow:{flow_id}"
@@ -26,70 +31,59 @@ class FlowRepository(BaseRepository[FlowConfig]):
 
     async def get(self, flow_id: str) -> Optional[FlowConfig]:
         """
-        Получает flow по ID.
-        
+        Получает flow по ID с типизацией.
+
         Args:
             flow_id: Идентификатор flow
-            
+
         Returns:
             FlowConfig или None если не найден
         """
-        key = self._get_key(flow_id)
-        data = await self.storage.get(key)
-        if data:
-            try:
-                return FlowConfig.model_validate_json(data)
-            except Exception as e:
-                logger.error(f"Ошибка парсинга flow {flow_id}: {e}")
-                return None
-        return None
+        return await self._get_typed(flow_id)
 
     async def set(self, config: FlowConfig) -> bool:
         """
-        Сохраняет конфигурацию flow.
-        
+        Сохраняет конфигурацию flow с типизацией.
+
         Args:
             config: Конфигурация flow
-            
+
         Returns:
             True если сохранение успешно
         """
+        # Обновляем timestamp
         now = datetime.now(timezone.utc)
         config.updated_at = now
         if not config.created_at:
             config.created_at = now
 
-        key = self._get_key(config.flow_id)
-        data = config.model_dump_json()
-        return await self.storage.set(key, data)
+        return await self._set_typed(config)
 
     async def delete(self, flow_id: str) -> bool:
         """
         Удаляет flow по ID.
-        
+
         Args:
             flow_id: Идентификатор flow
-            
+
         Returns:
             True если удаление успешно
         """
-        key = self._get_key(flow_id)
-        return await self.storage.delete(key)
+        return await self._delete_typed(flow_id)
 
     async def list_all(self, limit: int = 1000) -> List[FlowConfig]:
         """
         Возвращает список всех flows (оптимизировано - 1 запрос вместо N).
-        
+
         Args:
             limit: Максимальное количество результатов
-            
+
         Returns:
             Список конфигураций flows
         """
-        prefix = self._get_prefix()
         # Оптимизация: получаем все данные за 1 запрос вместо N
-        all_data = await self.storage.get_all_by_prefix(prefix, limit=limit)
-        
+        all_data = await self.get_all_by_prefix("flow:", limit=limit)
+
         flows = []
         for key, data in all_data.items():
             try:
@@ -98,7 +92,7 @@ class FlowRepository(BaseRepository[FlowConfig]):
             except Exception as e:
                 logger.error(f"Ошибка парсинга flow {key}: {e}")
                 continue
-        
+
         return flows
 
     async def find_public(self, limit: int = 100) -> List[FlowConfig]:
