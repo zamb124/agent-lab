@@ -11,6 +11,7 @@
 - **comments.mdc** - Правила написания чистого кода (DDD)
 - **exception.mdc** - Правила обработки исключений
 - **architecture.mdc** - Архитектурные принципы (Database-First, асинхронность)
+- **container.mdc** - Контейнер зависимостей (DI, доступ к сущностям)
 - **langgraph.mdc** - Работа с LangGraph (State, agents, checkpointer)
 - **database.mdc** - Работа с базой данных (Storage, изоляция по компаниям)
 - **tools.mdc** - Создание инструментов (@tool decorator, типизация)
@@ -55,6 +56,7 @@
 
 Каждое правило основано на документации:
 - `architecture.mdc` ← `docs/architecture.md`
+- `container.mdc` ← `docs/architecture.md` + `app/core/container.py`
 - `configuration.mdc` ← `docs/configuration.md`
 - `documentation.mdc` ← `mkdocs.yml` + правила работы с MkDocs
 - `makefile.mdc` ← `docs/makefile.md`

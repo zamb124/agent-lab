@@ -11,8 +11,9 @@ alwaysApply: false
 <good_example>
 from app.core.container import get_container
 
-# Получить репозиторий
-agent_repo = get_container().get_agent_repository()
+# Получить репозиторий через контейнер
+container = get_container()
+agent_repo = container.agent_repository
 
 # CRUD операции (единообразный API как в Storage)
 agent = await agent_repo.get("agent_id")
@@ -53,14 +54,15 @@ async def get_agent(agent_id: str, agent_repo: AgentRepositoryDep):
 <good_example>
 from app.core.container import get_container
 
-storage = get_container().get_storage()
+container = get_container()
+storage = container.storage
 
 # Для специфичных ключей
 await storage.set("var:api_key", value)
 var_keys = await storage.list_by_prefix("var:")
 
 # Для моделей используй репозитории
-agent_repo = get_container().get_agent_repository()
+agent_repo = container.agent_repository
 agent = await agent_repo.get("agent_id")
 </good_example>
 
@@ -86,10 +88,20 @@ key = f"company:{company_id}:flow:{flow_id}"
 - Не блокируй event loop синхронными вызовами
 
 <good_example>
+from app.core.container import get_container
+
 async def get_agent_config(agent_id: str) -> AgentConfig:
-    storage = Storage()
+    # Для специфичных ключей используй Storage напрямую
+    container = get_container()
+    storage = container.storage
     data = await storage.get(f"agent:{agent_id}")
     return AgentConfig(**data)
+
+# Для моделей всегда используй репозитории
+async def get_agent(agent_id: str) -> AgentConfig:
+    container = get_container()
+    agent_repo = container.agent_repository
+    return await agent_repo.get(agent_id)
 </good_example>
 
 ## PostgreSQL Checkpointer
