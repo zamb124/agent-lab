@@ -174,7 +174,7 @@ async def test_install_flow_creates_dependencies(migrated_db, storage, flow_fact
     
     # Даем время завершиться всем асинхронным задачам
     import asyncio
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(2.0)  # Увеличиваем время ожидания
 
 
 @pytest.mark.asyncio
@@ -219,7 +219,7 @@ async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_fa
     
     # Даем время завершиться всем асинхронным задачам
     import asyncio
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(2.0)  # Увеличиваем время ожидания
 
 
 @pytest.mark.asyncio
@@ -293,7 +293,7 @@ async def test_hooks_actually_execute(migrated_db, storage, flow_factory, migrat
     
     # Даем время завершиться всем асинхронным задачам
     import asyncio
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(2.0)  # Увеличиваем время ожидания
     
     # Очищаем контекст
     clear_context()
@@ -370,7 +370,7 @@ async def test_multiple_flows_isolation(migrated_db, storage, flow_factory, migr
     
     # Даем время завершиться всем асинхронным задачам
     import asyncio
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(2.0)  # Увеличиваем время ожидания
 
 
 @pytest.mark.asyncio
@@ -445,7 +445,7 @@ async def test_install_twice_should_succeed(migrated_db, storage, flow_factory, 
     
     # Даем время завершиться всем асинхронным задачам
     import asyncio
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(2.0)  # Увеличиваем время ожидания
 
 
 @pytest.mark.asyncio

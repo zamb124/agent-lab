@@ -587,8 +587,12 @@ class FlowFactory:
         
         hook_func = namespace.get("install") or namespace.get("uninstall")
         if hook_func and callable(hook_func):
-            await hook_func(flow_config, company_id)
-            logger.info(f"Выполнен hook {hook_ref.tool_id}")
+            try:
+                result = await hook_func(flow_config, company_id)
+                logger.info(f"Выполнен hook {hook_ref.tool_id}, результат: {result}")
+            except Exception as e:
+                logger.error(f"Ошибка выполнения hook {hook_ref.tool_id}: {e}")
+                raise
     
     async def _execute_after_install_hook(self, hook_ref: ToolReference) -> str | None:
         """
