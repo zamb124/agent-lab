@@ -79,9 +79,9 @@
 [data-theme="light"] {
     --bg-primary: #f5f5f8;
     --bg-secondary: rgba(0, 0, 0, 0.02);
-    --bg-tertiary: rgba(0, 0, 0, 0.04);
+    --bg-tertiary: rgba(0, 0, 0, 0.06);
     --bg-card: #ffffff;
-    --bg-hover: rgba(0, 0, 0, 0.05);
+    --bg-hover: rgba(0, 0, 0, 0.08);
     --bg-surface: rgba(255, 255, 255, 0.95);
     
     /* Glass morphism для светлой темы */

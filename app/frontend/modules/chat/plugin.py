@@ -18,7 +18,6 @@ class ChatPlugin(Plugin):
     requires_role = "user"
     
     static_css = ["chat-widget.css"]
-    static_js = []
     
     sidebar_items = []
     

@@ -92,53 +92,7 @@ async def show_inline_modal(request_data: Dict[str, Any], storage: StorageDep) -
     return HTMLResponse(content=html)
 
 
-@router.get("/{model_type}")
-async def get_models(request: Request, storage: StorageDep, model_type: str, view: str = "table") -> HTMLResponse:
-    """Получить список моделей в указанном виде"""
-
-    # При прямом переходе (не HTMX) возвращаем dashboard с preload_url
-    if not is_htmx_request(request):
-        return templates.TemplateResponse(
-            "dashboard.html",
-            {
-                "request": request,
-                "preload_url": f"/frontend/models/{model_type}?view={view}",
-            }
-        )
-
-    # При HTMX запросе возвращаем фрагмент
-    storage = get_container().storage
-
-    # Получаем все модели данного типа (Storage автоматически добавит префикс компании)
-    keys = await storage.list_by_prefix(f"{model_type}:")
-    models_data = []
-
-    for key in keys:
-        data = await storage.get(key)
-        if data:
-            # Парсим JSON если это строка
-            if isinstance(data, str):
-                model_data = json.loads(data)
-            else:
-                model_data = data
-            models_data.append(model_data)
-
-    # Создаем конкретные модели из данных
-    models = []
-    ModelClass = ModelRegistry.get_model_class(model_type)
-
-    for model_data in models_data:
-        model = ModelClass(**model_data)
-        models.append(model)
-
-    # Создаем wrapper с конкретными моделями
-    wrapper = ModelListWrapper(models=models, count=len(models), model_type=model_type)
-
-    html = wrapper.render(view_mode=view, model_type=model_type)
-    return HTMLResponse(content=html)
-
-
-@router.get("/{model_type}/{model_id}")
+@router.get("/{model_type}/{model_id:path}")
 async def get_model(
     storage: StorageDep, model_type: str, model_id: str, view: str = "table", parent_view_mode: str = None
 ) -> HTMLResponse:
@@ -219,6 +173,52 @@ async def get_model(
     return HTMLResponse(content=html)
 
 
+@router.get("/{model_type}")
+async def get_models(request: Request, storage: StorageDep, model_type: str, view: str = "table") -> HTMLResponse:
+    """Получить список моделей в указанном виде"""
+
+    # При прямом переходе (не HTMX) возвращаем dashboard с preload_url
+    if not is_htmx_request(request):
+        return templates.TemplateResponse(
+            "dashboard.html",
+            {
+                "request": request,
+                "preload_url": f"/frontend/models/{model_type}?view={view}",
+            }
+        )
+
+    # При HTMX запросе возвращаем фрагмент
+    storage = get_container().storage
+
+    # Получаем все модели данного типа (Storage автоматически добавит префикс компании)
+    keys = await storage.list_by_prefix(f"{model_type}:")
+    models_data = []
+
+    for key in keys:
+        data = await storage.get(key)
+        if data:
+            # Парсим JSON если это строка
+            if isinstance(data, str):
+                model_data = json.loads(data)
+            else:
+                model_data = data
+            models_data.append(model_data)
+
+    # Создаем конкретные модели из данных
+    models = []
+    ModelClass = ModelRegistry.get_model_class(model_type)
+
+    for model_data in models_data:
+        model = ModelClass(**model_data)
+        models.append(model)
+
+    # Создаем wrapper с конкретными моделями
+    wrapper = ModelListWrapper(models=models, count=len(models), model_type=model_type)
+
+    html = wrapper.render(view_mode=view, model_type=model_type)
+    return HTMLResponse(content=html)
+
+
 @router.post("/{model_type}")
 async def create_model(model_type: str, model_data: Dict[str, Any], storage: StorageDep) -> HTMLResponse:
     """Создать новую модель и вернуть HTML"""
@@ -240,7 +240,7 @@ async def create_model(model_type: str, model_data: Dict[str, Any], storage: Sto
     return HTMLResponse(content=html)
 
 
-@router.put("/{model_type}/{model_id}")
+@router.put("/{model_type}/{model_id:path}")
 async def update_model(
     storage: StorageDep, model_type: str, model_id: str, model_data: Dict[str, Any], view: str = "form"
 ) -> HTMLResponse:
@@ -367,7 +367,7 @@ async def update_model(
     return {"success": True, "message": "Модель обновлена"}
 
 
-@router.delete("/{model_type}/{model_id}")
+@router.delete("/{model_type}/{model_id:path}")
 async def delete_model(model_type: str, model_id: str, storage: StorageDep) -> Dict[str, Any]:
     """Удалить модель"""
     key = f"{model_type}:{model_id}"

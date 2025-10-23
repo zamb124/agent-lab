@@ -2,48 +2,41 @@
 <link rel="stylesheet" href="/static/chat/css/chat-widget.css">
 
 <div id="chat-widget" class="chat-widget hidden">
-    <div class="chat-widget-header bg-primary text-light p-2">
+    <div class="chat-widget-header">
         <!-- Основная строка заголовка -->
-        <div class="d-flex justify-content-between align-items-center">
-            <div class="d-flex align-items-center gap-2">
+        <div class="chat-header-row">
+            <div class="chat-header-left">
                 <span id="chat-widget-title">Чат с агентом</span>
-                <button id="chat-widget-info" class="btn btn-sm btn-ghost text-light hidden" title="Информация о флоу">
-                    <i class="bi bi-info-circle"></i>
+                <button id="chat-widget-info" class="btn btn-sm btn-ghost hidden" title="Информация о флоу">
+                    <i class="icon-info"></i>
                 </button>
                 <div id="chat-connection-status" class="connection-status" title="Состояние соединения">
                     <div class="connection-indicator connecting"></div>
                 </div>
             </div>
-            <div>
-                <button id="chat-widget-agents" class="btn btn-sm btn-ghost text-light" title="Переключить агента">
-                    <i class="bi bi-people"></i>
+            <div class="chat-header-right">
+                <button id="chat-widget-fullscreen" class="btn btn-sm btn-ghost" title="Развернуть на весь экран">
+                    <i class="icon-fullscreen"></i>
                 </button>
-                <button id="chat-widget-fullscreen" class="btn btn-sm btn-ghost text-light" title="Развернуть на весь экран">
-                    <i class="bi bi-arrows-fullscreen"></i>
+                <button id="chat-widget-popup" class="btn btn-sm btn-ghost" title="Открыть в отдельной странице">
+                    <i class="icon-external-link"></i>
                 </button>
-                <button id="chat-widget-minimize" class="btn btn-sm btn-ghost text-light" title="Свернуть">
-                    <i class="bi bi-dash"></i>
+                <button id="chat-widget-minimize" class="btn btn-sm btn-ghost" title="Свернуть">
+                    <i class="icon-minus"></i>
                 </button>
-                <button id="chat-widget-close" class="btn btn-sm btn-ghost text-light" title="Закрыть">
-                    <i class="bi bi-x"></i>
+                <button id="chat-widget-close" class="btn btn-sm btn-ghost" title="Закрыть">
+                    <i class="icon-close"></i>
                 </button>
-            </div>
-        </div>
-        
-        <!-- Панель переключения агентов -->
-        <div id="chat-agents-panel" class="chat-agents-panel mt-2 hidden">
-            <div class="d-flex flex-wrap gap-1">
-                <!-- Активные агенты будут добавляться динамически -->
             </div>
         </div>
     </div>
     
     <div id="chat-widget-body" class="chat-widget-body">
-        <div id="chat-widget-messages" class="chat-messages p-2 overflow-auto bg-light">
+        <div id="chat-widget-messages" class="chat-messages">
             <!-- Сообщения будут добавляться динамически -->
         </div>
         
-        <div class="chat-input-container p-2 bg-white border-top">
+        <div class="chat-input-container">
             <!-- Область предпросмотра файлов -->
             <div id="chat-files-preview" class="chat-files-preview hidden">
                 <!-- Файлы будут добавляться динамически -->
@@ -51,20 +44,20 @@
             
             <div class="chat-input-wrapper">
                 <button id="chat-widget-commands" class="chat-commands-btn" title="Команды">
-                    <i class="bi bi-slash-circle"></i>
+                    <i class="icon-slash"></i>
                 </button>
                 <button id="chat-widget-attach" class="chat-attach-btn" title="Прикрепить файл">
-                    <i class="bi bi-paperclip"></i>
+                    <i class="icon-paperclip"></i>
                 </button>
                 <button id="chat-widget-voice" class="chat-voice-btn" title="Голосовое сообщение (зажмите и говорите)">
-                    <i class="bi bi-mic"></i>
+                    <i class="icon-mic"></i>
                 </button>
                 <span id="voice-recording-indicator-widget" class="voice-recording-indicator hidden">
                     🔴 Запись...
                 </span>
                 <input type="text" id="chat-widget-input" class="chat-input" placeholder="Введите сообщение...">
                 <button id="chat-widget-send" class="chat-send-btn">
-                    <i class="bi bi-send"></i>
+                    <i class="icon-send"></i>
                 </button>
             </div>
             
@@ -72,15 +65,15 @@
             <div id="chat-commands-menu" class="chat-commands-menu hidden">
                 <div class="commands-list">
                     <button class="command-item" data-command="/help">
-                        <i class="bi bi-question-circle"></i>
+                        <i class="icon-question"></i>
                         <span>/help - Показать справку</span>
                     </button>
                     <button class="command-item" data-command="/clear">
-                        <i class="bi bi-trash"></i>
+                        <i class="icon-trash"></i>
                         <span>/clear - Очистить контекст диалога</span>
                     </button>
                     <button class="command-item" data-command="/start">
-                        <i class="bi bi-play-circle"></i>
+                        <i class="icon-play"></i>
                         <span>/start - Начать новый диалог</span>
                     </button>
                 </div>
@@ -92,7 +85,7 @@
 </div>
 
 <!-- Кнопка переключения чата -->
-<button id="chat-widget-toggle" class="chat-widget-toggle btn btn-primary rounded-circle">
-    <i class="bi bi-chat-dots"></i>
+<button id="chat-widget-toggle" class="chat-widget-toggle">
+    <i class="icon-chat"></i>
 </button>
 

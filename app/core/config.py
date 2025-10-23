@@ -31,6 +31,7 @@ class AuthConfig(BaseModel):
 
     enabled: bool = True
     secret_key: Optional[str] = None
+    jwt_secret_key: Optional[str] = None  # Секретный ключ для JWT токенов
     session_timeout: int = 3600  # секунд
     providers: Dict[str, AuthProviderConfig] = Field(default_factory=dict)
 

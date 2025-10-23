@@ -522,6 +522,7 @@ async def create_my_company(request: Request, storage: StorageDep):
     
     # Редиректим на dashboard
     # Для локальной разработки редиректим на localhost без поддомена
+    settings = get_settings()
     if settings.server.env == "local":
         return RedirectResponse(url="/frontend/dashboard", status_code=302)
     else:

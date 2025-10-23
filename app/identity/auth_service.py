@@ -35,7 +35,8 @@ class AuthService:
 
     def __init__(self, storage: Storage = None):
         if storage is None:
-            storage = get_container().storage
+            from app.core.container import get_system_container
+            storage = get_system_container().storage
         self.storage = storage
         self._providers: Dict[AuthProvider, BaseAuthProvider] = {}
         self._initialize_providers()
@@ -127,7 +128,9 @@ class AuthService:
                 session = await self._get_session(result_data["session_id"])
                 
                 if user and session:
-                    return AuthResult(success=True, user=user, session=session)
+                    # Получаем токен из кеша
+                    cached_token = result_data.get("token")
+                    return AuthResult(success=True, user=user, session=session, token=cached_token)
             
             # Проверяем state
             auth_state = await self._get_auth_state(auth_request.state)
@@ -163,7 +166,9 @@ class AuthService:
                         session = await self._get_session(result_data["session_id"])
                         
                         if user and session:
-                            return AuthResult(success=True, user=user, session=session)
+                            # Получаем токен из кеша
+                            cached_token = result_data.get("token")
+                            return AuthResult(success=True, user=user, session=session, token=cached_token)
                 raise
 
             # Получаем информацию о пользователе
@@ -175,10 +180,22 @@ class AuthService:
             # Создаем сессию
             session = await self._create_session(user, auth_request.provider, access_token, refresh_token)
 
+            # Создаем JWT токен для веб-сессии
+            from app.core.tokens import get_token_service
+            token_service = get_token_service()
+            jwt_token = token_service.create_token(
+                user_id=user.user_id,
+                company_id=user.active_company_id,
+                session_id=session.session_id,
+                expires_in=86400 * 7,  # 7 дней
+                metadata={"provider": auth_request.provider.value, "user_name": user.name}
+            )
+
             # Кешируем результат на 5 минут
             result_cache = json.dumps({
                 "user_id": user.user_id,
-                "session_id": session.session_id
+                "session_id": session.session_id,
+                "token": jwt_token
             })
             await self.storage.set(code_key, result_cache, ttl=300)
 
@@ -187,7 +204,7 @@ class AuthService:
 
             logger.info(f"✅ Авторизация завершена для пользователя {user_info.email}")
 
-            return AuthResult(success=True, user=user, session=session)
+            return AuthResult(success=True, user=user, session=session, token=jwt_token)
 
         except Exception as e:
             logger.error(f"❌ Ошибка авторизации: {e}")

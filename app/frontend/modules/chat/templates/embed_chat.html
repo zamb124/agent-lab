@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Встраиваемый Чат</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/core/variables.css">
+    <link rel="stylesheet" href="/static/css/utilities/colors.css">
+    <link rel="stylesheet" href="/static/css/utilities/spacing.css">
+    <link rel="stylesheet" href="/static/css/utilities/sizing.css">
+    <link rel="stylesheet" href="/static/css/utilities/flexbox.css">
+    <link rel="stylesheet" href="/static/css/utilities/borders.css">
+    <link rel="stylesheet" href="/static/css/components/buttons.css">
+    <link rel="stylesheet" href="/static/css/components/icons.css">
+    <link rel="stylesheet" href="/static/chat/css/chat-widget.css">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: var(--bg-secondary, #f8fafc);
+        }
+        /* Стили для режима кнопки чата */
+        .chat-widget.widget-mode {
+            display: none !important;
+        }
+        .chat-widget-toggle.widget-mode {
+            position: fixed !important;
+            bottom: 20px !important;
+            right: 20px !important;
+            z-index: 100000 !important;
+        }
+        
+        /* Стили для режима развернутого виджета */
+        .chat-widget.expanded-mode {
+            position: relative !important;
+            bottom: auto !important;
+            right: auto !important;
+            max-width: 100% !important;
+            max-height: 100% !important;
+            border-radius: var(--radius-md, 8px) !important;
+            box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.1)) !important;
+            z-index: 1 !important;
+        }
+        .chat-widget-toggle.expanded-mode {
+            display: none !important;
+        }
+    </style>
+</head>
+<body data-theme="{{ theme }}">
+    {% include 'chat_widget_inline.html' %}
+    
+    <!-- Подключаем основной ChatManager -->
+    <script type="module">
+        import ChatManager from '/static/js/chat/manager.js';
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            const chatWidget = document.getElementById('chat-widget');
+            const chatToggle = document.getElementById('chat-widget-toggle');
+            const mode = "{{ mode }}";
+            
+            // Применяем стили в зависимости от режима
+            if (mode === "expanded") {
+                // Режим развернутого виджета
+                if (chatWidget) {
+                    chatWidget.classList.remove('hidden');
+                    chatWidget.classList.add('fullscreen', 'expanded-mode');
+                    chatWidget.style.width = "{{ width }}";
+                    chatWidget.style.height = "{{ height }}";
+                    
+                    // Скрываем кнопки свернуть и закрыть
+                    const minimizeBtn = document.getElementById('chat-widget-minimize');
+                    const closeBtn = document.getElementById('chat-widget-close');
+                    if (minimizeBtn) minimizeBtn.style.display = 'none';
+                    if (closeBtn) closeBtn.style.display = 'none';
+                }
+                if (chatToggle) {
+                    chatToggle.classList.add('expanded-mode');
+                }
+            } else {
+                // Режим кнопки чата
+                if (chatWidget) {
+                    chatWidget.classList.add('widget-mode');
+                }
+                if (chatToggle) {
+                    chatToggle.classList.add('widget-mode');
+                    chatToggle.style.display = 'flex';
+                }
+            }
+
+            // Инициализируем ChatManager для встраиваемого чата
+            const chatManager = new ChatManager(null);
+            
+            // Устанавливаем параметры из URL
+            chatManager.currentAgent = "{{ flow_id }}";
+            const sessionId = "{{ session_id }}" || `web:${Date.now()}`;
+            
+            // Устанавливаем сессию правильно через метод
+            if (chatManager.agentSessions) {
+                chatManager.agentSessions[chatManager.currentAgent] = sessionId;
+            }
+            chatManager.currentSession = sessionId;
+            
+            // Инициализируем чат
+            chatManager.init();
+            
+            console.log("✅ Embedded Chat Manager initialized:");
+            console.log("Mode:", mode);
+            console.log("Flow ID: {{ flow_id }}");
+            console.log("Session ID:", sessionId);
+            console.log("Current Session:", chatManager.currentSession);
+            console.log("Agent Sessions:", chatManager.agentSessions);
+            console.log("User ID: {{ user_id }}");
+            console.log("Theme: {{ theme }}");
+            console.log("Width: {{ width }}");
+            console.log("Height: {{ height }}");
+        });
+    </script>
+</body>
+</html>

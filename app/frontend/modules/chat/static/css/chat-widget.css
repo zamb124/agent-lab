@@ -1,4 +1,276 @@
-/* Chat Widget - встраиваемый виджет чата */
+/* Стили для сообщений в встраиваемом чате */
+.message {
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.user-message {
+    background: var(--chat-user-msg-bg);
+    color: var(--chat-user-msg-text);
+    margin-left: auto;
+    text-align: right;
+}
+
+.bot-message {
+    background: var(--chat-agent-msg-bg);
+    color: var(--chat-agent-msg-text);
+    border: 1px solid var(--chat-agent-msg-border);
+    margin-right: auto;
+}
+
+.message-content {
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+/* Стили для кнопок чата */
+.chat-widget-header {
+    background: var(--chat-header-bg);
+    color: var(--chat-header-text);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--chat-border);
+}
+
+.chat-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.chat-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.chat-header-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.btn {
+    background: transparent;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.btn-sm {
+    padding: 2px 6px;
+    font-size: 12px;
+}
+
+.btn-ghost {
+    background: transparent;
+    color: inherit;
+}
+
+.btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* Общие стили для всех иконок */
+[class^="icon-"]::before {
+    font-style: normal;
+    display: inline-block;
+    padding: 0;
+    background: none;
+    border-radius: 0;
+    backdrop-filter: none;
+    border: none;
+    font-size: 16px;
+    margin-right: 0;
+}
+
+/* Стили для области сообщений */
+.chat-messages {
+    padding: 12px;
+    background: var(--chat-messages-bg);
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* Стили для области ввода */
+.chat-input-container {
+    padding: 12px;
+    background: var(--chat-input-bg);
+    border-top: 1px solid var(--chat-border);
+}
+
+.chat-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0; /* Убираем gap, используем границы */
+    height: 40px; /* Фиксированная высота для всех элементов */
+    background: var(--chat-input-bg);
+    border: 1px solid var(--chat-input-border);
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+.chat-input {
+    flex: 1;
+    height: 40px; /* Такая же высота как у кнопок */
+    padding: 0 12px;
+    border: none; /* Убираем границу, она теперь у wrapper */
+    background: transparent;
+    color: var(--chat-input-text);
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+.chat-input:focus {
+    outline: none;
+    border-color: var(--accent-primary, #6366f1);
+}
+
+.chat-send-btn {
+    background: var(--accent-primary, #6366f1);
+    color: white;
+    border: none;
+    height: 40px; /* Такая же высота как у input */
+    width: 40px; /* Квадратная кнопка */
+    border-radius: 0; /* Убираем скругление */
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.2); /* Граница слева */
+}
+
+.chat-send-btn:hover {
+    background: var(--accent-primary-hover, #5b5bd6);
+}
+
+.chat-commands-btn,
+.chat-attach-btn,
+.chat-voice-btn {
+    background: transparent;
+    border: none;
+    height: 40px; /* Такая же высота как у input */
+    width: 40px; /* Квадратные кнопки */
+    cursor: pointer;
+    color: var(--text-secondary, #64748b);
+    border-radius: 0; /* Убираем скругление */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-right: 1px solid var(--chat-input-border); /* Граница справа */
+}
+
+.chat-commands-btn:hover,
+.chat-attach-btn:hover,
+.chat-voice-btn:hover {
+    background: var(--bg-secondary, #f8fafc);
+    color: var(--text-primary, #1e293b);
+}
+
+/* Стили для кнопки переключения */
+.chat-widget-toggle {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 60px;
+    height: 60px;
+    background: var(--accent-primary, #6366f1);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    box-shadow: var(--chat-shadow);
+    z-index: 100000;
+}
+
+.chat-widget-toggle:hover {
+    background: var(--accent-primary-hover, #5b5bd6);
+    transform: scale(1.05);
+}
+
+/* Стили для панели агентов */
+.chat-agents-panel {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--chat-border);
+}
+
+.agents-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+/* Стили для меню команд */
+.chat-commands-menu {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    background: var(--chat-bg);
+    border: 1px solid var(--chat-border);
+    border-radius: 8px;
+    box-shadow: var(--chat-shadow);
+    z-index: 100;
+}
+
+.commands-list {
+    padding: 8px;
+}
+
+.command-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px;
+    background: transparent;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.command-item:hover {
+    background: var(--bg-secondary, #f8fafc);
+}
+
+/* Стили для предпросмотра файлов */
+.chat-files-preview {
+    margin-bottom: 8px;
+    padding: 8px;
+    background: var(--bg-secondary, #f8fafc);
+    border-radius: 8px;
+}
+
+/* Индикатор записи голоса */
+.voice-recording-indicator {
+    color: #ef4444;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+/* Скрытие элементов */
+.hidden {
+    display: none !important;
+}
 
 .chat-widget {
     --chat-bg: var(--bg-card, #ffffff);
@@ -22,16 +294,16 @@
     --chat-border: var(--border-primary, #374151);
     --chat-header-bg: rgba(22, 33, 62, 0.95);
     --chat-header-text: var(--text-primary, #ffffff);
-    --chat-messages-bg: rgba(26, 26, 46, 0.95);
-    --chat-input-bg: rgba(30, 30, 46, 0.95);
-    --chat-input-border: var(--border-primary, #374151);
-    --chat-input-text: var(--text-primary, #ffffff);
-    --chat-user-msg-bg: var(--accent-primary, #6366f1);
-    --chat-user-msg-text: white;
-    --chat-agent-msg-bg: rgba(37, 37, 69, 0.9);
-    --chat-agent-msg-text: var(--text-primary, #ffffff);
-    --chat-agent-msg-border: var(--border-secondary, #4b5563);
-    --chat-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.5));
+}
+
+/* Стили для иконок в темной теме */
+[data-theme="dark"] [class^="icon-"]::before {
+    background: none;
+    border: none;
+}
+
+[data-theme="dark"] .chat-send-btn {
+    border-left: 1px solid rgba(255, 255, 255, 0.1); /* Более тонкая граница для темной темы */
 }
 
 .chat-widget {
@@ -47,7 +319,7 @@
     border-radius: var(--radius-md, 8px);
     background: var(--chat-bg);
     box-shadow: 0 4px 12px var(--chat-shadow);
-    z-index: 150000;
+    z-index: 100000;
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
@@ -247,7 +519,7 @@
     font-size: 0.85em;
     font-weight: 500;
     box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
-    z-index: 1000;
+    z-index: 100000;
     animation: pulse-recording 1s infinite;
     white-space: nowrap;
 }
@@ -311,7 +583,7 @@
     right: 20px;
     width: 50px;
     height: 50px;
-    z-index: 150001;
+    z-index: 100001;
 }
 
 .chat-widget.minimized .chat-widget-body {
@@ -333,7 +605,7 @@
     max-width: 100vw !important;
     max-height: 100vh !important;
     border-radius: 0;
-    z-index: 150002;
+    z-index: 100002;
 }
 
 .chat-widget.fullscreen .chat-widget-header {
@@ -395,7 +667,7 @@
 }
 
 .chat-widget.fullscreen .chat-commands-menu {
-    z-index: 10000;
+    z-index: 100003;
     max-width: 400px;
 }
 
@@ -781,7 +1053,7 @@
     border: 1px solid var(--chat-border);
     border-radius: var(--radius-sm, 6px);
     box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
-    z-index: 1000;
+    z-index: 100000;
     max-width: 300px;
 }
 

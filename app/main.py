@@ -104,6 +104,10 @@ app.include_router(frontend_pages_router)
 app.include_router(frontend_websockets_router, prefix="/frontend")
 app.include_router(websocket_notifications_router, tags=["websocket-notifications"], include_in_schema=False)
 
+# Дополнительный роутер для /frontend/models (для builder)
+from app.frontend.api import models as frontend_models
+app.include_router(frontend_models.router, tags=["frontend-models-direct"], include_in_schema=False)
+
 # Frontend Modules загружаются автоматически через плагинную систему
 # (см. discover_and_load_plugins в lifespan)
 

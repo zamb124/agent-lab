@@ -16,6 +16,7 @@ from ..identity.models import User, AuthProvider, UserStatus, Company
 from ..identity.auth_service import AuthService
 from app.core.container import get_system_container
 from ..models.i18n_models import Language
+from ..core.tokens import get_token_service
 logger = logging.getLogger(__name__)
 
 
@@ -419,28 +420,41 @@ class AuthMiddleware(BaseHTTPMiddleware):
     async def _create_api_context(self, request: Request, requested_company: Company) -> Context:
         """Создает контекст для API запросов"""
 
-        # Получаем session_id из куки или заголовка Authorization
-        session_id = request.cookies.get("session_id")
-
+        # Получаем токен из куки auth_token или заголовка Authorization
+        token = request.cookies.get("auth_token")
+        
         # Если нет куки, проверяем заголовок Authorization
-        if not session_id:
+        if not token:
             auth_header = request.headers.get("authorization", "")
             if auth_header.startswith("Bearer "):
-                session_id = auth_header[7:]  # Убираем "Bearer "
+                token = auth_header[7:]  # Убираем "Bearer "
 
-        # Сессия обязательна для API запросов
-        if not session_id:
-            raise HTTPException(status_code=401, detail="Session required")
+        # Токен обязателен для API запросов
+        if not token:
+            raise HTTPException(status_code=401, detail="Token required")
 
-        # Получаем пользователя по сессии
-        user = await self._get_user_by_session(session_id)
+        # Проверяем токен через централизованную систему
+        token_service = get_token_service()
+        token_data = token_service.validate_token(token)
+        
+        if not token_data:
+            raise HTTPException(status_code=401, detail="Invalid token")
 
+        # Получаем пользователя по user_id из токена
+        user = None
+        if token_data.user_id:
+            user = await self._get_user_by_id(token_data.user_id)
+        
         if not user:
-            raise HTTPException(status_code=401, detail="Invalid session")
+            raise HTTPException(status_code=401, detail="User not found")
 
         # Получаем все компании пользователя
         user_companies = await self._get_user_companies(user)
 
+        # Проверяем доступ к запрашиваемой компании (если указана в токене)
+        if token_data.company_id and token_data.company_id != requested_company.company_id:
+            raise HTTPException(status_code=403, detail="Token company mismatch")
+        
         # Проверяем доступ к запрашиваемой компании
         if requested_company.company_id not in user.companies:
             # Если у пользователя нет доступа к запрашиваемой компании,
@@ -469,12 +483,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         return Context(
             user=user,
-            session_id=session_id,
+            session_id=token,  # Используем токен как session_id
             platform="api",
             active_company=active_company,
             user_companies=user_companies,
             language=language,
-            metadata={"authenticated": True},
+            metadata={
+                "authenticated": True, 
+                "api_request": True,
+                "jwt_token": True
+            },
         )
 
     async def _create_anonymous_context(self, request: Request, requested_company: Company) -> Context:
@@ -534,19 +552,26 @@ class AuthMiddleware(BaseHTTPMiddleware):
         return context
 
     async def _create_frontend_context(self, request: Request, requested_company: Company, allow_no_company: bool = False, has_subdomain: bool = False) -> Context:
-        """Создает контекст для frontend запросов на основе куки"""
-        # Получаем session_id из куки
-        session_id = request.cookies.get("session_id")
+        """Создает контекст для frontend запросов на основе JWT токена"""
+        # Получаем JWT токен из куки auth_token
+        token = request.cookies.get("auth_token")
         
-        logger.info(f"🍪 Проверка cookies: session_id={'найден' if session_id else 'НЕ найден'}, все cookies={list(request.cookies.keys())}")
+        logger.info(f"🍪 Проверка cookies: auth_token={'найден' if token else 'НЕ найден'}, все cookies={list(request.cookies.keys())}")
 
-        if not session_id:
+        if not token:
             raise HTTPException(status_code=401, detail="Unauthorized")
 
-        # Пытаемся найти пользователя по сессии
-        user = await self._get_user_by_session(session_id)
+        # Проверяем JWT токен
+        token_service = get_token_service()
+        token_data = token_service.validate_token(token)
+        
+        if not token_data:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        # Получаем пользователя по user_id из токена
+        user = await self._get_user_by_id(token_data.user_id)
         if not user:
-            raise HTTPException(status_code=401, detail="Invalid session")
+            raise HTTPException(status_code=401, detail="User not found")
 
         # Получаем все компании пользователя
         user_companies = await self._get_user_companies(user)
@@ -561,12 +586,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 # Разрешаем доступ к странице создания компании
                 return Context(
                     user=user,
-                    session_id=session_id,
+                    session_id=token_data.session_id,
                     platform="frontend",
                     active_company=None,
                     user_companies=[],
                     language=language,
-                    metadata={"authenticated": True, "needs_company_creation": True},
+                    metadata={"authenticated": True, "needs_company_creation": True, "jwt_token": True},
                 )
             else:
                 # Бросаем исключение для редиректа на создание компании
@@ -602,12 +627,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         return Context(
             user=user,
-            session_id=session_id,
+            session_id=token_data.session_id,
             platform="frontend",
             active_company=active_company,
             user_companies=user_companies,
             language=language,
-            metadata={"authenticated": True, "allow_no_company": allow_no_company},
+            metadata={"authenticated": True, "allow_no_company": allow_no_company, "jwt_token": True},
         )
 
     async def _get_user_companies(self, user: User) -> List[Company]:
@@ -624,6 +649,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
         from app.identity.auth_service import get_auth_service
         auth_service = get_auth_service()
         return await auth_service.get_user_by_session(session_id)
+    
+    async def _get_user_by_id(self, user_id: str) -> Optional[User]:
+        """Получает пользователя по user_id"""
+        user_key = f"user:{user_id}"
+        user_data = await self.storage.get(user_key, force_global=True)
+        if user_data:
+            return User.model_validate_json(user_data)
+        return None
     
     async def _update_user_active_company(self, user: User):
         """Обновляет активную компанию пользователя в БД"""

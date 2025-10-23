@@ -171,6 +171,9 @@ class AuthResult(BaseModel):
     session: Optional[AuthSession] = Field(
         default=None, title="Сессия", description="Сессия авторизации", readonly=True
     )
+    token: Optional[str] = Field(
+        default=None, title="Токен", description="Токен доступа", readonly=True
+    )
     error_message: Optional[str] = Field(
         default=None,
         title="Сообщение об ошибке",

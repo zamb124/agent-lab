@@ -99,6 +99,54 @@ class ChatManager {
         console.log('🗑️ Кеш дефолтного агента очищен');
     }
 
+    saveChatPosition(x, y) {
+        try {
+            const position = { x, y };
+            localStorage.setItem('chat_position', JSON.stringify(position));
+            console.log('💾 Позиция чата сохранена:', position);
+        } catch (error) {
+            console.error('❌ Ошибка сохранения позиции чата:', error);
+        }
+    }
+
+    loadChatPosition() {
+        try {
+            const saved = localStorage.getItem('chat_position');
+            if (saved) {
+                const position = JSON.parse(saved);
+                console.log('📦 Загружена сохраненная позиция чата:', position);
+                return position;
+            }
+        } catch (error) {
+            console.error('❌ Ошибка загрузки позиции чата:', error);
+        }
+        return null;
+    }
+
+    applyChatPosition() {
+        const widget = document.getElementById('chat-widget');
+        if (!widget) return;
+
+        const savedPosition = this.loadChatPosition();
+        if (savedPosition) {
+            const { x, y } = savedPosition;
+            
+            // Проверяем, что позиция не выходит за границы экрана
+            const maxX = window.innerWidth - widget.offsetWidth;
+            const maxY = window.innerHeight - widget.offsetHeight;
+            
+            const validX = Math.max(0, Math.min(x, maxX));
+            const validY = Math.max(0, Math.min(y, maxY));
+            
+            widget.style.left = validX + 'px';
+            widget.style.top = validY + 'px';
+            widget.style.right = 'auto';
+            widget.style.bottom = 'auto';
+            
+            console.log('📍 Применена сохраненная позиция чата:', { x: validX, y: validY });
+        }
+    }
+
     getOrCreateSessionForAgent(agent_id) {
         if (!agent_id) {
             agent_id = 'default_agent';
@@ -391,6 +439,7 @@ class ChatManager {
         const fullscreen = document.getElementById('chat-widget-fullscreen');
         const minimize = document.getElementById('chat-widget-minimize');
         const close = document.getElementById('chat-widget-close');
+        const popup = document.getElementById('chat-widget-popup');
         const agentsBtn = document.getElementById('chat-widget-agents');
         const infoBtn = document.getElementById('chat-widget-info');
         const commandsBtn = document.getElementById('chat-widget-commands');
@@ -403,6 +452,7 @@ class ChatManager {
         fullscreen?.addEventListener('click', () => this.toggleFullscreen());
         minimize?.addEventListener('click', () => this.minimizeChat());
         close?.addEventListener('click', () => this.closeChat());
+        popup?.addEventListener('click', () => this.openInNewWindow());
         agentsBtn?.addEventListener('click', () => this.toggleAgentsPanel());
         infoBtn?.addEventListener('click', () => this.showFlowInfo());
         
@@ -519,6 +569,9 @@ class ChatManager {
             if (isDragging) {
                 isDragging = false;
                 widget.style.transition = '';
+                
+                // Сохраняем позицию чата в localStorage
+                this.saveChatPosition(currentX, currentY);
             }
         });
     }
@@ -729,6 +782,9 @@ class ChatManager {
             toggle.style.display = 'none';
         }
         
+        // Применяем сохраненную позицию чата
+        this.applyChatPosition();
+        
         if (!this.currentAgent) {
             console.log('📌 Чат открывается без агента, автоматически выбираем дефолтный');
             this.open({});
@@ -771,6 +827,50 @@ class ChatManager {
         this.disconnectWebSocket();
     }
 
+    openInNewWindow() {
+        // Получаем JWT токен из куки auth_token
+        const token = this.getCookie('auth_token');
+        if (!token) {
+            console.error('❌ JWT токен не найден в куки. Необходимо авторизоваться.');
+            alert('Необходимо авторизоваться для открытия чата в отдельном окне.');
+            return;
+        }
+
+        // Получаем текущие параметры
+        const flowId = this.currentAgent || 'default_flow';
+        const sessionId = this.currentSession;
+        
+        // Формируем URL для отдельной страницы
+        let embedUrl = `/frontend/chat/embed?token=${encodeURIComponent(token)}&flow_id=${encodeURIComponent(flowId)}`;
+        
+        if (sessionId) {
+            embedUrl += `&session_id=${encodeURIComponent(sessionId)}`;
+        }
+
+        // Открываем в новом окне
+        const newWindow = window.open(
+            embedUrl,
+            'chat_popup',
+            'width=500,height=700,scrollbars=yes,resizable=yes,toolbar=no,menubar=no,location=no,status=no'
+        );
+        
+        if (newWindow) {
+            newWindow.focus();
+            console.log('✅ Чат открыт в отдельном окне');
+        } else {
+            console.warn('⚠️ Не удалось открыть новое окно (возможно заблокировано браузером)');
+            // Fallback: открываем в той же вкладке
+            window.open(embedUrl, '_blank');
+        }
+    }
+
+    getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        return null;
+    }
+
     toggleFullscreen() {
         if (this.isMobileDevice()) {
             return;
@@ -790,6 +890,10 @@ class ChatManager {
             widget.style.top = '';
             widget.style.right = '20px';
             widget.style.bottom = '80px';
+            
+            // Применяем сохраненную позицию при выходе из полноэкранного режима
+            this.applyChatPosition();
+            
             if (fullscreenIcon) {
                 fullscreenIcon.className = 'bi bi-arrows-fullscreen';
             }
@@ -1137,6 +1241,8 @@ class ChatManager {
 
     handleWebSocketMessage(message) {
         console.log('📨 Получено сообщение:', message);
+        console.log('🔍 Текущая сессия:', this.currentSession);
+        console.log('🔍 Сообщение для сессии:', message.session_id);
 
         // Фильтрация по session_id: показываем только сообщения для текущего чата
         if (message.session_id && this.currentSession) {
@@ -1147,6 +1253,12 @@ class ChatManager {
             const currentSessionUUID = this.currentSession.includes(':') 
                 ? this.currentSession.split(':').pop() 
                 : this.currentSession;
+            
+            console.log('🔍 Сравнение UUID:', {
+                messageSessionUUID,
+                currentSessionUUID,
+                match: messageSessionUUID === currentSessionUUID
+            });
             
             if (messageSessionUUID !== currentSessionUUID) {
                 console.log(`⏭️ Пропускаем сообщение для другой сессии: ${message.session_id} (текущая: ${this.currentSession})`);

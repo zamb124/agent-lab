@@ -120,11 +120,11 @@ async def auth_callback(
     # Для продакшена устанавливаем wildcard домен для работы на субдоменах
     domain = None if settings.server.env == "local" else f".{settings.server.domain}"
 
-    logger.info(f"🍪 Устанавливаем cookies: session_id={result.session.session_id}, domain={domain}, secure={is_production}")
+    logger.info(f"🍪 Устанавливаем cookies: session_id={result.session.session_id}, auth_token={result.token[:8]}..., domain={domain}, secure={is_production}")
 
     response.set_cookie(
         key="session_id",
-        value=result.session.session_id,
+        value=result.session.session_id,  # Реальный session_id
         domain=domain,
         httponly=True,
         secure=is_production,
@@ -132,7 +132,7 @@ async def auth_callback(
     )
     response.set_cookie(
         key="auth_token",
-        value=result.session.session_id,  # Используем session_id как auth_token
+        value=result.token,  # JWT токен
         domain=domain,
         httponly=False,  # Нужно для JS
         secure=is_production,
