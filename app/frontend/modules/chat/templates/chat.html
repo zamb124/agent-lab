@@ -1,0 +1,71 @@
+{% extends "../base.html" %}
+{% import 'components.html' as c %}
+
+{% block title %}Чат с агентами{% endblock %}
+
+{% block content %}
+<div class="container-fluid h-100">
+    <div class="row h-100">
+        <!-- Боковая панель с агентами -->
+        <div class="col-md-3 bg-secondary h-100 p-3">
+            <h5 class="text-light mb-3">Агенты</h5>
+            <div id="agents-list">
+                <div class="agent-item p-2 mb-2 bg-primary rounded cursor-pointer" data-agent-id="app.flows.weather_flow.weather_flow_config">
+                    <div class="fw-bold">Погода</div>
+                    <small class="text-muted">Прогноз погоды</small>
+                </div>
+                <div class="agent-item p-2 mb-2 bg-primary rounded cursor-pointer" data-agent-id="app.flows.smart_flow.smart_flow_config">
+                    <div class="fw-bold">Умный флоу</div>
+                    <small class="text-muted">Роутинг между калькулятором и погодой</small>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Область чата -->
+        <div class="col-md-9 h-100 d-flex flex-column">
+            <div id="chat-container" class="flex-grow-1 d-flex flex-column">
+                <!-- Заголовок чата -->
+                <div id="chat-header" class="bg-primary p-3 text-light">
+                    <h6 class="mb-0">Выберите агента для начала диалога</h6>
+                </div>
+                
+                <!-- Сообщения -->
+                <div id="chat-messages" class="flex-grow-1 p-3 overflow-auto bg-light">
+                    <!-- Сообщения будут добавляться динамически -->
+                </div>
+                
+                <!-- Поле ввода -->
+                <div id="chat-input-container" class="p-3 bg-white border-top">
+                    <div class="input-group">
+                        <input type="text" id="chat-input" class="form-control" placeholder="Введите сообщение..." disabled>
+                        <button id="chat-voice-btn" class="btn btn-outline-secondary" disabled title="Удерживайте для записи голоса">
+                            <i class="bi bi-mic"></i>
+                        </button>
+                        <button id="chat-send-btn" class="btn btn-primary" disabled>
+                            <i class="bi bi-send"></i>
+                        </button>
+                    </div>
+                    <div id="voice-recording-indicator" class="mt-2 text-center text-danger hidden">
+                        <i class="bi bi-record-circle"></i> Запись... Отпустите кнопку для отправки
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.agent-item').forEach(item => {
+            item.addEventListener('click', async () => {
+                const agentId = item.dataset.agentId;
+                if (window.app && window.app.chat) {
+                    await window.app.chat.open({agent_id: agentId});
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}

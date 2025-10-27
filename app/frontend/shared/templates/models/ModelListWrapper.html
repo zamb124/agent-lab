@@ -1,0 +1,95 @@
+{% set titles = {
+    'agent': t('models.agent.title_plural'),
+    'flow': t('models.flow.title_plural'), 
+    'task': t('models.task.title_plural'),
+    'user': t('models.user.title_plural')
+} %}
+
+<h1 class="header-title" id="page-title" hx-swap-oob="true">
+    <i class="bi bi-{{ 'robot' if model_type == 'agent' else 'diagram-3' if model_type == 'flow' else 'list-task' if model_type == 'task' else 'person-badge' }}"></i>
+    {{ titles.get(model_type, model_type.title()) }}
+</h1>
+
+<div class="card animate-fade-in-up">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center gap-3">
+                <div class="table-icon">
+                    <i class="bi bi-table"></i>
+                </div>
+                <div>
+                    <h5 class="mb-0 font-semibold">{{ model_type.title() }}</h5>
+                    <small class="text-muted">{{ count }} {{ t('models.common.records') }}</small>
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-secondary btn-sm active">
+                    <i class="bi bi-table"></i>
+                    {{ t('models.common.table_view') }}
+                </button>
+                <button class="btn btn-ghost btn-sm" 
+                        hx-get="/frontend/models/{{ model_type }}?view=cards" 
+                        hx-target="#content"
+                        hx-push-url="true"
+                        hx-indicator="#content-loading">
+                    <i class="bi bi-grid"></i>
+                    {{ t('models.common.cards_view') }}
+                </button>
+                <button class="btn btn-primary btn-sm" 
+                        hx-get="/frontend/models/{{ model_type }}?view=form" 
+                        hx-target="#content"
+                        hx-push-url="true"
+                        hx-indicator="#content-loading">
+                    <i class="bi bi-plus"></i>
+                    {{ t('common.create') }}
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        {% if models %}
+        <div class="table-container">
+            <table class="table">
+                <thead>
+                    <tr>
+                        {% for header in headers %}
+                        <th>
+                            <div class="d-flex align-items-center gap-2">
+                                {{ header.title }}
+                                <i class="bi bi-arrow-up-down small text-muted"></i>
+                            </div>
+                        </th>
+                        {% endfor %}
+                        <th class="text-center" width="120">
+                            <i class="bi bi-gear-fill text-muted"></i>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for model in models %}
+                        {{ model.render(view_mode="table", parent_view_mode="table", model_type=model_type, model_id=model.get_model_id())|safe }}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="bi bi-inbox display-4"></i>
+            </div>
+            <div class="empty-state-title">{{ t('models.common.no_data') }}</div>
+            <div class="empty-state-description">
+                {{ t('models.common.no_data_description') }}
+            </div>
+            <button class="btn btn-primary" 
+                    hx-get="/frontend/models/{{ model_type }}?view=form" 
+                    hx-target="#content"
+                    hx-push-url="true"
+                    hx-indicator="#content-loading">
+                <i class="bi bi-plus"></i>
+                {{ t('common.create') }} {{ titles.get(model_type, model_type.title()) }}
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>

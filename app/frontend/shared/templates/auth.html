@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% import 'components.html' as c %}
+
+{% block title %}{{ t('auth.title') }} - {{ t('common.app_name') }}{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card-wrapper">
+        <div class="card glass-effect animate-fade-in-up">
+            <div class="auth-card-body">
+                <div class="auth-header">
+                    <div class="auth-brand">
+                        <i class="bi bi-robot"></i>
+                        <div class="auth-brand-text">
+                            <h1 class="langflow-gradient">Agents Lab</h1>
+                            <div class="auth-subtitle">{{ t('auth.subtitle') }}</div>
+                        </div>
+                    </div>
+                    <p class="auth-description">{{ t('auth.choose_provider') }}</p>
+                </div>
+                
+                <div class="auth-providers">
+                    {% for provider in providers %}
+                    <a href="/auth/login/{{ provider.value }}" 
+                       class="btn btn-outline interactive glow-primary auth-btn">
+                        {% if provider.value == 'yandex' %}
+                            <i class="bi bi-cloud"></i>
+                        {% elif provider.value == 'google' %}
+                            <i class="bi bi-google"></i>
+                        {% elif provider.value == 'github' %}
+                            <i class="bi bi-github"></i>
+                        {% else %}
+                            <i class="bi bi-person"></i>
+                        {% endif %}
+                        <span>{{ t('auth.login_with_provider', provider=provider.name) }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+                
+                <div id="auth-result"></div>
+                
+                <div class="auth-footer">
+                    <p class="auth-footer-text">
+                        {{ t('auth.footer_text') }}
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Декоративные элементы -->
+        <div class="auth-decorations">
+            <div class="auth-decoration auth-decoration-1"></div>
+            <div class="auth-decoration auth-decoration-2"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}

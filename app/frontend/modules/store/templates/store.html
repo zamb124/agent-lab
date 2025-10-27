@@ -1,0 +1,32 @@
+{% import 'components.html' as c %}
+
+<link rel="stylesheet" href="/static/store/css/store.css">
+
+<h1 class="header-title" id="page-title" hx-swap-oob="true">
+    <i class="bi bi-shop me-2"></i>
+    {{ t('store.title') }}
+</h1>
+
+<div class="header-right" hx-swap-oob="true">
+    {{ c.button('',
+        variant='ghost',
+        size='sm',
+        icon='sun',
+        data_tooltip=t('dashboard.header.theme_toggle'),
+        onclick='document.querySelector(\'[data-theme-toggle]\').click()'
+    ) }}
+</div>
+
+<div class="store-container" 
+     id="store-list-view"
+     hx-get="/frontend/store/list" 
+     hx-trigger="load">
+    {{ c.skeleton(type='card', count=6) }}
+</div>
+
+<div id="flow-details-modal" class="flow-modal" style="display: none;" hx-preserve="true">
+    <div class="flow-modal-content" id="modal-flow-details">
+    </div>
+</div>
+
+<div id="modal-container"></div>

@@ -1,0 +1,37 @@
+{% if parent_view_mode == "table" %}
+  <!-- Обычная строка таблицы -->
+  <tr class="interactive transition-fast" data-model-type="{{ model_type }}" data-model-id="{{ model_id }}">
+      <!-- DEBUG: fields_html length = {{ fields_html|length if fields_html else 0 }} -->
+      {{ fields_html|safe }}
+      <td class="text-center">
+          <div class="btn-group">
+              <button class="btn btn-ghost btn-sm" data-tooltip="{{ t('common.edit') }}">
+                  <i class="bi bi-pencil"></i>
+              </button>
+              <button class="btn btn-ghost btn-sm" data-tooltip="{{ t('models.common.duplicate') }}">
+                  <i class="bi bi-copy"></i>
+              </button>
+              <button class="btn btn-ghost btn-sm text-danger" data-tooltip="{{ t('common.delete') }}">
+                  <i class="bi bi-trash"></i>
+              </button>
+          </div>
+      </td>
+  </tr>
+{% else %}
+  <!-- Мы вложены в ячейку таблицы - рендерим как компактную сводку -->
+  <!-- FROM: wrappers/table.html -->
+  <div class="nested-model-summary">
+    <span class="badge badge-info">
+      <i class="bi bi-box"></i>
+      {{ titles.get(model_type, model_type.title()) if model_type else t('models.common.model') }}
+    </span>
+    {% if model_id %}
+    <button class="btn btn-ghost btn-xs" 
+            hx-get="/frontend/models/{{ model_type }}/{{ model_id }}?view=modal" 
+            hx-target="#modal-container"
+            data-tooltip="{{ t('models.common.show_details') }}">
+        <i class="bi bi-eye"></i>
+    </button>
+    {% endif %}
+  </div>
+{% endif %}

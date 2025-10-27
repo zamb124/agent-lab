@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Демо встраивания чата - Agent Lab</title>
+    <link rel="stylesheet" href="/static/css/main.css">
+    <link rel="stylesheet" href="/static/css/core/variables.css">
+    <link rel="stylesheet" href="/static/css/utilities/colors.css">
+    <link rel="stylesheet" href="/static/css/utilities/spacing.css">
+    <link rel="stylesheet" href="/static/css/utilities/sizing.css">
+    <link rel="stylesheet" href="/static/css/utilities/flexbox.css">
+    <link rel="stylesheet" href="/static/css/utilities/borders.css">
+    <link rel="stylesheet" href="/static/css/components/buttons.css">
+    <link rel="stylesheet" href="/static/css/components/cards.css">
+    <link rel="stylesheet" href="/static/css/components/alerts.css">
+    <link rel="stylesheet" href="/static/css/components/tables.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #1a1a20 0%, #2a2a35 50%, #1a1a20 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .demo-section {
+            margin: 2rem 0;
+            padding: 2rem;
+            background: var(--glass-bg);
+            backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--glass-shadow);
+        }
+        
+        .code-block {
+            background: var(--bg-card);
+            border: 1px solid var(--border-primary);
+            border-radius: var(--radius-md);
+            padding: 1.5rem;
+            margin-top: 1rem;
+            font-family: 'Fira Code', monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            overflow-x: auto;
+            color: var(--text-primary);
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 1.5rem;
+        }
+        
+        .step-number {
+            background: var(--gradient-primary);
+            color: white;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: bold;
+            flex-shrink: 0;
+            margin-right: 1rem;
+            box-shadow: var(--shadow-primary);
+        }
+        
+        .demo-preview {
+            background: var(--glass-bg);
+            backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            padding: 1.5rem;
+            margin-top: 1rem;
+            box-shadow: var(--glass-shadow);
+        }
+        
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            background: var(--bg-card);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .table th, .table td {
+            border: 1px solid var(--border-primary);
+            padding: 1rem;
+            text-align: left;
+        }
+        
+        .table th {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+        
+        .table td {
+            color: var(--text-secondary);
+        }
+        
+        .table-striped tbody tr:nth-of-type(odd) {
+            background: var(--bg-secondary);
+        }
+        
+        .alert {
+            padding: 1.5rem;
+            border-radius: var(--radius-md);
+            margin-bottom: 1rem;
+            background: var(--glass-bg);
+            backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--glass-border);
+            box-shadow: var(--glass-shadow);
+        }
+        
+        .alert-info {
+            border-left: 4px solid var(--accent-info);
+        }
+        
+        .alert-warning {
+            border-left: 4px solid var(--accent-warning);
+        }
+        
+        .alert h5 {
+            color: var(--text-primary);
+            margin: 0 0 0.5rem 0;
+            font-weight: 600;
+        }
+        
+        .alert ul {
+            margin: 0;
+            padding-left: 1.5rem;
+            color: var(--text-secondary);
+        }
+        
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2rem;
+        }
+        
+        .col-md-6 {
+            flex: 1;
+            min-width: 300px;
+        }
+        
+        .interactive-demo {
+            background: var(--glass-bg);
+            backdrop-filter: var(--glass-blur);
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-xl);
+            padding: 2rem;
+            margin: 2rem 0;
+            box-shadow: var(--glass-shadow);
+        }
+        
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .row {
+                flex-direction: column;
+            }
+            
+            .col-md-6 {
+                min-width: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div>
+            <h1 style="margin-bottom: 2rem; text-align: center; color: var(--text-primary);">
+                💬 Демо встраивания чата Agent Lab
+            </h1>
+            
+            <div class="alert alert-info">
+                <h5>ℹ️ Что это?</h5>
+                <p>
+                    Эта страница демонстрирует, как встроить наш чат в любой веб-сайт. 
+                    Вы можете использовать iframe, JavaScript API или готовые виджеты.
+                </p>
+            </div>
+
+            <!-- Интерактивная демонстрация -->
+            <div class="interactive-demo">
+                <h3 style="text-align: center; margin-bottom: 1.5rem;">🎮 Попробуйте прямо сейчас!</h3>
+                <p style="text-align: center; color: var(--text-secondary);">Интерактивные примеры обоих режимов встраивания:</p>
+                
+                <div class="row">
+                    <!-- Режим кнопки -->
+                    <div class="col-md-6">
+                        <h5 style="text-align: center; margin-bottom: 1rem;">Режим кнопки чата</h5>
+                        <div style="position: relative; height: 300px; background: var(--bg-secondary); border-radius: var(--radius-lg); padding: 1rem;">
+                            <div style="color: var(--text-secondary); font-size: 14px; margin-bottom: 1rem;">
+                                <strong>Ваш сайт</strong><br>
+                                Кликните на кнопку чата в правом нижнем углу
+                            </div>
+                            <iframe 
+                                src="{{ embed_url }}&mode=widget"
+                                width="60" 
+                                height="60" 
+                                frameborder="0"
+                                style="position: absolute; bottom: 20px; right: 20px; border-radius: 50%; box-shadow: var(--shadow-lg);"
+                            ></iframe>
+                        </div>
+                    </div>
+                    
+                    <!-- Режим развернутого виджета -->
+                    <div class="col-md-6">
+                        <h5 style="text-align: center; margin-bottom: 1rem;">Режим развернутого виджета</h5>
+                        <div style="position: relative; height: 300px; background: var(--bg-secondary); border-radius: var(--radius-lg); padding: 1rem;">
+                            <div style="color: var(--text-secondary); font-size: 14px; margin-bottom: 1rem;">
+                                <strong>Встроенный чат</strong><br>
+                                Полноценный виджет чата
+                            </div>
+                            <iframe 
+                                src="{{ embed_url }}&mode=expanded&width=350px&height=220px"
+                                width="350" 
+                                height="220" 
+                                frameborder="0"
+                                style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border-radius: var(--radius-md); box-shadow: var(--shadow-lg);"
+                            ></iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+                <!-- Способ 1: iframe -->
+                <div class="demo-section">
+                    <h3>🪟 Способ 1: iframe (самый простой)</h3>
+                    <p>Просто вставьте iframe в ваш HTML код:</p>
+                    
+                    <div class="step">
+                        <span class="step-number">1</span>
+                        <strong>Получите токен доступа</strong>
+                        <p>Сначала создайте токен для встраивания через API:</p>
+                        <div class="code-block">
+POST /frontend/chat/create-embed-token
+Content-Type: application/json
+
+{
+    "flow_id": "support_bot",
+    "expires_in": 86400
+}
+                        </div>
+                    </div>
+
+                    <div class="step">
+                        <span class="step-number">2</span>
+                        <strong>Выберите режим отображения</strong>
+                        <p>Добавьте параметр <code>mode</code> для выбора режима:</p>
+                        <div class="code-block">
+&lt;!-- Режим кнопки чата (по умолчанию) --&gt;
+&lt;iframe 
+    src="{{ embed_url }}&mode=widget"
+    width="60" 
+    height="60" 
+    frameborder="0"
+    style="border-radius: 50%; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
+&gt;&lt;/iframe&gt;
+
+&lt;!-- Режим развернутого виджета --&gt;
+&lt;iframe 
+    src="{{ embed_url }}&mode=expanded"
+    width="400" 
+    height="600" 
+    frameborder="0"
+    style="border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
+&gt;&lt;/iframe&gt;
+                        </div>
+                    </div>
+
+                    <div class="step">
+                        <span class="step-number">3</span>
+                        <strong>Результат:</strong>
+                        <p>Выберите подходящий режим для вашего сайта:</p>
+                        
+                        <div class="row">
+                            <!-- Режим кнопки -->
+                            <div class="col-md-6">
+                                <h5 style="text-align: center; margin-bottom: 1rem;">Режим кнопки чата</h5>
+                                <div style="position: relative; height: 200px; background: var(--bg-secondary); border-radius: var(--radius-lg); padding: 1rem;">
+                                    <iframe 
+                                        src="{{ embed_url }}&mode=widget"
+                                        width="60" 
+                                        height="60" 
+                                        frameborder="0"
+                                        style="position: absolute; bottom: 20px; right: 20px; border-radius: 50%; box-shadow: var(--shadow-lg);"
+                                    ></iframe>
+                                    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: var(--text-secondary); font-size: 14px;">
+                                        Плавающая кнопка чата
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Режим развернутого виджета -->
+                            <div class="col-md-6">
+                                <h5 style="text-align: center; margin-bottom: 1rem;">Режим развернутого виджета</h5>
+                                <div style="position: relative; height: 200px; background: var(--bg-secondary); border-radius: var(--radius-lg); padding: 1rem;">
+                                    <iframe 
+                                        src="{{ embed_url }}&mode=expanded&width=300px&height=180px"
+                                        width="300" 
+                                        height="180" 
+                                        frameborder="0"
+                                        style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); border-radius: var(--radius-md); box-shadow: var(--shadow-lg);"
+                                    ></iframe>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Способ 2: JavaScript API -->
+                <div class="demo-section">
+                    <h3>⚙️ Способ 2: JavaScript API</h3>
+                    <p>Для более гибкого управления используйте JavaScript API:</p>
+                    
+                    <div class="step">
+                        <span class="step-number">1</span>
+                        <strong>Подключите скрипт</strong>
+                        <div class="code-block">
+&lt;script src="https://your-domain.com/static/chat/js/embed-chat.js"&gt;&lt;/script&gt;
+                        </div>
+                    </div>
+
+                    <div class="step">
+                        <span class="step-number">2</span>
+                        <strong>Инициализируйте чат</strong>
+                        <div class="code-block">
+&lt;script&gt;
+// Инициализация чата
+EmbedChat.init({
+    container: '#chat-container',
+    token: '{{ token }}',
+    flowId: '{{ flow_id }}',
+    sessionId: 'optional_session_id',
+    theme: 'light', // или 'dark'
+    width: '100%',
+    height: '500px'
+});
+&lt;/script&gt;
+                        </div>
+                    </div>
+
+                    <div class="step">
+                        <span class="step-number">3</span>
+                        <strong>HTML контейнер</strong>
+                        <div class="code-block">
+&lt;div id="chat-container"&gt;&lt;/div&gt;
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Способ 3: Готовый виджет -->
+                <div class="demo-section">
+                    <h3>🧩 Способ 3: Готовый виджет</h3>
+                    <p>Используйте готовый виджет с кнопкой открытия:</p>
+                    
+                    <div class="code-block">
+&lt;!-- Кнопка чата --&gt;
+&lt;button id="chat-toggle" class="btn btn-primary rounded-circle position-fixed" 
+        style="bottom: 20px; right: 20px; z-index: 1000;"&gt;
+    &lt;i class="bi bi-chat-dots"&gt;&lt;/i&gt;
+&lt;/button&gt;
+
+&lt;!-- Виджет чата --&gt;
+&lt;div id="chat-widget" class="chat-widget hidden"&gt;
+    &lt;!-- Содержимое чата будет загружено динамически --&gt;
+&lt;/div&gt;
+
+&lt;!-- Скрипт инициализации --&gt;
+&lt;script&gt;
+// Загружаем чат при клике на кнопку
+document.getElementById('chat-toggle').addEventListener('click', function() {
+    const widget = document.getElementById('chat-widget');
+    if (widget.classList.contains('hidden')) {
+        // Загружаем чат
+        widget.innerHTML = '&lt;iframe src="{{ embed_url }}" width="100%" height="100%" frameborder="0"&gt;&lt;/iframe&gt;';
+        widget.classList.remove('hidden');
+    } else {
+        widget.classList.add('hidden');
+    }
+});
+&lt;/script&gt;
+                    </div>
+                </div>
+
+                <!-- Параметры конфигурации -->
+                <div class="demo-section">
+                    <h3>⚙️ Параметры конфигурации</h3>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Параметр</th>
+                                    <th>Тип</th>
+                                    <th>Обязательный</th>
+                                    <th>Описание</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>token</code></td>
+                                    <td>string</td>
+                                    <td>✅</td>
+                                    <td>JWT токен для авторизации</td>
+                                </tr>
+                                <tr>
+                                    <td><code>flow_id</code></td>
+                                    <td>string</td>
+                                    <td>✅</td>
+                                    <td>ID агента/флоу для чата</td>
+                                </tr>
+                                <tr>
+                                    <td><code>session_id</code></td>
+                                    <td>string</td>
+                                    <td>❌</td>
+                                    <td>ID сессии для продолжения диалога</td>
+                                </tr>
+                                <tr>
+                                    <td><code>theme</code></td>
+                                    <td>string</td>
+                                    <td>❌</td>
+                                    <td>Тема оформления: 'light' или 'dark'</td>
+                                </tr>
+                                <tr>
+                                    <td><code>width</code></td>
+                                    <td>string</td>
+                                    <td>❌</td>
+                                    <td>Ширина виджета (по умолчанию: 400px)</td>
+                                </tr>
+                                <tr>
+                                    <td><code>height</code></td>
+                                    <td>string</td>
+                                    <td>❌</td>
+                                    <td>Высота виджета (по умолчанию: 600px)</td>
+                                </tr>
+                                <tr>
+                                    <td><code>mode</code></td>
+                                    <td>string</td>
+                                    <td>❌</td>
+                                    <td>Режим отображения: 'widget' (кнопка) или 'expanded' (развернутый). По умолчанию: 'widget'</td>
+                                </tr>
+                                <tr>
+                                    <td><code>user_id</code></td>
+                                    <td>string</td>
+                                    <td>❌</td>
+                                    <td>ID пользователя для персонализации</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Примеры использования -->
+                <div class="demo-section">
+                    <h3>💡 Примеры использования</h3>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>Интернет-магазин</h5>
+                            <p>Плавающая кнопка чата для поддержки:</p>
+                            <div class="code-block">
+&lt;!-- Плавающая кнопка чата --&gt;
+&lt;iframe src="{{ embed_url }}&mode=widget&flow_id=sales_support" 
+        width="60" height="60" frameborder="0"
+        style="position: fixed; bottom: 20px; right: 20px; z-index: 1000;"&gt;&lt;/iframe&gt;
+                            </div>
+                            
+                            <!-- Живой пример -->
+                            <div style="margin-top: 1rem; position: relative; height: 150px; background: var(--bg-secondary); border-radius: var(--radius-lg); padding: 1rem;">
+                                <div style="color: var(--text-secondary); font-size: 14px; margin-bottom: 1rem;">
+                                    Страница товара в интернет-магазине
+                                </div>
+                                <iframe 
+                                    src="{{ embed_url }}&mode=widget"
+                                    width="50" 
+                                    height="50" 
+                                    frameborder="0"
+                                    style="position: absolute; bottom: 15px; right: 15px; border-radius: 50%; box-shadow: var(--shadow-md);"
+                                ></iframe>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h5>Корпоративный сайт</h5>
+                            <p>Встроенный чат в футер сайта:</p>
+                            <div class="code-block">
+&lt;!-- Встроенный чат --&gt;
+&lt;div class="footer-chat"&gt;
+    &lt;iframe src="{{ embed_url }}&mode=expanded&flow_id=general_support" 
+            width="300" height="400" frameborder="0"&gt;&lt;/iframe&gt;
+&lt;/div&gt;
+                            </div>
+                            
+                            <!-- Живой пример -->
+                            <div style="margin-top: 1rem; position: relative; height: 150px; background: var(--bg-secondary); border-radius: var(--radius-lg); padding: 1rem;">
+                                <div style="color: var(--text-secondary); font-size: 14px; margin-bottom: 1rem;">
+                                    Футер корпоративного сайта
+                                </div>
+                                <iframe 
+                                    src="{{ embed_url }}&mode=expanded&width=250px&height=100px"
+                                    width="250" 
+                                    height="100" 
+                                    frameborder="0"
+                                    style="position: absolute; bottom: 10px; left: 10px; border-radius: var(--radius-md); box-shadow: var(--shadow-md);"
+                                ></iframe>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Безопасность -->
+                <div class="demo-section">
+                    <h3>🛡️ Безопасность</h3>
+                    <div class="alert alert-warning">
+                        <h5><i class="bi bi-exclamation-triangle"></i> Важно!</h5>
+                        <ul class="mb-0">
+                            <li>Токены имеют ограниченный срок действия</li>
+                            <li>Используйте HTTPS для передачи токенов</li>
+                            <li>Не передавайте токены в URL публично</li>
+                            <li>Регулярно обновляйте токены</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Поддержка -->
+                <div class="demo-section">
+                    <h3>🎧 Нужна помощь?</h3>
+                    <p>Если у вас возникли вопросы по интеграции:</p>
+                    <ul>
+                        <li>📧 Email: support@agent-lab.ru</li>
+                        <li>📱 Telegram: @agent_lab_support</li>
+                        <li>📖 Документация: <a href="/docs" target="_blank">docs.agent-lab.ru</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

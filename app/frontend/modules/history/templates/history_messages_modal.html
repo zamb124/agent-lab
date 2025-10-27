@@ -1,0 +1,158 @@
+{% import 'components.html' as c %}
+<link rel="stylesheet" href="/static/history/css/history.css">
+
+<div class="modal-overlay" onclick="this.remove(); document.body.style.overflow = '';">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h5 class="mb-0">
+                <i class="bi bi-chat-dots me-2"></i>
+                История диалога
+            </h5>
+            <button class="btn btn-ghost btn-sm" onclick="this.closest('.modal-overlay').remove(); document.body.style.overflow = '';">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+            
+            <div class="modal-body">
+                <div class="history-info">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="bi bi-diagram-3"></i>
+                                Сценарий
+                            </div>
+                            <div class="info-value flow-name">
+                                {% if history.flow_id %}
+                                    <a href="/frontend/builder/flow/{{ history.flow_id }}" 
+                                       target="_blank"
+                                       class="text-decoration-none" 
+                                       title="Открыть в Builder">
+                                        {{ history.flow_name or history.flow_id }}
+                                        <i class="bi bi-box-arrow-up-right ms-1"></i>
+                                    </a>
+                                {% else %}
+                                    Не указан
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="bi bi-hash"></i>
+                                ID сессии
+                            </div>
+                            <div class="session-id-wrapper">
+                                <code>{{ history.session_id[:12] }}...</code>
+                                <button class="btn btn-ghost copy-btn" 
+                                        onclick="navigator.clipboard.writeText('{{ history.session_id }}'); this.innerHTML='<i class=\'bi bi-check\'></i>'; setTimeout(() => this.innerHTML='<i class=\'bi bi-clipboard\'></i>', 1500);"
+                                        title="Копировать полный ID">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="bi bi-chat-left-text"></i>
+                                Сообщений
+                            </div>
+                            <div class="info-value">
+                                {{ history.total_messages }}
+                            </div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="bi bi-bookmark-check"></i>
+                                Контрольных точек
+                            </div>
+                            <div class="info-value">
+                                {{ history.total_checkpoints }}
+                            </div>
+                        </div>
+                        
+                        <div class="info-item">
+                            <div class="info-label">
+                                <i class="bi bi-clock-history"></i>
+                                Создано
+                            </div>
+                            <div class="info-value">
+                                {{ history.created_at.strftime('%d.%m.%Y %H:%M') if history.created_at else 'N/A' }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if history.messages %}
+                <div class="messages-timeline">
+                    {% for message in history.messages %}
+                    <div class="message-bubble {{ message.role.value }}">
+                        <div class="message-content-wrapper">
+                            <div class="message-header">
+                                {% if message.role.value == 'user' %}
+                                    <i class="bi bi-person-circle message-role-icon message-role-user"></i>
+                                    <span class="small fw-bold">Пользователь</span>
+                                {% elif message.role.value == 'assistant' %}
+                                    <i class="bi bi-robot message-role-icon message-role-assistant"></i>
+                                    <span class="small fw-bold">Ассистент</span>
+                                {% elif message.role.value == 'tool' %}
+                                    <i class="bi bi-tools message-role-icon message-role-tool"></i>
+                                    <span class="small fw-bold">Инструмент</span>
+                                {% elif message.role.value == 'system' %}
+                                    <i class="bi bi-gear-fill message-role-icon message-role-system"></i>
+                                    <span class="small fw-bold">Система</span>
+                                {% endif %}
+                                {% if message.source_node %}
+                                    <span class="badge message-source-badge">
+                                        <i class="bi bi-diagram-3"></i> {{ message.source_node }}
+                                    </span>
+                                {% endif %}
+                                <span class="message-time ms-auto">
+                                    {{ message.timestamp.strftime('%H:%M:%S') if message.timestamp else '' }}
+                                </span>
+                            </div>
+                            
+                            {% if message.content %}
+                            <div class="message-body">
+                                <div class="message-content">{{ message.content }}</div>
+                            </div>
+                            {% endif %}
+                            
+                            {% if message.tool_calls %}
+                            <div class="tool-call-box">
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <i class="bi bi-wrench"></i>
+                                    <span class="tool-name">Вызовы инструментов</span>
+                                </div>
+                                {% for tool_call in message.tool_calls %}
+                                <div class="mb-2">
+                                    <div class="fw-bold small mb-1">
+                                        <i class="bi bi-arrow-right-circle"></i>
+                                        {{ tool_call.tool_name }}
+                                    </div>
+                                    <pre class="tool-call-args">{{ tool_call.arguments | safe }}</pre>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            
+                            {% if message.metadata and message.metadata.get('tool_call_id') %}
+                            <div class="mt-2 small text-muted">
+                                <i class="bi bi-link-45deg"></i>
+                                <code class="tool-call-id">{{ message.metadata.tool_call_id }}</code>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox display-4 text-muted"></i>
+                    <p class="text-muted mt-3">Нет сообщений в этой сессии</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>

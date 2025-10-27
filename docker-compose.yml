@@ -22,7 +22,10 @@ services:
   app:
     build:
       context: .
-      dockerfile: backend/Dockerfile
+      dockerfile: Dockerfile
+      target: app
+      args:
+        - CONFIG_FILE=${CONFIG_FILE:-deploy/conf.json}
     ports:
       - "${APP_PORT:-8001}:8001"
     environment:
@@ -34,13 +37,15 @@ services:
         condition: service_healthy
         required: false
     restart: unless-stopped
-    command: python run.py
+    command: python run_prod.py
 
   # Task Worker
   worker:
     build:
       context: .
-      dockerfile: backend/Dockerfile
+      dockerfile: Dockerfile
+      args:
+        - CONFIG_FILE=${CONFIG_FILE:-deploy/conf.json}
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-local}
     volumes: []
@@ -50,6 +55,15 @@ services:
         required: false
     restart: unless-stopped
     command: python run_worker.py
+
+  # SGR Deep Research Service
+  sgr:
+    build:
+      context: .
+      dockerfile: ./sgr-service/Dockerfile
+    ports:
+      - "${SGR_PORT:-8010}:8010"
+    restart: unless-stopped
 
 volumes:
   postgres_data:

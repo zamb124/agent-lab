@@ -1,0 +1,11 @@
+/* Admin модуль */
+
+.btn-remigrate {
+    background: var(--accent-warning);
+}
+
+.limit-help-text {
+    color: var(--text-muted);
+    font-size: 0.875rem;
+}
+

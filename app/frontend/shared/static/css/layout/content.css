@@ -1,0 +1,134 @@
+/* Контентная область */
+
+.content {
+    flex: 1;
+    padding: 0 0 1.25rem 0;
+    background: var(--bg-primary);
+    width: 100%;
+    min-width: 0;
+    overflow: visible;
+    max-width: 100%;
+    box-sizing: border-box;
+    min-height: calc(100vh - var(--header-height) - 2rem);
+}
+
+.content-header {
+    margin-bottom: 1.5rem;
+}
+
+.content-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.375rem;
+}
+
+.content-description {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.content-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.875rem;
+}
+
+.content-container {
+    max-width: 100%;
+    margin: 0 auto;
+}
+
+.content-grid {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.content-grid-2 {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.content-grid-3 {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.content-grid-4 {
+    grid-template-columns: repeat(4, 1fr);
+}
+
+.content.loading {
+    position: relative;
+    pointer-events: none;
+}
+
+.content.loading::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 15, 35, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+.content.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2rem;
+    height: 2rem;
+    border: 2px solid var(--border-primary);
+    border-top: 2px solid var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    z-index: 11;
+}
+
+/* Empty state стили перенесены в components/empty-state.css */
+
+.card-body .empty-state {
+    min-height: 400px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+@media (max-width: 1024px) {
+    .content-grid-4,
+    .content-grid-3 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .content {
+        padding: 0 1rem 1rem 1rem;
+        box-sizing: border-box;
+    }
+    
+    .content-grid-2,
+    .content-grid-3,
+    .content-grid-4 {
+        grid-template-columns: 1fr;
+    }
+    
+    .content-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}
+
+@media (max-width: 480px) {
+    .content-title {
+        font-size: 1.5rem;
+    }
+}
+

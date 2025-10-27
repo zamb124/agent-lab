@@ -1,0 +1,37 @@
+<div class="item-card flow-card" data-flow-id="{{ flow.flow_id }}" draggable="true">
+    <div class="card-header">
+        <div class="card-icon">
+            <i class="icon-flow"></i>
+        </div>
+        <div class="card-title">{{ flow.name }}</div>
+        <div class="card-actions">
+            <button class="btn-icon" data-action="edit" title="Редактировать">
+                <i class="icon-edit"></i>
+            </button>
+            <button class="btn-icon" data-action="delete" title="Удалить">
+                <i class="icon-trash"></i>
+            </button>
+        </div>
+    </div>
+    
+    {% if flow.description %}
+    <div class="card-description">{{ flow.description }}</div>
+    {% endif %}
+    
+    <div class="card-meta">
+        <span class="meta-item">
+            <i class="icon-user"></i>
+            {{ flow.entry_point_agent or "Не настроен" }}
+        </span>
+        <span class="meta-item">
+            <i class="icon-calendar"></i>
+            {{ flow.created_at.strftime('%d.%m.%Y') if flow.created_at else "—" }}
+        </span>
+    </div>
+    
+    <div class="card-platforms">
+        {% for platform in flow.platforms.keys() %}
+        <span class="platform-badge">{{ platform }}</span>
+        {% endfor %}
+    </div>
+</div>

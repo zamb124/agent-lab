@@ -1,0 +1,93 @@
+/* Иконки приложения - единая система */
+
+/* Общие стили для всех иконок */
+[class^="icon-"]::before {
+    font-style: normal;
+    display: inline-block;
+    padding: 0;
+    background: none;
+    border-radius: 0;
+    backdrop-filter: none;
+    border: none;
+    font-size: 16px;
+    margin-right: 0;
+}
+
+/* Основные иконки */
+.icon-info::before { content: "ℹ️"; }
+.icon-people::before { content: "👥"; }
+.icon-fullscreen::before { content: "⛶"; }
+.icon-external-link::before { content: "↗"; }
+.icon-minus::before { content: "−"; }
+.icon-close::before { content: "×"; }
+.icon-slash::before { content: "/"; }
+.icon-paperclip::before { content: "📎"; }
+.icon-mic::before { content: "🎤"; }
+.icon-send::before { content: "➤"; }
+.icon-question::before { content: "?"; }
+.icon-trash::before { content: "🗑"; }
+.icon-play::before { content: "▶"; }
+.icon-chat::before { content: "💬"; }
+.icon-funnel::before { content: "🔍"; }
+
+/* Иконки для уведомлений и алертов */
+.icon-info-circle::before { content: "ℹ️"; }
+.icon-check-circle::before { content: "✅"; }
+.icon-exclamation-triangle::before { content: "⚠️"; }
+.icon-x-circle::before { content: "❌"; }
+
+/* Иконки для навигации */
+.icon-plus::before { content: "➕"; }
+.icon-minus-circle::before { content: "➖"; }
+.icon-x-circle-fill::before { content: "❌"; }
+.icon-circle-fill::before { content: "⭕"; }
+
+/* Иконки для действий */
+.icon-edit::before { content: "✏️"; }
+.icon-delete::before { content: "🗑️"; }
+.icon-save::before { content: "💾"; }
+.icon-cancel::before { content: "❌"; }
+.icon-confirm::before { content: "✅"; }
+
+/* Иконки для файлов */
+.icon-file::before { content: "📄"; }
+.icon-folder::before { content: "📁"; }
+.icon-image::before { content: "🖼️"; }
+.icon-video::before { content: "🎥"; }
+.icon-audio::before { content: "🎵"; }
+
+/* Иконки для статусов */
+.icon-success::before { content: "✅"; }
+.icon-error::before { content: "❌"; }
+.icon-warning::before { content: "⚠️"; }
+.icon-loading::before { content: "⏳"; }
+
+/* Иконки для платформ */
+.icon-telegram::before { content: "📱"; }
+.icon-whatsapp::before { content: "💬"; }
+.icon-web::before { content: "🌐"; }
+.icon-api::before { content: "🔌"; }
+.icon-amocrm::before { content: "📊"; }
+
+/* Иконки для билдера */
+.icon-grid-3x3-gap::before { content: "⊞"; }
+.icon-chevron-left::before { content: "◀"; }
+.icon-diagram-3::before { content: "📊"; }
+.icon-robot::before { content: "🤖"; }
+.icon-tools::before { content: "🔧"; }
+.icon-code-square::before { content: "📝"; }
+.icon-chat-dots::before { content: "💬"; }
+.icon-lightning::before { content: "⚡"; }
+.icon-arrow-left::before { content: "←"; }
+.icon-zoom-in::before { content: "🔍+"; }
+.icon-zoom-out::before { content: "🔍-"; }
+.icon-fullscreen::before { content: "⛶"; }
+.icon-translate::before { content: "🌐"; }
+.icon-check::before { content: "✅"; }
+.icon-x-circle-fill::before { content: "❌"; }
+.icon-cursor::before { content: "👆"; }
+.icon-pencil::before { content: "✏️"; }
+.icon-clipboard::before { content: "📋"; }
+.icon-moon::before { content: "🌙"; }
+.icon-arrow-counterclockwise::before { content: "🔄"; }
+.icon-cloud-upload::before { content: "☁️"; }

@@ -1,0 +1,689 @@
+{% extends "base_landing.html" %}
+{% import 'components.html' as c %}
+
+{% block title %}Agents Lab - Лаборатория Агентов{% endblock %}
+
+{% block content %}
+<div class="landing-page">
+    <!-- Header -->
+    <header class="landing-header">
+        <div class="container">
+            <div class="header-content">
+                <div class="brand">
+                    <button class="app-launcher-trigger" onclick="toggleAppLauncher()" title="Все приложения">
+                        <div class="app-launcher-icon-grid">
+                            <i class="bi bi-circle-fill"></i>
+                            <i class="bi bi-circle-fill"></i>
+                            <i class="bi bi-circle-fill"></i>
+                            <i class="bi bi-circle-fill"></i>
+                            <i class="bi bi-circle-fill"></i>
+                            <i class="bi bi-circle-fill"></i>
+                            <i class="bi bi-circle-fill"></i>
+                            <i class="bi bi-circle-fill"></i>
+                            <i class="bi bi-circle-fill"></i>
+                        </div>
+                    </button>
+                    <span class="brand-text langflow-gradient">Agents Lab</span>
+                </div>
+                
+                <!-- Desktop navigation -->
+                <div class="header-actions desktop-nav">
+                    <a href="/docs/" target="_blank" class="btn btn-outline-primary">
+                        <i class="bi bi-book"></i>
+                        Документация
+                    </a>
+                    <a href="/frontend/builder/" class="btn btn-outline-primary">
+                        <i class="bi bi-diagram-3"></i>
+                        {{ t('landing.header.builder') }}
+                    </a>
+                    {% if is_authenticated %}
+                        <a href="/frontend/dashboard" class="btn btn-outline-primary">
+                            <i class="bi bi-speedometer2"></i>
+                            {{ t('landing.header.dashboard') }}
+                        </a>
+                    {% else %}
+                        <a href="/frontend/auth" class="btn btn-outline-primary">
+                            <i class="bi bi-box-arrow-in-right"></i>
+                            {{ t('landing.header.login') }}
+                        </a>
+                    {% endif %}
+                    
+                    <div class="dropdown">
+                        <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
+                            <i class="bi bi-translate"></i>
+                            <span id="current-language">{{ get_current_language().upper() }}</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setLandingLanguage('ru');">
+                            <i class="bi bi-check invisible" id="lang-ru"></i> 
+                            {{ t('languages.ru') }}
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setLandingLanguage('en');">
+                            <i class="bi bi-check invisible" id="lang-en"></i> 
+                            {{ t('languages.en') }}
+                        </a></li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <!-- Mobile burger button -->
+                <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
+                    <i class="bi bi-list"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+    
+    <!-- Mobile menu overlay -->
+    <div class="mobile-menu-overlay" id="mobileMenuOverlay" onclick="closeMobileMenu()"></div>
+    <div class="mobile-menu" id="mobileMenu">
+        <div class="mobile-menu-header">
+            <div class="brand">
+                <span class="brand-text langflow-gradient">Agents Lab</span>
+            </div>
+            <button class="mobile-menu-close" onclick="closeMobileMenu()">
+                <i class="bi bi-x-circle-fill"></i>
+            </button>
+        </div>
+        <nav class="mobile-menu-nav">
+            <a href="/docs/" target="_blank" class="mobile-menu-item">
+                <i class="bi bi-book"></i>
+                <span>Документация</span>
+            </a>
+            <a href="/frontend/builder/" class="mobile-menu-item">
+                <i class="bi bi-diagram-3"></i>
+                <span>{{ t('landing.header.builder') }}</span>
+            </a>
+            {% if is_authenticated %}
+                <a href="/frontend/dashboard" class="mobile-menu-item">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>{{ t('landing.header.dashboard') }}</span>
+                </a>
+            {% else %}
+                <a href="/frontend/auth" class="mobile-menu-item">
+                    <i class="bi bi-box-arrow-in-right"></i>
+                    <span>{{ t('landing.header.login') }}</span>
+                </a>
+            {% endif %}
+            
+            <div class="mobile-menu-divider"></div>
+            
+            <div class="mobile-menu-section">
+                <div class="mobile-menu-section-title">{{ t('dashboard.header.language_toggle') }}</div>
+                <button class="mobile-menu-item" onclick="event.preventDefault(); setLandingLanguage('ru'); closeMobileMenu();">
+                    <i class="bi bi-check invisible" id="mobile-lang-ru"></i>
+                    <span>{{ t('languages.ru') }}</span>
+                </button>
+                <button class="mobile-menu-item" onclick="event.preventDefault(); setLandingLanguage('en'); closeMobileMenu();">
+                    <i class="bi bi-check invisible" id="mobile-lang-en"></i>
+                    <span>{{ t('languages.en') }}</span>
+                </button>
+            </div>
+        </nav>
+    </div>
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text">
+                    <h1 class="hero-title">
+                        {{ t('landing.hero.title_main') }}
+                        <span class="langflow-gradient">{{ t('landing.hero.title_accent') }}</span>
+                    </h1>
+                    <p class="hero-subtitle">
+                        {{ t('landing.hero.subtitle') }}
+                    </p>
+                    <div class="hero-actions">
+                        <button class="btn btn-primary btn-lg" onclick="openContactModal()">
+                            <i class="bi bi-rocket"></i>
+                            {{ t('landing.hero.start_button') }}
+                        </button>
+                        <button class="btn btn-outline-primary btn-lg" onclick="scrollToSection('about')">
+                            <i class="bi bi-info-circle"></i>
+                            {{ t('landing.hero.learn_more') }}
+                        </button>
+                    </div>
+                </div>
+                <div class="hero-visual">
+                    <div class="hero-image">
+                        <img src="/static/img/main.png" alt="Agents Lab Platform" class="platform-preview">
+                        <div class="visual-overlay">
+                            <div class="floating-card card-1">
+                                <i class="bi bi-cpu"></i>
+                                <span>{{ t('landing.hero.floating_tags.ai') }}</span>
+                            </div>
+                            <div class="floating-card card-2">
+                                <i class="bi bi-gear"></i>
+                                <span>{{ t('landing.hero.floating_tags.automation') }}</span>
+                            </div>
+                            <div class="floating-card card-3">
+                                <i class="bi bi-database"></i>
+                                <span>{{ t('landing.hero.floating_tags.rag') }}</span>
+                            </div>
+                            <div class="floating-card card-4">
+                                <i class="bi bi-search"></i>
+                                <span>{{ t('landing.hero.floating_tags.search') }}</span>
+                            </div>
+                            <div class="floating-card card-5">
+                                <i class="bi bi-headset"></i>
+                                <span>{{ t('landing.hero.floating_tags.support') }}</span>
+                            </div>
+                            <div class="floating-card card-6">
+                                <i class="bi bi-graph-up"></i>
+                                <span>{{ t('landing.hero.floating_tags.efficiency') }}</span>
+                            </div>
+                            <div class="floating-card card-7">
+                                <i class="bi bi-arrow-up-circle"></i>
+                                <span>{{ t('landing.hero.floating_tags.growth') }}</span>
+                            </div>
+                            <div class="floating-card card-8">
+                                <i class="bi bi-puzzle"></i>
+                                <span>{{ t('landing.hero.floating_tags.integrations') }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="about-section">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">{{ t('landing.about.title') }}</h2>
+                <p class="section-subtitle">
+                    {{ t('landing.about.subtitle') }}
+                </p>
+            </div>
+            
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="bi bi-robot"></i>
+                    </div>
+                    <h3 class="feature-title">{{ t('landing.features.autonomous_agents.title') }}</h3>
+                    <p class="feature-description">
+                        {{ t('landing.features.autonomous_agents.description') }}
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="bi bi-diagram-3"></i>
+                    </div>
+                    <h3 class="feature-title">{{ t('landing.features.multi_agent.title') }}</h3>
+                    <p class="feature-description">
+                        {{ t('landing.features.multi_agent.description') }}
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="bi bi-code-slash"></i>
+                    </div>
+                    <h3 class="feature-title">{{ t('landing.features.low_code.title') }}</h3>
+                    <p class="feature-description">
+                        {{ t('landing.features.low_code.description') }}
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="bi bi-puzzle"></i>
+                    </div>
+                    <h3 class="feature-title">{{ t('landing.features.integrations.title') }}</h3>
+                    <p class="feature-description">
+                        {{ t('landing.features.integrations.description') }}
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="bi bi-shield-check"></i>
+                    </div>
+                    <h3 class="feature-title">{{ t('landing.features.security.title') }}</h3>
+                    <p class="feature-description">
+                        {{ t('landing.features.security.description') }}
+                    </p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="bi bi-graph-up"></i>
+                    </div>
+                    <h3 class="feature-title">{{ t('landing.features.scalability.title') }}</h3>
+                    <p class="feature-description">
+                        {{ t('landing.features.scalability.description') }}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Benefits Section -->
+    <section class="benefits-section">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">{{ t('landing.benefits.title') }}</h2>
+            </div>
+            
+            <div class="benefits-grid">
+                <div class="benefit-item">
+                    <div class="benefit-header">
+                        <i class="bi bi-lightning"></i>
+                        <h3>{{ t('landing.benefits.speed.title') }}</h3>
+                    </div>
+                    <p>{{ t('landing.benefits.speed.description') }}</p>
+                </div>
+                
+                <div class="benefit-item">
+                    <div class="benefit-header">
+                        <i class="bi bi-shield-lock"></i>
+                        <h3>{{ t('landing.benefits.control_security.title') }}</h3>
+                    </div>
+                    <p>{{ t('landing.benefits.control_security.description') }}</p>
+                </div>
+                
+                <div class="benefit-item">
+                    <div class="benefit-header">
+                        <i class="bi bi-arrows-expand"></i>
+                        <h3>{{ t('landing.benefits.scalability.title') }}</h3>
+                    </div>
+                    <p>{{ t('landing.benefits.scalability.description') }}</p>
+                </div>
+                
+                <div class="benefit-item">
+                    <div class="benefit-header">
+                        <i class="bi bi-gear"></i>
+                        <h3>{{ t('landing.benefits.manageability.title') }}</h3>
+                    </div>
+                    <p>{{ t('landing.benefits.manageability.description') }}</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Target Audience Section -->
+    <section class="audience-section">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">{{ t('landing.audience.title') }}</h2>
+                <p class="section-subtitle">{{ t('landing.audience.subtitle') }}</p>
+            </div>
+            
+            <div class="audience-list">
+                 <div class="audience-item">
+                    <i class="bi bi-graph-down"></i>
+                    <p>{{ t('landing.audience.cost_reduction') }}</p>
+                </div>
+                <div class="audience-item">
+                    <i class="bi bi-building"></i>
+                    <p>{{ t('landing.audience.repetitive_tasks') }}</p>
+                </div>
+                <div class="audience-item">
+                    <i class="bi bi-code"></i>
+                    <p>{{ t('landing.audience.no_dev_team') }}</p>
+                </div>
+                
+                <div class="audience-item">
+                    <i class="bi bi-shield"></i>
+                    <p>{{ t('landing.audience.security_control') }}</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <div class="container">
+            <div class="cta-content">
+                <h2 class="cta-title">{{ t('landing.cta.title') }}</h2>
+                <p class="cta-subtitle">
+                    {{ t('landing.cta.subtitle') }}
+                </p>
+                    <div class="cta-actions">
+                        {% if is_authenticated %}
+                            <a href="/frontend/dashboard" class="btn btn-primary btn-lg">
+                                <i class="bi bi-speedometer2"></i>
+                                {{ t('landing.header.dashboard') }}
+                            </a>
+                        {% else %}
+                            <a href="/frontend/auth" class="btn btn-primary btn-lg">
+                                <i class="bi bi-rocket"></i>
+                                {{ t('landing.cta.login_button') }}
+                            </a>
+                        {% endif %}
+                        <button class="btn btn-outline-primary btn-lg" onclick="openContactModal()">
+                            <i class="bi bi-envelope"></i>
+                            {{ t('landing.cta.contact_button') }}
+                        </button>
+                    </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="landing-footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <i class="bi bi-robot icon-lg"></i>
+                    <span class="brand-text langflow-gradient">Agents Lab</span>
+                </div>
+                <div class="footer-links">
+                    <a href="/docs/" target="_blank" class="footer-link">
+                        <i class="bi bi-book"></i>
+                        Документация
+                    </a>
+                    <a href="/api/docs" target="_blank" class="footer-link">
+                        <i class="bi bi-code-square"></i>
+                        API
+                    </a>
+                </div>
+                <div class="footer-text">
+                    <p>{{ t('landing.footer.copyright') }}</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+</div>
+
+<!-- Модальное окно для связи -->
+<div id="contactModal" class="modal-overlay" onclick="closeContactModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3>{{ t('landing.contact_modal.title') }}</h3>
+            <button class="modal-close" onclick="closeContactModal()">
+                <i class="bi bi-x-circle-fill"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <form id="contactForm" onsubmit="submitContactForm(event)">
+                <div class="form-group">
+                    <label for="message">{{ t('landing.contact_modal.message_label') }}</label>
+                    <textarea id="message" name="message" rows="3" placeholder="{{ t('landing.contact_modal.message_placeholder') }}" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="email">{{ t('landing.contact_modal.email_label') }}</label>
+                    <input type="email" id="email" name="email" placeholder="{{ t('landing.contact_modal.email_placeholder') }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="phone">{{ t('landing.contact_modal.phone_label') }}</label>
+                    <input type="tel" id="phone" name="phone" placeholder="{{ t('landing.contact_modal.phone_placeholder') }}">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-outline-primary" onclick="closeContactModal()">
+                        {{ t('landing.contact_modal.cancel_button') }}
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-send"></i>
+                        {{ t('landing.contact_modal.send_button') }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- App Launcher Overlay -->
+<div class="app-launcher-overlay" id="app-launcher" onclick="if(event.target === this) toggleAppLauncher()">
+    <button class="app-launcher-close" onclick="toggleAppLauncher()">
+        <i class="bi bi-x-circle-fill"></i>
+    </button>
+    
+    <div class="app-launcher-container">
+        <h2 class="app-launcher-title-main">{{ t('dashboard.widgets.title') }}</h2>
+        
+        <div class="app-launcher-grid">
+            {% for widget in dashboard_widgets | default([]) %}
+            <div class="app-launcher-item" onclick="window.location.href='{{ widget.url }}'">
+                <div class="app-launcher-icon">
+                    <i class="bi {{ widget.icon }}"></i>
+                </div>
+                <div class="app-launcher-item-title">{{ t(widget.title) }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+// App Launcher
+function toggleAppLauncher() {
+    const launcher = document.getElementById('app-launcher');
+    if (launcher) {
+        launcher.classList.toggle('active');
+        document.body.style.overflow = launcher.classList.contains('active') ? 'hidden' : '';
+    }
+}
+
+// Закрытие по ESC
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const launcher = document.getElementById('app-launcher');
+        if (launcher && launcher.classList.contains('active')) {
+            toggleAppLauncher();
+        }
+    }
+});
+
+function scrollToSection(sectionId) {
+    const element = document.getElementById(sectionId);
+    if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+    }
+}
+
+function openContactModal() {
+    document.getElementById('contactModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeContactModal() {
+    document.getElementById('contactModal').style.display = 'none';
+    document.body.style.overflow = 'auto';
+    document.getElementById('contactForm').reset();
+}
+
+async function submitContactForm(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const data = {
+        message: formData.get('message'),
+        email: formData.get('email'),
+        phone: formData.get('phone') || null
+    };
+    
+    // Отключаем кнопку отправки
+    const submitButton = event.target.querySelector('button[type="submit"]');
+    const originalText = submitButton.innerHTML;
+    submitButton.disabled = true;
+            submitButton.innerHTML = `<i class="bi bi-hourglass-split"></i> ${t('landing.contact_modal.sending')}`;
+    
+    try {
+        const response = await fetch('/api/v1/lead', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            showNotification(t('landing.contact_modal.notification_success_title'), t('landing.contact_modal.notification_success_message'), 'success');
+            closeContactModal();
+        } else {
+            const errorData = await response.json();
+            let errorMessage = t('landing.contact_modal.notification_error_message_default');
+            
+            // Обрабатываем ошибки валидации
+            if (errorData.detail && Array.isArray(errorData.detail)) {
+                const emailError = errorData.detail.find(err => err.loc && err.loc.includes('email'));
+                if (emailError) {
+                    errorMessage = t('landing.contact_modal.notification_error_message_email_invalid');
+                }
+            }
+            
+            throw new Error(errorMessage);
+        }
+    } catch (error) {
+        console.error('Ошибка:', error);
+        showNotification(t('landing.contact_modal.notification_error_title'), error.message, 'error');
+    } finally {
+        // Восстанавливаем кнопку
+        submitButton.disabled = false;
+        submitButton.innerHTML = originalText;
+    }
+}
+
+function showNotification(title, message, type = 'success') {
+    // Создаем элемент уведомления
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    
+    const icon = type === 'success' ? 'bi-check-circle' : 'bi-exclamation-triangle';
+    
+    notification.innerHTML = `
+        <div class="notification-icon">
+            <i class="bi ${icon}"></i>
+        </div>
+        <div class="notification-content">
+            <div class="notification-title">${title}</div>
+            <div class="notification-message">${message}</div>
+        </div>
+        <button class="notification-close" onclick="closeNotification(this)">
+            <i class="bi bi-x"></i>
+        </button>
+    `;
+    
+    // Добавляем в body
+    document.body.appendChild(notification);
+    
+    // Показываем с анимацией
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 10);
+    
+    // Автоматически скрываем через 4 секунды
+    setTimeout(() => {
+        closeNotification(notification.querySelector('.notification-close'));
+    }, 4000);
+}
+
+function closeNotification(button) {
+    const notification = button.closest('.notification');
+    notification.classList.remove('show');
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+        }
+    }, 300);
+}
+
+// Закрытие модального окна по Escape
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        closeContactModal();
+        closeMobileMenu();
+    }
+});
+
+// Mobile menu functions
+function toggleMobileMenu() {
+    const menu = document.getElementById('mobileMenu');
+    const overlay = document.getElementById('mobileMenuOverlay');
+    
+    menu.classList.toggle('active');
+    overlay.classList.toggle('active');
+    
+    if (menu.classList.contains('active')) {
+        document.body.style.overflow = 'hidden';
+    } else {
+        document.body.style.overflow = 'auto';
+    }
+}
+
+function closeMobileMenu() {
+    const menu = document.getElementById('mobileMenu');
+    const overlay = document.getElementById('mobileMenuOverlay');
+    
+    menu.classList.remove('active');
+    overlay.classList.remove('active');
+    document.body.style.overflow = 'auto';
+}
+
+// Упрощенная функция смены языка для landing page
+function setLandingLanguage(language) {
+    const supportedLanguages = ['ru', 'en', 'es'];
+    
+    if (!supportedLanguages.includes(language)) {
+        console.warn(`Неподдерживаемый язык: ${language}`);
+        return;
+    }
+    
+    console.log(`🔄 Смена языка на landing page: ${language}`);
+    
+    // Сохраняем выбор в localStorage и cookie
+    localStorage.setItem('language', language);
+    setCookie('language', language, 365);
+    
+    // Обновляем UI индикатор
+    updateLanguageIndicator(language);
+    
+    // Перезагружаем страницу для применения переводов
+    window.location.reload();
+}
+
+function updateLanguageIndicator(language) {
+    // Обновляем текст текущего языка
+    const currentLangElement = document.querySelector('#current-language');
+    if (currentLangElement) {
+        currentLangElement.textContent = language.toUpperCase();
+    }
+    
+    // Обновляем галочки в desktop dropdown
+    const supportedLanguages = ['ru', 'en', 'es'];
+    supportedLanguages.forEach(lang => {
+        const indicator = document.querySelector(`#lang-${lang}`);
+        if (indicator) {
+            indicator.style.visibility = (lang === language) ? 'visible' : 'hidden';
+        }
+        
+        // Обновляем галочки в mobile menu
+        const mobileIndicator = document.querySelector(`#mobile-lang-${lang}`);
+        if (mobileIndicator) {
+            mobileIndicator.style.visibility = (lang === language) ? 'visible' : 'hidden';
+        }
+    });
+    
+    // Устанавливаем атрибут lang
+    document.documentElement.setAttribute('lang', language);
+}
+
+function setCookie(name, value, days) {
+    const expires = new Date();
+    expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+    document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+}
+
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+}
+
+// Инициализация языкового индикатора при загрузке
+document.addEventListener('DOMContentLoaded', function() {
+    // Определяем текущий язык из localStorage или cookie
+    let currentLang = localStorage.getItem('language') || getCookie('language') || 'ru';
+    
+    // Обновляем индикатор
+    updateLanguageIndicator(currentLang);
+    
+    console.log(`✅ Landing page язык инициализирован: ${currentLang}`);
+});
+</script>
+{% endblock %}

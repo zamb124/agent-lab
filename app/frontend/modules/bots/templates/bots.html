@@ -1,0 +1,79 @@
+{% import 'components.html' as c %}
+
+<link rel="stylesheet" href="/static/bots/css/bots.css">
+
+<h1 class="header-title" id="page-title" hx-swap-oob="true">
+    <i class="bi bi-people-fill me-2"></i>
+    <span data-i18n="bots.title">Боты</span>
+</h1>
+
+<div class="header-right" hx-swap-oob="true">
+    <button class="btn btn-primary btn-sm" onclick="createBot()" data-tooltip="Создать бота">
+        <i class="bi bi-plus-lg"></i>
+    </button>
+    <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="Переключить тему">
+        <i class="bi bi-sun"></i>
+    </button>
+</div>
+
+<div class="bots-container" 
+     id="bots-list-view"
+     hx-get="/frontend/bots/list" 
+     hx-trigger="load">
+    {{ c.skeleton(type='card', count=6) }}
+</div>
+
+<div id="bot-expanded-modal" class="bot-modal" style="display: none;" hx-preserve="true">
+    <div class="bot-modal-content" id="modal-bot-details">
+    </div>
+</div>
+
+<!-- Модальное окно подтверждения перемиграции -->
+<div id="remigrate-confirm-modal" class="modal-confirm modal-compact" style="display: none;">
+    <div class="modal-content"  onclick="event.stopPropagation()">
+        <div class="modal-header modal-warning-header">
+            <h3 class="d-flex align-items-center gap-2 m-0">
+                <i class="bi bi-exclamation-triangle text-warning icon-lg"></i>
+                <span>Сброс к коду</span>
+            </h3>
+            <button class="btn-close" onclick="closeRemigrateModal()" title="Закрыть">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <p class="mb-3">
+                Вы уверены что хотите сбросить бота к базовому состоянию из кода?
+            </p>
+            
+            <div class="warning-box">
+                <div class="fw-bold mb-2 d-flex align-items-center gap-2">
+                    <i class="bi bi-info-circle"></i>
+                    <span>Будут перемигрированы:</span>
+                </div>
+                <ul class="mb-0">
+                    <li>Flow и его настройки</li>
+                    <li>Entry point агент</li>
+                    <li>Все субагенты</li>
+                    <li>Все tools</li>
+                </ul>
+            </div>
+            
+            <div class="danger-box">
+                <p class="m-0 text-danger fw-bold d-flex align-items-center gap-2">
+                    <i class="bi bi-exclamation-circle"></i>
+                    <span>Все изменения будут потеряны!</span>
+                </p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeRemigrateModal()">
+                <i class="bi bi-x"></i>
+                Отмена
+            </button>
+            <button class="btn btn-warning fw-bold" id="confirm-remigrate-btn">
+                <i class="bi bi-arrow-counterclockwise"></i>
+                Сбросить к коду
+            </button>
+        </div>
+    </div>
+</div>

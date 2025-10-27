@@ -1,0 +1,217 @@
+/* Variables модуль */
+
+.variables-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.25rem;
+    width: 100%;
+}
+
+.variable-card {
+    min-height: 160px;
+    padding: 1.25rem !important;
+}
+
+.variable-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+/* Иконка наследуется от .card-icon в shared */
+
+.variable-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.variable-groups {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.variable-group-badge {
+    display: inline-flex;
+    padding: 0.25rem 0.5rem;
+    background: linear-gradient(135deg, rgba(124, 124, 248, 0.2), rgba(167, 139, 250, 0.2));
+    border: 1px solid rgba(124, 124, 248, 0.3);
+    backdrop-filter: blur(8px);
+    border-radius: var(--radius-lg);
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: var(--accent-primary);
+}
+
+.variable-card-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.variable-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.variable-key {
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.variable-key code {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-primary);
+    background: none;
+    padding: 0;
+}
+
+.variable-value {
+    font-size: 0.75rem;
+}
+
+.variable-secret-group {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+
+.variable-secret-group input {
+    flex: 1;
+    font-family: monospace;
+    font-size: 0.75rem;
+}
+
+.variable-value-display {
+    padding: 0.5rem 0.625rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(8px);
+    border-radius: var(--radius-lg);
+}
+
+.variable-value-display code {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+    background: none;
+    padding: 0;
+    font-size: 0.75rem;
+}
+
+.btn-icon-danger {
+    color: var(--accent-danger);
+}
+
+.btn-icon-danger:hover {
+    color: white;
+    background: var(--gradient-danger);
+    border-color: var(--accent-danger);
+    box-shadow: 0 8px 20px rgba(248, 113, 113, 0.2);
+}
+
+.variable-card-create {
+    border: 2px dashed var(--border-secondary);
+    padding: 0;
+    cursor: pointer;
+    background: transparent;
+}
+
+.variable-card-create:hover {
+    border-color: var(--accent-primary);
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-4px) scale(1.01);
+    background: rgba(124, 124, 248, 0.05);
+}
+
+.variable-card-create:hover i {
+    opacity: 1 !important;
+    color: var(--accent-primary);
+}
+
+.variable-create-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 0.75rem;
+    padding-top: 1.5rem;
+}
+
+.variable-create-icon {
+    font-size: 3rem;
+    opacity: 0.8;
+}
+
+.variable-create-content {
+    text-align: center;
+}
+
+.variable-create-title {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.variable-create-subtitle {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.variable-modal .modal-content {
+    max-width: 500px;
+}
+
+.variable-group-header {
+    margin-bottom: 2rem;
+}
+
+.variable-group-title {
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.variable-group-badge {
+    display: inline-flex;
+    padding: 0.375rem 0.75rem;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-xl);
+    font-size: 0.75rem;
+    color: white;
+    box-shadow: var(--shadow-primary);
+}
+
+.variable-group-count {
+    color: var(--text-muted);
+    margin-left: 0.5rem;
+}
+
+.empty-group-header {
+    margin-bottom: 2rem;
+}
+
+.empty-group-title {
+    margin-bottom: 1rem;
+    color: var(--text-muted);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.variable-badge-group {
+    font-size: 0.85rem;
+}
+
+.variable-badge-remove {
+    cursor: pointer;
+    margin-left: 0.25rem;
+}
+

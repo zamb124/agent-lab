@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% import 'components.html' as c %}
+
+{% block title %}{{ t('terms.title') }} — {{ company_name }}{% endblock %}
+
+{% block head %}
+<style>
+.terms-container {
+    max-width: 900px;
+    margin: 48px auto;
+    padding: 0 24px;
+}
+
+.terms-header {
+    margin-bottom: 32px;
+}
+
+.terms-header h1 {
+    font-size: clamp(28px, 4vw, 42px);
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+.terms-meta {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
+.terms-section {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow-sm);
+}
+
+.terms-section h2 {
+    font-size: clamp(20px, 3vw, 26px);
+    font-weight: 600;
+    margin: 0 0 16px 0;
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.terms-section p {
+    line-height: 1.7;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+.terms-section ul {
+    padding-left: 24px;
+    margin: 12px 0;
+}
+
+.terms-section li {
+    line-height: 1.7;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.terms-note {
+    background: color-mix(in srgb, var(--primary) 6%, transparent);
+    border-left: 4px solid var(--primary);
+    padding: 16px;
+    border-radius: var(--radius-md);
+    margin: 16px 0;
+}
+
+.terms-note p {
+    margin: 0;
+    color: var(--text-primary);
+}
+
+.terms-footer {
+    text-align: center;
+    padding: 24px 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.terms-contact-box {
+    background: color-mix(in srgb, var(--info) 6%, transparent);
+    padding: 16px;
+    border-radius: var(--radius-md);
+    margin: 12px 0;
+    border-left: 4px solid var(--info);
+}
+
+.terms-contact-box p {
+    margin: 0;
+}
+
+.terms-contact-box a {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.terms-contact-box a:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+    .terms-container {
+        margin: 24px auto;
+        padding: 0 16px;
+    }
+    
+    .terms-section {
+        padding: 20px;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="terms-container">
+    <header class="terms-header">
+        <h1>{{ t('terms.title') }}</h1>
+        <div class="terms-meta">
+            <span>{{ t('terms.updated') }}: <strong>{{ current_date }}</strong></span>
+        </div>
+        
+        {% if flow_info %}
+        <div class="terms-note" style="margin-top: 20px;">
+            <p><i class="bi bi-info-circle"></i> <strong>{{ flow_info.name }}</strong>{% if flow_info.description %} — {{ flow_info.description }}{% endif %}</p>
+        </div>
+        {% endif %}
+    </header>
+
+    <!-- Секция 1: Общие положения -->
+    <section class="terms-section">
+        <h2><i class="bi bi-file-text"></i> 1. {{ t('terms.section_1.title') }}</h2>
+        <p>{{ t('terms.section_1.intro') }} <strong>{{ company_name }}</strong>, {{ legal_form }}{% if inn %} (ИНН/ОГРН: {{ inn }}{% if ogrn %}/{{ ogrn }}{% endif %}){% endif %}, {{ t('terms.section_1.and_user') }}</p>
+        <p>{{ t('terms.section_1.acceptance') }}</p>
+        <p>{{ t('terms.section_1.capacity') }}</p>
+    </section>
+
+    <!-- Секция 2: Определения -->
+    <section class="terms-section">
+        <h2><i class="bi bi-book"></i> 2. {{ t('terms.section_2.title') }}</h2>
+        <ul>
+            <li>{{ t('terms.section_2.service') }}</li>
+            <li>{{ t('terms.section_2.user') }}</li>
+            <li>{{ t('terms.section_2.account') }}</li>
+            <li>{{ t('terms.section_2.content') }}</li>
+        </ul>
+    </section>
+
+    <!-- Секция 3: Регистрация -->
+    <section class="terms-section">
+        <h2><i class="bi bi-person-plus"></i> 3. {{ t('terms.section_3.title') }}</h2>
+        <ul>
+            <li>{{ t('terms.section_3.registration') }}</li>
+            <li>{{ t('terms.section_3.accuracy') }}</li>
+            <li>{{ t('terms.section_3.credentials') }}</li>
+            <li>{{ t('terms.section_3.unauthorized') }}</li>
+            <li>{{ t('terms.section_3.suspension') }}</li>
+        </ul>
+    </section>
+
+    <!-- Секция 4: Использование -->
+    <section class="terms-section">
+        <h2><i class="bi bi-check-circle"></i> 4. {{ t('terms.section_4.title') }}</h2>
+        <p>{{ t('terms.section_4.intro') }}</p>
+        <ul>
+            <li>{{ t('terms.section_4.comply') }}</li>
+            <li>{{ t('terms.section_4.respect') }}</li>
+            <li>{{ t('terms.section_4.no_spam') }}</li>
+            <li>{{ t('terms.section_4.no_illegal') }}</li>
+            <li>{{ t('terms.section_4.no_abuse') }}</li>
+        </ul>
+    </section>
+
+    <!-- Секция 5: Интеллектуальная собственность -->
+    <section class="terms-section">
+        <h2><i class="bi bi-shield-lock"></i> 5. {{ t('terms.section_5.title') }}</h2>
+        <ul>
+            <li>{{ t('terms.section_5.ownership') }}</li>
+            <li>{{ t('terms.section_5.license') }}</li>
+            <li>{{ t('terms.section_5.user_content') }}</li>
+            <li>{{ t('terms.section_5.no_copy') }}</li>
+        </ul>
+    </section>
+
+    <!-- Секция 6: Ответственность -->
+    <section class="terms-section">
+        <h2><i class="bi bi-exclamation-triangle"></i> 6. {{ t('terms.section_6.title') }}</h2>
+        <p>{{ t('terms.section_6.as_is') }}</p>
+        <p>{{ t('terms.section_6.no_warranty') }}</p>
+        <p>{{ t('terms.section_6.no_liability') }}</p>
+        <ul>
+            <li>{{ t('terms.section_6.technical') }}</li>
+            <li>{{ t('terms.section_6.data_loss') }}</li>
+            <li>{{ t('terms.section_6.third_party') }}</li>
+            <li>{{ t('terms.section_6.indirect') }}</li>
+        </ul>
+    </section>
+
+    <!-- Секция 7: Платные услуги -->
+    <section class="terms-section">
+        <h2><i class="bi bi-credit-card"></i> 7. {{ t('terms.section_7.title') }}</h2>
+        <ul>
+            <li>{{ t('terms.section_7.payment') }}</li>
+            <li>{{ t('terms.section_7.price') }}</li>
+            <li>{{ t('terms.section_7.refund') }}</li>
+            <li>{{ t('terms.section_7.subscription') }}</li>
+        </ul>
+    </section>
+
+    <!-- Секция 8: Персональные данные -->
+    <section class="terms-section">
+        <h2><i class="bi bi-person-lock"></i> 8. {{ t('terms.section_8.title') }}</h2>
+        <p>{{ t('terms.section_8.reference') }} <a href="/privacy?lang={{ lang }}{% if flow_info %}&flow_id={{ request.query_params.get('flow_id') }}{% endif %}">{{ t('terms.section_8.privacy_policy') }}</a>.</p>
+    </section>
+
+    <!-- Секция 9: Изменения -->
+    <section class="terms-section">
+        <h2><i class="bi bi-arrow-clockwise"></i> 9. {{ t('terms.section_9.title') }}</h2>
+        <ul>
+            <li>{{ t('terms.section_9.changes') }}</li>
+            <li>{{ t('terms.section_9.notification') }}</li>
+            <li>{{ t('terms.section_9.continued_use') }}</li>
+        </ul>
+    </section>
+
+    <!-- Секция 10: Прекращение -->
+    <section class="terms-section">
+        <h2><i class="bi bi-x-circle"></i> 10. {{ t('terms.section_10.title') }}</h2>
+        <ul>
+            <li>{{ t('terms.section_10.termination') }}</li>
+            <li>{{ t('terms.section_10.deletion') }}</li>
+            <li>{{ t('terms.section_10.suspension_right') }}</li>
+        </ul>
+    </section>
+
+    <!-- Секция 11: Применимое право -->
+    <section class="terms-section">
+        <h2><i class="bi bi-hammer"></i> 11. {{ t('terms.section_11.title') }}</h2>
+        <ul>
+            <li>{{ t('terms.section_11.law') }}</li>
+            <li>{{ t('terms.section_11.disputes') }}</li>
+            <li>{{ t('terms.section_11.претензионный_порядок') }}</li>
+        </ul>
+    </section>
+
+    <!-- Секция 12: Контакты -->
+    <section class="terms-section">
+        <h2><i class="bi bi-envelope"></i> 12. {{ t('terms.section_12.title') }}</h2>
+        <p>{{ t('terms.section_12.support') }}</p>
+        <div class="terms-contact-box">
+            <p>{{ t('terms.section_12.email') }} <a href="mailto:{{ support_email }}">{{ support_email }}</a></p>
+            {% if legal_address %}
+            <p>{{ t('terms.section_12.address') }} {{ legal_address }}</p>
+            {% endif %}
+        </div>
+    </section>
+
+    <footer class="terms-footer">
+        &copy; <span id="year"></span> {{ company_name }}. {{ t('terms.footer') }}.
+    </footer>
+</div>
+
+<script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+</script>
+{% endblock %}
+

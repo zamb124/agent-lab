@@ -1,0 +1,35 @@
+/* Алерты - градиентный стиль */
+
+.alert {
+    padding: 1rem 1.25rem;
+    border-radius: var(--radius-xl);
+    margin-bottom: 1rem;
+    border: 2px solid;
+    backdrop-filter: blur(10px);
+    box-shadow: var(--shadow-md);
+}
+
+.alert-info {
+    background: linear-gradient(135deg, rgba(103, 232, 249, 0.2), rgba(6, 182, 212, 0.2));
+    border-color: rgba(103, 232, 249, 0.4);
+    color: var(--accent-info);
+}
+
+.alert-success {
+    background: linear-gradient(135deg, rgba(110, 231, 183, 0.2), rgba(52, 211, 153, 0.2));
+    border-color: rgba(110, 231, 183, 0.4);
+    color: var(--accent-success);
+}
+
+.alert-warning {
+    background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(245, 158, 11, 0.2));
+    border-color: rgba(251, 191, 36, 0.4);
+    color: var(--accent-warning);
+}
+
+.alert-danger {
+    background: linear-gradient(135deg, rgba(248, 113, 113, 0.2), rgba(239, 68, 68, 0.2));
+    border-color: rgba(248, 113, 113, 0.4);
+    color: var(--accent-danger);
+}
+

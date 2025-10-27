@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Создание компании - Agent Lab</title>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .logo h1 {
+            color: #333;
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .logo p {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            color: #333;
+            font-weight: 500;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .subdomain-group {
+            display: flex;
+            align-items: stretch;
+        }
+        
+        .subdomain-group input {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+            border-right: none;
+        }
+        
+        .subdomain-suffix {
+            background: #f8f9fa;
+            border: 2px solid #e1e5e9;
+            border-left: none;
+            border-top-right-radius: 8px;
+            border-bottom-right-radius: 8px;
+            padding: 12px 16px;
+            color: #666;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+            min-width: fit-content;
+        }
+
+        .subdomain-suffix.error {
+            border-color: #c33;
+            background: #fee;
+            color: #c33;
+        }
+        
+        .help-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+        
+        .submit-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .submit-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+        }
+        
+        .footer a {
+            color: #666;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        .footer a:hover {
+            color: #333;
+        }
+
+        .error-message {
+            background: #fee;
+            color: #c33;
+            border: 1px solid #fcc;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        input.error {
+            border-color: #c33;
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <h1>Создание компании</h1>
+            <p>Добро пожаловать в Agent Lab!</p>
+        </div>
+
+        <div id="error-message" class="error-message"></div>
+
+        <form id="create-company-form" action="/api/v1/admin/create-my-company" method="post">
+            <div class="form-group">
+                <label for="name">Название компании</label>
+                <input 
+                    type="text" 
+                    id="name" 
+                    name="name"
+                    required
+                    placeholder="Моя компания"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="slug">Slug компании</label>
+                <div class="subdomain-group">
+                    <input 
+                        type="text" 
+                        id="slug" 
+                        name="slug"
+                        required
+                        placeholder="mycompany"
+                        pattern="[a-z0-9]{3,20}"
+                        title="Только строчные латинские буквы и цифры, от 3 до 20 символов"
+                        minlength="3"
+                        maxlength="20"
+                    >
+                    <div class="subdomain-suffix">
+                        .{{ domain }}
+                    </div>
+                </div>
+                <div class="help-text">
+                    Только латинские буквы и цифры, без пробелов и спецсимволов
+                </div>
+            </div>
+
+            <button type="submit" class="submit-btn" id="submit-btn">
+                Создать компанию
+            </button>
+        </form>
+
+        <div class="footer">
+            <a href="/auth/logout">Выйти из аккаунта</a>
+        </div>
+    </div>
+
+    <script>
+        const translitMap = {
+            'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
+            'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+            'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+            'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch',
+            'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya'
+        };
+
+        function transliterate(text) {
+            return text
+                .toLowerCase()
+                .split('')
+                .map(char => translitMap[char] || char)
+                .join('')
+                .replace(/[^a-z0-9]/g, '')
+                .slice(0, 20);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const nameInput = document.getElementById('name');
+            const slugInput = document.getElementById('slug');
+            const slugSuffix = document.querySelector('.subdomain-suffix');
+            const form = document.getElementById('create-company-form');
+            const submitBtn = document.getElementById('submit-btn');
+            const errorMessage = document.getElementById('error-message');
+            
+            let isManualSlug = false;
+
+            slugInput.addEventListener('input', function() {
+                isManualSlug = true;
+                hideError();
+            });
+
+            nameInput.addEventListener('input', function(e) {
+                if (!isManualSlug) {
+                    const slug = transliterate(e.target.value);
+                    slugInput.value = slug;
+                }
+                hideError();
+            });
+
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Создание...';
+                hideError();
+
+                const formData = new FormData(form);
+                
+                try {
+                    const response = await fetch('/api/v1/admin/create-my-company', {
+                        method: 'POST',
+                        body: formData,
+                        redirect: 'manual'
+                    });
+
+                    if (response.ok || response.type === 'opaqueredirect' || response.status === 0) {
+                        window.location.href = '/frontend/dashboard';
+                    } else if (response.status >= 400) {
+                        const errorData = await response.json().catch(() => ({}));
+                        const errorText = errorData.detail || 'Ошибка при создании компании';
+                        
+                        if (errorText.includes('уже занят') || errorText.includes('already taken')) {
+                            showError('Такой slug компании уже занят. Пожалуйста, введите другой slug.');
+                        } else {
+                            showError(errorText);
+                        }
+                        
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Создать компанию';
+                    }
+                } catch (error) {
+                    showError('Ошибка соединения с сервером. Попробуйте позже.');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Создать компанию';
+                }
+            });
+
+            function showError(message) {
+                errorMessage.textContent = message;
+                errorMessage.classList.add('show');
+                slugInput.classList.add('error');
+                slugSuffix.classList.add('error');
+            }
+
+            function hideError() {
+                errorMessage.classList.remove('show');
+                slugInput.classList.remove('error');
+                slugSuffix.classList.remove('error');
+            }
+        });
+    </script>
+</body>
+</html>

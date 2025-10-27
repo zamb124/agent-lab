@@ -1,0 +1,892 @@
+---
+alwaysApply: false
+---
+# Правила для Frontend
+
+## Компонентная система
+
+### Обязательные принципы
+
+**ВСЕГДА** используй компоненты из `app/frontend/shared/templates/components.html`:
+
+1. **DRY** - не дублируй HTML код
+2. **Консистентность** - единый стиль везде
+3. **Переиспользование** - один компонент = много применений
+
+### Структура компонентов (без дублирования)
+
+```
+app/frontend/shared/templates/
+├── components.html          # ← Реэкспортирует все макросы (77 строк)
+│                           # {% from 'macros/...' import ... %}
+│                           # В страницах: {% import 'components.html' as c %}
+│
+└── macros/                  # Оригинальные макросы (каждый в своем файле)
+    ├── base.html           # button, badge, icon
+    ├── feedback.html       # skeleton, empty_state, alert, loading
+    ├── data.html           # platform_badge, status_badge, pagination
+    ├── layout.html         # card, modal (с call blocks)
+    ├── forms.html          # input, textarea, select, checkbox
+    ├── table.html          # table_container, table_row, table_empty
+    └── navigation.html     # tabs, breadcrumbs, dropdown
+```
+
+**Принцип:**
+- Макросы определены ОДИН раз в `macros/*.html`
+- `components.html` реэкспортирует через `{% from ... import %}`
+- НЕТ дублирования кода
+
+### Использование компонентов
+
+**ОБЯЗАТЕЛЬНО** в начале каждого шаблона:
+
+```jinja2
+{% import 'components.html' as c %}
+```
+
+Затем используй макросы:
+
+<good_example>
+{# Skeleton loader при HTMX загрузке #}
+<div hx-get="/api/data" hx-trigger="load">
+    {{ c.skeleton(type='card', count=6) }}
+</div>
+
+{# Empty State #}
+{% if not items %}
+    {{ c.empty_state(
+        icon='inbox',
+        title='Нет данных',
+        description='Создайте первый элемент',
+        button_text='Создать',
+        button_onclick='create()'
+    ) }}
+{% endif %}
+
+{# Platform badges #}
+{{ c.platform_badge('telegram') }}
+{{ c.platform_badge('whatsapp') }}
+
+{# Status badges #}
+{{ c.status_badge('active') }}
+{{ c.status_badge('processing') }}
+
+{# Pagination #}
+{{ c.pagination(offset, limit, total, '/api/list', hx_target='#content') }}
+
+{# Button с HTMX #}
+{{ c.button('Удалить', 
+    variant='danger', 
+    icon='trash',
+    hx_delete='/api/item/123',
+    hx_confirm='Вы уверены?',
+    hx_target='closest .item-card',
+    hx_swap='outerHTML'
+) }}
+
+{# Alert #}
+{% if error %}
+    {{ c.alert(type='danger', title='Ошибка', message=error, dismissible=true) }}
+{% endif %}
+
+{# Form с HTMX автосохранением #}
+{{ c.input('name',
+    value=item.name,
+    label='Название',
+    hx_put='/api/items/' + item.id,
+    hx_trigger='change delay:500ms',
+    hx_swap='none',
+    hx_ext='json-enc'
+) }}
+</good_example>
+
+<bad_example>
+{# ❌ НЕ создавай кастомный empty state #}
+<div class="empty-state-centered">
+    <i class="bi bi-inbox"></i>
+    <h3>Нет данных</h3>
+</div>
+
+{# ❌ НЕ дублируй бейджи платформ #}
+<span class="badge bg-primary">
+    <i class="bi bi-telegram"></i> Telegram
+</span>
+
+{# ❌ НЕ используй include (старый подход) #}
+{% set icon = 'robot' %}
+{% include 'components/feedback/empty-state.html' %}
+</bad_example>
+
+---
+
+## Доступные компоненты
+
+### Base Components
+
+**Button** - Кнопки:
+- Варианты: `primary`, `secondary`, `success`, `danger`, `ghost`, `outline`, `outline-primary`
+- Размеры: `sm`, `md`, `lg`
+- HTMX: `hx_get`, `hx_post`, `hx_delete`, `hx_put`, `hx_target`, `hx_swap`, `hx_trigger`, `hx_indicator`, `hx_confirm`
+
+**Badge** - Бейджи:
+- Варианты: `primary`, `success`, `warning`, `danger`, `info`, `secondary`
+
+**Icon** - Иконки Bootstrap Icons
+
+### Feedback Components
+
+**Skeleton** - ОБЯЗАТЕЛЬНО при загрузке:
+- Типы: `card`, `table`, `list`, `text`
+
+**Empty State** - ОБЯЗАТЕЛЬНО когда нет данных:
+- С иконкой или изображением
+- С кнопкой CTA
+
+**Alert** - Уведомления:
+- Типы: `info`, `success`, `warning`, `danger`
+
+**Loading** - Индикаторы загрузки
+
+### Data Components
+
+**Platform Badge** - Бейджи платформ:
+- Автоматически выбирает иконку и цвет
+- Платформы: `telegram`, `whatsapp`, `web`, `api`, `amocrm`
+
+**Status Badge** - Бейджи статусов:
+- Автоматически выбирает цвет
+- Статусы: `active`, `inactive`, `processing`, `waiting_input`, `draft`, `published`, `error`
+
+**Pagination** - Навигация по страницам:
+- С HTMX
+- Автоматический подсчет
+
+**Counter Badge** - Счетчики
+
+### Layout Components
+
+**Card** - Карточки:
+- С call block для контента
+- Header, body, footer
+
+**Modal** - Модальные окна:
+- С call block для контента
+- Автоматическое управление overflow
+
+### Form Components
+
+**Input** - Текстовые поля:
+- С HTMX автосохранением
+- Validation
+
+**Textarea** - Многострочные поля
+
+**Select** - Выпадающие списки:
+- С HTMX динамической загрузкой
+
+**Checkbox** - Чекбоксы
+
+### Table Components
+
+**Table Container** - Обёртка для таблиц:
+- Responsive
+- С call block
+
+**Table Empty** - Пустая таблица
+
+### Navigation Components
+
+**Tabs** - Вкладки
+
+**Breadcrumbs** - Хлебные крошки
+
+**Dropdown** - Выпадающие меню
+
+---
+
+## Обязательные UX паттерны
+
+### 1. Skeleton Loaders при HTMX загрузке
+
+**ВСЕГДА** показывай skeleton:
+
+<good_example>
+<div hx-get="/api/agents" hx-trigger="load">
+    {{ c.skeleton(type='card', count=6) }}
+</div>
+</good_example>
+
+### 2. Empty States когда нет данных
+
+**ВСЕГДА** показывай понятное empty state:
+
+<good_example>
+{% if not bots %}
+    {{ c.empty_state(
+        icon='robot',
+        title='У вас пока нет ботов',
+        description='Создайте своего первого бота',
+        button_text='Создать бота',
+        button_onclick='createBot()'
+    ) }}
+{% endif %}
+</good_example>
+
+### 3. Alerts для ошибок
+
+<good_example>
+{% if error %}
+    {{ c.alert(type='danger', title='Ошибка', message=error, dismissible=true) }}
+{% endif %}
+</good_example>
+
+### 4. Platform и Status Badges
+
+Используй готовые компоненты вместо if-else:
+
+<bad_example>
+{% if platform == 'telegram' %}
+    <span class="badge bg-primary"><i class="bi bi-telegram"></i> Telegram</span>
+{% elif platform == 'whatsapp' %}
+    <span class="badge bg-success"><i class="bi bi-whatsapp"></i> WhatsApp</span>
+{% endif %}
+</bad_example>
+
+<good_example>
+{{ c.platform_badge(platform) }}
+</good_example>
+
+### 5. Pagination для списков
+
+<good_example>
+{% if total > limit %}
+    <div class="card-footer">
+        {{ c.pagination(offset, limit, total, '/api/sessions', hx_target='#table') }}
+    </div>
+{% endif %}
+</good_example>
+
+---
+
+## Где определены макросы
+
+**Важно:** Каждый макрос определен ОДИН раз в `macros/`, затем реэкспортирован в `components.html`:
+
+- `macros/base.html` → button, badge, icon
+- `macros/feedback.html` → skeleton, empty_state, alert, loading  
+- `macros/data.html` → platform_badge, status_badge, pagination, counter_badge
+- `macros/layout.html` → card, modal (с call blocks!)
+- `macros/forms.html` → input, textarea, select, checkbox
+- `macros/table.html` → table_container (с call block!), table_row, table_empty
+- `macros/navigation.html` → tabs, breadcrumbs, dropdown
+
+`components.html` (77 строк) только реэкспортирует через `{% from ... import %}`
+
+**НЕТ дублирования!**
+
+---
+
+## Интеграция: Components + Fields
+
+**Fields** (автогенерация) и **Components** (ручная верстка) - ДОПОЛНЯЮТ друг друга:
+
+- `app/frontend/shared/templates/fields/` - автоматический рендеринг Pydantic моделей
+- `app/frontend/shared/templates/components.html` - переиспользуемые UI компоненты
+- `app/frontend/shared/templates/macros/` - исходники макросов
+
+<good_example>
+{# Модалка (components/) с автоформой (fields/) #}
+{% import 'components.html' as c %}
+
+{% call c.modal('edit-agent', title='Редактировать агента', icon='pencil') %}
+    {{ agent_config.render(view_mode='form') }}
+    
+    <div class="d-flex gap-2 justify-content-end mt-3">
+        {{ c.button('Отмена', variant='secondary', onclick='this.closest(\'.modal-overlay\').remove()') }}
+        {{ c.button('Сохранить', variant='primary', icon='save', type='submit') }}
+    </div>
+{% endcall %}
+</good_example>
+
+### Когда использовать что
+
+**Fields** - когда:
+- Редактируешь AgentConfig, FlowConfig и другие Pydantic модели
+- Нужна автогенерация формы из модели
+- CRUD операции с inline редактированием в таблицах
+
+**Components** - когда:
+- Верстаешь лендинги и статические страницы
+- Создаёшь пустые состояния (Empty States)
+- Добавляешь модальные окна
+- Нужны skeleton loaders
+- Показываешь alerts и уведомления
+- Создаёшь формы вручную с HTMX
+
+---
+
+## Рекурсивный рендеринг (Fields)
+
+Используй систему автоматического рендеринга Pydantic моделей:
+- `model.render(view_mode="form")` - форма редактирования
+- `model.render(view_mode="table")` - строка таблицы
+- `model.render(view_mode="compact")` - компактный вид
+
+<good_example>
+# В роутере
+@router.get("/flows/{flow_id}")
+async def get_flow(flow_id: str, flow_repo: FlowRepositoryDep):
+    flow = await flow_repo.get(flow_id)
+    return HTMLResponse(flow.render(view_mode="form"))
+</good_example>
+
+---
+
+## HTMX - Приоритетный подход
+
+**HTMX в приоритете для загрузки шаблонов и обновления UI!**
+
+### Принципы использования HTMX
+
+1. **Загрузка контента**: HTMX для динамической загрузки HTML с сервера
+2. **Обновление UI**: HTMX для частичного обновления страницы
+3. **Формы**: HTMX для отправки форм без перезагрузки
+4. **Минимум JS**: JavaScript только для сложной логики (чат, drag&drop, canvas)
+
+### Когда использовать HTMX vs JavaScript
+
+✅ **HTMX используй для:**
+- Загрузки списков (боты, flows, история)
+- Обновления контента (таблицы, карточки)
+- Отправки форм (создание, редактирование)
+- Модальных окон с серверным контентом
+- Навигации (табы, пагинация)
+- Автообновления (статистика, статусы)
+
+❌ **JavaScript используй для:**
+- Чат с WebSocket
+- Canvas редактор (Builder)
+- Drag & Drop
+- Голосовая запись
+- Сложные UI взаимодействия
+
+### Базовые паттерны HTMX
+
+#### Загрузка с Skeleton Loader
+```html
+{% import 'components.html' as c %}
+
+<div hx-get="/frontend/bots/list" 
+     hx-trigger="load" 
+     hx-indicator="#loading">
+    <div id="loading" class="htmx-indicator">
+        {{ c.skeleton(type='card', count=6) }}
+    </div>
+</div>
+```
+
+#### Отправка формы
+```html
+<form hx-post="/frontend/api/flows" 
+      hx-target="#flows-list" 
+      hx-swap="afterbegin"
+      hx-ext="json-enc"
+      hx-on::after-request="if(event.detail.successful) this.reset()">
+    {{ c.input('name', label='Название', required=true) }}
+    {{ c.button('Создать', variant='primary', icon='plus', type='submit') }}
+</form>
+```
+
+#### Автосохранение полей
+```html
+{{ c.input('name',
+    value=agent.name,
+    hx_put='/api/agents/' + agent.id,
+    hx_trigger='change delay:500ms',
+    hx_swap='none',
+    hx_ext='json-enc'
+) }}
+```
+
+#### Модальное окно
+```html
+{% import 'components.html' as c %}
+
+<button hx-get="/frontend/models/flow/new?view=form" 
+        hx-target="#modal-container"
+        hx-swap="innerHTML"
+        class="btn btn-primary">
+    Создать Flow
+</button>
+
+<div id="modal-container"></div>
+```
+
+#### Удаление элемента
+```html
+{{ c.button('Удалить',
+    variant='danger',
+    icon='trash',
+    hx_delete='/api/flows/' + flow.id,
+    hx_target='closest .flow-card',
+    hx_swap='outerHTML swap:300ms',
+    hx_confirm='Удалить флоу?'
+) }}
+```
+
+#### Пагинация с HTMX
+```html
+{{ c.pagination(
+    offset=offset,
+    limit=limit,
+    total=total,
+    hx_get_url='/api/sessions',
+    hx_target='#sessions-table',
+    hx_include='#filters'
+) }}
+```
+
+### HTMX Extensions
+
+```html
+<!-- JSON encoding для форм -->
+<form hx-ext="json-enc" 
+      hx-post="/api/v1/flows"
+      hx-headers='{"Content-Type": "application/json"}'>
+  {{ c.input('name', label='Название') }}
+  {{ c.button('Создать', variant='primary', type='submit') }}
+</form>
+
+<!-- WebSocket (для чата, уведомлений) -->
+<div hx-ext="ws" ws-connect="/ws/notifications">
+  ...
+</div>
+```
+
+### Best Practices HTMX
+
+1. **Всегда указывай hx-target и hx-swap**
+2. **Используй hx-indicator для skeleton loaders**
+3. **Добавляй задержки для автосохранения** (`hx_trigger='change delay:500ms'`)
+4. **Используй hx-confirm для опасных действий**
+5. **Используй компоненты с HTMX параметрами**
+
+---
+
+## CSS Архитектура
+
+### Приоритеты использования стилей
+
+**ВСЕГДА** используй shared компоненты, специфичные стили - только в крайнем случае:
+
+1. **Приоритет 1: Shared компоненты** (`app/frontend/shared/static/css/components/`)
+   - `.btn`, `.card`, `.modal`, `.form-control`, `.badge`, `.table`
+   - Определены ОДИН РАЗ и используются везде
+
+2. **Приоритет 2: Shared utilities** (`app/frontend/shared/static/css/utilities/`)
+   - `.flex`, `.gap-4`, `.text-center`, `.rounded-lg`, `.shadow-md`
+
+3. **Приоритет 3: Модульные стили** (только если компонент уникален)
+   - `app/frontend/modules/{module}/static/css/{module}.css`
+   - Используй префикс модуля: `.billing-card`, `.bot-modal`, `.builder-canvas`
+
+### Структура CSS
+
+```
+app/frontend/shared/static/css/
+├── main.css                  # Единая точка входа
+├── core/                     # Базовые настройки
+│   ├── variables.css        # CSS переменные
+│   ├── reset.css
+│   └── typography.css
+├── layout/                   # Структура
+│   ├── sidebar.css
+│   ├── header.css
+│   └── content.css
+├── components/               # Компоненты (используются макросами)
+│   ├── buttons.css
+│   ├── badges.css
+│   ├── cards.css
+│   ├── modals.css
+│   ├── skeleton.css
+│   ├── empty-state.css
+│   ├── alerts.css
+│   ├── forms.css
+│   ├── tables.css
+│   └── ...
+└── utilities/
+    ├── spacing.css
+    ├── flexbox.css
+    └── ...
+```
+
+### Подключение стилей
+
+**base.html** (для всех страниц):
+```html
+<link rel="stylesheet" href="/static/css/main.css">
+```
+
+**Модульные страницы** (только если нужны уникальные стили):
+```html
+{% block head %}
+<link rel="stylesheet" href="/static/{module}/css/{module}.css">
+{% endblock %}
+```
+
+<bad_example>
+{# ❌ НЕ дублируй компоненты в модульных CSS #}
+/* billing.css */
+.btn {
+    padding: 0.5rem 1rem;
+}
+</bad_example>
+
+<good_example>
+{# ✅ Используй компоненты #}
+{{ c.button('Сохранить', variant='primary') }}
+
+/* billing.css - только уникальное */
+.billing-stats-card {
+    background: linear-gradient(...);
+}
+</good_example>
+
+---
+
+## Типичная структура страницы
+
+```jinja2
+{% import 'components.html' as c %}
+
+{# Header с действиями #}
+<h1 class="header-title" hx-swap-oob="true">
+    <i class="bi bi-robot"></i>
+    {{ t('agents.title') }}
+</h1>
+
+<div class="header-right" hx-swap-oob="true">
+    {{ c.button('Создать', variant='primary', icon='plus', onclick='createAgent()') }}
+</div>
+
+{# Контент с HTMX загрузкой #}
+<div hx-get="/frontend/agents/list" hx-trigger="load">
+    {{ c.skeleton(type='card', count=6) }}
+</div>
+
+{# agents/list.html #}
+{% import 'components.html' as c %}
+
+{% if agents %}
+    <div class="agents-grid">
+        {% for agent in agents %}
+            {# Карточки агентов #}
+        {% endfor %}
+    </div>
+{% else %}
+    {{ c.empty_state(
+        icon='robot',
+        title='Нет агентов',
+        button_text='Создать',
+        button_onclick='createAgent()'
+    ) }}
+{% endif %}
+
+{# Ошибки #}
+{% if error %}
+    {{ c.alert(type='danger', message=error, dismissible=true) }}
+{% endif %}
+```
+
+---
+
+## Типичные паттерны
+
+### Таблица с пагинацией
+
+```jinja2
+{% import 'components.html' as c %}
+
+{% call c.card(title='Сессии (' + total|string + ')') %}
+    {{ c.counter_badge(sessions|length) }}
+{% endcall %}
+
+<div class="card-body p-0">
+    {% if sessions %}
+        {% call c.table_container(min_width='1000px') %}
+            <thead>
+                <tr>
+                    <th>Платформа</th>
+                    <th>Статус</th>
+                    <th>Сообщений</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for session in sessions %}
+                <tr>
+                    <td>{{ c.platform_badge(session.platform) }}</td>
+                    <td>{{ c.status_badge(session.status) }}</td>
+                    <td>{{ c.counter_badge(session.message_count) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        {% endcall %}
+        
+        <div class="card-footer">
+            {{ c.pagination(offset, limit, total, '/api/sessions') }}
+        </div>
+    {% else %}
+        {{ c.empty_state(icon='inbox', title='Нет сессий') }}
+    {% endif %}
+</div>
+```
+
+---
+
+## Template Loader
+
+Используй единый template loader:
+- Импортируй `get_templates()` из `app/frontend/core/template_loader.py`
+- НЕ создавай свой Jinja2Templates
+
+<good_example>
+from app.frontend.core.template_loader import get_templates
+
+templates = get_templates()
+
+@router.get("/my-page")
+async def my_page(request: Request):
+    return templates.TemplateResponse("my_page.html", {"request": request})
+</good_example>
+
+---
+
+## Модульная структура
+
+При создании нового модуля:
+
+1. Создай `app/frontend/modules/{module_name}/`
+2. Добавь `router.py` с prefix `/frontend/{module_name}`
+3. Создай `templates/` для HTML
+4. Создай `static/` для CSS/JS (только если нужны уникальные стили)
+5. Подключи роутер в `app/main.py`
+
+<good_example>
+# Структура модуля
+modules/my_module/
+├── __init__.py
+├── router.py
+└── templates/
+    ├── my_module.html
+    └── my_module_list.html
+
+# Статика - только если нужна
+modules/my_module/static/
+├── css/
+│   └── my_module.css
+└── js/
+    └── my_module.js
+</good_example>
+
+---
+
+## Доступ к контексту в шаблонах
+
+Используй глобальные функции без явной передачи:
+- `current_user()` - текущий пользователь
+- `current_company()` - текущая компания
+- `user_roles()` - роли пользователя
+- `user_has_role('admin')` - проверка роли
+- `is_system_admin()` - системный администратор
+- `t('key')` - переводы (i18n)
+
+<good_example>
+{% if is_system_admin() %}
+  {{ c.button('Админ-панель', variant='secondary') }}
+{% endif %}
+
+{% if user_has_role('admin') %}
+  {{ c.button('Редактировать', variant='primary') }}
+{% endif %}
+
+<h1>{{ t('dashboard.title') }}</h1>
+</good_example>
+
+---
+
+## Интернационализация (i18n)
+
+Используй функцию `t()` для всех текстов:
+
+<good_example>
+<h1>{{ t('bots.title') }}</h1>
+{{ c.button(t('common.create'), variant='primary') }}
+{{ c.empty_state(title=t('bots.empty_state.title')) }}
+</good_example>
+
+<bad_example>
+<h1>Боты</h1>
+</bad_example>
+
+---
+
+## Чеклист создания/обновления страницы
+
+При рефакторинге или создании новой страницы:
+
+### Обязательно (ВСЕГДА):
+- [ ] `{% import 'components.html' as c %}`
+- [ ] Skeleton loader для HTMX загрузки
+- [ ] Empty state если данных может не быть
+- [ ] Alert для ошибок
+- [ ] Platform/Status badges через компоненты
+- [ ] Pagination через компонент
+- [ ] Все тексты через `t()`
+- [ ] НЕ создавать дублирующие стили
+- [ ] НЕ использовать inline styles
+
+### Желательно:
+- [ ] Проверить mobile адаптивность
+- [ ] Добавить loading индикаторы
+- [ ] HTMX события для обратной связи
+
+---
+
+## Best Practices
+
+### 1. Используй макросы вместо дублирования
+
+<bad_example>
+{# ❌ Дублирование кода #}
+{% if platform == 'telegram' %}
+    <span class="badge bg-primary"><i class="bi bi-telegram"></i> Telegram</span>
+{% elif platform == 'whatsapp' %}
+    <span class="badge bg-success"><i class="bi bi-whatsapp"></i> WhatsApp</span>
+{% endif %}
+</bad_example>
+
+<good_example>
+{# ✅ Используй компонент #}
+{{ c.platform_badge(platform) }}
+</good_example>
+
+### 2. Skeleton вместо спиннеров
+
+<bad_example>
+<div class="loading-indicator">
+    <div class="spinner"></div>
+    <span>Загрузка...</span>
+</div>
+</bad_example>
+
+<good_example>
+{{ c.skeleton(type='card', count=3) }}
+</good_example>
+
+### 3. Empty States для пустых списков
+
+<bad_example>
+<div class="text-center py-5">
+    <i class="bi bi-inbox"></i>
+    <h3>Нет данных</h3>
+</div>
+</bad_example>
+
+<good_example>
+{{ c.empty_state(icon='inbox', title='Нет данных') }}
+</good_example>
+
+### 4. Используй CSS переменные
+
+<bad_example>
+.my-button {
+    background: #6366f1;
+    border-radius: 8px;
+}
+</bad_example>
+
+<good_example>
+.my-button {
+    background: var(--accent-primary);
+    border-radius: var(--radius-md);
+}
+</good_example>
+
+---
+
+## Адаптивность (Mobile-First)
+
+Используй breakpoints из variables.css:
+
+```css
+/* Mobile (default) */
+.container { width: 100%; }
+
+/* Tablet */
+@media (min-width: 768px) {
+    .container { width: 750px; }
+}
+
+/* Desktop */
+@media (min-width: 1024px) {
+    .container { width: 970px; }
+}
+```
+
+---
+
+## Быстрая справка
+
+### Создание новой страницы:
+
+1. ✅ `{% import 'components.html' as c %}`
+2. ✅ Skeleton: `{{ c.skeleton(type='card', count=6) }}`
+3. ✅ Empty State: `{{ c.empty_state(...) }}`
+4. ✅ Badges: `{{ c.platform_badge() }}`, `{{ c.status_badge() }}`
+5. ✅ Pagination: `{{ c.pagination(...) }}`
+6. ✅ Alerts: `{{ c.alert(...) }}`
+7. ✅ Forms: `{{ c.input() }}`, `{{ c.select() }}`
+8. ✅ Все тексты через `t()`
+9. ❌ НЕ создавай кастомные компоненты
+10. ❌ НЕ дублируй стили
+
+### Частые ошибки:
+
+❌ Дублировать if-else для platform/status badges  
+✅ `{{ c.platform_badge(platform) }}`
+
+❌ Создавать свой empty state  
+✅ `{{ c.empty_state(...) }}`
+
+❌ Inline styles  
+✅ CSS классы из variables.css
+
+❌ Забывать про skeleton loader  
+✅ Всегда добавлять при HTMX загрузке
+
+❌ Создавать макросы в components.html  
+✅ Создавать в `macros/*.html`, затем реэкспортировать
+
+---
+
+## Плагинная система
+
+**Для создания плагинов фронтенда смотри отдельный файл правил:**  
+→ `.cursor/rules/frontend_plugins.mdc`
+
+Плагины позволяют расширять фронтенд без изменения кода в `shared/`:
+- Автоматическая регистрация
+- Sidebar/footer items
+- Dashboard widgets
+- Lazy loading JS
+- Модульные стили
+
+## Документация
+
+- `app/frontend/shared/templates/components/README.md` - API всех компонентов
+- `app/frontend/shared/templates/components/INTEGRATION.md` - интеграция с fields/
+- `app/frontend/shared/templates/components.html` - реэкспорт макросов (77 строк)
+- `app/frontend/shared/templates/macros/` - исходники макросов (7 файлов)
+- `FRONTEND_MODERNIZATION_PLAN.md` - план модернизации UI
+- `app/frontend/PLUGIN_SYSTEM.md` - документация плагинной системы
+- `.cursor/rules/frontend_plugins.mdc` - правила создания плагинов

@@ -1,0 +1,70 @@
+/* Утилиты для размеров */
+
+.w-full { width: 100%; }
+.h-full { height: 100%; }
+.min-h-screen { min-height: 100vh; }
+
+.max-w-150 {
+    max-width: 150px;
+}
+
+.max-w-200 {
+    max-width: 200px;
+}
+
+.max-w-300 {
+    max-width: 300px;
+}
+
+.min-h-300 {
+    min-height: 300px;
+}
+
+.min-h-400 {
+    min-height: 400px;
+}
+
+.w-120 {
+    width: 120px;
+}
+
+.w-140 {
+    width: 140px;
+}
+
+.w-150 {
+    width: 150px;
+}
+
+.w-5 {
+    width: 5%;
+}
+
+.w-8 {
+    width: 8%;
+}
+
+.w-12 {
+    width: 12%;
+}
+
+.w-15 {
+    width: 15%;
+}
+
+.w-28 {
+    width: 28%;
+}
+
+.w-10 {
+    width: 10%;
+}
+
+.w-25 {
+    width: 25%;
+}
+
+.w-160 {
+    width: 160px;
+}
+

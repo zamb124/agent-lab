@@ -1,0 +1,122 @@
+---
+description: "Правила тестирования"
+globs:
+  - "tests/**"
+  - "**/test_*.py"
+alwaysApply: false
+---
+# Правила тестирования
+
+## Реальная БД для тестов
+
+Используй реальную PostgreSQL БД для тестов:
+- НЕ используй MemorySaver для platform тестов
+- Используй `AsyncPostgresSaver` через фикстуры
+- Очищай БД после каждого теста
+
+<good_example>
+import pytest
+from app.core.checkpointer import get_checkpointer
+
+@pytest.mark.asyncio
+async def test_agent_execution():
+    checkpointer = await get_checkpointer()
+    # Тест с реальным checkpointer
+</good_example>
+
+<bad_example>
+from langgraph.checkpoint.memory import MemorySaver
+
+def test_agent():
+    checkpointer = MemorySaver()  # НЕ используй для platform
+</bad_example>
+
+## Фикстуры
+
+Используй фикстуры из `tests/conftest.py`:
+- `storage` - Storage экземпляр
+- `test_company` - тестовая компания
+- `test_user` - тестовый пользователь
+- `auth_context` - контекст с авторизацией
+
+<good_example>
+@pytest.mark.asyncio
+async def test_flow_execution(storage, test_user, auth_context):
+    # Используй готовые фикстуры
+    flow_config = FlowConfig(...)
+    await storage.set(f"flow:{flow_config.flow_id}", flow_config.model_dump())
+</good_example>
+
+## Без PYTHONPATH
+
+Не используй PYTHONPATH при запуске тестов:
+- Команды должны работать напрямую: `uv run pytest`
+- Не делай `PYTHONPATH=. pytest`
+
+<good_example>
+# В терминале
+uv run pytest tests/
+
+# В Makefile
+test:
+    uv run pytest tests/
+</good_example>
+
+<bad_example>
+PYTHONPATH=. pytest tests/
+</bad_example>
+
+## Маркеры pytest
+
+Используй маркеры для категоризации тестов:
+- `@pytest.mark.asyncio` - для асинхронных тестов
+- `@pytest.mark.integration` - интеграционные тесты
+- `@pytest.mark.slow` - медленные тесты
+
+<good_example>
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_full_flow():
+    # Интеграционный тест
+    pass
+</good_example>
+
+## Изоляция тестов
+
+Каждый тест должен быть изолирован:
+- Создавай уникальные ID для сущностей
+- Очищай данные после теста
+- Не полагайся на порядок выполнения тестов
+
+<good_example>
+@pytest.mark.asyncio
+async def test_agent_creation(storage):
+    agent_id = f"test_agent_{uuid.uuid4()}"
+    
+    try:
+        # Тест
+        await storage.set(f"agent:{agent_id}", {...})
+    finally:
+        # Очистка
+        await storage.delete(f"agent:{agent_id}")
+</good_example>
+
+## Критерий успеха
+
+Тест считается успешным только если:
+- ВСЕ тесты в suite проходят
+- Нет warnings или deprecations
+- Покрытие кода достаточное
+
+Частичный успех НЕ допустим.
+
+<bad_example>
+# 185 из 187 тестов прошли - ЭТО НЕ УСПЕХ
+# Нужно исправить 2 падающих теста
+</bad_example>
+
+## Не генерируй тесты без запроса
+
+Не создавай тесты автоматически:
+- Генерируй тесты только по явному запросу пользователя
+- Не создавай demo файлы для демонстрации

@@ -1,0 +1,18 @@
+---
+alwaysApply: true
+---
+Старайся писать код так, чтобы не пришлось писать комментарии. Используй технику DDD (Domain-Driven Design).
+
+
+<bad_example>
+# Очищаем чат
+for message in messages:
+ message.remove()
+</bad_example>
+
+Исправь на
+<good_example>
+def clear_chat(messages):
+    for message in messages:
+        message.remove()
+</good_example>

@@ -1,0 +1,87 @@
+{% import 'components.html' as c %}
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Сессии ({{ total }})</h5>
+        {{ c.counter_badge(sessions|length, variant='primary') }}
+    </div>
+    <div class="card-body p-0">
+        {% if sessions %}
+        {% call c.table_container(min_width='900px') %}
+            <thead>
+                <tr>
+                    <th class="w-15">Канал</th>
+                    <th class="w-25">Flow</th>
+                    <th class="w-15">Пользователь</th>
+                    <th class="w-10">Статус</th>
+                    <th class="w-10 text-center">Сообщений</th>
+                    <th class="w-15">Создано</th>
+                    <th class="w-10 text-center">Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for session in sessions %}
+                <tr>
+                    <td>{{ c.platform_badge(session.platform) }}</td>
+                    <td>
+                        {% if session.flow_id %}
+                            <a href="/frontend/builder/flow/{{ session.flow_id }}" 
+                               class="text-decoration-none" 
+                               title="Открыть в Builder">
+                                <small>{{ session.flow_name or session.flow_id }}</small>
+                                <i class="bi bi-box-arrow-up-right ms-1 text-xs"></i>
+                            </a>
+                        {% else %}
+                            <small class="text-muted">Не указан</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <small class="text-muted" title="{{ session.user_id }}">
+                            {{ session.user_name or session.user_id }}
+                        </small>
+                    </td>
+                    <td>{{ c.status_badge(session.status) }}</td>
+                    <td class="text-center">{{ c.counter_badge(session.message_count) }}</td>
+                    <td>
+                        <small class="text-muted">
+                            {{ session.created_at.strftime('%Y-%m-%d %H:%M') if session.created_at else '-' }}
+                        </small>
+                    </td>
+                    <td class="text-center">
+                        {{ c.button('',
+                            variant='outline-primary',
+                            size='sm',
+                            icon='eye',
+                            hx_get='/frontend/history/sessions/' + session.session_id + '/messages',
+                            hx_target='#modal-container',
+                            hx_swap='innerHTML',
+                            data_tooltip='Просмотреть историю'
+                        ) }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        {% endcall %}
+        
+        {% if total > limit %}
+        <div class="card-footer">
+            {{ c.pagination(
+                offset=offset,
+                limit=limit,
+                total=total,
+                hx_get_url='/frontend/history/sessions',
+                hx_target='#sessions-table',
+                hx_include='#history-filters'
+            ) }}
+        </div>
+        {% endif %}
+        
+        {% else %}
+        {{ c.empty_state(
+            icon='inbox',
+            title='Нет сессий',
+            description='Попробуйте изменить фильтры или создать новую сессию'
+        ) }}
+        {% endif %}
+    </div>
+</div>

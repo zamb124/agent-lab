@@ -5,27 +5,15 @@
 вызывают другие флоу, и все это работает из БД.
 """
 import pytest
-import asyncio
-from pathlib import Path
-import sys
-
-# Добавляем backend в путь
-backend_path = Path(__file__).parent.parent.parent / "backend"
-sys.path.insert(0, str(backend_path))
-
-from app.core.storage import Storage
-from app.core.flow_factory import FlowFactory
-from app.core.models import (
-    AgentConfig, AgentType, CodeMode, FlowConfig,
+from app.models import (
+    AgentConfig, AgentType, CodeMode, LLMConfig,
     GraphDefinition, GraphNode, GraphEdge, NodeType, ConditionType
 )
 from langchain_core.messages import HumanMessage
 
 @pytest.mark.asyncio
-async def test_create_stategraph_with_flow_nodes():
+async def test_create_stategraph_with_flow_nodes(migrated_db, storage, test_helpers, agent_repo):
     """Создание StateGraph агента с нодами-флоу"""
-    
-    storage = Storage()
         
         # 1. СОЗДАЕМ СУПЕР-АГЕНТА С ФЛОУ НОДАМИ
         
@@ -61,8 +49,7 @@ def super_router_condition(state):
 async def math_flow_node(state):
     """Нода которая вызывает математический флоу"""
     from app.core.flow_factory import FlowFactory
-    
-    factory = FlowFactory()
+    factory = get_container().flow_factory
     smart_flow = await factory.get_flow("smart_flow")  # Используем существующий smart_flow
     
     result = await smart_flow.ainvoke(
@@ -80,8 +67,7 @@ async def math_flow_node(state):
 async def weather_flow_node(state):
     """Нода которая вызывает погодный флоу"""
     from app.core.flow_factory import FlowFactory
-    
-    factory = FlowFactory()
+    factory = get_container().flow_factory
     weather_flow = await factory.get_flow("weather_flow")  # Используем существующий weather_flow
     
     result = await weather_flow.ainvoke(
@@ -174,39 +160,36 @@ async def finalizer_node(state):
         type=AgentType.STATEGRAPH,
         code_mode=CodeMode.INLINE_CODE,
         graph_definition=graph_def,
+        llm_config=LLMConfig(model="mock-gpt-4"),
         source="manual"
     )
         
-    await storage.set_agent_config(super_agent_config)
+    await agent_repo.set(super_agent_config)
     print("✅ Супер StateGraph агент создан в БД")
     
-    # 3. СОЗДАЕМ FLOW
-    super_flow_config = FlowConfig(
+    # Создаем flow
+    await test_helpers.create_simple_flow(
+        storage=storage,
         flow_id="super_flow",
         name="Super Flow",
-        description="Супер флоу который использует другие флоу как ноды",
-        entry_point_agent="super_flow_agent",
-        platforms={"api": {}}
+        entry_point_agent="super_flow_agent"
     )
-    
-    await storage.set_flow_config(super_flow_config)
     print("✅ Супер Flow создан в БД")
         
     return True
 
 @pytest.mark.asyncio
-async def test_execute_super_flow_math():
+async def test_execute_super_flow_math(migrated_db, storage, flow_factory, test_helpers, unique_id, agent_repo):
     """Создание и выполнение супер флоу с математическим запросом"""
     
-    # СОЗДАЕМ агента в этом же тесте для изоляции
-    await test_create_stategraph_with_flow_nodes()
+    # Создаем агента
+    await test_create_stategraph_with_flow_nodes(migrated_db, storage, test_helpers, agent_repo)
     
-    flow_factory = FlowFactory()
     super_flow = await flow_factory.get_flow("super_flow")
     
     result = await super_flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 25 * 4")]},
-        config={"configurable": {"thread_id": "test_super_math"}}
+        config={"configurable": {"thread_id": unique_id("test_super_math")}}
     )
     
     assert "messages" in result
@@ -219,18 +202,17 @@ async def test_execute_super_flow_math():
     print(f"✅ Супер флоу математический тест: {final_message}")
 
 @pytest.mark.asyncio
-async def test_execute_super_flow_weather():
+async def test_execute_super_flow_weather(migrated_db, storage, flow_factory, test_helpers, unique_id, agent_repo):
     """Создание и выполнение супер флоу с погодным запросом"""
     
-    # СОЗДАЕМ агента в этом же тесте для изоляции
-    await test_create_stategraph_with_flow_nodes()
+    # Создаем агента
+    await test_create_stategraph_with_flow_nodes(migrated_db, storage, test_helpers, agent_repo)
     
-    flow_factory = FlowFactory()
     super_flow = await flow_factory.get_flow("super_flow")
     
     result = await super_flow.ainvoke(
         {"messages": [HumanMessage(content="Какая погода в Екатеринбурге?")]},
-        config={"configurable": {"thread_id": "test_super_weather"}}
+        config={"configurable": {"thread_id": unique_id("test_super_weather")}}
     )
     
     assert "messages" in result

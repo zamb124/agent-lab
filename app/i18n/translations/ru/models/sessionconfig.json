@@ -1,0 +1,44 @@
+{
+  "fields": {
+    "session_id": {
+      "title": "ID сессии",
+      "description": "Уникальный идентификатор сессии"
+    },
+    "platform": {
+      "title": "Платформа",
+      "description": "Платформа (telegram, api, web)"
+    },
+    "user_id": {
+      "title": "ID пользователя",
+      "description": "Идентификатор пользователя"
+    },
+    "flow_id": {
+      "title": "ID флоу",
+      "description": "Идентификатор флоу"
+    },
+    "status": {
+      "title": "Статус",
+      "description": "Статус сессии"
+    },
+    "metadata": {
+      "title": "Метаданные",
+      "description": "Дополнительные метаданные сессии"
+    },
+    "created_at": {
+      "title": "Создано",
+      "description": "Время создания сессии"
+    },
+    "last_activity": {
+      "title": "Последняя активность",
+      "description": "Время последней активности"
+    },
+    "message_count": {
+      "title": "Количество сообщений",
+      "description": "Общее количество сообщений в сессии"
+    },
+    "first_message": {
+      "title": "Первое сообщение",
+      "description": "Первое сообщение пользователя (превью)"
+    }
+  }
+}

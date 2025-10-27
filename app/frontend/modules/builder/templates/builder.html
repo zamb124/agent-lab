@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% import 'components.html' as c %}
+
+{% block title %}{{ t('builder.title') }} - {{ t('common.app_name') }}{% endblock %}
+
+{% block head %}
+<!-- Метаданные плагинов для JS -->
+<script>
+    window.__PLUGINS__ = {{ plugin_metadata | default([]) | tojson | safe }};
+</script>
+
+<link rel="stylesheet" href="/static/builder/css/builder.css">
+<link rel="stylesheet" href="/static/builder/css/element-selector.css">
+{% endblock %}
+
+{% block content %}
+<div class="builder-container" id="builderContainer">
+    <!-- Палитра нод слева -->
+    <aside class="node-palette" id="nodePalette">
+        <div class="palette-header cursor-pointer" id="paletteHeader">
+            <h3><i class="bi bi-grid-3x3-gap"></i> Components</h3>
+            <button class="btn-collapse-palette" id="collapsePaletteBtn" title="Свернуть">
+                <i class="bi bi-chevron-left"></i>
+            </button>
+        </div>
+        
+        <div class="palette-section">
+            <div class="palette-section-title">Nodes</div>
+            
+            <!-- Flow Node -->
+            <div class="palette-item" data-node-type="flow_node" draggable="true">
+                <div class="palette-icon palette-icon-flow">
+                    <i class="bi bi-diagram-3"></i>
+                </div>
+                <div class="palette-info">
+                    <div class="palette-name">Flow</div>
+                    <div class="palette-desc">Entry point</div>
+                </div>
+            </div>
+            
+            <!-- Agent Node -->
+            <div class="palette-item" data-node-type="agent_node" draggable="true">
+                <div class="palette-icon palette-icon-agent">
+                    <i class="bi bi-robot"></i>
+                </div>
+                <div class="palette-info">
+                    <div class="palette-name">Agent</div>
+                    <div class="palette-desc">AI agent</div>
+                </div>
+            </div>
+            
+            <!-- Tool Node -->
+            <div class="palette-item" data-node-type="tool_node" draggable="true">
+                <div class="palette-icon palette-icon-tool">
+                    <i class="bi bi-tools"></i>
+                </div>
+                <div class="palette-info">
+                    <div class="palette-name">Tool</div>
+                    <div class="palette-desc">Function call</div>
+                </div>
+            </div>
+            
+            <!-- Function Node -->
+            <div class="palette-item" data-node-type="function_node" draggable="true">
+                <div class="palette-icon palette-icon-function">
+                    <i class="bi bi-code-square"></i>
+                </div>
+                <div class="palette-info">
+                    <div class="palette-name">Function</div>
+                    <div class="palette-desc">Custom code</div>
+                </div>
+            </div>
+            
+            <!-- Message Node -->
+            <div class="palette-item" data-node-type="message_node" draggable="true">
+                <div class="palette-icon palette-icon-message">
+                    <i class="bi bi-chat-dots"></i>
+                </div>
+                <div class="palette-info">
+                    <div class="palette-name">Message</div>
+                    <div class="palette-desc">Send message</div>
+                </div>
+            </div>
+            
+            <!-- Router Node -->
+            <div class="palette-item" data-node-type="router_node" draggable="true">
+                <div class="palette-icon palette-icon-router">
+                    <i class="bi bi-lightning"></i>
+                </div>
+                <div class="palette-info">
+                    <div class="palette-name">Conditional</div>
+                    <div class="palette-desc">Router logic</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+    
+    <!-- Основной канвас -->
+    <main class="builder-canvas" id="builderCanvas">
+        <div class="canvas-toolbar">
+            <div class="toolbar-left">
+                <a href="/frontend/dashboard" class="btn btn-ghost btn-sm" title="{{ t('builder.toolbar.back_to_dashboard') }}">
+                    <i class="bi bi-arrow-left"></i>
+                    {{ t('common.back') }}
+                </a>
+                <div class="toolbar-divider"></div>
+                <button class="btn btn-secondary btn-sm" id="zoomInBtn" title="{{ t('builder.toolbar.zoom_in') }}">
+                    <i class="bi bi-zoom-in"></i>
+                </button>
+                <button class="btn btn-secondary btn-sm" id="zoomOutBtn" title="{{ t('builder.toolbar.zoom_out') }}">
+                    <i class="bi bi-zoom-out"></i>
+                </button>
+                <button class="btn btn-secondary btn-sm" id="fitToScreenBtn" title="{{ t('builder.toolbar.fit_to_screen') }}">
+                    <i class="bi bi-fullscreen"></i>
+                </button>
+            </div>
+            
+            <div class="toolbar-center">
+                <span class="current-flow-name" id="currentFlowName">{{ t('builder.toolbar.select_or_create_flow') }}</span>
+            </div>
+            
+            <div class="toolbar-right">
+                <!-- Dropdown для выбора языка -->
+                <div class="dropdown">
+                    <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
+                        <i class="bi bi-translate"></i>
+                        <span id="current-language">{{ get_current_language().upper() }}</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); if(window.app && window.app.i18n) window.app.i18n.setLanguage('ru');">
+                            <i class="bi bi-check invisible" id="lang-ru"></i> 
+                            {{ t('languages.ru') }}
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); if(window.app && window.app.i18n) window.app.i18n.setLanguage('en');">
+                            <i class="bi bi-check invisible" id="lang-en"></i> 
+                            {{ t('languages.en') }}
+                        </a></li>
+                    </ul>
+                </div>
+                
+                <button class="btn btn-secondary btn-sm" id="themeToggleBtn" title="{{ t('dashboard.header.theme_toggle') }}">
+                    <i class="bi bi-moon-stars"></i>
+                </button>
+                <button class="btn btn-secondary btn-sm" id="clearCanvasBtn" title="{{ t('builder.toolbar.clear_canvas') }}">
+                    <i class="bi bi-trash"></i>
+                </button>
+                <button class="btn btn-warning btn-sm" id="resetToCodeBtn" disabled title="Сбросить к коду (очистить canvas_data)">
+                    <i class="bi bi-arrow-counterclockwise"></i>
+                </button>
+                <button class="btn btn-success btn-sm" id="saveFlowBtn" disabled>
+                    <i class="bi bi-cloud-upload"></i> {{ t('builder.toolbar.save') }}
+                </button>
+                <button class="btn btn-primary btn-sm" id="runFlowBtn" disabled>
+                    <i class="bi bi-chat-dots"></i> {{ t('builder.toolbar.run') }}
+                </button>
+            </div>
+        </div>
+        
+        <div class="canvas-container" id="canvasContainer">
+            <svg class="canvas-svg" id="canvasSvg">
+                <!-- Точечная сетка -->
+                <defs>
+                    <pattern id="dot-grid" width="30" height="30" patternUnits="userSpaceOnUse">
+                        <circle cx="1.5" cy="1.5" r="1.5" fill="var(--text-muted)" opacity="0.3"/>
+                    </pattern>
+                </defs>
+                <rect width="100%" height="100%" fill="url(#dot-grid)" />
+                
+                <!-- Группа для связей -->
+                <g class="edges-group" id="edgesGroup"></g>
+                
+                <!-- Группа для нод -->
+                <g class="nodes-group" id="nodesGroup"></g>
+            </svg>
+            
+            <!-- Overlay для HTML нод -->
+            <div class="canvas-overlay" id="canvasOverlay"></div>
+            
+            <!-- Индикатор зума -->
+            <div class="zoom-level">100%</div>
+        </div>
+    </main>
+    
+    <!-- Панель свойств справа -->
+    <aside class="properties-panel hidden" id="propertiesPanel">
+        <!-- Фиксированный крестик закрытия -->
+        <button class="properties-close-btn" id="closePanelBtn">
+            <i class="bi bi-x-circle-fill"></i>
+        </button>
+        
+        <div class="properties-empty">
+            <i class="bi bi-cursor"></i>
+            <p>Select a node to edit properties</p>
+        </div>
+    </aside>
+</div>
+
+<!-- Модальные окна -->
+<div id="modalContainer"></div>
+
+<!-- Контекстное меню -->
+<div class="context-menu hidden" id="contextMenu">
+    <div class="context-menu-item" data-action="edit">
+        <i class="bi bi-pencil"></i> {{ t('builder.context_menu.edit') }}
+    </div>
+    <div class="context-menu-item" data-action="duplicate">
+        <i class="bi bi-clipboard"></i> {{ t('builder.context_menu.duplicate') }}
+    </div>
+    <div class="context-menu-item" data-action="delete">
+        <i class="bi bi-trash"></i> {{ t('builder.context_menu.delete') }}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% endblock %}

@@ -1,0 +1,49 @@
+/* Agents Lab - Главный файл стилей */
+
+/* Шрифты */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400;500&display=swap');
+
+/* Core */
+@import url('/static/css/core/variables.css');
+@import url('/static/css/core/reset.css');
+@import url('/static/css/core/typography.css');
+
+/* Layout */
+@import url('/static/css/layout/app-layout.css');
+@import url('/static/css/layout/sidebar.css');
+@import url('/static/css/layout/header.css');
+@import url('/static/css/layout/content.css');
+
+/* Components */
+@import url('/static/css/components/buttons.css');
+@import url('/static/css/components/forms.css');
+@import url('/static/css/components/inputs.css');
+@import url('/static/css/components/cards.css');
+@import url('/static/css/components/modals.css');
+@import url('/static/css/components/dropdowns.css');
+@import url('/static/css/components/badges.css');
+@import url('/static/css/components/platform-badges.css');
+@import url('/static/css/components/tables.css');
+@import url('/static/css/components/alerts.css');
+@import url('/static/css/components/notifications.css');
+@import url('/static/css/components/loading.css');
+@import url('/static/css/components/auth.css');
+@import url('/static/css/components/skeleton.css');
+@import url('/static/css/components/empty-state.css');
+@import url('/static/css/components/icons.css');
+@import url('/static/css/components/slider.css?v=10');
+
+/* Utilities */
+@import url('/static/css/utilities/spacing.css');
+@import url('/static/css/utilities/flexbox.css');
+@import url('/static/css/utilities/colors.css');
+@import url('/static/css/utilities/sizing.css');
+@import url('/static/css/utilities/borders.css');
+@import url('/static/css/utilities/animations.css');
+
+/* Special */
+@import url('/static/css/special/fields.css');
+@import url('/static/css/special/prompt-editor.css');
+@import url('/static/css/special/markdown-preview.css');
+

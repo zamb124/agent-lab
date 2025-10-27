@@ -1,0 +1,63 @@
+{% import 'components.html' as c %}
+
+<div class="store-grid">
+    {% if flows %}
+        {% for flow in flows %}
+        <div class="card store-card {% if flow.installed %}installed{% endif %}" data-flow-id="{{ flow.flow_id }}" onclick="openFlowDetails('{{ flow.flow_id }}')">
+            <div class="store-card-image">
+                {% if flow.installed %}
+                <span class="badge badge-success store-card-badge">
+                    <i class="bi bi-check-circle-fill"></i>
+                    Установлено
+                </span>
+                {% endif %}
+                <div class="store-card-image-wrapper">
+                    <img src="{{ flow.image_url }}" alt="{{ flow.name }}" loading="lazy">
+                </div>
+            </div>
+            <div class="store-card-body">
+                <h3 class="store-card-title">{{ flow.name }}</h3>
+                
+                {% if flow.platforms and flow.platforms|length > 0 %}
+                <div class="store-card-platforms">
+                    <span class="platforms-label">
+                        <i class="bi bi-box"></i>
+                        Каналы:
+                    </span>
+                    <div class="platform-tags">
+                        {% for platform in flow.platforms %}
+                        {% set platform_config = {
+                            'telegram': {'icon': 'telegram', 'text': 'Telegram'},
+                            'whatsapp': {'icon': 'whatsapp', 'text': 'WhatsApp'},
+                            'api': {'icon': 'code-slash', 'text': 'API'},
+                            'web': {'icon': 'globe', 'text': 'Web'},
+                            'amocrm': {'icon': 'building', 'text': 'AmoCRM'}
+                        } %}
+                        {% set config = platform_config.get(platform, {'icon': 'gear', 'text': platform}) %}
+                        
+                        <span class="platform-tag platform-{{ platform }}">
+                            <i class="bi bi-{{ config.icon }}"></i> {{ config.text }}
+                        </span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if flow.author %}
+                <div class="store-card-author">
+                    <i class="bi bi-person-circle"></i>
+                    <span>{{ flow.author.get('name', 'Неизвестный автор') }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        {# СУПЕР просто с макросом! #}
+        {{ c.empty_state(
+            icon='shop',
+            title='Магазин пуст',
+            description='Нет доступных flows для установки'
+        ) }}
+    {% endif %}
+</div>

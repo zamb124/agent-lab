@@ -1,0 +1,101 @@
+{
+  "title": "Тарифы и оплата",
+  "current_plan": {
+    "title": "Текущий тариф",
+    "company": "Компания",
+    "balance": "Баланс",
+    "monthly_limit": "Месячный лимит",
+    "no_limit": "Без лимита"
+  },
+  "tariff_plans": {
+    "free": {
+      "name": "Бесплатный"
+    },
+    "basic": {
+      "name": "Базовый"
+    },
+    "premium": {
+      "name": "Премиум"
+    },
+    "enterprise": {
+      "name": "Корпоративный"
+    }
+  },
+  "budget_usage": {
+    "title": "Использование бюджета",
+    "add_funds": "Пополнить баланс",
+    "spent_this_month": "Потрачено в текущем месяце",
+    "used": "использовано",
+    "billing_period": "Расчетный период"
+  },
+  "usage_stats": {
+    "title": "Статистика использования",
+    "total_calls": "Всего вызовов",
+    "total_cost": "Общая стоимость"
+  },
+  "resources": {
+    "title": "Детализация по ресурсам",
+    "resource": "Ресурс",
+    "calls": "Вызовов",
+    "cost": "Стоимость",
+    "no_data": "Данные по использованию ресурсов пока отсутствуют"
+  },
+  "users": {
+    "title": "Детализация по пользователям",
+    "user": "Пользователь",
+    "calls": "Вызовов",
+    "cost": "Стоимость",
+    "no_data": "Данные по пользователям пока отсутствуют"
+  },
+  "payment_modal": {
+    "title": "Пополнение баланса",
+    "coming_soon": "Функция оплаты будет доступна в следующих версиях.",
+    "integrations_info": "В будущем здесь будет интеграция с платежными системами (Stripe, ЮKassa и другими).",
+    "card_payment": "Оплата банковской картой",
+    "secure_transaction": "Безопасная транзакция",
+    "auto_receipt": "Автоматическая выдача чека"
+  },
+  "create_company": "Создать компанию",
+  "init_message": "Инициализация Billing модуля",
+  "functions_registered": "Billing глобальные функции зарегистрированы",
+  "creating_payment": "Создание платежа...",
+  "redirecting_to_payment": "Переход к оплате...",
+  "payment_success_message": "Платеж успешно обработан! Баланс будет обновлен в течение минуты.",
+  "payment_error_message": "Ошибка оплаты. Попробуйте еще раз или выберите другой способ.",
+  "module_unloaded": "Billing модуль выгружен",
+  "validation": {
+    "min_amount": "Минимальная сумма пополнения: {amount}",
+    "max_amount": "Максимальная сумма пополнения: {amount}"
+  },
+  "errors": {
+    "payment_creation": "Ошибка создания платежа",
+    "stats_update": "Ошибка при обновлении статистики",
+    "stats_refresh": "Ошибка обновления статистики"
+  },
+  "payment_history": {
+    "title": "История пополнений",
+    "empty_title": "История пополнений пуста",
+    "empty_description": "Платежи появятся здесь после пополнения баланса"
+  },
+  "status": {
+    "success": "Успешно",
+    "pending": "Ожидание",
+    "error": "Ошибка"
+  },
+  "payment_methods": {
+    "yoomoney": "ЮMoney",
+    "yookassa": "ЮKassa"
+  },
+  "modal": {
+    "title": "Пополнить баланс",
+    "amount_label": "Сумма пополнения",
+    "amount_placeholder": "Введите сумму",
+    "amount_help": "Минимум: {min_amount}, Максимум: {max_amount}",
+    "card_payment": "Оплата картой через ЮMoney",
+    "secure_transaction": "Безопасная транзакция",
+    "instant_crediting": "Мгновенное зачисление",
+    "how_it_works": "Как это работает:",
+    "process_description": "После нажатия кнопки вы будете перенаправлены на страницу ЮMoney для безопасной оплаты. После успешной оплаты средства автоматически зачислятся на баланс компании.",
+    "proceed_to_payment": "Перейти к оплате"
+  }
+}

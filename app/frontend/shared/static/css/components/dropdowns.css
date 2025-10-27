@@ -1,0 +1,154 @@
+/* Dropdowns */
+
+.dropdown {
+    position: relative;
+}
+
+.dropdown .btn {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    position: relative;
+}
+
+.dropdown .btn::after,
+.dropdown .btn::before {
+    display: none !important;
+}
+
+.dropdown .btn.show {
+    background: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+}
+
+.dropdown .btn-ghost {
+    background: transparent;
+    color: var(--text-secondary);
+    border: none;
+    padding: 0.375rem 0.75rem;
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+}
+
+.dropdown .btn-ghost:hover,
+.dropdown .btn-ghost:focus,
+.dropdown .btn-ghost:focus-visible {
+    background: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+.dropdown .btn-ghost:active {
+    background: var(--bg-hover) !important;
+    transform: none !important;
+}
+
+.dropdown #current-language {
+    margin-left: 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    opacity: 0.8;
+    text-transform: uppercase;
+}
+
+.dropdown-menu {
+    background: var(--glass-bg) !important;
+    backdrop-filter: blur(20px) !important;
+    border: 2px solid var(--glass-border) !important;
+    border-radius: var(--radius-xl) !important;
+    box-shadow: var(--shadow-xl) !important;
+    padding: 0.5rem !important;
+    min-width: 160px !important;
+    margin-top: 0.5rem !important;
+    z-index: var(--z-dropdown) !important;
+    list-style: none !important;
+    display: none !important;
+}
+
+.dropdown-menu.show {
+    display: block !important;
+}
+
+.dropdown-menu li {
+    list-style: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.dropdown-item {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.625rem !important;
+    padding: 0.625rem 0.875rem !important;
+    color: var(--text-primary) !important;
+    background: transparent !important;
+    border: none !important;
+    text-decoration: none !important;
+    font-size: 0.875rem !important;
+    transition: all var(--transition-normal) !important;
+    cursor: pointer !important;
+    width: 100% !important;
+    text-align: left !important;
+    border-radius: var(--radius-lg) !important;
+}
+
+.dropdown-item:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-primary) !important;
+    transform: translateX(2px) !important;
+}
+
+.dropdown-item i.bi-check {
+    color: var(--accent-success) !important;
+    font-size: 0.875rem !important;
+}
+
+.dropdown-toggle.btn-ghost:focus,
+.dropdown-toggle:focus {
+    box-shadow: none !important;
+    border: none !important;
+    outline: none !important;
+}
+
+.dropdown .btn:focus,
+.dropdown .btn:active,
+.dropdown .btn.active,
+.dropdown .btn.dropdown-toggle:active,
+.dropdown .btn.dropdown-toggle.active,
+.dropdown .btn.dropdown-toggle:focus,
+.dropdown .btn.dropdown-toggle.focus,
+.dropdown .btn.dropdown-toggle.show {
+    background: var(--bg-hover) !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+.dropdown .btn[data-tooltip]:hover::before {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: -2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    z-index: var(--z-tooltip);
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-primary);
+}
+
+.dropdown .btn .bi-translate {
+    font-size: 0.875rem;
+}
+
+.header .dropdown-menu {
+    z-index: 1025 !important;
+}
+

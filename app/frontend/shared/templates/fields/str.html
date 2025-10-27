@@ -1,0 +1,59 @@
+{% if view_mode == "table" %}
+  <td class="field-cell">
+    {% if readonly %}
+      <div class="text-truncate max-w-200" title="{{ value or '' }}">
+        <span class="badge badge-secondary">{{ value or '-' }}</span>
+      </div>
+    {% else %}
+      <div class="field-input-wrapper d-flex align-items-center gap-2">
+        <div id="loading-{{ field_name }}-{{ model_id }}" class="field-loading-indicator htmx-indicator"></div>
+        <input type="text" 
+               class="form-control form-control-sm transition-fast flex-grow-1" 
+               value="{{ value or '' }}"
+               name="{{ field_name }}"
+               {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+               hx-put="/frontend/models/{{ model_type }}/{{ model_id }}"
+               hx-ext="json-enc"
+               hx-trigger="blur"
+               hx-swap="none"
+               hx-indicator="#loading-{{ field_name }}-{{ model_id }}"
+               hx-on::after-request="if(!event.detail.successful) console.error('Update failed:', event.detail.xhr.responseText)">
+      </div>
+    {% endif %}
+  </td>
+{% else %}
+  <div class="field field-str">
+    <label for="{{ field_name }}" class="field-label {% if required %}required{% endif %}">
+      {{ title }}
+    </label>
+    {% if description %}
+      <div class="field-description">{{ description }}</div>
+    {% endif %}
+    
+    <div class="field-input-wrapper">
+      {% if readonly %}
+        <input type="text" 
+               id="{{ field_name }}" 
+               name="{{ field_name }}" 
+               value="{{ value or '' }}" 
+               readonly 
+               class="form-control field-readonly"
+               {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+               {% for attr, val in widget_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}>
+      {% else %}
+        <input type="text" 
+               id="{{ field_name }}" 
+               name="{{ field_name }}" 
+               value="{{ value or '' }}" 
+               class="form-control transition-fast"
+               {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+               {% if required %}required{% endif %}
+               {% for attr, val in widget_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}>
+      {% endif %}
+    </div>
+    
+    {% if help_text %}
+      <div class="field-help">{{ help_text }}</div>
+    {% endif %}
+  </div>
+{% endif %}

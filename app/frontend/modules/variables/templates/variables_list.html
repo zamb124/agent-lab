@@ -1,0 +1,141 @@
+{% import 'components.html' as c %}
+
+<div class="container-fluid py-4 page-with-empty-state" id="variables-container">
+    <div class="mb-4 d-flex justify-content-between align-items-center">
+        <p class="text-muted mb-0">Управление секретами и переменными компании. Используйте <code>@var:key</code> для ссылок в конфигурации.</p>
+        {% if variables %}
+        <button class="btn btn-sm btn-outline-secondary" id="group-by-tags-btn" onclick="toggleGrouping()">
+            <i class="bi bi-grid"></i> Группировать по тегам
+        </button>
+        {% endif %}
+    </div>
+
+    <div id="variables-content">
+    <div class="variables-grid">
+        <div class="variable-grid-item">
+            <div class="card variable-card variable-card-create" onclick="openAddVariableModal()">
+                <div class="variable-create-body">
+                    <i class="bi bi-plus-circle variable-create-icon text-primary"></i>
+                    <div class="variable-create-content">
+                        <div class="variable-create-title">Создать переменную</div>
+                        <small class="variable-create-subtitle">Добавить новую переменную</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        {% if variables %}
+        
+        {% for key, var_data in variables.items() %}
+        <div class="variable-grid-item">
+            <div class="card variable-card">
+                <div class="variable-card-header">
+                    <div class="card-icon">
+                        {% if var_data.secret %}
+                        <i class="bi bi-shield-lock"></i>
+                        {% else %}
+                        <i class="bi bi-tag"></i>
+                        {% endif %}
+                    </div>
+                    <div class="variable-card-info">
+                        {% if var_data.groups and var_data.groups|length > 0 %}
+                        <div class="variable-groups">
+                            {% for group in var_data.groups %}
+                            <span class="variable-group-badge">{{ group }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="variable-card-actions">
+                        <button class="btn-icon" onclick="editVariable('{{ key }}', '{{ var_data.value }}', {{ 'true' if var_data.secret else 'false' }})" title="Изменить">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn-icon btn-icon-danger" onclick="deleteVariable('{{ key }}')" title="Удалить">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="variable-card-body">
+                    <div class="variable-key">
+                        <code title="{{ key }}">{{ key }}</code>
+                    </div>
+                    
+                    <div class="variable-value">
+                        {% if var_data.secret %}
+                        <div class="variable-secret-group">
+                            <input type="password" readonly value="••••••••••••" class="form-control form-control-sm" id="var-{{ key }}" data-secret-key="{{ key }}">
+                            <button class="btn-icon" type="button" onclick="toggleSecret('{{ key }}', this)" title="Показать/скрыть">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
+                        {% else %}
+                        <div class="variable-value-display">
+                            <code title="{{ var_data.value }}">{{ var_data.value }}</code>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+    </div>
+    </div>
+</div>
+
+<script type="application/json" id="variables-data">
+{{ variables|tojson|safe }}
+</script>
+
+<div id="variable-modal" class="modal-overlay modal-hidden variable-modal" hx-preserve="true" onclick="closeVariableModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h3 id="variable-modal-title">Добавить переменную</h3>
+            <div class="modal-header-actions">
+                <button class="btn-icon" onclick="saveVariable()" title="Сохранить">
+                    <i class="bi bi-floppy-fill"></i>
+                </button>
+                <button class="btn-close" onclick="closeVariableModal()" title="Закрыть">
+                    <i class="bi bi-x-circle-fill"></i>
+                </button>
+            </div>
+        </div>
+        <div class="modal-body">
+            <div class="mb-3">
+                <label class="form-label">Ключ переменной</label>
+                <input type="text" class="form-control" id="variable-key" placeholder="telegram_bot_token">
+                <div class="form-text">Используйте snake_case без пробелов</div>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Описание</label>
+                <input type="text" class="form-control" id="variable-description" placeholder="Краткое описание переменной">
+            </div>
+            
+                <div class="mb-3">
+                    <label class="form-label">Значение</label>
+                    <textarea class="form-control" id="variable-value" rows="3" placeholder="Значение переменной"></textarea>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Группы / Теги</label>
+                    <div id="variable-groups-container" class="mb-2"></div>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="variable-group-input" placeholder="Добавить группу (telegram, api, auth...)" onkeypress="if(event.key==='Enter'){event.preventDefault();addGroup();}">
+                        <button class="btn btn-warning" type="button" onclick="addGroup()">
+                            <i class="bi bi-plus-lg"></i>
+                        </button>
+                    </div>
+                    <small class="form-text">Группы помогают организовать переменные (telegram, api, database...)</small>
+                </div>
+                
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="variable-secret">
+                    <label class="form-check-label" for="variable-secret">
+                        Пометить как секрет (скрывать значение)
+                    </label>
+                </div>
+        </div>
+    </div>
+</div>

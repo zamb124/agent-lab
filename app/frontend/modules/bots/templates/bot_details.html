@@ -1,0 +1,762 @@
+{% import 'components.html' as c %}
+
+<div class="bot-details-header">
+    <div class="header-top-row">
+        <div class="header-left">
+            <h2>
+                <i class="bi bi-robot"></i>
+                {% if bot.is_new %}
+                    {{ t('bots.create_new_bot') }}
+                {% else %}
+                    {{ bot.name }}
+                {% endif %}
+            </h2>
+        </div>
+        <div class="header-right">
+            {% if not bot.is_new %}
+            <a href="/frontend/builder/flow/{{ bot.flow_id }}" class="btn btn-outline btn-sm btn-desktop-only" title="{{ t('bots.open_in_visual_editor') }}">
+                <i class="bi bi-diagram-3"></i>
+                Builder
+            </a>
+            <button class="btn btn-outline btn-sm btn-desktop-only" onclick="openBotChat('{{ bot.flow_id }}', '{{ bot.name }}')">
+                <i class="bi bi-chat-dots"></i>
+                {{ t('bots.launch') }}
+            </button>
+            <button class="btn btn-warning btn-sm btn-desktop-only" 
+                    onclick="remigrateFlowWithDeps('{{ bot.flow_id }}')"
+                    title="{{ t('bots.reset_flow_to_code') }}"
+                <i class="bi bi-arrow-counterclockwise"></i>
+                {{ t('bots.reset_to_code') }}
+            </button>
+            {% endif %}
+            <button class="btn-icon btn-desktop-only" onclick="toggleBotModalFullscreen()" title="{{ t('common.fullscreen') }}">
+                <i class="bi bi-fullscreen"></i>
+            </button>
+            <button class="btn-icon btn-desktop-only" onclick="saveBotSettings('{{ bot.flow_id }}')" title="{{ t('common.save') }}">
+                <i class="bi bi-floppy"></i>
+            </button>
+            
+            <div class="mobile-actions-menu btn-mobile-only">
+                <button class="btn-icon" onclick="toggleMobileActionsMenu()" title="Меню">
+                    <i class="bi bi-three-dots-vertical"></i>
+                </button>
+                <div class="mobile-actions-dropdown" id="mobile-actions-dropdown">
+                    {% if not bot.is_new %}
+                    <a href="/frontend/builder/flow/{{ bot.flow_id }}" class="mobile-action-item">
+                        <i class="bi bi-diagram-3"></i>
+                        Builder
+                    </a>
+                    <button class="mobile-action-item" onclick="openBotChat('{{ bot.flow_id }}', '{{ bot.name }}'); closeMobileActionsMenu()">
+                        <i class="bi bi-chat-dots"></i>
+                        Запустить
+                    </button>
+                    <button class="mobile-action-item" onclick="remigrateFlowWithDeps('{{ bot.flow_id }}'); closeMobileActionsMenu()">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                        Сброс к коду
+                    </button>
+                    {% endif %}
+                    <button class="mobile-action-item" onclick="toggleBotModalFullscreen(); closeMobileActionsMenu()">
+                        <i class="bi bi-fullscreen"></i>
+                        На весь экран
+                    </button>
+                    <button class="mobile-action-item" onclick="saveBotSettings('{{ bot.flow_id }}'); closeMobileActionsMenu()">
+                        <i class="bi bi-floppy"></i>
+                        Сохранить
+                    </button>
+                </div>
+            </div>
+            
+            <button class="btn-icon" onclick="closeBotModal()" title="{{ t('common.close') }}">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
+    </div>
+    
+    <div class="header-controls-row">
+        {% if not bot.is_new %}
+        <div class="control-group">
+            <label class="control-label">Flow ID</label>
+            <div class="control-value d-flex align-items-center gap-2">
+                <code title="{{ bot.flow_id }}">{{ bot.flow_id[:10] }}{% if bot.flow_id|length > 10 %}...{% endif %}</code>
+                <button class="btn-icon" onclick="copyToClipboard('{{ bot.flow_id }}')" title="{{ t('common.copy') }}">
+                    <i class="bi bi-clipboard"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label class="control-label">{{ t('bots.agent') }}</label>
+            <div class="control-value d-flex align-items-center gap-2">
+                <code title="{{ bot.entry_point }}">{{ bot.entry_point[:10] }}{% if bot.entry_point|length > 10 %}...{% endif %}</code>
+                <button class="btn-icon" onclick="copyToClipboard('{{ bot.entry_point }}')" title="{{ t('common.copy') }}">
+                    <i class="bi bi-clipboard"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label class="control-label">{{ t('bots.channels') }}</label>
+            <div class="control-value platforms-list">
+                {% if bot.platforms and bot.platforms|length > 0 %}
+                    {% for platform in bot.platforms.keys() %}
+                        {{ c.platform_badge(platform) }}
+                    {% endfor %}
+                {% else %}
+                    <button class="btn-icon" onclick="addPlatform('{{ bot.flow_id }}')" title="Добавить канал общения">
+                        <i class="bi bi-plus-circle"></i>
+                    </button>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="control-group">
+            <label class="control-label">{{ t('bots.llm_model') }}</label>
+            <div class="control-value">
+                <select class="form-control form-control-sm model-select" id="bot-llm-model"
+                        data-current-value="{{ bot.llm_config.model if bot.llm_config else '' }}">
+                    <option value="">{{ t('common.default') }}</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label class="control-label">
+                <i class="bi bi-palette"></i>
+                Креативность <span id="creativity-mode-label" class="creativity-mode-inline">[строгий]</span>
+            </label>
+            <div class="control-value">
+                {{ c.slider(
+                    id='bot-llm-temperature',
+                    value=bot.llm_config.temperature if bot.llm_config else 0.2
+                ) }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="bot-details-content">
+    <div class="bot-settings-section-full">
+        <div class="settings-tabs">
+            <button class="settings-tab active" data-tab="main">
+                <i class="bi bi-star"></i>
+                {{ t('bots.tabs.basic') }}
+            </button>
+            <button class="settings-tab" data-tab="abilities">
+                <i class="bi bi-tools"></i>
+                {{ t('bots.tabs.abilities') }}
+            </button>
+            <button class="settings-tab" data-tab="mcp">
+                <i class="bi bi-plugin"></i>
+                MCP
+            </button>
+            <button class="settings-tab" data-tab="knowledge">
+                <i class="bi bi-book"></i>
+                {{ t('bots.tabs.knowledge_base') }}
+            </button>
+            <button class="settings-tab" data-tab="platforms">
+                <i class="bi bi-globe"></i>
+                {{ t('bots.tabs.channels') }}
+            </button>
+            <button class="settings-tab" data-tab="advanced">
+                <i class="bi bi-gear"></i>
+                {{ t('bots.tabs.advanced') }}
+            </button>
+        </div>
+        
+        <div class="settings-content">
+            <div class="settings-panel active" data-panel="main">
+                <div class="main-settings-header">
+                    <div class="form-row-main">
+                        <div class="form-group">
+                            <label>{{ t('bots.bot_name') }}{% if bot.is_new %} <span class="text-danger">*</span>{% endif %}</label>
+                            <input type="text" class="form-control" value="{{ bot.name }}" id="bot-name" placeholder="{{ t('bots.bot_name_placeholder') }}" {% if bot.is_new %}required{% endif %}>
+                            {% if bot.is_new %}
+                            <small class="form-text">{{ t('bots.bot_name_help') }}</small>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>{{ t('bots.timeout_seconds') }}</label>
+                            <input type="number" class="form-control" value="{{ bot.timeout or '' }}" id="bot-timeout" placeholder="{{ t('common.default') }}">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>{{ t('bots.max_retries') }}</label>
+                            <input type="number" class="form-control" value="{{ bot.max_retries }}" id="bot-max-retries">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>{{ t('bots.description') }}{% if bot.is_new %} <span class="text-danger">*</span>{% endif %}</label>
+                    <textarea class="form-control" rows="2" id="bot-description-main" placeholder="{{ t('bots.description_placeholder') }}">{{ bot.description if bot.description != 'Описание отсутствует' else '' }}</textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>{{ t('bots.agent_prompt') }}</label>
+                    <div id="bot-prompt-editor-container" 
+                         data-prompt="{{ bot.prompt }}"
+                         data-flow-id="{{ bot.flow_id }}"
+                         data-entry-point="{{ bot.entry_point }}"></div>
+                </div>
+                
+                <div class="form-group">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="bot-enable-reasoning"
+                               {% if bot.enable_reasoning %}checked{% endif %}>
+                        <label class="form-check-label" for="bot-enable-reasoning">
+                            💭 {{ t('bots.enable_reasoning') }}
+                        </label>
+                    </div>
+                    <small class="form-text text-muted">
+                        {{ t('bots.reasoning_help') }}
+                    </small>
+                </div>
+            </div>
+            
+            <div class="settings-panel" data-panel="abilities">
+                <h4>
+                    <i class="bi bi-tools"></i>
+                    {{ t('bots.capabilities_title') }}
+                </h4>
+
+                <div id="bot-tools-selector" class="tools-selector">
+                    {{ c.skeleton(type='card', count=6) }}
+                </div>
+            </div>
+            
+            <div class="settings-panel" data-panel="mcp">
+                <h4>
+                    <i class="bi bi-plugin"></i>
+                    MCP инструменты
+                </h4>
+                
+                <div class="panel-description">
+                    <p>MCP (Model Context Protocol) — инструменты от внешних серверов. Выберите инструменты, которые должен использовать бот.</p>
+                </div>
+
+                <div id="bot-mcp-selector" class="mcp-selector">
+                    {{ c.skeleton(type='card', count=6) }}
+                </div>
+            </div>
+            
+            <div class="settings-panel" data-panel="knowledge">
+                <h4>
+                    <i class="bi bi-book"></i>
+                    {{ t('bots.knowledge_base_title') }}
+                </h4>
+                
+                <div class="panel-description">
+                    <p>{{ t('bots.knowledge_base_description') }}</p>
+                </div>
+                
+                <div class="rag-settings-section">
+                        <div class="form-group">
+                            <label>{{ t('bots.search_scopes') }}</label>
+                            <div class="checkbox-group">
+                                <div class="form-check">
+                                    <input class="form-check-input rag-search-scope" type="checkbox" value="company" id="rag-search-company"
+                                           {% if bot.rag_config and 'company' in bot.rag_config.search_scopes %}checked{% endif %}>
+                                    <label class="form-check-label" for="rag-search-company">
+                                        {{ t('bots.search_in_company_base') }}
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input rag-search-scope" type="checkbox" value="flow" id="rag-search-flow"
+                                           {% if bot.rag_config and 'flow' in bot.rag_config.search_scopes %}checked{% else %}checked{% endif %}>
+                                    <label class="form-check-label" for="rag-search-flow">
+                                        {{ t('bots.search_in_flow_base') }}
+                                    </label>
+                                </div>
+                            </div>
+                            <small class="form-text">
+                                {{ t('bots.search_scopes_help') }}
+                            </small>
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="knowledge-base-documents">
+                            <div class="documents-header">
+                                <h5>
+                                    <i class="bi bi-files"></i>
+                                    {{ t('bots.documents_in_knowledge_base') }}
+                                </h5>
+                                <div class="document-upload-buttons">
+                                    <button class="document-upload-button" onclick="uploadDocumentToKnowledgeBase('{{ bot.flow_id }}')" title="{{ t('bots.upload_document') }}">
+                                        <i class="bi bi-upload"></i>
+                                    </button>
+                                    <button class="document-upload-button" onclick="openUploadTextModal()" title="{{ t('bots.upload_text') }}">
+                                        <i class="bi bi-file-earmark-text"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div id="knowledge-base-docs-list" class="documents-list">
+                                <div class="loading-state">
+                                    <i class="bi bi-hourglass-split"></i>
+                                    Загрузка документов...
+                                </div>
+                            </div>
+                        </div>
+                </div>
+            </div>
+            
+            <div class="settings-panel" data-panel="platforms">
+                <div class="platforms-header">
+                    <h4>Настройки каналов</h4>
+                    <button class="btn-add-platform" onclick="addPlatform('{{ bot.flow_id }}')" title="Добавить канал общения">
+                        <i class="bi bi-plus-circle"></i>
+                    </button>
+                </div>
+                
+                <div class="panel-description">
+                    <p>Каналы — это каналы общения бота с пользователями. Вы можете подключить бота к Telegram, WhatsApp, Web чату или использовать через REST API. Каждый канал имеет свои настройки подключения и может работать независимо.</p>
+                </div>
+                
+                {% for platform, config in bot.platforms.items() %}
+                <div class="platform-settings" data-platform="{{ platform }}">
+                    <div class="platform-header" onclick="togglePlatformCollapse('{{ platform }}')">
+                        <div class="platform-header-left">
+                            <button class="platform-collapse-btn" type="button">
+                                <i class="bi bi-chevron-down"></i>
+                            </button>
+                            <h5>
+                                {% if platform == 'telegram' %}
+                                    <i class="bi bi-telegram"></i> Telegram
+                                {% elif platform == 'api' %}
+                                    <i class="bi bi-code-slash"></i> API
+                                {% elif platform == 'web' %}
+                                    <i class="bi bi-globe"></i> Web
+                                {% elif platform == 'whatsapp' %}
+                                    <i class="bi bi-whatsapp"></i> WhatsApp
+                                {% elif platform == 'amocrm' %}
+                                    <i class="bi bi-building"></i> AmoCRM
+                                {% elif platform == 'retailcrm' %}
+                                    <i class="bi bi-shop"></i> RetailCRM
+                                {% elif platform == 'discord' %}
+                                    <i class="bi bi-discord"></i> Discord
+                                {% elif platform == 'slack' %}
+                                    <i class="bi bi-slack"></i> Slack
+                                {% elif platform == 'viber' %}
+                                    <i class="bi bi-heart-fill"></i> Viber
+                                {% elif platform == 'vk' %}
+                                    <i class="bi bi-circle-fill"></i> VK
+                                {% else %}
+                                    <i class="bi bi-gear"></i> {{ platform }}
+                                {% endif %}
+                            </h5>
+                        </div>
+                        <div class="platform-actions" onclick="event.stopPropagation()">
+                            <button class="btn btn-outline-primary btn-sm" 
+                                    onclick="editPlatform('{{ bot.flow_id }}', '{{ platform }}')"
+                                    title="Редактировать">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" 
+                                    onclick="removePlatform('{{ bot.flow_id }}', '{{ platform }}')">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="platform-content">
+                    {% if platform == 'telegram' %}
+                    <div class="form-group">
+                        <label>Токен бота</label>
+                        <input type="password" 
+                               class="form-control" 
+                               placeholder="Введите токен Telegram бота"
+                               id="telegram-token-{{ bot.flow_id }}"
+                               value="{{ config.get('token', '') }}" 
+                               readonly>
+                        <small class="form-text">Получите токен у @BotFather</small>
+                    </div>
+                    
+                    {% if config.get('username') %}
+                    <div class="form-group">
+                        <label>Username</label>
+                        <div class="input-group">
+                            <span class="input-group-text">@</span>
+                            <input type="text" class="form-control" value="{{ config.username }}" 
+                                   id="telegram-username-{{ bot.flow_id }}" readonly>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    {% elif platform == 'whatsapp' %}
+                    <div class="form-group">
+                        <label>Phone Number ID</label>
+                        <input type="text" class="form-control" 
+                               value="{{ config.get('phone_number_id', '') }}" readonly>
+                        <small class="form-text text-muted">ID телефонного номера из WhatsApp Business</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Access Token</label>
+                        <input type="password" class="form-control" 
+                               value="{{ config.get('access_token', '') }}" readonly>
+                        <small class="form-text text-muted">Токен доступа от Meta for Developers</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Verify Token</label>
+                        <input type="password" class="form-control" 
+                               value="{{ config.get('verify_token', '') }}" readonly>
+                        <small class="form-text text-muted">Токен для верификации webhook</small>
+                    </div>
+                    
+                    {% if config.get('business_account_id') %}
+                    <div class="form-group">
+                        <label>Business Account ID</label>
+                        <input type="text" class="form-control" 
+                               value="{{ config.business_account_id }}" readonly>
+                    </div>
+                    {% endif %}
+                    
+                    {% if config.get('display_name') %}
+                    <div class="form-group">
+                        <label>Display Name</label>
+                        <input type="text" class="form-control" 
+                               value="{{ config.display_name }}" readonly>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="alert alert-primary bg-opacity-10 border-primary">
+                        <div class="mb-2">
+                            <i class="bi bi-info-circle me-2"></i><strong>Webhook URL:</strong><br>
+                            <small class="text-muted">Настройте этот URL в Meta for Developers</small>
+                        </div>
+                        <div class="input-group mb-2">
+                            <input type="text" class="form-control font-monospace" 
+                                   id="whatsapp-webhook-url-{{ bot.flow_id }}" 
+                                   value="https://{{ request.headers.get('host') }}/api/v1/webhook/whatsapp/company:{{ request.state.context.active_company.company_id }}:flow:{{ bot.flow_id }}" 
+                                   readonly>
+                            <button class="btn btn-outline-secondary" onclick="copyToClipboard('whatsapp-webhook-url-{{ bot.flow_id }}')">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <button class="btn btn-primary btn-sm" onclick="registerWhatsApp('{{ bot.flow_id }}')">
+                            <i class="bi bi-link-45deg"></i> Проверить регистрацию
+                        </button>
+                    </div>
+                    
+                    {% elif platform == 'api' %}
+                    <div class="api-info">
+                        <div class="api-section">
+                            <h6><i class="bi bi-link-45deg"></i> API Endpoint</h6>
+                            <div class="input-group mb-3">
+                                <input type="text" 
+                                       class="form-control font-monospace" 
+                                       id="api-endpoint-{{ bot.flow_id }}" 
+                                       value="https://{{ request.headers.get('host') }}/api/v1/flows/{{ bot.flow_id }}/message" 
+                                       readonly>
+                                <button class="btn btn-outline-secondary" 
+                                        onclick="copyToClipboard('api-endpoint-{{ bot.flow_id }}')">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="api-section">
+                            <h6><i class="bi bi-code-square"></i> Пример curl запроса</h6>
+                            <div class="code-block-wrapper">
+                                <pre class="code-block" id="api-curl-example-{{ bot.flow_id }}">curl -X POST "https://{{ request.headers.get('host') }}/api/v1/flows/{{ bot.flow_id }}/message" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_TOKEN" \
+  -d '{
+    "user_id": "user123",
+    "session_id": "session456",
+    "text": "Привет!"
+  }'</pre>
+                                <button class="btn btn-sm btn-outline-secondary copy-code-btn" 
+                                        onclick="copyToClipboard('api-curl-example-{{ bot.flow_id }}')">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="api-section">
+                            <h6><i class="bi bi-braces"></i> Пример тела запроса</h6>
+                            <div class="code-block-wrapper">
+                                <pre class="code-block" id="api-request-example-{{ bot.flow_id }}">{
+  "user_id": "user123",
+  "session_id": "session456",
+  "text": "Привет!",
+  "metadata": {
+    "source": "web",
+    "user_name": "John Doe"
+  }
+}</pre>
+                                <button class="btn btn-sm btn-outline-secondary copy-code-btn" 
+                                        onclick="copyToClipboard('api-request-example-{{ bot.flow_id }}')">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="api-section">
+                            <h6><i class="bi bi-play-circle"></i> Протестировать API</h6>
+                            <div class="api-test-form">
+                                <div class="form-group">
+                                    <label>User ID</label>
+                                    <input type="text" 
+                                           class="form-control" 
+                                           id="api-test-user-id-{{ bot.flow_id }}" 
+                                           value="test_user_{{ bot.flow_id }}" 
+                                           placeholder="user123">
+                                    <small class="form-text">Идентификатор пользователя</small>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>Session ID <span class="text-muted">(опционально)</span></label>
+                                    <input type="text" 
+                                           class="form-control" 
+                                           id="api-test-session-id-{{ bot.flow_id }}" 
+                                           placeholder="session456">
+                                    <small class="form-text">Оставьте пустым для новой сессии</small>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label>Сообщение</label>
+                                    <textarea class="form-control" 
+                                              id="api-test-message-{{ bot.flow_id }}" 
+                                              rows="3" 
+                                              placeholder="Введите тестовое сообщение...">Привет!</textarea>
+                                    <small class="form-text">Текст сообщения для отправки боту</small>
+                                </div>
+                                
+                                <button class="btn btn-primary" 
+                                        onclick="testApiEndpoint('{{ bot.flow_id }}')">
+                                    <i class="bi bi-send"></i> Отправить тестовое сообщение
+                                </button>
+                                
+                                <div id="api-test-result-{{ bot.flow_id }}" class="api-test-result">
+                                    <h6><i class="bi bi-reply"></i> Ответ от API</h6>
+                                    <div class="result-content">
+                                        <pre id="api-test-result-content-{{ bot.flow_id }}"></pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                    {% endif %}
+                    
+                    {% if config.get('allowed_users') %}
+                    <div class="form-group">
+                        <label>Разрешенные пользователи</label>
+                        <div class="allowed-users-display">
+                            {% for user in config.allowed_users %}
+                            {{ c.badge(user, variant='primary') }}
+                            {% endfor %}
+                        </div>
+                        <small class="form-text">Доступ к боту разрешен только указанным пользователям</small>
+                    </div>
+                    {% else %}
+                    <div class="form-group">
+                        <label>Разрешенные пользователи</label>
+                        <p class="text-muted mb-0">Доступ разрешен всем пользователям</p>
+                    </div>
+                    {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <div class="settings-panel" data-panel="advanced">
+                <h4>Дополнительные настройки</h4>
+                
+                {% if not bot.is_new %}
+                <div class="form-group">
+                    <label>Flow ID</label>
+                    <input type="text" class="form-control" value="{{ bot.flow_id }}" readonly>
+                    <small class="form-text">Системный идентификатор flow</small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Агент точки входа</label>
+                    <input type="text" class="form-control" value="{{ bot.entry_point }}" id="bot-entry-point" readonly>
+                    <small class="form-text">Системный агент, который обрабатывает запросы к боту</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно добавления канала -->
+<div id="add-platform-modal" class="modal modal-hidden">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Добавить канал общения</h3>
+            <div class="modal-header-actions">
+                <button class="btn-icon" onclick="savePlatform('{{ bot.flow_id }}')" title="{{ t('common.save') }}">
+                    <i class="bi bi-floppy-fill"></i>
+                </button>
+                <button class="btn-close" onclick="closeAddPlatformModal()" title="{{ t('common.close') }}">
+                    <i class="bi bi-x-circle-fill"></i>
+                </button>
+            </div>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Тип канала общения</label>
+                <div class="custom-select-wrapper">
+                    <div class="custom-select" id="platform-type-select" onclick="togglePlatformDropdown()">
+                        <div class="select-value">
+                            <span class="select-text">Выберите канал общения</span>
+                            <i class="bi bi-chevron-down"></i>
+                        </div>
+                        <div class="select-dropdown" id="platform-dropdown">
+                            <div class="dropdown-option" data-value="telegram" onclick="selectPlatform('telegram', 'bi-telegram', 'Telegram')">
+                                <i class="bi bi-telegram"></i>
+                                <span>Telegram</span>
+                            </div>
+                            <div class="dropdown-option" data-value="whatsapp" onclick="selectPlatform('whatsapp', 'bi-whatsapp', 'WhatsApp')">
+                                <i class="bi bi-whatsapp"></i>
+                                <span>WhatsApp</span>
+                            </div>
+                            <div class="dropdown-option" data-value="web" onclick="selectPlatform('web', 'bi-globe', 'Web Chat')">
+                                <i class="bi bi-globe"></i>
+                                <span>Web Chat</span>
+                            </div>
+                            <div class="dropdown-option" data-value="api" onclick="selectPlatform('api', 'bi-code-slash', 'REST API')">
+                                <i class="bi bi-code-slash"></i>
+                                <span>REST API</span>
+                            </div>
+                            <div class="dropdown-option" data-value="amocrm" onclick="selectPlatform('amocrm', 'bi-building', 'AmoCRM')">
+                                <i class="bi bi-building"></i>
+                                <span>AmoCRM</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="platform-config-section" style="display: none;">
+                <h4>Настройки каналов общения</h4>
+                
+            <div class="form-group">
+                <label>Токен</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="token-type" id="token-type-var" value="var" checked onchange="toggleTokenInput()">
+                    <label class="form-check-label" for="token-type-var">
+                        Ссылка на переменную
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="token-type" id="token-type-hardcoded" value="hardcoded" onchange="toggleTokenInput()">
+                    <label class="form-check-label" for="token-type-hardcoded">
+                        Хардкод токен
+                    </label>
+                </div>
+                    <div id="token-var-select-group">
+                        <select class="form-control" id="platform-token-select">
+                            <option value="">-- Выберите переменную --</option>
+                        </select>
+                    </div>
+                    <div id="token-hardcoded-group" style="display: none;">
+                        <input type="password" class="form-control" id="platform-token" placeholder="Введите токен">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Username/ID</label>
+                    <input type="text" class="form-control" id="platform-username" 
+                           placeholder="Имя пользователя или ID">
+                </div>
+
+                <div class="form-group">
+                    <label>Разрешенные пользователи</label>
+                    <div id="allowed-users-container">
+                        <div class="allowed-user-row">
+                            <input type="text" class="form-control" placeholder="User ID или username" 
+                                   onchange="updateAllowedUser(this)">
+                            <button class="btn btn-outline-danger btn-sm" onclick="removeAllowedUserRow(this)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button class="btn btn-outline-primary btn-sm" onclick="addAllowedUserRow()">
+                        <i class="bi bi-plus"></i>
+                        Добавить пользователя
+                    </button>
+                    <small class="form-text">Если список пустой - доступ разрешен всем. Можно указывать user_id или username</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Дополнительные параметры</label>
+                    <div id="custom-variables">
+                        <div class="variable-row">
+                            <input type="text" class="form-control" placeholder="Ключ" 
+                                   onchange="updateVariableName(this)">
+                            <input type="text" class="form-control" placeholder="Значение"
+                                   onchange="updateVariableValue(this)">
+                            <button class="btn btn-outline-danger btn-sm" onclick="removeVariableRow(this)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button class="btn btn-outline-primary btn-sm" onclick="addVariableRow()">
+                        <i class="bi bi-plus"></i>
+                        Добавить параметр
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно загрузки текста -->
+<div id="upload-text-modal" class="modal modal-upload-text">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Загрузить текст в базу знаний</h3>
+            <div class="modal-header-actions">
+                <button class="btn-icon" onclick="uploadTextFromModal('{{ bot.flow_id }}')" title="Загрузить">
+                    <i class="bi bi-upload"></i>
+                </button>
+                <button class="btn-close" onclick="closeUploadTextModal()" title="{{ t('common.close') }}">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Название документа <span class="text-muted">(опционально)</span></label>
+                <input type="text"
+                       class="form-control"
+                       id="upload-text-document-name"
+                       placeholder="Будет сгенерировано автоматически"
+                       maxlength="100"
+                       onkeydown="if(event.keyCode===13) {event.preventDefault(); return false;}">
+                <small class="form-text">Оставьте пустым для автоматической генерации названия</small>
+            </div>
+
+            <div class="form-group">
+                <label>Текст документа</label>
+                <textarea class="form-control"
+                          id="upload-text-content"
+                          rows="15"
+                          placeholder="Вставьте или введите текст для загрузки в базу знаний..."
+                          required></textarea>
+                <small class="form-text">
+                    Текст будет разбит на фрагменты и проиндексирован для поиска.
+                    Максимальная длина: 50,000 символов.
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label>Описание <span class="text-muted">(опционально)</span></label>
+                <input type="text"
+                       class="form-control"
+                       id="upload-text-description"
+                       placeholder="Краткое описание документа"
+                       maxlength="200">
+            </div>
+
+        </div>
+    </div>
+</div>

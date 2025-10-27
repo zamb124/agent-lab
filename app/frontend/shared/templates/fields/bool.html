@@ -1,0 +1,41 @@
+{% if view_mode == "table" %}
+  <td class="field-cell text-center">
+    {% if value %}
+      <i class="bi bi-check-circle-fill text-success" title="Да"></i>
+    {% else %}
+      <i class="bi bi-x-circle text-muted" title="Нет"></i>
+    {% endif %}
+  </td>
+{% else %}
+  <div class="field field-bool {{ css_class }}">
+    <div class="form-check">
+      {% if readonly %}
+        <input type="checkbox" 
+               id="{{ field_name }}" 
+               name="{{ field_name }}" 
+               {% if value %}checked{% endif %} 
+               disabled 
+               class="form-check-input"
+               {% for attr, val in widget_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}>
+      {% else %}
+        <input type="checkbox" 
+               id="{{ field_name }}" 
+               name="{{ field_name }}" 
+               {% if value %}checked{% endif %} 
+               class="form-check-input"
+               {% for attr, val in widget_attrs.items() %}{{ attr }}="{{ val }}"{% endfor %}>
+      {% endif %}
+      <label class="form-check-label" for="{{ field_name }}">
+        {{ title }}
+      </label>
+    </div>
+    
+    {% if description %}
+      <small class="field-description text-muted">{{ description }}</small>
+    {% endif %}
+    
+    {% if help_text %}
+      <small class="field-help text-muted">{{ help_text }}</small>
+    {% endif %}
+  </div>
+{% endif %}

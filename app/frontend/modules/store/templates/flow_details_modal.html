@@ -1,0 +1,145 @@
+{% import 'components.html' as c %}
+
+<div class="flow-modal-header">
+    <h2 class="flow-modal-title">
+        {{ flow.name }}
+        {% if flow.installed %}
+        {{ c.badge('Установлено', variant='success', icon='check-circle-fill') }}
+        {% endif %}
+    </h2>
+    <button class="btn-close" onclick="closeFlowModal()" title="Закрыть">
+        <i class="bi bi-x-circle-fill"></i>
+    </button>
+</div>
+
+<div class="flow-modal-body">
+    <div class="flow-details-layout">
+        <div class="flow-sidebar">
+            {% if flow.author %}
+            <div class="flow-author-card">
+                <h4><i class="bi bi-person-badge"></i> Автор</h4>
+                <div class="author-content">
+                    {% if flow.author.get('avatar') %}
+                    <img src="{{ flow.author.avatar }}" alt="{{ flow.author.name }}" class="author-avatar">
+                    {% else %}
+                    <div class="author-avatar-placeholder">
+                        <i class="bi bi-person-circle"></i>
+                    </div>
+                    {% endif %}
+                    <div class="author-info">
+                        <div class="author-name">{{ flow.author.get('name', 'Неизвестный автор') }}</div>
+                        {% if flow.author.get('email') %}
+                        <div class="author-contact">
+                            <i class="bi bi-envelope"></i>
+                            <a href="mailto:{{ flow.author.email }}">{{ flow.author.email }}</a>
+                        </div>
+                        {% endif %}
+                        {% if flow.author.get('website') %}
+                        <div class="author-contact">
+                            <i class="bi bi-link-45deg"></i>
+                            <a href="{{ flow.author.website }}" target="_blank" rel="noopener">Сайт</a>
+                        </div>
+                        {% endif %}
+                        {% if flow.author.get('github') %}
+                        <div class="author-contact">
+                            <i class="bi bi-github"></i>
+                            <a href="{{ flow.author.github }}" target="_blank" rel="noopener">GitHub</a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if flow.variables_definitions and flow.variables_definitions|length > 0 %}
+            <div class="flow-variables-section">
+                <h4><i class="bi bi-gear"></i> Настройка переменных</h4>
+                <p class="text-muted">Заполните переменные для корректной работы flow:</p>
+                <div class="variables-form" id="variables-form">
+                    {% for var_def in flow.variables_definitions %}
+                    <div class="variable-input-group">
+                        <label for="var_{{ var_def.key }}">
+                            {{ var_def.description }}
+                            {% if var_def.is_secret %}
+                                <i class="bi bi-shield-lock text-warning" title="Секретная переменная"></i>
+                            {% endif %}
+                            {% if var_def.required %}
+                                <span class="text-danger">*</span>
+                            {% endif %}
+                        </label>
+                        <div class="input-container">
+                            <input
+                                type="{% if var_def.is_secret %}password{% else %}text{% endif %}"
+                                id="var_{{ var_def.key }}"
+                                name="{{ var_def.key }}"
+                                {% if var_def.default_value %}value="{{ var_def.default_value }}"{% endif %}
+                                {% if var_def.required %}required{% endif %}
+                                placeholder="Введите значение..."
+                                class="form-control {% if var_def.is_secret %}has-password-toggle{% endif %}"
+                            >
+                            {% if var_def.is_secret %}
+                            <button type="button" class="password-toggle" onclick="togglePassword('var_{{ var_def.key }}')" title="Показать/скрыть пароль">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                        {% if var_def.is_secret %}
+                        <small class="text-muted">Это секретная переменная, она будет храниться в зашифрованном виде</small>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="flow-actions">
+                {% if flow.installed %}
+                <button class="btn btn-danger" onclick="uninstallFlow('{{ flow.flow_id }}')">
+                    <i class="bi bi-trash"></i>
+                    Удалить
+                </button>
+                {% else %}
+                <button class="btn btn-primary" onclick="installFlow('{{ flow.flow_id }}')">
+                    <i class="bi bi-box-arrow-in-down"></i>
+                    Установить
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="flow-main-content">
+            
+            <div class="flow-image">
+                <img src="{{ flow.image_url }}" alt="{{ flow.name }}">
+            </div>
+            
+            <div class="flow-description markdown-content" id="flow-description-content">{{ flow.description }}</div>
+            
+            {% if flow.platforms %}
+            <div class="flow-platforms-section">
+                <h4><i class="bi bi-box"></i> Поддерживаемые платформы</h4>
+                <div class="platform-tags-large">
+                    {% for platform, config in flow.platforms.items() %}
+                    <span class="platform-tag-large platform-{{ platform }}">
+                        {% if platform == 'telegram' %}
+                            <i class="bi bi-telegram"></i> Telegram
+                        {% elif platform == 'whatsapp' %}
+                            <i class="bi bi-whatsapp"></i> WhatsApp
+                        {% elif platform == 'api' %}
+                            <i class="bi bi-code-slash"></i> API
+                        {% elif platform == 'web' %}
+                            <i class="bi bi-globe"></i> Web
+                        {% elif platform == 'amocrm' %}
+                            <i class="bi bi-building"></i> AmoCRM
+                        {% else %}
+                            <i class="bi bi-gear"></i> {{ platform }}
+                        {% endif %}
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+

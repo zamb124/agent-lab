@@ -1,0 +1,91 @@
+{% import 'components.html' as c %}
+<link rel="stylesheet" href="/static/chat/css/chat-widget.css">
+
+<div id="chat-widget" class="chat-widget hidden">
+    <div class="chat-widget-header">
+        <!-- Основная строка заголовка -->
+        <div class="chat-header-row">
+            <div class="chat-header-left">
+                <span id="chat-widget-title">Чат с агентом</span>
+                <button id="chat-widget-info" class="btn btn-sm btn-ghost hidden" title="Информация о флоу">
+                    <i class="icon-info"></i>
+                </button>
+                <div id="chat-connection-status" class="connection-status" title="Состояние соединения">
+                    <div class="connection-indicator connecting"></div>
+                </div>
+            </div>
+            <div class="chat-header-right">
+                <button id="chat-widget-fullscreen" class="btn btn-sm btn-ghost" title="Развернуть на весь экран">
+                    <i class="icon-fullscreen"></i>
+                </button>
+                <button id="chat-widget-popup" class="btn btn-sm btn-ghost" title="Открыть в отдельной странице">
+                    <i class="icon-external-link"></i>
+                </button>
+                <button id="chat-widget-minimize" class="btn btn-sm btn-ghost" title="Свернуть">
+                    <i class="icon-minus"></i>
+                </button>
+                <button id="chat-widget-close" class="btn btn-sm btn-ghost" title="Закрыть">
+                    <i class="icon-close"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="chat-widget-body" class="chat-widget-body">
+        <div id="chat-widget-messages" class="chat-messages">
+            <!-- Сообщения будут добавляться динамически -->
+        </div>
+        
+        <div class="chat-input-container">
+            <!-- Область предпросмотра файлов -->
+            <div id="chat-files-preview" class="chat-files-preview hidden">
+                <!-- Файлы будут добавляться динамически -->
+            </div>
+            
+            <div class="chat-input-wrapper">
+                <button id="chat-widget-commands" class="chat-commands-btn" title="Команды">
+                    <i class="icon-slash"></i>
+                </button>
+                <button id="chat-widget-attach" class="chat-attach-btn" title="Прикрепить файл">
+                    <i class="icon-paperclip"></i>
+                </button>
+                <button id="chat-widget-voice" class="chat-voice-btn" title="Голосовое сообщение (зажмите и говорите)">
+                    <i class="icon-mic"></i>
+                </button>
+                <span id="voice-recording-indicator-widget" class="voice-recording-indicator hidden">
+                    🔴 Запись...
+                </span>
+                <input type="text" id="chat-widget-input" class="chat-input" placeholder="Введите сообщение...">
+                <button id="chat-widget-send" class="chat-send-btn">
+                    <i class="icon-send"></i>
+                </button>
+            </div>
+            
+            <!-- Выпадающее меню команд -->
+            <div id="chat-commands-menu" class="chat-commands-menu hidden">
+                <div class="commands-list">
+                    <button class="command-item" data-command="/help">
+                        <i class="icon-question"></i>
+                        <span>/help - Показать справку</span>
+                    </button>
+                    <button class="command-item" data-command="/clear">
+                        <i class="icon-trash"></i>
+                        <span>/clear - Очистить контекст диалога</span>
+                    </button>
+                    <button class="command-item" data-command="/start">
+                        <i class="icon-play"></i>
+                        <span>/start - Начать новый диалог</span>
+                    </button>
+                </div>
+            </div>
+            <!-- Скрытый input для выбора файлов -->
+            <input type="file" id="chat-file-input" class="hidden" multiple accept="*/*">
+        </div>
+    </div>
+</div>
+
+<!-- Кнопка переключения чата -->
+<button id="chat-widget-toggle" class="chat-widget-toggle">
+    <i class="icon-chat"></i>
+</button>
+

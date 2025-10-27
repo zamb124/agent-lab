@@ -1,0 +1,74 @@
+{% import 'components.html' as c %}
+
+<div class="modal-content modal-content-large">
+    <div class="modal-header">
+        <h3>{{ 'Новый MCP сервер' if server.is_new else 'Редактировать MCP сервер' }}</h3>
+        <button class="btn-close" onclick="closeServerModal()">
+            <i class="bi bi-x-circle-fill"></i>
+        </button>
+    </div>
+    <div class="modal-body">
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">ID сервера *</label>
+                <input type="text" class="form-control" id="server-id" value="{{ server.server_id }}" {% if not server.is_new %}disabled{% endif %}>
+                <div class="form-text">Уникальный идентификатор</div>
+            </div>
+            
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Название *</label>
+                <input type="text" class="form-control" id="server-name" value="{{ server.name }}">
+            </div>
+        </div>
+        
+        <div class="mb-3">
+            <label class="form-label">Описание</label>
+            <input type="text" class="form-control" id="server-description" value="{{ server.description }}">
+        </div>
+        
+        <div class="mb-3">
+            <label class="form-label">URL *</label>
+            <input type="text" class="form-control" id="server-url" value="{{ server.url }}">
+        </div>
+        
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Тип транспорта</label>
+                <select class="form-select" id="server-transport-type">
+                    <option value="http" {% if server.transport_type == 'http' %}selected{% endif %}>HTTP</option>
+                    <option value="sse" {% if server.transport_type == 'sse' %}selected{% endif %}>SSE</option>
+                </select>
+            </div>
+            
+            <div class="col-md-6 mb-3">
+                <label class="form-label">Таймаут (секунды)</label>
+                <input type="number" class="form-control" id="server-timeout" value="{{ server.timeout }}" min="5" max="300">
+            </div>
+        </div>
+        
+        <div class="mb-3">
+            <label class="form-label">HTTP заголовки (JSON)</label>
+            <textarea class="form-control font-monospace" id="server-headers" rows="4">{{ server.headers|tojson if server.headers else '{}' }}</textarea>
+        </div>
+        
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="server-is-active" {% if server.is_active %}checked{% endif %}>
+            <label class="form-check-label" for="server-is-active">
+                Активен
+            </label>
+        </div>
+        
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="server-auto-sync" {% if server.auto_sync_tools %}checked{% endif %}>
+            <label class="form-check-label" for="server-auto-sync">
+                Автоматическая синхронизация при старте
+            </label>
+        </div>
+        
+        <div class="mt-3">
+            {{ c.button('Сохранить', variant='primary', onclick='saveServer()', full_width=true) }}
+        </div>
+    </div>
+</div>
+
+

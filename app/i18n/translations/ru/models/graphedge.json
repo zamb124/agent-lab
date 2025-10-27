@@ -1,0 +1,20 @@
+{
+  "fields": {
+    "source": {
+      "title": "Источник",
+      "description": "ID исходной ноды"
+    },
+    "target": {
+      "title": "Цель",
+      "description": "ID целевой ноды"
+    },
+    "condition": {
+      "title": "Условие",
+      "description": "Условие или выражение для перехода"
+    },
+    "condition_type": {
+      "title": "Тип условия",
+      "description": "Тип условия для перехода"
+    }
+  }
+}

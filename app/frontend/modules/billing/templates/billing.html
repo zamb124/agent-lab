@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+{% import 'components.html' as c %}
+
+{% block title %}{{ t('billing.title') }} - {{ t('common.app_name') }}{% endblock %}
+
+{% block head %}
+<script>
+    window.__PLUGINS__ = {{ plugin_metadata | default([]) | tojson | safe }};
+</script>
+<link rel="stylesheet" href="/static/billing/css/billing.css">
+{% endblock %}
+
+{% block content %}
+<div class="billing-container">
+    <div class="billing-header">
+        <div class="billing-header-left">
+            <a href="/frontend/dashboard" class="btn btn-ghost btn-sm">
+                <i class="bi bi-arrow-left"></i>
+                {{ t('common.back') }}
+            </a>
+            <h1 class="billing-title">{{ t('billing.title') }}</h1>
+        </div>
+        <div class="billing-header-right">
+            <div class="dropdown">
+                <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
+                    <i class="bi bi-translate"></i>
+                    <span id="current-language">{{ get_current_language().upper() }}</span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); if(window.app && window.app.i18n) window.app.i18n.setLanguage('ru');">
+                        <i class="bi bi-check invisible" id="lang-ru"></i> 
+                        {{ t('languages.ru') }}
+                    </a></li>
+                    <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); if(window.app && window.app.i18n) window.app.i18n.setLanguage('en');">
+                        <i class="bi bi-check invisible" id="lang-en"></i> 
+                        {{ t('languages.en') }}
+                    </a></li>
+                </ul>
+            </div>
+            
+            <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="{{ t('dashboard.header.theme_toggle') }}">
+                <i class="bi bi-sun"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="billing-content">
+        <div class="billing-section">
+            <div class="billing-section-header">
+                <h2 class="billing-section-title">
+                    <i class="bi bi-star"></i>
+                    {{ t('billing.current_plan.title') }}
+                </h2>
+                <div class="billing-section-actions">
+                    <a href="/frontend/create-company" class="btn btn-ghost btn-sm">
+                        <i class="bi bi-plus-circle"></i>
+                        {{ t('billing.create_company') }}
+                    </a>
+                </div>
+            </div>
+            
+            <div class="tariff-card current-tariff">
+                <div class="tariff-badge">
+                    {% if company.tariff_plan == 'free' %}
+                        <i class="bi bi-gift"></i> {{ t('billing.tariff_plans.free.name') }}
+                    {% elif company.tariff_plan == 'basic' %}
+                        <i class="bi bi-box"></i> {{ t('billing.tariff_plans.basic.name') }}
+                    {% elif company.tariff_plan == 'premium' %}
+                        <i class="bi bi-gem"></i> {{ t('billing.tariff_plans.premium.name') }}
+                    {% elif company.tariff_plan == 'enterprise' %}
+                        <i class="bi bi-building"></i> {{ t('billing.tariff_plans.enterprise.name') }}
+                    {% endif %}
+                </div>
+                
+                <div class="tariff-stats">
+                    <div class="tariff-stat">
+                        <div class="tariff-stat-label">{{ t('billing.current_plan.company') }}</div>
+                        <div class="tariff-stat-value">{{ company.name }}</div>
+                    </div>
+                    <div class="tariff-stat">
+                        <div class="tariff-stat-label">{{ t('billing.current_plan.balance') }}</div>
+                        <div class="tariff-stat-value">{{ "%.2f"|format(company.balance) }} ₽</div>
+                    </div>
+                    <div class="tariff-stat">
+                        <div class="tariff-stat-label">{{ t('billing.current_plan.monthly_limit') }}</div>
+                        <div class="tariff-stat-value">
+                            {% if company.monthly_budget > 0 %}
+                                {{ "%.2f"|format(company.monthly_budget) }} ₽
+                            {% else %}
+                                {{ t('billing.current_plan.no_limit') }}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="billing-section">
+            <div class="billing-section-header">
+                <h2 class="billing-section-title">
+                    <i class="bi bi-wallet2"></i>
+                    {{ t('billing.budget_usage.title') }}
+                </h2>
+                <div class="billing-section-actions">
+                    <button class="btn btn-primary btn-sm" onclick="openPaymentModal()">
+                        <i class="bi bi-credit-card"></i>
+                        {{ t('billing.budget_usage.add_funds') }}
+                    </button>
+                </div>
+            </div>
+            
+            <div class="budget-card">
+                <div class="budget-info">
+                    <div class="budget-label">{{ t('billing.budget_usage.spent_this_month') }}</div>
+                    <div class="budget-values">
+                        <span class="budget-spent">{{ "%.2f"|format(company.current_month_spent) }} ₽</span>
+                        {% if company.monthly_budget > 0 %}
+                            <span class="budget-separator">/</span>
+                            <span class="budget-total">{{ "%.2f"|format(company.monthly_budget) }} ₽</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                {% if company.monthly_budget > 0 %}
+                <div class="budget-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: {{ budget_percent }}%"></div>
+                    </div>
+                    <div class="progress-label">{{ "%.1f"|format(budget_percent) }}% {{ t('billing.budget_usage.used') }}</div>
+                </div>
+                {% endif %}
+                
+                <div class="budget-period">
+                    <i class="bi bi-calendar3"></i>
+                    {{ t('billing.budget_usage.billing_period') }}: {{ company.billing_period_start.strftime('%d.%m.%Y') }} - {{ company.billing_period_start.replace(day=28).strftime('%d.%m.%Y') if company.billing_period_start.month != 12 else company.billing_period_start.replace(month=12, day=31).strftime('%d.%m.%Y') }}
+                </div>
+            </div>
+        </div>
+
+        <div class="billing-section">
+            <div class="billing-section-header">
+                <h2 class="billing-section-title">
+                    <i class="bi bi-graph-up"></i>
+                    {{ t('billing.usage_stats.title') }}
+                </h2>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon stat-icon-primary">
+                        <i class="bi bi-telephone"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-label">{{ t('billing.usage_stats.total_calls') }}</div>
+                        <div class="stat-value">{{ stats.total_calls }}</div>
+                    </div>
+                </div>
+                
+                <div class="stat-card">
+                    <div class="stat-icon stat-icon-success">
+                        <i class="bi bi-cash-stack"></i>
+                    </div>
+                    <div class="stat-content">
+                        <div class="stat-label">{{ t('billing.usage_stats.total_cost') }}</div>
+                        <div class="stat-value">{{ "%.2f"|format(stats.total_cost) }} ₽</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="billing-section">
+            <div class="billing-section-header">
+                <h2 class="billing-section-title">
+                    <i class="bi bi-list-ul"></i>
+                    {{ t('billing.resources.title') }}
+                </h2>
+            </div>
+            
+            <div class="resources-table-container">
+                {% if stats.by_resource %}
+                <table class="resources-table">
+                    <thead>
+                        <tr>
+                            <th>{{ t('billing.resources.resource') }}</th>
+                            <th>{{ t('billing.resources.calls') }}</th>
+                            <th>{{ t('billing.resources.cost') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for resource_name, resource_stats in stats.by_resource.items() %}
+                        <tr>
+                            <td>
+                                <div class="resource-name">
+                                    <i class="bi bi-cpu"></i>
+                                    {{ resource_name }}
+                                </div>
+                            </td>
+                            <td>{{ resource_stats.calls }}</td>
+                            <td>
+                                <span class="resource-cost">{{ "%.2f"|format(resource_stats.cost) }} ₽</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                {{ c.empty_state(
+                    icon='inbox',
+                    title=t('billing.resources.no_data'),
+                    centered=false
+                ) }}
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="billing-section">
+            <div class="billing-section-header">
+                <h2 class="billing-section-title">
+                    <i class="bi bi-people"></i>
+                    {{ t('billing.users.title') }}
+                </h2>
+            </div>
+            
+            <div class="resources-table-container">
+                {% if stats.by_user %}
+                <table class="resources-table">
+                    <thead>
+                        <tr>
+                            <th>{{ t('billing.users.user') }}</th>
+                            <th>{{ t('billing.users.calls') }}</th>
+                            <th>{{ t('billing.users.cost') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user_id, user_stats in stats.by_user.items() %}
+                        <tr>
+                            <td>
+                                <div class="resource-name">
+                                    <i class="bi bi-person"></i>
+                                    {{ user_stats.user_name if user_stats.user_name else user_id }}
+                                </div>
+                            </td>
+                            <td>{{ user_stats.calls }}</td>
+                            <td>
+                                <span class="resource-cost">{{ "%.2f"|format(user_stats.cost) }} ₽</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                {{ c.empty_state(
+                    icon='inbox',
+                    title=t('billing.users.no_data'),
+                    centered=false
+                ) }}
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="billing-section">
+            <div class="billing-section-header">
+                <h2 class="billing-section-title">
+                    <i class="bi bi-clock-history"></i>
+                    {{ t('billing.payment_history.title') }}
+                </h2>
+            </div>
+            
+            <div class="transactions-container">
+                {% if payment_history and payment_history|length > 0 %}
+                <div class="transactions-list">
+                    {% for transaction in payment_history %}
+                    <div class="transaction-item status-{{ transaction.status }}">
+                        <div class="transaction-icon">
+                            <i class="bi bi-arrow-down-circle"></i>
+                        </div>
+                        <div class="transaction-details">
+                            <div class="transaction-header">
+                                <span class="transaction-amount">+{{ "%.2f"|format(transaction.amount) }} ₽</span>
+                                <span class="transaction-status">
+                                    {% if transaction.status == 'success' %}
+                                        <i class="bi bi-check-circle-fill"></i> {{ t('billing.status.success') }}
+                                    {% elif transaction.status == 'pending' %}
+                                        <i class="bi bi-clock-fill"></i> {{ t('billing.status.pending') }}
+                                    {% elif transaction.status == 'failed' %}
+                                        <i class="bi bi-x-circle-fill"></i> {{ t('billing.status.error') }}
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div class="transaction-meta">
+                                <span class="transaction-date">
+                                    <i class="bi bi-calendar3"></i>
+                                    {{ transaction.created_at.strftime('%d.%m.%Y %H:%M') }}
+                                </span>
+                                <span class="transaction-id">
+                                    <i class="bi bi-hash"></i>
+                                    {{ transaction.transaction_id }}
+                                </span>
+                                <span class="transaction-provider">
+                                    <i class="bi bi-credit-card"></i>
+                                    {% if transaction.payment_provider == 'yoomoney' %}
+                                        {{ t('billing.payment_methods.yoomoney') }}
+                                    {% elif transaction.payment_provider == 'yukassa' %}
+                                        {{ t('billing.payment_methods.yookassa') }}
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                {{ c.empty_state(
+                    icon='inbox',
+                    title='{{ t("billing.payment_history.empty_title") }}',
+                    description='{{ t("billing.payment_history.empty_description") }}',
+                    centered=false
+                ) }}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="payment-modal" class="modal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="bi bi-wallet2"></i>
+                    {{ t('billing.modal.title') }}
+                </h3>
+                <button class="modal-close" onclick="closePaymentModal()">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="payment-form" onsubmit="event.preventDefault(); createPayment();">
+                    <div class="form-group">
+                        <label for="payment-amount">
+                            <i class="bi bi-currency-ruble"></i>
+                            {{ t('billing.modal.amount_label') }} (₽)
+                        </label>
+                        <input 
+                            type="number" 
+                            id="payment-amount" 
+                            class="form-control" 
+                            min="100" 
+                            max="1000000" 
+                            step="100" 
+                            value="1000"
+                            required
+                            placeholder="{{ t('billing.modal.amount_placeholder') }}"
+                        >
+                        <small class="form-text">{{ t('billing.modal.amount_help', min_amount='100', max_amount='1,000,000') }}</small>
+                    </div>
+                    
+                    <div class="payment-info">
+                        <div class="payment-info-item">
+                            <i class="bi bi-credit-card"></i>
+                            <span>{{ t('billing.modal.card_payment') }}</span>
+                        </div>
+                        <div class="payment-info-item">
+                            <i class="bi bi-shield-check"></i>
+                            <span>{{ t('billing.modal.secure_transaction') }}</span>
+                        </div>
+                        <div class="payment-info-item">
+                            <i class="bi bi-lightning-charge"></i>
+                            <span>{{ t('billing.modal.instant_crediting') }}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="payment-notice">
+                        <i class="bi bi-info-circle"></i>
+                        <div>
+                            <strong>{{ t('billing.modal.how_it_works') }}:</strong>
+                            <p>{{ t('billing.modal.process_description') }}</p>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" type="button" onclick="closePaymentModal()">
+                    {{ t('common.cancel') }}
+                </button>
+                <button class="btn btn-primary" type="button" id="payment-submit-btn" onclick="createPayment()">
+                    <i class="bi bi-arrow-right-circle"></i>
+                    {{ t('billing.modal.proceed_to_payment') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+
+{% endblock %}
+

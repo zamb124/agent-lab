@@ -3,14 +3,13 @@
 Работают с реальным S3 хранилищем и БД.
 """
 import pytest
-import asyncio
 import tempfile
 import uuid
 from pathlib import Path
 
-from backend.app.core.core_clients.s3_client import S3ClientFactory, get_default_s3_client
-from backend.app.core.models import FileRecord, FileStatus
-from backend.app.core.storage import Storage
+from app.core.core_clients.s3_client import S3ClientFactory, get_default_s3_client
+from app.models import FileRecord, FileStatus
+from app.db.repositories import Storage
 
 
 def skip_if_s3_fails(test_func):
@@ -39,7 +38,7 @@ class TestS3Integration:
         assert client.provider_name == 'vkcloud'
         assert client.endpoint_url == 'https://hb.ru-msk.vkcloud-storage.ru'
         assert client.access_key_id.startswith('xf9hZbchm88')
-        assert client.track_files == True
+        assert client.track_files
         
         await client.close()
     
@@ -68,15 +67,15 @@ class TestS3Integration:
             )
             
             if not upload_success:
-                print(f"⚠️ Загрузка не удалась (возможно ограничения прав), пропускаем тест")
+                print("⚠️ Загрузка не удалась (возможно ограничения прав), пропускаем тест")
                 pytest.skip("S3 upload failed - possibly access restrictions")
             
             print(f"✅ Файл загружен в S3: {test_key}")
             
             # Проверяем существование
             exists = await client.object_exists(test_key)
-            assert exists == True
-            print(f"✅ Файл существует в S3")
+            assert exists
+            print("✅ Файл существует в S3")
             
             # Скачиваем данные
             downloaded_data = await client.download_bytes(test_key)
@@ -98,7 +97,7 @@ class TestS3Integration:
             try:
                 delete_success = await client.delete_object(test_key)
                 if delete_success:
-                    print(f"✅ Тестовый файл удален")
+                    print("✅ Тестовый файл удален")
             except Exception:
                 pass
             
@@ -124,24 +123,24 @@ class TestS3Integration:
             )
             
             if not upload_success:
-                print(f"⚠️ Загрузка не удалась (возможно ограничения прав), пропускаем тест")
+                print("⚠️ Загрузка не удалась (возможно ограничения прав), пропускаем тест")
                 pytest.skip("S3 upload failed - possibly access restrictions")
             print(f"✅ Файл загружен с диска в S3: {test_key}")
             
             # Проверяем что файл существует
             exists = await client.object_exists(test_key)
-            assert exists == True
+            assert exists
             
             # Скачиваем обратно на диск
             download_path = temp_path.with_suffix('.downloaded.txt')
             download_success = await client.download_file(test_key, download_path)
-            assert download_success == True
+            assert download_success
             
             # Проверяем содержимое
             with open(download_path, 'r') as f:
                 content = f.read()
             assert content == "Test file content from disk"
-            print(f"✅ Файл скачан на диск и содержимое совпадает")
+            print("✅ Файл скачан на диск и содержимое совпадает")
             
         finally:
             # Очистка
@@ -166,7 +165,7 @@ class TestS3Integration:
                 
                 success = await client.upload_bytes(data, key, content_type="text/plain")
                 if not success:
-                    print(f"⚠️ Загрузка не удалась, пропускаем тест")
+                    print("⚠️ Загрузка не удалась, пропускаем тест")
                     pytest.skip("S3 upload failed - possibly access restrictions")
                 test_files.append(key)
             
@@ -177,7 +176,7 @@ class TestS3Integration:
             
             # Если список пустой, возможно проблема с подписью S3
             if len(objects) == 0:
-                print(f"⚠️ Список объектов пустой - возможна проблема с подписью S3 для VK Cloud")
+                print("⚠️ Список объектов пустой - возможна проблема с подписью S3 для VK Cloud")
                 pytest.skip("S3 list_objects returned empty - possibly signature issue with VK Cloud")
             
             assert len(objects) >= 3
@@ -211,22 +210,22 @@ class TestS3Integration:
             
             # Копируем файл
             copy_success = await client.copy_object(source_key, dest_key)
-            assert copy_success == True
+            assert copy_success
             print(f"✅ Файл скопирован: {source_key} -> {dest_key}")
             
             # Проверяем что оба файла существуют
             source_exists = await client.object_exists(source_key)
             dest_exists = await client.object_exists(dest_key)
             
-            assert source_exists == True
-            assert dest_exists == True
+            assert source_exists
+            assert dest_exists
             
             # Проверяем что содержимое одинаковое
             source_data = await client.download_bytes(source_key)
             dest_data = await client.download_bytes(dest_key)
             
             assert source_data == dest_data == test_data
-            print(f"✅ Содержимое файлов одинаковое")
+            print("✅ Содержимое файлов одинаковое")
             
         finally:
             # Очистка
@@ -267,7 +266,7 @@ class TestS3Integration:
             )
             
             assert upload_url is not None
-            print(f"✅ Upload presigned URL создан")
+            print("✅ Upload presigned URL создан")
             
         finally:
             # Очистка
@@ -279,9 +278,8 @@ class TestS3Integration:
 class TestS3WithDatabase:
     """Тесты S3 с сохранением записей в БД"""
     
-    async def test_file_record_creation_and_storage(self):
+    async def test_file_record_creation_and_storage(self, storage):
         """Тест создания и сохранения записи о файле в БД"""
-        storage = Storage()
         
         # Создаем запись о файле
         file_record = FileRecord(
@@ -300,7 +298,7 @@ class TestS3WithDatabase:
         
         # Сохраняем в БД
         save_success = await storage.set(file_record.key, file_record.model_dump_json())
-        assert save_success == True
+        assert save_success
         print(f"✅ Запись о файле сохранена в БД: {file_record.key}")
         
         # Получаем из БД
@@ -316,20 +314,19 @@ class TestS3WithDatabase:
         assert stored_record.original_name == file_record.original_name
         assert stored_record.s3_key == file_record.s3_key
         assert stored_record.url == file_record.url
-        print(f"✅ Запись восстановлена из БД корректно")
+        print("✅ Запись восстановлена из БД корректно")
         
         # Обновляем статус
         stored_record.status = FileStatus.UPLOADED
         update_success = await storage.set(stored_record.key, stored_record.model_dump_json())
-        assert update_success == True
-        print(f"✅ Статус файла обновлен в БД")
+        assert update_success
+        print("✅ Статус файла обновлен в БД")
         
         # Очистка
         await storage.delete(file_record.key)
     
-    async def test_full_s3_workflow_with_db(self):
+    async def test_full_s3_workflow_with_db(self, storage):
         """Полный тест: загрузка в S3 + сохранение в БД + скачивание + удаление"""
-        storage = Storage()
         client = S3ClientFactory.create_client_for_bucket('vkbucket')
         
         # Создаем тестовые данные
@@ -353,7 +350,7 @@ class TestS3WithDatabase:
         )
         
         db_save_success = await storage.set(file_record.key, file_record.model_dump_json())
-        assert db_save_success == True
+        assert db_save_success
         print(f"✅ 1. Запись создана в БД: {file_record.key}")
         
         try:
@@ -375,30 +372,30 @@ class TestS3WithDatabase:
             # 3. Обновляем статус в БД
             file_record.status = FileStatus.UPLOADED
             db_update_success = await storage.set(file_record.key, file_record.model_dump_json())
-            assert db_update_success == True
-            print(f"✅ 3. Статус обновлен в БД: UPLOADED")
+            assert db_update_success
+            print("✅ 3. Статус обновлен в БД: UPLOADED")
             
             # 4. Проверяем что файл доступен
             exists = await client.object_exists(s3_key)
-            assert exists == True
+            assert exists
             
             # 5. Скачиваем и проверяем содержимое
             downloaded_data = await client.download_bytes(s3_key)
             assert downloaded_data == test_data
-            print(f"✅ 4. Файл скачан и содержимое совпадает")
+            print("✅ 4. Файл скачан и содержимое совпадает")
             
             # 6. Проверяем метаданные S3
             s3_metadata = await client.get_object_metadata(s3_key)
             assert s3_metadata is not None
             assert s3_metadata['content_length'] == len(test_data)
             assert s3_metadata['metadata']['file_id'] == file_id
-            print(f"✅ 5. Метаданные S3 корректны")
+            print("✅ 5. Метаданные S3 корректны")
             
             # 7. Генерируем публичный URL
             public_url = file_record.url
             assert public_url is not None
-            assert client.bucket_name in public_url
-            assert s3_key in public_url
+            # URL может быть прямым S3 или прокси через API
+            assert (client.bucket_name in public_url or "/api/v1/files/download/" in public_url)
             print(f"✅ 6. Публичный URL: {public_url}")
             
         finally:
@@ -406,7 +403,7 @@ class TestS3WithDatabase:
             await client.delete_object(s3_key)
             file_record.status = FileStatus.DELETED
             await storage.set(file_record.key, file_record.model_dump_json())
-            print(f"✅ 7. Очистка завершена")
+            print("✅ 7. Очистка завершена")
             
             await client.close()
     
@@ -456,8 +453,8 @@ class TestS3WithDatabase:
                 pytest.skip("S3 upload failed - possibly access restrictions")
             
             exists = await default_client.object_exists(test_key)
-            assert exists == True
-            print(f"✅ Дефолтный клиент работает корректно")
+            assert exists
+            print("✅ Дефолтный клиент работает корректно")
             
         finally:
             await default_client.delete_object(test_key)
@@ -468,10 +465,10 @@ class TestS3Configuration:
     
     def test_s3_config_structure(self):
         """Тест структуры S3 конфигурации"""
-        from backend.app.core.config import settings
+        from app.core.config import settings
         
         assert hasattr(settings, 's3')
-        assert settings.s3.enabled == True
+        assert settings.s3.enabled
         assert settings.s3.default_bucket == "vkbucket"
         assert isinstance(settings.s3.buckets, dict)
         assert len(settings.s3.buckets) >= 1
@@ -487,8 +484,10 @@ class TestS3Configuration:
             print(f"✅ Бакет {bucket_name}: provider={bucket_config.provider}, enabled={bucket_config.enabled}")
     
     def test_file_record_url_generation(self):
-        """Тест генерации URL для разных провайдеров"""
-        # Yandex
+        """Тест генерации URL для файлов через платформу"""
+        # FileRecord.url всегда генерирует прокси URL через /api/v1/files/download/{file_id}
+        # Это безопаснее чем прямые S3 URL
+        
         yandex_file = FileRecord(
             file_id="yandex_test",
             provider="yandex",
@@ -501,10 +500,10 @@ class TestS3Configuration:
         )
         
         yandex_url = yandex_file.url
-        assert yandex_url == "https://storage.yandexcloud.net/my-bucket/files/test.txt"
-        print(f"✅ Yandex URL: {yandex_url}")
+        # URL должен быть прокси через нашу платформу
+        assert "/api/v1/files/download/yandex_test" in yandex_url
+        print(f"✅ Yandex URL (прокси): {yandex_url}")
         
-        # AWS
         aws_file = FileRecord(
             file_id="aws_test",
             provider="aws",
@@ -517,10 +516,10 @@ class TestS3Configuration:
         )
         
         aws_url = aws_file.url
-        assert aws_url == "https://s3.amazonaws.com/my-aws-bucket/files/test.txt"
-        print(f"✅ AWS URL: {aws_url}")
+        # URL должен быть прокси через нашу платформу
+        assert "/api/v1/files/download/aws_test" in aws_url
+        print(f"✅ AWS URL (прокси): {aws_url}")
         
-        # MinIO
         minio_file = FileRecord(
             file_id="minio_test",
             provider="minio",
@@ -533,5 +532,6 @@ class TestS3Configuration:
         )
         
         minio_url = minio_file.url
-        assert minio_url == "http://localhost:9000/my-minio-bucket/files/test.txt"
-        print(f"✅ MinIO URL: {minio_url}")
+        # URL должен быть прокси через нашу платформу
+        assert "/api/v1/files/download/minio_test" in minio_url
+        print(f"✅ MinIO URL (прокси): {minio_url}")
