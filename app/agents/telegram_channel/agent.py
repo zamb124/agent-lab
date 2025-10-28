@@ -12,9 +12,9 @@ class TelegramChannelAgent(ReActAgent):
 
     name = "telegram_channel_agent"
     description = "Помогает создавать и публиковать посты в Telegram канал"
-    
+
     llm_config = {
-        "model": "anthropic/claude-sonnet-4.5",
+        "model": "x-ai/grok-code-fast-1",
         "temperature": 0.3
     }
 

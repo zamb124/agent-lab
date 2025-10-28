@@ -9,6 +9,7 @@ from langchain_core.messages import BaseMessage, AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 
 from app.core.config import get_settings
+from app.core.langfuse_init import get_langfuse_callback
 
 logger = logging.getLogger(__name__)
 
@@ -19,53 +20,53 @@ _global_mock_registry: Dict[str, "MockLLM"] = {}
 
 class MockLLM(BaseChatModel):
     """Mock LLM для тестирования с поддержкой tool calls"""
-    
+
     model_name: str = "mock-gpt-4"
-    
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._responses = {}
         self._tool_responses = {}
         self._default_response = "Mock LLM ответ"
         self._call_count = {}  # Счетчик вызовов для каждого ключа
-    
+
     def set_responses(self, responses: dict):
         """Настройка mock ответов для разных запросов"""
         self._responses = responses
-    
+
     def set_tool_responses(self, tool_responses: dict):
         """
         Настройка mock ответов с tool calls.
-        
+
         Example:
             mock.set_tool_responses({
                 "сложи": {"tool": "add_tool", "args": {"a": 15, "b": 23}},
                 "погода": {"tool": "weather_tool", "args": {"city": "Москва"}}
             })
-        
+
         Логика:
         - При первом вызове с ключом -> возвращает tool_call
         - При втором вызове с тем же ключом -> возвращает текстовый ответ из _responses или default
         """
         self._tool_responses = tool_responses
-    
+
     def set_default_response(self, response: str):
         """Установить дефолтный ответ"""
         self._default_response = response
-    
+
     def reset_call_counts(self):
         """Сбросить счетчики вызовов (для изоляции тестов)"""
         self._call_count = {}
-    
+
     def configure(self, tool_responses: dict = None, responses: dict = None, default_response: str = None):
         """
         Удобный метод для настройки всех mock ответов сразу.
-        
+
         Args:
             tool_responses: Словарь с tool calls
             responses: Словарь с текстовыми ответами
             default_response: Дефолтный ответ
-            
+
         Returns:
             self для цепочки вызовов
         """
@@ -76,17 +77,17 @@ class MockLLM(BaseChatModel):
         if default_response:
             self.set_default_response(default_response)
         return self
-    
+
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         """Синхронная генерация (не используется в async коде)"""
         raise NotImplementedError("Используйте ainvoke")
-    
+
     async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
         """Асинхронная генерация с поддержкой tool calls через счетчик вызовов"""
         from langchain_core.messages import ToolMessage
-        
+
         logger.debug(f"MockLLM._agenerate вызван, messages count: {len(messages) if messages else 0}")
-        
+
         if not messages:
             content = self._default_response
             message = AIMessage(content=content)
@@ -95,7 +96,7 @@ class MockLLM(BaseChatModel):
             # Проверяем последнее сообщение - если это ToolMessage, значит tool только что выполнился
             last_message = messages[-1]
             is_tool_result = isinstance(last_message, ToolMessage)
-            
+
             if is_tool_result:
                 # После tool возвращаем текстовый ответ
                 if last_message.content:
@@ -107,7 +108,7 @@ class MockLLM(BaseChatModel):
             else:
                 # Нет ToolMessage - проверяем нужен ли tool call
                 content_str = last_message.content if isinstance(last_message, BaseMessage) else str(last_message)
-                
+
                 # Проверяем tool responses с использованием счетчика
                 tool_call_found = False
                 logger.info(f"MockLLM: ищем tool для сообщения '{content_str}' в {list(self._tool_responses.keys())}")
@@ -117,7 +118,7 @@ class MockLLM(BaseChatModel):
                         # Получаем счетчик для этого ключа
                         call_count = self._call_count.get(key, 0)
                         self._call_count[key] = call_count + 1
-                        
+
                         if call_count == 0:
                             # Первый вызов - возвращаем tool_call
                             tool_calls = [{
@@ -132,10 +133,10 @@ class MockLLM(BaseChatModel):
                             content = self._responses.get(key, self._default_response)
                             message = AIMessage(content=content)
                             logger.debug(f"MockLLM: [вызов #{call_count}] возвращаем текст для '{key}'")
-                        
+
                         tool_call_found = True
                         break
-                
+
                 if not tool_call_found:
                     # Ищем обычный текстовый ответ
                     content = self._default_response
@@ -147,18 +148,18 @@ class MockLLM(BaseChatModel):
                     message = AIMessage(content=content)
                     if content == self._default_response:
                         logger.debug(f"MockLLM: используем default response")
-        
+
         generation = ChatGeneration(message=message)
-        
+
         return ChatResult(
             generations=[generation],
             llm_output={"model": self.model_name}
         )
-    
+
     @property
     def _llm_type(self) -> str:
         return "mock"
-    
+
     def bind_tools(self, tools, **kwargs):
         """Привязывает tools к MockLLM (просто возвращаем self, tools уже известны LangGraph)"""
         return self
@@ -170,21 +171,21 @@ def get_global_mock_llm(model_name: str = "mock-gpt-4") -> Optional[MockLLM]:
 
 
 def setup_mock_responses(
-    responses: Optional[dict] = None, 
+    responses: Optional[dict] = None,
     tool_responses: Optional[dict] = None,
-    default_response: Optional[str] = None, 
+    default_response: Optional[str] = None,
     model_name: str = "mock-gpt-4"
 ):
     """
     Удобная функция для настройки mock ответов в тестах.
-    
+
     Args:
         responses: Словарь с ключами (подстроки в вопросе) и текстовыми ответами
-        tool_responses: Словарь с ключами и tool calls. 
+        tool_responses: Словарь с ключами и tool calls.
                        Формат: {"ключ": {"tool": "tool_name", "args": {...}}}
         default_response: Дефолтный ответ если ключ не найден
         model_name: Название mock модели
-        
+
     Example:
         setup_mock_responses(
             tool_responses={
@@ -198,20 +199,20 @@ def setup_mock_responses(
     """
     # Создаем mock если его еще нет
     get_llm(model_name)
-    
+
     # Получаем и настраиваем mock
     mock_llm = get_global_mock_llm(model_name)
     if mock_llm:
         # ВАЖНО: сбрасываем счетчики перед каждым тестом
         mock_llm.reset_call_counts()
-        
+
         if responses:
             mock_llm.set_responses(responses)
         if tool_responses:
             mock_llm.set_tool_responses(tool_responses)
         if default_response:
             mock_llm.set_default_response(default_response)
-        
+
         text_count = len(responses) if responses else 0
         tool_count = len(tool_responses) if tool_responses else 0
         logger.info(
@@ -233,7 +234,7 @@ def get_llm(model: Optional[str] = None, **kwargs) -> BaseLLM:
     """
     settings = get_settings()
     model_name = model or settings.llm.default_model
-    
+
     # Mock режим для тестов - ВСЕГДА возвращаем один и тот же экземпляр
     if model_name.startswith("mock-"):
         logger.debug(f"Возвращаем глобальный Mock LLM: {model_name}")
@@ -243,11 +244,11 @@ def get_llm(model: Optional[str] = None, **kwargs) -> BaseLLM:
             _global_mock_registry[model_name] = MockLLM(model_name=model_name)
         # ВАЖНО: всегда возвращаем тот же самый экземпляр
         return _global_mock_registry[model_name]
-    
+
     # Проверяем что OpenRouter включен для реальных моделей
     if not hasattr(settings.llm, 'openrouter'):
         raise ValueError("OpenRouter не настроен в конфигурации")
-    
+
     openrouter_config = settings.llm.openrouter
 
     if not openrouter_config.enabled:
@@ -255,7 +256,7 @@ def get_llm(model: Optional[str] = None, **kwargs) -> BaseLLM:
 
     # Получаем конфигурацию модели
     model_config = settings.llm.models.get(model_name)
-    
+
     # Собираем параметры для LLM
     llm_kwargs = {
         "base_url": openrouter_config.base_url,
@@ -271,7 +272,7 @@ def get_llm(model: Optional[str] = None, **kwargs) -> BaseLLM:
             llm_kwargs["temperature"] = model_config.temperature
         if model_config.max_tokens is not None:
             llm_kwargs["max_tokens"] = model_config.max_tokens
-    
+
     # Добавляем OpenRouter-специфичные headers для статистики
     llm_kwargs["default_headers"] = {
         "HTTP-Referer": openrouter_config.site_url,
@@ -282,6 +283,19 @@ def get_llm(model: Optional[str] = None, **kwargs) -> BaseLLM:
     for key, value in kwargs.items():
         if key not in ["api_key", "base_url"]:
             llm_kwargs[key] = value
+
+    # Добавляем Langfuse callback для трейсинга
+    # langfuse_callback = get_langfuse_callback()
+    # if langfuse_callback:
+    #     # Если уже есть callbacks - добавляем к ним
+    #     if "callbacks" in llm_kwargs:
+    #         if isinstance(llm_kwargs["callbacks"], list):
+    #             llm_kwargs["callbacks"].append(langfuse_callback)
+    #         else:
+    #             llm_kwargs["callbacks"] = [llm_kwargs["callbacks"], langfuse_callback]
+    #     else:
+    #         llm_kwargs["callbacks"] = [langfuse_callback]
+    #     logger.debug(f"Добавлен Langfuse callback для модели {model_name}")
 
     logger.info(f"Создаем LLM через OpenRouter: {model_name}")
 

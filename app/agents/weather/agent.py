@@ -19,7 +19,7 @@ class TravelInfoAgent(ReActAgent):
     description = "Определяет куда пользователь хочет поехать в путешествие"
     is_public = True
 
-    llm_config = {"model": "anthropic/claude-sonnet-4.5", "temperature": 0.3}
+    llm_config = {"model": "x-ai/grok-code-fast-1", "temperature": 0.3}
 
     prompt = """
 Ты специалист по определению направлений путешествий.
@@ -63,7 +63,7 @@ class WeatherAgent(ReActAgent):
     )
 
     llm_config = {
-        "model": "anthropic/claude-sonnet-4.5",
+        "model": "x-ai/grok-code-fast-1",
         "temperature": 0.3
     }
 

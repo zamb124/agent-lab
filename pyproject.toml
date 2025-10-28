@@ -16,6 +16,8 @@ dependencies = [
     "langchain-community>=0.0.20",
     # LLM Integrations
     "langchain-openai>=0.0.8",
+    # Langfuse for LLM Observability
+    "langfuse>=2.0.0",
     # Data Validation & Settings
     "pydantic[email]>=2.5.0",
     "pydantic-settings>=2.1.0",
