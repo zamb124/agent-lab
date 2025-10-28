@@ -62,12 +62,12 @@ def initialize_system_container() -> "Container":
 
 class Container:
     """Контейнер зависимостей с ленивой инициализацией сервисов"""
-    
+
     def __init__(self):
         # Базовые зависимости (инициализируются сразу)
         self.engine: Optional["AsyncEngine"] = None
         self._session_factory: Optional["async_sessionmaker"] = None
-        
+
         # Сервисы с ленивой инициализацией
         self._storage: Optional["Storage"] = None
         self._agent_repository: Optional["AgentRepository"] = None
@@ -87,7 +87,7 @@ class Container:
         self._payment_service: Optional["PaymentService"] = None
         self._interface_factory: Optional["InterfaceFactory"] = None
         self._migrator: Optional["Migrator"] = None
-        
+
         # Флаг инициализации базовых зависимостей
         self._initialized = False
 
@@ -99,7 +99,7 @@ class Container:
 
     def __getattr__(self, name: str):
         """Ленивая инициализация сервисов при обращении к атрибутам"""
-        
+
         # Маппинг имен атрибутов на приватные поля
         service_map = {
             'storage': '_storage',
@@ -121,94 +121,94 @@ class Container:
             'interface_factory': '_interface_factory',
             'migrator': '_migrator',
         }
-        
+
         if name not in service_map:
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
-        
+
         private_name = service_map[name]
         service = getattr(self, private_name)
-        
+
         if service is None:
             # Инициализируем сервис
             self._ensure_initialized()
-            
+
             if name == 'storage':
                 from app.db.repositories import Storage
                 service = Storage()
                 # Устанавливаем session_factory из контейнера
                 service.session_factory = self._session_factory
-                
+
             elif name == 'agent_repository':
                 from app.db.repositories import AgentRepository
                 service = AgentRepository(self.storage)
-                
+
             elif name == 'flow_repository':
                 from app.db.repositories import FlowRepository
                 service = FlowRepository(self.storage)
-                
+
             elif name == 'task_repository':
                 from app.db.repositories import TaskRepository
                 service = TaskRepository(self.storage)
-                
+
             elif name == 'session_repository':
                 from app.db.repositories import SessionRepository
                 service = SessionRepository(self.storage)
-                
+
             elif name == 'tool_repository':
                 from app.db.repositories import ToolRepository
                 service = ToolRepository(self.storage)
-                
+
             elif name == 'mcp_server_repository':
                 from app.db.repositories.mcp_repository import MCPServerRepository
                 service = MCPServerRepository(self.storage)
-                
+
             elif name == 'agent_factory':
                 from app.core.agent_factory import AgentFactory
                 service = AgentFactory(self.agent_repository)
-                
+
             elif name == 'tool_factory':
                 from app.core.tool_factory import ToolFactory
                 service = ToolFactory()
-                
+
             elif name == 'flow_factory':
                 from app.core.flow_factory import FlowFactory
                 service = FlowFactory(self.flow_repository, self.session_repository, self.storage)
-                
+
             elif name == 'graph_builder':
                 from app.core.graph_builder import GraphBuilder
                 service = GraphBuilder()
-                
+
             elif name == 'variables_service':
                 from app.services.variables_service import VariablesService
                 service = VariablesService(self.storage)
-                
+
             elif name == 's3_factory':
                 from app.core.core_clients.s3_client import S3ClientFactory
                 service = S3ClientFactory()
-                
+
             elif name == 'auth_service':
                 from app.identity.auth_service import AuthService
                 service = AuthService(self.storage)
-                
+
             elif name == 'billing_service':
                 from app.services.billing_service import BillingService
                 service = BillingService(self.storage)
-                
+
             elif name == 'payment_service':
                 from app.services.payment_service import PaymentService
                 service = PaymentService(self.storage)
-                
+
             elif name == 'interface_factory':
                 from app.interfaces.factory import InterfaceFactory
                 service = InterfaceFactory(self.storage, self.flow_repository)
-                
+
             elif name == 'migrator':
                 from app.core.migration import Migrator
                 service = Migrator()
-            
+
             # Сохраняем инициализированный сервис
             setattr(self, private_name, service)
-        
+
         return service
 
     @property
@@ -223,14 +223,14 @@ class Container:
                 "Используйте await get_session_factory() для инициализации или "
                 "обратитесь к storage через get_container().storage"
             )
-        
+
         return self._session_factory
 
 
 async def initialize_context_services_async(context) -> None:
     """Создает контейнер с ленивой инициализацией сервисов"""
     from app.db.database import get_session_factory
-    
+
     container = Container()
     # Инициализируем session_factory для контекста
     container._session_factory = await get_session_factory()
@@ -260,18 +260,18 @@ def initialize_context_services(context) -> None:
 def get_container() -> Container:
     """Получает контейнер зависимостей из текущего контекста"""
     from app.core.context import get_context
-    
+
     context = get_context()
     if context is None:
         raise RuntimeError(
             "Контекст не установлен! Используйте set_context() перед использованием get_container(). "
             "В тестах контекст создается автоматически через фикстуру test_context."
         )
-    
+
     if context.container is None:
         raise RuntimeError(
             "Container не инициализирован в контексте! "
             "Вызовите initialize_context_services(context) после создания контекста."
         )
-    
+
     return context.container

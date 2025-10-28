@@ -168,7 +168,7 @@
         "output_cost_per_token": 0.00025
       }
     },
-    "default_model": "anthropic/claude-sonnet-4.5"
+    "default_model": "x-ai/grok-code-fast-1"
   },
   "worker": {
     "max_workers": 6,
@@ -277,5 +277,14 @@
     "tavily_api_key": "your-tavily-api-key-here",
     "max_steps": 6,
     "max_results": 10
+  },
+  "langfuse": {
+    "enabled": false,
+    "host": "http://localhost:3000",
+    "public_key": "your_public_key_here",
+    "secret_key": "your_secret_key_here",
+    "sample_rate": 1.0,
+    "flush_interval": 1,
+    "flush_at": 1
   }
 }

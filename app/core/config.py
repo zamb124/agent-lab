@@ -75,7 +75,7 @@ class LLMConfig(BaseModel):
 
     openrouter: Optional[OpenRouterConfig] = None
     models: Dict[str, ModelConfig] = Field(default_factory=dict)
-    default_model: str = "anthropic/claude-sonnet-4.5"
+    default_model: str = "x-ai/grok-code-fast-1"
     default_summarization_model: str = "google/gemini-2.5-flash"  # Дефолтная модель для суммаризации
 
 
@@ -201,6 +201,19 @@ class TelegramConfig(BaseModel):
     bots: Dict[str, str] = Field(default_factory=dict)  # bot_name -> token
 
 
+class LangfuseConfig(BaseModel):
+    """Конфигурация Langfuse для мониторинга LLM"""
+
+    enabled: bool = False
+    host: Optional[str] = None  # Для self-hosted, например "http://localhost:3000"
+    public_key: Optional[str] = None
+    secret_key: Optional[str] = None
+    # Дополнительные настройки для тонкой настройки
+    sample_rate: float = 1.0  # Доля запросов для трейсинга (0.0-1.0)
+    flush_interval: int = 1  # Интервал отправки данных в секундах
+    flush_at: int = 1  # Минимальное количество событий перед отправкой
+
+
 class WhatsAppConfig(BaseModel):
     """Конфигурация WhatsApp интеграции"""
 
@@ -306,22 +319,22 @@ class MigrationSettings(BaseModel):
 
 class RAGProviderConfig(BaseModel):
     """Конфигурация одного RAG провайдера"""
-    
+
     enabled: bool = False
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     timeout: int = 60
-    
+
     embedding_provider: str = "openai"
     embedding_model: str = "text-embedding-3-small"
     embedding_api_key: Optional[str] = None
-    
+
     extra_params: Dict[str, Any] = Field(default_factory=dict)
 
 
 class RAGConfig(BaseModel):
     """Конфигурация RAG системы"""
-    
+
     enabled: bool = False
     default_provider: str = "agentset"
     providers: Dict[str, RAGProviderConfig] = Field(default_factory=dict)
@@ -329,18 +342,18 @@ class RAGConfig(BaseModel):
 
 class SGRConfig(BaseModel):
     """Конфигурация SGR Deep Research сервиса"""
-    
+
     enabled: bool = False
     base_url: str = "http://localhost:8010"
     api_key: Optional[str] = None
     timeout: float = 300.0
-    
+
     llm_base_url: str = "https://api.openai.com/v1"
     llm_api_key: Optional[str] = None
     llm_model: str = "gpt-4o-mini"
     llm_max_tokens: int = 8000
     llm_temperature: float = 0.4
-    
+
     tavily_api_key: Optional[str] = None
     max_steps: int = 6
     max_results: int = 10
@@ -348,7 +361,7 @@ class SGRConfig(BaseModel):
 
 class LegalConfig(BaseModel):
     """Конфигурация юридической информации компании"""
-    
+
     company_name_ru: str = "ООО «Энжилабс»"
     company_name_en: str = "Angilabs LLC"
     legal_form_ru: str = "Общество с ограниченной ответственностью"
@@ -385,6 +398,7 @@ class Settings(BaseSettings):
     fashn: FashnConfig = Field(default_factory=FashnConfig)
     cloud_voice: CloudVoiceConfig = Field(default_factory=CloudVoiceConfig)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
+    langfuse: LangfuseConfig = Field(default_factory=LangfuseConfig)
     whatsapp: WhatsAppConfig = Field(default_factory=WhatsAppConfig)
     nano_banana: NanoBananaConfig = Field(default_factory=NanoBananaConfig)
     amocrm: AmoCRMConfig = Field(default_factory=AmoCRMConfig)
@@ -398,12 +412,12 @@ class Settings(BaseSettings):
     def __init__(self, **data):
         # Загружаем JSON конфигурацию
         json_config = load_merged_config()
-        
+
         # Объединяем: JSON имеет низкий приоритет, data - высокий
         # НО! super().__init__ читает env переменные которые имеют еще более высокий приоритет
         # Поэтому передаем только JSON, а env переменные Pydantic прочитает сам
         merged_data = {**json_config, **data}
-        
+
         # BaseSettings автоматически применит env переменные поверх merged_data
         super().__init__(**merged_data)
 
