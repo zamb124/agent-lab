@@ -4,7 +4,6 @@ Nano Banana клиент для генерации изображений чер
 """
 
 import logging
-import re
 import base64
 from typing import List, Optional
 
@@ -100,16 +99,16 @@ class NanoBananaClient:
             "content": content
         }])
         
-        # Парсим file_ids из ответа (ChatOpenAIWithBilling добавил описания файлов)
-        # Формат: 📎 Файл: name (ID: file_id, [Скачать](url), ...)
-        pattern = r'📎 Файл: [^(]+ \(ID: ([^,]+),'
-        file_ids = re.findall(pattern, response.content)
+        # Парсим file_ids из ответа используя FileProcessor
+        from ..file_processor import FileProcessor
+        file_info_list = FileProcessor.extract_file_info_from_message(response.content)
+        file_ids = [info["file_id"] for info in file_info_list if info.get("file_id")]
         
         if file_ids:
             logger.info(f"✅ Сгенерировано {len(file_ids)} изображений: {file_ids}")
         else:
             logger.warning(f"⚠️ Не удалось найти file_id в ответе LLM")
-            logger.debug(f"Response content: {response.content}")
+            logger.info(f"Response content: {response.content[:500]}")
         
         return file_ids
 

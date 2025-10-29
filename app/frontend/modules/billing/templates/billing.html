@@ -4,9 +4,7 @@
 {% block title %}{{ t('billing.title') }} - {{ t('common.app_name') }}{% endblock %}
 
 {% block head %}
-<script>
-    window.__PLUGINS__ = {{ plugin_metadata | default([]) | tojson | safe }};
-</script>
+{# Метаданные плагинов теперь в base.html #}
 <link rel="stylesheet" href="/static/billing/css/billing.css">
 {% endblock %}
 

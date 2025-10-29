@@ -35,9 +35,14 @@ async def render_with_dashboard(
         HTMLResponse с фрагментом (для HTMX) или полным dashboard (для прямого перехода)
     """
     if is_htmx_request(request):
-        return templates.TemplateResponse(content_template, context)
+        context_with_request = {**context}
+        if "request" not in context_with_request:
+            context_with_request["request"] = request
+        
+        content_html = templates.get_template(content_template).render(**context_with_request)
+        return HTMLResponse(content=content_html)
     
-    plugin_data = get_plugins_for_template()
+    plugin_data = get_plugins_for_template(request)
     
     return templates.TemplateResponse(
         "dashboard.html",

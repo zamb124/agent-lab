@@ -4,11 +4,7 @@
 {% block title %}{{ t('builder.title') }} - {{ t('common.app_name') }}{% endblock %}
 
 {% block head %}
-<!-- Метаданные плагинов для JS -->
-<script>
-    window.__PLUGINS__ = {{ plugin_metadata | default([]) | tojson | safe }};
-</script>
-
+{# Метаданные плагинов теперь в base.html #}
 <link rel="stylesheet" href="/static/builder/css/builder.css">
 <link rel="stylesheet" href="/static/builder/css/element-selector.css">
 {% endblock %}

@@ -50,7 +50,7 @@ async def billing_index(request: Request):
     if company.monthly_budget > 0:
         budget_percent = min(100, (company.current_month_spent / company.monthly_budget) * 100)
     
-    plugin_data = get_plugins_for_template()
+    plugin_data = get_plugins_for_template(request)
     
     return templates.TemplateResponse(
         "billing.html",

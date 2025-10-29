@@ -42,6 +42,66 @@ class BotsPlugin(Plugin):
         }
     ]
     
+    header_actions = [
+        {
+            "id": "bots_save",
+            "label": "Сохранить",
+            "icon": "bi-device-floppy",
+            "action": "bots:save",
+            "urls": [
+                "/frontend/bots/*/details"
+            ],
+            "tooltip": "Сохранить изменения бота",
+            "order": 5
+        },
+        {
+            "id": "bots_copy_id",
+            "label": "Копировать ID",
+            "icon": "bi-copy",
+            "action": "bots:copy_id",
+            "urls": [
+                "/frontend/bots/*/details"
+            ],
+            "tooltip": "Скопировать ID бота",
+            "order": 7
+        },
+        {
+            "id": "bots_delete",
+            "label": "Удалить",
+            "icon": "bi-trash",
+            "action": "bots:delete",
+            "urls": [
+                "/frontend/bots/*/details"
+            ],
+            "tooltip": "Удалить бота",
+            "order": 6
+        },
+        {
+            "id": "bots_create",
+            "label": "Создать бота",
+            "icon": "bi-plus-circle",
+            "action": "bots:create",
+            "urls": [
+                "/frontend/bots/",
+                "/frontend/bots"
+            ],
+            "tooltip": "Создать нового бота",
+            "order": 10
+        },
+        {
+            "id": "bots_refresh",
+            "label": "Обновить",
+            "icon": "bi-arrow-clockwise",
+            "action": "bots:refresh",
+            "urls": [
+                "/frontend/bots/",
+                "/frontend/bots"
+            ],
+            "tooltip": "Обновить список ботов",
+            "order": 8
+        }
+    ]
+    
     def get_router(self):
         from .router import router
         return router

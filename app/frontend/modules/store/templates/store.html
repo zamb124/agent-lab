@@ -7,16 +7,6 @@
     {{ t('store.title') }}
 </h1>
 
-<div class="header-right" hx-swap-oob="true">
-    {{ c.button('',
-        variant='ghost',
-        size='sm',
-        icon='sun',
-        data_tooltip=t('dashboard.header.theme_toggle'),
-        onclick='document.querySelector(\'[data-theme-toggle]\').click()'
-    ) }}
-</div>
-
 <div class="store-container" 
      id="store-list-view"
      hx-get="/frontend/store/list" 

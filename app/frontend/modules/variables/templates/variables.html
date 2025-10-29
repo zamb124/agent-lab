@@ -7,19 +7,6 @@
     Ключи и Переменные
 </h1>
 
-<div class="header-right" hx-swap-oob="true">
-    {{ c.button('',
-        variant='primary',
-        size='sm',
-        icon='plus-lg',
-        onclick='openAddVariableModal()',
-        data_tooltip='Создать переменную'
-    ) }}
-    <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="Переключить тему">
-        <i class="bi bi-sun"></i>
-    </button>
-</div>
-
 <div hx-get="/frontend/variables/list" 
      hx-trigger="load" 
      hx-target="this" 

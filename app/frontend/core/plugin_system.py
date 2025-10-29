@@ -48,6 +48,61 @@ class Plugin(ABC):
         """Хук при отключении плагина"""
         pass
     
+    def get_header_actions(self, current_url: Optional[str] = None, user_role: Optional[str] = None, company_subdomain: Optional[str] = None) -> Optional[List[Dict[str, Any]]]:
+        """Получить динамические header actions с учетом контекста
+        
+        Переопределите этот метод для возврата динамических действий в зависимости от текущей страницы.
+        
+        Args:
+            current_url: Текущий URL пути
+            user_role: Роль пользователя
+            company_subdomain: Subdomain компании
+        
+        Returns:
+            Список действий или None для использования статических header_actions
+        """
+        return None
+    
+    async def modify_template_context(self, context: Dict[str, Any], request: Optional[Any] = None) -> Dict[str, Any]:
+        """Хук для модификации контекста шаблона перед рендерингом
+        
+        Позволяет плагину изменить или добавить данные в контекст шаблона.
+        
+        Args:
+            context: Словарь контекста для шаблона
+            request: FastAPI Request объект
+        
+        Returns:
+            Модифицированный контекст
+        """
+        return context
+    
+    def get_sidebar_modifications(self) -> Dict[str, Any]:
+        """Получить модификации для sidebar
+        
+        Возвращает словарь с опциями для изменения рендеринга sidebar:
+        - before_items: HTML для вставки перед элементами
+        - after_items: HTML для вставки после элементов
+        - custom_css: Дополнительные CSS классы
+        
+        Returns:
+            Словарь с модификациями или пустой dict
+        """
+        return {}
+    
+    def get_header_modifications(self) -> Dict[str, Any]:
+        """Получить модификации для header
+        
+        Возвращает словарь с опциями для изменения рендеринга header:
+        - before_actions: HTML для вставки перед действиями
+        - after_actions: HTML для вставки после действий
+        - custom_css: Дополнительные CSS классы
+        
+        Returns:
+            Словарь с модификациями или пустой dict
+        """
+        return {}
+    
     def get_static_paths(self) -> Dict[str, List[str]]:
         """Получить пути к статическим файлам"""
         css_paths = [f"/static/{self.name}/css/{f}" for f in self.static_css]
@@ -138,11 +193,62 @@ class PluginRegistry:
             widgets.extend(plugin.dashboard_widgets)
         return sorted(widgets, key=lambda x: x.get('order', 100))
     
-    def get_header_actions(self) -> List[Dict[str, Any]]:
-        """Собрать все действия для header"""
+    def _match_url_pattern(self, pattern: str, url: str) -> bool:
+        """Проверяет соответствует ли URL паттерну
+        
+        Правила:
+        - Точное совпадение: '/frontend/bots/' == '/frontend/bots/'
+        - С вариацией слэша: '/frontend/bots/' == '/frontend/bots' и наоборот
+        - Паттерны с *: '/frontend/bots/*/details' матчит '/frontend/bots/123/details'
+        - Если паттерн заканчивается на /: '/frontend/bots/' матчит все URL начинающиеся с '/frontend/bots/'
+        - Если паттерн без /: '/frontend/bots' матчит только '/frontend/bots' и '/frontend/bots/'
+        """
+        if pattern == url:
+            return True
+        
+        if pattern.endswith('/') and url == pattern.rstrip('/'):
+            return True
+        
+        if not pattern.endswith('/') and url == pattern + '/':
+            return True
+        
+        if '*' in pattern:
+            import re
+            regex_pattern = pattern.replace('*', '[^/]+')
+            regex_pattern = regex_pattern.replace('/', r'\/')
+            regex_pattern = f'^{regex_pattern}$'
+            return bool(re.match(regex_pattern, url))
+        
+        # Если паттерн заканчивается на /, то URL должен начинаться с него (для всех подпутей)
+        if pattern.endswith('/'):
+            return url.startswith(pattern)
+        
+        return False
+    
+    def get_header_actions(self, user_role: Optional[str] = None, company_subdomain: Optional[str] = None, current_url: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Собрать все действия для header с поддержкой контекста и фильтрации по URL"""
         actions = []
+        
         for plugin in self.get_enabled():
-            actions.extend(plugin.header_actions)
+            if user_role and plugin.requires_role and plugin.requires_role != user_role:
+                continue
+            if plugin.requires_company and plugin.requires_company != company_subdomain:
+                continue
+            
+            for action in plugin.header_actions:
+                action_urls = action.get('urls', [])
+                
+                if not action_urls:
+                    actions.append(action)
+                    continue
+                
+                if not current_url:
+                    continue
+                
+                matches = any(self._match_url_pattern(pattern, current_url) for pattern in action_urls)
+                if matches:
+                    actions.append(action)
+        
         return sorted(actions, key=lambda x: x.get('order', 100))
     
     def get_static_files(self) -> Dict[str, List[str]]:

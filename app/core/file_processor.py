@@ -226,20 +226,28 @@ class FileProcessor:
         if provider:
             # Поиск по конкретному провайдеру
             key = f"s3:{provider}:{file_id}"
+            logger.debug(f"🔍 Поиск файла {file_id} по ключу: {key}")
             data = await self.storage.get(key)
 
             if data:
+                logger.debug(f"✅ Файл {file_id} найден по ключу: {key}")
                 return FileRecord(**json.loads(data))
+            else:
+                logger.debug(f"❌ Файл {file_id} не найден по ключу: {key}")
         else:
             # Поиск по всем провайдерам
+            logger.debug(f"🔍 Поиск файла {file_id} по всем провайдерам")
             for bucket_name, bucket_config in settings.s3.buckets.items():
                 if bucket_config.enabled:
                     key = f"s3:{bucket_config.provider}:{file_id}"
+                    logger.debug(f"  Проверка ключа: {key} (bucket: {bucket_name}, provider: {bucket_config.provider})")
                     data = await self.storage.get(key)
 
                     if data:
+                        logger.debug(f"✅ Файл {file_id} найден по ключу: {key}")
                         return FileRecord(**json.loads(data))
 
+        logger.warning(f"⚠️ Файл {file_id} не найден ни по одному ключу")
         return None
 
     async def delete_file(self, file_id: str, provider: Optional[str] = None) -> bool:
@@ -291,14 +299,22 @@ class FileProcessor:
             file_record: Запись о файле
 
         Returns:
-            Отформатированное сообщение
+            Отформатированное сообщение в формате [FILE]...[/FILE]
         """
         size_mb = file_record.file_size / (1024 * 1024)
         size_str = (
             f"{size_mb:.2f} MB" if size_mb >= 1 else f"{file_record.file_size} байт"
         )
 
-        return f"📎 [{file_record.original_name}]({file_record.url}) ({size_str})"
+        return (
+            f"[FILE] "
+            f"Файл: {file_record.original_name} "
+            f"(ID: {file_record.file_id}, "
+            f"URL: {file_record.url}, "
+            f"тип: {file_record.content_type}, "
+            f"размер: {size_str}) "
+            f"[/FILE]"
+        )
 
     @staticmethod
     def extract_file_info_from_message(message: str) -> list[Dict[str, str]]:
@@ -336,7 +352,18 @@ class FileProcessor:
                 "size": match.group(5).strip(),
             })
         
-        # Старый формат: [FILE] 📎 Файл: name (ID: id, URL: url, тип: type, размер: size) [/FILE]
+        # Формат: [FILE] Файл: name (ID: id, URL: url, тип: type, размер: size) [/FILE]
+        current_pattern = r"\[FILE\]\s*Файл: ([^(]+) \(ID: ([^,]+),\s*URL: ([^,]+),\s*тип: ([^,]+),\s*размер: ([^)]+)\)\s*\[/FILE\]"
+        for match in re.finditer(current_pattern, message):
+            files.append({
+                "name": match.group(1).strip(),
+                "file_id": match.group(2).strip(),
+                "url": match.group(3).strip(),
+                "content_type": match.group(4).strip(),
+                "size": match.group(5).strip(),
+            })
+        
+        # Старый формат с эмодзи: [FILE] 📎 Файл: name (ID: id, URL: url, тип: type, размер: size) [/FILE]
         old_pattern = r"\[FILE\]\s*📎 Файл: ([^(]+) \(ID: ([^,]+), URL: ([^,]+), тип: ([^,]+), размер: ([^)]+)\)\s*\[/FILE\]"
         for match in re.finditer(old_pattern, message):
             files.append({

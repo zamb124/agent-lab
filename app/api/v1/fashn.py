@@ -388,6 +388,7 @@ A single, high-quality edited image that is 98-99.5% identical to the original I
                 }
             }
 
+            storage = get_container().storage
             await storage.set(try_on_id, json.dumps(try_on_record))
             logger.info(f"✅ Примерка сохранена в историю: {try_on_id}")
         else:

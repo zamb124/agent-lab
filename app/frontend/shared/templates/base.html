@@ -35,6 +35,27 @@
     <!-- Code Editor CSS (для работы с Ace Editor) -->
     <link rel="stylesheet" href="/static/css/components/code-editor.css">
 
+    <!-- Метаданные плагинов для JS (централизованные) -->
+    {% if plugin_metadata is defined %}
+    <script>
+        window.__PLUGINS__ = {{ plugin_metadata | default([]) | tojson | safe }};
+    </script>
+    {% endif %}
+
+    <!-- Динамические CSS плагинов -->
+    {% if static_files is defined and static_files.css %}
+    {% for css in static_files.css %}
+    <link rel="stylesheet" href="{{ css }}">
+    {% endfor %}
+    {% endif %}
+
+    <!-- Динамические JS плагинов -->
+    {% if static_files is defined and static_files.js %}
+    {% for js in static_files.js %}
+    <script src="{{ js }}" type="module"></script>
+    {% endfor %}
+    {% endif %}
+
     {% block head %}{% endblock %}
 </head>
 <body class="min-h-screen bg-primary" hx-ext="ws" ws-connect="/ws/notifications">

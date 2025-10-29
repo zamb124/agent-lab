@@ -48,6 +48,16 @@ class APP {
             console.log('🔄 Инициализируем chat manager...');
             this.chatManager.init();
             
+            // Обработчик HTMX для переинициализации кнопки темы
+            // Используем afterSettle для гарантии что DOM обновлен
+            document.addEventListener('htmx:afterSettle', (e) => {
+                // Проверяем был ли обновлен header
+                const headerRight = document.getElementById('header-right');
+                if (headerRight && this.themeManager && this.themeManager.reinitialize) {
+                    this.themeManager.reinitialize();
+                }
+            });
+            
             // Создаем глобальный API для чата
             this.chat = {
                 open: async (options) => await this.chatManager.open(options),

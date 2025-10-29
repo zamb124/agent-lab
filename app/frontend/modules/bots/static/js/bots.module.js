@@ -33,6 +33,7 @@ export default class BotsModule {
         this.remigration = new RemigrationManager(app);
         
         app.botsModule = this;
+        app.bots = this;
     }
     
     async init() {
@@ -40,6 +41,7 @@ export default class BotsModule {
         
         this.setupGlobalFunctions();
         this.setupEventListeners();
+        this.setupHeaderActions();
         
         return this;
     }
@@ -90,6 +92,76 @@ export default class BotsModule {
         window.copyToClipboard = (elementIdOrText) => copyToClipboard(elementIdOrText, this.app);
         window.togglePlatformCollapse = (platformName) => togglePlatformCollapse(platformName);
         window.testApiEndpoint = (flowId) => testApiEndpoint(flowId, this.app.authToken);
+    }
+    
+    setupHeaderActions() {
+        document.addEventListener('click', (e) => {
+            const action = e.target.closest('.btn-plugin-action[data-action]');
+            if (!action) return;
+            
+            const actionType = action.getAttribute('data-action');
+            if (!actionType || !actionType.startsWith('bots:')) return;
+            
+            e.preventDefault();
+            
+            const [, method] = actionType.split(':');
+            
+            switch(method) {
+                case 'save':
+                    const botId = this.getCurrentBotId();
+                    if (botId) this.saveBot(botId);
+                    break;
+                    
+                case 'copy_id':
+                    const botIdToCopy = this.getCurrentBotId();
+                    if (botIdToCopy) {
+                        navigator.clipboard.writeText(botIdToCopy).then(() => {
+                            if (this.app && this.app.showNotification) {
+                                this.app.showNotification('ID скопирован', 'success');
+                            }
+                        });
+                    }
+                    break;
+                    
+                case 'delete':
+                    const botIdToDelete = this.getCurrentBotId();
+                    if (botIdToDelete && confirm(`Вы уверены, что хотите удалить бота ${botIdToDelete}?`)) {
+                        this.deleteBot(botIdToDelete);
+                    }
+                    break;
+                    
+                case 'create':
+                    this.modal.expand('new');
+                    break;
+                    
+                case 'refresh':
+                    const content = document.getElementById('content');
+                    if (content) {
+                        content.dispatchEvent(new Event('htmx:refresh'));
+                    }
+                    break;
+            }
+        });
+    }
+    
+    getCurrentBotId() {
+        const modal = document.getElementById('bot-expanded-modal');
+        if (modal && modal.style.display === 'flex') {
+            const botDetails = document.querySelector('#modal-bot-details');
+            if (botDetails) {
+                const flowIdInput = botDetails.querySelector('input[name="flow_id"], input[id*="flow_id"]');
+                if (flowIdInput) {
+                    return flowIdInput.value;
+                }
+                const form = botDetails.querySelector('form');
+                if (form) {
+                    const formData = new FormData(form);
+                    return formData.get('flow_id') || this.modal.currentBotModal || null;
+                }
+                return this.modal.currentBotModal || null;
+            }
+        }
+        return null;
     }
     
     setupEventListeners() {
@@ -160,6 +232,44 @@ export default class BotsModule {
     
     initBotSettings() {
         this.settingsManager.init();
+    }
+    
+    saveBot(botId) {
+        if (botId === 'new') {
+            this.saver.save('new');
+        } else {
+            this.saver.save(botId);
+        }
+    }
+    
+    async deleteBot(botId) {
+        if (!botId || botId === 'new') {
+            console.warn('Cannot delete: invalid bot ID');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/v1/flows/${botId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${this.app.authToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                this.app.showNotification('Бот успешно удален', 'success');
+                setTimeout(() => {
+                    window.location.href = '/frontend/bots/';
+                }, 1000);
+            } else {
+                const error = await response.json().catch(() => ({ detail: 'Ошибка удаления' }));
+                this.app.showNotification(error.detail || 'Ошибка при удалении бота', 'danger');
+            }
+        } catch (error) {
+            console.error('Ошибка при удалении бота:', error);
+            this.app.showNotification('Ошибка при удалении бота', 'danger');
+        }
     }
     
     destroy() {
