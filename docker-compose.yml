@@ -1,8 +1,6 @@
 version: '3.8'
 
 # Include Langfuse services
-include:
-  - docker-compose.langfuse.yml
 
 services:
   # PostgreSQL база данных (только для локальной разработки)
