@@ -75,7 +75,7 @@ export class AgentNode extends BaseNode {
         return `
             <div class="node-simple-content">
                 <div class="node-simple-icon agent">
-                    <i class="bi bi-robot"></i>
+                    <i class="ti ti-robot"></i>
                 </div>
                 <div class="node-simple-info">
                     <div class="node-simple-title">${this.escapeHtml(displayName)}</div>

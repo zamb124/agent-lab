@@ -4,7 +4,7 @@
 <div class="abilities-container">
     <div class="abilities-column">
         <div class="abilities-column-header">
-            <i class="bi bi-robot"></i>
+            <i class="ti ti-robot"></i>
             <h3>{{ t('abilities.agents') }}</h3>
             <span class="count-badge">{{ agents|length }}</span>
         </div>
@@ -15,7 +15,7 @@
             <div class="ability-card" data-type="agent" data-id="{{ agent.id }}" onclick="app.abilities.showDetails('{{ agent.id }}', 'agent')">
                 <div class="ability-card-header">
                     <div class="ability-icon agent-icon">
-                        <i class="bi bi-robot"></i>
+                        <i class="ti ti-robot"></i>
                     </div>
                     <div class="ability-badge agent-badge">
                         {{ agent.agent_type }}
@@ -42,7 +42,7 @@
     
     <div class="abilities-column">
         <div class="abilities-column-header">
-            <i class="bi bi-tools"></i>
+            <i class="ti ti-tools"></i>
             <h3>{{ t('abilities.tools') }}</h3>
             <span class="count-badge">{{ tools|length }}</span>
         </div>
@@ -53,7 +53,7 @@
             <div class="ability-card" data-type="tool" data-id="{{ tool.id }}" onclick="app.abilities.showDetails('{{ tool.id }}', 'tool')">
                 <div class="ability-card-header">
                     <div class="ability-icon tool-icon">
-                        <i class="bi bi-tools"></i>
+                        <i class="ti ti-tools"></i>
                     </div>
                     {% if tool.cost > 0 %}
                     <div class="ability-badge cost-badge">

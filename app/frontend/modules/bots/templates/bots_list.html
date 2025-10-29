@@ -5,7 +5,7 @@
     {# Карточка "Создать бота" #}
     <div class="card bot-card bot-card-create" onclick="createBot()">
         <div class="bot-card-body d-flex flex-col align-items-center justify-content-center gap-3 bot-create-card-body">
-            <i class="bi bi-plus-circle icon-xl text-primary bot-create-icon"></i>
+            <i class="ti ti-plus-circle icon-xl text-primary bot-create-icon"></i>
             <div class="text-center">
                 <h4 class="m-0" data-i18n="bots.create_bot">Создать бота</h4>
                 <small class="text-muted">Добавить нового бота</small>
@@ -18,7 +18,7 @@
     <div class="card bot-card" data-bot-id="{{ bot.flow_id }}" onclick="expandBot('{{ bot.flow_id }}')">
         <div class="bot-card-header">
             <div class="card-icon">
-                <i class="bi bi-robot"></i>
+                <i class="ti ti-robot"></i>
             </div>
             <div class="bot-info">
                 <h3 class="bot-name">{{ bot.name }}</h3>
@@ -36,7 +36,7 @@
                         {% endfor %}
                     {% else %}
                         <span class="platform-empty">
-                            <i class="bi bi-inbox"></i>
+                            <i class="ti ti-inbox"></i>
                             <span>Нет канала</span>
                         </span>
                     {% endif %}
@@ -45,7 +45,7 @@
             
             <div class="bot-meta">
                 <span class="meta-item">
-                    <i class="bi bi-diagram-3"></i>
+                    <i class="ti ti-hierarchy"></i>
                     <span data-i18n="bots.agent">Агент:</span> <code>{{ bot.entry_point }}</code>
                 </span>
             </div>

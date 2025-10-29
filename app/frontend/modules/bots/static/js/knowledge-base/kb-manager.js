@@ -28,7 +28,7 @@ export class KnowledgeBaseManager {
             if (documents.length === 0) {
                 listContainer.innerHTML = `
                     <div class="empty-state">
-                        <i class="bi bi-inbox"></i>
+                        <i class="ti ti-inbox"></i>
                         <p>В базе знаний пока нет документов</p>
                         <p class="text-muted">Загрузите документы чтобы бот мог использовать их для ответов</p>
                     </div>
@@ -44,10 +44,10 @@ export class KnowledgeBaseManager {
             
             documents.forEach(doc => {
                 const statusIcon = {
-                    'ready': '<i class="bi bi-check-circle-fill text-success"></i>',
-                    'processing': '<i class="bi bi-hourglass-split text-warning"></i>',
-                    'failed': '<i class="bi bi-x-circle-fill text-danger"></i>'
-                }[doc.status] || '<i class="bi bi-question-circle"></i>';
+                    'ready': '<i class="ti ti-check-circle-fill text-success"></i>',
+                    'processing': '<i class="ti ti-hourglass-split text-warning"></i>',
+                    'failed': '<i class="ti ti-x-circle-fill text-danger"></i>'
+                }[doc.status] || '<i class="ti ti-question-circle"></i>';
                 
                 const downloadUrl = doc.metadata && (doc.metadata.source_url || doc.metadata.signed_url) ? (doc.metadata.source_url || doc.metadata.signed_url) : null;
                 const safeDownloadAttr = downloadUrl ? escapeAttr(downloadUrl) : '';
@@ -58,7 +58,7 @@ export class KnowledgeBaseManager {
                     <div class="${cardClasses}"${dataDownloadAttr}>
                         <div class="document-header">
                             <div class="document-icon">
-                                <i class="bi bi-file-earmark-pdf"></i>
+                                <i class="ti ti-file-earmark-pdf"></i>
                             </div>
                             <div class="document-info">
                                 <div class="document-name">${doc.name}</div>
@@ -73,7 +73,7 @@ export class KnowledgeBaseManager {
                             <button class="btn btn-sm btn-outline-danger" 
                                     onclick="deleteKnowledgeBaseDocument('${flowId}', '${doc.document_id}', event)"
                                     title="Удалить">
-                                <i class="bi bi-trash"></i>
+                                <i class="ti ti-trash"></i>
                             </button>
                         </div>
                     </div>
@@ -101,7 +101,7 @@ export class KnowledgeBaseManager {
             console.error('Ошибка загрузки документов:', error);
             listContainer.innerHTML = `
                 <div class="error-state">
-                    <i class="bi bi-exclamation-triangle"></i>
+                    <i class="ti ti-exclamation-triangle"></i>
                     <p>Не удалось загрузить документы</p>
                 </div>
             `;

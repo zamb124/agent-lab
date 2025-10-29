@@ -895,7 +895,7 @@ class ChatManager {
             this.applyChatPosition();
             
             if (fullscreenIcon) {
-                fullscreenIcon.className = 'bi bi-arrows-fullscreen';
+                fullscreenIcon.className = 'ti ti-arrows-fullscreen';
             }
             if (fullscreenBtn) {
                 fullscreenBtn.title = 'Развернуть на весь экран';
@@ -908,7 +908,7 @@ class ChatManager {
             widget.style.right = '0';
             widget.style.bottom = '0';
             if (fullscreenIcon) {
-                fullscreenIcon.className = 'bi bi-fullscreen-exit';
+                fullscreenIcon.className = 'ti ti-fullscreen-exit';
             }
             if (fullscreenBtn) {
                 fullscreenBtn.title = 'Выйти из полноэкранного режима';
@@ -996,13 +996,13 @@ class ChatManager {
             <div class="file-preview-header">
                 <span>📎 ${files.length} файл${files.length > 1 ? 'а' : ''}</span>
                 <button class="file-preview-cancel" onclick="window.app.chat.clearFilePreview()">
-                    <i class="bi bi-x"></i>
+                    <i class="ti ti-x"></i>
                 </button>
             </div>
             <div class="file-preview-list">
                 ${files.map(file => `
                     <div class="file-preview-item">
-                        <i class="bi bi-file-earmark"></i>
+                        <i class="ti ti-file-earmark"></i>
                         <span class="file-name">${file.name}</span>
                         <span class="file-size">${formatFileSize(file.size)}</span>
                     </div>

@@ -11,11 +11,11 @@ const NOTIFICATION_TYPES = {
 };
 
 const ICON_MAP = {
-    'success': 'bi-check-circle-fill',
-    'error': 'bi-exclamation-circle-fill',
-    'danger': 'bi-exclamation-circle-fill',
-    'warning': 'bi-exclamation-triangle-fill',
-    'info': 'bi-info-circle-fill'
+    'success': 'ti-check-circle-fill',
+    'error': 'ti-exclamation-circle-fill',
+    'danger': 'ti-exclamation-circle-fill',
+    'warning': 'ti-exclamation-triangle-fill',
+    'info': 'ti-info-circle-fill'
 };
 
 class NotificationManager {
@@ -46,12 +46,12 @@ class NotificationManager {
         notification.className = `notification ${type}`;
         notification.setAttribute('data-notification-id', id);
         notification.innerHTML = `
-            <i class="bi ${ICON_MAP[type] || ICON_MAP['info']} notification-icon"></i>
+            <i class="ti ti-${ICON_MAP[type] || ICON_MAP['info']} notification-icon"></i>
             <div class="notification-content">
                 <p class="notification-message">${message}</p>
             </div>
             <button class="notification-close" aria-label="Закрыть">
-                <i class="bi bi-x"></i>
+                <i class="ti ti-x"></i>
             </button>
         `;
         

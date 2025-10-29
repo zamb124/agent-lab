@@ -60,7 +60,7 @@ class MyModulePlugin(Plugin):
         {
             "id": "my_module",
             "label": "my_module.title",
-            "icon": "bi-star",
+            "icon": "star",
             "url": "/frontend/my_module/",
             "order": 100,
             "type": "htmx"  # или "page"
@@ -144,7 +144,7 @@ sidebar_items = [
     {
         "id": "unique_id",           # Уникальный ID
         "label": "translation.key",  # Ключ перевода
-        "icon": "bi-icon-name",      # Bootstrap Icon
+        "icon": "icon-name",         # Tabler Icon (без префикса ti-)
         "url": "/frontend/path/",    # URL
         "order": 50,                 # Порядок (меньше = выше)
         "type": "htmx"               # "htmx" или "page"
@@ -179,7 +179,7 @@ dashboard_widgets = [
 header_actions = [
     {
         "id": "export_data",
-        "icon": "bi-download",
+        "icon": "download",
         "label": "Экспорт",
         "onclick": "app.my_module.exportData()",
         "order": 10
@@ -264,7 +264,7 @@ class SimplePlugin(Plugin):
     
     sidebar_items = [{
         "label": "Простая страница",
-        "icon": "bi-file",
+        "icon": "file",
         "url": "/frontend/simple/",
         "type": "htmx"
     }]

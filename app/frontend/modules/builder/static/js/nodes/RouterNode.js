@@ -39,7 +39,7 @@ export class RouterNode extends BaseNode {
         return `
             <div class="node-simple-content">
                 <div class="node-simple-icon router">
-                    <i class="bi bi-lightning"></i>
+                    <i class="ti ti-bolt"></i>
                 </div>
                 <div class="node-simple-info">
                     <div class="node-simple-title">${this.escapeHtml(displayName)}</div>

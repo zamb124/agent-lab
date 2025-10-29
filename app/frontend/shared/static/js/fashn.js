@@ -79,13 +79,13 @@ class FashnApp {
         grid.innerHTML = `
             <div class="add-product-card" id="addProductCard">
                 <div class="add-product-icon">
-                    <i class="bi bi-plus"></i>
+                    <i class="ti ti-plus"></i>
                 </div>
                 <div class="add-product-text">Добавь свой товар</div>
             </div>
             <div class="empty-state">
                 <div class="empty-state-content">
-                    <i class="bi bi-bag" style="font-size: 48px; color: #9ca3af; margin-bottom: 16px;"></i>
+                    <i class="ti ti-bag" style="font-size: 48px; color: #9ca3af; margin-bottom: 16px;"></i>
                     <h3>No products yet</h3>
                     <p>Add product URLs above or upload your own product photos</p>
                 </div>
@@ -188,7 +188,7 @@ class FashnApp {
         const addProductCard = `
             <div class="add-product-card" id="addProductCard">
                 <div class="add-product-icon">
-                    <i class="bi bi-plus"></i>
+                    <i class="ti ti-plus"></i>
                 </div>
                 <div class="add-product-text">Добавь свой товар</div>
             </div>
@@ -212,7 +212,7 @@ class FashnApp {
             // Индикатор множественных изображений
             const multipleImagesIndicator = (product.imageUrls && product.imageUrls.length > 1) ? 
                 `<div class="multiple-images-indicator">
-                    <i class="bi bi-images"></i>
+                    <i class="ti ti-images"></i>
                     <span>${product.imageUrls.length}</span>
                 </div>` : '';
 
@@ -222,7 +222,7 @@ class FashnApp {
                         <img src="${product.image}" alt="${product.name}" class="product-image">
                         ${!isLoading && !isError ? `
                             <button class="product-favorite">
-                                <i class="bi bi-heart"></i>
+                                <i class="ti ti-heart"></i>
                             </button>
                         ` : ''}
                         ${multipleImagesIndicator}
@@ -661,7 +661,7 @@ class FashnApp {
                     <div class="result-image-container">
                         <img src="${url}" alt="Результат примерки ${index + 1}" class="result-image">
                 <a href="${url}" target="_blank" download class="download-btn">
-                    <i class="bi bi-download"></i>
+                    <i class="ti ti-download"></i>
                 </a>
                     </div>
             `;
@@ -897,7 +897,7 @@ class FashnApp {
                 imageItem.innerHTML = `
                     <img src="${e.target.result}" alt="Product image">
                     <button class="remove-image-btn" data-image-id="${imageId}">
-                        <i class="bi bi-x"></i>
+                        <i class="ti ti-x"></i>
                     </button>
                 `;
 

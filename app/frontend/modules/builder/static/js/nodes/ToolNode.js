@@ -105,7 +105,7 @@ export class ToolNode extends BaseNode {
         return `
             <div class="node-simple-content">
                 <div class="node-simple-icon tool">
-                    <i class="bi bi-tools"></i>
+                    <i class="ti ti-tools"></i>
                 </div>
                 <div class="node-simple-info">
                     <div class="node-simple-title">${this.escapeHtml(displayName)}</div>

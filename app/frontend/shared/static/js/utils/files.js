@@ -3,15 +3,15 @@
  */
 
 export function getFileIcon(mimeType) {
-    if (mimeType.startsWith('image/')) return 'bi-file-earmark-image';
-    if (mimeType.startsWith('video/')) return 'bi-file-earmark-play';
-    if (mimeType.startsWith('audio/')) return 'bi-file-earmark-music';
-    if (mimeType.includes('pdf')) return 'bi-file-earmark-pdf';
-    if (mimeType.includes('word') || mimeType.includes('document')) return 'bi-file-earmark-word';
-    if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'bi-file-earmark-excel';
-    if (mimeType.includes('powerpoint') || mimeType.includes('presentation')) return 'bi-file-earmark-ppt';
-    if (mimeType.includes('zip') || mimeType.includes('archive')) return 'bi-file-earmark-zip';
-    return 'bi-file-earmark';
+    if (mimeType.startsWith('image/')) return 'ti-file-earmark-image';
+    if (mimeType.startsWith('video/')) return 'ti-file-earmark-play';
+    if (mimeType.startsWith('audio/')) return 'ti-file-earmark-music';
+    if (mimeType.includes('pdf')) return 'ti-file-earmark-pdf';
+    if (mimeType.includes('word') || mimeType.includes('document')) return 'ti-file-earmark-word';
+    if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'ti-file-earmark-excel';
+    if (mimeType.includes('powerpoint') || mimeType.includes('presentation')) return 'ti-file-earmark-ppt';
+    if (mimeType.includes('zip') || mimeType.includes('archive')) return 'ti-file-earmark-zip';
+    return 'ti-file-earmark';
 }
 
 export function getFileIconEmoji(filename) {

@@ -159,7 +159,7 @@ class ChatMessageRenderer {
         
         fileCard.innerHTML = `
             <div class="file-card-icon">
-                <i class="bi ${icon}"></i>
+                <i class="ti ti-${icon}"></i>
             </div>
             <div class="file-card-info">
                 <div class="file-card-name">${file.name}</div>
@@ -167,7 +167,7 @@ class ChatMessageRenderer {
             </div>
             <div class="file-card-actions">
                 <a href="${file.url}" target="_blank" class="file-download-btn" title="Скачать">
-                    <i class="bi bi-download"></i>
+                    <i class="ti ti-download"></i>
                 </a>
             </div>
         `;
@@ -266,7 +266,7 @@ class ChatMessageRenderer {
                     <div class="file-info" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
                         <span class="file-name" style="font-size: 14px; color: #666;">${link.fileName}</span>
                         <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
-                            <i class="bi bi-download"></i> Скачать
+                            <i class="ti ti-download"></i> Скачать
                         </a>
                     </div>
                 </div>
@@ -281,7 +281,7 @@ class ChatMessageRenderer {
                     <div class="file-info" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
                         <span class="file-name" style="font-size: 14px; color: #666;">${link.fileName}</span>
                         <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
-                            <i class="bi bi-download"></i> Скачать
+                            <i class="ti ti-download"></i> Скачать
                         </a>
                     </div>
                 </div>
@@ -296,7 +296,7 @@ class ChatMessageRenderer {
                     <div class="file-info" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
                         <span class="file-name" style="font-size: 14px; color: #666;">${link.fileName}</span>
                         <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
-                            <i class="bi bi-download"></i> Скачать
+                            <i class="ti ti-download"></i> Скачать
                         </a>
                     </div>
                 </div>
@@ -311,7 +311,7 @@ class ChatMessageRenderer {
                         ${mimeType ? `<div class="file-type" style="font-size: 12px; color: #666;">${mimeType}</div>` : ''}
                     </div>
                     <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
-                        <i class="bi bi-download"></i>
+                        <i class="ti ti-download"></i>
                     </a>
                 </div>
             `;
@@ -356,7 +356,7 @@ class ChatMessageRenderer {
                         <small class="text-muted">${formatFileSize(attachment.size)}</small>
                     </div>
                     <a href="${attachment.url}" target="_blank" class="btn btn-sm btn-outline-primary">
-                        <i class="bi bi-download"></i>
+                        <i class="ti ti-download"></i>
                     </a>
                 </div>
             `;

@@ -178,7 +178,7 @@ class LayoutManager {
     updateToggleIcon() {
         const toggleBtn = document.querySelector('button[onclick*="toggleSidebar"] i');
         if (toggleBtn) {
-            toggleBtn.className = this.sidebarCollapsed ? 'bi bi-chevron-right' : 'bi bi-chevron-left';
+            toggleBtn.className = this.sidebarCollapsed ? 'ti ti-chevron-right' : 'ti ti-chevron-left';
         }
     }
     

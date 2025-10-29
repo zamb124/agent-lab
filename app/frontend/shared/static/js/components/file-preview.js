@@ -18,7 +18,7 @@ export class FilePreviewCard {
         
         fileCard.innerHTML = `
             <div class="file-card-icon">
-                <i class="bi ${icon}"></i>
+                <i class="ti ti-${icon}"></i>
             </div>
             <div class="file-card-info">
                 <div class="file-card-name">${this.file.name}</div>
@@ -26,7 +26,7 @@ export class FilePreviewCard {
             </div>
             <div class="file-card-actions">
                 <a href="${this.file.url}" target="_blank" class="file-download-btn" title="Скачать">
-                    <i class="bi bi-download"></i>
+                    <i class="ti ti-download"></i>
                 </a>
             </div>
         `;
@@ -55,7 +55,7 @@ export class FilePreviewList {
             <span>📎 ${this.files.length} файл${this.files.length > 1 ? 'а' : ''}</span>
             ${this.options.showRemove ? `
                 <button class="file-preview-cancel">
-                    <i class="bi bi-x"></i>
+                    <i class="ti ti-x"></i>
                 </button>
             ` : ''}
         `;
@@ -78,7 +78,7 @@ export class FilePreviewList {
             const item = document.createElement('div');
             item.className = 'file-preview-item';
             item.innerHTML = `
-                <i class="bi bi-file-earmark"></i>
+                <i class="ti ti-file-earmark"></i>
                 <span class="file-name">${file.name}</span>
                 <span class="file-size">${formatFileSize(file.size)}</span>
             `;
@@ -154,7 +154,7 @@ function renderFilePreview(container, link, mimeType = null, knownType = null) {
                 <div class="file-info" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
                     <span class="file-name" style="font-size: 14px; color: #666;">${link.fileName}</span>
                     <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
-                        <i class="bi bi-download"></i> Скачать
+                        <i class="ti ti-download"></i> Скачать
                     </a>
                 </div>
             </div>
@@ -169,7 +169,7 @@ function renderFilePreview(container, link, mimeType = null, knownType = null) {
                 <div class="file-info" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
                     <span class="file-name" style="font-size: 14px; color: #666;">${link.fileName}</span>
                     <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
-                        <i class="bi bi-download"></i> Скачать
+                        <i class="ti ti-download"></i> Скачать
                     </a>
                 </div>
             </div>
@@ -184,7 +184,7 @@ function renderFilePreview(container, link, mimeType = null, knownType = null) {
                 <div class="file-info" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
                     <span class="file-name" style="font-size: 14px; color: #666;">${link.fileName}</span>
                     <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
-                        <i class="bi bi-download"></i> Скачать
+                        <i class="ti ti-download"></i> Скачать
                     </a>
                 </div>
             </div>
@@ -199,7 +199,7 @@ function renderFilePreview(container, link, mimeType = null, knownType = null) {
                     ${mimeType ? `<div class="file-type" style="font-size: 12px; color: #666;">${mimeType}</div>` : ''}
                 </div>
                 <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
-                    <i class="bi bi-download"></i>
+                    <i class="ti ti-download"></i>
                 </a>
             </div>
         `;

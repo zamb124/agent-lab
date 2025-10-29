@@ -131,11 +131,11 @@ export default class StoreModule {
 
         if (input.type === 'password') {
             input.type = 'text';
-            icon.className = 'bi bi-eye-slash';
+            icon.className = 'ti ti-eye-slash';
             button.title = 'Скрыть пароль';
         } else {
             input.type = 'password';
-            icon.className = 'bi bi-eye';
+            icon.className = 'ti ti-eye';
             button.title = 'Показать пароль';
         }
     }

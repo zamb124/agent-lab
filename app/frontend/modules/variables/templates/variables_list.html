@@ -5,7 +5,7 @@
         <p class="text-muted mb-0">Управление секретами и переменными компании. Используйте <code>@var:key</code> для ссылок в конфигурации.</p>
         {% if variables %}
         <button class="btn btn-sm btn-outline-secondary" id="group-by-tags-btn" onclick="toggleGrouping()">
-            <i class="bi bi-grid"></i> Группировать по тегам
+            <i class="ti ti-grid"></i> Группировать по тегам
         </button>
         {% endif %}
     </div>
@@ -15,7 +15,7 @@
         <div class="variable-grid-item">
             <div class="card variable-card variable-card-create" onclick="openAddVariableModal()">
                 <div class="variable-create-body">
-                    <i class="bi bi-plus-circle variable-create-icon text-primary"></i>
+                    <i class="ti ti-plus-circle variable-create-icon text-primary"></i>
                     <div class="variable-create-content">
                         <div class="variable-create-title">Создать переменную</div>
                         <small class="variable-create-subtitle">Добавить новую переменную</small>
@@ -32,9 +32,9 @@
                 <div class="variable-card-header">
                     <div class="card-icon">
                         {% if var_data.secret %}
-                        <i class="bi bi-shield-lock"></i>
+                        <i class="ti ti-shield-lock"></i>
                         {% else %}
-                        <i class="bi bi-tag"></i>
+                        <i class="ti ti-tag"></i>
                         {% endif %}
                     </div>
                     <div class="variable-card-info">
@@ -48,10 +48,10 @@
                     </div>
                     <div class="variable-card-actions">
                         <button class="btn-icon" onclick="editVariable('{{ key }}', '{{ var_data.value }}', {{ 'true' if var_data.secret else 'false' }})" title="Изменить">
-                            <i class="bi bi-pencil"></i>
+                            <i class="ti ti-pencil"></i>
                         </button>
                         <button class="btn-icon btn-icon-danger" onclick="deleteVariable('{{ key }}')" title="Удалить">
-                            <i class="bi bi-trash"></i>
+                            <i class="ti ti-trash"></i>
                         </button>
                     </div>
                 </div>
@@ -66,7 +66,7 @@
                         <div class="variable-secret-group">
                             <input type="password" readonly value="••••••••••••" class="form-control form-control-sm" id="var-{{ key }}" data-secret-key="{{ key }}">
                             <button class="btn-icon" type="button" onclick="toggleSecret('{{ key }}', this)" title="Показать/скрыть">
-                                <i class="bi bi-eye"></i>
+                                <i class="ti ti-eye"></i>
                             </button>
                         </div>
                         {% else %}
@@ -94,10 +94,10 @@
             <h3 id="variable-modal-title">Добавить переменную</h3>
             <div class="modal-header-actions">
                 <button class="btn-icon" onclick="saveVariable()" title="Сохранить">
-                    <i class="bi bi-floppy-fill"></i>
+                    <i class="ti ti-device-floppy"></i>
                 </button>
                 <button class="btn-close" onclick="closeVariableModal()" title="Закрыть">
-                    <i class="bi bi-x-circle-fill"></i>
+                    <i class="ti ti-x"></i>
                 </button>
             </div>
         </div>
@@ -124,7 +124,7 @@
                     <div class="input-group">
                         <input type="text" class="form-control" id="variable-group-input" placeholder="Добавить группу (telegram, api, auth...)" onkeypress="if(event.key==='Enter'){event.preventDefault();addGroup();}">
                         <button class="btn btn-warning" type="button" onclick="addGroup()">
-                            <i class="bi bi-plus-lg"></i>
+                            <i class="ti ti-plus"></i>
                         </button>
                     </div>
                     <small class="form-text">Группы помогают организовать переменные (telegram, api, database...)</small>

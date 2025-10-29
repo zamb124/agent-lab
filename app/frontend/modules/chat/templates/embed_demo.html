@@ -46,7 +46,7 @@
             border-radius: var(--radius-md);
             padding: 1.5rem;
             margin-top: 1rem;
-            font-family: 'Fira Code', monospace;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
             font-size: 14px;
             white-space: pre-wrap;
             word-break: break-all;
@@ -87,64 +87,8 @@
             box-shadow: var(--glass-shadow);
         }
         
-        .table {
-            width: 100%;
-            border-collapse: collapse;
+        .demo-preview .table {
             margin-top: 1rem;
-            background: var(--bg-card);
-            border-radius: var(--radius-md);
-            overflow: hidden;
-            box-shadow: var(--shadow-sm);
-        }
-        
-        .table th, .table td {
-            border: 1px solid var(--border-primary);
-            padding: 1rem;
-            text-align: left;
-        }
-        
-        .table th {
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
-            font-weight: 600;
-        }
-        
-        .table td {
-            color: var(--text-secondary);
-        }
-        
-        .table-striped tbody tr:nth-of-type(odd) {
-            background: var(--bg-secondary);
-        }
-        
-        .alert {
-            padding: 1.5rem;
-            border-radius: var(--radius-md);
-            margin-bottom: 1rem;
-            background: var(--glass-bg);
-            backdrop-filter: var(--glass-blur);
-            border: 1px solid var(--glass-border);
-            box-shadow: var(--glass-shadow);
-        }
-        
-        .alert-info {
-            border-left: 4px solid var(--accent-info);
-        }
-        
-        .alert-warning {
-            border-left: 4px solid var(--accent-warning);
-        }
-        
-        .alert h5 {
-            color: var(--text-primary);
-            margin: 0 0 0.5rem 0;
-            font-weight: 600;
-        }
-        
-        .alert ul {
-            margin: 0;
-            padding-left: 1.5rem;
-            color: var(--text-secondary);
         }
         
         .row {
@@ -378,7 +322,7 @@ EmbedChat.init({
 &lt;!-- Кнопка чата --&gt;
 &lt;button id="chat-toggle" class="btn btn-primary rounded-circle position-fixed" 
         style="bottom: 20px; right: 20px; z-index: 1000;"&gt;
-    &lt;i class="bi bi-chat-dots"&gt;&lt;/i&gt;
+    &lt;i class="ti ti-chat-dots"&gt;&lt;/i&gt;
 &lt;/button&gt;
 
 &lt;!-- Виджет чата --&gt;
@@ -532,7 +476,7 @@ document.getElementById('chat-toggle').addEventListener('click', function() {
                 <div class="demo-section">
                     <h3>🛡️ Безопасность</h3>
                     <div class="alert alert-warning">
-                        <h5><i class="bi bi-exclamation-triangle"></i> Важно!</h5>
+                        <h5><i class="ti ti-exclamation-triangle"></i> Важно!</h5>
                         <ul class="mb-0">
                             <li>Токены имеют ограниченный срок действия</li>
                             <li>Используйте HTTPS для передачи токенов</li>

@@ -27,7 +27,7 @@ class BillingPlugin(Plugin):
             "id": "billing_widget",
             "title": "dashboard.widgets.billing",
             "description": "Тарифы и оплата",
-            "icon": "bi-credit-card",
+            "icon": "credit-card",
             "url": "/frontend/billing/",
             "order": 50
         }
@@ -37,7 +37,7 @@ class BillingPlugin(Plugin):
         {
             "id": "billing",
             "label": "dashboard.navigation.billing",
-            "icon": "bi-credit-card",
+            "icon": "credit-card",
             "url": "/frontend/billing/",
             "order": 20
         }

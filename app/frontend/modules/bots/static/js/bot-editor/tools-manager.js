@@ -110,7 +110,7 @@ export class ToolsManager {
             }
             
             if (toolsMap.size === 0) {
-                toolsSelector.innerHTML = '<div class="tools-empty"><i class="bi bi-info-circle"></i> Нет доступных функций</div>';
+                toolsSelector.innerHTML = '<div class="tools-empty"><i class="ti ti-info-circle"></i> Нет доступных функций</div>';
                 return;
             }
 
@@ -136,7 +136,7 @@ export class ToolsManager {
             if (groupedTools.size > 0) {
                 const abilitiesSection = document.createElement('div');
                 abilitiesSection.className = 'tools-section';
-                abilitiesSection.innerHTML = '<h4 class="tools-section-title"><i class="bi bi-collection"></i> Возможности</h4>';
+                abilitiesSection.innerHTML = '<h4 class="tools-section-title"><i class="ti ti-apps"></i> Возможности</h4>';
 
                 const abilitiesGrid = document.createElement('div');
                 abilitiesGrid.className = 'abilities-grid';
@@ -162,7 +162,7 @@ export class ToolsManager {
                     let indicatorElement = null;
                     if (isFullySelected) {
                         indicatorElement = document.createElement('i');
-                        indicatorElement.className = 'bi bi-check-circle-fill';
+                        indicatorElement.className = 'ti ti-check-circle-fill';
                     } else if (isPartiallySelected) {
                         indicatorElement = document.createElement('div');
                         indicatorElement.className = 'partial-indicator';
@@ -172,7 +172,7 @@ export class ToolsManager {
                     groupCard.innerHTML = `
                         <div class="ability-group-header">
                             <div class="ability-group-icon">
-                                <i class="bi bi-collection"></i>
+                                <i class="ti ti-apps"></i>
                             </div>
                             <div class="ability-group-info">
                                 <h5 class="ability-group-name">${translatedGroupName}</h5>
@@ -258,7 +258,7 @@ export class ToolsManager {
             // Секция "Все возможности" (отдельные тулы)
             const allToolsSection = document.createElement('div');
             allToolsSection.className = 'tools-section';
-            allToolsSection.innerHTML = '<h4 class="tools-section-title"><i class="bi bi-list"></i> Все возможности</h4>';
+            allToolsSection.innerHTML = '<h4 class="tools-section-title"><i class="ti ti-list"></i> Все возможности</h4>';
 
             const toolsList = document.createElement('div');
             toolsList.className = 'abilities-selector-grid';
@@ -270,10 +270,10 @@ export class ToolsManager {
                 const isChecked = selectedToolIds.includes(tool.id);
                 const isNonPublic = !tool.is_public;
                 const isAgent = tool.type === 'agent';
-                const lockIcon = isNonPublic ? '<i class="bi bi-lock-fill"></i>' : '';
+                const lockIcon = isNonPublic ? '<i class="ti ti-lock-fill"></i>' : '';
 
                 const iconClass = isAgent ? 'agent-icon' : 'tool-icon';
-                const iconName = isAgent ? 'bi-robot' : 'bi-tools';
+                const iconName = isAgent ? 'robot' : 'tools';
                 const badgeClass = isAgent ? 'agent-badge' : '';
                 const badge = isAgent ? `<div class="ability-badge ${badgeClass}">${tool.type || 'agent'}</div>` : '';
                 const costBadge = tool.cost > 0 ? `<div class="ability-badge cost-badge">${tool.cost} ₽</div>` : '';
@@ -287,11 +287,11 @@ export class ToolsManager {
                     <label for="tool-${tool.id.replace(/\./g, '-').replace(/:/g, '-')}" class="ability-selector-label">
                         <div class="ability-card-header">
                             <div class="ability-icon ${iconClass}">
-                                <i class="bi ${iconName}"></i>
+                                <i class="ti ti-${iconName}"></i>
                             </div>
                             <div class="ability-header-right">
                                 <div class="ability-selector-check">
-                                    <i class="bi bi-check-circle-fill"></i>
+                                    <i class="ti ti-check-circle-fill"></i>
                                 </div>
                                 <div class="ability-badges">
                                     ${badge}
@@ -364,7 +364,7 @@ export class ToolsManager {
 
                     if (isFullySelected) {
                         const checkIcon = document.createElement('i');
-                        checkIcon.className = 'bi bi-check-circle-fill';
+                        checkIcon.className = 'ti ti-check-circle-fill';
                         groupCheckElement.appendChild(checkIcon);
                     } else if (isPartiallySelected) {
                         const partialDiv = document.createElement('div');
@@ -406,7 +406,7 @@ export class ToolsManager {
             
         } catch (error) {
             console.error('Ошибка загрузки тулов:', error);
-            toolsSelector.innerHTML = '<div class="tools-empty"><i class="bi bi-exclamation-triangle"></i> Ошибка загрузки функций</div>';
+            toolsSelector.innerHTML = '<div class="tools-empty"><i class="ti ti-exclamation-triangle"></i> Ошибка загрузки функций</div>';
         }
     }
 }

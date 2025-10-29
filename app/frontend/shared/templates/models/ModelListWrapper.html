@@ -6,7 +6,7 @@
 } %}
 
 <h1 class="header-title" id="page-title" hx-swap-oob="true">
-    <i class="bi bi-{{ 'robot' if model_type == 'agent' else 'diagram-3' if model_type == 'flow' else 'list-task' if model_type == 'task' else 'person-badge' }}"></i>
+    <i class="ti ti-{{ 'robot' if model_type == 'agent' else 'diagram-3' if model_type == 'flow' else 'list-task' if model_type == 'task' else 'person-badge' }}"></i>
     {{ titles.get(model_type, model_type.title()) }}
 </h1>
 
@@ -15,7 +15,7 @@
         <div class="d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-3">
                 <div class="table-icon">
-                    <i class="bi bi-table"></i>
+                    <i class="ti ti-table"></i>
                 </div>
                 <div>
                     <h5 class="mb-0 font-semibold">{{ model_type.title() }}</h5>
@@ -24,7 +24,7 @@
             </div>
             <div class="btn-group">
                 <button class="btn btn-secondary btn-sm active">
-                    <i class="bi bi-table"></i>
+                    <i class="ti ti-table"></i>
                     {{ t('models.common.table_view') }}
                 </button>
                 <button class="btn btn-ghost btn-sm" 
@@ -32,7 +32,7 @@
                         hx-target="#content"
                         hx-push-url="true"
                         hx-indicator="#content-loading">
-                    <i class="bi bi-grid"></i>
+                    <i class="ti ti-grid"></i>
                     {{ t('models.common.cards_view') }}
                 </button>
                 <button class="btn btn-primary btn-sm" 
@@ -40,7 +40,7 @@
                         hx-target="#content"
                         hx-push-url="true"
                         hx-indicator="#content-loading">
-                    <i class="bi bi-plus"></i>
+                    <i class="ti ti-plus"></i>
                     {{ t('common.create') }}
                 </button>
             </div>
@@ -56,12 +56,12 @@
                         <th>
                             <div class="d-flex align-items-center gap-2">
                                 {{ header.title }}
-                                <i class="bi bi-arrow-up-down small text-muted"></i>
+                                <i class="ti ti-arrow-up-down small text-muted"></i>
                             </div>
                         </th>
                         {% endfor %}
                         <th class="text-center" width="120">
-                            <i class="bi bi-gear-fill text-muted"></i>
+                            <i class="ti ti-gear-fill text-muted"></i>
                         </th>
                     </tr>
                 </thead>
@@ -75,7 +75,7 @@
         {% else %}
         <div class="empty-state">
             <div class="empty-state-icon">
-                <i class="bi bi-inbox display-4"></i>
+                <i class="ti ti-inbox display-4"></i>
             </div>
             <div class="empty-state-title">{{ t('models.common.no_data') }}</div>
             <div class="empty-state-description">
@@ -86,7 +86,7 @@
                     hx-target="#content"
                     hx-push-url="true"
                     hx-indicator="#content-loading">
-                <i class="bi bi-plus"></i>
+                <i class="ti ti-plus"></i>
                 {{ t('common.create') }} {{ titles.get(model_type, model_type.title()) }}
             </button>
         </div>

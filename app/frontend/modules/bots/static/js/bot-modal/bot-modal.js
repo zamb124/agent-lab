@@ -92,7 +92,7 @@ export class BotModalManager {
         if (isCollapsed) {
             chatSection.classList.remove('collapsed');
             if (layout) layout.classList.remove('chat-collapsed');
-            if (toggleIcon) toggleIcon.className = 'bi bi-chevron-left';
+            if (toggleIcon) toggleIcon.className = 'ti ti-chevron-left';
             if (toggleBtn) toggleBtn.title = 'Свернуть чат';
             
             const placeholder = document.getElementById(`bot-chat-embed-${flowId}`);
@@ -105,7 +105,7 @@ export class BotModalManager {
         } else {
             chatSection.classList.add('collapsed');
             if (layout) layout.classList.add('chat-collapsed');
-            if (toggleIcon) toggleIcon.className = 'bi bi-chevron-right';
+            if (toggleIcon) toggleIcon.className = 'ti ti-chevron-right';
             if (toggleBtn) toggleBtn.title = 'Развернуть чат';
         }
     }
@@ -124,7 +124,7 @@ export class BotModalManager {
             console.error('Оригинальный чат не найден');
             placeholder.innerHTML = `
                 <div style="display: flex; align-items: center; justify-content: center; height: 100%; flex-direction: column; gap: 1rem; color: var(--text-secondary); padding: 2rem;">
-                    <i class="bi bi-exclamation-triangle" style="font-size: 3rem;"></i>
+                    <i class="ti ti-exclamation-triangle" style="font-size: 3rem;"></i>
                     <h4 style="margin: 0;">Чат не инициализирован</h4>
                     <p>Обновите страницу</p>
                 </div>
@@ -168,10 +168,10 @@ export class BotModalManager {
         try {
             if (!document.fullscreenElement) {
                 await modalContent.requestFullscreen();
-                if (btn) btn.className = 'bi bi-fullscreen-exit';
+                if (btn) btn.className = 'ti ti-fullscreen-exit';
             } else {
                 await document.exitFullscreen();
-                if (btn) btn.className = 'bi bi-fullscreen';
+                if (btn) btn.className = 'ti ti-fullscreen';
             }
         } catch (err) {
             console.error('Ошибка fullscreen:', err);

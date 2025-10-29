@@ -29,10 +29,10 @@
               </div>
               <div class="btn-group">
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-tooltip="Редактировать">
-                  <i class="bi bi-pencil"></i>
+                  <i class="ti ti-pencil"></i>
                 </button>
                 <button type="button" class="btn btn-outline-danger btn-sm" data-tooltip="Удалить">
-                  <i class="bi bi-trash"></i>
+                  <i class="ti ti-trash"></i>
                 </button>
               </div>
             </div>
@@ -41,14 +41,14 @@
         {% endfor %}
       {% else %}
         <div class="text-muted text-center py-3">
-          <i class="bi bi-tools"></i>
+          <i class="ti ti-tools"></i>
           Инструменты не добавлены
         </div>
       {% endif %}
       
       {% if not readonly %}
       <button type="button" class="btn btn-outline-primary btn-sm mt-2" data-tooltip="Добавить инструмент">
-        <i class="bi bi-plus"></i>
+        <i class="ti ti-plus"></i>
         Добавить инструмент
       </button>
       {% endif %}

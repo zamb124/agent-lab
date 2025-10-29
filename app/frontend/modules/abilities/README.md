@@ -132,7 +132,7 @@ app.abilities.isAbilitiesPage()
 Модуль добавляет пункт в сайдбар:
 
 - **ID**: `abilities`
-- **Иконка**: `bi-star`
+- **Иконка**: `ti-star`
 - **Порядок**: 30
 - **Тип**: HTMX
 

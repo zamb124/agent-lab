@@ -124,25 +124,25 @@ class CodeEditor {
         this.toolbar.innerHTML = `
             <div class="toolbar-left">
                 <span class="toolbar-label">
-                    <i class="bi bi-code-square"></i>
+                    <i class="ti ti-code-square"></i>
                     Python Editor
                 </span>
             </div>
             <div class="toolbar-right">
                 <button class="toolbar-btn" id="formatCodeBtn-${this.uniqueId}" title="Форматировать код (Ctrl+Shift+F)">
-                    <i class="bi bi-brush"></i>
+                    <i class="ti ti-brush"></i>
                 </button>
                 <button class="toolbar-btn" id="validateCodeBtn-${this.uniqueId}" title="Проверить синтаксис">
-                    <i class="bi bi-check-circle"></i>
+                    <i class="ti ti-check-circle"></i>
                 </button>
                 <button class="toolbar-btn" id="showStoreVarsBtn-${this.uniqueId}" title="Доступные переменные store">
-                    <i class="bi bi-database"></i>
+                    <i class="ti ti-database"></i>
                 </button>
                 <button class="toolbar-btn" id="infoBtn-${this.uniqueId}" title="Документация по API">
-                    <i class="bi bi-info-circle"></i>
+                    <i class="ti ti-info-circle"></i>
                 </button>
                 <button class="toolbar-btn" id="fullscreenBtn-${this.uniqueId}" title="Полноэкранный режим (F11)">
-                    <i class="bi bi-arrows-fullscreen"></i>
+                    <i class="ti ti-arrows-fullscreen"></i>
                 </button>
             </div>
         `;
@@ -169,7 +169,7 @@ class CodeEditor {
     createEditor() {
         if (typeof ace === 'undefined') {
             console.error('Ace Editor не загружен!');
-            this.editorContainer.innerHTML = '<div class="code-editor-loading"><i class="bi bi-exclamation-triangle"></i> Редактор не загружен</div>';
+            this.editorContainer.innerHTML = '<div class="code-editor-loading"><i class="ti ti-exclamation-triangle"></i> Редактор не загружен</div>';
             return;
         }
         
@@ -396,7 +396,7 @@ class CodeEditor {
             return;
         }
         
-        statusEl.innerHTML = '<i class="bi bi-hourglass-split"></i> Проверка...';
+        statusEl.innerHTML = '<i class="ti ti-hourglass-split"></i> Проверка...';
         statusEl.className = 'status-item status-validating';
         
         try {
@@ -456,7 +456,7 @@ class CodeEditor {
                         <div class="var-key">state["store"]["${key}"]</div>
                         <div class="var-value">${this.escapeHtml(valueStr)}</div>
                         <button class="var-copy-btn" data-copy-text='${copyText}' title="Копировать">
-                            <i class="bi bi-clipboard"></i>
+                            <i class="ti ti-clipboard"></i>
                         </button>
                     </div>
                 `;
@@ -474,7 +474,7 @@ class CodeEditor {
                         <div class="var-key">{${key}}</div>
                         <div class="var-value">${this.escapeHtml(valueStr)}</div>
                         <button class="var-copy-btn" data-copy-text='${copyText}' title="Копировать">
-                            <i class="bi bi-clipboard"></i>
+                            <i class="ti ti-clipboard"></i>
                         </button>
                     </div>
                 `;
@@ -645,7 +645,7 @@ class CodeEditor {
                 <div class="variables-modal-header">
                     <h3>${title}</h3>
                     <button class="variables-modal-close">
-                        <i class="bi bi-x-lg"></i>
+                        <i class="ti ti-x-lg"></i>
                     </button>
                 </div>
                 <div class="variables-modal-body">
@@ -682,9 +682,9 @@ class CodeEditor {
                         // Визуальная обратная связь
                         const icon = btn.querySelector('i');
                         if (icon) {
-                            icon.className = 'bi bi-check';
+                            icon.className = 'ti ti-check';
                             setTimeout(() => {
-                                icon.className = 'bi bi-clipboard';
+                                icon.className = 'ti ti-clipboard';
                             }, 1000);
                         }
                     } catch (error) {
@@ -715,7 +715,7 @@ class CodeEditor {
             this.container.classList.add('code-editor-fullscreen');
             
             const icon = this.toolbar.querySelector(`#fullscreenBtn-${this.uniqueId} i`);
-            if (icon) icon.className = 'bi bi-fullscreen-exit';
+            if (icon) icon.className = 'ti ti-fullscreen-exit';
             
             // Блокируем скролл body
             document.body.style.overflow = 'hidden';
@@ -735,7 +735,7 @@ class CodeEditor {
             }
             
             const icon = this.toolbar.querySelector(`#fullscreenBtn-${this.uniqueId} i`);
-            if (icon) icon.className = 'bi bi-arrows-fullscreen';
+            if (icon) icon.className = 'ti ti-arrows-fullscreen';
             
             // Разблокируем скролл body
             document.body.style.overflow = '';
@@ -767,13 +767,13 @@ class CodeEditor {
         if (!statusEl) return;
         
         const icons = {
-            success: 'bi-check-circle-fill',
-            error: 'bi-x-circle-fill',
-            warning: 'bi-exclamation-triangle-fill',
-            info: 'bi-info-circle-fill'
+            success: 'ti-check-circle-fill',
+            error: 'ti-x-circle-fill',
+            warning: 'ti-exclamation-triangle-fill',
+            info: 'ti-info-circle-fill'
         };
         
-        statusEl.innerHTML = `<i class="bi ${icons[type] || icons.info}"></i> ${message}`;
+        statusEl.innerHTML = `<i class="ti ti-${icons[type] || icons.info}"></i> ${message}`;
         statusEl.className = `status-item status-${type}`;
         
         setTimeout(() => {

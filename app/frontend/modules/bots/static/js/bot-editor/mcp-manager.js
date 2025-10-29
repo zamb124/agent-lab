@@ -29,7 +29,7 @@ export class MCPManager {
             if (!servers || servers.length === 0) {
                 mcpSelector.innerHTML = `
                     <div class="mcp-empty">
-                        <i class="bi bi-info-circle"></i> 
+                        <i class="ti ti-info-circle"></i> 
                         <p>MCP серверы не настроены.</p>
                         <p><a href="/frontend/mcp/" class="btn btn-primary btn-sm">Настроить MCP</a></p>
                     </div>
@@ -76,8 +76,8 @@ export class MCPManager {
                 serverHeader.className = 'mcp-server-header';
                 
                 const statusIcon = server.is_active
-                    ? '<i class="bi bi-check-circle-fill text-success"></i>'
-                    : '<i class="bi bi-x-circle-fill text-danger"></i>';
+                    ? '<i class="ti ti-check-circle-fill text-success"></i>'
+                    : '<i class="ti ti-x-circle-fill text-danger"></i>';
 
                 serverHeader.innerHTML = `
                     <div class="mcp-server-title">
@@ -111,10 +111,10 @@ export class MCPManager {
                         <label for="mcp-tool-${server.server_id}-${toolName.replace(/\./g, '-')}" class="mcp-tool-label">
                             <div class="mcp-tool-header">
                                 <div class="mcp-tool-icon">
-                                    <i class="bi bi-plugin"></i>
+                                    <i class="ti ti-plugin"></i>
                                 </div>
                                 <div class="mcp-tool-check">
-                                    <i class="bi bi-check-circle-fill"></i>
+                                    <i class="ti ti-check-circle-fill"></i>
                                 </div>
                             </div>
                             
@@ -155,7 +155,7 @@ export class MCPManager {
             console.error('Ошибка загрузки MCP инструментов:', error);
             mcpSelector.innerHTML = `
                 <div class="mcp-empty">
-                    <i class="bi bi-exclamation-triangle"></i> 
+                    <i class="ti ti-exclamation-triangle"></i> 
                     Ошибка загрузки MCP инструментов
                 </div>
             `;

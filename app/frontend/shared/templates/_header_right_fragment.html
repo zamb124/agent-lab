@@ -9,7 +9,7 @@
            {% if action.action %}data-action="{{ action.action }}"{% endif %}
            {% if action.tooltip %}data-tooltip="{{ action.tooltip }}"{% endif %}
            {% if action.id %}id="{{ action.id }}"{% endif %}>
-            {% if action.icon %}<i class="bi {{ action.icon }}"></i>{% endif %}
+            {% if action.icon %}<i class="ti ti-{{ action.icon }}"></i>{% endif %}
             {% if action.label %}<span>{{ t(action.label) if action.label.startswith('dashboard.') or action.label.startswith('common.') else action.label }}</span>{% endif %}
         </a>
         {% else %}
@@ -18,7 +18,7 @@
                 {% if action.onclick %}onclick="{{ action.onclick }}"{% endif %}
                 {% if action.tooltip %}data-tooltip="{{ action.tooltip }}"{% endif %}
                 {% if action.id %}id="{{ action.id }}"{% endif %}>
-            {% if action.icon %}<i class="bi {{ action.icon }}"></i>{% endif %}
+            {% if action.icon %}<i class="ti ti-{{ action.icon }}"></i>{% endif %}
             {% if action.label %}<span>{{ t(action.label) if action.label.startswith('dashboard.') or action.label.startswith('common.') else action.label }}</span>{% endif %}
         </button>
         {% endif %}
@@ -32,8 +32,8 @@
         {% set companies = user_companies if user_companies is defined else user_companies() %}
         {% if companies|length > 1 %}
         <div class="dropdown">
-            <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.switch_company') }}" style="max-width: 200px;">
-                <i class="bi bi-building"></i>
+            <button class="btn btn-ghost btn-sm" data-dropdown-toggle data-tooltip="{{ t('dashboard.header.switch_company') }}" style="max-width: 200px;">
+                <i class="ti ti-building"></i>
                 <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ current_company().name if current_company() else '' }}</span>
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
@@ -44,7 +44,7 @@
                        onclick="event.preventDefault(); switchCompany('{{ company.company_id }}');"
                        style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;">
                         {% if current_company() and company.company_id == current_company().company_id %}
-                        <i class="bi bi-check"></i>
+                        <i class="ti ti-check"></i>
                         {% endif %}
                         {{ company.name }}
                     </a>
@@ -56,24 +56,24 @@
         
         <!-- Dropdown для выбора языка -->
         <div class="dropdown">
-            <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
-                <i class="bi bi-translate"></i>
+            <button class="btn btn-ghost btn-sm" data-dropdown-toggle data-tooltip="{{ t('dashboard.header.language_toggle') }}">
+                <i class="ti ti-translate"></i>
                 <span id="current-language">{{ get_current_language().upper() }}</span>
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
                 <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); if(window.app && window.app.i18n) window.app.i18n.setLanguage('ru');">
-                    <i class="bi bi-check invisible" id="lang-ru"></i> 
+                    <i class="ti ti-check invisible" id="lang-ru"></i> 
                     {{ t('languages.ru') }}
                 </a></li>
                 <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); if(window.app && window.app.i18n) window.app.i18n.setLanguage('en');">
-                    <i class="bi bi-check invisible" id="lang-en"></i> 
+                    <i class="ti ti-check invisible" id="lang-en"></i> 
                     {{ t('languages.en') }}
                 </a></li>
             </ul>
         </div>
         
         <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="{{ t('dashboard.header.theme_toggle') }}">
-            <i class="bi bi-sun"></i>
+            <i class="ti ti-sun"></i>
         </button>
     </div>
 </div>

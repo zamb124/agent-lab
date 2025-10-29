@@ -67,7 +67,7 @@ export class FlowNode extends BaseNode {
         return `
             <div class="node-simple-content">
                 <div class="node-simple-icon flow">
-                    <i class="bi bi-diagram-3"></i>
+                    <i class="ti ti-hierarchy"></i>
                 </div>
                 <div class="node-simple-info">
                     <div class="node-simple-title">${this.escapeHtml(displayName)}</div>

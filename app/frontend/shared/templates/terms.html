@@ -128,14 +128,14 @@
         
         {% if flow_info %}
         <div class="terms-note" style="margin-top: 20px;">
-            <p><i class="bi bi-info-circle"></i> <strong>{{ flow_info.name }}</strong>{% if flow_info.description %} — {{ flow_info.description }}{% endif %}</p>
+            <p><i class="ti ti-info-circle"></i> <strong>{{ flow_info.name }}</strong>{% if flow_info.description %} — {{ flow_info.description }}{% endif %}</p>
         </div>
         {% endif %}
     </header>
 
     <!-- Секция 1: Общие положения -->
     <section class="terms-section">
-        <h2><i class="bi bi-file-text"></i> 1. {{ t('terms.section_1.title') }}</h2>
+        <h2><i class="ti ti-file-text"></i> 1. {{ t('terms.section_1.title') }}</h2>
         <p>{{ t('terms.section_1.intro') }} <strong>{{ company_name }}</strong>, {{ legal_form }}{% if inn %} (ИНН/ОГРН: {{ inn }}{% if ogrn %}/{{ ogrn }}{% endif %}){% endif %}, {{ t('terms.section_1.and_user') }}</p>
         <p>{{ t('terms.section_1.acceptance') }}</p>
         <p>{{ t('terms.section_1.capacity') }}</p>
@@ -143,7 +143,7 @@
 
     <!-- Секция 2: Определения -->
     <section class="terms-section">
-        <h2><i class="bi bi-book"></i> 2. {{ t('terms.section_2.title') }}</h2>
+        <h2><i class="ti ti-book"></i> 2. {{ t('terms.section_2.title') }}</h2>
         <ul>
             <li>{{ t('terms.section_2.service') }}</li>
             <li>{{ t('terms.section_2.user') }}</li>
@@ -154,7 +154,7 @@
 
     <!-- Секция 3: Регистрация -->
     <section class="terms-section">
-        <h2><i class="bi bi-person-plus"></i> 3. {{ t('terms.section_3.title') }}</h2>
+        <h2><i class="ti ti-person-plus"></i> 3. {{ t('terms.section_3.title') }}</h2>
         <ul>
             <li>{{ t('terms.section_3.registration') }}</li>
             <li>{{ t('terms.section_3.accuracy') }}</li>
@@ -166,7 +166,7 @@
 
     <!-- Секция 4: Использование -->
     <section class="terms-section">
-        <h2><i class="bi bi-check-circle"></i> 4. {{ t('terms.section_4.title') }}</h2>
+        <h2><i class="ti ti-check-circle"></i> 4. {{ t('terms.section_4.title') }}</h2>
         <p>{{ t('terms.section_4.intro') }}</p>
         <ul>
             <li>{{ t('terms.section_4.comply') }}</li>
@@ -179,7 +179,7 @@
 
     <!-- Секция 5: Интеллектуальная собственность -->
     <section class="terms-section">
-        <h2><i class="bi bi-shield-lock"></i> 5. {{ t('terms.section_5.title') }}</h2>
+        <h2><i class="ti ti-shield-lock"></i> 5. {{ t('terms.section_5.title') }}</h2>
         <ul>
             <li>{{ t('terms.section_5.ownership') }}</li>
             <li>{{ t('terms.section_5.license') }}</li>
@@ -190,7 +190,7 @@
 
     <!-- Секция 6: Ответственность -->
     <section class="terms-section">
-        <h2><i class="bi bi-exclamation-triangle"></i> 6. {{ t('terms.section_6.title') }}</h2>
+        <h2><i class="ti ti-exclamation-triangle"></i> 6. {{ t('terms.section_6.title') }}</h2>
         <p>{{ t('terms.section_6.as_is') }}</p>
         <p>{{ t('terms.section_6.no_warranty') }}</p>
         <p>{{ t('terms.section_6.no_liability') }}</p>
@@ -204,7 +204,7 @@
 
     <!-- Секция 7: Платные услуги -->
     <section class="terms-section">
-        <h2><i class="bi bi-credit-card"></i> 7. {{ t('terms.section_7.title') }}</h2>
+        <h2><i class="ti ti-credit-card"></i> 7. {{ t('terms.section_7.title') }}</h2>
         <ul>
             <li>{{ t('terms.section_7.payment') }}</li>
             <li>{{ t('terms.section_7.price') }}</li>
@@ -215,13 +215,13 @@
 
     <!-- Секция 8: Персональные данные -->
     <section class="terms-section">
-        <h2><i class="bi bi-person-lock"></i> 8. {{ t('terms.section_8.title') }}</h2>
+        <h2><i class="ti ti-person-lock"></i> 8. {{ t('terms.section_8.title') }}</h2>
         <p>{{ t('terms.section_8.reference') }} <a href="/privacy?lang={{ lang }}{% if flow_info %}&flow_id={{ request.query_params.get('flow_id') }}{% endif %}">{{ t('terms.section_8.privacy_policy') }}</a>.</p>
     </section>
 
     <!-- Секция 9: Изменения -->
     <section class="terms-section">
-        <h2><i class="bi bi-arrow-clockwise"></i> 9. {{ t('terms.section_9.title') }}</h2>
+        <h2><i class="ti ti-arrow-clockwise"></i> 9. {{ t('terms.section_9.title') }}</h2>
         <ul>
             <li>{{ t('terms.section_9.changes') }}</li>
             <li>{{ t('terms.section_9.notification') }}</li>
@@ -231,7 +231,7 @@
 
     <!-- Секция 10: Прекращение -->
     <section class="terms-section">
-        <h2><i class="bi bi-x-circle"></i> 10. {{ t('terms.section_10.title') }}</h2>
+        <h2><i class="ti ti-x-circle"></i> 10. {{ t('terms.section_10.title') }}</h2>
         <ul>
             <li>{{ t('terms.section_10.termination') }}</li>
             <li>{{ t('terms.section_10.deletion') }}</li>
@@ -241,7 +241,7 @@
 
     <!-- Секция 11: Применимое право -->
     <section class="terms-section">
-        <h2><i class="bi bi-hammer"></i> 11. {{ t('terms.section_11.title') }}</h2>
+        <h2><i class="ti ti-hammer"></i> 11. {{ t('terms.section_11.title') }}</h2>
         <ul>
             <li>{{ t('terms.section_11.law') }}</li>
             <li>{{ t('terms.section_11.disputes') }}</li>
@@ -251,7 +251,7 @@
 
     <!-- Секция 12: Контакты -->
     <section class="terms-section">
-        <h2><i class="bi bi-envelope"></i> 12. {{ t('terms.section_12.title') }}</h2>
+        <h2><i class="ti ti-envelope"></i> 12. {{ t('terms.section_12.title') }}</h2>
         <p>{{ t('terms.section_12.support') }}</p>
         <div class="terms-contact-box">
             <p>{{ t('terms.section_12.email') }} <a href="mailto:{{ support_email }}">{{ support_email }}</a></p>

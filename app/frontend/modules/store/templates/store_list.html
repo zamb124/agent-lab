@@ -7,7 +7,7 @@
             <div class="store-card-image">
                 {% if flow.installed %}
                 <span class="badge badge-success store-card-badge">
-                    <i class="bi bi-check-circle-fill"></i>
+                    <i class="ti ti-check-circle-fill"></i>
                     Установлено
                 </span>
                 {% endif %}
@@ -21,7 +21,7 @@
                 {% if flow.platforms and flow.platforms|length > 0 %}
                 <div class="store-card-platforms">
                     <span class="platforms-label">
-                        <i class="bi bi-box"></i>
+                        <i class="ti ti-box"></i>
                         Каналы:
                     </span>
                     <div class="platform-tags">
@@ -36,7 +36,7 @@
                         {% set config = platform_config.get(platform, {'icon': 'gear', 'text': platform}) %}
                         
                         <span class="platform-tag platform-{{ platform }}">
-                            <i class="bi bi-{{ config.icon }}"></i> {{ config.text }}
+                            <i class="ti ti-{{ config.icon }}"></i> {{ config.text }}
                         </span>
                         {% endfor %}
                     </div>
@@ -45,7 +45,7 @@
                 
                 {% if flow.author %}
                 <div class="store-card-author">
-                    <i class="bi bi-person-circle"></i>
+                    <i class="ti ti-person-circle"></i>
                     <span>{{ flow.author.get('name', 'Неизвестный автор') }}</span>
                 </div>
                 {% endif %}

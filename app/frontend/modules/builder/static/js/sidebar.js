@@ -137,7 +137,7 @@ export default class BuilderSidebar {
                  draggable="true" 
                  data-item-type="flow"
                  data-item-id="${flow.flow_id}">
-                <i class="bi bi-diagram-3"></i>
+                <i class="ti ti-hierarchy"></i>
                 <span class="item-name">${flow.name}</span>
             </div>
         `).join('');
@@ -162,7 +162,7 @@ export default class BuilderSidebar {
                  draggable="true" 
                  data-item-type="agent"
                  data-item-id="${agent.agent_id}">
-                <i class="bi bi-robot"></i>
+                <i class="ti ti-robot"></i>
                 <span class="item-name">${agent.name}</span>
                 <span class="item-meta">${agent.type}</span>
             </div>
@@ -188,7 +188,7 @@ export default class BuilderSidebar {
                  draggable="true" 
                  data-item-type="tool"
                  data-item-id="${tool.tool_id}">
-                <i class="bi bi-tools"></i>
+                <i class="ti ti-tools"></i>
                 <span class="item-name">${tool.name}</span>
             </div>
         `).join('');

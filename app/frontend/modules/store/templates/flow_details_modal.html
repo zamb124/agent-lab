@@ -8,7 +8,7 @@
         {% endif %}
     </h2>
     <button class="btn-close" onclick="closeFlowModal()" title="Закрыть">
-        <i class="bi bi-x-circle-fill"></i>
+        <i class="ti ti-x-circle-fill"></i>
     </button>
 </div>
 
@@ -17,32 +17,32 @@
         <div class="flow-sidebar">
             {% if flow.author %}
             <div class="flow-author-card">
-                <h4><i class="bi bi-person-badge"></i> Автор</h4>
+                <h4><i class="ti ti-person-badge"></i> Автор</h4>
                 <div class="author-content">
                     {% if flow.author.get('avatar') %}
                     <img src="{{ flow.author.avatar }}" alt="{{ flow.author.name }}" class="author-avatar">
                     {% else %}
                     <div class="author-avatar-placeholder">
-                        <i class="bi bi-person-circle"></i>
+                        <i class="ti ti-person-circle"></i>
                     </div>
                     {% endif %}
                     <div class="author-info">
                         <div class="author-name">{{ flow.author.get('name', 'Неизвестный автор') }}</div>
                         {% if flow.author.get('email') %}
                         <div class="author-contact">
-                            <i class="bi bi-envelope"></i>
+                            <i class="ti ti-envelope"></i>
                             <a href="mailto:{{ flow.author.email }}">{{ flow.author.email }}</a>
                         </div>
                         {% endif %}
                         {% if flow.author.get('website') %}
                         <div class="author-contact">
-                            <i class="bi bi-link-45deg"></i>
+                            <i class="ti ti-link-45deg"></i>
                             <a href="{{ flow.author.website }}" target="_blank" rel="noopener">Сайт</a>
                         </div>
                         {% endif %}
                         {% if flow.author.get('github') %}
                         <div class="author-contact">
-                            <i class="bi bi-github"></i>
+                            <i class="ti ti-github"></i>
                             <a href="{{ flow.author.github }}" target="_blank" rel="noopener">GitHub</a>
                         </div>
                         {% endif %}
@@ -53,7 +53,7 @@
 
             {% if flow.variables_definitions and flow.variables_definitions|length > 0 %}
             <div class="flow-variables-section">
-                <h4><i class="bi bi-gear"></i> Настройка переменных</h4>
+                <h4><i class="ti ti-gear"></i> Настройка переменных</h4>
                 <p class="text-muted">Заполните переменные для корректной работы flow:</p>
                 <div class="variables-form" id="variables-form">
                     {% for var_def in flow.variables_definitions %}
@@ -61,7 +61,7 @@
                         <label for="var_{{ var_def.key }}">
                             {{ var_def.description }}
                             {% if var_def.is_secret %}
-                                <i class="bi bi-shield-lock text-warning" title="Секретная переменная"></i>
+                                <i class="ti ti-shield-lock text-warning" title="Секретная переменная"></i>
                             {% endif %}
                             {% if var_def.required %}
                                 <span class="text-danger">*</span>
@@ -79,7 +79,7 @@
                             >
                             {% if var_def.is_secret %}
                             <button type="button" class="password-toggle" onclick="togglePassword('var_{{ var_def.key }}')" title="Показать/скрыть пароль">
-                                <i class="bi bi-eye"></i>
+                                <i class="ti ti-eye"></i>
                             </button>
                             {% endif %}
                         </div>
@@ -95,12 +95,12 @@
             <div class="flow-actions">
                 {% if flow.installed %}
                 <button class="btn btn-danger" onclick="uninstallFlow('{{ flow.flow_id }}')">
-                    <i class="bi bi-trash"></i>
+                    <i class="ti ti-trash"></i>
                     Удалить
                 </button>
                 {% else %}
                 <button class="btn btn-primary" onclick="installFlow('{{ flow.flow_id }}')">
-                    <i class="bi bi-box-arrow-in-down"></i>
+                    <i class="ti ti-box-arrow-in-down"></i>
                     Установить
                 </button>
                 {% endif %}
@@ -117,22 +117,22 @@
             
             {% if flow.platforms %}
             <div class="flow-platforms-section">
-                <h4><i class="bi bi-box"></i> Поддерживаемые платформы</h4>
+                <h4><i class="ti ti-box"></i> Поддерживаемые платформы</h4>
                 <div class="platform-tags-large">
                     {% for platform, config in flow.platforms.items() %}
                     <span class="platform-tag-large platform-{{ platform }}">
                         {% if platform == 'telegram' %}
-                            <i class="bi bi-telegram"></i> Telegram
+                            <i class="ti ti-telegram"></i> Telegram
                         {% elif platform == 'whatsapp' %}
-                            <i class="bi bi-whatsapp"></i> WhatsApp
+                            <i class="ti ti-whatsapp"></i> WhatsApp
                         {% elif platform == 'api' %}
-                            <i class="bi bi-code-slash"></i> API
+                            <i class="ti ti-code-slash"></i> API
                         {% elif platform == 'web' %}
-                            <i class="bi bi-globe"></i> Web
+                            <i class="ti ti-globe"></i> Web
                         {% elif platform == 'amocrm' %}
-                            <i class="bi bi-building"></i> AmoCRM
+                            <i class="ti ti-building"></i> AmoCRM
                         {% else %}
-                            <i class="bi bi-gear"></i> {{ platform }}
+                            <i class="ti ti-gear"></i> {{ platform }}
                         {% endif %}
                     </span>
                     {% endfor %}

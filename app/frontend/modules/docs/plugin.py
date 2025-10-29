@@ -28,7 +28,7 @@ class DocsPlugin(Plugin):
         {
             "id": "docs",
             "label": "dashboard.navigation.docs",
-            "icon": "bi-book",
+            "icon": "book",
             "url": "/docs",
             "order": 10,
             "target": "_blank"

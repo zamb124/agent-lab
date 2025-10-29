@@ -25,42 +25,42 @@ class AdminPlugin(Plugin):
         {
             "id": "admin",
             "label": "Администрирование",
-            "icon": "bi-shield-lock",
+            "icon": "shield-lock",
             "type": "submenu",
             "order": 100,
             "children": [
                 {
                     "id": "admin_users",
                     "label": "Пользователи",
-                    "icon": "bi-people",
+                    "icon": "people",
                     "url": "/frontend/models/user?view=table",
                     "type": "htmx"
                 },
                 {
                     "id": "admin_agents",
                     "label": "Агенты",
-                    "icon": "bi-robot",
+                    "icon": "robot",
                     "url": "/frontend/models/agent?view=table",
                     "type": "htmx"
                 },
                 {
                     "id": "admin_flows",
                     "label": "Flows",
-                    "icon": "bi-diagram-3",
+                    "icon": "diagram-3",
                     "url": "/frontend/models/flow?view=table",
                     "type": "htmx"
                 },
                 {
                     "id": "admin_tasks",
                     "label": "Tasks",
-                    "icon": "bi-list-task",
+                    "icon": "list-task",
                     "url": "/frontend/models/task?view=table",
                     "type": "htmx"
                 },
                 {
                     "id": "admin_companies",
                     "label": "Компании",
-                    "icon": "bi-building",
+                    "icon": "building",
                     "url": "/frontend/admin/companies",
                     "type": "page"
                 }

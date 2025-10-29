@@ -24,7 +24,7 @@ class MCPPlugin(Plugin):
         {
             "id": "mcp",
             "label": "dashboard.navigation.mcp",
-            "icon": "bi-plug",
+            "icon": "plug",
             "url": "/frontend/mcp/",
             "order": 60,
             "type": "htmx"
@@ -36,7 +36,7 @@ class MCPPlugin(Plugin):
             "id": "mcp_widget",
             "title": "dashboard.widgets.mcp",
             "description": "Интеграция с внешними MCP серверами",
-            "icon": "bi-plug",
+            "icon": "plug",
             "url": "/frontend/mcp/",
             "order": 60
         }

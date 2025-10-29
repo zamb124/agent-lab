@@ -40,15 +40,24 @@ async def get_current_user(auth_service: AuthServiceDep):
     avatar_url = None
     provider_value = None
     
+    all_provider_info = await auth_service.get_all_user_providers_info(user.user_id)
+    if all_provider_info:
+        for provider_data in all_provider_info.values():
+            if provider_data.get("avatar_url") and not avatar_url:
+                avatar_url = provider_data.get("avatar_url")
+            if provider_data.get("email") and not email:
+                email = provider_data.get("email")
+    
     if context.session_id:
         session = await auth_service._get_session(context.session_id)
-        provider_value = session.provider.value if session else None
-        
         if session:
+            provider_value = session.provider.value
             provider_info = await auth_service.get_user_provider_info(user.user_id, session.provider)
             if provider_info:
-                email = provider_info.get("email")
-                avatar_url = provider_info.get("avatar_url")
+                if provider_info.get("email"):
+                    email = provider_info.get("email")
+                if provider_info.get("avatar_url"):
+                    avatar_url = provider_info.get("avatar_url")
     
     return {
         "user_id": user.user_id,

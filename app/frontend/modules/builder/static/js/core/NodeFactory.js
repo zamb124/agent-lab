@@ -72,7 +72,7 @@ export class NodeFactory {
                 element.innerHTML = `
                     <div class="node-simple-content">
                         <div class="node-simple-icon default">
-                            <i class="bi bi-square"></i>
+                            <i class="ti ti-square"></i>
                         </div>
                         <div class="node-simple-info">
                             <div class="node-simple-title">${this.escapeHtml(displayName)}</div>

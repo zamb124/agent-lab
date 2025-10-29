@@ -30,7 +30,7 @@
                                class="text-decoration-none" 
                                title="{{ t('builder.title') }}">
                                 <small>{{ session.flow_name or session.flow_id }}</small>
-                                <i class="bi bi-box-arrow-up-right ms-1 text-xs"></i>
+                                <i class="ti ti-box-arrow-up-right ms-1 text-xs"></i>
                             </a>
                         {% else %}
                             <small class="text-muted">{{ t('chats.not_specified') }}</small>
@@ -59,7 +59,7 @@
                         {{ c.button('',
                             variant='primary',
                             size='sm',
-                            icon='chat-dots',
+                            icon='message-dots',
                             onclick='window.app.chat.openExistingSession(\'' + session.flow_id + '\', \'' + session.session_id + '\')',
                             data_tooltip=t('chats.open_chat')
                         ) }}

@@ -24,7 +24,7 @@ class BotsPlugin(Plugin):
         {
             "id": "bots",
             "label": "dashboard.navigation.bots",
-            "icon": "bi-people-fill",
+            "icon": "users",
             "url": "/frontend/bots/",
             "order": 10,
             "type": "htmx"
@@ -36,7 +36,7 @@ class BotsPlugin(Plugin):
             "id": "bots_widget",
             "title": "dashboard.widgets.bots",
             "description": "Управление ботами и агентами",
-            "icon": "bi-robot",
+            "icon": "robot",
             "url": "/frontend/bots/",
             "order": 20
         }
@@ -46,7 +46,7 @@ class BotsPlugin(Plugin):
         {
             "id": "bots_save",
             "label": "Сохранить",
-            "icon": "bi-device-floppy",
+            "icon": "device-floppy",
             "action": "bots:save",
             "urls": [
                 "/frontend/bots/*/details"
@@ -57,7 +57,7 @@ class BotsPlugin(Plugin):
         {
             "id": "bots_copy_id",
             "label": "Копировать ID",
-            "icon": "bi-copy",
+            "icon": "copy",
             "action": "bots:copy_id",
             "urls": [
                 "/frontend/bots/*/details"
@@ -68,7 +68,7 @@ class BotsPlugin(Plugin):
         {
             "id": "bots_delete",
             "label": "Удалить",
-            "icon": "bi-trash",
+            "icon": "trash",
             "action": "bots:delete",
             "urls": [
                 "/frontend/bots/*/details"
@@ -79,7 +79,7 @@ class BotsPlugin(Plugin):
         {
             "id": "bots_create",
             "label": "Создать бота",
-            "icon": "bi-plus-circle",
+            "icon": "plus",
             "action": "bots:create",
             "urls": [
                 "/frontend/bots/",
@@ -91,7 +91,7 @@ class BotsPlugin(Plugin):
         {
             "id": "bots_refresh",
             "label": "Обновить",
-            "icon": "bi-arrow-clockwise",
+            "icon": "rotate-clockwise",
             "action": "bots:refresh",
             "urls": [
                 "/frontend/bots/",

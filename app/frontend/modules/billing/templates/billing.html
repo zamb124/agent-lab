@@ -13,31 +13,31 @@
     <div class="billing-header">
         <div class="billing-header-left">
             <a href="/frontend/dashboard" class="btn btn-ghost btn-sm">
-                <i class="bi bi-arrow-left"></i>
+                <i class="ti ti-arrow-left"></i>
                 {{ t('common.back') }}
             </a>
             <h1 class="billing-title">{{ t('billing.title') }}</h1>
         </div>
         <div class="billing-header-right">
             <div class="dropdown">
-                <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
-                    <i class="bi bi-translate"></i>
+                <button class="btn btn-ghost btn-sm" data-dropdown-toggle data-tooltip="{{ t('dashboard.header.language_toggle') }}">
+                    <i class="ti ti-translate"></i>
                     <span id="current-language">{{ get_current_language().upper() }}</span>
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end">
                     <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); if(window.app && window.app.i18n) window.app.i18n.setLanguage('ru');">
-                        <i class="bi bi-check invisible" id="lang-ru"></i> 
+                        <i class="ti ti-check invisible" id="lang-ru"></i> 
                         {{ t('languages.ru') }}
                     </a></li>
                     <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); if(window.app && window.app.i18n) window.app.i18n.setLanguage('en');">
-                        <i class="bi bi-check invisible" id="lang-en"></i> 
+                        <i class="ti ti-check invisible" id="lang-en"></i> 
                         {{ t('languages.en') }}
                     </a></li>
                 </ul>
             </div>
             
             <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="{{ t('dashboard.header.theme_toggle') }}">
-                <i class="bi bi-sun"></i>
+                <i class="ti ti-sun"></i>
             </button>
         </div>
     </div>
@@ -46,12 +46,12 @@
         <div class="billing-section">
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
-                    <i class="bi bi-star"></i>
+                    <i class="ti ti-star"></i>
                     {{ t('billing.current_plan.title') }}
                 </h2>
                 <div class="billing-section-actions">
                     <a href="/frontend/create-company" class="btn btn-ghost btn-sm">
-                        <i class="bi bi-plus-circle"></i>
+                        <i class="ti ti-plus-circle"></i>
                         {{ t('billing.create_company') }}
                     </a>
                 </div>
@@ -60,13 +60,13 @@
             <div class="tariff-card current-tariff">
                 <div class="tariff-badge">
                     {% if company.tariff_plan == 'free' %}
-                        <i class="bi bi-gift"></i> {{ t('billing.tariff_plans.free.name') }}
+                        <i class="ti ti-gift"></i> {{ t('billing.tariff_plans.free.name') }}
                     {% elif company.tariff_plan == 'basic' %}
-                        <i class="bi bi-box"></i> {{ t('billing.tariff_plans.basic.name') }}
+                        <i class="ti ti-box"></i> {{ t('billing.tariff_plans.basic.name') }}
                     {% elif company.tariff_plan == 'premium' %}
-                        <i class="bi bi-gem"></i> {{ t('billing.tariff_plans.premium.name') }}
+                        <i class="ti ti-gem"></i> {{ t('billing.tariff_plans.premium.name') }}
                     {% elif company.tariff_plan == 'enterprise' %}
-                        <i class="bi bi-building"></i> {{ t('billing.tariff_plans.enterprise.name') }}
+                        <i class="ti ti-building"></i> {{ t('billing.tariff_plans.enterprise.name') }}
                     {% endif %}
                 </div>
                 
@@ -96,12 +96,12 @@
         <div class="billing-section">
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
-                    <i class="bi bi-wallet2"></i>
+                    <i class="ti ti-wallet2"></i>
                     {{ t('billing.budget_usage.title') }}
                 </h2>
                 <div class="billing-section-actions">
                     <button class="btn btn-primary btn-sm" onclick="openPaymentModal()">
-                        <i class="bi bi-credit-card"></i>
+                        <i class="ti ti-credit-card"></i>
                         {{ t('billing.budget_usage.add_funds') }}
                     </button>
                 </div>
@@ -129,7 +129,7 @@
                 {% endif %}
                 
                 <div class="budget-period">
-                    <i class="bi bi-calendar3"></i>
+                    <i class="ti ti-calendar3"></i>
                     {{ t('billing.budget_usage.billing_period') }}: {{ company.billing_period_start.strftime('%d.%m.%Y') }} - {{ company.billing_period_start.replace(day=28).strftime('%d.%m.%Y') if company.billing_period_start.month != 12 else company.billing_period_start.replace(month=12, day=31).strftime('%d.%m.%Y') }}
                 </div>
             </div>
@@ -138,7 +138,7 @@
         <div class="billing-section">
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
-                    <i class="bi bi-graph-up"></i>
+                    <i class="ti ti-graph-up"></i>
                     {{ t('billing.usage_stats.title') }}
                 </h2>
             </div>
@@ -146,7 +146,7 @@
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-icon stat-icon-primary">
-                        <i class="bi bi-telephone"></i>
+                        <i class="ti ti-telephone"></i>
                     </div>
                     <div class="stat-content">
                         <div class="stat-label">{{ t('billing.usage_stats.total_calls') }}</div>
@@ -156,7 +156,7 @@
                 
                 <div class="stat-card">
                     <div class="stat-icon stat-icon-success">
-                        <i class="bi bi-cash-stack"></i>
+                        <i class="ti ti-cash-stack"></i>
                     </div>
                     <div class="stat-content">
                         <div class="stat-label">{{ t('billing.usage_stats.total_cost') }}</div>
@@ -169,7 +169,7 @@
         <div class="billing-section">
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
-                    <i class="bi bi-list-ul"></i>
+                    <i class="ti ti-list-ul"></i>
                     {{ t('billing.resources.title') }}
                 </h2>
             </div>
@@ -189,7 +189,7 @@
                         <tr>
                             <td>
                                 <div class="resource-name">
-                                    <i class="bi bi-cpu"></i>
+                                    <i class="ti ti-cpu"></i>
                                     {{ resource_name }}
                                 </div>
                             </td>
@@ -214,7 +214,7 @@
         <div class="billing-section">
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
-                    <i class="bi bi-people"></i>
+                    <i class="ti ti-people"></i>
                     {{ t('billing.users.title') }}
                 </h2>
             </div>
@@ -234,7 +234,7 @@
                         <tr>
                             <td>
                                 <div class="resource-name">
-                                    <i class="bi bi-person"></i>
+                                    <i class="ti ti-person"></i>
                                     {{ user_stats.user_name if user_stats.user_name else user_id }}
                                 </div>
                             </td>
@@ -259,7 +259,7 @@
         <div class="billing-section">
             <div class="billing-section-header">
                 <h2 class="billing-section-title">
-                    <i class="bi bi-clock-history"></i>
+                    <i class="ti ti-clock-history"></i>
                     {{ t('billing.payment_history.title') }}
                 </h2>
             </div>
@@ -270,32 +270,32 @@
                     {% for transaction in payment_history %}
                     <div class="transaction-item status-{{ transaction.status }}">
                         <div class="transaction-icon">
-                            <i class="bi bi-arrow-down-circle"></i>
+                            <i class="ti ti-arrow-down-circle"></i>
                         </div>
                         <div class="transaction-details">
                             <div class="transaction-header">
                                 <span class="transaction-amount">+{{ "%.2f"|format(transaction.amount) }} ₽</span>
                                 <span class="transaction-status">
                                     {% if transaction.status == 'success' %}
-                                        <i class="bi bi-check-circle-fill"></i> {{ t('billing.status.success') }}
+                                        <i class="ti ti-check-circle-fill"></i> {{ t('billing.status.success') }}
                                     {% elif transaction.status == 'pending' %}
-                                        <i class="bi bi-clock-fill"></i> {{ t('billing.status.pending') }}
+                                        <i class="ti ti-clock-fill"></i> {{ t('billing.status.pending') }}
                                     {% elif transaction.status == 'failed' %}
-                                        <i class="bi bi-x-circle-fill"></i> {{ t('billing.status.error') }}
+                                        <i class="ti ti-x-circle-fill"></i> {{ t('billing.status.error') }}
                                     {% endif %}
                                 </span>
                             </div>
                             <div class="transaction-meta">
                                 <span class="transaction-date">
-                                    <i class="bi bi-calendar3"></i>
+                                    <i class="ti ti-calendar3"></i>
                                     {{ transaction.created_at.strftime('%d.%m.%Y %H:%M') }}
                                 </span>
                                 <span class="transaction-id">
-                                    <i class="bi bi-hash"></i>
+                                    <i class="ti ti-hash"></i>
                                     {{ transaction.transaction_id }}
                                 </span>
                                 <span class="transaction-provider">
-                                    <i class="bi bi-credit-card"></i>
+                                    <i class="ti ti-credit-card"></i>
                                     {% if transaction.payment_provider == 'yoomoney' %}
                                         {{ t('billing.payment_methods.yoomoney') }}
                                     {% elif transaction.payment_provider == 'yukassa' %}
@@ -325,18 +325,18 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3 class="modal-title">
-                    <i class="bi bi-wallet2"></i>
+                    <i class="ti ti-wallet2"></i>
                     {{ t('billing.modal.title') }}
                 </h3>
                 <button class="modal-close" onclick="closePaymentModal()">
-                    <i class="bi bi-x-lg"></i>
+                    <i class="ti ti-x-lg"></i>
                 </button>
             </div>
             <div class="modal-body">
                 <form id="payment-form" onsubmit="event.preventDefault(); createPayment();">
                     <div class="form-group">
                         <label for="payment-amount">
-                            <i class="bi bi-currency-ruble"></i>
+                            <i class="ti ti-currency-ruble"></i>
                             {{ t('billing.modal.amount_label') }} (₽)
                         </label>
                         <input 
@@ -355,21 +355,21 @@
                     
                     <div class="payment-info">
                         <div class="payment-info-item">
-                            <i class="bi bi-credit-card"></i>
+                            <i class="ti ti-credit-card"></i>
                             <span>{{ t('billing.modal.card_payment') }}</span>
                         </div>
                         <div class="payment-info-item">
-                            <i class="bi bi-shield-check"></i>
+                            <i class="ti ti-shield-check"></i>
                             <span>{{ t('billing.modal.secure_transaction') }}</span>
                         </div>
                         <div class="payment-info-item">
-                            <i class="bi bi-lightning-charge"></i>
+                            <i class="ti ti-lightning-charge"></i>
                             <span>{{ t('billing.modal.instant_crediting') }}</span>
                         </div>
                     </div>
                     
                     <div class="payment-notice">
-                        <i class="bi bi-info-circle"></i>
+                        <i class="ti ti-info-circle"></i>
                         <div>
                             <strong>{{ t('billing.modal.how_it_works') }}:</strong>
                             <p>{{ t('billing.modal.process_description') }}</p>
@@ -382,7 +382,7 @@
                     {{ t('common.cancel') }}
                 </button>
                 <button class="btn btn-primary" type="button" id="payment-submit-btn" onclick="createPayment()">
-                    <i class="bi bi-arrow-right-circle"></i>
+                    <i class="ti ti-arrow-right-circle"></i>
                     {{ t('billing.modal.proceed_to_payment') }}
                 </button>
             </div>

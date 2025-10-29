@@ -370,35 +370,9 @@
     transform: none !important;
 }
 
-/* Убираем кастомные иконки - будем использовать Bootstrap Icons напрямую */
+/* Убираем кастомные иконки - используем Tabler Icons */
 
-/* Модальное окно - Glass Morphism */
-.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 1050;
-    display: none;
-    align-items: center;
-    justify-content: center;
-}
-
-.modal.show {
-    display: flex !important;
-}
-
-.modal-backdrop {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(16px);
-    z-index: 1;
-}
+/* Builder-specific модальные окна - используем общий стиль из shared, но добавляем специфичные обертки */
 
 .modal-form-wrapper {
     position: relative;
