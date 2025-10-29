@@ -464,13 +464,6 @@
 
 .flow-actions .btn {
     flex: 1;
-    padding: 0.5rem 1rem;
-    font-size: 0.875rem;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
 }
 
 .flow-variables-section {
@@ -564,13 +557,13 @@
     transform: translateY(-50%) scale(0.95);
 }
 
-.variable-input-group input:required {
-    border-color: var(--error-color);
+.variable-input-group input:required:invalid:not(:placeholder-shown):not(:focus) {
+    border-color: var(--accent-danger);
 }
 
-.variable-input-group input:required:focus {
-    border-color: var(--error-color);
-    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+.variable-input-group input:required:invalid:focus {
+    border-color: var(--accent-danger);
+    box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.2);
 }
 
 .variable-input-group small {

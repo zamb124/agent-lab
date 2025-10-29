@@ -4,7 +4,6 @@ Nano Banana клиент для генерации изображений чер
 """
 
 import logging
-import re
 import base64
 from typing import List, Optional
 
@@ -43,6 +42,7 @@ class NanoBananaClient:
         prompt: str,
         reference_file_ids: Optional[List[str]] = None,
         num_images: int = 1,
+        is_editing: bool = False,
     ) -> List[str]:
         """
         Генерирует изображения через LLM с multimodal output.
@@ -51,6 +51,7 @@ class NanoBananaClient:
             prompt: Текстовое описание для генерации
             reference_file_ids: ID файлов-референсов для использования в генерации
             num_images: Количество изображений для генерации
+            is_editing: Если True, первое изображение используется как база для редактирования
             
         Returns:
             Список file_id сгенерированных изображений
@@ -58,7 +59,38 @@ class NanoBananaClient:
         logger.info(f"🎨 Генерация {num_images} изображений через LLM: {prompt[:50]}...")
         
         # Формируем multimodal content
-        content = [{"type": "text", "text": prompt}]
+        content = []
+        
+        # Если режим редактирования - добавляем жесткие инструкции в начало
+        if is_editing and reference_file_ids:
+            content.append({
+                "type": "text",
+                "text": """🚨 CRITICAL: PHOTO EDITING TASK - ABSOLUTE PROHIBITION ON GENERATION 🚨
+
+**YOU ARE FORBIDDEN FROM:**
+- Generating a NEW person (different face, body, identity, gender)
+- Creating a NEW background or scene
+- Generating a NEW image from scratch
+- Replacing the person in the BASE IMAGE
+- Changing the person's appearance, face, body, or identity
+- **IMPROVING or ENHANCING the person's appearance** (better skin, smoother features, perfect makeup, etc.)
+- **IMPROVING or CHANGING the person's clothing** (making it more fashionable, cleaner, newer, better fitting)
+- **TOUCHING UP or BEAUTIFYING** any part of the person or their clothing
+- **REMOVING or FIXING imperfections** in the person's appearance or clothing
+
+**YOU MUST:**
+- EDIT the EXISTING BASE IMAGE (Image #1) ONLY
+- PRESERVE the EXACT person, face, body, pose, background, and lighting
+- PRESERVE the EXACT clothing as it appears (keep all wrinkles, wear, style, condition)
+- PRESERVE all imperfections, natural features, and realistic appearance
+- ADD the product to the EXISTING person in the BASE IMAGE
+- Keep 98-99% of the BASE IMAGE unchanged
+- Only modify 1-2% to add the product
+
+**IF YOU GENERATE A NEW PERSON OR NEW IMAGE, THIS IS A CRITICAL FAILURE.**
+
+The BASE IMAGE below shows the EXACT person you must preserve. Do NOT create a new person."""
+            })
         
         # Добавляем референсные изображения если есть
         if reference_file_ids:
@@ -66,7 +98,7 @@ class NanoBananaClient:
             from ..file_processor import get_default_file_processor
             file_processor = await get_default_file_processor()
             
-            for file_id in reference_file_ids:
+            for idx, file_id in enumerate(reference_file_ids):
                 record = await file_processor.get_file_record(file_id)
                 if record:
                     # Загружаем файл из S3
@@ -78,18 +110,65 @@ class NanoBananaClient:
                         # Конвертируем в base64
                         base64_data = base64.b64encode(file_bytes).decode('utf-8')
                         
-                        # Добавляем в content
+                        # Если это режим редактирования и первое изображение - добавляем с явной меткой
+                        if is_editing and idx == 0:
+                            # Сначала добавляем текст с инструкцией о базовом изображении
+                            content.append({
+                                "type": "text",
+                                "text": """BASE IMAGE TO EDIT (Image #1) - DO NOT GENERATE NEW IMAGE
+
+**THIS IS THE EXISTING PHOTOGRAPH - YOU MUST EDIT IT, NOT REPLACE IT:**
+
+CRITICAL RULES FOR BASE IMAGE:
+1. The person in this image MUST remain IDENTICAL (same face, same body, same identity, same gender, same clothing, same hair, same pose)
+2. The background in this image MUST remain IDENTICAL
+3. The lighting in this image MUST remain IDENTICAL  
+4. The person's clothing MUST remain EXACTLY as shown (same style, condition, wrinkles, wear, fit)
+5. DO NOT improve, enhance, or beautify the person's appearance (skin, features, makeup, etc.)
+6. DO NOT improve, update, or change the person's clothing (fashion, condition, fit, cleanliness)
+7. DO NOT touch up, remove imperfections, or "fix" anything about the person or their clothing
+8. You are ONLY allowed to ADD the product to this person - nothing else changes
+9. DO NOT generate a new person or new image
+10. DO NOT replace the person's face, body, or identity
+11. DO NOT change the background or scene
+
+**IF THE OUTPUT SHOWS A DIFFERENT PERSON OR DIFFERENT BACKGROUND, YOU HAVE FAILED.**
+
+After this base image, you will see reference images of the product. Your task is to add ONLY the product to this EXACT person in this EXACT image."""
+                            })
+                        
+                        # Добавляем изображение
                         content.append({
                             "type": "image_url",
                             "image_url": {
                                 "url": f"data:{record.content_type};base64,{base64_data}"
                             }
                         })
-                        logger.info(f"📎 Добавлено изображение {file_id}")
+                        
+                        # Если это режим редактирования и не первое изображение - добавляем метку референса
+                        if is_editing and idx > 0:
+                            content.append({
+                                "type": "text",
+                                "text": f"""REFERENCE IMAGE #{idx + 1} - PRODUCT TO COPY
+
+**CRITICAL:** This is a REFERENCE of the product. You must:
+1. Extract ONLY the product from this reference image
+2. Copy it EXACTLY (color, pattern, shape, details, size)
+3. Add it to the BASE IMAGE (Image #1) - the EXISTING person
+4. DO NOT create a new person or use the person from this reference
+5. DO NOT generate anything new - only copy the product to the base image
+
+Remember: Edit the BASE IMAGE, do NOT generate a new image."""
+                            })
+                        
+                        logger.info(f"📎 Добавлено изображение {file_id} (индекс {idx})")
                     else:
                         logger.warning(f"⚠️ Не удалось загрузить файл {file_id}")
                 else:
                     logger.warning(f"⚠️ Файл {file_id} не найден")
+        
+        # Добавляем основной prompt в конец, чтобы он конкретизировал задачу
+        content.append({"type": "text", "text": prompt})
         
         # Получаем LLM
         llm = await self._get_llm()
@@ -100,16 +179,16 @@ class NanoBananaClient:
             "content": content
         }])
         
-        # Парсим file_ids из ответа (ChatOpenAIWithBilling добавил описания файлов)
-        # Формат: 📎 Файл: name (ID: file_id, [Скачать](url), ...)
-        pattern = r'📎 Файл: [^(]+ \(ID: ([^,]+),'
-        file_ids = re.findall(pattern, response.content)
+        # Парсим file_ids из ответа используя FileProcessor
+        from ..file_processor import FileProcessor
+        file_info_list = FileProcessor.extract_file_info_from_message(response.content)
+        file_ids = [info["file_id"] for info in file_info_list if info.get("file_id")]
         
         if file_ids:
             logger.info(f"✅ Сгенерировано {len(file_ids)} изображений: {file_ids}")
         else:
             logger.warning(f"⚠️ Не удалось найти file_id в ответе LLM")
-            logger.debug(f"Response content: {response.content}")
+            logger.info(f"Response content: {response.content[:500]}")
         
         return file_ids
 

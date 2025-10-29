@@ -43,10 +43,24 @@ class ThemeManager {
     }
     
     setupThemeToggle() {
-        const toggleBtn = document.querySelector('[data-theme-toggle]');
-        if (toggleBtn) {
-            toggleBtn.addEventListener('click', () => this.toggleTheme());
-        }
+        // Используем делегирование событий на уровне document
+        // Это работает даже если кнопка заменяется через HTMX
+        document.removeEventListener('click', this._handleThemeToggle);
+        this._handleThemeToggle = (e) => {
+            const toggleBtn = e.target.closest('[data-theme-toggle]');
+            if (toggleBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.toggleTheme();
+            }
+        };
+        document.addEventListener('click', this._handleThemeToggle);
+        this.updateThemeIcon();
+    }
+    
+    reinitialize() {
+        // При HTMX обновлениях просто обновляем иконку
+        this.updateThemeIcon();
     }
 }
 

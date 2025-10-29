@@ -147,16 +147,22 @@ class FileRecord(BaseModel):
         from app.core.config import settings
         
         context = get_context()
-        subdomain = context.active_company.subdomain
+        subdomain = context.active_company.subdomain if context and context.active_company else None
         
-        # Для локального окружения используем localhost
+        # Для локального окружения используем localhost с поддоменом
         if settings.server.env in ("local", "development"):
             protocol = "http"
-            host = f"localhost:{settings.server.port}"
+            if subdomain:
+                host = f"{subdomain}.localhost:{settings.server.port}"
+            else:
+                host = f"localhost:{settings.server.port}"
             return f"{protocol}://{host}/api/v1/files/download/{self.file_id}"
         
         # Для продакшн используем домен с поддоменом
-        return f"https://{subdomain}.{settings.server.domain}/api/v1/files/download/{self.file_id}"
+        if subdomain:
+            return f"https://{subdomain}.{settings.server.domain}/api/v1/files/download/{self.file_id}"
+        else:
+            return f"https://{settings.server.domain}/api/v1/files/download/{self.file_id}"
 
     @property
     def direct_s3_url(self) -> Optional[str]:

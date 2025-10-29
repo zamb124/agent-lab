@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 def get_httpx_client(
     timeout: Optional[float] = None,
     proxy: Optional[str] = None,
-    use_proxy_from_config: bool = True,
+    use_proxy_from_config: bool = False,
     **kwargs
 ) -> httpx.AsyncClient:
     """
@@ -21,7 +21,7 @@ def get_httpx_client(
     Args:
         timeout: Таймаут запросов
         proxy: Явно указанный прокси URL. Если None и use_proxy_from_config=True - берется из конфигурации
-        use_proxy_from_config: Использовать прокси из глобальной конфигурации
+        use_proxy_from_config: Использовать прокси из глобальной конфигурации (по умолчанию False)
         **kwargs: Дополнительные параметры для httpx.AsyncClient
         
     Returns:
@@ -37,13 +37,22 @@ def get_httpx_client(
         
         if proxy_url:
             logger.debug(f"🌐 Используем прокси из конфигурации: {proxy_url}")
+    elif proxy_url is None and not use_proxy_from_config:
+        # Явно отключаем прокси, чтобы переопределить переменные окружения
+        proxy_url = None
     
     # Создаем клиент
     client_kwargs = {
         "timeout": timeout or 30.0,
-        "proxy": proxy_url,
         **kwargs
     }
+    
+    # Явно передаем proxy (даже если None), чтобы переопределить переменные окружения
+    if proxy_url is not None:
+        client_kwargs["proxy"] = proxy_url
+    else:
+        # Явно отключаем прокси, чтобы игнорировать HTTP_PROXY/HTTPS_PROXY из окружения
+        client_kwargs["proxy"] = None
     
     return httpx.AsyncClient(**client_kwargs)
 

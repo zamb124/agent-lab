@@ -94,9 +94,22 @@ class TemplateLoader:
         def user_companies():
             """Получить все компании пользователя"""
             context = get_context()
-            if not context or not context.user_companies:
-                return []
-            return context.user_companies
+            
+            # Сначала пробуем получить из контекста
+            if context and hasattr(context, 'user_companies') and isinstance(context.user_companies, list):
+                return context.user_companies
+            
+            # Если контекст очищен (например в middleware), пытаемся получить из request.state
+            try:
+                # Получаем request из контекста шаблона (передается автоматически)
+                if 'request' in globals() or hasattr(self, '_request'):
+                    request = globals().get('request') or getattr(self, '_request', None)
+                    if request and hasattr(request, 'state') and hasattr(request.state, 'user_companies'):
+                        return request.state.user_companies or []
+            except Exception:
+                pass
+            
+            return []
         
         def t(key: str, **kwargs) -> str:
             """Функция перевода для шаблонов"""

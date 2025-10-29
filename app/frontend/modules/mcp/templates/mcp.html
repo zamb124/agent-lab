@@ -6,19 +6,6 @@
     MCP Серверы
 </h1>
 
-<div class="header-right" hx-swap-oob="true">
-    {{ c.button('',
-        variant='primary',
-        size='sm',
-        icon='plus-lg',
-        onclick='openAddServerModal()',
-        data_tooltip='Добавить MCP сервер'
-    ) }}
-    <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="Переключить тему">
-        <i class="bi bi-sun"></i>
-    </button>
-</div>
-
 <div hx-get="/frontend/mcp/list" 
      hx-trigger="load" 
      hx-target="this" 

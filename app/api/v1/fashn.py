@@ -225,7 +225,12 @@ async def process_nano_banana_try_on(request: TryOnRequest, model_record, produc
 **CONTEXT & INPUTS:**
 You are provided with {len(reference_file_ids)} images:
 - **Image #1: BASE - ORIGINAL PERSON PHOTO (WITHOUT THE TARGET PRODUCT).** This is the **ABSOLUTE PRIMARY CANVAS AND THE UNCHANGEABLE SUBJECT**. It features a specific person, potentially with their own clothing or accessories, but **NOT** the specific {request.item_kind} you need to add. This image MUST remain the primary canvas. **DO NOT ALTER THE PERSON IN IMAGE #1 IN ANY WAY THAT CHANGES THEIR IDENTITY, FACE, BODY, GENDER, CLOTHING, HAIR, OR POSE BEYOND MINIMAL INTERACTION.**
-- **Images #2-{len(reference_file_ids)}: REFERENCE - {request.item_kind.upper()} product(s) and/or person with product.** These images serve as detailed references. If multiple, they show DIFFERENT ANGLES of the *SAME SINGLE TARGET PRODUCT*. They might also include a person wearing/holding a product (either the target product or a similar one) to demonstrate natural interaction. Study all angles and examples to fully understand the target product's 3D form, texture, details, and how it naturally interacts with a person.
+- **Images #2-{len(reference_file_ids)}: REFERENCE - {request.item_kind.upper()} product(s) and/or person with product.** These images serve as detailed references. If multiple, they show DIFFERENT ANGLES of the *SAME SINGLE TARGET PRODUCT* (front view, back view, side views, top/bottom if visible). They might also include a person wearing/holding a product (either the target product or a similar one) to demonstrate natural interaction. **YOU MUST STUDY ALL REFERENCE IMAGES SYSTEMATICALLY TO UNDERSTAND THE PRODUCT'S COMPLETE 3D STRUCTURE, INCLUDING:**
+    - Front vs back identification (logos, design elements, seams, closures)
+    - How all sides look and connect in 3D space
+    - Accurate placement of straps, handles, zippers, and hardware
+    - Texture, patterns, and material direction across all surfaces
+    - How the product naturally interacts with a person's body when worn/carried
 
 **YOUR SOLE OBJECTIVE:**
 Integrate ONE {request.item_kind} from the reference images (Images #2+) onto the **EXACT, UNMODIFIED PERSON** in Image #1. This is a sophisticated photo editing task, akin to a professional retoucher adding a product in Photoshop, NOT generating a new scene. The goal is a seamless, natural integration, making it look as if the person in Image #1 was originally photographed with the target product. **The final image MUST look like a professional studio photograph, not a digital overlay, and MUST strictly adhere to the provided references for both the original person and the exact product.**
@@ -239,18 +244,68 @@ Integrate ONE {request.item_kind} from the reference images (Images #2+) onto th
         *   Slight camera angle rotation (5-15 degrees) to optimize product visibility.
         *   Subtle body angle/turn of the person to naturally showcase the product (e.g., turning a shoulder for a bag).
         *   Realistic modification of hand/arm position to VISIBLY HOLD, WEAR, or CARRY the product. Fingers MUST visibly grip straps, hands MUST support bottoms, straps MUST go over shoulders naturally. **The interaction must be physically convincing and show tension/support where appropriate. THESE ARE THE ONLY PERMISSIBLE CHANGES TO THE PERSON'S POSE OR LIMB POSITION. NO OTHER CHANGES TO THE PERSON ARE ALLOWED.**
-    *   **ABSOLUTELY FORBIDDEN:** Changing facial features, identity, **GENDER**, clothing, hair, body shape, background, or dramatic lighting shifts. Floating products without physical contact. Hands "holding" without visible, convincing grip. Products "on" a person without visible means of attachment (e.g., straps, support). **ANY CHANGE TO THE PERSON'S APPEARANCE OR IDENTITY BEYOND THE EXTREMELY MINIMAL INTERACTION ADJUSTMENTS IS A CRITICAL FAILURE.**
+    *   **ABSOLUTELY FORBIDDEN:** 
+        - Changing facial features, identity, **GENDER**, clothing, hair, body shape, background, or dramatic lighting shifts
+        - **IMPROVING or ENHANCING the person's appearance** (better skin texture, smoother features, perfect makeup, enhanced beauty, removal of imperfections)
+        - **IMPROVING or CHANGING the person's clothing** (making it more fashionable, cleaner, newer looking, better fitting, removing wrinkles or wear)
+        - **TOUCHING UP or BEAUTIFYING** any aspect of the person or their clothing
+        - Floating products without physical contact
+        - Hands "holding" without visible, convincing grip
+        - Products "on" a person without visible means of attachment (e.g., straps, support)
+        - **ANY CHANGE TO THE PERSON'S APPEARANCE OR IDENTITY BEYOND THE EXTREMELY MINIMAL INTERACTION ADJUSTMENTS IS A CRITICAL FAILURE.**
+        - **PRESERVE ALL IMPERFECTIONS, WEAR, AND REALISTIC APPEARANCE EXACTLY AS SHOWN IN THE BASE IMAGE.**
 
 2.  **PRODUCT ACCURACY & DETAILS (ABSOLUTE AND NON-NEGOTIABLE):**
+    *   **COMPREHENSIVE PRODUCT ANALYSIS (CRITICAL FIRST STEP):**
+        *   **STUDY ALL REFERENCE IMAGES SYSTEMATICALLY:** Before placing the product, you MUST carefully examine ALL reference images (Images #2+) from EVERY angle they show.
+        *   **IDENTIFY FRONT vs BACK:** Determine which side is the FRONT and which is the BACK of the product. Look for distinguishing features:
+            - Front typically shows: main design, logos, primary decorative elements, zippers/closures (if visible from front), main pockets
+            - Back typically shows: seams, less decoration, zippers/closures (if visible from back), different strap/handle attachment points
+        *   **UNDERSTAND 3D STRUCTURE:** Mentally reconstruct the 3D shape of the product from all reference angles. Note:
+            - How the product curves and bends in 3D space
+            - Where straps/handles attach and how they align
+            - How the product opens/closes (zippers, buttons, closures)
+            - Textile grain direction and any patterns that might indicate orientation
+        *   **VERIFY ORIENTATION BEFORE PLACEMENT:** Based on the person's pose in Image #1, determine which side of the product should face the camera:
+            - If person faces camera: FRONT of product faces camera
+            - If person is in profile/side view: appropriate side of product is visible
+            - If person's back is visible: BACK of product faces camera (with front hidden)
+        *   **DO NOT GUESS OR REVERSE:** If you cannot clearly determine front/back from references, study them MORE CAREFULLY. Do NOT randomly choose orientation. The product's orientation MUST match the logical viewing angle given the person's pose.
+    
     *   **IDENTICAL REPLICATION:** Use the EXACT target product from Image #2+. Maintain ALL details: color, pattern, texture, shape, hardware, logos, stitching, **AND SPECIFIC FEATURES LIKE STRAPS, HANDLES, ZIPPERS, AND EMBLEMS.**
     *   **NO MODIFICATION, NO GENERATION, NO INFERENCE:** DO NOT alter the product's appearance, simplify details, change colors, **ADD NEW FEATURES (e.g., chains on straps if not present in reference, extra handles, different logos), or remove existing features.** The product must be a PHOTOREALISTIC, pixel-perfect copy from the reference images. **Every visible detail of the product must come directly from the provided reference images, not from imagination or other sources.**
 
-3.  **PRODUCT SIZE & PROPORTIONS (PARAMOUNT):**
+3.  **PRODUCT SIZE & PROPORTIONS (PARAMOUNT - EXACT SIZES REQUIRED):**
     *   **PERSON HEIGHT:** {request.model_height_cm} cm.
-    *   **PRODUCT DIMENSIONS:** Width: {request.product_width_cm} cm. Height: {request.product_height_cm} cm (if > 0, otherwise proportional).
-    *   **MANDATORY REALISM:** Calculate and apply the product's size **REALISTICALLY** relative to the person's height. The product MUST appear true-to-life in scale.
-    *   **NO SHRINKING TO FIT:** If the product is large (e.g., a backpack or large bag) and its correct scale means it won't entirely fit within the frame, **DO NOT shrink it**. Instead, show a partial view (crop edges) at the correct, realistic scale.
-    *   **PRIORITY:** Real-world size accuracy is **MORE IMPORTANT** than showing the entire product. Always add the product, even if partially visible, at its correct scale. NEVER omit the product.
+    *   **PRODUCT DIMENSIONS (EXACT - NOT APPROXIMATE):**
+        - **Width:** {request.product_width_cm} cm (EXACT width, do not make smaller)
+        - **Height:** {request.product_height_cm} cm (if specified) or maintain reference proportions
+        - **Size Multiplier:** {request.scale_bias}x (apply this final scaling factor to the base dimensions)
+        - **FINAL WIDTH MUST BE:** {request.product_width_cm * request.scale_bias} cm after applying multiplier
+    *   **CRITICAL SIZE CALCULATION PROCESS:**
+        1. **MEASURE THE PERSON IN IMAGE #1:** First, measure the visible height of the person in Image #1 (in pixels). Call this value `person_pixels`. This is your reference scale.
+        2. **CALCULATE PIXELS PER CENTIMETER:** 
+           - Real person height = {request.model_height_cm} cm
+           - Scale ratio = `person_pixels` pixels ÷ {request.model_height_cm} cm = pixels_per_cm
+           - Example: If person is 1200 pixels tall and {request.model_height_cm} cm real height, then pixels_per_cm = 1200 ÷ {request.model_height_cm} = {1200 / request.model_height_cm:.2f} pixels per cm
+        3. **CALCULATE PRODUCT SIZE IN PIXELS:**
+           - Product real width = {request.product_width_cm * request.scale_bias} cm (base width × multiplier)
+           - Product width in pixels = {request.product_width_cm * request.scale_bias} cm × pixels_per_cm
+           - **THIS IS THE EXACT SIZE THE PRODUCT MUST BE IN THE IMAGE**
+        4. **VERIFY BEFORE PLACING:** Check that the product matches this calculated pixel size. If the reference product appears at a different size, scale it to match this EXACT pixel width.
+        5. **APPLY EXACTLY:** The product MUST be EXACTLY this calculated size, not "approximately" or "close to". Do NOT make it smaller. Use precise pixel measurements and scaling.
+    *   **SIZE ACCURACY IS NON-NEGOTIABLE:**
+        - **DO NOT** make the product smaller than specified "to fit better" or "look more natural"
+        - **DO NOT** approximate sizes - use EXACT dimensions
+        - **DO NOT** scale down proportionally unless the specified dimensions require it
+        - **ALWAYS** verify the product appears at the correct size relative to the person's {request.model_height_cm} cm height
+        - If you think the size looks "too large", the issue is NOT the size - it's the correct size. Trust the measurements.
+    *   **SIZE EXAMPLES FOR REFERENCE:**
+        - If person is {request.model_height_cm} cm tall and product is {request.product_width_cm * request.scale_bias} cm wide, the product width should be {request.product_width_cm * request.scale_bias / request.model_height_cm * 100:.1f}% of the person's height
+        - A {request.product_width_cm * request.scale_bias} cm bag on a {request.model_height_cm} cm person should look substantial, not tiny
+        - If {request.product_width_cm * request.scale_bias} cm seems large, it IS large - that's the correct size
+    *   **NO SHRINKING TO FIT:** If the product's correct size means it won't entirely fit within the frame, **DO NOT shrink it**. Instead, show a partial view (crop edges) at the correct, EXACT scale.
+    *   **PRIORITY:** Exact size accuracy is **MORE IMPORTANT** than fitting the entire product in frame. Always use the EXACT specified dimensions. NEVER make the product smaller than specified.
 
 4.  **SMART & NATURAL PLACEMENT & INTERACTION (PROFESSIONAL TOUCH):**
     *   **ANALYZE POSE:** Carefully assess the person's pose in Image #1:
@@ -277,9 +332,16 @@ Integrate ONE {request.item_kind} from the reference images (Images #2+) onto th
 
 **FORBIDDEN ACTIONS (REITERATED AND EMPHASIZED - ANY OF THESE IS A CRITICAL FAILURE):**
 *   **CHANGING THE PERSON IN IMAGE #1 IN ANY WAY (FACE, IDENTITY, GENDER, BODY, CLOTHING, HAIR, SKIN TONE, POSE BEYOND MINIMAL INTERACTION).**
+*   **IMPROVING OR ENHANCING THE PERSON'S APPEARANCE:** Better skin texture, smoother features, perfect makeup, enhanced beauty, removal of blemishes, wrinkles, or imperfections. Keep ALL natural, realistic appearance exactly as shown.
+*   **IMPROVING OR CHANGING THE PERSON'S CLOTHING:** Making it more fashionable, cleaner, newer looking, better fitting, removing wrinkles, wear, or stains. Keep clothing EXACTLY as shown with all imperfections.
+*   **TOUCHING UP OR BEAUTIFYING:** Any cosmetic improvements, retouching, or enhancement of the person or their clothing is FORBIDDEN.
 *   Changing the background or lighting dramatically.
 *   Products floating unnaturally without contact.
 *   Unnatural or unrealistic product placement.
+*   **REVERSING OR INCORRECTLY ORIENTING THE PRODUCT:** Placing the product with front and back reversed, or with wrong orientation relative to the person's pose. You MUST correctly identify which side is front and which is back from reference images, and place it accordingly.
+*   **PLACING PRODUCT WITHOUT STUDYING ALL REFERENCE ANGLES:** Do NOT proceed to place the product until you have systematically examined ALL reference images and understand the product's 3D structure from every visible angle.
+*   **MAKING PRODUCT SMALLER THAN SPECIFIED:** The product MUST be EXACTLY {request.product_width_cm * request.scale_bias} cm wide (after multiplier). DO NOT make it smaller because you think it "looks better" or "fits better". The specified size IS the correct size.
+*   **APPROXIMATING SIZES INSTEAD OF USING EXACT DIMENSIONS:** You MUST use precise pixel calculations based on the person's {request.model_height_cm} cm height. Do NOT guess or approximate the size.
 *   **MODIFYING THE PRODUCT'S APPEARANCE IN ANY WAY FROM THE REFERENCE IMAGES.**
 *   **SIMPLIFYING OR CHANGING PRODUCT DETAILS.**
 *   **ADDING OR REMOVING ANY PRODUCT FEATURES (e.g., chains, handles, pockets, logos).**
@@ -320,7 +382,8 @@ A single, high-quality edited image that is 98-99.5% identical to the original I
         result_text = await generate_images.ainvoke({
             "prompt": prompt,
             "reference_file_ids": reference_file_ids,
-            "num_images": num_images
+            "num_images": num_images,
+            "is_editing": True,  # Режим редактирования: первое изображение - база
         })
         
         logger.info(f"Результат generate_images: {result_text}")
@@ -388,6 +451,7 @@ A single, high-quality edited image that is 98-99.5% identical to the original I
                 }
             }
 
+            storage = get_container().storage
             await storage.set(try_on_id, json.dumps(try_on_record))
             logger.info(f"✅ Примерка сохранена в историю: {try_on_id}")
         else:

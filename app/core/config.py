@@ -40,10 +40,10 @@ class DatabaseConfig(BaseModel):
     """Конфигурация базы данных"""
 
     url: str = (
-        "postgresql+asyncpg://agent_user:agent_password@localhost:5455/agent_platform"
+        "postgresql+asyncpg://agent_user:agent_password@localhost:5432/agent_platform"
     )
     checkpointer_url: str = (
-        "postgresql://agent_user:agent_password@localhost:5455/agent_platform"
+        "postgresql://agent_user:agent_password@localhost:5432/agent_platform"
     )
 
 

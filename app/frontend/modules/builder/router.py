@@ -14,7 +14,7 @@ templates = get_templates()
 @router.get("/", response_class=HTMLResponse)
 async def builder_index(request: Request):
     """Главная страница Builder"""
-    plugin_data = get_plugins_for_template()
+    plugin_data = get_plugins_for_template(request)
     return templates.TemplateResponse("builder.html", {
         "request": request,
         **plugin_data
@@ -24,7 +24,7 @@ async def builder_index(request: Request):
 @router.get("/flow/{flow_id:path}", response_class=HTMLResponse)
 async def builder_flow(request: Request, flow_id: str):
     """Страница редактирования конкретного флоу"""
-    plugin_data = get_plugins_for_template()
+    plugin_data = get_plugins_for_template(request)
     return templates.TemplateResponse("builder.html", {
         "request": request,
         "flow_id": flow_id,

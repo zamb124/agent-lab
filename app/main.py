@@ -20,6 +20,7 @@ from app.frontend.websockets_router import router as frontend_websockets_router
 from app.frontend.websockets.notifications import router as websocket_notifications_router
 from app.middleware.auth import AuthMiddleware
 from app.middleware.profiling import ProfilingMiddleware
+from app.frontend.core.htmx_helpers import HTMXHeaderMiddleware
 
 # Настройка логирования
 setup_app_logging()
@@ -58,6 +59,9 @@ app.add_middleware(
 
 # Auth middleware (заглушка)
 app.add_middleware(AuthMiddleware)
+
+# HTMX Header middleware - автоматическое обновление header для всех HTMX запросов
+app.add_middleware(HTMXHeaderMiddleware)
 
 # CORS middleware
 app.add_middleware(

@@ -164,8 +164,8 @@
         "max_tokens": 8192,
         "temperature": 0.1,
         "description": "Gemini 2.5 Flash Preview Image (Nano Banana) - генерация изображений",
-        "input_cost_per_token": 0.00003,
-        "output_cost_per_token": 0.00025
+        "input_cost_per_token": 0.0000003,
+        "output_cost_per_token": 0.0000025
       }
     },
     "default_model": "x-ai/grok-code-fast-1"

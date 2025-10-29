@@ -96,21 +96,53 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Для скачивания файлов - создаем минимальный контекст с компанией из поддомена
         if request.url.path.startswith("/api/v1/files/download/"):
             try:
-                # Определяем компанию по Host
-                requested_company = await self._get_company_from_host(request)
+                # Определяем компанию по Host - для файлов всегда требуется поддомен
+                host = request.headers.get("host", "")
+                domain = settings.server.domain
+                requested_company = None
+                
+                # Для локальной разработки: требуем поддомен
+                if settings.server.env == "local":
+                    if ".localhost" in host:
+                        subdomain = host.split(".")[0]
+                        company_id = await self.storage.get(f"subdomain:{subdomain}", force_global=True)
+                        if company_id:
+                            company_id = company_id.strip('"') if isinstance(company_id, str) else company_id
+                            company_data = await self.storage.get(f"company:{company_id}", force_global=True)
+                            if company_data:
+                                requested_company = Company.model_validate_json(company_data)
+                                logger.info(f"📂 Файл: найдена компания {company_id} по поддомену {subdomain}")
+                    
+                    if not requested_company:
+                        logger.warning(f"⚠️ Запрос файла без поддомена: {host}")
+                        raise HTTPException(status_code=400, detail="Для скачивания файла требуется указать поддомен компании (например, ssd.localhost:8001)")
+                else:
+                    # Для продакшена - та же логика что в _get_company_from_host
+                    if host.endswith(f".{domain}") and not host.startswith(domain):
+                        subdomain = host.split(".")[0]
+                        company_id = await self.storage.get(f"subdomain:{subdomain}", force_global=True)
+                        if company_id:
+                            company_id = company_id.strip('"') if isinstance(company_id, str) else company_id
+                            company_data = await self.storage.get(f"company:{company_id}", force_global=True)
+                            if company_data:
+                                requested_company = Company.model_validate_json(company_data)
+                    
+                    if not requested_company:
+                        raise HTTPException(status_code=400, detail="Для скачивания файла требуется указать поддомен компании")
 
                 # Создаем минимальный анонимный контекст с этой компанией
                 context = await self._create_anonymous_context(request, requested_company)
                 await set_context(context)
                 request.state.context = context
                 request.state.user = context.user
-
                 request.state.language = context.language.value
 
                 logger.info(f"📂 Контекст для скачивания файла: компания {requested_company.company_id}")
 
+            except HTTPException:
+                raise
             except Exception as e:
-                logger.error(f"❌ Не удалось создать контекст для скачивания файла: {e}")
+                logger.error(f"❌ Не удалось создать контекст для скачивания файла: {e}", exc_info=True)
                 raise HTTPException(status_code=500, detail="Ошибка определения компании")
 
             return await call_next(request)
@@ -128,6 +160,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             request.state.context = context
             request.state.user = context.user
             request.state.language = context.language.value
+            request.state.user_companies = getattr(context, 'user_companies', [])
 
             # Продолжаем обработку
             response = await call_next(request)

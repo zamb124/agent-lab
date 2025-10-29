@@ -22,3 +22,9 @@ site/
 
 # Video files
 docs/video/*.mov
+/logs/app.log
+/logs/app.log.1
+/logs/app.log.2
+/logs/app.log.3
+/logs/app.log.4
+/logs/app.log.5

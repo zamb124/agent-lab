@@ -7,6 +7,7 @@ LLM с встроенным биллингом для OpenRouter.
 import logging
 import base64
 import json
+import copy
 import httpx
 from typing import Optional, List, Any, Mapping
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -48,6 +49,28 @@ class ChatOpenAIWithBilling(BaseChatModel):
         self._bound_tools = []
         
         logger.info(f"Создана LLM с биллингом: {self._billing_model}")
+    
+    def _sanitize_payload_for_logging(self, payload: dict) -> dict:
+        """Убирает base64 данные из payload для логирования"""
+        sanitized = copy.deepcopy(payload)
+        
+        if 'messages' in sanitized:
+            for message in sanitized['messages']:
+                if 'content' in message:
+                    content = message['content']
+                    if isinstance(content, list):
+                        for item in content:
+                            if isinstance(item, dict) and 'image_url' in item:
+                                image_url = item['image_url']
+                                if isinstance(image_url, dict) and 'url' in image_url:
+                                    url = image_url['url']
+                                    if url.startswith('data:'):
+                                        # Оставляем только начало data URL без base64 данных
+                                        parts = url.split(',', 1)
+                                        if len(parts) == 2:
+                                            image_url['url'] = f"{parts[0]},<base64_data_removed>"
+        
+        return sanitized
     
     @property
     def _llm_type(self) -> str:
@@ -230,8 +253,9 @@ class ChatOpenAIWithBilling(BaseChatModel):
         if self.default_headers:
             headers.update(self.default_headers)
         
-        # Логируем запрос
-        logger.info(f"LLM запрос:\n{json.dumps(payload, ensure_ascii=False, indent=2)}")
+        # Логируем запрос (без base64 данных)
+        payload_for_log = self._sanitize_payload_for_logging(payload)
+        logger.info(f"LLM запрос:\n{json.dumps(payload_for_log, ensure_ascii=False, indent=2)}")
         
         # Получаем прокси из конфигурации
         settings = get_settings()

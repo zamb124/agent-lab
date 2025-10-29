@@ -29,7 +29,7 @@ async def landing_page(request: Request):
         context.user.user_id != "anonymous"
     )
     
-    plugins_data = get_plugins_for_template()
+    plugins_data = get_plugins_for_template(request)
     
     return templates.TemplateResponse(
         "landing.html", 

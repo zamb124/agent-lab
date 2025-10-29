@@ -8,10 +8,10 @@ from datetime import datetime, timezone
 
 from app.core.config import settings
 from app.core.logger import setup_worker_logging, get_logger
-from app.core.container import get_container
+from app.core.container import get_container, initialize_system_container
 from app.models import TaskStatus, SessionConfig, SessionStatus
 from app.core.context import set_context, clear_context, get_context
-from app.db.database import create_tables
+from app.db.database import create_tables, get_session_factory
 from app.core.checkpointer import init_checkpointer
 from app.interfaces.factory import InterfaceFactory
 from app.db.repositories import Storage
@@ -37,30 +37,34 @@ class TaskProcessor:
     
     @property
     def storage(self) -> Storage:
-        """Ленивая инициализация storage"""
+        """Ленивая инициализация storage из системного контейнера"""
         if self._storage is None:
-            self._storage = get_container().storage
+            system_container = initialize_system_container()
+            self._storage = system_container.storage
         return self._storage
     
     @property
     def agent_factory(self):
-        """Ленивая инициализация agent_factory из контейнера"""
+        """Ленивая инициализация agent_factory из системного контейнера"""
         if self._agent_factory is None:
-            self._agent_factory = get_container().agent_factory
+            system_container = initialize_system_container()
+            self._agent_factory = system_container.agent_factory
         return self._agent_factory
     
     @property
     def task_repository(self):
-        """Ленивая инициализация task_repository из контейнера"""
+        """Ленивая инициализация task_repository из системного контейнера"""
         if self._task_repository is None:
-            self._task_repository = get_container().task_repository
+            system_container = initialize_system_container()
+            self._task_repository = system_container.task_repository
         return self._task_repository
     
     @property
     def interface_factory(self):
-        """Ленивая инициализация interface_factory из контейнера"""
+        """Ленивая инициализация interface_factory из системного контейнера"""
         if self._interface_factory is None:
-            self._interface_factory = get_container().interface_factory
+            system_container = initialize_system_container()
+            self._interface_factory = system_container.interface_factory
         return self._interface_factory
 
     async def start(self):
@@ -70,6 +74,11 @@ class TaskProcessor:
         logger.info("📊 Создание таблиц БД...")
         await create_tables()
         logger.info("✅ Таблицы БД созданы")
+        
+        logger.info("🔄 Инициализация системного контейнера...")
+        system_container = initialize_system_container()
+        system_container._session_factory = await get_session_factory()
+        logger.info("✅ Системный контейнер инициализирован")
         
         logger.info("🔄 Инициализация checkpointer...")
         await init_checkpointer()

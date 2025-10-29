@@ -1219,19 +1219,6 @@ input:checked + .slider:before {
 .platform-actions .btn {
     padding: 0.375rem 0.5rem;
     font-size: 0.875rem;
-    border-radius: var(--radius-md);
-    transition: all var(--transition-fast);
-}
-
-.platform-actions .btn-outline-danger {
-    border: 1px solid var(--accent-danger);
-    color: var(--accent-danger);
-    background: transparent;
-}
-
-.platform-actions .btn-outline-danger:hover {
-    background: var(--accent-danger);
-    color: white;
 }
 
 .custom-select-wrapper {

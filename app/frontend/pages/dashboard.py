@@ -20,7 +20,7 @@ async def index(request: Request):
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
     """Панель управления с динамической загрузкой плагинов"""
-    plugin_data = get_plugins_for_template()
+    plugin_data = get_plugins_for_template(request)
     
     return templates.TemplateResponse("dashboard.html", {
         "request": request,

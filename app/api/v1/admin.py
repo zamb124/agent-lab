@@ -162,10 +162,18 @@ async def parse_product_url(url: str):
             )
 
         # Загружаем страницу
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            html = response.text
+        from app.core.http_utils import get_httpx_client
+        
+        async with get_httpx_client(timeout=10.0) as client:
+            try:
+                response = await client.get(url)
+                response.raise_for_status()
+                html = response.text
+            except httpx.ConnectTimeout as e:
+                logger.error(f"Таймаут подключения к {url}: {e}", exc_info=True)
+                raise HTTPException(
+                    status_code=408, detail=f"Таймаут подключения к сайту {url}. Сайт недоступен или медленно отвечает."
+                )
 
         # Парсим HTML
         soup = BeautifulSoup(html, "html.parser")
@@ -390,13 +398,19 @@ async def parse_product_url(url: str):
         logger.info(f"Товар успешно распарсен: {title}, изображений: {len(image_urls)}")
         return result
 
-    except httpx.HTTPError as e:
-        logger.error(f"HTTP ошибка при парсинге {url}: {e}")
+    except httpx.ConnectTimeout as e:
+        logger.error(f"Таймаут подключения при парсинге {url}: {e}", exc_info=True)
         raise HTTPException(
-            status_code=400, detail=f"Не удалось загрузить страницу: {str(e)}"
+            status_code=408, detail=f"Таймаут подключения к {url}. Проверьте доступность сайта или настройки прокси."
+        )
+    except httpx.HTTPError as e:
+        logger.error(f"HTTP ошибка при парсинге {url}: {e}", exc_info=True)
+        error_detail = str(e) if str(e) else f"{type(e).__name__}: {getattr(e, 'message', 'Неизвестная ошибка HTTP')}"
+        raise HTTPException(
+            status_code=400, detail=f"Не удалось загрузить страницу: {error_detail}"
         )
     except Exception as e:
-        logger.error(f"Ошибка парсинга товара {url}: {e}")
+        logger.error(f"Ошибка парсинга товара {url}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Ошибка парсинга: {str(e)}")
 
 
@@ -624,6 +638,7 @@ async def reload_telegram_bots():
     Используется после добавления новых платформ.
     Работает только в локальном окружении (ENV=local).
     """
+    settings = get_settings()
     if settings.server.env != "local":
         raise HTTPException(
             status_code=400,
