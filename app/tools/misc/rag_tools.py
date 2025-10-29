@@ -19,12 +19,9 @@ logger = logging.getLogger(__name__)
 def _get_rag_config_from_context(context):
     """
     Получает RAG конфигурацию из context.
-    Приоритет: agent > flow (агент может переопределить настройки flow)
+    RAG конфигурация хранится только в flow_config.
     Если конфига нет - возвращает None (RAG отключен)
     """
-    if context.agent_config and context.agent_config.rag_config:
-        return context.agent_config.rag_config
-    
     if context.flow_config and context.flow_config.rag_config:
         return context.flow_config.rag_config
     
