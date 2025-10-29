@@ -22,6 +22,7 @@ async def generate_images(
     prompt: str,
     reference_file_ids: Optional[list[str]] = None,
     num_images: int = 1,
+    is_editing: bool = False,
 ) -> str:
     """
     Генерирует изображения на основе текстового описания.
@@ -30,6 +31,7 @@ async def generate_images(
         prompt: Описание того, что нужно сгенерировать
         reference_file_ids: Список ID файлов-референсов
         num_images: Количество изображений (1-4)
+        is_editing: Если True, первое изображение используется как база для редактирования
         
     Returns:
         Список сгенерированных изображений в формате [FILE]...[/FILE]
@@ -51,6 +53,7 @@ async def generate_images(
             prompt=prompt,
             reference_file_ids=reference_file_ids,
             num_images=num_images,
+            is_editing=is_editing,
         )
         
         if not generated_file_ids:
