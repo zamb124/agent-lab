@@ -541,18 +541,6 @@
 }
 
 /* Дополнительные стили для кнопок */
-.btn-outline-primary {
-    background: transparent;
-    color: var(--accent-primary);
-    border: 1px solid var(--accent-primary);
-}
-
-.btn-outline-primary:hover {
-    background: var(--accent-primary);
-    color: white;
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
-}
 
 /* Исправление для градиентных переменных */
 .langflow-gradient {

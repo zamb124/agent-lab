@@ -19,9 +19,6 @@
     border-radius: var(--radius-md);
 }
 
-.input-group .btn {
-    border-radius: var(--radius-md);
-}
 
 .form-check {
     display: flex;

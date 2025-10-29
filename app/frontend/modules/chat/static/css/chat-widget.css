@@ -52,35 +52,6 @@
     gap: 4px;
 }
 
-.btn {
-    background: transparent;
-    border: none;
-    padding: 4px 8px;
-    border-radius: 4px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: background-color 0.2s;
-}
-
-.btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-.btn-sm {
-    padding: 2px 6px;
-    font-size: 12px;
-}
-
-.btn-ghost {
-    background: transparent;
-    color: inherit;
-}
-
-.btn-ghost:hover {
-    background: rgba(255, 255, 255, 0.1);
-}
 
 /* Общие стили для всех иконок */
 [class^="icon-"]::before {
@@ -365,14 +336,7 @@
 }
 
 .chat-widget-header .btn {
-    color: var(--chat-header-text) !important;
-    border: none !important;
-    background: transparent !important;
     flex-shrink: 0;
-}
-
-.chat-widget-header .btn:hover {
-    background: rgba(255, 255, 255, 0.1) !important;
 }
 
 .chat-widget-body {
@@ -1255,20 +1219,15 @@
     }
     
     .chat-widget-header .btn {
-        padding: 0.4rem !important;
-        min-width: 36px !important;
-        max-width: 36px !important;
-        width: 36px !important;
-        height: 36px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        flex-shrink: 0 !important;
-        margin: 0 !important;
+        padding: 0.4rem;
+        min-width: 36px;
+        max-width: 36px;
+        height: 36px;
+        flex-shrink: 0;
     }
     
     .chat-widget-header .btn i {
-        font-size: 1.1rem !important;
+        font-size: 1.1rem;
     }
     
     #chat-connection-status {

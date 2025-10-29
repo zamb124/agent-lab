@@ -1284,39 +1284,6 @@ body {
     gap: 12px;
 }
 
-.btn-secondary,
-.btn-primary {
-    padding: 12px 24px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    border: none;
-}
-
-.btn-secondary {
-    background: var(--light-gray);
-    color: var(--dark-gray);
-}
-
-.btn-secondary:hover {
-    background: #e5e7eb;
-}
-
-.btn-primary {
-    background: var(--primary-green);
-    color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-    background: var(--light-green);
-}
-
-.btn-primary:disabled {
-    background: #d1d5db;
-    cursor: not-allowed;
-}
 
 /* Multiple Images Indicator */
 .multiple-images-indicator {
@@ -1436,10 +1403,6 @@ body {
         flex-direction: column-reverse;
     }
 
-    .btn-secondary,
-    .btn-primary {
-        width: 100%;
-    }
     
     .hero-title {
         font-size: 2.5rem;
