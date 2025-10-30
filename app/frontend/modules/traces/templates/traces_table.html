@@ -1,0 +1,99 @@
+{% import 'components.html' as c %}
+
+{% if traces %}
+<div class="card">
+    <div class="card-body p-0">
+        {% call c.table_container(min_width='1200px') %}
+            <thead>
+                <tr>
+                    <th style="width: 50px;"></th>
+                    <th>Название</th>
+                    <th style="width: 120px;">Тип</th>
+                    <th style="width: 100px;">Статус</th>
+                    <th style="width: 100px;">Spans</th>
+                    <th style="width: 120px;">Длительность</th>
+                    <th style="width: 100px;">Стоимость</th>
+                    <th style="width: 180px;">Время начала</th>
+                    <th style="width: 80px;">Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for trace in traces %}
+                <tr>
+                    <td class="text-center">
+                        {% if trace.root_span_type.value == 'agent' %}
+                            <i class="bi bi-robot text-purple"></i>
+                        {% elif trace.root_span_type.value == 'llm' %}
+                            <i class="bi bi-chat-square-text text-blue"></i>
+                        {% elif trace.root_span_type.value == 'tool' %}
+                            <i class="bi bi-tools text-green"></i>
+                        {% elif trace.root_span_type.value == 'chain' %}
+                            <i class="bi bi-diagram-2 text-orange"></i>
+                        {% else %}
+                            <i class="bi bi-circle text-secondary"></i>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="fw-medium">{{ trace.name }}</div>
+                        <small class="text-muted font-mono">{{ trace.trace_id[:16] }}...</small>
+                    </td>
+                    <td>
+                        <span class="badge bg-secondary">{{ trace.root_span_type.value }}</span>
+                    </td>
+                    <td>
+                        {{ c.status_badge(trace.status.value) }}
+                        {% if trace.error_count > 0 %}
+                            <span class="badge bg-danger ms-1">{{ trace.error_count }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ c.counter_badge(trace.total_spans) }}
+                    </td>
+                    <td>
+                        {% if trace.duration_ms %}
+                            <span class="font-mono">{{ "%.2f"|format(trace.duration_ms) }}ms</span>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if trace.total_cost %}
+                            <span class="font-mono">${{ "%.4f"|format(trace.total_cost) }}</span>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="font-mono">{{ trace.start_time.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+                    </td>
+                    <td>
+                        {{ c.button('',
+                            variant='ghost',
+                            size='sm',
+                            icon='eye',
+                            hx_get='/frontend/traces/' + trace.trace_id,
+                            hx_target='#modal-container'
+                        ) }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        {% endcall %}
+    </div>
+
+    {% if total > limit %}
+    <div class="card-footer">
+        {{ c.pagination(offset, limit, total, '/frontend/traces/list', hx_target='#traces-table', hx_include='#traces-filters') }}
+    </div>
+    {% endif %}
+</div>
+{% else %}
+    {{ c.empty_state(
+        icon='diagram-3',
+        title='Нет трейсов',
+        description='Трейсы появятся после выполнения операций'
+    ) }}
+{% endif %}
+
+
+
