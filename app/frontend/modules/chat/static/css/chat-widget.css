@@ -53,18 +53,6 @@
 }
 
 
-/* Общие стили для всех иконок */
-[class^="icon-"]::before {
-    font-style: normal;
-    display: inline-block;
-    padding: 0;
-    background: none;
-    border-radius: 0;
-    backdrop-filter: none;
-    border: none;
-    font-size: 16px;
-    margin-right: 0;
-}
 
 /* Стили для области сообщений */
 .chat-messages {
@@ -267,11 +255,6 @@
     --chat-header-text: var(--text-primary, #ffffff);
 }
 
-/* Стили для иконок в темной теме */
-[data-theme="dark"] [class^="icon-"]::before {
-    background: none;
-    border: none;
-}
 
 [data-theme="dark"] .chat-send-btn {
     border-left: 1px solid rgba(255, 255, 255, 0.1); /* Более тонкая граница для темной темы */

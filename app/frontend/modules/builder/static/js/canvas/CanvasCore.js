@@ -312,25 +312,37 @@ export class CanvasCore extends EventEmitter {
      * Загрузка графа
      */
     async loadGraph(graphData) {
+        console.log('🎨 loadGraph called with:', graphData);
         this.clearGraph();
-        
+
         if (!graphData || !graphData.nodes) {
+            console.log('⚠️ loadGraph: no graphData or nodes');
             return;
         }
-        
-        // Загружаем ноды БЕЗ автоматического разворачивания
-        // (граф уже готовый, все ноды и связи в нем)
+
+        console.log(`📦 loadGraph: loading ${graphData.nodes.length} nodes and ${graphData.edges?.length || 0} edges`);
+
         for (const nodeData of graphData.nodes) {
-            await this.addNode(nodeData, { autoExpand: false });
+            const processedNodeData = { ...nodeData };
+
+            // НЕ используем ui из graphData - координаты будут применены отдельно из canvas_data
+            delete processedNodeData.ui;
+            if (processedNodeData.params?.ui) {
+                delete processedNodeData.params.ui;
+            }
+
+            console.log(`➕ loadGraph: adding node ${nodeData.id} without ui (will be applied later)`);
+            await this.addNode(processedNodeData, { autoExpand: false });
         }
-        
-        // Загружаем связи
+
         if (graphData.edges) {
             for (const edgeData of graphData.edges) {
+                console.log(`🔗 loadGraph: creating edge ${edgeData.source} -> ${edgeData.target}`);
                 this.connectionManager.createEdge(edgeData.source, edgeData.target);
             }
         }
-        
+
+        console.log('✅ loadGraph: emitting graph:loaded event with nodes count:', this.nodes.size);
         this.emit('graph:loaded', { graphData });
     }
     
@@ -344,7 +356,7 @@ export class CanvasCore extends EventEmitter {
             source: edge.source,
             target: edge.target
         }));
-        
+
         return { nodes, edges };
     }
     

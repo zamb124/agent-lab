@@ -67,7 +67,7 @@ class ModalManager {
                     ${title ? `<h4 class="modal-title" style="margin: 0; color: var(--text-primary);">${title}</h4>` : ''}
                     ${closeButton ? `
                         <button class="modal-close-btn" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary);">
-                            <i class="bi bi-x"></i>
+                            <i class="ti ti-x"></i>
                         </button>
                     ` : ''}
                 </div>

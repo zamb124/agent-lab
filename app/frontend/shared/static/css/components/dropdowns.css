@@ -101,7 +101,7 @@
     transform: translateX(2px) !important;
 }
 
-.dropdown-item i.bi-check {
+.dropdown-item i.ti-check {
     color: var(--accent-success) !important;
     font-size: 0.875rem !important;
 }
@@ -144,7 +144,7 @@
     border: 1px solid var(--border-primary);
 }
 
-.dropdown .btn .bi-translate {
+.dropdown .btn .ti-translate {
     font-size: 0.875rem;
 }
 

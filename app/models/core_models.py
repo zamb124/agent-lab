@@ -1257,7 +1257,7 @@ class FlowConfig(BuilderEntity):
         exclude_from_form=True,
     )
     
-    @field_validator('platforms', 'canvas_data', 'variables', 'store', mode='before')
+    @field_validator('platforms', 'variables', 'store', mode='before')
     @classmethod
     def parse_json_fields(cls, v):
         """Автоматически парсит JSON строки в dict"""
@@ -1267,6 +1267,17 @@ class FlowConfig(BuilderEntity):
             except json.JSONDecodeError:
                 return v
         return v if v else ({"api": {}} if v is None else v)
+    
+    @field_validator('canvas_data', mode='before')
+    @classmethod
+    def parse_canvas_data(cls, v):
+        """Автоматически парсит JSON строки в dict для canvas_data"""
+        if isinstance(v, str) and v.strip():
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return v
+        return v if v is not None else None
     
     @field_validator('timeout', mode='before')
     @classmethod

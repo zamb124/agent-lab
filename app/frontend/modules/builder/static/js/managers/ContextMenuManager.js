@@ -23,15 +23,15 @@ export class ContextMenuManager extends EventEmitter {
         const html = `
             <div class="node-context-menu">
                 <button class="context-menu-option" data-action="edit">
-                    <i class="bi bi-pencil"></i>
+                    <i class="ti ti-pencil"></i>
                     <span>Изменить</span>
                 </button>
                 <button class="context-menu-option" data-action="delete">
-                    <i class="bi bi-trash"></i>
+                    <i class="ti ti-trash"></i>
                     <span>Удалить</span>
                 </button>
                 <button class="context-menu-option" data-action="duplicate">
-                    <i class="bi bi-files"></i>
+                    <i class="ti ti-files"></i>
                     <span>Копировать</span>
                 </button>
             </div>

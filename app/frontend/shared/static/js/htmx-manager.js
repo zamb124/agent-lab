@@ -112,7 +112,7 @@ export default class HTMXManager {
         notification.className = 'notification';
         notification.innerHTML = `
             <div class="alert alert-info">
-                <i class="bi bi-info-circle"></i>
+                <i class="ti ti-info-circle"></i>
                 ${data.message || 'Уведомление'}
             </div>
         `;

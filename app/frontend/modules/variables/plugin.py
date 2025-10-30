@@ -24,7 +24,7 @@ class VariablesPlugin(Plugin):
         {
             "id": "variables",
             "label": "Ключи и Переменные",
-            "icon": "bi-key",
+            "icon": "key",
             "url": "/frontend/variables/",
             "order": 60,
             "type": "htmx"
@@ -36,7 +36,7 @@ class VariablesPlugin(Plugin):
             "id": "variables_widget",
             "title": "dashboard.widgets.variables",
             "description": "Ключи и переменные",
-            "icon": "bi-key",
+            "icon": "key",
             "url": "/frontend/variables/",
             "order": 45
         }

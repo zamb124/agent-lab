@@ -187,11 +187,19 @@ async def update_flow(
     for field, value in updates.items():
         if field in allowed_fields:
             flow_dict[field] = value
+            if field == "canvas_data":
+                logger.info(f"💾 Обновляем canvas_data для flow {flow_id}: {type(value)}, keys: {list(value.keys()) if isinstance(value, dict) else 'not dict'}")
 
     # Валидируем через модель - валидаторы автоматически преобразуют типы
     # Устанавливаем flow_id явно, так как он frozen
     flow_dict['flow_id'] = flow_id
     validated_flow = FlowConfig(**flow_dict)
+    
+    # Проверяем что canvas_data сохранился
+    if "canvas_data" in updates:
+        logger.info(f"✅ После валидации canvas_data: {validated_flow.canvas_data is not None}, type: {type(validated_flow.canvas_data)}")
+        if validated_flow.canvas_data:
+            logger.info(f"   Ключи в canvas_data: {list(validated_flow.canvas_data.keys())}")
     
     # Если обновили platforms - проверяем уникальность username
     if "platforms" in updates:

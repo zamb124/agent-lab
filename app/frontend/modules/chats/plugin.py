@@ -24,7 +24,7 @@ class ChatsPlugin(Plugin):
         {
             "id": "chats",
             "label": "dashboard.navigation.chats",
-            "icon": "bi-chat-left-dots",
+            "icon": "message",
             "url": "/frontend/chats/",
             "order": 20,
             "type": "htmx"
@@ -36,7 +36,7 @@ class ChatsPlugin(Plugin):
             "id": "chats_widget",
             "title": "dashboard.widgets.chats",
             "description": "Диалоги с пользователями",
-            "icon": "bi-chat-left-dots",
+            "icon": "message",
             "url": "/frontend/chats/",
             "order": 35
         }

@@ -10,37 +10,37 @@ export default class NodePalette {
         
         this.nodeTypes = {
             'flow_node': {
-                icon: 'bi-diagram-3',
+                icon: 'hierarchy',
                 color: '#3b82f6',
                 label: 'Flow',
                 desc: 'Entry point'
             },
             'agent_node': {
-                icon: 'bi-robot',
+                icon: 'robot',
                 color: '#8b5cf6',
                 label: 'Agent',
                 desc: 'AI agent'
             },
             'tool_node': {
-                icon: 'bi-tools',
+                icon: 'tools',
                 color: '#10b981',
                 label: 'Tool',
                 desc: 'Function call'
             },
             'function_node': {
-                icon: 'bi-code-square',
+                icon: 'code',
                 color: '#f59e0b',
                 label: 'Function',
                 desc: 'Custom code'
             },
             'message_node': {
-                icon: 'bi-chat-dots',
+                icon: 'message-dots',
                 color: '#06b6d4',
                 label: 'Message',
                 desc: 'Send message'
             },
             'router_node': {
-                icon: 'bi-lightning',
+                icon: 'bolt',
                 color: '#ef4444',
                 label: 'Router',
                 desc: 'Router logic'

@@ -11,17 +11,7 @@
             <div class="header-content">
                 <div class="brand">
                     <button class="app-launcher-trigger" onclick="toggleAppLauncher()" title="Все приложения">
-                        <div class="app-launcher-icon-grid">
-                            <i class="bi bi-circle-fill"></i>
-                            <i class="bi bi-circle-fill"></i>
-                            <i class="bi bi-circle-fill"></i>
-                            <i class="bi bi-circle-fill"></i>
-                            <i class="bi bi-circle-fill"></i>
-                            <i class="bi bi-circle-fill"></i>
-                            <i class="bi bi-circle-fill"></i>
-                            <i class="bi bi-circle-fill"></i>
-                            <i class="bi bi-circle-fill"></i>
-                        </div>
+                        <i class="ti ti-apps"></i>
                     </button>
                     <span class="brand-text langflow-gradient">Agents Lab</span>
                 </div>
@@ -29,37 +19,37 @@
                 <!-- Desktop navigation -->
                 <div class="header-actions desktop-nav">
                     <a href="/docs/" target="_blank" class="btn btn-outline-primary">
-                        <i class="bi bi-book"></i>
+                        <i class="ti ti-book"></i>
                         Документация
                     </a>
                     <a href="/frontend/builder/" class="btn btn-outline-primary">
-                        <i class="bi bi-diagram-3"></i>
+                        <i class="ti ti-diagram-3"></i>
                         {{ t('landing.header.builder') }}
                     </a>
                     {% if is_authenticated %}
                         <a href="/frontend/dashboard" class="btn btn-outline-primary">
-                            <i class="bi bi-speedometer2"></i>
+                            <i class="ti ti-speedometer2"></i>
                             {{ t('landing.header.dashboard') }}
                         </a>
                     {% else %}
                         <a href="/frontend/auth" class="btn btn-outline-primary">
-                            <i class="bi bi-box-arrow-in-right"></i>
+                            <i class="ti ti-box-arrow-in-right"></i>
                             {{ t('landing.header.login') }}
                         </a>
                     {% endif %}
                     
                     <div class="dropdown">
-                        <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
-                            <i class="bi bi-translate"></i>
+                        <button class="btn btn-ghost btn-sm" data-dropdown-toggle data-tooltip="{{ t('dashboard.header.language_toggle') }}">
+                            <i class="ti ti-translate"></i>
                             <span id="current-language">{{ get_current_language().upper() }}</span>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setLandingLanguage('ru');">
-                            <i class="bi bi-check invisible" id="lang-ru"></i> 
+                            <i class="ti ti-check invisible" id="lang-ru"></i> 
                             {{ t('languages.ru') }}
                         </a></li>
                         <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setLandingLanguage('en');">
-                            <i class="bi bi-check invisible" id="lang-en"></i> 
+                            <i class="ti ti-check invisible" id="lang-en"></i> 
                             {{ t('languages.en') }}
                         </a></li>
                         </ul>
@@ -68,7 +58,7 @@
                 
                 <!-- Mobile burger button -->
                 <button class="mobile-menu-btn" onclick="toggleMobileMenu()">
-                    <i class="bi bi-list"></i>
+                    <i class="ti ti-list"></i>
                 </button>
             </div>
         </div>
@@ -82,26 +72,26 @@
                 <span class="brand-text langflow-gradient">Agents Lab</span>
             </div>
             <button class="mobile-menu-close" onclick="closeMobileMenu()">
-                <i class="bi bi-x-circle-fill"></i>
+                <i class="ti ti-x-circle-fill"></i>
             </button>
         </div>
         <nav class="mobile-menu-nav">
             <a href="/docs/" target="_blank" class="mobile-menu-item">
-                <i class="bi bi-book"></i>
+                <i class="ti ti-book"></i>
                 <span>Документация</span>
             </a>
             <a href="/frontend/builder/" class="mobile-menu-item">
-                <i class="bi bi-diagram-3"></i>
+                <i class="ti ti-diagram-3"></i>
                 <span>{{ t('landing.header.builder') }}</span>
             </a>
             {% if is_authenticated %}
                 <a href="/frontend/dashboard" class="mobile-menu-item">
-                    <i class="bi bi-speedometer2"></i>
+                    <i class="ti ti-speedometer2"></i>
                     <span>{{ t('landing.header.dashboard') }}</span>
                 </a>
             {% else %}
                 <a href="/frontend/auth" class="mobile-menu-item">
-                    <i class="bi bi-box-arrow-in-right"></i>
+                    <i class="ti ti-box-arrow-in-right"></i>
                     <span>{{ t('landing.header.login') }}</span>
                 </a>
             {% endif %}
@@ -111,11 +101,11 @@
             <div class="mobile-menu-section">
                 <div class="mobile-menu-section-title">{{ t('dashboard.header.language_toggle') }}</div>
                 <button class="mobile-menu-item" onclick="event.preventDefault(); setLandingLanguage('ru'); closeMobileMenu();">
-                    <i class="bi bi-check invisible" id="mobile-lang-ru"></i>
+                    <i class="ti ti-check invisible" id="mobile-lang-ru"></i>
                     <span>{{ t('languages.ru') }}</span>
                 </button>
                 <button class="mobile-menu-item" onclick="event.preventDefault(); setLandingLanguage('en'); closeMobileMenu();">
-                    <i class="bi bi-check invisible" id="mobile-lang-en"></i>
+                    <i class="ti ti-check invisible" id="mobile-lang-en"></i>
                     <span>{{ t('languages.en') }}</span>
                 </button>
             </div>
@@ -136,11 +126,11 @@
                     </p>
                     <div class="hero-actions">
                         <button class="btn btn-primary btn-lg" onclick="openContactModal()">
-                            <i class="bi bi-rocket"></i>
+                            <i class="ti ti-rocket"></i>
                             {{ t('landing.hero.start_button') }}
                         </button>
                         <button class="btn btn-outline-primary btn-lg" onclick="scrollToSection('about')">
-                            <i class="bi bi-info-circle"></i>
+                            <i class="ti ti-info-circle"></i>
                             {{ t('landing.hero.learn_more') }}
                         </button>
                     </div>
@@ -150,35 +140,35 @@
                         <img src="/static/img/main.png" alt="Agents Lab Platform" class="platform-preview">
                         <div class="visual-overlay">
                             <div class="floating-card card-1">
-                                <i class="bi bi-cpu"></i>
+                                <i class="ti ti-cpu"></i>
                                 <span>{{ t('landing.hero.floating_tags.ai') }}</span>
                             </div>
                             <div class="floating-card card-2">
-                                <i class="bi bi-gear"></i>
+                                <i class="ti ti-gear"></i>
                                 <span>{{ t('landing.hero.floating_tags.automation') }}</span>
                             </div>
                             <div class="floating-card card-3">
-                                <i class="bi bi-database"></i>
+                                <i class="ti ti-database"></i>
                                 <span>{{ t('landing.hero.floating_tags.rag') }}</span>
                             </div>
                             <div class="floating-card card-4">
-                                <i class="bi bi-search"></i>
+                                <i class="ti ti-search"></i>
                                 <span>{{ t('landing.hero.floating_tags.search') }}</span>
                             </div>
                             <div class="floating-card card-5">
-                                <i class="bi bi-headset"></i>
+                                <i class="ti ti-headset"></i>
                                 <span>{{ t('landing.hero.floating_tags.support') }}</span>
                             </div>
                             <div class="floating-card card-6">
-                                <i class="bi bi-graph-up"></i>
+                                <i class="ti ti-graph-up"></i>
                                 <span>{{ t('landing.hero.floating_tags.efficiency') }}</span>
                             </div>
                             <div class="floating-card card-7">
-                                <i class="bi bi-arrow-up-circle"></i>
+                                <i class="ti ti-arrow-up-circle"></i>
                                 <span>{{ t('landing.hero.floating_tags.growth') }}</span>
                             </div>
                             <div class="floating-card card-8">
-                                <i class="bi bi-puzzle"></i>
+                                <i class="ti ti-puzzle"></i>
                                 <span>{{ t('landing.hero.floating_tags.integrations') }}</span>
                             </div>
                         </div>
@@ -201,7 +191,7 @@
             <div class="features-grid">
                 <div class="feature-card">
                     <div class="feature-icon">
-                        <i class="bi bi-robot"></i>
+                        <i class="ti ti-robot"></i>
                     </div>
                     <h3 class="feature-title">{{ t('landing.features.autonomous_agents.title') }}</h3>
                     <p class="feature-description">
@@ -211,7 +201,7 @@
                 
                 <div class="feature-card">
                     <div class="feature-icon">
-                        <i class="bi bi-diagram-3"></i>
+                        <i class="ti ti-diagram-3"></i>
                     </div>
                     <h3 class="feature-title">{{ t('landing.features.multi_agent.title') }}</h3>
                     <p class="feature-description">
@@ -221,7 +211,7 @@
                 
                 <div class="feature-card">
                     <div class="feature-icon">
-                        <i class="bi bi-code-slash"></i>
+                        <i class="ti ti-code-slash"></i>
                     </div>
                     <h3 class="feature-title">{{ t('landing.features.low_code.title') }}</h3>
                     <p class="feature-description">
@@ -231,7 +221,7 @@
                 
                 <div class="feature-card">
                     <div class="feature-icon">
-                        <i class="bi bi-puzzle"></i>
+                        <i class="ti ti-puzzle"></i>
                     </div>
                     <h3 class="feature-title">{{ t('landing.features.integrations.title') }}</h3>
                     <p class="feature-description">
@@ -241,7 +231,7 @@
                 
                 <div class="feature-card">
                     <div class="feature-icon">
-                        <i class="bi bi-shield-check"></i>
+                        <i class="ti ti-shield-check"></i>
                     </div>
                     <h3 class="feature-title">{{ t('landing.features.security.title') }}</h3>
                     <p class="feature-description">
@@ -251,7 +241,7 @@
                 
                 <div class="feature-card">
                     <div class="feature-icon">
-                        <i class="bi bi-graph-up"></i>
+                        <i class="ti ti-graph-up"></i>
                     </div>
                     <h3 class="feature-title">{{ t('landing.features.scalability.title') }}</h3>
                     <p class="feature-description">
@@ -272,7 +262,7 @@
             <div class="benefits-grid">
                 <div class="benefit-item">
                     <div class="benefit-header">
-                        <i class="bi bi-lightning"></i>
+                        <i class="ti ti-lightning"></i>
                         <h3>{{ t('landing.benefits.speed.title') }}</h3>
                     </div>
                     <p>{{ t('landing.benefits.speed.description') }}</p>
@@ -280,7 +270,7 @@
                 
                 <div class="benefit-item">
                     <div class="benefit-header">
-                        <i class="bi bi-shield-lock"></i>
+                        <i class="ti ti-shield-lock"></i>
                         <h3>{{ t('landing.benefits.control_security.title') }}</h3>
                     </div>
                     <p>{{ t('landing.benefits.control_security.description') }}</p>
@@ -288,7 +278,7 @@
                 
                 <div class="benefit-item">
                     <div class="benefit-header">
-                        <i class="bi bi-arrows-expand"></i>
+                        <i class="ti ti-arrows-expand"></i>
                         <h3>{{ t('landing.benefits.scalability.title') }}</h3>
                     </div>
                     <p>{{ t('landing.benefits.scalability.description') }}</p>
@@ -296,7 +286,7 @@
                 
                 <div class="benefit-item">
                     <div class="benefit-header">
-                        <i class="bi bi-gear"></i>
+                        <i class="ti ti-gear"></i>
                         <h3>{{ t('landing.benefits.manageability.title') }}</h3>
                     </div>
                     <p>{{ t('landing.benefits.manageability.description') }}</p>
@@ -315,20 +305,20 @@
             
             <div class="audience-list">
                  <div class="audience-item">
-                    <i class="bi bi-graph-down"></i>
+                    <i class="ti ti-graph-down"></i>
                     <p>{{ t('landing.audience.cost_reduction') }}</p>
                 </div>
                 <div class="audience-item">
-                    <i class="bi bi-building"></i>
+                    <i class="ti ti-building"></i>
                     <p>{{ t('landing.audience.repetitive_tasks') }}</p>
                 </div>
                 <div class="audience-item">
-                    <i class="bi bi-code"></i>
+                    <i class="ti ti-code"></i>
                     <p>{{ t('landing.audience.no_dev_team') }}</p>
                 </div>
                 
                 <div class="audience-item">
-                    <i class="bi bi-shield"></i>
+                    <i class="ti ti-shield"></i>
                     <p>{{ t('landing.audience.security_control') }}</p>
                 </div>
             </div>
@@ -346,17 +336,17 @@
                     <div class="cta-actions">
                         {% if is_authenticated %}
                             <a href="/frontend/dashboard" class="btn btn-primary btn-lg">
-                                <i class="bi bi-speedometer2"></i>
+                                <i class="ti ti-speedometer2"></i>
                                 {{ t('landing.header.dashboard') }}
                             </a>
                         {% else %}
                             <a href="/frontend/auth" class="btn btn-primary btn-lg">
-                                <i class="bi bi-rocket"></i>
+                                <i class="ti ti-rocket"></i>
                                 {{ t('landing.cta.login_button') }}
                             </a>
                         {% endif %}
                         <button class="btn btn-outline-primary btn-lg" onclick="openContactModal()">
-                            <i class="bi bi-envelope"></i>
+                            <i class="ti ti-envelope"></i>
                             {{ t('landing.cta.contact_button') }}
                         </button>
                     </div>
@@ -369,16 +359,16 @@
         <div class="container">
             <div class="footer-content">
                 <div class="footer-brand">
-                    <i class="bi bi-robot icon-lg"></i>
+                    <i class="ti ti-robot icon-lg"></i>
                     <span class="brand-text langflow-gradient">Agents Lab</span>
                 </div>
                 <div class="footer-links">
                     <a href="/docs/" target="_blank" class="footer-link">
-                        <i class="bi bi-book"></i>
+                        <i class="ti ti-book"></i>
                         Документация
                     </a>
                     <a href="/api/docs" target="_blank" class="footer-link">
-                        <i class="bi bi-code-square"></i>
+                        <i class="ti ti-code-square"></i>
                         API
                     </a>
                 </div>
@@ -396,7 +386,7 @@
         <div class="modal-header">
             <h3>{{ t('landing.contact_modal.title') }}</h3>
             <button class="modal-close" onclick="closeContactModal()">
-                <i class="bi bi-x-circle-fill"></i>
+                <i class="ti ti-x-circle-fill"></i>
             </button>
         </div>
         <div class="modal-body">
@@ -418,7 +408,7 @@
                         {{ t('landing.contact_modal.cancel_button') }}
                     </button>
                     <button type="submit" class="btn btn-primary">
-                        <i class="bi bi-send"></i>
+                        <i class="ti ti-send"></i>
                         {{ t('landing.contact_modal.send_button') }}</button>
                 </div>
             </form>
@@ -429,7 +419,7 @@
 <!-- App Launcher Overlay -->
 <div class="app-launcher-overlay" id="app-launcher" onclick="if(event.target === this) toggleAppLauncher()">
     <button class="app-launcher-close" onclick="toggleAppLauncher()">
-        <i class="bi bi-x-circle-fill"></i>
+        <i class="ti ti-x"></i>
     </button>
     
     <div class="app-launcher-container">
@@ -439,7 +429,7 @@
             {% for widget in dashboard_widgets | default([]) %}
             <div class="app-launcher-item" onclick="window.location.href='{{ widget.url }}'">
                 <div class="app-launcher-icon">
-                    <i class="bi {{ widget.icon }}"></i>
+                    <i class="ti ti-{{ widget.icon }}"></i>
                 </div>
                 <div class="app-launcher-item-title">{{ t(widget.title) }}</div>
             </div>
@@ -500,7 +490,7 @@ async function submitContactForm(event) {
     const submitButton = event.target.querySelector('button[type="submit"]');
     const originalText = submitButton.innerHTML;
     submitButton.disabled = true;
-            submitButton.innerHTML = `<i class="bi bi-hourglass-split"></i> ${t('landing.contact_modal.sending')}`;
+            submitButton.innerHTML = `<i class="ti ti-hourglass-split"></i> ${t('landing.contact_modal.sending')}`;
     
     try {
         const response = await fetch('/api/v1/lead', {
@@ -543,18 +533,18 @@ function showNotification(title, message, type = 'success') {
     const notification = document.createElement('div');
     notification.className = `notification ${type}`;
     
-    const icon = type === 'success' ? 'bi-check-circle' : 'bi-exclamation-triangle';
+    const icon = type === 'success' ? 'ti-check-circle' : 'ti-exclamation-triangle';
     
     notification.innerHTML = `
         <div class="notification-icon">
-            <i class="bi ${icon}"></i>
+            <i class="ti ti-${icon}"></i>
         </div>
         <div class="notification-content">
             <div class="notification-title">${title}</div>
             <div class="notification-message">${message}</div>
         </div>
         <button class="notification-close" onclick="closeNotification(this)">
-            <i class="bi bi-x"></i>
+            <i class="ti ti-x"></i>
         </button>
     `;
     

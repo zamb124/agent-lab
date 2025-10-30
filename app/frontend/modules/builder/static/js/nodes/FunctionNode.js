@@ -39,7 +39,7 @@ export class FunctionNode extends BaseNode {
         return `
             <div class="node-simple-content">
                 <div class="node-simple-icon function">
-                    <i class="bi bi-code-square"></i>
+                    <i class="ti ti-code"></i>
                 </div>
                 <div class="node-simple-info">
                     <div class="node-simple-title">${this.escapeHtml(displayName)}</div>

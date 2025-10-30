@@ -5,11 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>AI Stylist - Виртуальная примерка</title>
     
-    <!-- Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <!-- Favicon -->
+    <link rel="icon" type="image/jpeg" href="/static/img/favicon.jpg">
+    
+    <!-- Tabler Icons -->
+    <link rel="stylesheet" href="/static/fonts/tabler-icons/tabler-icons.min.css">
     
     <!-- HTMX -->
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="/static/js/htmx.min.js"></script>
     
     <!-- FASHN Styles -->
     <link rel="stylesheet" href="/static/css/fashn.css">
@@ -19,7 +22,7 @@
     <section class="hero-section">
         <div class="hero-content">
             <div class="ai-badge">
-                <i class="bi bi-stars"></i>
+                <i class="ti ti-stars"></i>
                 AI-Powered Fashion Styling
             </div>
             
@@ -34,12 +37,12 @@
                 <div class="upload-card" id="photoContainer">
                     <div id="uploadZone" class="upload-zone">
                         <div class="upload-icon">
-                            <i class="bi bi-cloud-upload"></i>
+                            <i class="ti ti-cloud-upload"></i>
                         </div>
                         <h3 class="upload-title">Start Your Styling Journey</h3>
                         <p class="upload-subtitle">Upload a clear photo of yourself to begin the AI styling experience</p>
                         <button class="upload-button" type="button">
-                            <i class="bi bi-cloud-upload"></i>
+                            <i class="ti ti-cloud-upload"></i>
                             Upload Your Photo
                         </button>
                         <p class="upload-formats">Supported formats: JPG, PNG, WEBP • Max size: 10MB</p>
@@ -48,11 +51,11 @@
                     <div id="photoPreview" class="photo-preview-section hidden">
                         <img id="photoImage" class="uploaded-photo" alt="Your photo">
                         <button id="removePhoto" class="remove-btn">
-                            <i class="bi bi-x"></i>
+                            <i class="ti ti-x"></i>
                         </button>
                         <div class="photo-actions">
                             <button id="generateBtn" class="generate-btn" disabled>
-                                <i class="bi bi-magic"></i>
+                                <i class="ti ti-magic"></i>
                                 Generate Styled Images
                             </button>
                         </div>
@@ -111,7 +114,7 @@
             <div class="add-product-form">
                 <input type="url" id="productUrl" placeholder="Paste product URL..." class="product-url-input">
                 <button type="button" id="addProductBtn" class="add-product-btn">
-                    <i class="bi bi-plus-circle"></i>
+                    <i class="ti ti-plus-circle"></i>
                     Add Product
                 </button>
             </div>
@@ -140,7 +143,7 @@
             <div class="modal-header">
                 <h2>Добавь свой товар</h2>
                 <button class="modal-close" id="closeModalBtn">
-                    <i class="bi bi-x"></i>
+                    <i class="ti ti-x"></i>
                 </button>
             </div>
             
@@ -152,7 +155,7 @@
                     
                     <div class="images-upload-zone" id="imagesUploadZone">
                         <div class="upload-placeholder">
-                            <i class="bi bi-images"></i>
+                            <i class="ti ti-images"></i>
                             <p>Нажмите или перетащите фотографии</p>
                         </div>
                         <input type="file" id="productImagesInput" accept="image/*" multiple class="hidden">
@@ -200,7 +203,7 @@
     <!-- Fullscreen Viewer -->
     <div class="fullscreen-overlay" id="fullscreenOverlay">
         <button class="fullscreen-close" id="fullscreenClose">
-            <i class="bi bi-x"></i>
+            <i class="ti ti-x"></i>
         </button>
         <img class="fullscreen-image" id="fullscreenImage" alt="Результат примерки">
     </div>
@@ -215,7 +218,7 @@
             hx-get="/api/v1/fashn/history-panel" 
             hx-target="#historyPanel" 
             hx-swap="innerHTML">
-        <i class="bi bi-clock-history"></i>
+        <i class="ti ti-clock-history"></i>
         History
     </button>
 

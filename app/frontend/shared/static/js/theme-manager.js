@@ -38,7 +38,7 @@ class ThemeManager {
     updateThemeIcon() {
         const themeBtn = document.querySelector('[data-theme-toggle] i');
         if (themeBtn) {
-            themeBtn.className = this.currentTheme === 'dark' ? 'bi bi-sun' : 'bi bi-moon';
+            themeBtn.className = this.currentTheme === 'dark' ? 'ti ti-sun' : 'ti ti-moon';
         }
     }
     

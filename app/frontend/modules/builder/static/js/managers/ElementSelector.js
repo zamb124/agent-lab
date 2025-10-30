@@ -35,9 +35,9 @@ export class ElementSelector extends EventEmitter {
         this.closeMenu();
         
         const iconMap = {
-            'agent_node': 'bi-robot',
-            'tool_node': 'bi-tools',
-            'flow_node': 'bi-diagram-3'
+            'agent_node': 'robot',
+            'tool_node': 'tools',
+            'flow_node': 'hierarchy'
         };
         
         const labelMap = {
@@ -46,7 +46,7 @@ export class ElementSelector extends EventEmitter {
             'flow_node': 'Flow'
         };
         
-        const icon = iconMap[nodeType] || 'bi-square';
+        const icon = iconMap[nodeType] || 'square';
         const label = labelMap[nodeType] || 'Element';
         
         const html = `
@@ -54,7 +54,7 @@ export class ElementSelector extends EventEmitter {
                 <div class="menu-layout">
                     <div class="menu-icon-column">
                         <div class="menu-main-icon">
-                            <i class="${icon}"></i>
+                            <i class="ti ti-${icon}"></i>
                         </div>
                     </div>
                     <div class="menu-options-column">
@@ -101,7 +101,7 @@ export class ElementSelector extends EventEmitter {
                 <div class="menu-layout">
                     <div class="menu-icon-column">
                         <div class="menu-main-icon">
-                            <i class="bi-robot"></i>
+                            <i class="ti ti-robot"></i>
                         </div>
                     </div>
                     <div class="menu-options-column">
@@ -134,9 +134,9 @@ export class ElementSelector extends EventEmitter {
         this.closeMenu();
         
         const iconMap = {
-            'agent_node': 'bi-robot',
-            'tool_node': 'bi-tools',
-            'flow_node': 'bi-diagram-3'
+            'agent_node': 'robot',
+            'tool_node': 'tools',
+            'flow_node': 'hierarchy'
         };
         
         const labelMap = {
@@ -145,22 +145,22 @@ export class ElementSelector extends EventEmitter {
             'flow_node': 'flow'
         };
         
-        const icon = iconMap[nodeType] || 'bi-square';
+        const icon = iconMap[nodeType] || 'square';
         const label = labelMap[nodeType] || 'элемент';
         
         // Для тулов добавляем фильтры
         const filtersHtml = nodeType === 'tool_node' ? `
             <div class="filter-badges">
                 <button class="filter-badge active" data-filter="all">
-                    <i class="bi bi-grid"></i>
+                    <i class="ti ti-grid"></i>
                     <span>Все</span>
                 </button>
                 <button class="filter-badge" data-filter="tools">
-                    <i class="bi bi-tools"></i>
+                    <i class="ti ti-tools"></i>
                     <span>Tools</span>
                 </button>
                 <button class="filter-badge" data-filter="mcp">
-                    <i class="bi bi-plugin"></i>
+                    <i class="ti ti-plugin"></i>
                     <span>MCP</span>
                 </button>
             </div>
@@ -170,7 +170,7 @@ export class ElementSelector extends EventEmitter {
             <div class="existing-elements-context-menu">
                 <div class="search-container">
                     <div class="search-input-wrapper">
-                        <i class="bi bi-search"></i>
+                        <i class="ti ti-search"></i>
                         <input type="text" 
                                class="search-input" 
                                placeholder="Поиск ${label}..." 
@@ -269,7 +269,7 @@ export class ElementSelector extends EventEmitter {
             this.renderElements(agents, 'agent', (agent) => ({
                 id: agent.agent_id,
                 name: agent.name,
-                icon: 'bi-robot',
+                icon: 'robot',
                 meta: agent.type,
                 onClick: () => this.selectExistingAgent(agent.agent_id)
             }));
@@ -346,20 +346,20 @@ export class ElementSelector extends EventEmitter {
                      data-element-type="${isMcp ? 'mcp' : 'tool'}"
                      data-tool-name="${this.escapeHtml(tool.name)}">
                     <div class="element-icon">
-                        <i class="bi-tools"></i>
+                        <i class="ti ti-tools"></i>
                     </div>
                     <div class="element-info">
                         <p class="element-name">${this.escapeHtml(tool.name)}${mcpBadge}</p>
                         ${tool.description ? `<p class="element-desc">${this.escapeHtml(tool.description)}</p>` : ''}
                         ${tool.group ? `
                             <p class="element-group">
-                                <i class="bi bi-folder"></i>
+                                <i class="ti ti-folder"></i>
                                 ${this.escapeHtml(tool.group)}
                             </p>
                         ` : ''}
                         ${isMcp && tool.server ? `
                             <p class="element-server">
-                                <i class="bi bi-server"></i>
+                                <i class="ti ti-server"></i>
                                 ${this.escapeHtml(tool.server)}
                             </p>
                         ` : ''}
@@ -398,7 +398,7 @@ export class ElementSelector extends EventEmitter {
             this.renderElements(flows, 'flow', (flow) => ({
                 id: flow.flow_id,
                 name: flow.name,
-                icon: 'bi-diagram-3',
+                icon: 'hierarchy',
                 description: flow.description,
                 onClick: () => this.selectExistingFlow(flow.flow_id)
             }));

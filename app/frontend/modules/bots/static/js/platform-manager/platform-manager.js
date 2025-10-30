@@ -134,7 +134,7 @@ export class PlatformManager {
             <input type="text" class="form-control" placeholder="User ID или username" 
                    onchange="updateAllowedUser(this)">
             <button class="btn btn-outline-danger btn-sm" onclick="removeAllowedUserRow(this)">
-                <i class="bi bi-trash"></i>
+                <i class="ti ti-trash"></i>
             </button>
         `;
         container.appendChild(row);
@@ -160,7 +160,7 @@ export class PlatformManager {
             <input type="text" class="form-control" placeholder="Значение"
                    onchange="updateVariableValue(this)">
             <button class="btn btn-outline-danger btn-sm" onclick="removeVariableRow(this)">
-                <i class="bi bi-trash"></i>
+                <i class="ti ti-trash"></i>
             </button>
         `;
         container.appendChild(row);

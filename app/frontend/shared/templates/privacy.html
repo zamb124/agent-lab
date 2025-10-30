@@ -151,14 +151,14 @@
         
         {% if flow_info %}
         <div class="privacy-note" style="margin-top: 20px;">
-            <p><i class="bi bi-info-circle"></i> <strong>{{ flow_info.name }}</strong>{% if flow_info.description %} — {{ flow_info.description }}{% endif %}</p>
+            <p><i class="ti ti-info-circle"></i> <strong>{{ flow_info.name }}</strong>{% if flow_info.description %} — {{ flow_info.description }}{% endif %}</p>
         </div>
         {% endif %}
     </header>
 
     <!-- Секция 1: Кто мы -->
     <section class="privacy-section">
-        <h2><i class="bi bi-building"></i> 1. {{ t('privacy.section_1.title') }}</h2>
+        <h2><i class="ti ti-building"></i> 1. {{ t('privacy.section_1.title') }}</h2>
         <p><strong>{{ company_name }}</strong>, {{ legal_form }}{% if inn %} (ИНН/ОГРН: {{ inn }}{% if ogrn %}/{{ ogrn }}{% endif %}){% endif %}{% if legal_address %}; {{ t('privacy.section_1.registered_address') if lang == 'ru' else 'registered address' }}: {{ legal_address }}{% endif %}, {{ t('privacy.section_1.content') }}</p>
         <div class="privacy-contact-box">
             <p>{{ t('privacy.section_1.contact') }} <a href="mailto:{{ dpo_email }}">{{ dpo_email }}</a>{% if phone %}, {{ phone }}{% endif %}</p>
@@ -167,7 +167,7 @@
 
     <!-- Секция 2: Термины -->
     <section class="privacy-section">
-        <h2><i class="bi bi-journal-text"></i> 2. {{ t('privacy.section_2.title') }}</h2>
+        <h2><i class="ti ti-journal-text"></i> 2. {{ t('privacy.section_2.title') }}</h2>
         <ul>
             <li>{{ t('privacy.section_2.personal_data') }}</li>
             <li>{{ t('privacy.section_2.legal_basis') }}</li>
@@ -177,7 +177,7 @@
 
     <!-- Секция 3: Какие данные -->
     <section class="privacy-section">
-        <h2><i class="bi bi-database"></i> 3. {{ t('privacy.section_3.title') }}</h2>
+        <h2><i class="ti ti-database"></i> 3. {{ t('privacy.section_3.title') }}</h2>
         <h3>3.1. {{ t('privacy.section_3.whatsapp_title') }}</h3>
         <ul>
             <li>{{ t('privacy.section_3.whatsapp_ids') }}</li>
@@ -198,7 +198,7 @@
 
     <!-- Секция 4: Для чего -->
     <section class="privacy-section">
-        <h2><i class="bi bi-gear"></i> 4. {{ t('privacy.section_4.title') }}</h2>
+        <h2><i class="ti ti-gear"></i> 4. {{ t('privacy.section_4.title') }}</h2>
         <ul>
             <li>{{ t('privacy.section_4.service') }}</li>
             <li>{{ t('privacy.section_4.identification') }}</li>
@@ -210,7 +210,7 @@
 
     <!-- Секция 5: Правовые основания -->
     <section class="privacy-section">
-        <h2><i class="bi bi-file-earmark-law"></i> 5. {{ t('privacy.section_5.title') }}</h2>
+        <h2><i class="ti ti-file-earmark-law"></i> 5. {{ t('privacy.section_5.title') }}</h2>
         <ul>
             <li>{{ t('privacy.section_5.contract') }}</li>
             <li>{{ t('privacy.section_5.legitimate') }}</li>
@@ -221,7 +221,7 @@
 
     <!-- Секция 6: Хранение -->
     <section class="privacy-section">
-        <h2><i class="bi bi-clock-history"></i> 6. {{ t('privacy.section_6.title') }}</h2>
+        <h2><i class="ti ti-clock-history"></i> 6. {{ t('privacy.section_6.title') }}</h2>
         <p>{{ t('privacy.section_6.intro') }}</p>
         <ul>
             <li>{{ t('privacy.section_6.logs') }} <strong>{{ retention_logs }}</strong></li>
@@ -232,7 +232,7 @@
 
     <!-- Секция 7: Третьи стороны -->
     <section class="privacy-section">
-        <h2><i class="bi bi-share"></i> 7. {{ t('privacy.section_7.title') }}</h2>
+        <h2><i class="ti ti-share"></i> 7. {{ t('privacy.section_7.title') }}</h2>
         <p>{{ t('privacy.section_7.intro') }}</p>
         <ul>
             <li>{{ t('privacy.section_7.meta') }}</li>
@@ -248,13 +248,13 @@
 
     <!-- Секция 8: Трансграничная передача -->
     <section class="privacy-section">
-        <h2><i class="bi bi-globe2"></i> 8. {{ t('privacy.section_8.title') }}</h2>
+        <h2><i class="ti ti-globe2"></i> 8. {{ t('privacy.section_8.title') }}</h2>
         <p>{{ t('privacy.section_8.content') }}</p>
     </section>
 
     <!-- Секция 9: Безопасность -->
     <section class="privacy-section">
-        <h2><i class="bi bi-shield-lock"></i> 9. {{ t('privacy.section_9.title') }}</h2>
+        <h2><i class="ti ti-shield-lock"></i> 9. {{ t('privacy.section_9.title') }}</h2>
         <ul>
             <li>{{ t('privacy.section_9.encryption') }}</li>
             <li>{{ t('privacy.section_9.access') }}</li>
@@ -265,7 +265,7 @@
 
     <!-- Секция 10: Права -->
     <section class="privacy-section">
-        <h2><i class="bi bi-hand-thumbs-up"></i> 10. {{ t('privacy.section_10.title') }}</h2>
+        <h2><i class="ti ti-hand-thumbs-up"></i> 10. {{ t('privacy.section_10.title') }}</h2>
         <ul>
             <li>{{ t('privacy.section_10.access') }}</li>
             <li>{{ t('privacy.section_10.withdrawal') }}</li>
@@ -280,25 +280,25 @@
 
     <!-- Секция 11: Дети -->
     <section class="privacy-section">
-        <h2><i class="bi bi-people"></i> 11. {{ t('privacy.section_11.title') }}</h2>
+        <h2><i class="ti ti-people"></i> 11. {{ t('privacy.section_11.title') }}</h2>
         <p>{{ t('privacy.section_11.content').replace('{min_age}', min_age|string) }}</p>
     </section>
 
     <!-- Секция 12: Cookie -->
     <section class="privacy-section">
-        <h2><i class="bi bi-cookie"></i> 12. {{ t('privacy.section_12.title') }}</h2>
+        <h2><i class="ti ti-cookie"></i> 12. {{ t('privacy.section_12.title') }}</h2>
         <p>{{ t('privacy.section_12.content') }}</p>
     </section>
 
     <!-- Секция 13: Изменения -->
     <section class="privacy-section">
-        <h2><i class="bi bi-arrow-clockwise"></i> 13. {{ t('privacy.section_13.title') }}</h2>
+        <h2><i class="ti ti-arrow-clockwise"></i> 13. {{ t('privacy.section_13.title') }}</h2>
         <p>{{ t('privacy.section_13.content') }}</p>
     </section>
 
     <!-- Секция 14: Контакты -->
     <section class="privacy-section">
-        <h2><i class="bi bi-envelope"></i> 14. {{ t('privacy.section_14.title') }}</h2>
+        <h2><i class="ti ti-envelope"></i> 14. {{ t('privacy.section_14.title') }}</h2>
         <p>{{ t('privacy.section_14.content') }} <a href="mailto:{{ dpo_email }}">{{ dpo_email }}</a>{% if legal_address %} {{ t('privacy.section_14.or') }} {{ legal_address }}{% endif %}.</p>
     </section>
 

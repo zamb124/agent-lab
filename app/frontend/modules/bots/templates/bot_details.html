@@ -4,7 +4,7 @@
     <div class="header-top-row">
         <div class="header-left">
             <h2>
-                <i class="bi bi-robot"></i>
+                <i class="ti ti-robot"></i>
                 {% if bot.is_new %}
                     {{ t('bots.create_new_bot') }}
                 {% else %}
@@ -15,59 +15,59 @@
         <div class="header-right">
             {% if not bot.is_new %}
             <a href="/frontend/builder/flow/{{ bot.flow_id }}" class="btn btn-outline btn-sm btn-desktop-only" title="{{ t('bots.open_in_visual_editor') }}">
-                <i class="bi bi-diagram-3"></i>
+                <i class="ti ti-hierarchy"></i>
                 Builder
             </a>
             <button class="btn btn-outline btn-sm btn-desktop-only" onclick="openBotChat('{{ bot.flow_id }}', '{{ bot.name }}')">
-                <i class="bi bi-chat-dots"></i>
+                <i class="ti ti-message-dots"></i>
                 {{ t('bots.launch') }}
             </button>
             <button class="btn btn-warning btn-sm btn-desktop-only" 
                     onclick="remigrateFlowWithDeps('{{ bot.flow_id }}')"
                     title="{{ t('bots.reset_flow_to_code') }}"
-                <i class="bi bi-arrow-counterclockwise"></i>
+                <i class="ti ti-rotate-clockwise"></i>
                 {{ t('bots.reset_to_code') }}
             </button>
             {% endif %}
             <button class="btn-icon btn-desktop-only" onclick="toggleBotModalFullscreen()" title="{{ t('common.fullscreen') }}">
-                <i class="bi bi-fullscreen"></i>
+                <i class="ti ti-maximize"></i>
             </button>
             <button class="btn-icon btn-desktop-only" onclick="saveBotSettings('{{ bot.flow_id }}')" title="{{ t('common.save') }}">
-                <i class="bi bi-floppy"></i>
+                <i class="ti ti-device-floppy"></i>
             </button>
             
             <div class="mobile-actions-menu btn-mobile-only">
                 <button class="btn-icon" onclick="toggleMobileActionsMenu()" title="Меню">
-                    <i class="bi bi-three-dots-vertical"></i>
+                    <i class="ti ti-three-dots-vertical"></i>
                 </button>
                 <div class="mobile-actions-dropdown" id="mobile-actions-dropdown">
                     {% if not bot.is_new %}
                     <a href="/frontend/builder/flow/{{ bot.flow_id }}" class="mobile-action-item">
-                        <i class="bi bi-diagram-3"></i>
+                        <i class="ti ti-hierarchy"></i>
                         Builder
                     </a>
                     <button class="mobile-action-item" onclick="openBotChat('{{ bot.flow_id }}', '{{ bot.name }}'); closeMobileActionsMenu()">
-                        <i class="bi bi-chat-dots"></i>
+                        <i class="ti ti-message-dots"></i>
                         Запустить
                     </button>
                     <button class="mobile-action-item" onclick="remigrateFlowWithDeps('{{ bot.flow_id }}'); closeMobileActionsMenu()">
-                        <i class="bi bi-arrow-counterclockwise"></i>
+                        <i class="ti ti-rotate-clockwise"></i>
                         Сброс к коду
                     </button>
                     {% endif %}
                     <button class="mobile-action-item" onclick="toggleBotModalFullscreen(); closeMobileActionsMenu()">
-                        <i class="bi bi-fullscreen"></i>
+                        <i class="ti ti-maximize"></i>
                         На весь экран
                     </button>
                     <button class="mobile-action-item" onclick="saveBotSettings('{{ bot.flow_id }}'); closeMobileActionsMenu()">
-                        <i class="bi bi-floppy"></i>
+                        <i class="ti ti-device-floppy"></i>
                         Сохранить
                     </button>
                 </div>
             </div>
             
             <button class="btn-icon" onclick="closeBotModal()" title="{{ t('common.close') }}">
-                <i class="bi bi-x-lg"></i>
+                <i class="ti ti-x"></i>
             </button>
         </div>
     </div>
@@ -79,7 +79,7 @@
             <div class="control-value d-flex align-items-center gap-2">
                 <code title="{{ bot.flow_id }}">{{ bot.flow_id[:10] }}{% if bot.flow_id|length > 10 %}...{% endif %}</code>
                 <button class="btn-icon" onclick="copyToClipboard('{{ bot.flow_id }}')" title="{{ t('common.copy') }}">
-                    <i class="bi bi-clipboard"></i>
+                    <i class="ti ti-clipboard"></i>
                 </button>
             </div>
         </div>
@@ -89,7 +89,7 @@
             <div class="control-value d-flex align-items-center gap-2">
                 <code title="{{ bot.entry_point }}">{{ bot.entry_point[:10] }}{% if bot.entry_point|length > 10 %}...{% endif %}</code>
                 <button class="btn-icon" onclick="copyToClipboard('{{ bot.entry_point }}')" title="{{ t('common.copy') }}">
-                    <i class="bi bi-clipboard"></i>
+                    <i class="ti ti-clipboard"></i>
                 </button>
             </div>
         </div>
@@ -103,7 +103,7 @@
                     {% endfor %}
                 {% else %}
                     <button class="btn-icon" onclick="addPlatform('{{ bot.flow_id }}')" title="Добавить канал общения">
-                        <i class="bi bi-plus-circle"></i>
+                        <i class="ti ti-plus"></i>
                     </button>
                 {% endif %}
             </div>
@@ -122,7 +122,7 @@
         
         <div class="control-group">
             <label class="control-label">
-                <i class="bi bi-palette"></i>
+                <i class="ti ti-palette"></i>
                 Креативность <span id="creativity-mode-label" class="creativity-mode-inline">[строгий]</span>
             </label>
             <div class="control-value">
@@ -139,27 +139,27 @@
     <div class="bot-settings-section-full">
         <div class="settings-tabs">
             <button class="settings-tab active" data-tab="main">
-                <i class="bi bi-star"></i>
+                <i class="ti ti-star"></i>
                 {{ t('bots.tabs.basic') }}
             </button>
             <button class="settings-tab" data-tab="abilities">
-                <i class="bi bi-tools"></i>
+                <i class="ti ti-tools"></i>
                 {{ t('bots.tabs.abilities') }}
             </button>
             <button class="settings-tab" data-tab="mcp">
-                <i class="bi bi-plugin"></i>
+                <i class="ti ti-plugin"></i>
                 MCP
             </button>
             <button class="settings-tab" data-tab="knowledge">
-                <i class="bi bi-book"></i>
+                <i class="ti ti-book"></i>
                 {{ t('bots.tabs.knowledge_base') }}
             </button>
             <button class="settings-tab" data-tab="platforms">
-                <i class="bi bi-globe"></i>
+                <i class="ti ti-globe"></i>
                 {{ t('bots.tabs.channels') }}
             </button>
             <button class="settings-tab" data-tab="advanced">
-                <i class="bi bi-gear"></i>
+                <i class="ti ti-gear"></i>
                 {{ t('bots.tabs.advanced') }}
             </button>
         </div>
@@ -217,7 +217,7 @@
             
             <div class="settings-panel" data-panel="abilities">
                 <h4>
-                    <i class="bi bi-tools"></i>
+                    <i class="ti ti-tools"></i>
                     {{ t('bots.capabilities_title') }}
                 </h4>
 
@@ -228,7 +228,7 @@
             
             <div class="settings-panel" data-panel="mcp">
                 <h4>
-                    <i class="bi bi-plugin"></i>
+                    <i class="ti ti-plugin"></i>
                     MCP инструменты
                 </h4>
                 
@@ -243,7 +243,7 @@
             
             <div class="settings-panel" data-panel="knowledge">
                 <h4>
-                    <i class="bi bi-book"></i>
+                    <i class="ti ti-book"></i>
                     {{ t('bots.knowledge_base_title') }}
                 </h4>
                 
@@ -280,22 +280,22 @@
                         <div class="knowledge-base-documents">
                             <div class="documents-header">
                                 <h5>
-                                    <i class="bi bi-files"></i>
+                                    <i class="ti ti-files"></i>
                                     {{ t('bots.documents_in_knowledge_base') }}
                                 </h5>
                                 <div class="document-upload-buttons">
                                     <button class="document-upload-button" onclick="uploadDocumentToKnowledgeBase('{{ bot.flow_id }}')" title="{{ t('bots.upload_document') }}">
-                                        <i class="bi bi-upload"></i>
+                                        <i class="ti ti-upload"></i>
                                     </button>
                                     <button class="document-upload-button" onclick="openUploadTextModal()" title="{{ t('bots.upload_text') }}">
-                                        <i class="bi bi-file-earmark-text"></i>
+                                        <i class="ti ti-file-text"></i>
                                     </button>
                                 </div>
                             </div>
                             
                             <div id="knowledge-base-docs-list" class="documents-list">
                                 <div class="loading-state">
-                                    <i class="bi bi-hourglass-split"></i>
+                                    <i class="ti ti-hourglass-split"></i>
                                     Загрузка документов...
                                 </div>
                             </div>
@@ -307,7 +307,7 @@
                 <div class="platforms-header">
                     <h4>Настройки каналов</h4>
                     <button class="btn-add-platform" onclick="addPlatform('{{ bot.flow_id }}')" title="Добавить канал общения">
-                        <i class="bi bi-plus-circle"></i>
+                        <i class="ti ti-plus"></i>
                     </button>
                 </div>
                 
@@ -320,31 +320,31 @@
                     <div class="platform-header" onclick="togglePlatformCollapse('{{ platform }}')">
                         <div class="platform-header-left">
                             <button class="platform-collapse-btn" type="button">
-                                <i class="bi bi-chevron-down"></i>
+                                <i class="ti ti-chevron-down"></i>
                             </button>
                             <h5>
                                 {% if platform == 'telegram' %}
-                                    <i class="bi bi-telegram"></i> Telegram
+                                    <i class="ti ti-telegram"></i> Telegram
                                 {% elif platform == 'api' %}
-                                    <i class="bi bi-code-slash"></i> API
+                                    <i class="ti ti-code-slash"></i> API
                                 {% elif platform == 'web' %}
-                                    <i class="bi bi-globe"></i> Web
+                                    <i class="ti ti-globe"></i> Web
                                 {% elif platform == 'whatsapp' %}
-                                    <i class="bi bi-whatsapp"></i> WhatsApp
+                                    <i class="ti ti-whatsapp"></i> WhatsApp
                                 {% elif platform == 'amocrm' %}
-                                    <i class="bi bi-building"></i> AmoCRM
+                                    <i class="ti ti-building"></i> AmoCRM
                                 {% elif platform == 'retailcrm' %}
-                                    <i class="bi bi-shop"></i> RetailCRM
+                                    <i class="ti ti-shop"></i> RetailCRM
                                 {% elif platform == 'discord' %}
-                                    <i class="bi bi-discord"></i> Discord
+                                    <i class="ti ti-discord"></i> Discord
                                 {% elif platform == 'slack' %}
-                                    <i class="bi bi-slack"></i> Slack
+                                    <i class="ti ti-slack"></i> Slack
                                 {% elif platform == 'viber' %}
-                                    <i class="bi bi-heart-fill"></i> Viber
+                                    <i class="ti ti-heart-fill"></i> Viber
                                 {% elif platform == 'vk' %}
-                                    <i class="bi bi-circle-fill"></i> VK
+                                    <i class="ti ti-circle-fill"></i> VK
                                 {% else %}
-                                    <i class="bi bi-gear"></i> {{ platform }}
+                                    <i class="ti ti-gear"></i> {{ platform }}
                                 {% endif %}
                             </h5>
                         </div>
@@ -352,11 +352,11 @@
                             <button class="btn btn-outline-primary btn-sm" 
                                     onclick="editPlatform('{{ bot.flow_id }}', '{{ platform }}')"
                                     title="Редактировать">
-                                <i class="bi bi-pencil"></i>
+                                <i class="ti ti-pencil"></i>
                             </button>
                             <button class="btn btn-outline-danger btn-sm" 
                                     onclick="removePlatform('{{ bot.flow_id }}', '{{ platform }}')">
-                                <i class="bi bi-trash"></i>
+                                <i class="ti ti-trash"></i>
                             </button>
                         </div>
                     </div>
@@ -425,7 +425,7 @@
                     
                     <div class="alert alert-primary bg-opacity-10 border-primary">
                         <div class="mb-2">
-                            <i class="bi bi-info-circle me-2"></i><strong>Webhook URL:</strong><br>
+                            <i class="ti ti-info-circle me-2"></i><strong>Webhook URL:</strong><br>
                             <small class="text-muted">Настройте этот URL в Meta for Developers</small>
                         </div>
                         <div class="input-group mb-2">
@@ -434,18 +434,18 @@
                                    value="https://{{ request.headers.get('host') }}/api/v1/webhook/whatsapp/company:{{ request.state.context.active_company.company_id }}:flow:{{ bot.flow_id }}" 
                                    readonly>
                             <button class="btn btn-outline-secondary" onclick="copyToClipboard('whatsapp-webhook-url-{{ bot.flow_id }}')">
-                                <i class="bi bi-clipboard"></i>
+                                <i class="ti ti-clipboard"></i>
                             </button>
                         </div>
                         <button class="btn btn-primary btn-sm" onclick="registerWhatsApp('{{ bot.flow_id }}')">
-                            <i class="bi bi-link-45deg"></i> Проверить регистрацию
+                            <i class="ti ti-link-45deg"></i> Проверить регистрацию
                         </button>
                     </div>
                     
                     {% elif platform == 'api' %}
                     <div class="api-info">
                         <div class="api-section">
-                            <h6><i class="bi bi-link-45deg"></i> API Endpoint</h6>
+                            <h6><i class="ti ti-link-45deg"></i> API Endpoint</h6>
                             <div class="input-group mb-3">
                                 <input type="text" 
                                        class="form-control font-monospace" 
@@ -454,13 +454,13 @@
                                        readonly>
                                 <button class="btn btn-outline-secondary" 
                                         onclick="copyToClipboard('api-endpoint-{{ bot.flow_id }}')">
-                                    <i class="bi bi-clipboard"></i>
+                                    <i class="ti ti-clipboard"></i>
                                 </button>
                             </div>
                         </div>
 
                         <div class="api-section">
-                            <h6><i class="bi bi-code-square"></i> Пример curl запроса</h6>
+                            <h6><i class="ti ti-code-square"></i> Пример curl запроса</h6>
                             <div class="code-block-wrapper">
                                 <pre class="code-block" id="api-curl-example-{{ bot.flow_id }}">curl -X POST "https://{{ request.headers.get('host') }}/api/v1/flows/{{ bot.flow_id }}/message" \
   -H "Content-Type: application/json" \
@@ -472,13 +472,13 @@
   }'</pre>
                                 <button class="btn btn-sm btn-outline-secondary copy-code-btn" 
                                         onclick="copyToClipboard('api-curl-example-{{ bot.flow_id }}')">
-                                    <i class="bi bi-clipboard"></i>
+                                    <i class="ti ti-clipboard"></i>
                                 </button>
                             </div>
                         </div>
 
                         <div class="api-section">
-                            <h6><i class="bi bi-braces"></i> Пример тела запроса</h6>
+                            <h6><i class="ti ti-braces"></i> Пример тела запроса</h6>
                             <div class="code-block-wrapper">
                                 <pre class="code-block" id="api-request-example-{{ bot.flow_id }}">{
   "user_id": "user123",
@@ -491,13 +491,13 @@
 }</pre>
                                 <button class="btn btn-sm btn-outline-secondary copy-code-btn" 
                                         onclick="copyToClipboard('api-request-example-{{ bot.flow_id }}')">
-                                    <i class="bi bi-clipboard"></i>
+                                    <i class="ti ti-clipboard"></i>
                                 </button>
                             </div>
                         </div>
 
                         <div class="api-section">
-                            <h6><i class="bi bi-play-circle"></i> Протестировать API</h6>
+                            <h6><i class="ti ti-play-circle"></i> Протестировать API</h6>
                             <div class="api-test-form">
                                 <div class="form-group">
                                     <label>User ID</label>
@@ -529,11 +529,11 @@
                                 
                                 <button class="btn btn-primary" 
                                         onclick="testApiEndpoint('{{ bot.flow_id }}')">
-                                    <i class="bi bi-send"></i> Отправить тестовое сообщение
+                                    <i class="ti ti-send"></i> Отправить тестовое сообщение
                                 </button>
                                 
                                 <div id="api-test-result-{{ bot.flow_id }}" class="api-test-result">
-                                    <h6><i class="bi bi-reply"></i> Ответ от API</h6>
+                                    <h6><i class="ti ti-reply"></i> Ответ от API</h6>
                                     <div class="result-content">
                                         <pre id="api-test-result-content-{{ bot.flow_id }}"></pre>
                                     </div>
@@ -593,10 +593,10 @@
             <h3>Добавить канал общения</h3>
             <div class="modal-header-actions">
                 <button class="btn-icon" onclick="savePlatform('{{ bot.flow_id }}')" title="{{ t('common.save') }}">
-                    <i class="bi bi-floppy-fill"></i>
+                    <i class="ti ti-device-floppy"></i>
                 </button>
                 <button class="btn-close" onclick="closeAddPlatformModal()" title="{{ t('common.close') }}">
-                    <i class="bi bi-x-circle-fill"></i>
+                    <i class="ti ti-x"></i>
                 </button>
             </div>
         </div>
@@ -607,27 +607,27 @@
                     <div class="custom-select" id="platform-type-select" onclick="togglePlatformDropdown()">
                         <div class="select-value">
                             <span class="select-text">Выберите канал общения</span>
-                            <i class="bi bi-chevron-down"></i>
+                            <i class="ti ti-chevron-down"></i>
                         </div>
                         <div class="select-dropdown" id="platform-dropdown">
-                            <div class="dropdown-option" data-value="telegram" onclick="selectPlatform('telegram', 'bi-telegram', 'Telegram')">
-                                <i class="bi bi-telegram"></i>
+                            <div class="dropdown-option" data-value="telegram" onclick="selectPlatform('telegram', 'ti-telegram', 'Telegram')">
+                                <i class="ti ti-telegram"></i>
                                 <span>Telegram</span>
                             </div>
-                            <div class="dropdown-option" data-value="whatsapp" onclick="selectPlatform('whatsapp', 'bi-whatsapp', 'WhatsApp')">
-                                <i class="bi bi-whatsapp"></i>
+                            <div class="dropdown-option" data-value="whatsapp" onclick="selectPlatform('whatsapp', 'ti-whatsapp', 'WhatsApp')">
+                                <i class="ti ti-whatsapp"></i>
                                 <span>WhatsApp</span>
                             </div>
-                            <div class="dropdown-option" data-value="web" onclick="selectPlatform('web', 'bi-globe', 'Web Chat')">
-                                <i class="bi bi-globe"></i>
+                            <div class="dropdown-option" data-value="web" onclick="selectPlatform('web', 'ti-globe', 'Web Chat')">
+                                <i class="ti ti-globe"></i>
                                 <span>Web Chat</span>
                             </div>
-                            <div class="dropdown-option" data-value="api" onclick="selectPlatform('api', 'bi-code-slash', 'REST API')">
-                                <i class="bi bi-code-slash"></i>
+                            <div class="dropdown-option" data-value="api" onclick="selectPlatform('api', 'ti-code', 'REST API')">
+                                <i class="ti ti-code"></i>
                                 <span>REST API</span>
                             </div>
-                            <div class="dropdown-option" data-value="amocrm" onclick="selectPlatform('amocrm', 'bi-building', 'AmoCRM')">
-                                <i class="bi bi-building"></i>
+                            <div class="dropdown-option" data-value="amocrm" onclick="selectPlatform('amocrm', 'ti-building', 'AmoCRM')">
+                                <i class="ti ti-building"></i>
                                 <span>AmoCRM</span>
                             </div>
                         </div>
@@ -675,12 +675,12 @@
                             <input type="text" class="form-control" placeholder="User ID или username" 
                                    onchange="updateAllowedUser(this)">
                             <button class="btn btn-outline-danger btn-sm" onclick="removeAllowedUserRow(this)">
-                                <i class="bi bi-trash"></i>
+                                <i class="ti ti-trash"></i>
                             </button>
                         </div>
                     </div>
                     <button class="btn btn-outline-primary btn-sm" onclick="addAllowedUserRow()">
-                        <i class="bi bi-plus"></i>
+                        <i class="ti ti-plus"></i>
                         Добавить пользователя
                     </button>
                     <small class="form-text">Если список пустой - доступ разрешен всем. Можно указывать user_id или username</small>
@@ -695,12 +695,12 @@
                             <input type="text" class="form-control" placeholder="Значение"
                                    onchange="updateVariableValue(this)">
                             <button class="btn btn-outline-danger btn-sm" onclick="removeVariableRow(this)">
-                                <i class="bi bi-trash"></i>
+                                <i class="ti ti-trash"></i>
                             </button>
                         </div>
                     </div>
                     <button class="btn btn-outline-primary btn-sm" onclick="addVariableRow()">
-                        <i class="bi bi-plus"></i>
+                        <i class="ti ti-plus"></i>
                         Добавить параметр
                     </button>
                 </div>
@@ -716,10 +716,10 @@
             <h3>Загрузить текст в базу знаний</h3>
             <div class="modal-header-actions">
                 <button class="btn-icon" onclick="uploadTextFromModal('{{ bot.flow_id }}')" title="Загрузить">
-                    <i class="bi bi-upload"></i>
+                    <i class="ti ti-upload"></i>
                 </button>
                 <button class="btn-close" onclick="closeUploadTextModal()" title="{{ t('common.close') }}">
-                    <i class="bi bi-x-lg"></i>
+                    <i class="ti ti-x"></i>
                 </button>
             </div>
         </div>

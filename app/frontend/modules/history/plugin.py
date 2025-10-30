@@ -24,7 +24,7 @@ class HistoryPlugin(Plugin):
         {
             "id": "history",
             "label": "dashboard.navigation.history",
-            "icon": "bi-clock-history",
+            "icon": "history",
             "url": "/frontend/history/",
             "order": 40,
             "type": "htmx"
@@ -36,7 +36,7 @@ class HistoryPlugin(Plugin):
             "id": "history",
             "title": "dashboard.widgets.history",
             "description": "История диалогов и сессий",
-            "icon": "bi-clock-history",
+            "icon": "history",
             "url": "/frontend/history/",
             "order": 40
         }

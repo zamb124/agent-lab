@@ -28,7 +28,7 @@ class LanguageManager {
         // Обновляем UI индикаторы языка
         this.updateLanguageIndicators();
         
-        // Настраиваем обработчики dropdown после инициализации Bootstrap
+        // Настраиваем обработчики dropdown
         setTimeout(() => this.setupDropdownHandlers(), 100);
         
         this.isInitialized = true;
@@ -253,7 +253,7 @@ class LanguageManager {
     
     setupDropdownHandlers() {
         // Дополнительная настройка dropdown поведения
-        const dropdownBtn = document.querySelector('.header-right .dropdown .btn[data-bs-toggle="dropdown"]');
+        const dropdownBtn = document.querySelector('.header-right .dropdown .btn[data-dropdown-toggle]');
         const dropdown = document.querySelector('.header-right .dropdown');
         const dropdownMenu = document.querySelector('.header-right .dropdown-menu');
         
@@ -290,10 +290,10 @@ class LanguageManager {
                     e.preventDefault();
                     e.stopPropagation();
                     
-                    // Bootstrap dropdown автоматически закроется после клика
-                    const dropdownInstance = window.bootstrap?.Dropdown?.getInstance(dropdownBtn);
-                    if (dropdownInstance) {
-                        dropdownInstance.hide();
+                    // Закрываем dropdown после клика
+                    const dropdownMenu = dropdownBtn.nextElementSibling;
+                    if (dropdownMenu && dropdownMenu.classList.contains('dropdown-menu')) {
+                        dropdownMenu.classList.remove('show');
                     }
                 });
             });

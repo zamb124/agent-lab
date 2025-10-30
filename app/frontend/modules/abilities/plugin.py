@@ -24,7 +24,7 @@ class AbilitiesPlugin(Plugin):
         {
             "id": "abilities",
             "label": "dashboard.navigation.abilities",
-            "icon": "bi-star",
+            "icon": "star",
             "url": "/frontend/abilities/",
             "order": 30,
             "type": "htmx"
@@ -36,7 +36,7 @@ class AbilitiesPlugin(Plugin):
             "id": "abilities_widget",
             "title": "dashboard.widgets.abilities",
             "description": "Библиотека агентов и инструментов",
-            "icon": "bi-star",
+            "icon": "star",
             "url": "/frontend/abilities/",
             "order": 25
         }

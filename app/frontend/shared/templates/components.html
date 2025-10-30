@@ -42,20 +42,20 @@
     {% if hx_ext %}hx-ext="{{ hx_ext }}"{% endif %}
     {% if hx_include %}hx-include="{{ hx_include }}"{% endif %}
 >
-    {% if icon and icon_position == 'left' %}<i class="bi bi-{{ icon }}"></i>{% endif %}
+    {% if icon and icon_position == 'left' %}<i class="ti ti-{{ icon }}"></i>{% endif %}
     {{ text if text else caller() if caller }}
-    {% if icon and icon_position == 'right' %}<i class="bi bi-{{ icon }}"></i>{% endif %}
+    {% if icon and icon_position == 'right' %}<i class="ti ti-{{ icon }}"></i>{% endif %}
 </button>
 {% endmacro %}
 
 {% macro badge(text='', variant='secondary', icon='', class_='') %}
 <span class="badge bg-{{ variant }} {{ class_ }}">
-    {% if icon %}<i class="bi bi-{{ icon }}"></i>&nbsp;{% endif %}{{ text }}
+    {% if icon %}<i class="ti ti-{{ icon }}"></i>&nbsp;{% endif %}{{ text }}
 </span>
 {% endmacro %}
 
 {% macro icon(name, size='', class_='', style='') %}
-<i class="bi bi-{{ name }} {{ class_ }}" {% if style %}style="{{ style }}"{% endif %}></i>
+<i class="ti ti-{{ name }} {{ class_ }}" {% if style %}style="{{ style }}"{% endif %}></i>
 {% endmacro %}
 
 {# ========================================
@@ -147,7 +147,7 @@
         </div>
     {% elif icon %}
         <div class="empty-state-icon">
-            <i class="bi bi-{{ icon }} display-4 text-muted"></i>
+            <i class="ti ti-{{ icon }} display-4 text-muted"></i>
         </div>
     {% endif %}
     
@@ -162,7 +162,7 @@
     {% if button_text %}
     <div class="empty-state-actions d-flex gap-3 justify-content-center mt-3">
         <button class="btn btn-{{ button_variant }}" onclick="{{ button_onclick }}">
-            {% if button_icon %}<i class="bi bi-{{ button_icon }}"></i>{% endif %}
+            {% if button_icon %}<i class="ti ti-{{ button_icon }}"></i>{% endif %}
             {{ button_text }}
         </button>
     </div>
@@ -180,7 +180,7 @@
 
 <div class="alert alert-{{ type }} {{ class_ }}" role="alert">
     <div class="d-flex align-items-start gap-2">
-        <i class="bi bi-{{ icon or icon_map.get(type, 'info-circle') }}"></i>
+        <i class="ti ti-{{ icon or icon_map.get(type, 'info-circle') }}"></i>
         <div class="flex-grow-1">
             {% if title %}<div class="fw-bold">{{ title }}</div>{% endif %}
             {% if message %}<div>{{ message }}</div>{% endif %}
@@ -213,7 +213,7 @@
 } %}
 {% set config = platforms.get(platform, {'icon': 'gear', 'text': platform}) %}
 <span class="platform-badge platform-badge-{{ platform }} {{ class_ }}">
-    <i class="bi bi-{{ config.icon }}"></i> {{ config.text }}
+    <i class="ti ti-{{ config.icon }}"></i> {{ config.text }}
 </span>
 {% endmacro %}
 
@@ -245,7 +245,7 @@
                 hx-get="{{ hx_get_url }}?offset={{ max(0, offset - limit) }}&limit={{ limit }}"
                 hx-target="{{ hx_target }}"
                 {% if hx_include %}hx-include="{{ hx_include }}"{% endif %}>
-            <i class="bi bi-chevron-left"></i> {{ prev_text }}
+            <i class="ti ti-chevron-left"></i> {{ prev_text }}
         </button>
         {% endif %}
         
@@ -254,7 +254,7 @@
                 hx-get="{{ hx_get_url }}?offset={{ offset + limit }}&limit={{ limit }}"
                 hx-target="{{ hx_target }}"
                 {% if hx_include %}hx-include="{{ hx_include }}"{% endif %}>
-            {{ next_text }} <i class="bi bi-chevron-right"></i>
+            {{ next_text }} <i class="ti ti-chevron-right"></i>
         </button>
         {% endif %}
     </div>
@@ -278,7 +278,7 @@
             <div class="d-flex align-items-center gap-3">
                 {% if icon %}
                 <div class="card-icon">
-                    <i class="bi bi-{{ icon }}"></i>
+                    <i class="ti ti-{{ icon }}"></i>
                 </div>
                 {% endif %}
                 
@@ -301,15 +301,15 @@
 </div>
 {% endmacro %}
 
-{% macro modal(id, title='', subtitle='', icon='', size='md', closeable=true, backdrop=true, class_='') %}
-<div class="modal-overlay modal-hidden" id="{{ id }}" {% if backdrop %}onclick="if(event.target === this) this.remove()"{% endif %}>
+{% macro modal(id, title='', subtitle='', icon='', size='md', closeable=true, backdrop=true, class_='', hidden=true) %}
+<div class="modal-overlay {% if hidden %}modal-hidden{% endif %}" id="{{ id }}" {% if backdrop %}onclick="if(event.target === this) this.remove()"{% endif %}>
     <div class="modal-content modal-{{ size }} {{ class_ }}" onclick="event.stopPropagation()">
         {% if title or icon or closeable %}
         <div class="modal-header">
             <div class="d-flex align-items-center gap-3 flex-grow-1">
                 {% if icon %}
                 <div class="modal-icon">
-                    <i class="bi bi-{{ icon }}"></i>
+                    <i class="ti ti-{{ icon }}"></i>
                 </div>
                 {% endif %}
                 
@@ -322,8 +322,8 @@
             </div>
             
             {% if closeable %}
-            <button class="btn btn-ghost btn-sm" onclick="this.closest('.modal-overlay').remove()">
-                <i class="bi bi-x"></i>
+            <button class="btn btn-ghost btn-sm" onclick="this.closest('.modal-overlay').remove(); document.body.style.overflow = '';">
+                <i class="ti ti-x"></i>
             </button>
             {% endif %}
         </div>
@@ -334,19 +334,6 @@
         </div>
     </div>
 </div>
-
-<script>
-(function() {
-    const modal = document.getElementById('{{ id }}');
-    if (modal) {
-        modal.style.display = 'flex';
-        document.body.style.overflow = 'hidden';
-        modal.addEventListener('remove', function() {
-            document.body.style.overflow = '';
-        });
-    }
-})();
-</script>
 {% endmacro %}
 
 {# ========================================
@@ -502,7 +489,7 @@
 {% macro table_empty(message='Нет данных', colspan=5) %}
 <tr>
     <td colspan="{{ colspan }}" class="text-center text-muted py-5">
-        <i class="bi bi-inbox display-4 d-block mb-2 table-empty-icon"></i>
+        <i class="ti ti-inbox display-4 d-block mb-2 table-empty-icon"></i>
         {{ message }}
     </td>
 </tr>
@@ -520,7 +507,7 @@
            {% if item.href %}href="{{ item.href }}"{% endif %}
            {% if item.hx_get %}hx-get="{{ item.hx_get }}" hx-target="{{ item.hx_target or '#content' }}"{% endif %}
            {% if item.onclick %}onclick="{{ item.onclick }}"{% endif %}>
-            {% if item.icon %}<i class="bi bi-{{ item.icon }}"></i>{% endif %}
+            {% if item.icon %}<i class="ti ti-{{ item.icon }}"></i>{% endif %}
             {{ item.text }}
         </a>
     </li>
@@ -535,11 +522,11 @@
         <li class="breadcrumb-item {{ 'active' if loop.last else '' }}" {% if loop.last %}aria-current="page"{% endif %}>
             {% if not loop.last and item.href %}
                 <a href="{{ item.href }}">
-                    {% if item.icon %}<i class="bi bi-{{ item.icon }}"></i>{% endif %}
+                    {% if item.icon %}<i class="ti ti-{{ item.icon }}"></i>{% endif %}
                     {{ item.text }}
                 </a>
             {% else %}
-                {% if item.icon %}<i class="bi bi-{{ item.icon }}"></i>{% endif %}
+                {% if item.icon %}<i class="ti ti-{{ item.icon }}"></i>{% endif %}
                 {{ item.text }}
             {% endif %}
         </li>
@@ -550,9 +537,9 @@
 
 {% macro dropdown(button_text='', button_variant='secondary', button_size='sm', items=[], class_='', align='end') %}
 <div class="dropdown {{ class_ }}">
-    <button class="btn btn-{{ button_variant }} btn-{{ button_size }}" data-bs-toggle="dropdown" aria-expanded="false">
+    <button class="btn btn-{{ button_variant }} btn-{{ button_size }}" data-dropdown-toggle aria-expanded="false">
         {{ button_text }}
-        <i class="bi bi-chevron-down ms-1"></i>
+        <i class="ti ti-chevron-down ms-1"></i>
     </button>
     <ul class="dropdown-menu dropdown-menu-{{ align }}">
         {% for item in items %}
@@ -563,7 +550,7 @@
                     <a class="dropdown-item" 
                        {% if item.href %}href="{{ item.href }}"{% else %}href="#"{% endif %}
                        {% if item.onclick %}onclick="{{ item.onclick }}"{% endif %}>
-                        {% if item.icon %}<i class="bi bi-{{ item.icon }}"></i>{% endif %}
+                        {% if item.icon %}<i class="ti ti-{{ item.icon }}"></i>{% endif %}
                         {{ item.text }}
                     </a>
                 </li>

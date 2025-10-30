@@ -75,7 +75,7 @@ export class AgentNode extends BaseNode {
         return `
             <div class="node-simple-content">
                 <div class="node-simple-icon agent">
-                    <i class="bi bi-robot"></i>
+                    <i class="ti ti-robot"></i>
                 </div>
                 <div class="node-simple-info">
                     <div class="node-simple-title">${this.escapeHtml(displayName)}</div>
@@ -91,8 +91,8 @@ export class AgentNode extends BaseNode {
     /**
      * Рекурсивное разворачивание агента
      */
-    async expand(layoutManager) {
-        console.log('📂 AgentNode.expand() для', this.data.params?.agent_id);
+    async expand(layoutManager, canvasNodes = null) {
+        console.log('📂 AgentNode.expand() для', this.data.params?.agent_id, 'canvasNodes =', canvasNodes);
         
         if (!this.agentData) {
             console.warn('⚠️ Нет данных агента для разворачивания');
@@ -104,7 +104,7 @@ export class AgentNode extends BaseNode {
         if (agentType === 'react') {
             return await this.expandReactAgent(layoutManager);
         } else if (agentType === 'stategraph') {
-            return await this.expandStateGraphAgent(layoutManager);
+            return await this.expandStateGraphAgent(layoutManager, canvasNodes);
         }
         
         return [];
@@ -201,9 +201,9 @@ export class AgentNode extends BaseNode {
     /**
      * Разворачивание StateGraph агента - разворачиваем граф
      */
-    async expandStateGraphAgent(layoutManager) {
+    async expandStateGraphAgent(layoutManager, canvasNodes = null) {
+        console.log('📊 expandStateGraphAgent canvasNodes =', canvasNodes);
         const graphDef = this.agentData.graph_definition;
-        
         if (!graphDef || !graphDef.nodes) {
             console.log('📋 У StateGraph агента нет graph_definition');
             return [];
@@ -217,11 +217,14 @@ export class AgentNode extends BaseNode {
         // Создаем все ноды
         for (const nodeData of graphDef.nodes) {
             const position = layoutManager.getNextPosition(this);
-            
+
+            // Получаем сохраненные координаты для ноды
+            const savedNodeData = canvasNodes?.[nodeData.id];
+
             const childNodeData = {
                 ...nodeData,
-                id: nodeData.id || `${nodeData.type}_${Date.now()}`,
-                ui: {
+                id: nodeData.id,
+                ui: savedNodeData || {
                     x: position.x,
                     y: position.y,
                     width: 200,
@@ -339,9 +342,11 @@ export class AgentNode extends BaseNode {
             
             // Для StateGraph: собираем graph_definition из дочерних нод
             if (agentData.type === 'stategraph') {
-                const childNodeIds = new Set(childNodes.map(n => n.id));
+                // Собираем ВСЕХ достижимых потомков рекурсивно (не только прямых детей)
+                const allChildNodes = this.getAllDescendantNodes();
+                const childNodeIds = new Set(allChildNodes.map(n => n.id));
                 
-                const nodes = childNodes.map(child => ({
+                const nodes = allChildNodes.map(child => ({
                     id: child.id,
                     type: child.type,
                     params: child.data.params || {}
@@ -364,7 +369,7 @@ export class AgentNode extends BaseNode {
                 console.log(`   📊 Сохранено ${nodes.length} нод, ${edges.length} связей`);
                 
                 // Рекурсивно сохраняем вложенных агентов
-                const nestedAgents = childNodes.filter(n => n.type === 'agent_node');
+                const nestedAgents = allChildNodes.filter(n => n.type === 'agent_node');
                 for (const nestedAgent of nestedAgents) {
                     await nestedAgent.save();
                 }

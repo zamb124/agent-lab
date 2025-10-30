@@ -3,7 +3,7 @@
   <td class="field-cell">
     <div class="nested-model-summary">
       <span class="badge badge-info">
-        <i class="bi bi-box"></i> {{ model_type.title() if model_type else 'Модель' }}
+        <i class="ti ti-box"></i> {{ model_type.title() if model_type else 'Модель' }}
       </span>
       {% if model_id %}
       <!-- Это ссылка на отдельную модель в БД -->
@@ -11,7 +11,7 @@
               hx-get="/frontend/models/{{ model_type }}/{{ model_id }}?view=modal" 
               hx-target="#modal-container"
               data-tooltip="Показать {{ model_type }}">
-          <i class="bi bi-eye"></i>
+          <i class="ti ti-eye"></i>
       </button>
       {% else %}
       <!-- Это поле текущей модели - показываем в модальном окне -->
@@ -22,7 +22,7 @@
               hx-target="body"
               hx-swap="beforeend"
               data-tooltip="Редактировать {{ title|default(field_name) }}">
-          <i class="bi bi-pencil"></i>
+          <i class="ti ti-pencil"></i>
       </button>
       {% endif %}
     </div>
@@ -33,7 +33,7 @@
     <div class="card">
       <div class="card-header p-2">
         <div class="d-flex align-items-center gap-2">
-          <i class="bi bi-box"></i>
+          <i class="ti ti-box"></i>
           <span class="small">{{ model_type.title() if model_type else 'Модель' }}</span>
         </div>
       </div>

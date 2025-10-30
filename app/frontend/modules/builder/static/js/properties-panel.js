@@ -119,7 +119,7 @@ export default class PropertiesPanel {
             
             this.panel.innerHTML = `
                 <button class="properties-close-btn" id="closePanelBtn">
-                    <i class="bi bi-x-circle-fill"></i>
+                    <i class="ti ti-x"></i>
                 </button>
                 ${formHtml}
             `;
@@ -147,11 +147,11 @@ export default class PropertiesPanel {
     loadDefaultEditor(node) {
         this.panel.innerHTML = `
             <button class="properties-close-btn" id="closePanelBtn">
-                <i class="bi bi-x-circle-fill"></i>
+                <i class="ti ti-x"></i>
             </button>
             <div class="card">
                 <div class="card-header">
-                    <i class="bi bi-gear"></i> ${node.data.params?.name || node.type}
+                    <i class="ti ti-gear"></i> ${node.data.params?.name || node.type}
                 </div>
                 <div class="card-body">
                     <p>Редактирование ${node.type} пока не реализовано</p>
@@ -177,10 +177,10 @@ export default class PropertiesPanel {
         
         this.panel.innerHTML = `
             <button class="properties-close-btn" id="closePanelBtn">
-                <i class="bi bi-x-circle-fill"></i>
+                <i class="ti ti-x"></i>
             </button>
             <div class="properties-empty">
-                <i class="bi bi-cursor"></i>
+                <i class="ti ti-cursor"></i>
                 <p>Select a node to edit properties</p>
             </div>
         `;
@@ -196,11 +196,11 @@ export default class PropertiesPanel {
         
         this.panel.innerHTML = `
             <button class="properties-close-btn" id="closePanelBtn">
-                <i class="bi bi-x-circle-fill"></i>
+                <i class="ti ti-x"></i>
             </button>
             <div class="card">
                 <div class="card-header" style="background: #06b6d4; color: white;">
-                    <i class="bi bi-chat-dots"></i> ${nodeName}
+                    <i class="ti ti-message-dots"></i> ${nodeName}
                 </div>
                 <div class="card-body">
                     <p class="text-muted mb-3">Отправка фиксированного сообщения пользователю</p>
@@ -227,7 +227,7 @@ export default class PropertiesPanel {
                     </div>
                     
                     <button class="btn btn-primary" onclick="window.builderInstance.propertiesPanel.saveMessageNode('${node.id}')">
-                        <i class="bi bi-floppy"></i> Сохранить
+                        <i class="ti ti-floppy"></i> Сохранить
                     </button>
                 </div>
             </div>
@@ -246,11 +246,11 @@ export default class PropertiesPanel {
         
         this.panel.innerHTML = `
             <button class="properties-close-btn" id="closePanelBtn">
-                <i class="bi bi-x-circle-fill"></i>
+                <i class="ti ti-x"></i>
             </button>
             <div class="card">
                 <div class="card-header" style="background: #ef4444; color: white;">
-                    <i class="bi bi-lightning"></i> ${nodeName}
+                    <i class="ti ti-lightning"></i> ${nodeName}
                 </div>
                 <div class="card-body">
                     <p class="text-muted mb-3">Функция-роутер для условных переходов. Возвращает ID следующей ноды на основе state.</p>
@@ -283,7 +283,7 @@ export default class PropertiesPanel {
                     </div>
                     
                     <button class="btn btn-primary" onclick="window.builderInstance.propertiesPanel.saveRouterNode('${node.id}')">
-                        <i class="bi bi-floppy"></i> Сохранить
+                        <i class="ti ti-floppy"></i> Сохранить
                     </button>
                 </div>
             </div>
@@ -329,11 +329,11 @@ export default class PropertiesPanel {
         
         this.panel.innerHTML = `
             <button class="properties-close-btn" id="closePanelBtn">
-                <i class="bi bi-x-circle-fill"></i>
+                <i class="ti ti-x"></i>
             </button>
             <div class="card">
                 <div class="card-header" style="background: #f59e0b; color: white;">
-                    <i class="bi bi-code-square"></i> ${nodeName}
+                    <i class="ti ti-code"></i> ${nodeName}
                 </div>
                 <div class="card-body">
                     <p class="text-muted mb-3">Выполнение произвольного Python кода. Функция получает state и возвращает обновлённый state.</p>
@@ -366,7 +366,7 @@ export default class PropertiesPanel {
                     </div>
                     
                     <button class="btn btn-primary" onclick="window.builderInstance.propertiesPanel.saveFunctionNode('${node.id}')">
-                        <i class="bi bi-floppy"></i> Сохранить
+                        <i class="ti ti-floppy"></i> Сохранить
                     </button>
                 </div>
             </div>
@@ -470,7 +470,7 @@ export default class PropertiesPanel {
         try {
             this.panel.innerHTML = `
                 <button class="properties-close-btn" id="closePanelBtn">
-                    <i class="bi bi-x-circle-fill"></i>
+                    <i class="ti ti-x"></i>
                 </button>
                 <div class="properties-loading">
                     <div class="spinner-border text-primary" role="status">
@@ -515,10 +515,10 @@ export default class PropertiesPanel {
             } else {
                 this.panel.innerHTML = `
                     <button class="properties-close-btn" id="closePanelBtn">
-                        <i class="bi bi-x-circle-fill"></i>
+                        <i class="ti ti-x"></i>
                     </button>
                     <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i>
+                        <i class="ti ti-info-circle"></i>
                         <p>Properties for ${nodeType} will be available soon.</p>
                     </div>
                 `;
@@ -541,7 +541,7 @@ export default class PropertiesPanel {
             
             this.panel.innerHTML = `
                 <button class="properties-close-btn" id="closePanelBtn">
-                    <i class="bi bi-x-circle-fill"></i>
+                    <i class="ti ti-x"></i>
                 </button>
                 ${html}
             `;
@@ -572,10 +572,10 @@ export default class PropertiesPanel {
             console.error('❌ Ошибка загрузки формы:', error);
             this.panel.innerHTML = `
                 <button class="properties-close-btn" id="closePanelBtn">
-                    <i class="bi bi-x-circle-fill"></i>
+                    <i class="ti ti-x"></i>
                 </button>
                 <div class="alert alert-danger">
-                    <i class="bi bi-exclamation-triangle"></i>
+                    <i class="ti ti-exclamation-triangle"></i>
                     <p>Error loading form: ${error.message}</p>
                 </div>
             `;

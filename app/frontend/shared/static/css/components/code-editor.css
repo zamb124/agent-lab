@@ -125,7 +125,18 @@
 }
 
 .toolbar-btn i {
+    display: inline-block;
+    font-family: "tabler-icons" !important;
     font-size: 15px;
+    line-height: 1;
+    color: inherit;
+    font-style: normal;
+    font-weight: normal;
+    font-variant: normal;
+    text-transform: none;
+    speak: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 .code-editor-container {
@@ -307,6 +318,21 @@
     transition: all 0.15s ease;
 }
 
+.variables-modal-close i {
+    display: inline-block;
+    font-family: "tabler-icons" !important;
+    font-size: 18px;
+    line-height: 1;
+    color: inherit;
+    font-style: normal;
+    font-weight: normal;
+    font-variant: normal;
+    text-transform: none;
+    speak: none;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
 .variables-modal-close:hover {
     background: var(--code-editor-hover);
     color: var(--code-editor-text);
@@ -469,12 +495,12 @@
 .api-name {
     font-weight: 600;
     color: var(--code-editor-text-primary);
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
     margin-bottom: 4px;
 }
 
 .api-signature {
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace, monospace;
     color: var(--code-editor-accent);
     font-size: 13px;
     margin-bottom: 8px;
@@ -506,14 +532,14 @@
 }
 
 .method-name {
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace, monospace;
     font-weight: 500;
     color: var(--code-editor-text-primary);
     margin-right: 8px;
 }
 
 .method-signature {
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: 'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace, monospace;
     color: var(--code-editor-accent);
     font-size: 12px;
     margin-right: 8px;

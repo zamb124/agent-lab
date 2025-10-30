@@ -4,7 +4,7 @@
       <!-- FROM: fields/basemodel.html -->
       <div class="nested-model-summary">
         <span class="badge badge-info">
-          <i class="bi bi-box"></i>
+          <i class="ti ti-box"></i>
           {{ value.__class__.__name__ }}
         </span>
         <button class="btn btn-ghost btn-xs" 
@@ -13,7 +13,7 @@
                 hx-target="#modal-container"
                 hx-ext="json-enc"
                 data-tooltip="Показать детали">
-            <i class="bi bi-eye"></i>
+            <i class="ti ti-eye"></i>
         </button>
       </div>
     {% else %}
@@ -29,7 +29,7 @@
         <div class="card">
           <div class="card-header p-2">
             <div class="d-flex align-items-center gap-2">
-              <i class="bi bi-box"></i>
+              <i class="ti ti-box"></i>
               <span class="small">{{ value.__class__.__name__ }}</span>
             </div>
           </div>

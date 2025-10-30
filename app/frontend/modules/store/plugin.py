@@ -24,7 +24,7 @@ class StorePlugin(Plugin):
         {
             "id": "store",
             "label": "dashboard.navigation.store",
-            "icon": "bi-shop",
+            "icon": "shopping-cart",
             "url": "/frontend/store/",
             "order": 30,
             "type": "htmx"
@@ -36,7 +36,7 @@ class StorePlugin(Plugin):
             "id": "store_widget",
             "title": "dashboard.widgets.store",
             "description": "Готовые решения и шаблоны",
-            "icon": "bi-shop",
+            "icon": "shopping-cart",
             "url": "/frontend/store/",
             "order": 30
         }

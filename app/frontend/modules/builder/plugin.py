@@ -24,7 +24,7 @@ class BuilderPlugin(Plugin):
         {
             "id": "builder",
             "label": "dashboard.navigation.builder",
-            "icon": "bi-palette",
+            "icon": "palette",
             "url": "/frontend/builder/",
             "order": 50,
             "type": "page"
@@ -36,7 +36,7 @@ class BuilderPlugin(Plugin):
             "id": "builder_widget",
             "title": "dashboard.widgets.builder",
             "description": "Визуальный редактор для создания сложных flows",
-            "icon": "bi-palette",
+            "icon": "palette",
             "url": "/frontend/builder/",
             "order": 10
         }

@@ -60,12 +60,12 @@ export default class VariablesModule {
         if (!isGrouped) {
             btn.classList.add('active', 'btn-primary');
             btn.classList.remove('btn-outline-secondary');
-            btn.innerHTML = '<i class="bi bi-grid-fill"></i> ' + this.app.i18n.t('variables.grouped');
+            btn.innerHTML = '<i class="ti ti-grid-fill"></i> ' + this.app.i18n.t('variables.grouped');
             this.renderGroupedView(variables, contentDiv);
         } else {
             btn.classList.remove('active', 'btn-primary');
             btn.classList.add('btn-outline-secondary');
-            btn.innerHTML = '<i class="bi bi-grid"></i> ' + this.app.i18n.t('variables.group_by_tags');
+            btn.innerHTML = '<i class="ti ti-grid"></i> ' + this.app.i18n.t('variables.group_by_tags');
             this.renderGridView(variables, contentDiv);
         }
     }
@@ -143,8 +143,8 @@ export default class VariablesModule {
     renderVariableCard(key, data) {
         const isSecret = data.secret;
         const icon = isSecret ? 
-            '<i class="bi bi-shield-lock"></i>' :
-            '<i class="bi bi-tag"></i>';
+            '<i class="ti ti-shield-lock"></i>' :
+            '<i class="ti ti-tag"></i>';
         
         const groups = data.groups && data.groups.length > 0 ? 
             data.groups.map(g => `<span class="variable-group-badge">${g}</span>`).join('') :
@@ -154,7 +154,7 @@ export default class VariablesModule {
             `<div class="variable-secret-group">
                 <input type="password" readonly value="••••••••••••" class="form-control form-control-sm" id="var-${key}" data-secret-key="${key}">
                         <button class="btn-icon" type="button" onclick="toggleSecret('${key}', this)" title="${this.app.i18n.t('variables.show_hide')}">
-                    <i class="bi bi-eye"></i>
+                    <i class="ti ti-eye"></i>
                 </button>
             </div>` :
             `<div class="variable-value-display">
@@ -173,10 +173,10 @@ export default class VariablesModule {
                         </div>
                         <div class="variable-card-actions">
                             <button class="btn-icon" onclick="event.stopPropagation();editVariable('${key}', '${data.value}', ${isSecret})" title="${this.app.i18n.t('variables.edit')}">
-                                <i class="bi bi-pencil"></i>
+                                <i class="ti ti-pencil"></i>
                             </button>
                             <button class="btn-icon btn-icon-danger" onclick="event.stopPropagation();deleteVariable('${key}')" title="${this.app.i18n.t('variables.delete')}">
-                                <i class="bi bi-trash"></i>
+                                <i class="ti ti-trash"></i>
                             </button>
                         </div>
                     </div>
@@ -362,7 +362,7 @@ export default class VariablesModule {
         container.innerHTML = this.currentGroups.map(group => `
             <span class="badge bg-primary me-1 mb-1 variable-badge-group">
                 ${group}
-                <i class="bi bi-x variable-badge-remove" onclick="removeGroup('${group}')"></i>
+                <i class="ti ti-x variable-badge-remove" onclick="removeGroup('${group}')"></i>
             </span>
         `).join('');
     }
@@ -383,7 +383,7 @@ export default class VariablesModule {
                     const data = await response.json();
                     input.value = data.value;
                     input.type = 'text';
-                    icon.className = 'bi bi-eye-slash';
+                    icon.className = 'ti ti-eye-slash';
                 }
             } catch (err) {
                 console.error(this.app.i18n.t('variables.load_value_error') + ':', err);
@@ -391,7 +391,7 @@ export default class VariablesModule {
         } else {
             input.value = '••••••••••••';
             input.type = 'password';
-            icon.className = 'bi bi-eye';
+            icon.className = 'ti ti-eye';
         }
     }
     

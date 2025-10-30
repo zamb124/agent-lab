@@ -14,9 +14,9 @@
     <!-- Палитра нод слева -->
     <aside class="node-palette" id="nodePalette">
         <div class="palette-header cursor-pointer" id="paletteHeader">
-            <h3><i class="bi bi-grid-3x3-gap"></i> Components</h3>
+            <h3><i class="ti ti-grid-3x3-gap"></i> Components</h3>
             <button class="btn-collapse-palette" id="collapsePaletteBtn" title="Свернуть">
-                <i class="bi bi-chevron-left"></i>
+                <i class="ti ti-chevron-left"></i>
             </button>
         </div>
         
@@ -26,7 +26,7 @@
             <!-- Flow Node -->
             <div class="palette-item" data-node-type="flow_node" draggable="true">
                 <div class="palette-icon palette-icon-flow">
-                    <i class="bi bi-diagram-3"></i>
+                    <i class="ti ti-hierarchy"></i>
                 </div>
                 <div class="palette-info">
                     <div class="palette-name">Flow</div>
@@ -37,7 +37,7 @@
             <!-- Agent Node -->
             <div class="palette-item" data-node-type="agent_node" draggable="true">
                 <div class="palette-icon palette-icon-agent">
-                    <i class="bi bi-robot"></i>
+                    <i class="ti ti-robot"></i>
                 </div>
                 <div class="palette-info">
                     <div class="palette-name">Agent</div>
@@ -48,7 +48,7 @@
             <!-- Tool Node -->
             <div class="palette-item" data-node-type="tool_node" draggable="true">
                 <div class="palette-icon palette-icon-tool">
-                    <i class="bi bi-tools"></i>
+                    <i class="ti ti-tools"></i>
                 </div>
                 <div class="palette-info">
                     <div class="palette-name">Tool</div>
@@ -59,7 +59,7 @@
             <!-- Function Node -->
             <div class="palette-item" data-node-type="function_node" draggable="true">
                 <div class="palette-icon palette-icon-function">
-                    <i class="bi bi-code-square"></i>
+                    <i class="ti ti-code"></i>
                 </div>
                 <div class="palette-info">
                     <div class="palette-name">Function</div>
@@ -70,7 +70,7 @@
             <!-- Message Node -->
             <div class="palette-item" data-node-type="message_node" draggable="true">
                 <div class="palette-icon palette-icon-message">
-                    <i class="bi bi-chat-dots"></i>
+                    <i class="ti ti-message-dots"></i>
                 </div>
                 <div class="palette-info">
                     <div class="palette-name">Message</div>
@@ -81,7 +81,7 @@
             <!-- Router Node -->
             <div class="palette-item" data-node-type="router_node" draggable="true">
                 <div class="palette-icon palette-icon-router">
-                    <i class="bi bi-lightning"></i>
+                    <i class="ti ti-bolt"></i>
                 </div>
                 <div class="palette-info">
                     <div class="palette-name">Conditional</div>
@@ -96,18 +96,18 @@
         <div class="canvas-toolbar">
             <div class="toolbar-left">
                 <a href="/frontend/dashboard" class="btn btn-ghost btn-sm" title="{{ t('builder.toolbar.back_to_dashboard') }}">
-                    <i class="bi bi-arrow-left"></i>
+                    <i class="ti ti-arrow-left"></i>
                     {{ t('common.back') }}
                 </a>
                 <div class="toolbar-divider"></div>
                 <button class="btn btn-secondary btn-sm" id="zoomInBtn" title="{{ t('builder.toolbar.zoom_in') }}">
-                    <i class="bi bi-zoom-in"></i>
+                    <i class="ti ti-zoom-in"></i>
                 </button>
                 <button class="btn btn-secondary btn-sm" id="zoomOutBtn" title="{{ t('builder.toolbar.zoom_out') }}">
-                    <i class="bi bi-zoom-out"></i>
+                    <i class="ti ti-zoom-out"></i>
                 </button>
                 <button class="btn btn-secondary btn-sm" id="fitToScreenBtn" title="{{ t('builder.toolbar.fit_to_screen') }}">
-                    <i class="bi bi-fullscreen"></i>
+                    <i class="ti ti-fullscreen"></i>
                 </button>
             </div>
             
@@ -118,36 +118,36 @@
             <div class="toolbar-right">
                 <!-- Dropdown для выбора языка -->
                 <div class="dropdown">
-                    <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
-                        <i class="bi bi-translate"></i>
+                    <button class="btn btn-ghost btn-sm" data-dropdown-toggle data-tooltip="{{ t('dashboard.header.language_toggle') }}">
+                        <i class="ti ti-translate"></i>
                         <span id="current-language">{{ get_current_language().upper() }}</span>
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); if(window.app && window.app.i18n) window.app.i18n.setLanguage('ru');">
-                            <i class="bi bi-check invisible" id="lang-ru"></i> 
+                            <i class="ti ti-check invisible" id="lang-ru"></i> 
                             {{ t('languages.ru') }}
                         </a></li>
                         <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); if(window.app && window.app.i18n) window.app.i18n.setLanguage('en');">
-                            <i class="bi bi-check invisible" id="lang-en"></i> 
+                            <i class="ti ti-check invisible" id="lang-en"></i> 
                             {{ t('languages.en') }}
                         </a></li>
                     </ul>
                 </div>
                 
                 <button class="btn btn-secondary btn-sm" id="themeToggleBtn" title="{{ t('dashboard.header.theme_toggle') }}">
-                    <i class="bi bi-moon-stars"></i>
+                    <i class="ti ti-moon-stars"></i>
                 </button>
                 <button class="btn btn-secondary btn-sm" id="clearCanvasBtn" title="{{ t('builder.toolbar.clear_canvas') }}">
-                    <i class="bi bi-trash"></i>
+                    <i class="ti ti-trash"></i>
                 </button>
                 <button class="btn btn-warning btn-sm" id="resetToCodeBtn" disabled title="Сбросить к коду (очистить canvas_data)">
-                    <i class="bi bi-arrow-counterclockwise"></i>
+                    <i class="ti ti-arrow-counterclockwise"></i>
                 </button>
                 <button class="btn btn-success btn-sm" id="saveFlowBtn" disabled>
-                    <i class="bi bi-cloud-upload"></i> {{ t('builder.toolbar.save') }}
+                    <i class="ti ti-cloud-upload"></i> {{ t('builder.toolbar.save') }}
                 </button>
                 <button class="btn btn-primary btn-sm" id="runFlowBtn" disabled>
-                    <i class="bi bi-chat-dots"></i> {{ t('builder.toolbar.run') }}
+                    <i class="ti ti-message-dots"></i> {{ t('builder.toolbar.run') }}
                 </button>
             </div>
         </div>
@@ -181,11 +181,11 @@
     <aside class="properties-panel hidden" id="propertiesPanel">
         <!-- Фиксированный крестик закрытия -->
         <button class="properties-close-btn" id="closePanelBtn">
-            <i class="bi bi-x-circle-fill"></i>
+            <i class="ti ti-x-circle-fill"></i>
         </button>
         
         <div class="properties-empty">
-            <i class="bi bi-cursor"></i>
+            <i class="ti ti-cursor"></i>
             <p>Select a node to edit properties</p>
         </div>
     </aside>
@@ -197,13 +197,13 @@
 <!-- Контекстное меню -->
 <div class="context-menu hidden" id="contextMenu">
     <div class="context-menu-item" data-action="edit">
-        <i class="bi bi-pencil"></i> {{ t('builder.context_menu.edit') }}
+        <i class="ti ti-pencil"></i> {{ t('builder.context_menu.edit') }}
     </div>
     <div class="context-menu-item" data-action="duplicate">
-        <i class="bi bi-clipboard"></i> {{ t('builder.context_menu.duplicate') }}
+        <i class="ti ti-clipboard"></i> {{ t('builder.context_menu.duplicate') }}
     </div>
     <div class="context-menu-item" data-action="delete">
-        <i class="bi bi-trash"></i> {{ t('builder.context_menu.delete') }}
+        <i class="ti ti-trash"></i> {{ t('builder.context_menu.delete') }}
     </div>
 </div>
 {% endblock %}

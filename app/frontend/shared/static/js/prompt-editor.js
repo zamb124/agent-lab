@@ -47,37 +47,37 @@ class PromptEditor {
                 <div class="prompt-editor-toolbar">
                     <div class="toolbar-section">
                         <button class="toolbar-btn" data-action="h1" title="Заголовок 1">
-                            <i class="bi bi-type-h1"></i>
+                            <i class="ti ti-h-1"></i>
                         </button>
                         <button class="toolbar-btn" data-action="h2" title="Заголовок 2">
-                            <i class="bi bi-type-h2"></i>
+                            <i class="ti ti-h-2"></i>
                         </button>
                         <button class="toolbar-btn" data-action="h3" title="Заголовок 3">
-                            <i class="bi bi-type-h3"></i>
+                            <i class="ti ti-h-3"></i>
                         </button>
                     </div>
                     <div class="toolbar-section toolbar-divider">
                         <button class="toolbar-btn" data-action="bold" title="Жирный текст">
-                            <i class="bi bi-type-bold"></i>
+                            <i class="ti ti-bold"></i>
                         </button>
                         <button class="toolbar-btn" data-action="italic" title="Курсив">
-                            <i class="bi bi-type-italic"></i>
+                            <i class="ti ti-italic"></i>
                         </button>
                         <button class="toolbar-btn" data-action="code" title="Код">
-                            <i class="bi bi-code"></i>
+                            <i class="ti ti-code"></i>
                         </button>
                     </div>
                     <div class="toolbar-section toolbar-divider">
                         <button class="toolbar-btn" data-action="list" title="Маркированный список">
-                            <i class="bi bi-list-ul"></i>
+                            <i class="ti ti-list"></i>
                         </button>
                         <button class="toolbar-btn" data-action="ordered-list" title="Нумерованный список">
-                            <i class="bi bi-list-ol"></i>
+                            <i class="ti ti-list-numbers"></i>
                         </button>
                     </div>
                     <div class="toolbar-section">
                         <button class="toolbar-btn" data-action="preview" title="Предпросмотр">
-                            <i class="bi bi-eye"></i> Preview
+                            <i class="ti ti-eye"></i> Preview
                         </button>
                     </div>
                 </div>
@@ -89,9 +89,9 @@ class PromptEditor {
                     </div>
                     <div class="prompt-variables-panel">
                         <div class="variables-panel-header">
-                            <h5><i class="bi bi-list-ul"></i> Переменные</h5>
+                            <h5><i class="ti ti-list"></i> Переменные</h5>
                             <button class="btn-toggle-panel" title="Свернуть">
-                                <i class="bi bi-chevron-right"></i>
+                                <i class="ti ti-chevron-right"></i>
                             </button>
                         </div>
                         <div class="variables-panel-content">
@@ -106,10 +106,10 @@ class PromptEditor {
                                 <div class="variable-category">
                                     <div class="category-header">
                                         <span class="category-title">
-                                            <i class="bi bi-gear"></i> Системные
+                                            <i class="ti ti-gear"></i> Системные
                                         </span>
                                         <button class="btn-toggle-category" title="Свернуть/Развернуть">
-                                            <i class="bi bi-chevron-down"></i>
+                                            <i class="ti ti-chevron-down"></i>
                                         </button>
                                     </div>
                                     <div class="category-items" data-category="system"></div>
@@ -119,10 +119,10 @@ class PromptEditor {
                                 <div class="variable-category">
                                     <div class="category-header">
                                         <span class="category-title">
-                                            <i class="bi bi-building"></i> Компания
+                                            <i class="ti ti-building"></i> Компания
                                         </span>
                                         <button class="btn-toggle-category" title="Свернуть/Развернуть">
-                                            <i class="bi bi-chevron-down"></i>
+                                            <i class="ti ti-chevron-down"></i>
                                         </button>
                                     </div>
                                     <div class="category-items" data-category="company"></div>
@@ -132,10 +132,10 @@ class PromptEditor {
                                 <div class="variable-category">
                                     <div class="category-header">
                                         <span class="category-title">
-                                            <i class="bi bi-person"></i> Пользователь
+                                            <i class="ti ti-person"></i> Пользователь
                                         </span>
                                         <button class="btn-toggle-category" title="Свернуть/Развернуть">
-                                            <i class="bi bi-chevron-down"></i>
+                                            <i class="ti ti-chevron-down"></i>
                                         </button>
                                     </div>
                                     <div class="category-items" data-category="user"></div>
@@ -145,14 +145,14 @@ class PromptEditor {
                                 <div class="variable-category">
                                     <div class="category-header">
                                         <span class="category-title">
-                                            <i class="bi bi-diagram-3"></i> Flow
+                                            <i class="ti ti-hierarchy"></i> Flow
                                         </span>
                                         <div class="category-actions">
                                             <button class="btn-add-variable" data-type="flow" title="Добавить">
-                                                <i class="bi bi-plus-circle"></i>
+                                                <i class="ti ti-plus"></i>
                                             </button>
                                             <button class="btn-toggle-category" title="Свернуть/Развернуть">
-                                                <i class="bi bi-chevron-down"></i>
+                                                <i class="ti ti-chevron-down"></i>
                                             </button>
                                         </div>
                                     </div>
@@ -163,14 +163,14 @@ class PromptEditor {
                                 <div class="variable-category">
                                     <div class="category-header">
                                         <span class="category-title">
-                                            <i class="bi bi-database"></i> Session Store
+                                            <i class="ti ti-database"></i> Session Store
                                         </span>
                                         <div class="category-actions">
                                             <button class="btn-add-variable" data-type="store" title="Добавить">
-                                                <i class="bi bi-plus-circle"></i>
+                                                <i class="ti ti-plus"></i>
                                             </button>
                                             <button class="btn-toggle-category" title="Свернуть/Развернуть">
-                                                <i class="bi bi-chevron-down"></i>
+                                                <i class="ti ti-chevron-down"></i>
                                             </button>
                                         </div>
                                     </div>
@@ -625,14 +625,14 @@ class PromptEditor {
                     <button class="btn-insert-variable" 
                             data-variable="${v.name}" 
                             title="Вставить">
-                        <i class="bi bi-plus-lg"></i>
+                        <i class="ti ti-plus-lg"></i>
                     </button>
                     ${(category === 'flow' || category === 'local') ? `
                     <button class="btn-delete-variable" 
                             data-variable="${v.name}"
                             data-category="${category}"
                             title="Удалить">
-                        <i class="bi bi-trash"></i>
+                        <i class="ti ti-trash"></i>
                     </button>
                     ` : ''}
                 </div>
@@ -702,10 +702,10 @@ class PromptEditor {
                 const icon = toggleBtn.querySelector('i');
                 if (icon) {
                     if (isCollapsed) {
-                        icon.className = 'bi bi-chevron-right';
+                        icon.className = 'ti ti-chevron-right';
                         toggleBtn.title = 'Свернуть';
                     } else {
-                        icon.className = 'bi bi-chevron-left';
+                        icon.className = 'ti ti-chevron-left';
                         toggleBtn.title = 'Развернуть';
                     }
                 }
@@ -727,11 +727,11 @@ class PromptEditor {
                 if (category.classList.contains('collapsed')) {
                     category.classList.remove('collapsed');
                     items.style.display = 'flex';
-                    if (icon) icon.className = 'bi bi-chevron-down';
+                    if (icon) icon.className = 'ti ti-chevron-down';
                 } else {
                     category.classList.add('collapsed');
                     items.style.display = 'none';
-                    if (icon) icon.className = 'bi bi-chevron-right';
+                    if (icon) icon.className = 'ti ti-chevron-right';
                 }
             });
         });
@@ -919,7 +919,7 @@ class PromptEditor {
             editorMode.style.display = 'block';
             previewMode.style.display = 'none';
             if (btn) {
-                btn.querySelector('i').className = 'bi bi-eye';
+                btn.querySelector('i').className = 'ti ti-eye';
                 btn.querySelector('.btn-text')?.remove();
                 const text = document.createTextNode(' Preview');
                 btn.appendChild(text);
@@ -930,7 +930,7 @@ class PromptEditor {
             previewMode.style.display = 'block';
             this.updatePreview();
             if (btn) {
-                btn.querySelector('i').className = 'bi bi-pencil';
+                btn.querySelector('i').className = 'ti ti-pencil';
                 btn.childNodes.forEach(node => {
                     if (node.nodeType === 3) node.remove();
                 });
@@ -1037,7 +1037,7 @@ class PromptEditor {
                 <div class="modal-header">
                     <h5>Добавить ${type === 'flow' ? 'Flow' : type === 'store' ? 'Session Store' : 'локальную'} переменную</h5>
                     <button class="btn-close" onclick="this.closest('.prompt-variable-modal').remove()">
-                        <i class="bi bi-x"></i>
+                        <i class="ti ti-x"></i>
                     </button>
                 </div>
                 <div class="modal-body">

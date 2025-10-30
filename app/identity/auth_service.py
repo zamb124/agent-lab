@@ -389,6 +389,16 @@ class AuthService:
                 return info
         
         return None
+    
+    async def get_all_user_providers_info(self, user_id: str) -> Optional[dict]:
+        """Получает информацию о всех провайдерах пользователя"""
+        providers_key = f"user_providers:{user_id}"
+        providers_data = await self.storage.get(providers_key, force_global=True)
+        
+        if not providers_data:
+            return None
+        
+        return json.loads(providers_data)
 
     async def _create_session(
         self, user: User, provider: AuthProvider, access_token: str, refresh_token: Optional[str]

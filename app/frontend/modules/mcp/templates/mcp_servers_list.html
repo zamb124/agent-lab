@@ -2,7 +2,7 @@
 <link rel="stylesheet" href="/static/mcp/css/mcp.css">
 
 <h1 class="header-title" id="page-title" hx-swap-oob="true">
-    <i class="bi bi-plug me-2"></i>
+    <i class="ti ti-plug me-2"></i>
     MCP Серверы
 </h1>
 
@@ -24,7 +24,7 @@
         <div class="mcp-server-grid-item">
             <div class="card mcp-server-card mcp-server-card-create" onclick="openAddServerModal()">
                 <div class="mcp-server-create-body">
-                    <i class="bi bi-plus-circle mcp-server-create-icon text-primary"></i>
+                    <i class="ti ti-plus mcp-server-create-icon text-primary"></i>
                     <div class="mcp-server-create-content">
                         <div class="mcp-server-create-title">Добавить MCP сервер</div>
                         <small class="mcp-server-create-subtitle">Подключить внешний сервер</small>
@@ -38,7 +38,7 @@
             <div class="card mcp-server-card {% if not server.is_active %}mcp-server-card-inactive{% endif %}">
                 <div class="mcp-server-card-header">
                     <div class="card-icon">
-                        <i class="bi {% if server.is_active %}bi-plug-fill text-success{% else %}bi-plug text-muted{% endif %}"></i>
+                        <i class="ti ti-{% if server.is_active %}plug-connected text-success{% else %}plug text-muted{% endif %}"></i>
                     </div>
                     <div class="mcp-server-card-info">
                         <div class="mcp-server-status">
@@ -60,22 +60,22 @@
                                 onclick="event.stopPropagation();syncServer('{{ server.server_id }}')" 
                                 title="Синхронизировать тулы"
                                 id="sync-btn-{{ server.server_id }}">
-                            <i class="bi bi-arrow-repeat"></i>
+                            <i class="ti ti-refresh"></i>
                         </button>
                         <button class="btn-icon" 
                                 onclick="event.stopPropagation();testServer('{{ server.server_id }}')" 
                                 title="Тест подключения">
-                            <i class="bi bi-wifi"></i>
+                            <i class="ti ti-wifi"></i>
                         </button>
                         <button class="btn-icon" 
                                 onclick="event.stopPropagation();editServer('{{ server.server_id }}')" 
                                 title="Редактировать">
-                            <i class="bi bi-pencil"></i>
+                            <i class="ti ti-pencil"></i>
                         </button>
                         <button class="btn-icon btn-icon-danger" 
                                 onclick="event.stopPropagation();deleteServer('{{ server.server_id }}')" 
                                 title="Удалить">
-                            <i class="bi bi-trash"></i>
+                            <i class="ti ti-trash"></i>
                         </button>
                     </div>
                 </div>
@@ -92,16 +92,16 @@
                     {% endif %}
                     
                     <div class="mcp-server-url">
-                        <i class="bi bi-globe"></i>
+                        <i class="ti ti-globe"></i>
                         <code>{{ server.url }}</code>
                     </div>
                     
                     <div class="mcp-server-tools-info">
-                        <i class="bi bi-tools"></i>
+                        <i class="ti ti-tools"></i>
                         <span>{{ server.cached_tools|length }} инструментов</span>
                         {% if server.last_sync_at %}
                         <span class="text-muted ms-2">
-                            <i class="bi bi-clock"></i>
+                            <i class="ti ti-clock"></i>
                             {{ server.last_sync_at.strftime('%d.%m.%Y %H:%M') if server.last_sync_at else 'Не синхронизировано' }}
                         </span>
                         {% endif %}
@@ -115,7 +115,7 @@
                         <div class="mcp-tools-list">
                             {% for tool_id in server.cached_tools %}
                             <div class="mcp-tool-item">
-                                <i class="bi bi-wrench"></i>
+                                <i class="ti ti-wrench"></i>
                                 <code>{{ tool_id }}</code>
                             </div>
                             {% endfor %}
@@ -162,10 +162,10 @@
             <h3 id="mcp-server-modal-title">Добавить MCP сервер</h3>
             <div class="modal-header-actions">
                 <button class="btn-icon" onclick="saveServer()" title="Сохранить">
-                    <i class="bi bi-floppy-fill"></i>
+                    <i class="ti ti-device-floppy"></i>
                 </button>
                 <button class="btn-close" onclick="closeServerModal()" title="Закрыть">
-                    <i class="bi bi-x-circle-fill"></i>
+                    <i class="ti ti-x"></i>
                 </button>
             </div>
         </div>
@@ -215,7 +215,7 @@
                 <div class="form-text">
                     Используйте <code>@var:key</code> для ссылок на переменные. 
                     <button class="btn btn-sm btn-link p-0 ms-2" onclick="event.preventDefault();insertSampleHeaders()">
-                        <i class="bi bi-code"></i> Вставить пример
+                        <i class="ti ti-code"></i> Вставить пример
                     </button>
                 </div>
             </div>

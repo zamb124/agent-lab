@@ -67,7 +67,7 @@ export class FlowNode extends BaseNode {
         return `
             <div class="node-simple-content">
                 <div class="node-simple-icon flow">
-                    <i class="bi bi-diagram-3"></i>
+                    <i class="ti ti-hierarchy"></i>
                 </div>
                 <div class="node-simple-info">
                     <div class="node-simple-title">${this.escapeHtml(displayName)}</div>
@@ -81,8 +81,8 @@ export class FlowNode extends BaseNode {
      * Рекурсивное разворачивание flow
      * Flow имеет только один дочерний элемент - entry_point_agent
      */
-    async expand(layoutManager) {
-        console.log('📂 FlowNode.expand() для', this.data.params?.flow_id);
+    async expand(layoutManager, canvasNodes = null) {
+        console.log('📂 FlowNode.expand() для', this.data.params?.flow_id, 'canvasNodes =', canvasNodes);
         
         if (!this.flowData || !this.flowData.entry_point_agent) {
             console.warn('⚠️ Нет entry_point_agent');
@@ -94,12 +94,16 @@ export class FlowNode extends BaseNode {
         
         // Вычисляем позицию для агента
         const position = layoutManager.getNextPosition(this);
-        
+
+        // Получаем сохраненные координаты для агента
+        const agentIdClean = agentId.replace(/[^a-zA-Z0-9]/g, '_');
+        const savedAgentData = canvasNodes?.[`agent_${agentIdClean}`];
+
         const agentNodeData = {
-            id: `agent_${Date.now()}`,
+            id: `agent_${agentIdClean}`,
             type: 'agent_node',
             params: { agent_id: agentId },
-            ui: {
+            ui: savedAgentData || {
                 x: position.x,
                 y: position.y,
                 width: 200,
@@ -114,7 +118,7 @@ export class FlowNode extends BaseNode {
         this.canvas.connectionManager.createEdge(this.id, agentNode.id);
         
         // Явно разворачиваем агента
-        const children = await agentNode.expand(layoutManager);
+        const children = await agentNode.expand(layoutManager, canvasNodes);
         
         return [agentNode, ...children];
     }
@@ -156,17 +160,15 @@ export class FlowNode extends BaseNode {
                 console.log('✅ Flow создан в БД:', flowId);
             }
             
-            // Получаем все ноды и связи на canvas
-            const graphData = this.canvas.getGraphData();
-            
-            // Canvas data с позициями
+            // Canvas data только с позициями нод
             const canvasData = {
                 zoom: this.canvas.zoom,
                 panX: this.canvas.panX,
                 panY: this.canvas.panY,
                 nodes: {}
             };
-            
+
+            // Сохраняем координаты всех нод
             this.canvas.nodes.forEach((node, nodeId) => {
                 canvasData.nodes[nodeId] = {
                     x: node.x,
@@ -187,7 +189,6 @@ export class FlowNode extends BaseNode {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    graph_definition: graphData,
                     canvas_data: canvasData
                 })
             });

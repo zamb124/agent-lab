@@ -5,11 +5,11 @@
     <div class="modal-content" onclick="event.stopPropagation()">
         <div class="modal-header">
             <h5 class="mb-0">
-                <i class="bi bi-chat-dots me-2"></i>
+                <i class="ti ti-chat-dots me-2"></i>
                 История диалога
             </h5>
             <button class="btn btn-ghost btn-sm" onclick="this.closest('.modal-overlay').remove(); document.body.style.overflow = '';">
-                <i class="bi bi-x"></i>
+                <i class="ti ti-x"></i>
             </button>
         </div>
             
@@ -18,7 +18,7 @@
                     <div class="info-grid">
                         <div class="info-item">
                             <div class="info-label">
-                                <i class="bi bi-diagram-3"></i>
+                                <i class="ti ti-diagram-3"></i>
                                 Сценарий
                             </div>
                             <div class="info-value flow-name">
@@ -28,7 +28,7 @@
                                        class="text-decoration-none" 
                                        title="Открыть в Builder">
                                         {{ history.flow_name or history.flow_id }}
-                                        <i class="bi bi-box-arrow-up-right ms-1"></i>
+                                        <i class="ti ti-box-arrow-up-right ms-1"></i>
                                     </a>
                                 {% else %}
                                     Не указан
@@ -38,22 +38,22 @@
                         
                         <div class="info-item">
                             <div class="info-label">
-                                <i class="bi bi-hash"></i>
+                                <i class="ti ti-hash"></i>
                                 ID сессии
                             </div>
                             <div class="session-id-wrapper">
                                 <code>{{ history.session_id[:12] }}...</code>
                                 <button class="btn btn-ghost copy-btn" 
-                                        onclick="navigator.clipboard.writeText('{{ history.session_id }}'); this.innerHTML='<i class=\'bi bi-check\'></i>'; setTimeout(() => this.innerHTML='<i class=\'bi bi-clipboard\'></i>', 1500);"
+                                        onclick="navigator.clipboard.writeText('{{ history.session_id }}'); this.innerHTML='<i class=\'ti ti-check\'></i>'; setTimeout(() => this.innerHTML='<i class=\'ti ti-clipboard\'></i>', 1500);"
                                         title="Копировать полный ID">
-                                    <i class="bi bi-clipboard"></i>
+                                    <i class="ti ti-clipboard"></i>
                                 </button>
                             </div>
                         </div>
                         
                         <div class="info-item">
                             <div class="info-label">
-                                <i class="bi bi-chat-left-text"></i>
+                                <i class="ti ti-chat-left-text"></i>
                                 Сообщений
                             </div>
                             <div class="info-value">
@@ -63,7 +63,7 @@
                         
                         <div class="info-item">
                             <div class="info-label">
-                                <i class="bi bi-bookmark-check"></i>
+                                <i class="ti ti-bookmark-check"></i>
                                 Контрольных точек
                             </div>
                             <div class="info-value">
@@ -73,7 +73,7 @@
                         
                         <div class="info-item">
                             <div class="info-label">
-                                <i class="bi bi-clock-history"></i>
+                                <i class="ti ti-clock-history"></i>
                                 Создано
                             </div>
                             <div class="info-value">
@@ -90,21 +90,21 @@
                         <div class="message-content-wrapper">
                             <div class="message-header">
                                 {% if message.role.value == 'user' %}
-                                    <i class="bi bi-person-circle message-role-icon message-role-user"></i>
+                                    <i class="ti ti-person-circle message-role-icon message-role-user"></i>
                                     <span class="small fw-bold">Пользователь</span>
                                 {% elif message.role.value == 'assistant' %}
-                                    <i class="bi bi-robot message-role-icon message-role-assistant"></i>
+                                    <i class="ti ti-robot message-role-icon message-role-assistant"></i>
                                     <span class="small fw-bold">Ассистент</span>
                                 {% elif message.role.value == 'tool' %}
-                                    <i class="bi bi-tools message-role-icon message-role-tool"></i>
+                                    <i class="ti ti-tools message-role-icon message-role-tool"></i>
                                     <span class="small fw-bold">Инструмент</span>
                                 {% elif message.role.value == 'system' %}
-                                    <i class="bi bi-gear-fill message-role-icon message-role-system"></i>
+                                    <i class="ti ti-gear-fill message-role-icon message-role-system"></i>
                                     <span class="small fw-bold">Система</span>
                                 {% endif %}
                                 {% if message.source_node %}
                                     <span class="badge message-source-badge">
-                                        <i class="bi bi-diagram-3"></i> {{ message.source_node }}
+                                        <i class="ti ti-diagram-3"></i> {{ message.source_node }}
                                     </span>
                                 {% endif %}
                                 <span class="message-time ms-auto">
@@ -121,13 +121,13 @@
                             {% if message.tool_calls %}
                             <div class="tool-call-box">
                                 <div class="d-flex align-items-center gap-2 mb-2">
-                                    <i class="bi bi-wrench"></i>
+                                    <i class="ti ti-wrench"></i>
                                     <span class="tool-name">Вызовы инструментов</span>
                                 </div>
                                 {% for tool_call in message.tool_calls %}
                                 <div class="mb-2">
                                     <div class="fw-bold small mb-1">
-                                        <i class="bi bi-arrow-right-circle"></i>
+                                        <i class="ti ti-arrow-right-circle"></i>
                                         {{ tool_call.tool_name }}
                                     </div>
                                     <pre class="tool-call-args">{{ tool_call.arguments | safe }}</pre>
@@ -138,7 +138,7 @@
                             
                             {% if message.metadata and message.metadata.get('tool_call_id') %}
                             <div class="mt-2 small text-muted">
-                                <i class="bi bi-link-45deg"></i>
+                                <i class="ti ti-link-45deg"></i>
                                 <code class="tool-call-id">{{ message.metadata.tool_call_id }}</code>
                             </div>
                             {% endif %}
@@ -148,7 +148,7 @@
                 </div>
                 {% else %}
                 <div class="text-center py-5">
-                    <i class="bi bi-inbox display-4 text-muted"></i>
+                    <i class="ti ti-inbox display-4 text-muted"></i>
                     <p class="text-muted mt-3">Нет сообщений в этой сессии</p>
                 </div>
                 {% endif %}

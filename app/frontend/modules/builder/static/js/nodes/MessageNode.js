@@ -36,7 +36,7 @@ export class MessageNode extends BaseNode {
         return `
             <div class="node-simple-content">
                 <div class="node-simple-icon message">
-                    <i class="bi bi-chat-dots"></i>
+                    <i class="ti ti-message-dots"></i>
                 </div>
                 <div class="node-simple-info">
                     <div class="node-simple-title">Message</div>

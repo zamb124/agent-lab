@@ -13,17 +13,7 @@
         <div class="sidebar-header">
             <div class="sidebar-brand-container">
                 <button class="app-launcher-trigger" onclick="toggleAppLauncher()" data-tooltip="Все приложения">
-                    <div class="app-launcher-icon-grid">
-                        <i class="bi bi-circle-fill"></i>
-                        <i class="bi bi-circle-fill"></i>
-                        <i class="bi bi-circle-fill"></i>
-                        <i class="bi bi-circle-fill"></i>
-                        <i class="bi bi-circle-fill"></i>
-                        <i class="bi bi-circle-fill"></i>
-                        <i class="bi bi-circle-fill"></i>
-                        <i class="bi bi-circle-fill"></i>
-                        <i class="bi bi-circle-fill"></i>
-                    </div>
+                    <i class="ti ti-apps"></i>
                 </button>
                 <a href="/" class="sidebar-brand">
                     <span class="langflow-gradient">Agents Lab</span>
@@ -34,7 +24,7 @@
                 document.querySelector('.sidebar-overlay').classList.remove('active');
                 document.querySelector('.sidebar').classList.remove('open');
             ">
-                <i class="bi bi-x-circle-fill"></i>
+                <i class="ti ti-x-circle-fill"></i>
             </button>
         </div>
         
@@ -45,9 +35,9 @@
                     {% if item.type == 'submenu' %}
                     {# Submenu с вложенностью #}
                     <div class="sidebar-nav-link sidebar-nav-submenu" onclick="this.parentElement.classList.toggle('open')">
-                        <i class="bi {{ item.icon }}"></i>
+                        <i class="ti ti-{{ item.icon }}"></i>
                         <span class="sidebar-nav-text">{{ t(item.label) if item.label.startswith('dashboard.') else item.label }}</span>
-                        <i class="bi bi-chevron-down submenu-arrow"></i>
+                        <i class="ti ti-chevron-down submenu-arrow"></i>
                     </div>
                     {% if item.children %}
                     <div class="sidebar-nav-submenu-items">
@@ -66,14 +56,14 @@
                        hx-sync="closest .app-container:replace"
                        onclick="if(window.innerWidth <= 768 && window.app && window.app.layoutManager) window.app.layoutManager.closeMobileMenu()"
                        class="sidebar-nav-link">
-                        <i class="bi {{ item.icon }}"></i>
+                        <i class="ti ti-{{ item.icon }}"></i>
                         <span class="sidebar-nav-text">{{ t(item.label) if item.label.startswith('dashboard.') else item.label }}</span>
                     </a>
                     
                     {% else %}
                     {# Page - обычная ссылка #}
                     <a href="{{ item.url }}" class="sidebar-nav-link">
-                        <i class="bi {{ item.icon }}"></i>
+                        <i class="ti ti-{{ item.icon }}"></i>
                         <span class="sidebar-nav-text">{{ t(item.label) if item.label.startswith('dashboard.') else item.label }}</span>
                     </a>
                     {% endif %}
@@ -92,7 +82,7 @@
                 <a href="{{ item.url }}" 
                    {% if item.target %}target="{{ item.target }}"{% endif %}
                    class="sidebar-nav-link">
-                    <i class="bi {{ item.icon }}"></i>
+                    <i class="ti ti-{{ item.icon }}"></i>
                     <span class="sidebar-nav-text">{{ t(item.label) if item.label.startswith('dashboard.') else item.label }}</span>
                 </a>
             </div>
@@ -107,7 +97,7 @@
                         <div class="small text-muted">{{ t('dashboard.footer.online') }}</div>
                     </div>
                     <button class="btn btn-ghost btn-sm" onclick="app.logout()" data-tooltip="{{ t('dashboard.header.logout') }}">
-                        <i class="bi bi-box-arrow-right"></i>
+                        <i class="ti ti-box-arrow-right"></i>
                     </button>
                 </div>
             </div>
@@ -120,7 +110,7 @@
     <!-- App Launcher Overlay -->
     <div class="app-launcher-overlay" id="app-launcher" onclick="if(event.target === this) toggleAppLauncher()">
         <button class="app-launcher-close" onclick="toggleAppLauncher()">
-            <i class="bi bi-x-circle-fill"></i>
+            <i class="ti ti-x"></i>
         </button>
         
         <div class="app-launcher-container">
@@ -130,7 +120,7 @@
                 {% for widget in dashboard_widgets | default([]) %}
                 <div class="app-launcher-item" onclick="window.location.href='{{ widget.url }}'">
                     <div class="app-launcher-icon">
-                        <i class="bi {{ widget.icon }}"></i>
+                        <i class="ti ti-{{ widget.icon }}"></i>
                     </div>
                     <div class="app-launcher-item-title">{{ t(widget.title) }}</div>
                 </div>
@@ -144,10 +134,10 @@
         <div class="header">
             <div class="header-left">
                 <button class="mobile-menu-toggle" onclick="window.app.layoutManager.toggleMobileMenu()">
-                    <i class="bi bi-list"></i>
+                    <i class="ti ti-list"></i>
                 </button>
                 <button class="btn btn-ghost btn-sm d-none d-md-block" onclick="window.app.layoutManager.toggleSidebar()" data-tooltip="{{ t('dashboard.header.collapse_menu') }}">
-                    <i class="bi bi-chevron-left"></i>
+                    <i class="ti ti-chevron-left"></i>
                 </button>
                 
                 <h1 class="header-title" id="page-title">{{ t('dashboard.title') }}</h1>
@@ -163,7 +153,7 @@
                        {% if action.action %}data-action="{{ action.action }}"{% endif %}
                        {% if action.tooltip %}data-tooltip="{{ action.tooltip }}"{% endif %}
                        {% if action.id %}id="{{ action.id }}"{% endif %}>
-                        {% if action.icon %}<i class="bi {{ action.icon }}"></i>{% endif %}
+                        {% if action.icon %}<i class="ti ti-{{ action.icon }}"></i>{% endif %}
                         {% if action.label %}<span>{{ t(action.label) if action.label.startswith('dashboard.') or action.label.startswith('common.') else action.label }}</span>{% endif %}
                     </a>
                     {% else %}
@@ -172,7 +162,7 @@
                             {% if action.onclick %}onclick="{{ action.onclick }}"{% endif %}
                             {% if action.tooltip %}data-tooltip="{{ action.tooltip }}"{% endif %}
                             {% if action.id %}id="{{ action.id }}"{% endif %}>
-                        {% if action.icon %}<i class="bi {{ action.icon }}"></i>{% endif %}
+                        {% if action.icon %}<i class="ti ti-{{ action.icon }}"></i>{% endif %}
                         {% if action.label %}<span>{{ t(action.label) if action.label.startswith('dashboard.') or action.label.startswith('common.') else action.label }}</span>{% endif %}
                     </button>
                     {% endif %}
@@ -187,8 +177,8 @@
                     {% set companies = user_companies() %}
                     {% if companies|length > 1 %}
                     <div class="dropdown">
-                        <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.switch_company') }}" style="max-width: 200px;">
-                            <i class="bi bi-building"></i>
+                        <button class="btn btn-ghost btn-sm" data-dropdown-toggle data-tooltip="{{ t('dashboard.header.switch_company') }}" style="max-width: 200px;">
+                            <i class="ti ti-building"></i>
                             <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ current_company().name if current_company() else '' }}</span>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end">
@@ -199,7 +189,7 @@
                                    onclick="event.preventDefault(); switchCompany('{{ company.company_id }}');"
                                    style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;">
                                     {% if current_company() and company.company_id == current_company().company_id %}
-                                    <i class="bi bi-check"></i>
+                                    <i class="ti ti-check"></i>
                                     {% endif %}
                                     {{ company.name }}
                                 </a>
@@ -211,24 +201,24 @@
                     
                     <!-- Dropdown для выбора языка -->
                     <div class="dropdown">
-                        <button class="btn btn-ghost btn-sm" data-bs-toggle="dropdown" data-tooltip="{{ t('dashboard.header.language_toggle') }}">
-                            <i class="bi bi-translate"></i>
+                        <button class="btn btn-ghost btn-sm" data-dropdown-toggle data-tooltip="{{ t('dashboard.header.language_toggle') }}">
+                            <i class="ti ti-translate"></i>
                             <span id="current-language">{{ get_current_language().upper() }}</span>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); if(window.app && window.app.i18n) window.app.i18n.setLanguage('ru');">
-                                <i class="bi bi-check invisible" id="lang-ru"></i> 
+                                <i class="ti ti-check invisible" id="lang-ru"></i> 
                                 {{ t('languages.ru') }}
                             </a></li>
                             <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); if(window.app && window.app.i18n) window.app.i18n.setLanguage('en');">
-                                <i class="bi bi-check invisible" id="lang-en"></i> 
+                                <i class="ti ti-check invisible" id="lang-en"></i> 
                                 {{ t('languages.en') }}
                             </a></li>
                         </ul>
                     </div>
                     
                     <button class="btn btn-ghost btn-sm" data-theme-toggle data-tooltip="{{ t('dashboard.header.theme_toggle') }}">
-                        <i class="bi bi-sun"></i>
+                        <i class="ti ti-sun"></i>
                     </button>
                 </div>
             </div>
@@ -341,12 +331,6 @@
     border-top: 1px solid var(--border-primary);
 }
 
-.user-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    object-fit: cover;
-}
 
 .status-dot {
     width: 8px;
@@ -388,23 +372,14 @@
     text-decoration: none;
 }
 
-.app-launcher-icon-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 4px;
-    width: 36px;
-    height: 36px;
-}
-
-.app-launcher-icon-grid i {
-    font-size: 8px;
+.app-launcher-trigger i {
+    font-size: 1.5rem;
     color: var(--accent-primary);
-    opacity: 0.8;
     transition: all 0.2s ease;
 }
 
-.app-launcher-trigger:hover .app-launcher-icon-grid i {
-    opacity: 1;
+.app-launcher-trigger:hover i {
+    color: var(--accent-primary);
     transform: scale(1.1);
 }
 

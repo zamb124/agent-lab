@@ -268,11 +268,11 @@ export class PlatformSaver {
             }
             
             const platformIcons = {
-                'telegram': 'bi-telegram',
-                'whatsapp': 'bi-whatsapp',
-                'web': 'bi-globe',
-                'api': 'bi-code-slash',
-                'amocrm': 'bi-building'
+                'telegram': 'telegram',
+                'whatsapp': 'whatsapp',
+                'web': 'globe',
+                'api': 'code-slash',
+                'amocrm': 'building'
             };
             
             const platformNames = {
@@ -283,7 +283,7 @@ export class PlatformSaver {
                 'amocrm': 'AmoCRM'
             };
             
-            await this.platformManager.selectPlatform(platformType, platformIcons[platformType] || 'bi-gear', platformNames[platformType] || platformType);
+            await this.platformManager.selectPlatform(platformType, platformIcons[platformType] || 'gear', platformNames[platformType] || platformType);
             
             console.log('🔧 Ждем 300мс перед заполнением формы...');
             await new Promise(resolve => setTimeout(resolve, 300));
@@ -313,7 +313,7 @@ export class PlatformSaver {
                             <input type="text" class="form-control" placeholder="User ID или username" 
                                    value="${user}" onchange="updateAllowedUser(this)">
                             <button class="btn btn-outline-danger btn-sm" onclick="removeAllowedUserRow(this)">
-                                <i class="bi bi-trash"></i>
+                                <i class="ti ti-trash"></i>
                             </button>
                         `;
                         container.appendChild(row);

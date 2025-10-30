@@ -767,7 +767,7 @@
     color: var(--text-primary) !important;
 }
 
-.header-actions .dropdown-item i.bi-check {
+.header-actions .dropdown-item i.ti-check {
     color: var(--accent-success) !important;
     font-size: 0.875rem !important;
 }
@@ -792,23 +792,14 @@
     background: rgba(0, 0, 0, 0.05);
 }
 
-.app-launcher-icon-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 4px;
-    width: 36px;
-    height: 36px;
-}
-
-.app-launcher-icon-grid i {
-    font-size: 8px;
+.app-launcher-trigger i {
+    font-size: 1.5rem;
     color: var(--accent-primary);
-    opacity: 0.8;
     transition: all 0.2s ease;
 }
 
-.app-launcher-trigger:hover .app-launcher-icon-grid i {
-    opacity: 1;
+.app-launcher-trigger:hover i {
+    color: var(--accent-primary);
     transform: scale(1.1);
 }
 

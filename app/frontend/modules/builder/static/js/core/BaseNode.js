@@ -126,6 +126,30 @@ export class BaseNode extends EventEmitter {
     }
     
     /**
+     * Получение всех достижимых потомков рекурсивно
+     */
+    getAllDescendantNodes() {
+        const descendants = [];
+        const visited = new Set();
+        
+        const collect = (node) => {
+            if (visited.has(node.id)) {
+                return;
+            }
+            visited.add(node.id);
+            descendants.push(node);
+            
+            const children = node.getChildNodes();
+            children.forEach(child => collect(child));
+        };
+        
+        const directChildren = this.getChildNodes();
+        directChildren.forEach(child => collect(child));
+        
+        return descendants;
+    }
+    
+    /**
      * Абстрактный метод: создание DOM элемента
      * Должен быть переопределен в подклассах
      */

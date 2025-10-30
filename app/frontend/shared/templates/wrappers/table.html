@@ -6,13 +6,13 @@
       <td class="text-center">
           <div class="btn-group">
               <button class="btn btn-ghost btn-sm" data-tooltip="{{ t('common.edit') }}">
-                  <i class="bi bi-pencil"></i>
+                  <i class="ti ti-pencil"></i>
               </button>
               <button class="btn btn-ghost btn-sm" data-tooltip="{{ t('models.common.duplicate') }}">
-                  <i class="bi bi-copy"></i>
+                  <i class="ti ti-copy"></i>
               </button>
               <button class="btn btn-ghost btn-sm text-danger" data-tooltip="{{ t('common.delete') }}">
-                  <i class="bi bi-trash"></i>
+                  <i class="ti ti-trash"></i>
               </button>
           </div>
       </td>
@@ -22,7 +22,7 @@
   <!-- FROM: wrappers/table.html -->
   <div class="nested-model-summary">
     <span class="badge badge-info">
-      <i class="bi bi-box"></i>
+      <i class="ti ti-box"></i>
       {{ titles.get(model_type, model_type.title()) if model_type else t('models.common.model') }}
     </span>
     {% if model_id %}
@@ -30,7 +30,7 @@
             hx-get="/frontend/models/{{ model_type }}/{{ model_id }}?view=modal" 
             hx-target="#modal-container"
             data-tooltip="{{ t('models.common.show_details') }}">
-        <i class="bi bi-eye"></i>
+        <i class="ti ti-eye"></i>
     </button>
     {% endif %}
   </div>

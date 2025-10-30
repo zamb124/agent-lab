@@ -178,9 +178,9 @@ export default class BotsModule {
             const btn = document.querySelector('.btn-fullscreen i');
             if (btn) {
                 if (document.fullscreenElement) {
-                    btn.className = 'bi bi-fullscreen-exit';
+                    btn.className = 'ti ti-fullscreen-exit';
                 } else {
-                    btn.className = 'bi bi-fullscreen';
+                    btn.className = 'ti ti-fullscreen';
                 }
             }
         });

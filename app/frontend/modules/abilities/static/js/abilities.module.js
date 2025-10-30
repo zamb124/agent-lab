@@ -86,7 +86,7 @@ export default class AbilitiesModule {
                         <button class="btn btn-ghost btn-sm" 
                                 style="position: absolute; top: 1rem; right: 1rem; z-index: 10;"
                                 onclick="this.closest('.modal-overlay').remove(); document.body.style.overflow = '';">
-                            <i class="bi bi-x"></i>
+                            <i class="ti ti-x"></i>
                         </button>
                         <div class="modal-body" style="padding: 0;">
                             ${formHtml}
@@ -119,16 +119,16 @@ export default class AbilitiesModule {
                     <div class="modal-content modal-md">
                         <div class="modal-header">
                             <h4 class="modal-title">
-                                <i class="bi bi-exclamation-triangle text-danger"></i>
+                                <i class="ti ti-exclamation-triangle text-danger"></i>
                                 Ошибка
                             </h4>
                             <button class="btn btn-ghost btn-sm" onclick="this.closest('.modal-overlay').remove(); document.body.style.overflow = '';">
-                                <i class="bi bi-x"></i>
+                                <i class="ti ti-x"></i>
                             </button>
                         </div>
                         <div class="modal-body">
                             <div class="alert alert-danger">
-                                <i class="bi bi-exclamation-triangle"></i>
+                                <i class="ti ti-exclamation-triangle"></i>
                                 Ошибка загрузки: ${error.message}
                             </div>
                         </div>
