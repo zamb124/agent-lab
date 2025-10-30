@@ -1,0 +1,226 @@
+{% import 'components.html' as c %}
+<link rel="stylesheet" href="/static/history/css/history.css">
+<link rel="stylesheet" href="/static/traces/css/traces.css">
+
+<div class="modal-overlay" onclick="this.remove(); document.body.style.overflow = '';">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h5 class="mb-0">
+                <i class="bi bi-diagram-3 me-2"></i>
+                Trace <code class="font-mono">{{ trace_info.trace_id }}</code>
+            </h5>
+            <button class="btn btn-ghost btn-sm" onclick="this.closest('.modal-overlay').remove(); document.body.style.overflow = '';">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+
+        <div class="modal-body">
+            <div class="history-info">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="bi bi-diagram-3"></i>
+                            Название
+                        </div>
+                        <div class="info-value flow-name">
+                            {{ trace_info.name }}
+                        </div>
+                    </div>
+
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="bi bi-hash"></i>
+                            Trace ID
+                        </div>
+                        <div class="session-id-wrapper">
+                            <code>{{ trace_info.trace_id }}</code>
+                            <button class="btn btn-ghost copy-btn"
+                                    onclick="navigator.clipboard.writeText('{{ trace_info.trace_id }}'); this.innerHTML='<i class=\'bi bi-check\'></i>'; setTimeout(() => this.innerHTML='<i class=\'bi bi-clipboard\'></i>', 1500);"
+                                    title="Копировать Trace ID">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="bi bi-check-circle"></i>
+                            Статус
+                        </div>
+                        <div class="info-value">
+                            <span class="badge bg-{{ 'success' if trace_info.status == 'success' else 'danger' if trace_info.status == 'error' else 'warning' }}">
+                                {{ trace_info.status }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="bi bi-layers"></i>
+                            Spans
+                        </div>
+                        <div class="info-value">
+                            {{ trace_info.total_spans }}
+                        </div>
+                    </div>
+
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="bi bi-stopwatch"></i>
+                            Длительность
+                        </div>
+                        <div class="info-value">
+                            {% if trace_info.duration_ms %}
+                                {{ "%.2f"|format(trace_info.duration_ms / 1000) }}s
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% if trace_info.total_cost %}
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="bi bi-currency-dollar"></i>
+                            Стоимость
+                        </div>
+                        <div class="info-value">
+                            ${{ "%.4f"|format(trace_info.total_cost) }}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if trace_info.error_count > 0 %}
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            Ошибки
+                        </div>
+                        <div class="info-value text-danger">
+                            {{ trace_info.error_count }}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="bi bi-tag"></i>
+                            Тип
+                        </div>
+                        <div class="info-value">
+                            <span class="trace-badge-type trace-badge-{{ trace_info.root_span_type.value }}">{{ trace_info.root_span_type.value }}</span>
+                        </div>
+                    </div>
+
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="bi bi-clock-history"></i>
+                            Время начала
+                        </div>
+                        <div class="info-value font-mono">
+                            {{ trace_info.start_time }}
+                        </div>
+                    </div>
+
+                    {% if trace_info.metadata and trace_info.metadata.get('session_id') %}
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="bi bi-hash"></i>
+                            Session ID
+                        </div>
+                        <div class="session-id-wrapper">
+                            <code>{{ trace_info.metadata.session_id[:12] }}...</code>
+                            <button class="btn btn-ghost copy-btn"
+                                    onclick="navigator.clipboard.writeText('{{ trace_info.metadata.session_id }}'); this.innerHTML='<i class=\'bi bi-check\'></i>'; setTimeout(() => this.innerHTML='<i class=\'bi bi-clipboard\'></i>', 1500);"
+                                    title="Копировать Session ID">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if trace_info.metadata and trace_info.metadata.get('user_id') %}
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="bi bi-person"></i>
+                            User ID
+                        </div>
+                        <div class="info-value">
+                            <code>{{ trace_info.metadata.user_id }}</code>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="trace-content-container">
+                <!-- Left Panel: Execution Tree с Timeline -->
+                <div class="trace-tree-panel">
+                    <div class="trace-tree-header">
+                        <h6 class="mb-0">
+                            <i class="bi bi-diagram-2 me-2"></i>
+                            Execution Tree
+                        </h6>
+                    </div>
+                    <div class="trace-tree-content" id="trace-tree-container">
+                        <!-- Tree с таймлайном будет построен через D3.js -->
+                    </div>
+                </div>
+
+                <!-- Right Panel: Details -->
+                <div class="trace-details-panel">
+                    <div class="trace-details-header">
+                        <h6 class="mb-0">
+                            <i class="bi bi-file-text me-2"></i>
+                            Details
+                        </h6>
+                    </div>
+
+                    <div class="trace-details-content">
+                        <div class="trace-detail-view" id="trace-detail-view">
+                            <!-- Детали span будут показаны здесь -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timeline Graph снизу -->
+            {% if spans|length > 1 %}
+            <div class="trace-timeline-container">
+                <div class="trace-timeline-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-clock-history me-2"></i>
+                        Timeline
+                    </h6>
+                </div>
+                <div class="trace-timeline-content" id="trace-timeline-container">
+                    <!-- Timeline будет построен через D3.js -->
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const traceData = {
+        traceInfo: {{ trace_info|tojson }},
+        spans: {{ spans|tojson }}
+    };
+
+    const initTraceDetail = () => {
+        if (window.app && window.app.traces) {
+            window.app.traces.initTraceDetail(traceData);
+        } else {
+            setTimeout(initTraceDetail, 100);
+        }
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initTraceDetail);
+    } else {
+        initTraceDetail();
+    }
+})();
+</script>

@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.models import AgentConfig, FlowConfig, TaskConfig, SessionConfig, SessionStatus
 from app.db.database import AsyncSessionLocal
-from app.db.models import Storage as StorageModel, Users as UsersModel, Variables as VariablesModel, Tasks as TasksModel
+from app.db.models import Storage as StorageModel, Users as UsersModel, Variables as VariablesModel, Tasks as TasksModel, OtelSpans as OtelSpansModel
 from app.core.context import get_context
 from app.core.config import settings
 
@@ -26,7 +26,7 @@ TABLE_ROUTING = {
     "auth_state:": {"table": "users", "company_specific": False},
     "var:": {"table": "variables", "company_specific": False},
     "task:": {"table": "tasks", "company_specific": False},
-    
+    "otel:": {"table": "otel_spans", "company_specific": False},
     "_default": {"table": "storage", "company_specific": False}
 }
 
@@ -40,12 +40,12 @@ class Storage:
         self.session_factory = None
         self._table_cache = {}
         self._metadata = MetaData()
-    
+
     def _get_session(self):
         """Создает новую сессию БД"""
         if self.session_factory:
             return self.session_factory()
-        
+
         # Fallback для случаев когда Storage создан напрямую
         # В ленивой инициализации контейнера session_factory может быть None
         # Используем AsyncSessionLocal как fallback
@@ -59,15 +59,15 @@ class Storage:
                     "или вызовите await get_session_factory() для инициализации"
                 ) from e
             raise
-    
+
     def _get_table_name(self, key: str, company_id: Optional[str] = None) -> str:
         """
         Определяет имя таблицы на основе префикса ключа и компании.
-        
+
         Args:
             key: Ключ (например, "user:yandex:123" или "task:abc")
             company_id: ID компании (если есть)
-            
+
         Returns:
             Имя таблицы (например, "users", "storage", "acme_tasks")
         """
@@ -77,7 +77,7 @@ class Storage:
             parts = key.split(":", 2)
             if len(parts) >= 3:
                 check_key = parts[2]
-        
+
         for prefix, config in TABLE_ROUTING.items():
             if prefix == "_default":
                 continue
@@ -86,36 +86,36 @@ class Storage:
                 if config["company_specific"] and company_id:
                     return f"{company_id}_{table_name}"
                 return table_name
-        
+
         default_config = TABLE_ROUTING["_default"]
         table_name = default_config["table"]
         if default_config["company_specific"] and company_id:
             return f"{company_id}_{table_name}"
         return table_name
-    
+
     def _get_table_model(self, table_name: str):
         """
         Возвращает SQLAlchemy модель таблицы.
         """
         if table_name in self._table_cache:
             return self._table_cache[table_name]
-        
+
         if table_name == "storage":
             self._table_cache[table_name] = StorageModel
             return StorageModel
-        
+
         if table_name == "users":
             self._table_cache[table_name] = UsersModel
             return UsersModel
-        
+
         if table_name == "variables":
             self._table_cache[table_name] = VariablesModel
             return VariablesModel
-        
+
         if table_name == "tasks":
             self._table_cache[table_name] = TasksModel
             return TasksModel
-        
+
         table = Table(
             table_name,
             self._metadata,
@@ -129,27 +129,27 @@ class Storage:
     def _get_company_key(self, key: str, force_global: bool = False) -> tuple[str, Optional[str]]:
         """
         Добавляет префикс компании к ключу если нужно.
-        
+
         Returns:
             Кортеж (final_key, company_id)
         """
         if force_global:
             return key, None
-            
+
         global_prefixes = [
-            'company:', 'subdomain:', 
+            'company:', 'subdomain:',
             'auth_session:', 'auth_state:',
             'web_notification:', 'media_group:'
         ]
-        
+
         if any(key.startswith(prefix) for prefix in global_prefixes):
             return key, None
-        
+
         context = get_context()
         if context and context.active_company:
             company_id = context.active_company.company_id
             return f"company:{company_id}:{key}", company_id
-        
+
         return key, None
 
     # === Базовые методы key-value storage ===
@@ -168,7 +168,7 @@ class Storage:
         """
         final_key, company_id = self._get_company_key(key, force_global)
         table_name = self._get_table_name(key, company_id)
-        
+
         if db_session:
             return await self._get_with_session(final_key, table_name, db_session)
 
@@ -177,12 +177,16 @@ class Storage:
 
     async def _get_with_session(self, key: str, table_name: str, session) -> Optional[str]:
         """Получает значение с использованием переданной сессии"""
-        
-        self._get_table_model(table_name)
-        
+
+        # self._get_table_model(table_name)
+
         if table_name == "storage":
             result = await session.execute(
                 select(StorageModel.value).where(StorageModel.key == key)
+            )
+        elif table_name == "otel_spans":
+            result = await session.execute(
+                select(OtelSpansModel.value).where(OtelSpansModel.key == key)
             )
         elif table_name == "users":
             result = await session.execute(
@@ -199,7 +203,7 @@ class Storage:
         else:
             query = text(f"SELECT value FROM {table_name} WHERE key = :key")
             result = await session.execute(query, {"key": key})
-        
+
         row = result.first()
         if row:
             value = row.value if hasattr(row, 'value') else row[0]
@@ -230,8 +234,6 @@ class Storage:
         """
         final_key, company_id = self._get_company_key(key, force_global)
         table_name = self._get_table_name(key, company_id)
-        
-        
         if db_session:
             return await self._set_with_session(final_key, value, ttl, table_name, db_session)
 
@@ -244,7 +246,7 @@ class Storage:
         self, key: str, value: str, ttl: Optional[int], table_name: str, session
     ) -> bool:
         """Сохраняет значение с использованием переданной сессии"""
-        
+
         json_value = json.loads(value)
 
         expired_at = None
@@ -252,10 +254,10 @@ class Storage:
             expired_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
         else:
             permanent_prefixes = [
-                'company:', 'subdomain:', 'user:', 
+                'company:', 'subdomain:', 'user:',
                 'auth_session:', 'auth_state:', 'token:'
             ]
-            
+
             if any(key.startswith(prefix) for prefix in permanent_prefixes):
                 expired_at = None
             else:
@@ -300,6 +302,32 @@ class Storage:
                 ),
             )
             await session.execute(stmt)
+        elif table_name == "tasks":
+            stmt = insert(TasksModel).values(
+                key=key, value=json_value, expired_at=expired_at
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["key"],
+                set_=dict(
+                    value=stmt.excluded.value,
+                    updated_at=stmt.excluded.updated_at,
+                    expired_at=stmt.excluded.expired_at,
+                ),
+            )
+            await session.execute(stmt)
+        elif table_name == "otel_spans":
+            stmt = insert(OtelSpansModel).values(
+                key=key, value=json_value, expired_at=expired_at
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["key"],
+                set_= dict(
+                    value=stmt.excluded.value,
+                    updated_at=stmt.excluded.updated_at,
+                    expired_at=stmt.excluded.expired_at,
+                ),
+            )
+            await session.execute(stmt)
         else:
             query = text(f"""
                 INSERT INTO {table_name} (key, value, expired_at, created_at, updated_at)
@@ -334,7 +362,7 @@ class Storage:
         """
         final_key, company_id = self._get_company_key(key, force_global)
         table_name = self._get_table_name(key, company_id)
-        
+
         if db_session:
             return await self._delete_with_session(final_key, table_name, db_session)
 
@@ -345,7 +373,7 @@ class Storage:
 
     async def _delete_with_session(self, key: str, table_name: str, session) -> bool:
         """Удаляет значение с использованием переданной сессии"""
-        
+
         if table_name == "storage":
             result = await session.execute(
                 delete(StorageModel).where(StorageModel.key == key)
@@ -354,10 +382,22 @@ class Storage:
             result = await session.execute(
                 delete(UsersModel).where(UsersModel.key == key)
             )
+        elif table_name == "variables":
+            result = await session.execute(
+                delete(VariablesModel).where(VariablesModel.key == key)
+            )
+        elif table_name == "tasks":
+            result = await session.execute(
+                delete(TasksModel).where(TasksModel.key == key)
+            )
+        elif table_name == "otel_spans":
+            result = await session.execute(
+                delete(OtelSpansModel).where(OtelSpansModel.key == key)
+            )
         else:
             query = text(f"DELETE FROM {table_name} WHERE key = :key")
             result = await session.execute(query, {"key": key})
-        
+
         deleted = result.rowcount > 0
         if deleted:
             logger.debug(f"Удалено: {key} из таблицы {table_name}")
@@ -492,17 +532,17 @@ class Storage:
             session_json = await self.get(key)
             if not session_json:
                 continue
-                
+
             # Проверяем что это SessionConfig по наличию обязательных полей
             import json
             data = json.loads(session_json)
-            
+
             if not isinstance(data, dict):
                 continue
             if not all(field in data for field in ['session_id', 'platform', 'user_id']):
                 logger.debug(f"Ключ {key} не содержит обязательные поля SessionConfig, пропускаем")
                 continue
-                
+
             session = SessionConfig.model_validate_json(session_json)
             # Фильтруем по платформе, пользователю и flow
             if (
@@ -532,7 +572,7 @@ class Storage:
         """
         final_prefix, company_id = self._get_company_key(prefix, force_global)
         table_name = self._get_table_name(prefix, company_id)
-        
+
         async with self._get_session() as session:
             if table_name == "storage":
                 result = await session.execute(
@@ -555,6 +595,20 @@ class Storage:
                     .limit(limit)
                 )
                 return [row.key for row in result]
+            elif table_name == "tasks":
+                result = await session.execute(
+                    select(TasksModel.key)
+                    .where(TasksModel.key.like(f"{final_prefix}%"))
+                    .limit(limit)
+                )
+                return [row.key for row in result]
+            elif table_name == "otel_spans":
+                result = await session.execute(
+                    select(OtelSpansModel.key)
+                    .where(OtelSpansModel.key.like(f"{final_prefix}%"))
+                    .limit(limit)
+                )
+                return [row.key for row in result]
             else:
                 query = text(f"SELECT key FROM {table_name} WHERE key LIKE :prefix LIMIT :limit")
                 result = await session.execute(query, {"prefix": f"{final_prefix}%", "limit": limit})
@@ -572,10 +626,10 @@ class Storage:
         Returns:
             Словарь {key: value_json}
         """
-        
+
         final_prefix, company_id = self._get_company_key(prefix, force_global)
         table_name = self._get_table_name(prefix, company_id)
-        
+
         async with self._get_session() as session:
             if table_name == "storage":
                 result = await session.execute(
@@ -595,16 +649,28 @@ class Storage:
                     .where(VariablesModel.key.like(f"{final_prefix}%"))
                     .limit(limit)
                 )
+            elif table_name == "tasks":
+                result = await session.execute(
+                    select(TasksModel.key, TasksModel.value)
+                    .where(TasksModel.key.like(f"{final_prefix}%"))
+                    .limit(limit)
+                )
+            elif table_name == "otel_spans":
+                result = await session.execute(
+                    select(OtelSpansModel.key, OtelSpansModel.value)
+                    .where(OtelSpansModel.key.like(f"{final_prefix}%"))
+                    .limit(limit)
+                )
             else:
                 query = text(f"SELECT key, value FROM {table_name} WHERE key LIKE :prefix LIMIT :limit")
                 result = await session.execute(query, {"prefix": f"{final_prefix}%", "limit": limit})
-            
+
             # Формируем словарь {key: value_json}
             data = {}
             for row in result:
                 key = row.key if hasattr(row, 'key') else row[0]
                 value = row.value if hasattr(row, 'value') else row[1]
-                
+
                 # JSONB поля уже dict, сериализуем в строку
                 if isinstance(value, dict):
                     data[key] = json.dumps(value)
@@ -612,7 +678,7 @@ class Storage:
                     data[key] = value
                 else:
                     data[key] = json.dumps(value)
-            
+
             return data
 
     async def get_many(self, keys: List[str], force_global: bool = False) -> dict[str, str]:
@@ -628,8 +694,8 @@ class Storage:
         """
         if not keys:
             return {}
-        
-        
+
+
         # Применяем company prefix к ключам
         final_keys = []
         key_mapping = {}  # original_key -> final_key
@@ -637,10 +703,10 @@ class Storage:
             final_key, _ = self._get_company_key(key, force_global)
             final_keys.append(final_key)
             key_mapping[final_key] = key
-        
+
         # Определяем таблицу по первому ключу
         table_name = self._get_table_name(keys[0], None)
-        
+
         async with self._get_session() as session:
             if table_name == "storage":
                 result = await session.execute(
@@ -657,21 +723,31 @@ class Storage:
                     select(VariablesModel.key, VariablesModel.value)
                     .where(VariablesModel.key.in_(final_keys))
                 )
+            elif table_name == "tasks":
+                result = await session.execute(
+                    select(TasksModel.key, TasksModel.value)
+                    .where(TasksModel.key.in_(final_keys))
+                )
+            elif table_name == "otel_spans":
+                result = await session.execute(
+                    select(OtelSpansModel.key, OtelSpansModel.value)
+                    .where(OtelSpansModel.key.in_(final_keys))
+                )
             else:
                 placeholders = ','.join([f':key{i}' for i in range(len(final_keys))])
                 query = text(f"SELECT key, value FROM {table_name} WHERE key IN ({placeholders})")
                 params = {f'key{i}': k for i, k in enumerate(final_keys)}
                 result = await session.execute(query, params)
-            
+
             # Формируем словарь {original_key: value_json}
             data = {}
             for row in result:
                 final_key = row.key if hasattr(row, 'key') else row[0]
                 value = row.value if hasattr(row, 'value') else row[1]
-                
+
                 # Получаем оригинальный ключ
                 original_key = key_mapping.get(final_key, final_key)
-                
+
                 # JSONB поля уже dict, сериализуем в строку
                 if isinstance(value, dict):
                     data[original_key] = json.dumps(value)
@@ -679,7 +755,7 @@ class Storage:
                     data[original_key] = value
                 else:
                     data[original_key] = json.dumps(value)
-            
+
             return data
 
     async def get_pending_tasks(self, limit: int = 10) -> List[TaskConfig]:
@@ -696,12 +772,12 @@ class Storage:
             )
             all_tasks = list(all_tasks_result)
             logger.info(f"🔍 Найдено {len(all_tasks)} задач с паттерном '%task:%'")
-            
+
             if all_tasks:
                 for row in all_tasks[:5]:
                     status = row.value.get("status") if isinstance(row.value, dict) else "???"
                     logger.info(f"  - key={row.key}, status={status}")
-            
+
             # Запрос с фильтрацией по JSON полю status - ищем во ВСЕХ компаниях
             result = await session.execute(
                 select(StorageModel.key, StorageModel.value)
@@ -713,7 +789,7 @@ class Storage:
             tasks = []
             rows = list(result)
             logger.info(f"🔍 Найдено {len(rows)} pending задач")
-            
+
             for row in rows:
                 try:
                     task_data = json.dumps(row.value)

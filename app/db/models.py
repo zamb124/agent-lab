@@ -19,7 +19,7 @@ class Storage(Base):
     - agent:agent_id
     - flow:flow_id
     - session:session_id
-    
+
     Задачи (task:*) теперь в отдельной таблице Tasks.
     """
 
@@ -99,7 +99,7 @@ class Users(Base):
 class Tasks(Base):
     """
     Таблица для задач (Tasks).
-    
+
     Ключи имеют формат: task:task_id
     Физическая изоляция задач для лучшей производительности.
     """
@@ -143,7 +143,7 @@ class Tasks(Base):
 class Variables(Base):
     """
     Таблица для переменных всех компаний.
-    
+
     Ключи имеют формат: company:{company_id}:var:{key}
     Изоляция per-company через префикс ключа.
     """
@@ -171,3 +171,39 @@ class Variables(Base):
 
     def __repr__(self):
         return f"<Variables(key='{self.key}', updated_at='{self.updated_at}')>"
+
+
+class OtelSpans(Base):
+    """
+    Таблица для OpenTelemetry.
+
+    Ключи имеют формат: otel:{trace_id}:span:{span_id}
+    Физическая изоляция spans для лучшей производительности трейсинга.
+    """
+
+    __tablename__ = "otel_spans"
+
+    key = Column(String, primary_key=True, index=True)
+    value = Column(JSONB, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    expired_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("key", name="uq_otel_spans_key"),
+        Index("ix_otel_spans_key_prefix", "key"),
+        Index("ix_otel_spans_updated_at", "updated_at"),
+        Index("ix_otel_spans_trace_id", (text("(value->>'trace_id')"))),
+        Index("ix_otel_spans_span_type", (text("(value->>'span_type')"))),
+        Index("ix_otel_spans_status", (text("(value->>'status')"))),
+        Index("ix_otel_spans_start_time", (text("(value->>'start_time')"))),
+    )
+
+    def __repr__(self):
+        return f"<OtelSpans(key='{self.key}', updated_at='{self.updated_at}')>"

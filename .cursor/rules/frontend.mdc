@@ -1,6 +1,8 @@
 ---
 description: фронтенд плагины
 alwaysApply: false
+globs:
+  - "app/frontend/**/*"
 ---
 # Правила для Frontend
 
@@ -76,8 +78,8 @@ app/frontend/shared/templates/
 {{ c.pagination(offset, limit, total, '/api/list', hx_target='#content') }}
 
 {# Button с HTMX #}
-{{ c.button('Удалить', 
-    variant='danger', 
+{{ c.button('Удалить',
+    variant='danger',
     icon='trash',
     hx_delete='/api/item/123',
     hx_confirm='Вы уверены?',
@@ -274,7 +276,7 @@ app/frontend/shared/templates/
 **Важно:** Каждый макрос определен ОДИН раз в `macros/`, затем реэкспортирован в `components.html`:
 
 - `macros/base.html` → button, badge, icon
-- `macros/feedback.html` → skeleton, empty_state, alert, loading  
+- `macros/feedback.html` → skeleton, empty_state, alert, loading
 - `macros/data.html` → platform_badge, status_badge, pagination, counter_badge
 - `macros/layout.html` → card, modal (с call blocks!)
 - `macros/forms.html` → input, textarea, select, checkbox
@@ -301,7 +303,7 @@ app/frontend/shared/templates/
 
 {% call c.modal('edit-agent', title='Редактировать агента', icon='pencil') %}
     {{ agent_config.render(view_mode='form') }}
-    
+
     <div class="d-flex gap-2 justify-content-end mt-3">
         {{ c.button('Отмена', variant='secondary', onclick='this.closest(\'.modal-overlay\').remove()') }}
         {{ c.button('Сохранить', variant='primary', icon='save', type='submit') }}
@@ -377,8 +379,8 @@ async def get_flow(flow_id: str, flow_repo: FlowRepositoryDep):
 ```html
 {% import 'components.html' as c %}
 
-<div hx-get="/frontend/bots/list" 
-     hx-trigger="load" 
+<div hx-get="/frontend/bots/list"
+     hx-trigger="load"
      hx-indicator="#loading">
     <div id="loading" class="htmx-indicator">
         {{ c.skeleton(type='card', count=6) }}
@@ -388,8 +390,8 @@ async def get_flow(flow_id: str, flow_repo: FlowRepositoryDep):
 
 #### Отправка формы
 ```html
-<form hx-post="/frontend/api/flows" 
-      hx-target="#flows-list" 
+<form hx-post="/frontend/api/flows"
+      hx-target="#flows-list"
       hx-swap="afterbegin"
       hx-ext="json-enc"
       hx-on::after-request="if(event.detail.successful) this.reset()">
@@ -413,7 +415,7 @@ async def get_flow(flow_id: str, flow_repo: FlowRepositoryDep):
 ```html
 {% import 'components.html' as c %}
 
-<button hx-get="/frontend/models/flow/new?view=form" 
+<button hx-get="/frontend/models/flow/new?view=form"
         hx-target="#modal-container"
         hx-swap="innerHTML"
         class="btn btn-primary">
@@ -451,7 +453,7 @@ async def get_flow(flow_id: str, flow_repo: FlowRepositoryDep):
 
 ```html
 <!-- JSON encoding для форм -->
-<form hx-ext="json-enc" 
+<form hx-ext="json-enc"
       hx-post="/api/v1/flows"
       hx-headers='{"Content-Type": "application/json"}'>
   {{ c.input('name', label='Название') }}
@@ -632,7 +634,7 @@ app/frontend/shared/static/css/
                 {% endfor %}
             </tbody>
         {% endcall %}
-        
+
         <div class="card-footer">
             {{ c.pagination(offset, limit, total, '/api/sessions') }}
         </div>
@@ -853,26 +855,26 @@ modules/my_module/static/
 
 ### Частые ошибки:
 
-❌ Дублировать if-else для platform/status badges  
+❌ Дублировать if-else для platform/status badges
 ✅ `{{ c.platform_badge(platform) }}`
 
-❌ Создавать свой empty state  
+❌ Создавать свой empty state
 ✅ `{{ c.empty_state(...) }}`
 
-❌ Inline styles  
+❌ Inline styles
 ✅ CSS классы из variables.css
 
-❌ Забывать про skeleton loader  
+❌ Забывать про skeleton loader
 ✅ Всегда добавлять при HTMX загрузке
 
-❌ Создавать макросы в components.html  
+❌ Создавать макросы в components.html
 ✅ Создавать в `macros/*.html`, затем реэкспортировать
 
 ---
 
 ## Плагинная система
 
-**Для создания плагинов фронтенда смотри отдельный файл правил:**  
+**Для создания плагинов фронтенда смотри отдельный файл правил:**
 → `.cursor/rules/frontend_plugins.mdc`
 
 Плагины позволяют расширять фронтенд без изменения кода в `shared/`:

@@ -84,7 +84,9 @@ class LoggingConfig(BaseModel):
 
     level: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
     format: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    json_format: bool = True  # Использовать JSON формат для структурированных логов
+    json_format: bool = True  # Использовать JSON формат для структурированных логов в файлы
+    console_format: str = "structured"  # Формат для консоли: "structured", "json", "pretty"
+    console_colors: bool = True  # Использовать цвета в консоли
     file_enabled: bool = True
     file_path: str = "logs/app.log"
     file_max_bytes: int = 10 * 1024 * 1024  # 10MB
@@ -199,19 +201,6 @@ class TelegramConfig(BaseModel):
 
     enabled: bool = True
     bots: Dict[str, str] = Field(default_factory=dict)  # bot_name -> token
-
-
-class LangfuseConfig(BaseModel):
-    """Конфигурация Langfuse для мониторинга LLM"""
-
-    enabled: bool = False
-    host: Optional[str] = None  # Для self-hosted, например "http://localhost:3000"
-    public_key: Optional[str] = None
-    secret_key: Optional[str] = None
-    # Дополнительные настройки для тонкой настройки
-    sample_rate: float = 1.0  # Доля запросов для трейсинга (0.0-1.0)
-    flush_interval: int = 1  # Интервал отправки данных в секундах
-    flush_at: int = 1  # Минимальное количество событий перед отправкой
 
 
 class WhatsAppConfig(BaseModel):
@@ -359,6 +348,17 @@ class SGRConfig(BaseModel):
     max_results: int = 10
 
 
+class OtelConfig(BaseModel):
+    """Конфигурация OpenTelemetry трейсинга"""
+
+    enabled: bool = True
+    service_name: str = "agent-lab"
+    instrument_langchain: bool = True
+    instrument_openai: bool = True
+    instrument_asyncpg: bool = True
+    log_level: str = "INFO"
+
+
 class LegalConfig(BaseModel):
     """Конфигурация юридической информации компании"""
 
@@ -398,7 +398,6 @@ class Settings(BaseSettings):
     fashn: FashnConfig = Field(default_factory=FashnConfig)
     cloud_voice: CloudVoiceConfig = Field(default_factory=CloudVoiceConfig)
     telegram: TelegramConfig = Field(default_factory=TelegramConfig)
-    langfuse: LangfuseConfig = Field(default_factory=LangfuseConfig)
     whatsapp: WhatsAppConfig = Field(default_factory=WhatsAppConfig)
     nano_banana: NanoBananaConfig = Field(default_factory=NanoBananaConfig)
     amocrm: AmoCRMConfig = Field(default_factory=AmoCRMConfig)
@@ -407,6 +406,7 @@ class Settings(BaseSettings):
     migration: MigrationSettings = Field(default_factory=MigrationSettings)
     rag: RAGConfig = Field(default_factory=RAGConfig)
     sgr: SGRConfig = Field(default_factory=SGRConfig)
+    otel: OtelConfig = Field(default_factory=OtelConfig)
     legal: LegalConfig = Field(default_factory=LegalConfig)
 
     def __init__(self, **data):

@@ -1,0 +1,514 @@
+# Правила работы с OpenTelemetry Tracing
+
+## Общие принципы
+
+Используй OpenTelemetry для трейсинга операций агентов, flows, tools и API запросов.
+
+## Получение tracer
+
+Используй глобальный tracer из `opentelemetry.trace`:
+
+<good_example>
+from opentelemetry import trace
+
+tracer = trace.get_tracer(__name__)
+</good_example>
+
+## Создание spans
+
+### Базовое использование
+
+<good_example>
+from opentelemetry import trace
+from app.models.trace_models import SpanType
+import json
+
+tracer = trace.get_tracer(__name__)
+
+async def my_function(input_data: dict):
+    with tracer.start_as_current_span(
+        "my_function",
+        attributes={
+            "span_type": SpanType.AGENT.value,
+            "input_data": json.dumps(input_data),
+        }
+    ) as span:
+        try:
+            result = await some_operation(input_data)
+
+            # Добавляем output после выполнения
+            span.set_attribute("output_data", json.dumps(result))
+
+            return result
+        except Exception as e:
+            # Автоматически помечает span как ERROR
+            span.record_exception(e)
+            raise
+</good_example>
+
+### Типы spans (SpanType)
+
+Используй правильный тип для каждого span:
+
+- `SpanType.AGENT` - выполнение агента
+- `SpanType.TOOL` - вызов инструмента
+- `SpanType.LLM` - запрос к LLM
+- `SpanType.FLOW` - выполнение flow
+- `SpanType.API` - API запрос
+
+<good_example>
+# Агент
+with tracer.start_as_current_span(
+    "agent_execution",
+    attributes={"span_type": SpanType.AGENT.value}
+):
+    pass
+
+# Tool
+with tracer.start_as_current_span(
+    "tool_call",
+    attributes={"span_type": SpanType.TOOL.value}
+):
+    pass
+
+# LLM
+with tracer.start_as_current_span(
+    "llm_request",
+    attributes={"span_type": SpanType.LLM.value}
+):
+    pass
+</good_example>
+
+## Attributes
+
+### Обязательные attributes
+
+- `span_type` - тип span (из SpanType enum)
+- `input_data` - входные данные (JSON строка)
+- `output_data` - выходные данные (JSON строка)
+
+### Дополнительные attributes
+
+- `cost` - стоимость операции (JSON объект: `{"total": 0.5, "input": 0.2, "output": 0.3}`)
+- `usage` - использование токенов (JSON объект: `{"input_tokens": 100, "output_tokens": 50}`)
+- Любые другие метаданные
+
+<good_example>
+span.set_attribute("span_type", SpanType.TOOL.value)
+span.set_attribute("input_data", json.dumps({"query": "test"}))
+span.set_attribute("output_data", json.dumps({"result": "success"}))
+span.set_attribute("cost", json.dumps({
+    "total": 0.5,
+    "input": 0.2,
+    "output": 0.3
+}))
+span.set_attribute("usage", json.dumps({
+    "input_tokens": 100,
+    "output_tokens": 50
+}))
+</good_example>
+
+## Вложенные spans
+
+OpenTelemetry автоматически создает иерархию spans:
+
+<good_example>
+with tracer.start_as_current_span("parent_operation") as parent_span:
+    parent_span.set_attribute("span_type", SpanType.FLOW.value)
+
+    # Вложенный span автоматически станет дочерним
+    with tracer.start_as_current_span("child_operation") as child_span:
+        child_span.set_attribute("span_type", SpanType.AGENT.value)
+        result = await agent.ainvoke(data)
+
+    # Еще один дочерний span
+    with tracer.start_as_current_span("another_child") as child_span2:
+        child_span2.set_attribute("span_type", SpanType.TOOL.value)
+        await some_tool()
+</good_example>
+
+## Обработка ошибок
+
+Используй `span.record_exception()` для записи исключений:
+
+<good_example>
+with tracer.start_as_current_span("operation") as span:
+    try:
+        result = await risky_operation()
+        return result
+    except Exception as e:
+        # Автоматически помечает span как ERROR и записывает traceback
+        span.record_exception(e)
+        raise
+</good_example>
+
+<bad_example>
+# НЕ устанавливай статус вручную
+from opentelemetry.trace import Status, StatusCode
+
+with tracer.start_as_current_span("operation") as span:
+    try:
+        result = await operation()
+    except Exception as e:
+        span.set_status(Status(StatusCode.ERROR))  # НЕТ! Используй record_exception
+        raise
+</bad_example>
+
+## Сериализация данных
+
+Всегда сериализуй сложные типы в JSON:
+
+<good_example>
+import json
+
+# Сериализуем dict/list в JSON
+span.set_attribute("input_data", json.dumps({"key": "value"}))
+span.set_attribute("output_data", json.dumps(["item1", "item2"]))
+
+# Для Pydantic моделей
+span.set_attribute("config", model.model_dump_json())
+</good_example>
+
+<bad_example>
+# НЕ передавай объекты напрямую
+span.set_attribute("input_data", {"key": "value"})  # НЕТ!
+span.set_attribute("config", model)  # НЕТ!
+</bad_example>
+
+## Где добавлять spans
+
+### В агентах
+Оборачивай метод `ainvoke`:
+
+<good_example>
+async def ainvoke(self, input_data: dict, config: dict = None):
+    with tracer.start_as_current_span(
+        f"agent_{self.config.agent_id}",
+        attributes={
+            "span_type": SpanType.AGENT.value,
+            "agent_id": self.config.agent_id,
+            "input_data": json.dumps(input_data),
+        }
+    ) as span:
+        result = await graph.ainvoke(input_data, config=config)
+        span.set_attribute("output_data", json.dumps(result))
+        return result
+</good_example>
+
+### В tools
+Оборачивай основную функцию:
+
+<good_example>
+from app.core.tool_decorator import tool
+
+@tool
+async def my_tool(query: str) -> str:
+    with tracer.start_as_current_span(
+        "my_tool",
+        attributes={
+            "span_type": SpanType.TOOL.value,
+            "input_data": json.dumps({"query": query}),
+        }
+    ) as span:
+        result = await process_query(query)
+        span.set_attribute("output_data", json.dumps({"result": result}))
+        return result
+</good_example>
+
+### В flows
+Оборачивай метод `run`:
+
+<good_example>
+async def run(self, input_data: dict):
+    with tracer.start_as_current_span(
+        f"flow_{self.config.flow_id}",
+        attributes={
+            "span_type": SpanType.FLOW.value,
+            "flow_id": self.config.flow_id,
+            "input_data": json.dumps(input_data),
+        }
+    ) as span:
+        result = await self._execute_flow(input_data)
+        span.set_attribute("output_data", json.dumps(result))
+        return result
+</good_example>
+
+### В API эндпоинтах
+FastAPI автоматически создает spans для HTTP запросов (через middleware).
+Добавляй spans только для важных операций внутри эндпоинта.
+
+## НЕ добавляй spans для
+
+- Простых геттеров/сеттеров
+- Валидации данных
+- Логирования
+- Операций с локальными переменными
+
+## Использование декораторов
+
+Для переиспользуемого кода создавай декораторы:
+
+### Базовый декоратор для tracing
+
+<good_example>
+import functools
+from typing import Optional
+from opentelemetry import trace
+from app.models.trace_models import SpanType
+import json
+
+def traced(
+    span_type: SpanType = SpanType.AGENT,
+    span_name: Optional[str] = None,
+    include_args: bool = True,
+    include_result: bool = True
+):
+    """
+    Декоратор для автоматического создания spans.
+
+    Args:
+        span_type: Тип span
+        span_name: Имя span (если None - используется имя функции)
+        include_args: Включать аргументы в input_data
+        include_result: Включать результат в output_data
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            tracer = trace.get_tracer(__name__)
+            name = span_name or func.__name__
+
+            with tracer.start_as_current_span(
+                name,
+                attributes={"span_type": span_type.value}
+            ) as span:
+                # Добавляем входные данные
+                if include_args:
+                    input_data = {
+                        "args": [str(arg) for arg in args],
+                        "kwargs": kwargs
+                    }
+                    span.set_attribute("input_data", json.dumps(input_data))
+
+                try:
+                    result = await func(*args, **kwargs)
+
+                    # Добавляем результат
+                    if include_result and result is not None:
+                        if isinstance(result, (dict, list)):
+                            span.set_attribute("output_data", json.dumps(result))
+                        else:
+                            span.set_attribute("output_data", str(result))
+
+                    return result
+                except Exception as e:
+                    span.record_exception(e)
+                    raise
+
+        return wrapper
+    return decorator
+</good_example>
+
+### Примеры использования декоратора
+
+<good_example>
+# Простой случай
+@traced(span_type=SpanType.TOOL)
+async def fetch_weather(city: str) -> dict:
+    return {"city": city, "temp": 20}
+
+# С кастомным именем
+@traced(
+    span_type=SpanType.API,
+    span_name="external_api_call"
+)
+async def call_external_api(endpoint: str) -> dict:
+    response = await http_client.get(endpoint)
+    return response.json()
+
+# Без логирования результата (большой объем)
+@traced(
+    span_type=SpanType.AGENT,
+    include_result=False
+)
+async def process_large_data(data: list) -> list:
+    # Обрабатываем большие данные
+    return processed_data
+</good_example>
+
+### Декоратор для методов класса
+
+<good_example>
+class MyAgent:
+    @traced(span_type=SpanType.AGENT, span_name="agent_execution")
+    async def ainvoke(self, input_data: dict) -> dict:
+        # Логика агента
+        return result
+
+    @traced(span_type=SpanType.TOOL)
+    async def _process_tool_call(self, tool_name: str, args: dict) -> str:
+        # Обработка вызова инструмента
+        return result
+</good_example>
+
+### Декоратор с дополнительными метаданными
+
+<good_example>
+def traced_with_metadata(
+    span_type: SpanType,
+    metadata_extractor=None
+):
+    """
+    Декоратор с возможностью добавления кастомных метаданных.
+
+    Args:
+        span_type: Тип span
+        metadata_extractor: Функция для извлечения метаданных из результата
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            tracer = trace.get_tracer(__name__)
+
+            with tracer.start_as_current_span(
+                func.__name__,
+                attributes={"span_type": span_type.value}
+            ) as span:
+                try:
+                    result = await func(*args, **kwargs)
+
+                    # Извлекаем метаданные из результата
+                    if metadata_extractor and result:
+                        metadata = metadata_extractor(result)
+                        for key, value in metadata.items():
+                            if isinstance(value, (dict, list)):
+                                span.set_attribute(key, json.dumps(value))
+                            else:
+                                span.set_attribute(key, str(value))
+
+                    return result
+                except Exception as e:
+                    span.record_exception(e)
+                    raise
+
+        return wrapper
+    return decorator
+
+# Использование
+def extract_llm_metadata(result):
+    return {
+        "model": result.get("model"),
+        "tokens": result.get("usage", {}).get("total_tokens"),
+        "cost": result.get("cost")
+    }
+
+@traced_with_metadata(
+    span_type=SpanType.LLM,
+    metadata_extractor=extract_llm_metadata
+)
+async def call_llm(prompt: str) -> dict:
+    result = await llm.ainvoke(prompt)
+    return result
+</good_example>
+
+### Декоратор с контекстом (self)
+
+Для методов класса, где нужен доступ к атрибутам:
+
+<good_example>
+def traced_method(span_type: SpanType = SpanType.AGENT):
+    """Декоратор для методов класса с доступом к self."""
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(self, *args, **kwargs):
+            tracer = trace.get_tracer(__name__)
+
+            # Можем использовать атрибуты объекта для span name
+            span_name = f"{func.__name__}_{getattr(self, 'agent_id', 'unknown')}"
+
+            with tracer.start_as_current_span(
+                span_name,
+                attributes={
+                    "span_type": span_type.value,
+                    "agent_id": getattr(self, "agent_id", None),
+                    "config_name": getattr(self, "name", None),
+                }
+            ) as span:
+                try:
+                    result = await func(self, *args, **kwargs)
+                    return result
+                except Exception as e:
+                    span.record_exception(e)
+                    raise
+
+        return wrapper
+    return decorator
+
+# Использование
+class MyAgent:
+    def __init__(self, agent_id: str, name: str):
+        self.agent_id = agent_id
+        self.name = name
+
+    @traced_method(span_type=SpanType.AGENT)
+    async def ainvoke(self, input_data: dict) -> dict:
+        # Span будет называться "ainvoke_my_agent" с attributes
+        return result
+</good_example>
+
+### Комбинирование декораторов
+
+<good_example>
+from app.core.tool_decorator import tool
+
+# Сначала traced, потом tool
+@tool(cost=0.1)
+@traced(span_type=SpanType.TOOL, include_args=True)
+async def expensive_tool(query: str) -> str:
+    """Инструмент с трейсингом и биллингом"""
+    result = await process_query(query)
+    return result
+
+# Порядок важен: декораторы применяются снизу вверх
+# traced будет оборачивать tool
+</good_example>
+
+### Декоратор для синхронных функций
+
+Если нужен трейсинг для sync функций:
+
+<good_example>
+def traced_sync(span_type: SpanType = SpanType.AGENT):
+    """Декоратор для синхронных функций."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            tracer = trace.get_tracer(__name__)
+
+            with tracer.start_as_current_span(
+                func.__name__,
+                attributes={"span_type": span_type.value}
+            ) as span:
+                try:
+                    result = func(*args, **kwargs)
+                    return result
+                except Exception as e:
+                    span.record_exception(e)
+                    raise
+
+        return wrapper
+    return decorator
+
+# Использование
+@traced_sync(span_type=SpanType.TOOL)
+def calculate(a: int, b: int) -> int:
+    return a + b
+</good_example>
+
+## ВАЖНО
+
+- **ВСЕГДА** используй `json.dumps()` для сложных типов
+- **ВСЕГДА** указывай `span_type`
+- **ВСЕГДА** оборачивай в try-except и используй `record_exception()`
+- **НЕ** добавляй spans для тривиальных операций
+- **НЕ** забывай добавлять `output_data` после выполнения
