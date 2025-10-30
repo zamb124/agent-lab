@@ -16,10 +16,18 @@
 
 /* Используем стили из history модуля для info-grid */
 
+/* Модалка трейсов почти на весь экран */
+.traces-modal .modal-content {
+    width: 96vw;
+    max-width: 96vw;
+    height: 96vh;
+    max-height: 96vh;
+}
+
 /* Контейнер с двумя панелями */
 .trace-content-container {
     display: flex;
-    height: 500px;
+    height: 65vh; /* занимать большую часть модалки */
     overflow: hidden;
     border-bottom: 1px solid var(--border-primary);
 }
@@ -55,7 +63,7 @@
     border-top: 1px solid var(--border-primary);
     display: flex;
     flex-direction: column;
-    height: 200px;
+    height: 22vh; /* адаптивная высота под почти fullscreen */
     overflow: hidden;
 }
 
@@ -690,9 +698,7 @@
     padding: 0;
 }
 
-.trace-detail-view {
-    /* Убрали padding, так как он в trace-details-content */
-}
+/* .trace-detail-view — без дополнительных правил */
 
 .trace-detail-section {
     margin-bottom: 1.5rem;
