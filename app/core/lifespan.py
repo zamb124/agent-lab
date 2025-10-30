@@ -23,13 +23,76 @@ from app.frontend.core.plugin_loader import discover_and_load_plugins
 from app.workers.mcp_sync_worker import MCPSyncWorker
 from app.core.mcp_sync import sync_all_companies_mcp_servers
 from app.services.cleanup_service import CleanupService
+from app.core.tracing.exporters.database_exporter import DatabaseSpanExporter
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from openinference.instrumentation.langchain import LangChainInstrumentor
+from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
 
+
+from opentelemetry.sdk.resources import Resource
 # Условные импорты для локального окружения
 if settings.server.env == "local":
     from app.workers.task_processor import TaskProcessor
     from app.services.telegram_poller import telegram_poller
 
 logger = logging.getLogger(__name__)
+
+# Глобальный TracerProvider для управления жизненным циклом
+_tracer_provider = None
+
+
+def _setup_otel_instrumentation():
+    """
+    Настраивает OpenTelemetry инструментацию для LangGraph/LangChain
+    """
+    global _tracer_provider
+
+    if not settings.otel.enabled:
+        logger.info("🔍 OTEL трейсинг отключен в конфигурации")
+        return
+
+    resource = Resource.create({
+        "service.name": settings.otel.service_name,
+        "service.version": "0.1.0",
+    })
+
+    _tracer_provider = TracerProvider(resource=resource)
+
+    span_exporter = DatabaseSpanExporter()
+    span_processor = SimpleSpanProcessor(span_exporter)
+    _tracer_provider.add_span_processor(span_processor)
+
+    trace.set_tracer_provider(_tracer_provider)
+
+    logger.info(f"✅ OTEL TracerProvider инициализирован (service={settings.otel.service_name})")
+
+    if settings.otel.instrument_langchain:
+        LangChainInstrumentor().instrument(tracer_provider=_tracer_provider)
+        logger.info("✅ LangChain/LangGraph инструментирован для OTEL")
+
+    if settings.otel.instrument_asyncpg:
+        AsyncPGInstrumentor().instrument(tracer_provider=_tracer_provider)
+        logger.info("✅ asyncpg инструментирован для OTEL")
+
+
+def _shutdown_otel_instrumentation():
+    """Корректно останавливает OTEL инструментацию"""
+    global _tracer_provider
+
+    if not _tracer_provider:
+        return
+
+    logger.info("🔍 Остановка OTEL инструментации...")
+
+    LangChainInstrumentor().uninstrument()
+    AsyncPGInstrumentor().uninstrument()
+
+    _tracer_provider.shutdown()
+
+    logger.info("✅ OTEL инструментация остановлена")
+
 
 
 async def _periodic_cleanup():
@@ -89,6 +152,10 @@ async def lifespan(app: FastAPI):
         # Инициализация БД
         logger.info("📊 Создание таблиц БД...")
         await create_tables()
+
+        # Настройка OTEL инструментации (после инициализации системного контейнера)
+        logger.info("🔍 Настройка OpenTelemetry инструментации...")
+        _setup_otel_instrumentation()
 
         # Инициализация checkpointer для LangGraph
         logger.info("🔄 Инициализация checkpointer...")
@@ -174,6 +241,9 @@ async def lifespan(app: FastAPI):
     finally:
         # Закрытие ресурсов
         logger.info("🔄 Закрытие ресурсов...")
+
+        # Останавливаем OTEL инструментацию
+        _shutdown_otel_instrumentation()
 
         # Останавливаем сервисы если запущены
         if settings.server.env == "local":
