@@ -17,10 +17,10 @@ from app.core.container import get_container
 from app.core.context_window_manager import ContextWindowManager
 from app.core.context import get_context, set_context
 from app.core.checkpointer import get_checkpointer
-from app.core.langfuse_init import get_langfuse_callback
 from langgraph.errors import GraphInterrupt
 from langchain_core.messages import HumanMessage
 from app.core.checkpointer import update_checkpointer_with_store_changes
+from app.core.tracing.langfuse_init import get_langfuse_callback
 logger = logging.getLogger(__name__)
 
 
@@ -253,16 +253,6 @@ class BaseAgent(ABC):
                 current_context.agent_config = self.config
                 await set_context(current_context)
 
-            # # Добавляем Langfuse callback для трейсинга действий агента
-            langfuse_callback = get_langfuse_callback()
-            if langfuse_callback:
-                if "callbacks" not in run_config:
-                    run_config["callbacks"] = []
-                elif not isinstance(run_config["callbacks"], list):
-                    run_config["callbacks"] = [run_config["callbacks"]]
-
-                run_config["callbacks"].append(langfuse_callback)
-                logger.debug(f"🪢 Добавлен Langfuse callback для агента {self.config.name}")
 
             # Загружаем state из checkpointer перед выполнением графа
             # Это нужно для того, чтобы tools могли получить правильный state
@@ -274,6 +264,13 @@ class BaseAgent(ABC):
                     if checkpoint_state:
                         set_state_in_context(checkpoint_state)
                         logger.debug(f"🔄 State загружен из checkpointer в контекст: {list(checkpoint_state.keys())}")
+
+            # Добавляем Langfuse callback если включен
+            langfuse_callback = get_langfuse_callback()
+
+            if langfuse_callback and "callbacks" not in run_config:
+                run_config["callbacks"] = [langfuse_callback]
+                logger.debug(f"🔍 Langfuse callback добавлен для агента {self.config.name}")
 
             result = await graph.ainvoke(input_data, config=run_config)
 
