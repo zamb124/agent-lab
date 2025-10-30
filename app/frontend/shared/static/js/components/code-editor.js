@@ -133,7 +133,7 @@ class CodeEditor {
                     <i class="ti ti-brush"></i>
                 </button>
                 <button class="toolbar-btn" id="validateCodeBtn-${this.uniqueId}" title="Проверить синтаксис">
-                    <i class="ti ti-check-circle"></i>
+                    <i class="ti ti-check"></i>
                 </button>
                 <button class="toolbar-btn" id="showStoreVarsBtn-${this.uniqueId}" title="Доступные переменные store">
                     <i class="ti ti-database"></i>
@@ -142,7 +142,7 @@ class CodeEditor {
                     <i class="ti ti-info-circle"></i>
                 </button>
                 <button class="toolbar-btn" id="fullscreenBtn-${this.uniqueId}" title="Полноэкранный режим (F11)">
-                    <i class="ti ti-arrows-fullscreen"></i>
+                    <i class="ti ti-maximize"></i>
                 </button>
             </div>
         `;
@@ -645,7 +645,7 @@ class CodeEditor {
                 <div class="variables-modal-header">
                     <h3>${title}</h3>
                     <button class="variables-modal-close">
-                        <i class="ti ti-x-lg"></i>
+                        <i class="ti ti-x"></i>
                     </button>
                 </div>
                 <div class="variables-modal-body">
@@ -715,7 +715,7 @@ class CodeEditor {
             this.container.classList.add('code-editor-fullscreen');
             
             const icon = this.toolbar.querySelector(`#fullscreenBtn-${this.uniqueId} i`);
-            if (icon) icon.className = 'ti ti-fullscreen-exit';
+            if (icon) icon.className = 'ti ti-minimize';
             
             // Блокируем скролл body
             document.body.style.overflow = 'hidden';
@@ -735,7 +735,7 @@ class CodeEditor {
             }
             
             const icon = this.toolbar.querySelector(`#fullscreenBtn-${this.uniqueId} i`);
-            if (icon) icon.className = 'ti ti-arrows-fullscreen';
+            if (icon) icon.className = 'ti ti-maximize';
             
             // Разблокируем скролл body
             document.body.style.overflow = '';

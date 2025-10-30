@@ -123,10 +123,49 @@ async def update_agent(
     allowed_fields = {
         "name", "description", "type", "prompt", "code_mode",
         "function_class", "inline_code", "tools", "llm_config", "history_from",
-        "local_variables", "store"
+        "local_variables", "store", "graph_definition"
     }
+    
+    # Сначала обрабатываем graph_definition отдельно
+    if "graph_definition" in updates:
+        graph_data = updates["graph_definition"]
+        if graph_data:
+            from app.models import GraphDefinition, GraphNode, GraphEdge
+            
+            nodes = []
+            for node_data in graph_data.get("nodes", []):
+                # Сохраняем ui данные отдельно, если они есть в params
+                params = node_data.get("params", {}).copy()
+                ui_data = params.pop("ui", None)
+                
+                node = GraphNode(**{**node_data, "params": params})
+                
+                # Сохраняем ui обратно в params (для отображения на канвасе)
+                if ui_data:
+                    node.params["ui"] = ui_data
+                nodes.append(node)
+            
+            edges = [GraphEdge(**edge_data) for edge_data in graph_data.get("edges", [])]
+            
+            # Определяем entry_point: берем первую ноду без входящих рёбер
+            entry_point = graph_data.get("entry_point", "")
+            if not entry_point and nodes:
+                # Находим первую ноду без входящих рёбер (или просто первую если все имеют входящие)
+                target_nodes = {edge.target for edge in edges}
+                entry_node = next((n for n in nodes if n.id not in target_nodes), nodes[0])
+                entry_point = entry_node.id
+            
+            agent_dict["graph_definition"] = GraphDefinition(
+                nodes=nodes,
+                edges=edges,
+                entry_point=entry_point
+            )
+        else:
+            agent_dict["graph_definition"] = None
+    
+    # Обновляем остальные поля
     for field, value in updates.items():
-        if field in allowed_fields:
+        if field in allowed_fields and field != "graph_definition":
             agent_dict[field] = value
 
     # Валидируем через модель - валидаторы автоматически преобразуют типы

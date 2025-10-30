@@ -25,6 +25,8 @@ export default class BuilderModule {
         this.currentFlow = null;
         this.entryPointAgentType = null;
         this.isInitialized = false;
+        this.isLoadingFlow = false;
+        this.loadedFlowId = null;
     }
     
     /**
@@ -111,6 +113,19 @@ export default class BuilderModule {
      */
     async onPageLoad() {
         console.log('📄 Builder страница загружена');
+        
+        // Извлекаем flow_id из URL
+        const pathMatch = window.location.pathname.match(/\/frontend\/builder\/flow\/([^/]+)/);
+        const flowIdFromURL = pathMatch ? pathMatch[1] : null;
+        const urlParams = new URLSearchParams(window.location.search);
+        const flowIdFromQuery = urlParams.get('flow_id');
+        const flowId = flowIdFromURL || flowIdFromQuery;
+        
+        // Если flow уже загружен и ID совпадает - не перезагружаем
+        if (this.loadedFlowId === flowId && this.currentFlow && this.canvas?.nodes.size > 0) {
+            console.log('⏭️ Flow уже загружен:', flowId, '- пропускаем');
+            return;
+        }
         
         this.setupButtonListeners();
         await this.initializeBuilder();
@@ -216,8 +231,10 @@ export default class BuilderModule {
                 this.enableFlowActions();
                 await this.updateEntryPointAgentType();
                 
-                // Автосохранение canvas_data
-                await this.saveCanvasData();
+                // Автосохранение canvas_data только если не идет загрузка flow
+                if (!this.isLoadingFlow) {
+                    await this.saveCanvasData();
+                }
             }
             
             // Если добавлен AgentNode
@@ -233,7 +250,8 @@ export default class BuilderModule {
             }
             
             // Если есть currentFlow - автосохранение при добавлении любой ноды
-            if (this.currentFlow && node.type !== 'flow_node') {
+            // НО НЕ во время загрузки flow (чтобы избежать множественных сохранений)
+            if (this.currentFlow && node.type !== 'flow_node' && !this.isLoadingFlow) {
                 await this.saveCanvasData();
             }
         });
@@ -344,29 +362,51 @@ export default class BuilderModule {
     async loadFlowFromURL() {
         // Проверяем URL: /frontend/builder/flow/{flow_id}
         const pathMatch = window.location.pathname.match(/\/frontend\/builder\/flow\/([^/]+)/);
-        
-        if (pathMatch) {
-            const flowId = pathMatch[1];
-            console.log('🔗 Обнаружен flow в URL:', flowId);
-            await this.openAndExpandFlow(flowId);
-            return;
-        }
+        const flowIdFromURL = pathMatch ? pathMatch[1] : null;
         
         // Или через query параметр
         const urlParams = new URLSearchParams(window.location.search);
-        const flowIdParam = urlParams.get('flow_id');
+        const flowIdFromQuery = urlParams.get('flow_id');
         
-        if (flowIdParam) {
-            console.log('🔗 Обнаружен flow в параметрах:', flowIdParam);
-            await this.openAndExpandFlow(flowIdParam);
+        const flowId = flowIdFromURL || flowIdFromQuery;
+        
+        if (!flowId) {
+            return;
         }
+        
+        // Проверяем, не загружен ли уже этот flow
+        if (this.loadedFlowId === flowId && this.currentFlow && this.canvas?.nodes.size > 0) {
+            console.log('⏭️ Flow уже загружен:', flowId);
+            return;
+        }
+        
+        console.log('🔗 Загружаем flow из URL:', flowId);
+        await this.openAndExpandFlow(flowId);
     }
     
     /**
      * Открытие и рекурсивное разворачивание flow
      */
     async openAndExpandFlow(flowId) {
+        // Предотвращаем множественную загрузку
+        if (this.isLoadingFlow) {
+            console.log('⏭️ Flow уже загружается, пропускаем');
+            return;
+        }
+        
+        // Проверяем, не загружен ли уже этот flow
+        if (this.loadedFlowId === flowId && this.currentFlow?.flow_id === flowId) {
+            const hasFlowNode = Array.from(this.canvas.nodes.values()).some(
+                n => n.type === 'flow_node' && n.data.params?.flow_id === flowId
+            );
+            if (hasFlowNode) {
+                console.log('⏭️ Flow уже загружен и отображен:', flowId);
+                return;
+            }
+        }
+        
         try {
+            this.isLoadingFlow = true;
             console.log('📂 Загружаем и разворачиваем flow:', flowId);
             
             const response = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}`);
@@ -375,6 +415,7 @@ export default class BuilderModule {
             }
             
             this.currentFlow = await response.json();
+            this.loadedFlowId = flowId;
             
             // Обновляем тип entry_point агента
             await this.updateEntryPointAgentType();
@@ -386,13 +427,13 @@ export default class BuilderModule {
             const centerPos = this.canvas.getCenterPosition();
             
             const flowNodeData = {
-                id: `flow_${Date.now()}`,
+                id: `flow_${flowId}`,
                 type: 'flow_node',
                 params: {
                     flow_id: flowId,
                     isEntryPoint: true
                 },
-                ui: {
+                ui: this.currentFlow.canvas_data?.nodes?.[`flow_${flowId}`] || {
                     x: centerPos.x - 100,
                     y: centerPos.y - 50,
                     width: 200,
@@ -400,8 +441,16 @@ export default class BuilderModule {
                 }
             };
             
-            // Добавляем FlowNode (автоматически развернется через autoExpand)
-            const flowNode = await this.canvas.addNode(flowNodeData);
+            // Добавляем FlowNode без автоматического разворачивания
+            const flowNode = await this.canvas.addNode(flowNodeData, { autoExpand: false });
+
+            // Создаем layoutManager для позиционирования
+            const { LayoutManager } = await import('/static/builder/js/managers/LayoutManager.js');
+            const layoutManager = new LayoutManager();
+
+            // Разворачиваем вручную с layoutManager и canvasNodes
+            await flowNode.expand(layoutManager, this.currentFlow.canvas_data?.nodes);
+            debugger
             
             // Fit to screen после разворачивания
             setTimeout(() => {
@@ -415,6 +464,8 @@ export default class BuilderModule {
         } catch (error) {
             console.error('❌ Ошибка разворачивания flow:', error);
             this.showNotification('Ошибка загрузки flow', 'danger');
+        } finally {
+            this.isLoadingFlow = false;
         }
     }
     
@@ -422,36 +473,83 @@ export default class BuilderModule {
      * Открытие flow (без разворачивания)
      */
     async openFlow(flowId) {
+        console.log('🚀 openFlow called with flowId:', flowId);
+        // Предотвращаем множественную загрузку
+        if (this.isLoadingFlow) {
+            console.log('⏭️ Flow уже загружается, пропускаем');
+            return;
+        }
+
+        // Проверяем, не загружен ли уже этот flow
+        if (this.loadedFlowId === flowId && this.currentFlow?.flow_id === flowId) {
+            const hasFlowNode = Array.from(this.canvas.nodes.values()).some(
+                n => n.type === 'flow_node' && n.data.params?.flow_id === flowId
+            );
+            if (hasFlowNode) {
+                console.log('⏭️ Flow уже загружен:', flowId);
+                return;
+            }
+        }
+        
         try {
+            this.isLoadingFlow = true;
             console.log('📂 Загружаем flow:', flowId);
-            
+
+            // Очищаем canvas перед загрузкой нового flow
+            console.log('🧹 Очищаем canvas перед загрузкой');
+            this.canvas.clearGraph();
+
+            console.log('🌐 Fetching URL:', `/frontend/api/flows/${encodeURIComponent(flowId)}`);
             const response = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}`);
+            console.log('📡 fetch completed, response status:', response.status);
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }
+            console.log('📡 response ok, parsing JSON...');
             
             this.currentFlow = await response.json();
-            
+            console.log('📄 JSON parsed, currentFlow:', this.currentFlow);
+             this.loadedFlowId = flowId;
+
             // Обновляем тип entry_point агента
             await this.updateEntryPointAgentType();
-            
-            // Загружаем граф из graph_definition
-            if (this.currentFlow.graph_definition) {
-                await this.canvas.loadGraph(this.currentFlow.graph_definition);
-            }
-            
-            // Применяем визуальные данные из canvas_data
+
+            // Создаем FlowNode и разворачиваем граф из entry_point_agent
+            console.log('📂 Создаем граф из entry_point_agent');
+            const flowNodeData = {
+                id: `flow_${flowId}`,
+                type: 'flow_node',
+                params: {
+                    flow_id: flowId,
+                    name: this.currentFlow.name,
+                    description: this.currentFlow.description
+                },
+                ui: this.currentFlow.canvas_data?.nodes?.[`flow_${flowId}`] || {}
+            };
+
+            console.log('🎯 Перед expand: canvas_data =', this.currentFlow.canvas_data);
+            console.log('🎯 Перед expand: canvas_data.nodes =', this.currentFlow.canvas_data?.nodes);
+            const canvasNodes = this.currentFlow.canvas_data?.nodes;
+            console.log('🎯 canvasNodes to pass:', canvasNodes);
+            const flowNode = await this.canvas.addNode(flowNodeData);
+            await flowNode.expand(canvasNodes);
+            debugger;
+
+            // Применяем zoom/pan если есть
             if (this.currentFlow.canvas_data) {
                 this.applyCanvasVisualData(this.currentFlow.canvas_data);
             }
-            
+
             this.updateFlowInfo();
             this.enableFlowActions();
             this.showNotification(`Flow "${this.currentFlow.name}" загружен`, 'success');
             
         } catch (error) {
             console.error('❌ Ошибка загрузки flow:', error);
+            console.error('❌ Error stack:', error.stack);
             this.showNotification('Ошибка загрузки flow', 'danger');
+        } finally {
+            this.isLoadingFlow = false;
         }
     }
     
@@ -484,18 +582,20 @@ export default class BuilderModule {
      * Применение визуальных данных
      */
     applyCanvasVisualData(canvasData) {
+        // Применяем только zoom/pan (позиции нод уже применены при создании)
         if (canvasData.zoom) {
             this.canvas.zoom = canvasData.zoom;
         }
-        
+
         if (canvasData.panX !== undefined) {
             this.canvas.panX = canvasData.panX;
         }
-        
+
         if (canvasData.panY !== undefined) {
             this.canvas.panY = canvasData.panY;
         }
-        
+
+        // Обновляем трансформацию canvas после установки zoom/pan
         this.canvas.updateTransform();
     }
     
@@ -503,14 +603,15 @@ export default class BuilderModule {
      * Быстрое сохранение canvas_data (только позиции нод)
      */
     async saveCanvasData() {
-        if (!this.currentFlow) {
+        if (!this.currentFlow || this.isLoadingFlow) {
+            if (this.isLoadingFlow) {
+                console.log('⏭️ Пропускаем автосохранение во время загрузки flow');
+            }
             return;
         }
         
         try {
             console.log('💾 Автосохранение canvas_data...');
-            
-            const graphData = this.canvas.getGraphData();
             
             const canvasData = {
                 zoom: this.canvas.zoom,
@@ -527,12 +628,13 @@ export default class BuilderModule {
                     height: node.height
                 };
             });
+
+            console.log('💾 Сохраняем', Object.keys(canvasData.nodes).length, 'нод:', Object.keys(canvasData.nodes));
             
             const response = await fetch(`/frontend/api/flows/${encodeURIComponent(this.currentFlow.flow_id)}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    graph_definition: graphData,
                     canvas_data: canvasData
                 })
             });
@@ -736,6 +838,8 @@ export default class BuilderModule {
         this.propertiesPanel = null;
         this.sidebar = null;
         this.currentFlow = null;
+        this.loadedFlowId = null;
+        this.isLoadingFlow = false;
         this.isInitialized = false;
     }
     
