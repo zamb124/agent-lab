@@ -3,6 +3,10 @@
 
 {% block title %}Чат с агентами{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="/static/chat/css/chat-widget.css">
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid h-100">
     <div class="row h-100">
@@ -34,18 +38,31 @@
                     <!-- Сообщения будут добавляться динамически -->
                 </div>
                 
-                <!-- Поле ввода -->
-                <div id="chat-input-container" class="p-3 bg-white border-top">
-                    <div class="input-group">
-                        <input type="text" id="chat-input" class="form-control" placeholder="Введите сообщение..." disabled>
-                        <button id="chat-voice-btn" class="btn btn-outline-secondary" disabled title="Удерживайте для записи голоса">
-                            <i class="ti ti-mic"></i>
+                <!-- Поле ввода (остров + кнопки слева) -->
+                <div id="chat-input-container" class="chat-input-container">
+                    <div class="chat-files-preview hidden" id="chat-files-preview">
+                        <div class="file-preview-list" id="file-preview-list"></div>
+                    </div>
+
+                    <div class="chat-input-wrapper">
+                        <button class="chat-commands-btn" id="chat-commands-btn" title="Команды">
+                            <i class="ti ti-bolt"></i>
                         </button>
-                        <button id="chat-send-btn" class="btn btn-primary" disabled>
+                        <button class="chat-attach-btn" id="chat-attach-btn" title="Прикрепить файл">
+                            <i class="ti ti-paperclip"></i>
+                        </button>
+
+                        <input type="text" id="chat-input" class="chat-input" placeholder="Введите сообщение..." disabled>
+
+                        <button class="chat-voice-btn" id="chat-voice-btn" disabled title="Удерживайте для записи голоса">
+                            <i class="ti ti-microphone"></i>
+                        </button>
+                        <button class="chat-send-btn" id="chat-send-btn" disabled>
                             <i class="ti ti-send"></i>
                         </button>
                     </div>
-                    <div id="voice-recording-indicator" class="mt-2 text-center text-danger hidden">
+
+                    <div id="voice-recording-indicator" class="voice-recording-indicator hidden">
                         <i class="ti ti-record-circle"></i> Запись... Отпустите кнопку для отправки
                     </div>
                 </div>
