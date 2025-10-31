@@ -118,9 +118,9 @@ async def test_new_company_only_tools(migrated_db, storage, system_context, crea
     """
     test_company = await create_test_company("new_company_1_uniq")
 
-    # Создаем migrator локально для правильного event loop
-    from app.core.migration.migrator import Migrator
-    migrator = Migrator()
+    # Получаем migrator через контейнер
+    from app.core.container import get_container
+    migrator = get_container().migrator
 
     await migrator.migrate_defaults_for_company(test_company)
     
@@ -280,15 +280,15 @@ async def test_flow_with_image(migrated_db, storage, system_context, agent_repo,
 async def test_multiple_flows_isolation(migrated_db, storage, flow_factory, system_context, create_test_company, agent_repo, flow_repo):
     """
     Тест 6: Изоляция flows между компаниями.
-    
+
     Проверяет что flows в одной компании не видны в другой.
     """
     company1 = await create_test_company("isolation_company_1_uniq")
     company2 = await create_test_company("isolation_company_2_uniq")
 
-    # Создаем migrator локально для правильного event loop
-    from app.core.migration.migrator import Migrator
-    migrator = Migrator()
+    # Получаем migrator через контейнер
+    from app.core.container import get_container
+    migrator = get_container().migrator
 
     # Контекст уже установлен для последней созданной компании (company2)
     # Переключаемся на company1
