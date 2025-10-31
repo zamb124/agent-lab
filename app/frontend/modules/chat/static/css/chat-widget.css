@@ -399,7 +399,7 @@
     background: var(--chat-input-bg) !important;
     position: relative; /* база для абсолютного позиционирования кнопок */
     min-height: 92px;
-    padding: 14px 16px 80px 16px; /* снизу место под панель кнопок */
+    padding: 14px 16px 96px 16px; /* больше места под панель кнопок */
     border: 1px solid var(--chat-border);
     border-radius: 18px; /* скругление всего блока */
     box-shadow: var(--shadow-md, 0 6px 16px rgba(17, 24, 39, 0.08));
@@ -446,7 +446,7 @@
     transition: all var(--transition-normal, 0.25s ease);
     position: absolute; /* привязка к .chat-input-container */
     left: 12px;
-    bottom: 16px;
+    bottom: 24px;
 }
 
 .chat-commands-btn:hover {
@@ -469,7 +469,7 @@
     transition: all var(--transition-normal, 0.25s ease);
     position: absolute;
     left: 68px; /* рядышком после команды */
-    bottom: 16px;
+    bottom: 24px;
 }
 
 .chat-attach-btn:hover {
@@ -493,7 +493,7 @@
     user-select: none;
     position: absolute;
     left: 124px; /* третья кнопка слева */
-    bottom: 16px;
+    bottom: 24px;
 }
 
 .chat-voice-btn:hover {
@@ -569,7 +569,7 @@
     transition: all var(--transition-normal, 0.25s ease);
     position: absolute;
     right: 12px;
-    bottom: 16px; /* справа снизу */
+    bottom: 24px; /* справа снизу */
 }
 
 .chat-send-btn:hover {
@@ -636,11 +636,11 @@
 }
 
 .chat-widget.fullscreen .chat-input-container {
-    padding: 16px 20px 80px 20px; /* учитываем нижнюю панель кнопок */
+    padding: 16px 20px 90px 20px; /* больше места для нижней панели кнопок */
     flex-shrink: 0;
     position: relative;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 20px;
+    border-bottom-right-radius: 20px;
     margin: 0; /* островок прилипает к краям в полноэкранном режиме */
     border-left: none;
     border-right: none;

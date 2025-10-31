@@ -16,17 +16,36 @@
     
     <div id="chat-widget-body" class="chat-widget-body">
         <!-- Сообщения -->
-        <div id="chat-widget-messages" class="chat-messages p-2 overflow-auto bg-light">
-            <!-- Сообщения будут добавляться динамически -->
-        </div>
-        
-        <!-- Поле ввода -->
-        <div class="chat-input-container p-2 bg-white border-top">
-            <div class="input-group input-group-sm">
-                <input type="text" id="chat-widget-input" class="form-control" placeholder="Введите сообщение...">
-                <button id="chat-widget-send" class="btn btn-primary">
+        <div id="chat-widget-messages" class="chat-messages p-2 overflow-auto bg-light"></div>
+
+        <!-- Поле ввода (остров с превью файлов и нижней панелью кнопок) -->
+        <div class="chat-input-container">
+            <!-- Превью прикреплённых файлов -->
+            <div id="chat-files-preview" class="chat-files-preview"></div>
+
+            <!-- Скрытый input для выбора файлов -->
+            <input id="chat-file-input" type="file" class="hidden" multiple />
+
+            <div class="chat-input-wrapper">
+                <button id="chat-widget-commands" class="chat-commands-btn" title="Команды">
+                    <i class="ti ti-bolt"></i>
+                </button>
+                <button id="chat-widget-attach" class="chat-attach-btn" title="Прикрепить файл">
+                    <i class="ti ti-paperclip"></i>
+                </button>
+
+                <textarea id="chat-widget-input" class="chat-input" type="text" placeholder="Введите сообщение..." />
+
+                <button id="chat-widget-voice" class="chat-voice-btn" title="Удерживайте для записи">
+                    <i class="ti ti-microphone"></i>
+                </button>
+                <button id="chat-widget-send" class="chat-send-btn" title="Отправить">
                     <i class="ti ti-send"></i>
                 </button>
+            </div>
+
+            <div id="voice-recording-indicator-widget" class="voice-recording-indicator hidden">
+                <i class="ti ti-record-circle"></i> Запись... Отпустите для отправки
             </div>
         </div>
     </div>
