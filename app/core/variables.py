@@ -5,6 +5,7 @@
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from app.core.context import get_context
 
@@ -39,9 +40,20 @@ class VariableResolver:
         """
         variables = {}
         
-        # Системные переменные
+        context = get_context()
+        
+        # Системные переменные (с учётом таймзоны из state.store.timezone если есть)
         if include_system:
-            now = datetime.now()
+            tz = None
+            if context and getattr(context, "state", None):
+                store = context.state.get("store", {}) if isinstance(context.state, dict) else {}
+                tz_name = store.get("timezone") if isinstance(store, dict) else None
+                if tz_name:
+                    try:
+                        tz = ZoneInfo(tz_name)
+                    except Exception:
+                        tz = None
+            now = datetime.now(tz) if tz else datetime.now()
             variables.update({
                 "current_date": now.strftime("%Y-%m-%d"),
                 "current_time": now.strftime("%H:%M"),
@@ -50,8 +62,6 @@ class VariableResolver:
                 "current_month": now.month,
                 "current_day": now.day,
             })
-        
-        context = get_context()
         if not context:
             logger.warning("Нет контекста при резолвинге переменных")
             if local_vars:
@@ -90,7 +100,8 @@ class VariableResolver:
     def render_template(
         template: str,
         local_vars: Optional[Dict[str, Any]] = None,
-        safe: bool = True
+        safe: bool = True,
+        include_system: bool = True,
     ) -> str:
         """
         Рендерит шаблон с подстановкой переменных.
@@ -114,7 +125,7 @@ class VariableResolver:
         if not template:
             return template
             
-        variables = VariableResolver.resolve_all(local_vars=local_vars)
+        variables = VariableResolver.resolve_all(local_vars=local_vars, include_system=include_system)
         
         result = template
         

@@ -11,7 +11,7 @@ from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_flow_history_from_smart_flow(migrated_db, storage, flow_factory, unique_id, session_repo):
+async def test_flow_history_from_smart_flow(migrated_db, storage, flow_factory, system_context, unique_id, session_repo):
     """
     Тест получения истории сообщений из выполненного smart_flow
     """
@@ -89,7 +89,7 @@ async def test_flow_history_from_smart_flow(migrated_db, storage, flow_factory, 
 
 
 @pytest.mark.asyncio
-async def test_flow_history_with_checkpoints(migrated_db, storage, flow_factory, unique_id, session_repo):
+async def test_flow_history_with_checkpoints(migrated_db, storage, flow_factory, system_context, unique_id, session_repo):
     """
     Тест получения истории с детальной информацией о checkpoints
     """
@@ -145,7 +145,7 @@ async def test_flow_history_with_checkpoints(migrated_db, storage, flow_factory,
 
 
 @pytest.mark.asyncio
-async def test_flow_sessions_list(migrated_db, storage, flow_factory, unique_id, session_repo):
+async def test_flow_sessions_list(migrated_db, storage, flow_factory, system_context, unique_id, session_repo):
     """
     Тест получения списка сессий через FlowFactory
     """
@@ -246,7 +246,7 @@ async def test_flow_sessions_list(migrated_db, storage, flow_factory, unique_id,
 
 
 @pytest.mark.asyncio
-async def test_flow_history_tool_calls(migrated_db, storage, flow_factory, unique_id, session_repo):
+async def test_flow_history_tool_calls(migrated_db, storage, flow_factory, system_context, unique_id, session_repo):
     """
     Тест что история корректно фиксирует вызовы инструментов
     """

@@ -12,7 +12,7 @@ import pytest_asyncio
 import logging
 from datetime import datetime, timezone
 
-from app.core.context import set_context, clear_context
+from app.core.context import set_context, clear_context, get_context
 from app.identity.models import Company, User, AuthProvider, UserStatus
 from app.models.context_models import Context
 from app.models import ToolReference
@@ -136,7 +136,7 @@ async def test_new_company_only_tools(migrated_db, storage, migrator, create_tes
 
 
 @pytest.mark.asyncio
-async def test_install_flow_creates_dependencies(migrated_db, storage, flow_factory, migrator, create_test_company, agent_repo, flow_repo):
+async def test_install_flow_creates_dependencies(migrated_db, storage, flow_factory, system_context, create_test_company, agent_repo, flow_repo):
     """
     Тест 2: Установка flow создает все зависимости.
     
@@ -147,7 +147,11 @@ async def test_install_flow_creates_dependencies(migrated_db, storage, flow_fact
     - Выполняется install hook
     """
     test_company = await create_test_company("install_test_company")
-    
+
+    # Создаем migrator локально для правильного event loop
+    from app.core.migration.migrator import Migrator
+    migrator = Migrator()
+
     await migrator.migrate_defaults_for_company(test_company)
     
     weather_flow = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
@@ -178,7 +182,7 @@ async def test_install_flow_creates_dependencies(migrated_db, storage, flow_fact
 
 
 @pytest.mark.asyncio
-async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_factory, migrator, create_test_company, agent_repo, flow_repo):
+async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_factory, system_context, create_test_company, agent_repo, flow_repo):
     """
     Тест 3: Удаление flow удаляет все зависимости.
     
@@ -189,7 +193,11 @@ async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_fa
     - Публичные tools остаются
     """
     test_company = await create_test_company("uninstall_test_company")
-    
+
+    # Создаем migrator локально для правильного event loop
+    from app.core.migration.migrator import Migrator
+    migrator = Migrator()
+
     await migrator.migrate_defaults_for_company(test_company)
     
     await flow_factory.install_flow("app.flows.weather_flow.weather_flow_config")
@@ -223,7 +231,7 @@ async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_fa
 
 
 @pytest.mark.asyncio
-async def test_flow_hooks_execution(migrated_db, storage, agent_repo, flow_repo):
+async def test_flow_hooks_execution(migrated_db, storage, system_context, agent_repo, flow_repo):
     """
     Тест 4: Проверка выполнения хуков install и uninstall.
     
@@ -248,7 +256,7 @@ async def test_flow_hooks_execution(migrated_db, storage, agent_repo, flow_repo)
 
 
 @pytest.mark.asyncio
-async def test_hooks_actually_execute(migrated_db, storage, flow_factory, migrator, create_test_company, agent_repo, flow_repo):
+async def test_hooks_actually_execute(migrated_db, storage, flow_factory, system_context, create_test_company, agent_repo, flow_repo):
     """
     Тест 4.5: Проверка ФАКТИЧЕСКОГО выполнения хуков install and uninstall.
     
@@ -300,7 +308,7 @@ async def test_hooks_actually_execute(migrated_db, storage, flow_factory, migrat
 
 
 @pytest.mark.asyncio
-async def test_flow_with_image(migrated_db, storage, agent_repo, flow_repo):
+async def test_flow_with_image(migrated_db, storage, system_context, agent_repo, flow_repo):
     """
     Тест 5: Проверка загрузки картинки flow в S3.
     
@@ -318,7 +326,7 @@ async def test_flow_with_image(migrated_db, storage, agent_repo, flow_repo):
 
 
 @pytest.mark.asyncio
-async def test_multiple_flows_isolation(migrated_db, storage, flow_factory, migrator, create_test_company, agent_repo, flow_repo):
+async def test_multiple_flows_isolation(migrated_db, storage, flow_factory, system_context, create_test_company, agent_repo, flow_repo):
     """
     Тест 6: Изоляция flows между компаниями.
     
@@ -326,7 +334,11 @@ async def test_multiple_flows_isolation(migrated_db, storage, flow_factory, migr
     """
     company1 = await create_test_company("isolation_company_1")
     company2 = await create_test_company("isolation_company_2")
-    
+
+    # Создаем migrator локально для правильного event loop
+    from app.core.migration.migrator import Migrator
+    migrator = Migrator()
+
     # Контекст уже установлен для последней созданной компании (company2)
     # Переключаемся на company1
     from app.core.context import get_context
@@ -374,7 +386,7 @@ async def test_multiple_flows_isolation(migrated_db, storage, flow_factory, migr
 
 
 @pytest.mark.asyncio
-async def test_flow_author_extraction(migrated_db, storage, agent_repo, flow_repo):
+async def test_flow_author_extraction(migrated_db, storage, system_context, agent_repo, flow_repo):
     """
     Тест 7: Проверка извлечения информации об авторе.
     
@@ -393,14 +405,18 @@ async def test_flow_author_extraction(migrated_db, storage, agent_repo, flow_rep
 
 
 @pytest.mark.asyncio
-async def test_install_twice_should_succeed(migrated_db, storage, flow_factory, migrator, create_test_company, agent_repo, flow_repo):
+async def test_install_twice_should_succeed(migrated_db, storage, flow_factory, system_context, create_test_company, agent_repo, flow_repo):
     """
     Тест 8: Повторная установка flow должна перезаписывать существующий.
     
     Проверяет что можно переустановить flow (перемиграция).
     """
     test_company = await create_test_company("double_install_company")
-    
+
+    # Создаем migrator локально для правильного event loop
+    from app.core.migration.migrator import Migrator
+    migrator = Migrator()
+
     await migrator.migrate_defaults_for_company(test_company)
     
     result1 = await flow_factory.install_flow("app.flows.weather_flow.weather_flow_config")
@@ -449,16 +465,25 @@ async def test_install_twice_should_succeed(migrated_db, storage, flow_factory, 
 
 
 @pytest.mark.asyncio
-async def test_uninstall_not_installed_should_fail(migrated_db, storage, flow_factory, migrator, create_test_company, agent_repo, flow_repo):
+async def test_uninstall_not_installed_should_fail(migrated_db, storage, flow_factory, system_context, create_test_company, agent_repo, flow_repo):
     """
     Тест 9: Удаление неустановленного flow должно вызывать ошибку.
     
     Проверяет что нельзя удалить flow который не установлен.
     """
     test_company = await create_test_company("uninstall_empty_company")
-    
+
+    # Создаем migrator локально для правильного event loop
+    from app.core.migration.migrator import Migrator
+    migrator = Migrator()
+
     await migrator.migrate_defaults_for_company(test_company)
-    
+
+    # Устанавливаем контекст для test_company
+    context = get_context()
+    context.active_company = test_company
+    await set_context(context)
+
     error_raised = False
     try:
         await flow_factory.uninstall_flow("app.flows.weather_flow.weather_flow_config")

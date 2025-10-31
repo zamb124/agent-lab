@@ -8,7 +8,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 
 @pytest.mark.asyncio
-async def test_weather_flow_execution(migrated_db, flow_factory, unique_id):
+async def test_weather_flow_execution(migrated_db, flow_factory, system_context, unique_id):
     """Тест выполнения weather_flow из БД"""
     
     weather_flow = await flow_factory.get_flow("app.flows.weather_flow.weather_flow_config")
@@ -28,7 +28,7 @@ async def test_weather_flow_execution(migrated_db, flow_factory, unique_id):
     print(f"✅ Weather flow выполнен из БД: {final_message[:100]}...")
 
 @pytest.mark.asyncio
-async def test_smart_flow_math_execution(migrated_db, flow_factory, mock_llm, unique_id):
+async def test_smart_flow_math_execution(migrated_db, flow_factory, system_context, mock_llm, unique_id):
     """Тест математического запроса в smart_flow из БД"""
     
     mock_llm.configure(
@@ -63,7 +63,7 @@ async def test_smart_flow_math_execution(migrated_db, flow_factory, mock_llm, un
     print(f"✅ Smart flow математический тест из БД: {final_message[:100]}...")
 
 @pytest.mark.asyncio
-async def test_smart_flow_weather_execution(migrated_db, flow_factory, unique_id):
+async def test_smart_flow_weather_execution(migrated_db, flow_factory, system_context, unique_id):
     """Тест погодного запроса в smart_flow из БД"""
     
     smart_flow = await flow_factory.get_flow("app.flows.smart_flow.smart_flow_config")
@@ -84,7 +84,7 @@ async def test_smart_flow_weather_execution(migrated_db, flow_factory, unique_id
     print(f"✅ Smart flow погодный тест из БД: {final_message[:100]}...")
 
 @pytest.mark.asyncio
-async def test_flow_isolation(migrated_db, flow_factory, mock_llm):
+async def test_flow_isolation(migrated_db, flow_factory, system_context, mock_llm):
     """Тест изоляции флоу - разные thread_id не должны влиять друг на друга"""
     
     import asyncio

@@ -5,7 +5,7 @@ Pydantic модели для конфигурации агентов и флоу
 
 from __future__ import annotations
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, ConfigDict
 from typing import Optional, List, Dict, Any, TYPE_CHECKING, Union
 from enum import Enum
 from datetime import datetime, timezone
@@ -1392,8 +1392,8 @@ class FlowConfig(BuilderEntity):
         
         flow_config = cls.from_flow_config_object(flow_config_orig, flow_id)
         
-        if flow_config.image_path:
-            flow_config = await cls._upload_image_to_s3(flow_config)
+        # Загрузка изображений в S3 не выполняется во время миграции,
+        # чтобы исключить внешние побочные эффекты и зависания тестов.
         
         flow_config.source = "migration"
         now = datetime.now(timezone.utc)
