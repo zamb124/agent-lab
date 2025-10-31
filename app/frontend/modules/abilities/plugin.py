@@ -28,7 +28,7 @@ class AbilitiesPlugin(Plugin):
             "url": "/frontend/abilities/",
             "order": 30,
             "type": "htmx",
-            "group": "Способности",
+            "group": "Агенты и Боты",
             "group_icon": "star",
             "group_order": 30
         }
