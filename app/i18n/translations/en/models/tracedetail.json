@@ -1,0 +1,10 @@
+{
+  "fields": {
+    "trace_info": {
+      "description": "[TODO: models.tracedetail.fields.trace_info.description]"
+    },
+    "spans": {
+      "description": "[TODO: models.tracedetail.fields.spans.description]"
+    }
+  }
+}

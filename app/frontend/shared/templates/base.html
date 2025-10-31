@@ -5,10 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>{% block title %}{{ t('common.app_name') }}{% endblock %}</title>
-    
+
     <!-- Favicon -->
     <link rel="icon" type="image/jpeg" href="/static/img/favicon.jpg">
-    
     <!-- Применяем тему ДО загрузки страницы для избежания мигания -->
     <script>
         (function() {
@@ -16,16 +15,14 @@
             document.documentElement.setAttribute('data-theme', savedTheme);
         })();
     </script>
-    
-    
+
     <!-- Tabler Icons -->
     <link rel="stylesheet" href="/static/fonts/tabler-icons/tabler-icons.min.css">
-    
+
     <!-- HTMX -->
     <script src="/static/js/htmx.min.js" defer></script>
     <script src="/static/js/json-enc.js" defer></script>
     <script src="/static/js/htmx-ext-ws.js" defer></script>
-    
     <!-- Custom CSS (единый файл со всеми компонентами) -->
     <link rel="stylesheet" href="/static/css/main.css?v=10">
 
@@ -60,7 +57,7 @@
 
     <!-- Контейнер для уведомлений -->
     <div id="notifications-container"></div>
-    
+
     <!-- Контейнер для модальных окон -->
     <div id="modal-container"></div>
 
@@ -69,13 +66,13 @@
 
     <!-- Opus Recorder для записи голоса в OGG/Opus -->
     <script src="/static/js/opus-recorder.min.js"></script>
-    
+
     <!-- CodeEditor компонент (нужен для inline кода) -->
     <script src="/static/js/components/code-editor.js"></script>
 
     <!-- Modal Manager (система модальных окон) -->
     <script src="/static/js/components/modal.js"></script>
-    
+
     <!-- Creativity Slider Component -->
     <script src="/static/js/components/creativity-slider.js"></script>
 
@@ -85,13 +82,13 @@
 
     <!-- Prompt Editor -->
     <script src="/static/js/prompt-editor.js" type="module"></script>
-    
+
     <!-- Dropdown (без Bootstrap) -->
     <script src="/static/js/dropdown.js"></script>
-    
+
     <!-- Main APP JavaScript -->
     <script src="/static/js/app.js" type="module"></script>
-    
+
     {% block scripts %}{% endblock %}
 </body>
 </html>

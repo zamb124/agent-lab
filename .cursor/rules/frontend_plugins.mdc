@@ -1,6 +1,8 @@
 ---
 description: фронтенд плагины
 alwaysApply: false
+globs:
+  - "app/frontend/**/*"
 ---
 # Плагинная система фронтенда
 
@@ -51,19 +53,19 @@ from app.frontend.core.plugin_system import Plugin
 
 class MyPlugin(Plugin):
     """Описание плагина"""
-    
+
     name = "my_plugin"
     display_name = "Мой плагин"
     version = "1.0.0"
     description = "Краткое описание"
     author = "Agents Lab"
-    
+
     requires_auth = True
     requires_role = "user"
-    
+
     static_css = ["my_plugin.css"]
     static_js = ["my_plugin.module.js"]
-    
+
     sidebar_items = [
         {
             "id": "my_plugin",
@@ -74,7 +76,7 @@ class MyPlugin(Plugin):
             "type": "htmx"
         }
     ]
-    
+
     dashboard_widgets = [
         {
             "id": "my_widget",
@@ -85,7 +87,7 @@ class MyPlugin(Plugin):
             "order": 100
         }
     ]
-    
+
     def get_router(self):
         from .router import router
         return router
@@ -118,25 +120,25 @@ export default class MyPluginModule {
         this.name = 'my_plugin';
         this.version = '1.0.0';
     }
-    
+
     async init() {
         console.log('✅ MyPlugin инициализирован');
-        
+
         this.setupGlobalFunctions();
         this.setupEventListeners();
-        
+
         if (this.isMyPluginPage()) {
             await this.loadDependencies();
             await this.initializePage();
         }
-        
+
         return this;
     }
-    
+
     setupGlobalFunctions() {
         window.doSomething = () => this.doSomething();
     }
-    
+
     setupEventListeners() {
         document.addEventListener('htmx:afterSettle', (e) => {
             if (e.target.id === 'content' && this.isMyPluginPage()) {
@@ -144,31 +146,31 @@ export default class MyPluginModule {
             }
         });
     }
-    
+
     isMyPluginPage() {
         return window.location.pathname.startsWith('/frontend/my_plugin');
     }
-    
+
     async loadDependencies() {
         console.log('📦 Загружаем зависимости...');
-        
+
         const [Dep1, Dep2] = await Promise.all([
             import('/static/my_plugin/js/dep1.js'),
             import('/static/my_plugin/js/dep2.js')
         ]);
-        
+
         this.Dep1 = Dep1.default;
         this.Dep2 = Dep2.default;
     }
-    
+
     async initializePage() {
         console.log('🔧 Инициализация страницы MyPlugin');
     }
-    
+
     doSomething() {
         console.log('MyPlugin doing something');
     }
-    
+
     destroy() {
         console.log('🧹 MyPlugin модуль выгружен');
     }
@@ -235,7 +237,7 @@ sidebar_items = [
 ]
 </good_example>
 
-**type: "htmx"** - загрузка через HTMX в `#content` (рекомендуется)  
+**type: "htmx"** - загрузка через HTMX в `#content` (рекомендуется)
 **type: "page"** - обычный переход на страницу
 
 ## Dashboard Widgets
@@ -276,11 +278,11 @@ class MyPlugin(Plugin):
     async def on_load(self, app: FastAPI):
         """Вызывается при загрузке плагина"""
         print(f"Loading {self.name}...")
-    
+
     async def on_enable(self):
         """Вызывается при включении плагина"""
         pass
-    
+
     async def on_disable(self):
         """Вызывается при отключении плагина"""
         pass
@@ -294,7 +296,7 @@ export default class MyPluginModule {
         // Инициализация плагина
         return this;
     }
-    
+
     destroy() {
         // Очистка при выгрузке
     }
@@ -331,7 +333,7 @@ export default class BuilderModule {
         this.Canvas = null;
         this.DragDrop = null;
     }
-    
+
     async init() {
         if (this.isBuilderPage()) {
             await this.loadDependencies();
@@ -339,21 +341,21 @@ export default class BuilderModule {
         }
         return this;
     }
-    
+
     isBuilderPage() {
         return window.location.pathname.startsWith('/frontend/builder');
     }
-    
+
     async loadDependencies() {
         if (this.Canvas) return;
-        
+
         console.log('📦 Загружаем зависимости Builder...');
-        
+
         const [Canvas, DragDrop] = await Promise.all([
             import('/static/builder/js/canvas.js'),
             import('/static/builder/js/drag-drop.js')
         ]);
-        
+
         this.Canvas = Canvas.default;
         this.DragDrop = DragDrop.default;
     }
@@ -383,7 +385,7 @@ setupEventListeners() {
             this.onPageLoad();
         }
     });
-    
+
     window.addEventListener('popstate', () => {
         if (this.isMyPluginPage()) {
             this.onPageLoad();
@@ -448,10 +450,10 @@ await app.pluginManager.reload('my_plugin');
 class SimplePlugin(Plugin):
     name = "simple"
     display_name = "Простой плагин"
-    
+
     static_css = ["simple.css"]
     static_js = []
-    
+
     sidebar_items = [{
         "id": "simple",
         "label": "simple.title",
@@ -459,7 +461,7 @@ class SimplePlugin(Plugin):
         "url": "/frontend/simple/",
         "type": "htmx"
     }]
-    
+
     def get_router(self):
         from .router import router
         return router
@@ -471,7 +473,7 @@ class SimplePlugin(Plugin):
 class StatsPlugin(Plugin):
     name = "stats"
     display_name = "Статистика"
-    
+
     dashboard_widgets = [
         {
             "id": "user_stats",
@@ -482,7 +484,7 @@ class StatsPlugin(Plugin):
             "order": 5
         }
     ]
-    
+
     def get_router(self):
         from .router import router
         return router
@@ -494,7 +496,7 @@ class StatsPlugin(Plugin):
 class BillingPlugin(Plugin):
     name = "billing"
     display_name = "Биллинг"
-    
+
     footer_items = [
         {
             "id": "billing",
@@ -504,7 +506,7 @@ class BillingPlugin(Plugin):
             "order": 20
         }
     ]
-    
+
     def get_router(self):
         from .router import router
         return router
@@ -585,7 +587,7 @@ export default class MyPluginModule {
         }
         return this;
     }
-    
+
     async loadDependencies() {
         const HeavyLib = await import('/static/my_plugin/js/heavy-lib.js');
         this.heavy = new HeavyLib.default();
@@ -610,12 +612,12 @@ export default class MyPluginModule {
     constructor(app) {
         this.handler = this.handleClick.bind(this);
     }
-    
+
     async init() {
         document.addEventListener('click', this.handler);
         return this;
     }
-    
+
     destroy() {
         document.removeEventListener('click', this.handler);
     }
@@ -662,7 +664,7 @@ from app.frontend.core.plugin_system import Plugin
 class MyPlugin(Plugin):
     name = "my_plugin"
     display_name = "Мой плагин"
-    
+
     def get_router(self):
         from .router import router
         return router
@@ -680,11 +682,11 @@ export default class MyPluginModule {
     constructor(app) {
         this.app = app;
     }
-    
+
     async init() {
         return this;
     }
-    
+
     destroy() {}
 }
 ```

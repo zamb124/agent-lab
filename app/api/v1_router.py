@@ -19,7 +19,8 @@ from app.api.v1 import (
     payments,
     admin_payments,
     variables,
-    knowledge_base
+    knowledge_base,
+    traces
 )
 
 # Создание главного роутера v1
@@ -41,3 +42,4 @@ router.include_router(whatsapp.router, tags=["whatsapp"], include_in_schema=Fals
 router.include_router(tokens.router, tags=["tokens"], include_in_schema=False)
 router.include_router(admin_payments.router, tags=["admin-payments"], include_in_schema=False)
 router.include_router(variables.router, tags=["variables"], include_in_schema=False)
+router.include_router(traces.router, tags=["traces"], include_in_schema=False)

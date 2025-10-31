@@ -1,0 +1,37 @@
+{
+  "fields": {
+    "trace_id": {
+      "description": "[TODO: models.traceinfo.fields.trace_id.description]"
+    },
+    "name": {
+      "description": "[TODO: models.traceinfo.fields.name.description]"
+    },
+    "status": {
+      "description": "[TODO: models.traceinfo.fields.status.description]"
+    },
+    "start_time": {
+      "description": "[TODO: models.traceinfo.fields.start_time.description]"
+    },
+    "end_time": {
+      "description": "[TODO: models.traceinfo.fields.end_time.description]"
+    },
+    "duration_ms": {
+      "description": "[TODO: models.traceinfo.fields.duration_ms.description]"
+    },
+    "total_spans": {
+      "description": "[TODO: models.traceinfo.fields.total_spans.description]"
+    },
+    "total_cost": {
+      "description": "[TODO: models.traceinfo.fields.total_cost.description]"
+    },
+    "error_count": {
+      "description": "[TODO: models.traceinfo.fields.error_count.description]"
+    },
+    "root_span_type": {
+      "description": "[TODO: models.traceinfo.fields.root_span_type.description]"
+    },
+    "metadata": {
+      "description": "[TODO: models.traceinfo.fields.metadata.description]"
+    }
+  }
+}

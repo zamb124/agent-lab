@@ -1,7 +1,5 @@
 version: '3.8'
 
-# Include Langfuse services
-
 services:
   # PostgreSQL база данных (только для локальной разработки)
   postgres:

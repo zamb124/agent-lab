@@ -1,0 +1,74 @@
+{% import 'components.html' as c %}
+
+<link rel="stylesheet" href="/static/traces/css/traces.css">
+
+<h1 class="header-title" id="page-title" hx-swap-oob="true">
+    <i class="bi bi-diagram-3 me-2"></i>
+    Трейсы
+</h1>
+
+<div class="container-fluid py-4">
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <form id="traces-filters"
+                  hx-get="/frontend/traces/list"
+                  hx-target="#traces-table"
+                  hx-trigger="submit, change from:select"
+                  class="d-flex flex-wrap align-items-center gap-2">
+
+                <select class="form-select form-select-sm" style="width: 140px;" name="status">
+                    <option value="">Статус</option>
+                    <option value="success">Success</option>
+                    <option value="error">Error</option>
+                    <option value="pending">Pending</option>
+                </select>
+
+                <select class="form-select form-select-sm" style="width: 140px;" name="span_type">
+                    <option value="">Тип</option>
+                    <option value="agent">Agent</option>
+                    <option value="llm">LLM</option>
+                    <option value="tool">Tool</option>
+                    <option value="chain">Chain</option>
+                    <option value="retriever">Retriever</option>
+                </select>
+
+                {{ c.button('Применить',
+                    variant='primary',
+                    size='sm',
+                    icon='funnel',
+                    type='submit'
+                ) }}
+
+                {{ c.button('Сбросить',
+                    variant='outline-secondary',
+                    size='sm',
+                    icon='x-circle',
+                    type='button',
+                    onclick='document.getElementById(\'traces-filters\').reset(); htmx.trigger(\'#traces-filters\', \'submit\');'
+                ) }}
+            </form>
+        </div>
+    </div>
+
+    <div id="traces-table"
+         hx-get="/frontend/traces/list"
+         hx-trigger="load">
+        {{ c.skeleton(type='table', count=5) }}
+    </div>
+</div>
+
+<div id="modal-container"></div>
+
+<script>
+document.body.addEventListener('htmx:afterSwap', (event) => {
+    if (event.detail.target.id === 'modal-container') {
+        const modalOverlay = document.querySelector('#modal-container .modal-overlay');
+        if (modalOverlay) {
+            document.body.style.overflow = 'hidden';
+        }
+    }
+});
+</script>
+
+
+
