@@ -74,6 +74,39 @@ export class BotSettingsManager {
                 card.classList.add('collapsed');
             }
         });
+
+        // Инлайн-редактирование имени бота в заголовке
+        const nameDisplay = document.getElementById('bot-name-display');
+        const nameInput = document.getElementById('bot-name');
+        if (nameDisplay && nameInput) {
+            const startEdit = () => {
+                nameInput.style.display = '';
+                nameInput.value = (nameDisplay.textContent || '').trim();
+                nameInput.focus();
+                nameInput.select();
+                nameDisplay.style.display = 'none';
+            };
+            const finishEdit = () => {
+                const newName = nameInput.value?.trim();
+                if (newName) {
+                    nameDisplay.textContent = newName;
+                }
+                nameInput.style.display = 'none';
+                nameDisplay.style.display = '';
+            };
+            nameDisplay.addEventListener('click', startEdit);
+            nameInput.addEventListener('blur', finishEdit);
+            nameInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    finishEdit();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    nameInput.style.display = 'none';
+                    nameDisplay.style.display = '';
+                }
+            });
+        }
     }
     
     initPromptEditor() {

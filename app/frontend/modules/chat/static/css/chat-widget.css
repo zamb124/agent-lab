@@ -887,6 +887,39 @@
     gap: 6px;
 }
 
+/* Компактное отображение файлов в сообщении пользователя: имя + маленькая кнопка */
+.file-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 260px;
+}
+
+.file-inline-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+    color: var(--chat-input-text);
+}
+
+.file-inline-download {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    border: 1px solid var(--chat-border);
+    color: var(--accent-primary, #6366f1);
+    text-decoration: none;
+    font-size: 12px;
+}
+
+.file-inline-download:hover {
+    background: var(--chat-agent-msg-bg);
+}
+
 .chat-file-card {
     display: flex;
     align-items: center;
@@ -957,10 +990,25 @@
 }
 
 .message-download-links {
-    margin-top: 8px;
+    margin-top: 6px;
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
+}
+
+.message-download-links .download-link-container {
+    padding: 0;
+    margin: 0;
+}
+
+.message-download-links .file-preview {
+    padding: 0;
+    background: transparent;
+    border: none;
+}
+
+.message-download-links .file-preview .file-info {
+    margin-top: 0;
 }
 
 .download-link-button {

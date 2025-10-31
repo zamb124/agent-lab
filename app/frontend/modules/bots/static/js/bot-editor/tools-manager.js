@@ -132,11 +132,11 @@ export class ToolsManager {
             const container = document.createElement('div');
             container.className = 'tools-container';
 
-            // Секция "Возможности" (группы)
+            // Секция "Способности" (группы)
             if (groupedTools.size > 0) {
                 const abilitiesSection = document.createElement('div');
                 abilitiesSection.className = 'tools-section';
-                abilitiesSection.innerHTML = '<h4 class="tools-section-title"><i class="ti ti-apps"></i> Возможности</h4>';
+                abilitiesSection.innerHTML = '<h4 class="tools-section-title"><i class="ti ti-apps"></i> Способности</h4>';
 
                 const abilitiesGrid = document.createElement('div');
                 abilitiesGrid.className = 'abilities-grid';
@@ -162,7 +162,7 @@ export class ToolsManager {
                     let indicatorElement = null;
                     if (isFullySelected) {
                         indicatorElement = document.createElement('i');
-                        indicatorElement.className = 'ti ti-check-circle-fill';
+                        indicatorElement.className = 'ti ti-check';
                     } else if (isPartiallySelected) {
                         indicatorElement = document.createElement('div');
                         indicatorElement.className = 'partial-indicator';
@@ -255,10 +255,10 @@ export class ToolsManager {
                 container.appendChild(abilitiesSection);
             }
 
-            // Секция "Все возможности" (отдельные тулы)
+            // Секция "Все Инструменты" (отдельные тулы)
             const allToolsSection = document.createElement('div');
             allToolsSection.className = 'tools-section';
-            allToolsSection.innerHTML = '<h4 class="tools-section-title"><i class="ti ti-list"></i> Все возможности</h4>';
+            allToolsSection.innerHTML = '<h4 class="tools-section-title"><i class="ti ti-list"></i> Все Инструменты</h4>';
 
             const toolsList = document.createElement('div');
             toolsList.className = 'abilities-selector-grid';
@@ -291,7 +291,7 @@ export class ToolsManager {
                             </div>
                             <div class="ability-header-right">
                                 <div class="ability-selector-check">
-                                    <i class="ti ti-check-circle-fill"></i>
+                                    <i class="ti ti-check"></i>
                                 </div>
                                 <div class="ability-badges">
                                     ${badge}

@@ -159,16 +159,59 @@ class PluginRegistry:
             self.enabled_plugins.remove(name)
     
     def get_sidebar_items(self, user_role: Optional[str] = None, company_subdomain: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Собрать все пункты sidebar из плагинов"""
-        items = []
+        """Собрать все пункты sidebar из плагинов с поддержкой групп.
+
+        Правила группировки:
+        - Элементы, у которых указан ключ "group" (строка), объединяются в группу с таким названием
+        - Порядок группы = минимальный order среди её детей
+        - Иконка группы берётся из первого непустого "group_icon" элемента, иначе "folder"
+        - Группа имеет тип "group" и по умолчанию помечается как раскрытая (open=True)
+        - Элементы без группы остаются на верхнем уровне
+        - Уже заданные вложенные элементы (type == 'submenu') не изменяются
+        """
+        flat_items: List[Dict[str, Any]] = []
         for plugin in self.get_enabled():
             if user_role and plugin.requires_role and plugin.requires_role != user_role:
                 continue
             if plugin.requires_company and plugin.requires_company != company_subdomain:
                 continue
-            items.extend(plugin.sidebar_items)
-        
-        return sorted(items, key=lambda x: x.get('order', 100))
+            flat_items.extend(plugin.sidebar_items)
+
+        # Сбор групп
+        groups: Dict[str, Dict[str, Any]] = {}
+        top_level_items: List[Dict[str, Any]] = []
+
+        for item in flat_items:
+            group_name = item.get("group")
+            if isinstance(group_name, str) and group_name.strip():
+                name = group_name.strip()
+                if name not in groups:
+                    groups[name] = {
+                        "id": f"group_{name.lower().replace(' ', '_')}",
+                        "label": name,
+                        "icon": item.get("group_icon") or "folder",
+                        "type": "group",
+                        "open": True,
+                        "children": [],
+                        "order": item.get("group_order", item.get("order", 100)),
+                    }
+                # Обновляем order/иконку группы при необходимости
+                groups[name]["order"] = min(
+                    groups[name]["order"], item.get("group_order", item.get("order", 100))
+                )
+                if not groups[name].get("icon") and item.get("group_icon"):
+                    groups[name]["icon"] = item.get("group_icon")
+                groups[name]["children"].append(item)
+            else:
+                top_level_items.append(item)
+
+        # Отсортировать детей внутри групп
+        for group in groups.values():
+            group["children"] = sorted(group["children"], key=lambda x: x.get("order", 100))
+
+        # Собрать итоговый список: top-level без группы + группы
+        result: List[Dict[str, Any]] = top_level_items + list(groups.values())
+        return sorted(result, key=lambda x: x.get('order', 100))
     
     def get_footer_items(self, user_role: Optional[str] = None, company_subdomain: Optional[str] = None) -> List[Dict[str, Any]]:
         """Собрать все пункты footer из плагинов"""

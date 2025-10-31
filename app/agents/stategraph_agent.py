@@ -14,6 +14,7 @@ from app.core.container import get_container
 logger = logging.getLogger(__name__)
 
 
+
 class StateGraphAgent(BaseAgent):
     """
     Агент на базе кастомного StateGraph.

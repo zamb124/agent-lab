@@ -27,7 +27,10 @@ class BuilderPlugin(Plugin):
             "icon": "palette",
             "url": "/frontend/builder/",
             "order": 50,
-            "type": "page"
+            "type": "page",
+            "group": "Инструменты",
+            "group_icon": "tools",
+            "group_order": 50
         }
     ]
     

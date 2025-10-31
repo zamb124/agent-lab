@@ -4,6 +4,7 @@
 
 import VoiceRecorder from '/static/js/chat/voice-recorder.js';
 import ChatMessageRenderer, { MESSAGE_TYPES } from '/static/js/chat/message-renderer.js';
+import CheckpointInspector from '/static/js/components/checkpoint-inspector.js';
 import { generateUUID } from '/static/js/utils/uuid.js';
 import { formatFileSize } from '/static/js/utils/formatting.js';
 import { fileToBase64 } from '/static/js/utils/files.js';
@@ -22,6 +23,7 @@ class ChatManager {
         this.container = null;
         this.messageRenderer = new ChatMessageRenderer();
         this.voiceRecorder = new VoiceRecorder();
+        this.checkpointInspector = new CheckpointInspector(app, this);
         this.selectedFiles = null;
         
         this.isReconnecting = false;
@@ -291,8 +293,35 @@ class ChatManager {
         await this.updateChatHeader();
         this.updateAgentsPanel();
         this.updateInputState();
+        this.updateInspectButton();
 
         console.log(`✅ Переключились на агента ${agent_id}, сессия: ${this.currentSession}`);
+    }
+
+    updateInspectButton() {
+        const inspectBtn = document.getElementById('chat-widget-inspect');
+        if (!inspectBtn) {
+            console.warn('⚠️ Кнопка inspect не найдена в DOM');
+            return;
+        }
+        
+        console.log('🔍 updateInspectButton:', {
+            currentSession: this.currentSession,
+            currentAgent: this.currentAgent,
+            hasSession: !!this.currentSession
+        });
+        
+        if (this.currentSession) {
+            inspectBtn.classList.remove('hidden');
+            inspectBtn.style.display = '';
+            inspectBtn.disabled = false;
+            console.log('✅ Кнопка inspect показана');
+        } else {
+            inspectBtn.classList.add('hidden');
+            inspectBtn.style.display = 'none';
+            inspectBtn.disabled = true;
+            console.log('❌ Кнопка inspect скрыта - нет сессии');
+        }
     }
 
     updateInputState() {
@@ -440,6 +469,7 @@ class ChatManager {
         const minimize = document.getElementById('chat-widget-minimize');
         const close = document.getElementById('chat-widget-close');
         const popup = document.getElementById('chat-widget-popup');
+        const inspectBtn = document.getElementById('chat-widget-inspect');
         const agentsBtn = document.getElementById('chat-widget-agents');
         const infoBtn = document.getElementById('chat-widget-info');
         const commandsBtn = document.getElementById('chat-widget-commands');
@@ -453,6 +483,7 @@ class ChatManager {
         minimize?.addEventListener('click', () => this.minimizeChat());
         close?.addEventListener('click', () => this.closeChat());
         popup?.addEventListener('click', () => this.openInNewWindow());
+        inspectBtn?.addEventListener('click', () => this.checkpointInspector.showInspector(this.currentSession));
         agentsBtn?.addEventListener('click', () => this.toggleAgentsPanel());
         infoBtn?.addEventListener('click', () => this.showFlowInfo());
         
@@ -634,6 +665,7 @@ class ChatManager {
         await this.updateChatHeader();
         this.updateAgentsPanel();
         this.updateInputState();
+        this.updateInspectButton();
 
         this.showChat();
 
@@ -671,6 +703,7 @@ class ChatManager {
         await this.updateChatHeader();
         this.updateAgentsPanel();
         this.updateInputState();
+        this.updateInspectButton();
 
         this.showChat();
 
@@ -827,6 +860,7 @@ class ChatManager {
         this.disconnectWebSocket();
     }
 
+
     openInNewWindow() {
         // Получаем JWT токен из куки auth_token
         const token = this.getCookie('auth_token');
@@ -895,7 +929,7 @@ class ChatManager {
             this.applyChatPosition();
             
             if (fullscreenIcon) {
-                fullscreenIcon.className = 'ti ti-arrows-fullscreen';
+                fullscreenIcon.className = 'ti ti-maximize';
             }
             if (fullscreenBtn) {
                 fullscreenBtn.title = 'Развернуть на весь экран';
@@ -908,7 +942,7 @@ class ChatManager {
             widget.style.right = '0';
             widget.style.bottom = '0';
             if (fullscreenIcon) {
-                fullscreenIcon.className = 'ti ti-fullscreen-exit';
+                fullscreenIcon.className = 'ti ti-minimize';
             }
             if (fullscreenBtn) {
                 fullscreenBtn.title = 'Выйти из полноэкранного режима';

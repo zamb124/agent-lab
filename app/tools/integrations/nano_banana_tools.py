@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
     group="Изображения",
     cost=5.0,  # 5 рублей за генерацию изображения
     billing_name="nano_banana_generation",
-    free_for_plans=["premium", "enterprise"]
+    free_for_plans=["premium", "enterprise"],
+    is_public=True
 )
 async def generate_images(
     prompt: str,

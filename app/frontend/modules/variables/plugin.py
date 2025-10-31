@@ -27,7 +27,10 @@ class VariablesPlugin(Plugin):
             "icon": "key",
             "url": "/frontend/variables/",
             "order": 60,
-            "type": "htmx"
+            "type": "htmx",
+            "group": "Инструменты",
+            "group_icon": "tools",
+            "group_order": 50
         }
     ]
     

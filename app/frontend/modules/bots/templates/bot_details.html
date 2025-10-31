@@ -5,11 +5,14 @@
         <div class="header-left">
             <h2>
                 <i class="ti ti-robot"></i>
-                {% if bot.is_new %}
-                    {{ t('bots.create_new_bot') }}
-                {% else %}
-                    {{ bot.name }}
-                {% endif %}
+                <span id="bot-name-display" title="Нажмите, чтобы изменить" style="cursor: text;">
+                    {% if bot.is_new %}
+                        {{ t('bots.create_new_bot') }}
+                    {% else %}
+                        {{ bot.name }}
+                    {% endif %}
+                </span>
+                <input type="text" id="bot-name" class="form-control" value="{{ bot.name }}" placeholder="{{ t('bots.bot_name_placeholder') }}" style="display: none; max-width: 360px; margin-left: .5rem;">
             </h2>
         </div>
         <div class="header-right">
@@ -144,7 +147,7 @@
             </button>
             <button class="settings-tab" data-tab="abilities">
                 <i class="ti ti-tools"></i>
-                {{ t('bots.tabs.abilities') }}
+                Способности
             </button>
             <button class="settings-tab" data-tab="mcp">
                 <i class="ti ti-plugin"></i>
@@ -166,27 +169,7 @@
         
         <div class="settings-content">
             <div class="settings-panel active" data-panel="main">
-                <div class="main-settings-header">
-                    <div class="form-row-main">
-                        <div class="form-group">
-                            <label>{{ t('bots.bot_name') }}{% if bot.is_new %} <span class="text-danger">*</span>{% endif %}</label>
-                            <input type="text" class="form-control" value="{{ bot.name }}" id="bot-name" placeholder="{{ t('bots.bot_name_placeholder') }}" {% if bot.is_new %}required{% endif %}>
-                            {% if bot.is_new %}
-                            <small class="form-text">{{ t('bots.bot_name_help') }}</small>
-                            {% endif %}
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>{{ t('bots.timeout_seconds') }}</label>
-                            <input type="number" class="form-control" value="{{ bot.timeout or '' }}" id="bot-timeout" placeholder="{{ t('common.default') }}">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>{{ t('bots.max_retries') }}</label>
-                            <input type="number" class="form-control" value="{{ bot.max_retries }}" id="bot-max-retries">
-                        </div>
-                    </div>
-                </div>
+                
                 
                 <div class="form-group">
                     <label>{{ t('bots.description') }}{% if bot.is_new %} <span class="text-danger">*</span>{% endif %}</label>

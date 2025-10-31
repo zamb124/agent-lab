@@ -27,7 +27,10 @@ class ChatsPlugin(Plugin):
             "icon": "message",
             "url": "/frontend/chats/",
             "order": 20,
-            "type": "htmx"
+            "type": "htmx",
+            "group": "Боты",
+            "group_icon": "users",
+            "group_order": 10
         }
     ]
     

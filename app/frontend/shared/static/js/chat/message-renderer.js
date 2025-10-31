@@ -152,27 +152,25 @@ class ChatMessageRenderer {
     }
 
     renderFileCard(file) {
-        const fileCard = document.createElement('div');
-        fileCard.className = 'chat-file-card';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'file-inline';
         
-        const icon = getFileIcon(file.type);
+        const name = document.createElement('span');
+        name.className = 'file-inline-name';
+        name.textContent = file.name;
         
-        fileCard.innerHTML = `
-            <div class="file-card-icon">
-                <i class="ti ti-${icon}"></i>
-            </div>
-            <div class="file-card-info">
-                <div class="file-card-name">${file.name}</div>
-                <div class="file-card-details">${file.size} • ${file.type}</div>
-            </div>
-            <div class="file-card-actions">
-                <a href="${file.url}" target="_blank" class="file-download-btn" title="Скачать">
-                    <i class="ti ti-download"></i>
-                </a>
-            </div>
-        `;
+        const download = document.createElement('a');
+        download.href = file.url;
+        download.target = '_blank';
+        download.className = 'file-inline-download';
+        download.title = 'Скачать';
+        download.setAttribute('aria-label', `Скачать ${file.name}`);
+        download.innerHTML = '<i class="ti ti-download"></i>';
         
-        return fileCard;
+        wrapper.appendChild(name);
+        wrapper.appendChild(download);
+        
+        return wrapper;
     }
 
     parseDownloadLinksFromContent(content) {
@@ -257,13 +255,13 @@ class ChatMessageRenderer {
         
         if (fileType === 'image') {
             container.innerHTML = `
-                <div class="file-preview image-preview">
+                <div class="file-preview image-preview" style="display:flex; flex-direction:column; align-items:flex-start; gap:6px;">
                     <img src="${link.url}" alt="${link.fileName}" 
-                         style="max-width: 300px; max-height: 300px; border-radius: 8px; cursor: pointer; object-fit: contain;"
+                         style="max-width: 300px; max-height: 300px; border-radius: 8px; cursor: pointer; object-fit: contain; display:block;"
                          onclick="window.open('${link.url}', '_blank')"
                          onerror="this.parentElement.innerHTML='<div class=error-preview>❌ Не удалось загрузить изображение</div>'"
                     >
-                    <div class="file-info" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+                    <div class="file-info" style="display:flex; justify-content: space-between; align-items: center; width:100%;">
                         <span class="file-name" style="font-size: 14px; color: #666;">${link.fileName}</span>
                         <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
                             <i class="ti ti-download"></i> Скачать
@@ -273,12 +271,12 @@ class ChatMessageRenderer {
             `;
         } else if (fileType === 'video') {
             container.innerHTML = `
-                <div class="file-preview video-preview">
-                    <video controls style="max-width: 400px; border-radius: 8px;">
+                <div class="file-preview video-preview" style="display:flex; flex-direction:column; align-items:flex-start; gap:6px;">
+                    <video controls style="max-width: 400px; border-radius: 8px; display:block;">
                         <source src="${link.url}" type="${mimeType || 'video/mp4'}">
                         Ваш браузер не поддерживает видео.
                     </video>
-                    <div class="file-info" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+                    <div class="file-info" style="display: flex; justify-content: space-between; align-items: center; width:100%;">
                         <span class="file-name" style="font-size: 14px; color: #666;">${link.fileName}</span>
                         <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
                             <i class="ti ti-download"></i> Скачать
@@ -288,12 +286,12 @@ class ChatMessageRenderer {
             `;
         } else if (fileType === 'audio') {
             container.innerHTML = `
-                <div class="file-preview audio-preview">
+                <div class="file-preview audio-preview" style="display:flex; flex-direction:column; align-items:flex-start; gap:6px;">
                     <audio controls style="width: 300px;">
                         <source src="${link.url}" type="${mimeType || 'audio/mpeg'}">
                         Ваш браузер не поддерживает аудио.
                     </audio>
-                    <div class="file-info" style="margin-top: 8px; display: flex; justify-content: space-between; align-items: center;">
+                    <div class="file-info" style="display: flex; justify-content: space-between; align-items: center; width:100%;">
                         <span class="file-name" style="font-size: 14px; color: #666;">${link.fileName}</span>
                         <a href="${link.url}" class="btn btn-sm btn-outline-primary" download="${link.fileName}">
                             <i class="ti ti-download"></i> Скачать
@@ -304,7 +302,7 @@ class ChatMessageRenderer {
         } else {
             const icon = getFileIconEmoji(link.fileName);
             container.innerHTML = `
-                <div class="file-preview document-preview" style="display: flex; align-items: center; padding: 12px; border: 1px solid #ddd; border-radius: 8px; background: #f8f9fa;">
+                <div class="file-preview document-preview" style="display: flex; align-items: center; padding: 8px 10px; border: 1px solid #ddd; border-radius: 8px; background: #f8f9fa;">
                     <div class="file-icon" style="font-size: 32px; margin-right: 12px;">${icon}</div>
                     <div class="file-info" style="flex-grow: 1;">
                         <div class="file-name" style="font-size: 14px; font-weight: 500;">${link.fileName}</div>

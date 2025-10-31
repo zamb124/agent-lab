@@ -27,7 +27,10 @@ class HistoryPlugin(Plugin):
             "icon": "history",
             "url": "/frontend/history/",
             "order": 40,
-            "type": "htmx"
+            "type": "htmx",
+            "group": "История",
+            "group_icon": "history",
+            "group_order": 40
         }
     ]
     

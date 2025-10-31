@@ -592,3 +592,51 @@
 </div>
 {% endmacro %}
 
+
+{# ========================================
+   TIMELINE TREE COMPONENT
+   ======================================== #}
+
+{% macro timeline_tree(id='', timeline_data=[], network_data={nodes: [], edges: []}, height=400, class_='') %}
+<div class="timeline-tree-container {{ class_ }}">
+    <div id="{{ id }}-timeline" class="timeline-tree-timeline" style="height: {{ height }}px;"></div>
+    <div id="{{ id }}-network" class="timeline-tree-network" style="height: {{ height }}px;"></div>
+</div>
+<script>
+(function() {
+    const timelineContainer = document.getElementById('{{ id }}-timeline');
+    const networkContainer = document.getElementById('{{ id }}-network');
+    
+    if (timelineContainer && typeof vis !== 'undefined') {
+        // Timeline
+        const timelineOptions = {
+            height: '{{ height }}px',
+            start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // week ago
+            end: new Date(),
+            editable: false,
+            zoomable: true,
+            moveable: true
+        };
+        const timeline = new vis.Timeline(timelineContainer, {{ timeline_data | tojson }}, timelineOptions);
+        
+        // Network (tree)
+        const networkOptions = {
+            layout: {
+                hierarchical: {
+                    direction: 'UD',
+                    sortMethod: 'directed'
+                }
+            },
+            physics: {
+                enabled: false
+            },
+            edges: {
+                arrows: 'to'
+            },
+            height: '{{ height }}px'
+        };
+        const network = new vis.Network(networkContainer, {{ network_data | tojson }}, networkOptions);
+    }
+})();
+</script>
+{% endmacro %}

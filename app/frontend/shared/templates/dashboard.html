@@ -31,8 +31,8 @@
         <div class="sidebar-content">
             <nav class="sidebar-nav">
                 {% macro render_nav_item(item, level=0) %}
-                <div class="sidebar-nav-item {% if level > 0 %}sidebar-nav-item-nested level-{{ level }}{% endif %}">
-                    {% if item.type == 'submenu' %}
+                <div class="sidebar-nav-item {% if level > 0 %}sidebar-nav-item-nested level-{{ level }}{% endif %}{% if item.open %} open{% endif %}">
+                    {% if item.type in ['submenu', 'group'] %}
                     {# Submenu с вложенностью #}
                     <div class="sidebar-nav-link sidebar-nav-submenu" onclick="this.parentElement.classList.toggle('open')">
                         <i class="ti ti-{{ item.icon }}"></i>
