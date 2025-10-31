@@ -107,7 +107,7 @@ async def create_test_company(storage):
 
 
 @pytest.mark.asyncio
-async def test_new_company_only_tools(migrated_db, storage, migrator, create_test_company, agent_repo, flow_repo):
+async def test_new_company_only_tools(migrated_db, storage, system_context, create_test_company, agent_repo, flow_repo):
     """
     Тест 1: При создании компании мигрируются только публичные tools.
     
@@ -116,8 +116,12 @@ async def test_new_company_only_tools(migrated_db, storage, migrator, create_tes
     - Flows НЕ мигрируются
     - Агенты НЕ мигрируются
     """
-    test_company = await create_test_company("new_company_1")
-    
+    test_company = await create_test_company("new_company_1_uniq")
+
+    # Создаем migrator локально для правильного event loop
+    from app.core.migration.migrator import Migrator
+    migrator = Migrator()
+
     await migrator.migrate_defaults_for_company(test_company)
     
     simple_flow = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
@@ -148,11 +152,7 @@ async def test_install_flow_creates_dependencies(migrated_db, storage, flow_fact
     """
     test_company = await create_test_company("install_test_company")
 
-    # Создаем migrator локально для правильного event loop
-    from app.core.migration.migrator import Migrator
-    migrator = Migrator()
-
-    await migrator.migrate_defaults_for_company(test_company)
+    # Миграция уже выполнена в migrated_db фикстуре, не нужно повторять
     
     weather_flow = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert weather_flow is None, "Flow не должен быть установлен до вызова install"
@@ -192,7 +192,7 @@ async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_fa
     - Удаляются агенты flow
     - Публичные tools остаются
     """
-    test_company = await create_test_company("uninstall_test_company")
+    test_company = await create_test_company("uninstall_test_company_1")
 
     # Создаем migrator локально для правильного event loop
     from app.core.migration.migrator import Migrator
@@ -263,8 +263,8 @@ async def test_hooks_actually_execute(migrated_db, storage, flow_factory, system
     Проверяет что хуки реально выполняются, а не просто извлекаются из кода.
     """
     test_company = await create_test_company("hooks_test_company")
-    
-    await migrator.migrate_defaults_for_company(test_company)
+
+    # Миграция уже выполнена в migrated_db фикстуре, не нужно повторять
 
     # Очищаем переменную если она существует от предыдущих тестов
     default_city_key = f"company:{test_company.company_id}:var:default_city"
@@ -332,8 +332,8 @@ async def test_multiple_flows_isolation(migrated_db, storage, flow_factory, syst
     
     Проверяет что flows в одной компании не видны в другой.
     """
-    company1 = await create_test_company("isolation_company_1")
-    company2 = await create_test_company("isolation_company_2")
+    company1 = await create_test_company("isolation_company_1_uniq")
+    company2 = await create_test_company("isolation_company_2_uniq")
 
     # Создаем migrator локально для правильного event loop
     from app.core.migration.migrator import Migrator
@@ -471,13 +471,9 @@ async def test_uninstall_not_installed_should_fail(migrated_db, storage, flow_fa
     
     Проверяет что нельзя удалить flow который не установлен.
     """
-    test_company = await create_test_company("uninstall_empty_company")
+    test_company = await create_test_company("uninstall_empty_company_uniq")
 
-    # Создаем migrator локально для правильного event loop
-    from app.core.migration.migrator import Migrator
-    migrator = Migrator()
-
-    await migrator.migrate_defaults_for_company(test_company)
+    # Миграция уже выполнена в migrated_db фикстуре, не нужно повторять
 
     # Устанавливаем контекст для test_company
     context = get_context()

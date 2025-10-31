@@ -267,8 +267,8 @@ class TestTelegramFileIntegration:
         print(formatted_message)
         
         # Проверяем что сообщение содержит все нужные данные
-        # Формат использует markdown ссылку: 📎 [filename](url) (size)
-        assert "📎" in formatted_message
+        # Формат: [FILE] Файл: filename (ID: id, URL: url, тип: type, размер: size)
+        assert "[FILE]" in formatted_message
         assert "user_document.pdf" in formatted_message
         assert "test_file_123" in formatted_message
         assert "1.00 MB" in formatted_message
@@ -318,7 +318,7 @@ class TestTelegramFileIntegration:
         
         # Проверяем что агент получит и текст и информацию о файле
         assert user_text in combined_message
-        assert "📎" in combined_message
+        assert "[FILE]" in combined_message
         assert "quarterly_report.xlsx" in combined_message
         assert "analysis_file_456" in combined_message
         assert "2.00 MB" in combined_message
