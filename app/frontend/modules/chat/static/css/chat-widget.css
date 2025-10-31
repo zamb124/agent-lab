@@ -428,6 +428,76 @@
     transition: all var(--transition-fast, 0.15s ease);
 }
 
+/* Превью файлов в одной линии между левыми и правыми кнопками */
+.chat-files-preview {
+    position: absolute;
+    bottom: 24px; /* на линии нижних кнопок */
+    left: 180px;  /* после команд и скрепки */
+    right: 120px; /* больше запасов до микрофона/отправки */
+    height: 28px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden !important;
+    white-space: nowrap;
+    background: transparent; /* визуально без контейнера */
+    border: none !important;
+    bottom: 15px !important;
+}
+
+.file-preview-item.more {
+    border-radius: 999px;
+    padding: 2px 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--chat-border);
+    font-weight: 600;
+}
+
+/* Компактные чипы файлов */
+.file-preview-item {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0;
+    background: transparent; /* только иконка и текст */
+    border: none;
+}
+
+.file-preview-item i {
+    font-size: 16px;
+    opacity: 0.9;
+}
+
+.file-preview-item .file-name {
+    font-size: 12px;
+    max-width: 60px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-preview-remove {
+    position: absolute;
+    bottom: -4px;
+    right: -6px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    font-size: 9px;
+    line-height: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-card);
+    border: 1px solid var(--chat-border);
+    cursor: pointer;
+}
+
+.file-preview-list { display: inline-flex; gap: 8px; }
+
 /* Убираем подсветку вложенного контейнера при фокусе */
 .chat-input-wrapper:focus-within { box-shadow: none; }
 

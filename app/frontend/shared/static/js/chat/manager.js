@@ -1024,31 +1024,43 @@ class ChatManager {
         const previewContainer = document.getElementById('chat-files-preview');
         if (!previewContainer) return;
 
-        previewContainer.style.display = 'block';
-        
-        previewContainer.innerHTML = `
-            <div class="file-preview-header">
-                <span>📎 ${files.length} файл${files.length > 1 ? 'а' : ''}</span>
-                <button class="file-preview-cancel" onclick="window.app.chat.clearFilePreview()">
-                    <i class="ti ti-x"></i>
-                </button>
-            </div>
-            <div class="file-preview-list">
-                ${files.map(file => `
-                    <div class="file-preview-item">
-                        <i class="ti ti-file-earmark"></i>
-                        <span class="file-name">${file.name}</span>
-                        <span class="file-size">${formatFileSize(file.size)}</span>
-                    </div>
-                `).join('')}
-            </div>
-        `;
-        
+        previewContainer.classList.remove('hidden');
+        previewContainer.style.display = '';
+
+        const maxVisible = 3;
+        const extra = Math.max(0, files.length - maxVisible);
+        const visibleFiles = files.slice(0, maxVisible);
+
+        const chips = visibleFiles.map((file, idx) => {
+            const base = (file.name || '').split('.')[0] || '';
+            const short = base.length > 5 ? base.slice(0, 5) + '…' : base;
+            return `
+            <div class="file-preview-item" title="${file.name}">
+                <i class="ti ti-file"></i>
+                <span class="file-name">${short}</span>
+                <button class="file-preview-remove" onclick="window.app.chat.removeFileAt(${idx})" aria-label="Удалить">✕</button>
+            </div>`;
+        }).join('');
+
+        const moreChip = extra > 0 ? `<div class="file-preview-item more" title="ещё ${extra}">+${extra}</div>` : '';
+
+        previewContainer.innerHTML = `<div class="file-preview-list">${chips}${moreChip}</div>`;
+
+        // Подвешиваем обработчики удаления без inline onclick
+        const removeButtons = previewContainer.querySelectorAll('.file-preview-remove');
+        removeButtons.forEach((btn, idx) => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.removeFileAt(idx);
+            });
+        });
+
         this.selectedFiles = files;
-        
+
         const input = document.getElementById('chat-widget-input');
         if (input) {
-            input.placeholder = `Сообщение с ${files.length} файл${files.length > 1 ? 'ами' : 'ом'}...`;
+            input.placeholder = '';
         }
     }
 
@@ -1056,6 +1068,7 @@ class ChatManager {
         const previewContainer = document.getElementById('chat-files-preview');
         if (previewContainer) {
             previewContainer.style.display = 'none';
+            previewContainer.classList.add('hidden');
             previewContainer.innerHTML = '';
         }
         
@@ -1065,6 +1078,17 @@ class ChatManager {
         }
         
         this.selectedFiles = null;
+    }
+
+    removeFileAt(index) {
+        if (!this.selectedFiles || index < 0 || index >= this.selectedFiles.length) return;
+        const updated = [...this.selectedFiles];
+        updated.splice(index, 1);
+        if (updated.length === 0) {
+            this.clearFilePreview();
+        } else {
+            this.showFilePreview(updated);
+        }
     }
 
     async sendMessageWithFiles(message) {

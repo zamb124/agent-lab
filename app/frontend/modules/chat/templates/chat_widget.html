@@ -20,9 +20,6 @@
 
         <!-- Поле ввода (остров с превью файлов и нижней панелью кнопок) -->
         <div class="chat-input-container">
-            <!-- Превью прикреплённых файлов -->
-            <div id="chat-files-preview" class="chat-files-preview"></div>
-
             <!-- Скрытый input для выбора файлов -->
             <input id="chat-file-input" type="file" class="hidden" multiple />
 
@@ -34,7 +31,10 @@
                     <i class="ti ti-paperclip"></i>
                 </button>
 
-                <textarea id="chat-widget-input" class="chat-input" type="text" placeholder="Введите сообщение..." />
+                <!-- Превью между левыми кнопками и отправкой -->
+                <div id="chat-files-preview" class="chat-files-preview hidden"></div>
+
+                <textarea id="chat-widget-input" class="chat-input" type="text" placeholder="Введите сообщение..."></textarea>
 
                 <button id="chat-widget-voice" class="chat-voice-btn" title="Удерживайте для записи">
                     <i class="ti ti-microphone"></i>

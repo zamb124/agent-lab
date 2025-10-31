@@ -40,11 +40,6 @@
         </div>
         
         <div class="chat-input-container">
-            <!-- Область предпросмотра файлов -->
-            <div id="chat-files-preview" class="chat-files-preview">
-                <!-- Файлы будут добавляться динамически -->
-            </div>
-            
             <div class="chat-input-wrapper">
                 <button id="chat-widget-commands" class="chat-commands-btn" title="Команды">
                     <i class="ti ti-code"></i>
@@ -52,6 +47,8 @@
                 <button id="chat-widget-attach" class="chat-attach-btn" title="Прикрепить файл">
                     <i class="ti ti-paperclip"></i>
                 </button>
+                <!-- Превью между левыми кнопками и отправкой -->
+                <div id="chat-files-preview" class="chat-files-preview hidden"></div>
                 <button id="chat-widget-voice" class="chat-voice-btn" title="Голосовое сообщение (зажмите и говорите)">
                     <i class="ti ti-microphone"></i>
                 </button>
