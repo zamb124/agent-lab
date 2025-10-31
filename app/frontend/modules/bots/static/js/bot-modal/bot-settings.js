@@ -163,26 +163,30 @@ export class BotSettingsManager {
     
     async updateLLMModels() {
         const modelSelect = document.getElementById('bot-llm-model');
-        
+
         if (!modelSelect) return;
-        
+
         const currentValue = modelSelect.dataset.currentValue || modelSelect.value;
-        
+        const isNewBot = !currentValue || currentValue === '';
+
         const modelsData = await this.loadLLMModels();
-        
+
         modelSelect.innerHTML = '';
-        
+
         const defaultOption = document.createElement('option');
         defaultOption.value = '';
         defaultOption.textContent = 'По умолчанию';
         modelSelect.appendChild(defaultOption);
-        
+
         if (modelsData && modelsData.models) {
             modelsData.models.forEach(model => {
                 const option = document.createElement('option');
                 option.value = model.value;
                 option.textContent = model.label;
-                if (model.value === currentValue) {
+                // Для нового бота выбираем дефолтную модель из конфига
+                if (isNewBot && model.value === modelsData.default_model) {
+                    option.selected = true;
+                } else if (model.value === currentValue) {
                     option.selected = true;
                 }
                 modelSelect.appendChild(option);

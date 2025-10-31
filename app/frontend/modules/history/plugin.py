@@ -28,7 +28,7 @@ class HistoryPlugin(Plugin):
             "url": "/frontend/history/",
             "order": 40,
             "type": "htmx",
-            "group": "История",
+            "group": "Агенты и Боты",
             "group_icon": "history",
             "group_order": 40
         }
