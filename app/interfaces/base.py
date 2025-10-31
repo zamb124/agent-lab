@@ -46,7 +46,7 @@ class BaseInterface(ABC):
     def __init__(self, platform_config: Dict[str, Any]):
         self.platform_config = platform_config
         self.platform_name = self.__class__.__name__.replace("Interface", "").lower()
-        
+
         container = get_container()
         self.storage = container.storage
         self.flow_repository = container.flow_repository
@@ -56,27 +56,27 @@ class BaseInterface(ABC):
     def check_user_access(self, user_identifier: str, username: str = None) -> Tuple[bool, Optional[str]]:
         """
         Проверяет доступ пользователя к flow на основе allowed_users в platform_config.
-        
+
         Args:
             user_identifier: ID пользователя (например, chat_id в Telegram)
             username: Username пользователя (например, @shvedivik без @)
-            
+
         Returns:
-            Tuple[allowed, error_message]: (True, None) если доступ разрешен, 
+            Tuple[allowed, error_message]: (True, None) если доступ разрешен,
                                            (False, "сообщение") если запрещен
         """
         allowed_users = self.platform_config.get("allowed_users", [])
-        
+
         # Если список не задан или пустой - доступ всем
         if not allowed_users or len(allowed_users) == 0:
             return True, None
-        
+
         # Проверяем user_identifier и username в списке разрешенных
         user_id_str = str(user_identifier)
-        
+
         # Поддерживаем как username, так и user_id
         is_allowed = user_id_str in allowed_users or (username and username in allowed_users)
-        
+
         if is_allowed:
             return True, None
         else:
@@ -102,7 +102,7 @@ class BaseInterface(ABC):
     async def send_typing_notification(self, session_id: str, is_typing: bool):
         """Отправка уведомления о печати"""
         pass
-    
+
     async def start_typing_indicator(self, session_id: str):
         """
         Запускает индикатор 'печатает...'.
@@ -110,7 +110,7 @@ class BaseInterface(ABC):
         Telegram переопределяет для фоновой корутины.
         """
         await self.send_typing_notification(session_id, True)
-    
+
     async def stop_typing_indicator(self, session_id: str):
         """
         Останавливает индикатор 'печатает...'.
@@ -124,16 +124,16 @@ class BaseInterface(ABC):
         Отправляет reasoning как промежуточное сообщение.
         Базовая реализация - форматирует с префиксом '💭'.
         Наследники могут переопределить для специального форматирования.
-        
+
         Args:
             session_id: ID сессии
             reasoning_text: Текст reasoning от LLM
         """
         if not reasoning_text or not reasoning_text.strip():
             return
-        
+
         formatted = f"💭 {reasoning_text.strip()}"
-        
+
         message = Message(
             user_id="system",
             session_id=session_id,
@@ -142,7 +142,7 @@ class BaseInterface(ABC):
             platform=self.platform_name,
             metadata={"is_reasoning": True}
         )
-        
+
         await self.send_message(message)
         logger.debug(f"💭 Отправлен reasoning для сессии {session_id}")
 
@@ -207,15 +207,15 @@ class BaseInterface(ABC):
     ) -> Dict[str, Any]:
         """
         Регистрирует/инициализирует платформу для flow.
-        
+
         Базовая реализация - для платформ без специальной регистрации.
         Переопределяется в наследниках для платформ требующих настройки.
-        
+
         Args:
             flow_id: ID flow
             username: Username на платформе
             platform_config: Конфигурация платформы из FlowConfig
-        
+
         Returns:
             Результат регистрации
         """
@@ -251,7 +251,7 @@ class BaseInterface(ABC):
             if not isinstance(data, dict) or not all(field in data for field in ['session_id', 'platform', 'user_id']):
                 logger.warning(f"Данные в {session_key} не являются SessionConfig")
                 session_data = None
-            
+
         if session_data:
             session_config = SessionConfig.model_validate_json(session_data)
             logger.info(f"🔍 Текущий статус сессии: {session_config.status}")
@@ -316,7 +316,7 @@ class BaseInterface(ABC):
 
         # Обогащаем контекст session_id если его нет
         context.session_id = message.session_id or context.session_id
-        
+
         # Загружаем и добавляем flow_config в контекст
         flow_config = await self.flow_repository.get(flow_id)
         if flow_config:
@@ -365,18 +365,18 @@ class BaseInterface(ABC):
         logger.info(f"  - Исходный ключ: {task_key}")
         logger.info(f"  - Статус: {task_config.status}")
         logger.info(f"  - Компания в контексте: {company_id}")
-        
+
         logger.info(f"🔵 ПЕРЕД storage.set: key={task_key}")
         await storage.set(task_key, task_config.model_dump_json(), force_global=True)
         logger.info(f"🟢 ПОСЛЕ storage.set: key={task_key}")
-        
+
         # Проверяем что задача реально сохранилась
         saved_task = await storage.get(task_key, force_global=True)
         if saved_task:
             logger.info(f"✅ Задача {task_id} сохранена и проверена в БД")
         else:
             logger.error(f"❌ Задача {task_id} НЕ найдена после сохранения!")
-        
+
         logger.info(f"📋 Создана задача {task_id} для flow {flow_id}")
 
         return task_id

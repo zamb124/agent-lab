@@ -18,10 +18,12 @@ import functools
 import logging
 import inspect
 import copy
+import json
 from typing import Optional, Callable, List, Annotated, Any, Dict
 from pydantic import create_model, Field
 from dataclasses import dataclass
 
+from opentelemetry import trace
 from langchain_core.tools import tool as langchain_tool
 from langgraph.errors import GraphInterrupt
 from langgraph.prebuilt import InjectedState
@@ -30,6 +32,7 @@ from langchain_core.messages import ToolMessage
 
 from app.core.variables import set_state_in_context, get_state
 from app.core.context import get_context
+from app.models.trace_models import SpanType
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +98,7 @@ def tool(
         def session_set(key: str, value: str) -> ToolReturn:
             state = get_state()  # Актуальный state благодаря state_aware=True
             state["store"][key] = value
-            
+
             return ToolReturn(
                 delta={"store": state["store"]},  # Для LangGraph
                 result=f"Сохранено: {key} = {value}"  # Для Python кода
@@ -110,173 +113,256 @@ def tool(
         # Декоратор автоматически детектирует изменения state и обновляет delta
         # ВЕЗДЕ возвращается ToolReturn: result = tool.invoke({"message": "test"}) -> ToolReturn(delta={"tasks": [...]}, result="Задача создана: test")
     """
-    
+
     def decorator(func: Callable) -> Callable:
         is_async = asyncio.iscoroutinefunction(func)
         tool_name = name or func.__name__
-        
+
+        # Получаем tracer для трейсинга
+        tracer = trace.get_tracer("agent-lab.tool_decorator")
+
         # Создаем wrapper функцию для универсального использования
         if is_async:
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
-                # Обработка state для LangGraph
-                injected_state = None
-                
-                if state_aware:
-                    # Извлекаем state если он передан (из LangGraph)
-                    injected_state = kwargs.pop('state', None)
-                    logger.debug(f"🔍 [{tool_name}] state_aware=True, injected_state={injected_state is not None}")
-                    
-                    if injected_state and isinstance(injected_state, dict):
-                        # Устанавливаем state в контекст для доступа через get_state()
-                        set_state_in_context(injected_state)
-                        logger.debug(f"🔄 State установлен в контекст для {tool_name}")
-                    else:
-                        logger.debug(f"⚠️ [{tool_name}] injected_state не передан или не dict: {injected_state}")
-                        injected_state = None
-                
-                try:
-                    # Вызываем оригинальную функцию
-                    tool_result = await func(*args, **kwargs)
-                    
-                    # Определяем контекст выполнения
+                # Создаем span для трейсинга
+                span_name = f"tool.{tool_name}"
+                with tracer.start_as_current_span(span_name) as span:
+                    # Базовые атрибуты
+                    span.set_attribute("span_type", SpanType.TOOL.value)
+                    span.set_attribute("tool_name", tool_name)
+
+                    # Метаданные tool
+                    if title:
+                        span.set_attribute("meta_title", title)
+                    if billing_name:
+                        span.set_attribute("meta_billing_name", billing_name)
+                    if group:
+                        span.set_attribute("meta_group", group)
+                    if cost > 0:
+                        span.set_attribute("meta_cost", cost)
+
+                    # Контекст (если доступен)
                     context = get_context()
-                    agent_type = None
-                    if context and hasattr(context, 'agent_config') and context.agent_config:
-                        agent_type = context.agent_config.type
-                    
-                    logger.info(f"🔍 [{tool_name}] Контекст: injected_state={'есть' if injected_state else 'нет'}, agent_type={agent_type}")
-                    
-                    # ВСЕГДА оборачиваем результат в ToolReturn для единообразия
-                    if isinstance(tool_result, ToolReturn):
-                        # Если уже ToolReturn - используем как есть
-                        wrapped_result = tool_result
-                    else:
-                        # Если обычный результат - оборачиваем в ToolReturn
-                        wrapped_result = ToolReturn(
-                            delta={},  # Пустая дельта для обычных результатов
-                            result=tool_result
-                        )
-                    
-                    # Простая логика: если есть injected_state, обновляем его напрямую
-                    if injected_state is not None:
-                        # Получаем текущий state после выполнения функции
-                        current_state = get_state()
-                        if current_state:
-                            # Обновляем injected_state напрямую
-                            for key, value in current_state.items():
-                                injected_state[key] = value
-                            logger.info(f"✅ [{tool_name}] injected_state обновлен: {list(current_state.keys())}")
-                            
-                            # Для StateGraph агентов также заполняем delta
-                            if agent_type == "stategraph":
-                                wrapped_result.delta = current_state
-                                logger.info(f"🔄 [{tool_name}] StateGraph delta заполнен: {list(current_state.keys())}")
-                    
-                    # Возвращаем результат в зависимости от контекста
-                    if injected_state is not None:
-                        # В LangGraph - определяем тип агента
-                        if agent_type == "stategraph":
-                            # В StateGraph агенте - возвращаем delta для обновления state
-                            logger.info(f"🔄 [{tool_name}] StateGraph агент - возвращаем delta: {wrapped_result.delta}")
-                            return wrapped_result.delta
+                    if context and context.user:
+                        span.set_attribute("context_user_id", context.user.user_id)
+                    if context and context.active_company:
+                        span.set_attribute("context_company_id", context.active_company.company_id)
+                    if context and context.session_id:
+                        span.set_attribute("context_session_id", context.session_id)
+
+                    # Обработка state для LangGraph
+                    injected_state = None
+
+                    if state_aware:
+                        # Извлекаем state если он передан (из LangGraph)
+                        injected_state = kwargs.pop('state', None)
+                        logger.debug(f"🔍 [{tool_name}] state_aware=True, injected_state={injected_state is not None}")
+
+                        if injected_state and isinstance(injected_state, dict):
+                            # Устанавливаем state в контекст для доступа через get_state()
+                            set_state_in_context(injected_state)
+                            logger.debug(f"🔄 State установлен в контекст для {tool_name}")
                         else:
-                            # В ReAct агенте - возвращаем строку для ToolMessage.content
-                            # State будет обновлен вручную после ainvoke через checkpointer
-                            logger.info(f"🔄 [{tool_name}] ReAct агент - возвращаем строку: {wrapped_result.result}")
-                            if isinstance(wrapped_result.result, str):
-                                return wrapped_result.result
+                            logger.debug(f"⚠️ [{tool_name}] injected_state не передан или не dict: {injected_state}")
+                            injected_state = None
+
+                    # Подготовка input_data для трейсинга (без state, чтобы не перегружать)
+                    input_data = {"args": [str(arg) for arg in args], "kwargs": {k: str(v) for k, v in kwargs.items() if k != 'state'}}
+                    span.set_attribute("input_data", json.dumps(input_data))
+
+                    try:
+                        # Вызываем оригинальную функцию
+                        tool_result = await func(*args, **kwargs)
+
+                        # Определяем контекст выполнения
+                        context = get_context()
+                        agent_type = None
+                        if context and hasattr(context, 'agent_config') and context.agent_config:
+                            agent_type = context.agent_config.type
+
+                        logger.info(f"🔍 [{tool_name}] Контекст: injected_state={'есть' if injected_state else 'нет'}, agent_type={agent_type}")
+
+                        # ВСЕГДА оборачиваем результат в ToolReturn для единообразия
+                        if isinstance(tool_result, ToolReturn):
+                            # Если уже ToolReturn - используем как есть
+                            wrapped_result = tool_result
+                        else:
+                            # Если обычный результат - оборачиваем в ToolReturn
+                            wrapped_result = ToolReturn(
+                                delta={},  # Пустая дельта для обычных результатов
+                                result=tool_result
+                            )
+
+                        # Простая логика: если есть injected_state, обновляем его напрямую
+                        if injected_state is not None:
+                            # Получаем текущий state после выполнения функции
+                            current_state = get_state()
+                            if current_state:
+                                # Обновляем injected_state напрямую
+                                for key, value in current_state.items():
+                                    injected_state[key] = value
+                                logger.info(f"✅ [{tool_name}] injected_state обновлен: {list(current_state.keys())}")
+
+                                # Для StateGraph агентов также заполняем delta
+                                if agent_type == "stategraph":
+                                    wrapped_result.delta = current_state
+                                    logger.info(f"🔄 [{tool_name}] StateGraph delta заполнен: {list(current_state.keys())}")
+
+                        # Записываем output_data в span
+                        output_data = {
+                            "result": str(wrapped_result.result)[:500],  # Ограничиваем длину
+                            "has_delta": bool(wrapped_result.delta),
+                            "agent_type": agent_type or "none"
+                        }
+                        span.set_attribute("output_data", json.dumps(output_data))
+
+                        # Возвращаем результат в зависимости от контекста
+                        if injected_state is not None:
+                            # В LangGraph - определяем тип агента
+                            if agent_type == "stategraph":
+                                # В StateGraph агенте - возвращаем delta для обновления state
+                                logger.info(f"🔄 [{tool_name}] StateGraph агент - возвращаем delta: {wrapped_result.delta}")
+                                return wrapped_result.delta
                             else:
-                                return str(wrapped_result.result)
-                    else:
-                        # В обычном Python коде - возвращаем только result
-                        logger.info(f"🔄 [{tool_name}] Python код - возвращаем result: {wrapped_result.result}")
-                        return wrapped_result.result
-                    
-                except Exception as e:
-                    logger.error(f"❌ Ошибка в tool {tool_name}: {e}", exc_info=True)
-                    raise
+                                # В ReAct агенте - возвращаем строку для ToolMessage.content
+                                # State будет обновлен вручную после ainvoke через checkpointer
+                                logger.info(f"🔄 [{tool_name}] ReAct агент - возвращаем строку: {wrapped_result.result}")
+                                if isinstance(wrapped_result.result, str):
+                                    return wrapped_result.result
+                                else:
+                                    return str(wrapped_result.result)
+                        else:
+                            # В обычном Python коде - возвращаем только result
+                            logger.info(f"🔄 [{tool_name}] Python код - возвращаем result: {wrapped_result.result}")
+                            return wrapped_result.result
+
+                    except Exception as e:
+                        # Записываем исключение в span
+                        span.record_exception(e)
+                        logger.error(f"❌ Ошибка в tool {tool_name}: {e}", exc_info=True)
+                        raise
         else:
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
-                # Обработка state для LangGraph
-                injected_state = None
-                
-                if state_aware:
-                    # Извлекаем state если он передан (из LangGraph)
-                    injected_state = kwargs.pop('state', None)
-                    logger.debug(f"🔍 [{tool_name}] state_aware=True, injected_state={injected_state is not None}")
-                    
-                    if injected_state and isinstance(injected_state, dict):
-                        # Устанавливаем state в контекст для доступа через get_state()
-                        set_state_in_context(injected_state)
-                        logger.debug(f"🔄 State установлен в контекст для {tool_name}")
-                    else:
-                        logger.debug(f"⚠️ [{tool_name}] injected_state не передан или не dict: {injected_state}")
-                        injected_state = None
-                
-                try:
-                    # Вызываем оригинальную функцию
-                    tool_result = func(*args, **kwargs)
-                    
-                    # Определяем контекст выполнения
+                # Создаем span для трейсинга
+                span_name = f"tool.{tool_name}"
+                with tracer.start_as_current_span(span_name) as span:
+                    # Базовые атрибуты
+                    span.set_attribute("span_type", SpanType.TOOL.value)
+                    span.set_attribute("tool_name", tool_name)
+
+                    # Метаданные tool
+                    if title:
+                        span.set_attribute("meta_title", title)
+                    if billing_name:
+                        span.set_attribute("meta_billing_name", billing_name)
+                    if group:
+                        span.set_attribute("meta_group", group)
+                    if cost > 0:
+                        span.set_attribute("meta_cost", cost)
+
+                    # Контекст (если доступен)
                     context = get_context()
-                    agent_type = None
-                    if context and hasattr(context, 'agent_config') and context.agent_config:
-                        agent_type = context.agent_config.type
-                    
-                    logger.info(f"🔍 [{tool_name}] Контекст: injected_state={'есть' if injected_state else 'нет'}, agent_type={agent_type}")
-                    
-                    # ВСЕГДА оборачиваем результат в ToolReturn для единообразия
-                    if isinstance(tool_result, ToolReturn):
-                        # Если уже ToolReturn - используем как есть
-                        wrapped_result = tool_result
-                    else:
-                        # Если обычный результат - оборачиваем в ToolReturn
-                        wrapped_result = ToolReturn(
-                            delta={},  # Пустая дельта для обычных результатов
-                            result=tool_result
-                        )
-                    
-                    # Простая логика: если есть injected_state, обновляем его напрямую
-                    if injected_state is not None:
-                        # Получаем текущий state после выполнения функции
-                        current_state = get_state()
-                        if current_state:
-                            # Обновляем injected_state напрямую
-                            for key, value in current_state.items():
-                                injected_state[key] = value
-                            logger.info(f"✅ [{tool_name}] injected_state обновлен: {list(current_state.keys())}")
-                            
-                            # Для StateGraph агентов также заполняем delta
-                            if agent_type == "stategraph":
-                                wrapped_result.delta = current_state
-                                logger.info(f"🔄 [{tool_name}] StateGraph delta заполнен: {list(current_state.keys())}")
-                    
-                    # Возвращаем результат в зависимости от контекста
-                    if injected_state is not None:
-                        # В LangGraph - определяем тип агента
-                        if agent_type == "stategraph":
-                            # В StateGraph агенте - возвращаем delta для обновления state
-                            logger.info(f"🔄 [{tool_name}] StateGraph агент - возвращаем delta: {wrapped_result.delta}")
-                            return wrapped_result.delta
+                    if context and context.user:
+                        span.set_attribute("context_user_id", context.user.user_id)
+                    if context and context.active_company:
+                        span.set_attribute("context_company_id", context.active_company.company_id)
+                    if context and context.session_id:
+                        span.set_attribute("context_session_id", context.session_id)
+
+                    # Обработка state для LangGraph
+                    injected_state = None
+
+                    if state_aware:
+                        # Извлекаем state если он передан (из LangGraph)
+                        injected_state = kwargs.pop('state', None)
+                        logger.debug(f"🔍 [{tool_name}] state_aware=True, injected_state={injected_state is not None}")
+
+                        if injected_state and isinstance(injected_state, dict):
+                            # Устанавливаем state в контекст для доступа через get_state()
+                            set_state_in_context(injected_state)
+                            logger.debug(f"🔄 State установлен в контекст для {tool_name}")
                         else:
-                            # В ReAct агенте - возвращаем строку для ToolMessage.content
-                            # State будет обновлен вручную после ainvoke через checkpointer
-                            logger.info(f"🔄 [{tool_name}] ReAct агент - возвращаем строку: {wrapped_result.result}")
-                            if isinstance(wrapped_result.result, str):
-                                return wrapped_result.result
+                            logger.debug(f"⚠️ [{tool_name}] injected_state не передан или не dict: {injected_state}")
+                            injected_state = None
+
+                    # Подготовка input_data для трейсинга (без state, чтобы не перегружать)
+                    input_data = {"args": [str(arg) for arg in args], "kwargs": {k: str(v) for k, v in kwargs.items() if k != 'state'}}
+                    span.set_attribute("input_data", json.dumps(input_data))
+
+                    try:
+                        # Вызываем оригинальную функцию
+                        tool_result = func(*args, **kwargs)
+
+                        # Определяем контекст выполнения
+                        context = get_context()
+                        agent_type = None
+                        if context and hasattr(context, 'agent_config') and context.agent_config:
+                            agent_type = context.agent_config.type
+
+                        logger.info(f"🔍 [{tool_name}] Контекст: injected_state={'есть' if injected_state else 'нет'}, agent_type={agent_type}")
+
+                        # ВСЕГДА оборачиваем результат в ToolReturn для единообразия
+                        if isinstance(tool_result, ToolReturn):
+                            # Если уже ToolReturn - используем как есть
+                            wrapped_result = tool_result
+                        else:
+                            # Если обычный результат - оборачиваем в ToolReturn
+                            wrapped_result = ToolReturn(
+                                delta={},  # Пустая дельта для обычных результатов
+                                result=tool_result
+                            )
+
+                        # Простая логика: если есть injected_state, обновляем его напрямую
+                        if injected_state is not None:
+                            # Получаем текущий state после выполнения функции
+                            current_state = get_state()
+                            if current_state:
+                                # Обновляем injected_state напрямую
+                                for key, value in current_state.items():
+                                    injected_state[key] = value
+                                logger.info(f"✅ [{tool_name}] injected_state обновлен: {list(current_state.keys())}")
+
+                                # Для StateGraph агентов также заполняем delta
+                                if agent_type == "stategraph":
+                                    wrapped_result.delta = current_state
+                                    logger.info(f"🔄 [{tool_name}] StateGraph delta заполнен: {list(current_state.keys())}")
+
+                        # Записываем output_data в span
+                        output_data = {
+                            "result": str(wrapped_result.result)[:500],  # Ограничиваем длину
+                            "has_delta": bool(wrapped_result.delta),
+                            "agent_type": agent_type or "none"
+                        }
+                        span.set_attribute("output_data", json.dumps(output_data))
+
+                        # Возвращаем результат в зависимости от контекста
+                        if injected_state is not None:
+                            # В LangGraph - определяем тип агента
+                            if agent_type == "stategraph":
+                                # В StateGraph агенте - возвращаем delta для обновления state
+                                logger.info(f"🔄 [{tool_name}] StateGraph агент - возвращаем delta: {wrapped_result.delta}")
+                                return wrapped_result.delta
                             else:
-                                return str(wrapped_result.result)
-                    else:
-                        # В обычном Python коде - возвращаем только result
-                        logger.info(f"🔄 [{tool_name}] Python код - возвращаем result: {wrapped_result.result}")
-                        return wrapped_result.result
-                    
-                except Exception as e:
-                    logger.error(f"❌ Ошибка в tool {tool_name}: {e}", exc_info=True)
-                    raise
-        
+                                # В ReAct агенте - возвращаем строку для ToolMessage.content
+                                # State будет обновлен вручную после ainvoke через checkpointer
+                                logger.info(f"🔄 [{tool_name}] ReAct агент - возвращаем строку: {wrapped_result.result}")
+                                if isinstance(wrapped_result.result, str):
+                                    return wrapped_result.result
+                                else:
+                                    return str(wrapped_result.result)
+                        else:
+                            # В обычном Python коде - возвращаем только result
+                            logger.info(f"🔄 [{tool_name}] Python код - возвращаем result: {wrapped_result.result}")
+                            return wrapped_result.result
+
+                    except Exception as e:
+                        # Записываем исключение в span
+                        span.record_exception(e)
+                        logger.error(f"❌ Ошибка в tool {tool_name}: {e}", exc_info=True)
+                        raise
+
         # Применяем стандартный langchain декоратор
         langchain_kwargs = {
             "name": name,
@@ -285,21 +371,21 @@ def tool(
             "args_schema": args_schema,
             "infer_schema": infer_schema,
         }
-        
+
         # Убираем None значения
         langchain_kwargs = {k: v for k, v in langchain_kwargs.items() if v is not None}
-        
+
         langchain_decorated = langchain_tool(**langchain_kwargs)(wrapper)
-        
+
         # Добавляем поддержку state если нужно
         if state_aware:
             # Получаем оригинальную схему
             original_schema = langchain_decorated.args_schema
-            
+
             if original_schema:
                 # Создаем новую схему с дополнительными полями
                 field_definitions = {}
-                
+
                 # Копируем все поля из оригинальной схемы, но без Annotated типов
                 for field_name, field_info in original_schema.model_fields.items():
                     # Извлекаем базовый тип из Annotated если есть
@@ -307,7 +393,7 @@ def tool(
                     if hasattr(annotation, '__origin__') and annotation.__origin__ is Annotated:
                         # Если это Annotated[BaseType, ...], берем BaseType
                         annotation = annotation.__args__[0]
-                    
+
                     field_definitions[field_name] = (
                         annotation,
                         Field(
@@ -316,13 +402,13 @@ def tool(
                             **{k: v for k, v in field_info.json_schema_extra.items() if k not in ['default', 'description']} if field_info.json_schema_extra else {}
                         )
                     )
-                
+
                 # Добавляем только state поле с InjectedState (БЕЗ tool_call_id!)
                 field_definitions['state'] = (
                     Annotated[Optional[Dict[str, Any]], InjectedState],
                     Field(default=None, description="State из LangGraph (автоматически инжектируется)")
                 )
-                
+
                 # Создаем новую схему
                 logger.debug(f"🔍 Создаем схему {original_schema.__name__}WithState с полями: {list(field_definitions.keys())}")
                 try:
@@ -335,10 +421,10 @@ def tool(
                     logger.error(f"❌ Ошибка создания схемы: {e}")
                     logger.error(f"❌ Поля: {field_definitions}")
                     raise
-                
+
                 # Заменяем схему
                 langchain_decorated.args_schema = new_schema
-        
+
         # Добавляем метаданные платформы
         langchain_decorated._platform_cost = cost
         langchain_decorated._platform_billing_name = billing_name or tool_name
@@ -351,9 +437,9 @@ def tool(
 
         # Маркируем как инструмент платформы
         langchain_decorated._is_platform_tool = True
-        
+
         return langchain_decorated
-    
+
     if func is None:
         # Декоратор вызван с параметрами: @tool(cost=0.01)
         return decorator

@@ -23,6 +23,29 @@ class TraceUtils {
             return String(obj);
         }
     }
+
+    static formatJsonWithSyntaxHighlighting(jsonString) {
+        // Простое форматирование JSON с подсветкой синтаксиса
+        return jsonString
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                    } else {
+                        cls = 'json-string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'json-null';
+                }
+                return `<span class="${cls}">${match}</span>`;
+            });
+    }
     static serializeForJson(obj) {
         if (obj === null || obj === undefined) {
             return obj;
@@ -658,35 +681,57 @@ class SpanDetails {
 
     renderPreviewTab(span) {
         const sections = [];
-        if (span.input_data) {
-            if (span.input_data.messages) {
-                sections.push(this.renderMessagesSection('Input Messages', span.input_data.messages));
-                const otherInputData = { ...span.input_data };
+
+        // Извлекаем ключевую информацию из метаданных и сообщений
+        const langchainTags = this.extractLangchainTags(span.metadata);
+        const keyInfo = this.extractKeyInfo(span);
+
+        // Показываем ключевую информацию в начале
+        if (keyInfo.hasContent) {
+            sections.push(this.renderKeyInfoSection(keyInfo));
+        }
+
+        // Показываем теги
+        if (langchainTags.length > 0) {
+            sections.push(this.renderTagsSection(langchainTags));
+        }
+
+        // Парсим и форматируем input_data
+        const parsedInput = this.parseData(span.input_data);
+        if (parsedInput) {
+            if (parsedInput.messages && Array.isArray(parsedInput.messages)) {
+                sections.push(this.renderMessagesSection('Input Messages', parsedInput.messages));
+                const otherInputData = { ...parsedInput };
                 delete otherInputData.messages;
                 if (Object.keys(otherInputData).length > 0) {
-                    sections.push(this.renderTreeSection('Input (Other)', otherInputData));
+                    sections.push(this.renderTreeSection('Input (Other)', otherInputData, true));
                 }
             } else {
-                sections.push(this.renderTreeSection('Input', span.input_data));
+                sections.push(this.renderTreeSection('Input', parsedInput, true));
             }
         }
-        if (span.output_data) {
-            if (span.output_data.messages) {
-                sections.push(this.renderMessagesSection('Output Messages', span.output_data.messages));
-                const otherOutputData = { ...span.output_data };
+
+        // Парсим и форматируем output_data
+        const parsedOutput = this.parseData(span.output_data);
+        if (parsedOutput) {
+            if (parsedOutput.messages && Array.isArray(parsedOutput.messages)) {
+                sections.push(this.renderMessagesSection('Output Messages', parsedOutput.messages));
+                const otherOutputData = { ...parsedOutput };
                 delete otherOutputData.messages;
                 if (Object.keys(otherOutputData).length > 0) {
-                    sections.push(this.renderTreeSection('Output (Other)', otherOutputData));
+                    sections.push(this.renderTreeSection('Output (Other)', otherOutputData, true));
                 }
             } else {
-                sections.push(this.renderTreeSection('Output', span.output_data));
+                sections.push(this.renderTreeSection('Output', parsedOutput, true));
             }
         }
+
         if (span.usage) {
-            sections.push(this.renderTreeSection('Usage', span.usage));
+            sections.push(this.renderTreeSection('Usage', this.parseData(span.usage), true));
         }
         if (span.metadata && Object.keys(span.metadata).length > 0) {
-            sections.push(this.renderTreeSection('Metadata', span.metadata));
+            // Форматируем метаданные с улучшенным отображением LangChain данных
+            sections.push(this.renderMetadataSection('Metadata', span.metadata));
         }
         if (span.error) {
             sections.push(`
@@ -701,7 +746,559 @@ class SpanDetails {
         return sections.join('');
     }
 
+    parseData(data) {
+        if (!data) return null;
+
+        // Если это уже объект, возвращаем как есть
+        if (typeof data === 'object' && data !== null) {
+            return data;
+        }
+
+        // Если это строка, пытаемся распарсить
+        if (typeof data === 'string') {
+            // Пропускаем пустые строки
+            if (data.trim() === '') return null;
+
+            try {
+                // Сначала пытаемся JSON
+                const parsed = JSON.parse(data);
+                return parsed;
+            } catch (e1) {
+                try {
+                    // Если не JSON, может быть Python dict строка
+                    // Более безопасная конвертация
+                    let jsonLike = data.trim();
+
+                    // Заменяем Python специфичные значения
+                    jsonLike = jsonLike
+                        .replace(/None/g, 'null')
+                        .replace(/True/g, 'true')
+                        .replace(/False/g, 'false');
+
+                    // Заменяем одинарные кавычки на двойные (только для ключей и значений)
+                    // Более умная замена, которая учитывает контекст
+                    jsonLike = jsonLike.replace(/'([^']*)'/g, (match, content) => {
+                        // Если это выглядит как ключ (следует двоеточие или запятая)
+                        if (/:\s*$|,\s*$/.test(jsonLike.slice(jsonLike.indexOf(match) + match.length))) {
+                            return `"${content}"`;
+                        }
+                        // Иначе - это значение, тоже заменяем
+                        return `"${content.replace(/"/g, '\\"')}"`;
+                    });
+
+                    const parsed = JSON.parse(jsonLike);
+                    return parsed;
+                } catch (e2) {
+                    // Если не получилось - возвращаем как есть
+                    console.warn('Не удалось распарсить данные:', e2);
+                    return data;
+                }
+            }
+        }
+
+        return data;
+    }
+
+    extractKeyInfo(span) {
+        const info = {
+            hasContent: false,
+            inputMessage: null,
+            outputMessage: null,
+            summary: null
+        };
+
+        // Парсим input_data
+        const inputData = this.parseData(span.input_data);
+        if (inputData) {
+            // Ищем messages в input_data
+            if (inputData.messages && Array.isArray(inputData.messages)) {
+                const humanMessage = inputData.messages.find(msg => {
+                    const msgType = msg.type || msg._originalType || '';
+                    return msgType === 'human' || msgType === 'user' ||
+                           (msg.content && typeof msg.content === 'string');
+                });
+                if (humanMessage && humanMessage.content) {
+                    info.inputMessage = this.extractQuestionFromContent(humanMessage.content);
+                    info.hasContent = true;
+                }
+            }
+
+            // Если не нашли в messages, ищем в других полях
+            if (!info.inputMessage) {
+                if (inputData.original_question) {
+                    info.inputMessage = inputData.original_question;
+                    info.hasContent = true;
+                } else if (inputData.question) {
+                    info.inputMessage = inputData.question;
+                    info.hasContent = true;
+                }
+            }
+        }
+
+        // Также проверяем метаданные для входящего сообщения
+        if (!info.inputMessage && span.metadata && span.metadata['langchain.inputs']) {
+            const inputs = this.parseData(span.metadata['langchain.inputs']);
+            if (inputs) {
+                if (inputs.original_question) {
+                    info.inputMessage = inputs.original_question;
+                    info.hasContent = true;
+                } else if (inputs.messages && Array.isArray(inputs.messages)) {
+                    const humanMsg = inputs.messages.find(msg => {
+                        const msgType = msg.type || msg._originalType || '';
+                        return msgType === 'human' || msgType === 'user';
+                    });
+                    if (humanMsg && humanMsg.content) {
+                        info.inputMessage = this.extractQuestionFromContent(humanMsg.content);
+                        info.hasContent = true;
+                    }
+                }
+            }
+        }
+
+        // Парсим output_data
+        const outputData = this.parseData(span.output_data);
+        if (outputData) {
+            if (outputData.messages && Array.isArray(outputData.messages)) {
+                // Ищем последнее AI сообщение с контентом
+                const aiMessages = outputData.messages.filter(msg => {
+                    const msgType = msg.type || msg._originalType || '';
+                    return (msgType === 'ai' || msgType === 'assistant') && msg.content;
+                });
+                if (aiMessages.length > 0) {
+                    const lastAIMessage = aiMessages[aiMessages.length - 1];
+                    info.outputMessage = lastAIMessage.content;
+                    info.summary = this.extractSummaryFromContent(lastAIMessage.content);
+                    info.hasContent = true;
+                }
+            }
+        }
+
+        // Также проверяем метаданные для выходного сообщения
+        if (!info.outputMessage && span.metadata && span.metadata['langchain.outputs']) {
+            const outputs = this.parseData(span.metadata['langchain.outputs']);
+            if (outputs && outputs.messages && Array.isArray(outputs.messages)) {
+                const aiMessages = outputs.messages.filter(msg => {
+                    const msgType = msg.type || msg._originalType || '';
+                    return (msgType === 'ai' || msgType === 'assistant') && msg.content;
+                });
+                if (aiMessages.length > 0) {
+                    const lastAIMessage = aiMessages[aiMessages.length - 1];
+                    info.outputMessage = lastAIMessage.content;
+                    info.summary = this.extractSummaryFromContent(lastAIMessage.content);
+                    info.hasContent = true;
+                }
+            }
+        }
+
+        return info;
+    }
+
+    extractQuestionFromContent(content) {
+        if (!content || typeof content !== 'string') return null;
+
+        // Пытаемся найти исходный вопрос пользователя
+        const questionMatch = content.match(/Исходный вопрос пользователя:\s*["']?([^"\n]+)["']?/i);
+        if (questionMatch) {
+            return questionMatch[1];
+        }
+
+        // Если не нашли, берем первые 200 символов
+        if (content.length > 200) {
+            return content.substring(0, 200) + '...';
+        }
+        return content;
+    }
+
+    extractSummaryFromContent(content) {
+        if (!content || typeof content !== 'string') return null;
+
+        // Ищем резюме или результат
+        const summaryMatches = [
+            /Резюме[:\s]+(.+?)(?:\n\n|$)/i,
+            /Итог[:\s]+(.+?)(?:\n\n|$)/i,
+            /\*\*Результат\*\*[:\s]+(.+?)(?:\n\n|$)/i,
+            /Результат работы агента[:\s]+(.+?)(?:\n\n|$)/i
+        ];
+
+        for (const pattern of summaryMatches) {
+            const match = content.match(pattern);
+            if (match && match[1]) {
+                return match[1].trim();
+            }
+        }
+
+        // Если не нашли паттерн, берем первые 300 символов
+        if (content.length > 300) {
+            return content.substring(0, 300) + '...';
+        }
+        return content;
+    }
+
+    renderKeyInfoSection(keyInfo) {
+        if (!keyInfo.hasContent) return '';
+
+        const sections = [];
+
+        if (keyInfo.inputMessage) {
+            sections.push(`
+                <div class="key-info-item">
+                    <div class="key-info-label">
+                        <i class="bi bi-inbox me-2"></i>
+                        Входящее сообщение
+                    </div>
+                    <div class="key-info-value">
+                        ${TraceUtils.escapeHtml(keyInfo.inputMessage)}
+                    </div>
+                </div>
+            `);
+        }
+
+        if (keyInfo.outputMessage) {
+            sections.push(`
+                <div class="key-info-item">
+                    <div class="key-info-label">
+                        <i class="bi bi-reply me-2"></i>
+                        Ответ агента
+                    </div>
+                    <div class="key-info-value markdown-content">
+                        ${this.renderMarkdownContent(keyInfo.outputMessage)}
+                    </div>
+                </div>
+            `);
+        }
+
+        if (keyInfo.summary && keyInfo.summary !== keyInfo.outputMessage) {
+            sections.push(`
+                <div class="key-info-item">
+                    <div class="key-info-label">
+                        <i class="bi bi-file-text me-2"></i>
+                        Резюме
+                    </div>
+                    <div class="key-info-value">
+                        ${TraceUtils.escapeHtml(keyInfo.summary)}
+                    </div>
+                </div>
+            `);
+        }
+
+        if (sections.length === 0) return '';
+
+        return `
+            <div class="tree-section key-info-section">
+                <div class="tree-section-title">
+                    <i class="bi bi-info-circle me-2"></i>
+                    Ключевая информация
+                </div>
+                <div class="key-info-container">
+                    ${sections.join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    extractLangchainTags(metadata) {
+        if (!metadata) return [];
+
+        const tags = [];
+
+        // LangGraph информация
+        if (metadata['langchain.metadata']) {
+            let metaData;
+            try {
+                metaData = typeof metadata['langchain.metadata'] === 'string'
+                    ? JSON.parse(metadata['langchain.metadata'])
+                    : metadata['langchain.metadata'];
+            } catch (e) {
+                metaData = null;
+            }
+
+            if (metaData) {
+                if (metaData.langgraph_node) {
+                    tags.push({
+                        label: 'Node',
+                        value: metaData.langgraph_node,
+                        icon: 'bi-diagram-2',
+                        color: 'info'
+                    });
+                }
+                if (metaData.langgraph_step !== undefined) {
+                    tags.push({
+                        label: 'Step',
+                        value: `#${metaData.langgraph_step}`,
+                        icon: 'bi-list-ol',
+                        color: 'secondary'
+                    });
+                }
+                if (metaData.langgraph_triggers && Array.isArray(metaData.langgraph_triggers)) {
+                    const triggers = metaData.langgraph_triggers.map(t => t.replace('branch:to:', '')).join(', ');
+                    if (triggers) {
+                        tags.push({
+                            label: 'Trigger',
+                            value: triggers,
+                            icon: 'bi-arrow-right-circle',
+                            color: 'primary'
+                        });
+                    }
+                }
+                if (metaData.thread_id) {
+                    const threadParts = metaData.thread_id.split(':');
+                    if (threadParts.length > 1) {
+                        tags.push({
+                            label: 'Flow',
+                            value: threadParts[2] || 'unknown',
+                            icon: 'bi-diagram-3',
+                            color: 'primary'
+                        });
+                    }
+                }
+                if (metaData.langgraph_checkpoint_ns) {
+                    const checkpointParts = metaData.langgraph_checkpoint_ns.split(':');
+                    if (checkpointParts.length > 0) {
+                        tags.push({
+                            label: 'Checkpoint',
+                            value: checkpointParts[0],
+                            icon: 'bi-bookmark',
+                            color: 'secondary',
+                            title: metaData.langgraph_checkpoint_ns
+                        });
+                    }
+                }
+            }
+        }
+
+        // Selected Agent
+        if (metadata['langchain.inputs']) {
+            let inputs;
+            try {
+                inputs = typeof metadata['langchain.inputs'] === 'string'
+                    ? JSON.parse(metadata['langchain.inputs'])
+                    : metadata['langchain.inputs'];
+            } catch (e) {
+                inputs = null;
+            }
+
+            if (inputs && inputs.selected_agent) {
+                tags.push({
+                    label: 'Agent',
+                    value: inputs.selected_agent,
+                    icon: 'bi-robot',
+                    color: 'purple'
+                });
+            }
+            if (inputs && inputs.original_question) {
+                const question = inputs.original_question;
+                if (question.length > 50) {
+                    tags.push({
+                        label: 'Question',
+                        value: question.substring(0, 50) + '...',
+                        icon: 'bi-question-circle',
+                        color: 'warning',
+                        title: question
+                    });
+                } else {
+                    tags.push({
+                        label: 'Question',
+                        value: question,
+                        icon: 'bi-question-circle',
+                        color: 'warning'
+                    });
+                }
+            }
+        }
+
+        // Model и токены из outputs
+        if (metadata['langchain.outputs']) {
+            let outputs;
+            try {
+                outputs = typeof metadata['langchain.outputs'] === 'string'
+                    ? JSON.parse(metadata['langchain.outputs'])
+                    : metadata['langchain.outputs'];
+            } catch (e) {
+                outputs = null;
+            }
+
+            if (outputs && outputs.messages) {
+                // Ищем последнее AI сообщение с метаданными
+                const aiMessages = outputs.messages.filter(msg =>
+                    (msg.type === 'ai' || msg.type === 'assistant' || msg._originalType === 'ai') &&
+                    msg.response_metadata
+                );
+
+                if (aiMessages.length > 0) {
+                    const lastAIMessage = aiMessages[aiMessages.length - 1];
+                    const responseMeta = lastAIMessage.response_metadata;
+
+                    if (responseMeta.model_name) {
+                        tags.push({
+                            label: 'Model',
+                            value: responseMeta.model_name,
+                            icon: 'bi-cpu',
+                            color: 'success'
+                        });
+                    }
+
+                    // Token usage
+                    if (responseMeta.token_usage) {
+                        const usage = responseMeta.token_usage;
+                        const total = usage.total_tokens || (usage.prompt_tokens || 0) + (usage.completion_tokens || 0);
+                        if (total > 0) {
+                            tags.push({
+                                label: 'Tokens',
+                                value: `${total.toLocaleString()} (${usage.prompt_tokens || 0}/${usage.completion_tokens || 0})`,
+                                icon: 'bi-123',
+                                color: 'info',
+                                title: `Prompt: ${usage.prompt_tokens || 0}, Completion: ${usage.completion_tokens || 0}, Total: ${total}`
+                            });
+                        }
+                    }
+
+                    // Finish reason
+                    if (responseMeta.finish_reason) {
+                        tags.push({
+                            label: 'Finish',
+                            value: responseMeta.finish_reason,
+                            icon: responseMeta.finish_reason === 'stop' ? 'bi-check-circle' : 'bi-exclamation-circle',
+                            color: responseMeta.finish_reason === 'stop' ? 'success' : 'warning'
+                        });
+                    }
+                }
+
+                // Tool calls
+                const toolCalls = outputs.messages.filter(msg =>
+                    msg.tool_calls && Array.isArray(msg.tool_calls) && msg.tool_calls.length > 0
+                );
+                if (toolCalls.length > 0) {
+                    const allToolCalls = toolCalls.flatMap(msg => msg.tool_calls);
+                    const uniqueTools = [...new Set(allToolCalls.map(tc => tc.name))];
+                    if (uniqueTools.length > 0) {
+                        tags.push({
+                            label: 'Tools',
+                            value: `${uniqueTools.length} tool${uniqueTools.length > 1 ? 's' : ''}`,
+                            icon: 'bi-tools',
+                            color: 'green',
+                            title: uniqueTools.join(', ')
+                        });
+                    }
+                }
+            }
+        }
+
+        // Run ID
+        if (metadata['langchain.run_id']) {
+            tags.push({
+                label: 'Run ID',
+                value: metadata['langchain.run_id'].substring(0, 8) + '...',
+                icon: 'bi-hash',
+                color: 'secondary',
+                title: metadata['langchain.run_id']
+            });
+        }
+
+        // Type
+        if (metadata['langchain.type']) {
+            tags.push({
+                label: 'Type',
+                value: metadata['langchain.type'],
+                icon: 'bi-tag',
+                color: 'info'
+            });
+        }
+
+        return tags;
+    }
+
+    renderTagsSection(tags) {
+        if (!tags || tags.length === 0) return '';
+
+        const tagsHtml = tags.map(tag => {
+            let badgeClass;
+            if (tag.color === 'purple') {
+                badgeClass = 'bg-purple';
+            } else if (tag.color === 'green') {
+                badgeClass = 'bg-green';
+            } else {
+                badgeClass = `bg-${tag.color}`;
+            }
+            const titleAttr = tag.title ? `title="${TraceUtils.escapeHtml(tag.title)}"` : '';
+            return `
+                <div class="metadata-tag" ${titleAttr}>
+                    <i class="bi ${tag.icon} me-1"></i>
+                    <span class="metadata-tag-label">${TraceUtils.escapeHtml(tag.label)}:</span>
+                    <span class="badge ${badgeClass} metadata-tag-value">${TraceUtils.escapeHtml(tag.value)}</span>
+                </div>
+            `;
+        }).join('');
+
+        return `
+            <div class="tree-section metadata-tags-section">
+                <div class="tree-section-title">
+                    <i class="bi bi-tags me-2"></i>
+                    Key Information
+                </div>
+                <div class="metadata-tags-container">
+                    ${tagsHtml}
+                </div>
+            </div>
+        `;
+    }
+
+    renderMetadataSection(title, metadata) {
+        // Парсим LangChain данные для лучшего отображения
+        const langchainSections = {};
+        const otherMetadata = {};
+
+        for (const [key, value] of Object.entries(metadata)) {
+            if (key.startsWith('langchain.')) {
+                langchainSections[key] = value;
+            } else {
+                otherMetadata[key] = value;
+            }
+        }
+
+        // Парсим все LangChain секции
+        for (const key in langchainSections) {
+            langchainSections[key] = this.parseData(langchainSections[key]);
+        }
+
+        let sectionsHtml = '';
+
+        // LangChain секции (в определенном порядке)
+        const orderedKeys = [
+            'langchain.inputs',
+            'langchain.metadata',
+            'langchain.outputs',
+            'langchain.run_id',
+            'langchain.tags',
+            'langchain.type'
+        ];
+
+        // Сначала добавляем упорядоченные ключи
+        for (const key of orderedKeys) {
+            if (langchainSections[key]) {
+                const displayKey = this.formatMetadataKey(key);
+                sectionsHtml += this.renderTreeSection(displayKey, langchainSections[key], true);
+            }
+        }
+
+        // Затем добавляем остальные LangChain ключи
+        for (const [key, value] of Object.entries(langchainSections)) {
+            if (!orderedKeys.includes(key)) {
+                const displayKey = this.formatMetadataKey(key);
+                sectionsHtml += this.renderTreeSection(displayKey, value, true);
+            }
+        }
+
+        // Другие метаданные
+        if (Object.keys(otherMetadata).length > 0) {
+            sectionsHtml += this.renderTreeSection('Other Metadata', otherMetadata, true);
+        }
+
+        return sectionsHtml;
+    }
+
     renderRawTab(span) {
+        // Форматируем JSON с красивым выводом
+        const formattedJson = TraceUtils.formatJson(span);
         return `
             <div class="raw-json-container">
                 <div class="raw-json-header">
@@ -710,7 +1307,7 @@ class SpanDetails {
                         Copy JSON
                     </button>
                 </div>
-                <pre class="raw-json-content"><code>${TraceUtils.formatJson(span)}</code></pre>
+                <pre class="raw-json-content"><code class="json-content">${TraceUtils.escapeHtml(formattedJson)}</code></pre>
             </div>
         `;
     }
@@ -796,7 +1393,27 @@ class SpanDetails {
         return `<div class="markdown-content">${html}</div>`;
     }
 
-    renderTreeSection(title, data) {
+    renderTreeSection(title, data, isFormatted = false) {
+        if (!data) return '';
+
+        // Всегда пытаемся отформатировать как JSON для объектов
+        if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
+            try {
+                const formattedJson = TraceUtils.formatJson(data);
+                return `
+                    <div class="tree-section">
+                        <div class="tree-section-title">${title}</div>
+                        <div class="tree-content">
+                            <pre class="metadata-json-content"><code class="json-content">${TraceUtils.escapeHtml(formattedJson)}</code></pre>
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                // Fallback на обычное дерево
+            }
+        }
+
+        // Для массивов и других типов используем дерево
         return `
             <div class="tree-section">
                 <div class="tree-section-title">${title}</div>
@@ -953,7 +1570,17 @@ class SpanDetails {
     }
 
     formatMetadataKey(key) {
-        return key.replaceAll('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+        // Форматируем ключи метаданных для читаемости
+        return key
+            .replace('langchain.', '')
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, l => l.toUpperCase())
+            .replace(/Inputs/i, 'Inputs')
+            .replace(/Outputs/i, 'Outputs')
+            .replace(/Metadata/i, 'Metadata')
+            .replace(/Run Id/i, 'Run ID')
+            .replace(/Tags/i, 'Tags')
+            .replace(/Type/i, 'Type');
     }
 }
 

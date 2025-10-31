@@ -12,6 +12,8 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 from app.interfaces.base import BaseInterface, Message
 from app.core.context import get_context
+from app.core.tracing.decorators import trace_span
+from app.models.trace_models import SpanType
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,11 @@ class WebInterface(BaseInterface):
         """Устанавливает WebSocket менеджер для отправки сообщений"""
         self.websocket_manager = websocket_manager
 
+    @trace_span(
+        name="web_interface.handle_message",
+        span_type=SpanType.OTHER,
+        metadata={"component": "web_interface", "operation": "handle_message"}
+    )
     async def handle_message(
         self, raw_data: Dict[str, Any], flow_id: str
     ) -> Optional[Message]:
@@ -58,18 +65,18 @@ class WebInterface(BaseInterface):
         # Формируем правильный session_id
         context = get_context()
         real_user_id = context.user.user_id if context else user_id
-        
+
         # Получаем email пользователя (если доступен в контексте)
         user_email = context.user.email if context and hasattr(context.user, 'email') else None
-        
+
         # Проверяем доступ пользователя
         is_allowed, error_message = self.check_user_access(real_user_id, user_email)
         if not is_allowed:
             logger.warning(f"🚫 Доступ запрещен для пользователя {real_user_id} ({user_email}) в flow {flow_id}")
-            
+
             # Формируем временный session_id для ошибки
             temp_session_id = f"web:{real_user_id}:{flow_id}:{uuid.uuid4().hex[:8]}"
-            
+
             access_denied_message = Message(
                 user_id=real_user_id,
                 session_id=temp_session_id,
@@ -83,7 +90,7 @@ class WebInterface(BaseInterface):
             )
             await self.send_message(access_denied_message)
             return None
-        
+
         # Проверяем и валидируем session_id
         if js_session_id and js_session_id.startswith('web:'):
             parts = js_session_id.split(':')
@@ -138,17 +145,17 @@ class WebInterface(BaseInterface):
             # Разделяем аудиофайлы и обычные файлы
             audio_files = [f for f in files_data if f.get("content_type", "").startswith("audio/")]
             regular_files = [f for f in files_data if not f.get("content_type", "").startswith("audio/")]
-            
+
             # Обрабатываем обычные файлы
             file_messages = []
             if regular_files:
                 file_messages = await self.process_files(regular_files, user_id)
-            
+
             # Обрабатываем аудиофайлы
             audio_messages = []
             if audio_files:
                 audio_messages = await self.process_audio_files(audio_files, user_id)
-            
+
             # Объединяем все сообщения
             all_messages = file_messages + audio_messages
             processed_files = all_messages
@@ -192,22 +199,27 @@ class WebInterface(BaseInterface):
             },
         )
 
+    @trace_span(
+        name="web_interface.send_reasoning",
+        span_type=SpanType.OTHER,
+        metadata={"component": "web_interface", "operation": "send_reasoning"}
+    )
     async def send_reasoning(self, session_id: str, reasoning_text: str):
         """
         Отправляет reasoning как отдельное уведомление в web chat.
         Reasoning отображается как специальное сообщение с индикатором "думает".
-        
+
         Args:
             session_id: ID сессии
             reasoning_text: Текст reasoning от LLM
         """
         if not reasoning_text or not reasoning_text.strip():
             return
-        
+
         # Извлекаем user_id из session_id (формат: web:user_id:flow:uuid)
         parts = session_id.split(":")
         user_id = parts[1] if len(parts) > 1 else "unknown"
-        
+
         # Создаем уведомление для reasoning
         notification = {
             "type": "AGENT_REASONING",
@@ -218,14 +230,19 @@ class WebInterface(BaseInterface):
                 "message_id": f"reasoning_{datetime.now(timezone.utc).timestamp()}",
             },
         }
-        
+
         notification_key = f"web_notification:web:{user_id}:{uuid.uuid4().hex}"
         await self.storage.set(notification_key, json.dumps(notification), ttl=900, force_global=True)
-        
+
         logger.debug(f"💭 Reasoning отправлен в web chat для session {session_id}: {reasoning_text[:50]}...")
-        
+
         await asyncio.sleep(0.3)
 
+    @trace_span(
+        name="web_interface.send_message",
+        span_type=SpanType.OTHER,
+        metadata={"component": "web_interface", "operation": "send_message"}
+    )
     async def send_message(self, message: Message):
         """
         Сохраняет сообщение как уведомление в БД для многоинстансной архитектуры.
@@ -280,11 +297,16 @@ class WebInterface(BaseInterface):
             f"📤 Уведомление сохранено: key={notification_key}, type={notification.get('type', 'unknown')}, content={message.content[:50]}..."
         )
 
+    @trace_span(
+        name="web_interface.send_typing_notification",
+        span_type=SpanType.OTHER,
+        metadata={"component": "web_interface", "operation": "send_typing_notification"}
+    )
     async def send_typing_notification(self, session_id: str, is_typing: bool):
         """Отправка уведомления о печати для web чата"""
         parts = session_id.split(':')
         user_id = parts[1] if len(parts) >= 2 else "unknown"
-        
+
         typing_notification = {
             "type": "AGENT_TYPING",
             "session_id": session_id,
@@ -301,11 +323,16 @@ class WebInterface(BaseInterface):
         status = "начал" if is_typing else "закончил"
         logger.info(f"💬 Агент {status} печатать: key={notification_key}")
 
+    @trace_span(
+        name="web_interface.send_interrupt_question",
+        span_type=SpanType.OTHER,
+        metadata={"component": "web_interface", "operation": "send_interrupt_question"}
+    )
     async def send_interrupt_question(self, session_id: str, question: str):
         """Сохраняет interrupt вопрос в БД"""
         parts = session_id.split(':')
         user_id = parts[1] if len(parts) >= 2 else "unknown"
-        
+
         interrupt_notification = {
             "type": "AGENT_INTERRUPT",
             "session_id": session_id,
@@ -320,7 +347,11 @@ class WebInterface(BaseInterface):
         await self.storage.set(notification_key, json.dumps(interrupt_notification), ttl=900, force_global=True)
         logger.info(f"🟡 Interrupt уведомление сохранено: key={notification_key}")
 
-    # Глобальный экземпляр для использования
+    @trace_span(
+        name="web_interface._process_single_file",
+        span_type=SpanType.OTHER,
+        metadata={"component": "web_interface", "operation": "process_file"}
+    )
     async def _process_single_file(
         self, file_data: Dict[str, Any], user_id: str, file_processor
     ):
@@ -347,6 +378,11 @@ class WebInterface(BaseInterface):
 
         return file_record
 
+    @trace_span(
+        name="web_interface._process_single_audio_file",
+        span_type=SpanType.OTHER,
+        metadata={"component": "web_interface", "operation": "process_audio"}
+    )
     async def _process_single_audio_file(
         self, audio_data: Dict[str, Any], user_id: str, audio_processor
     ):

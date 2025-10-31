@@ -30,7 +30,7 @@ async def get_traces(
     """
 
     # Получаем все spans из БД
-    all_span_keys = await storage.list_by_prefix("otel:")
+    all_span_keys = await storage.list_by_prefix("otel:", limit= 10000)
 
     # Парсим spans
     traces_map = {}
@@ -136,7 +136,7 @@ async def get_trace_detail(
     """
 
     # Получаем spans конкретного трейса (формат: otel:{trace_id}:span:{span_id})
-    span_keys = await storage.list_by_prefix(f"otel:{trace_id}:span:")
+    span_keys = await storage.list_by_prefix(f"otel:{trace_id}:span:", limit = 10000)
 
     spans = []
     for key in span_keys:

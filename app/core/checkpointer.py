@@ -7,6 +7,8 @@ import asyncio
 import logging
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from app.core.config import get_settings
+from app.core.tracing.decorators import trace_span
+from app.models.trace_models import SpanType
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +61,7 @@ class CheckpointerManager:
                             # Если проверка не удалась, пересоздадим соединение
                             self._connection = None
                             self._context_manager = None
-                    
+
                     if self._connection is None:
                         if self.serde:
                             self._context_manager = AsyncPostgresSaver.from_conn_string(
@@ -69,10 +71,10 @@ class CheckpointerManager:
                             self._context_manager = AsyncPostgresSaver.from_conn_string(
                                 self.conn_string
                             )
-                        
+
                         self._connection = await self._context_manager.__aenter__()
                         logger.debug("✅ Создано переиспользуемое соединение с PostgreSQL checkpointer")
-                    
+
                     return self._connection
 
             async def setup(self):
@@ -140,6 +142,11 @@ class CheckpointerManager:
 _manager = CheckpointerManager()
 
 
+@trace_span(
+    name="checkpointer.init_checkpointer",
+    span_type=SpanType.OTHER,
+    metadata={"component": "checkpointer", "operation": "init"}
+)
 async def init_checkpointer() -> None:
     """Инициализация checkpointer"""
     global _checkpointer
@@ -161,6 +168,11 @@ async def init_checkpointer() -> None:
         raise
 
 
+@trace_span(
+    name="checkpointer.get_checkpointer",
+    span_type=SpanType.OTHER,
+    metadata={"component": "checkpointer", "operation": "get"}
+)
 async def get_checkpointer():
     """Получение checkpointer"""
     global _checkpointer
@@ -172,6 +184,11 @@ async def get_checkpointer():
     return _checkpointer
 
 
+@trace_span(
+    name="checkpointer.update_checkpointer_with_store_changes",
+    span_type=SpanType.OTHER,
+    metadata={"component": "checkpointer", "operation": "update_store"}
+)
 async def update_checkpointer_with_store_changes(checkpointer, run_config: dict, store_data: dict):
     """
     Обновляет checkpointer с изменениями store, сделанными в tools.
@@ -183,11 +200,11 @@ async def update_checkpointer_with_store_changes(checkpointer, run_config: dict,
         # Обновляем channel_values с новыми данными store
         updated_channel_values = checkpoint_tuple.checkpoint.get("channel_values", {})
         updated_channel_values["store"] = store_data
-        
+
         # Создаем новый checkpoint с обновленными данными
         updated_checkpoint = checkpoint_tuple.checkpoint.copy()
         updated_checkpoint["channel_values"] = updated_channel_values
-        
+
         # Обновляем channel_versions для store
         channel_versions = checkpoint_tuple.checkpoint.get("channel_versions", {})
         if "store" in channel_versions:
@@ -203,7 +220,7 @@ async def update_checkpointer_with_store_changes(checkpointer, run_config: dict,
             channel_versions["store"] = new_version
         else:
             channel_versions["store"] = "00000000000000000000000000000001"
-        
+
         # Сохраняем обновленный checkpoint
         # Используем checkpoint_tuple.config для сохранения (содержит checkpoint_ns)
         await checkpointer.aput(
@@ -212,12 +229,17 @@ async def update_checkpointer_with_store_changes(checkpointer, run_config: dict,
             checkpoint_tuple.metadata,
             channel_versions
         )
-        
+
         logger.info(f"✅ Store обновлен в checkpointer: {list(store_data.keys())}")
     else:
         logger.warning("⚠️ Не удалось получить checkpoint для обновления store")
 
 
+@trace_span(
+    name="checkpointer.close_checkpointer",
+    span_type=SpanType.OTHER,
+    metadata={"component": "checkpointer", "operation": "close_global"}
+)
 async def close_checkpointer() -> None:
     """Закрытие checkpointer"""
     global _checkpointer

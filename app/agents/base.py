@@ -20,7 +20,8 @@ from app.core.checkpointer import get_checkpointer
 from langgraph.errors import GraphInterrupt
 from langchain_core.messages import HumanMessage
 from app.core.checkpointer import update_checkpointer_with_store_changes
-from app.core.tracing.langfuse_init import get_langfuse_callback
+from app.core.tracing.decorators import trace_span
+from app.models.trace_models import SpanType
 logger = logging.getLogger(__name__)
 
 
@@ -44,6 +45,11 @@ class BaseAgent(ABC):
         self._compiled_graph = None
         self._tools = None
 
+    @trace_span(
+        name="agent.get_tools",
+        span_type=SpanType.OTHER,
+        metadata={"component": "agent", "operation": "get_tools"}
+    )
     async def get_tools(self) -> List[Any]:
         """
         ЕДИНООБРАЗНО собирает инструменты ТОЛЬКО из БД по ссылкам в config.tools.
@@ -265,13 +271,6 @@ class BaseAgent(ABC):
                         set_state_in_context(checkpoint_state)
                         logger.debug(f"🔄 State загружен из checkpointer в контекст: {list(checkpoint_state.keys())}")
 
-            # Добавляем Langfuse callback если включен
-            langfuse_callback = get_langfuse_callback()
-
-            if langfuse_callback and "callbacks" not in run_config:
-                run_config["callbacks"] = [langfuse_callback]
-                logger.debug(f"🔍 Langfuse callback добавлен для агента {self.config.name}")
-
             result = await graph.ainvoke(input_data, config=run_config)
 
             # Обновляем state в контексте после выполнения графа
@@ -299,7 +298,11 @@ class BaseAgent(ABC):
                     exc_info=True
                 )
                 raise
-
+    @trace_span(
+        name="agent.as_tool",
+        span_type=SpanType.OTHER,
+        metadata={"component": "agent", "operation": "get_tools"}
+    )
     def as_tool(self, name: Optional[str] = None, description: Optional[str] = None):
         """
         Превращает агента в инструмент для использования в других агентах.
