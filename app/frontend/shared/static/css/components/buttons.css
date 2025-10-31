@@ -18,6 +18,11 @@
     user-select: none;
 }
 
+.btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--border-focus);
+}
+
 .btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
@@ -48,12 +53,11 @@
 .btn-secondary {
     background: var(--glass-bg);
     color: var(--text-primary);
-    border: 2px solid var(--glass-border);
-    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-primary);
 }
 
 .btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--bg-hover);
     border-color: var(--border-secondary);
     transform: translateY(-1px);
 }

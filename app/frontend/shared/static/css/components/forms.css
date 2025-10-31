@@ -17,14 +17,13 @@
 .form-group select {
     width: 100%;
     padding: 0.625rem 0.875rem;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid var(--glass-border);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
     border-radius: var(--radius-lg);
     color: var(--text-primary);
     font-size: 0.8125rem;
     transition: all var(--transition-normal);
     font-family: inherit;
-    backdrop-filter: blur(8px);
 }
 
 .form-group input:focus,
@@ -32,8 +31,8 @@
 .form-group select:focus {
     outline: none;
     border-color: var(--accent-primary);
-    box-shadow: 0 0 0 4px rgba(124, 124, 248, 0.15), var(--shadow-md);
-    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.18);
+    background: var(--bg-secondary);
     transform: translateY(-1px);
 }
 
@@ -64,20 +63,19 @@
     display: block;
     width: 100%;
     padding: 0.625rem 0.875rem;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid var(--glass-border);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
     border-radius: var(--radius-lg);
     color: var(--text-primary);
     font-size: 0.8125rem;
     transition: all var(--transition-normal);
-    backdrop-filter: blur(8px);
 }
 
 .form-control:focus {
     outline: none;
     border-color: var(--accent-primary);
-    box-shadow: 0 0 0 4px rgba(124, 124, 248, 0.15), var(--shadow-md);
-    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.18);
+    background: var(--bg-secondary);
     transform: translateY(-1px);
 }
 

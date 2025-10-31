@@ -117,7 +117,7 @@ async def migrated_db():
     await migrator.run_full_migration()
     logger.info("✅ Миграция БД выполнена успешно")
     
-    clear_context()
+    #clear_context()
 
     yield
 
@@ -185,6 +185,37 @@ async def tool_factory():
 
 
 @pytest_asyncio.fixture
+async def system_context():
+    """Системный контекст для чтения системных сущностей (flows, agents)"""
+    from app.identity.models import Company, User, AuthProvider, UserStatus
+    from app.models.context_models import Context
+
+    system_context = Context(
+        user=User(
+            user_id="migration_user",
+            provider="system",
+            provider_user_id="sys_001",
+            email="migration@system.local",
+            name="Migration User",
+            status="active",
+            groups=["admin"],
+            companies={"system": ["admin"]},
+            active_company_id="system"
+        ),
+        session_id="migration_session",
+        platform="system",
+        active_company=Company(
+            company_id="system",
+            subdomain="system",
+            name="System Company",
+            status="active"
+        )
+    )
+    await set_context(system_context)
+    return system_context
+
+
+@pytest_asyncio.fixture
 async def migrator():
     """Migrator для каждого теста"""
     return get_container().migrator
@@ -222,7 +253,7 @@ def test_user(test_company: Company) -> User:
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def test_context(test_user: User, test_company: Company):
+async def test_context(test_user: User, test_company: Company, migrated_db):
     """Тестовый контекст с изолированными сервисами для каждого теста"""
     context = Context(
         user=test_user,

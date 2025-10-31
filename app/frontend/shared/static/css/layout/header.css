@@ -69,8 +69,8 @@
 
 .btn-plugin-action:hover {
     background: var(--bg-hover);
-    border-color: var(--accent-primary);
-    color: var(--accent-primary);
+    border-color: var(--border-secondary);
+    color: var(--text-primary);
     transform: translateY(-1px);
     box-shadow: var(--shadow-sm);
 }

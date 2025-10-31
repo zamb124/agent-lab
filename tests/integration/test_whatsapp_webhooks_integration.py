@@ -74,31 +74,45 @@ async def wa_test_flow(wa_test_company):
 @pytest_asyncio.fixture
 async def wa_test_variables(wa_test_company):
     """Создает тестовые переменные для компании"""
-    from app.core.context import get_context
+    from app.core.context import set_context
     from app.core.container import get_container
-    
-    # Устанавливаем контекст компании для создания переменных
-    context = get_context()
-    context.active_company = wa_test_company
-    
+    from app.models.context_models import Context
+
+    from app.identity.models import User, AuthProvider, UserStatus
+
+    # Создаем контекст с компанией и пользователем
+    context = Context(
+        user=User(
+            user_id="wa_test_user",
+            provider="test",
+            provider_user_id="wa_001",
+            email="wa_test@example.com",
+            name="WhatsApp Test User",
+            status="active",
+            groups=["user"],
+            companies={wa_test_company.company_id: ["user"]},
+            active_company_id=wa_test_company.company_id
+        ),
+        platform="test",
+        active_company=wa_test_company
+    )
+    await set_context(context)
+
     container = get_container()
     variables_service = container.variables_service
-    
+
     # Создаем переменные
     await variables_service.set_var("wa_test_token", "EAAxxx_test_access_token", is_secret=True)
     await variables_service.set_var("wa_verify_token", "test_verify_12345", is_secret=False)
-    
+
     yield {
         "access_token": "EAAxxx_test_access_token",
         "verify_token": "test_verify_12345"
     }
-    
+
     # Cleanup
     await variables_service.delete_var("wa_test_token")
     await variables_service.delete_var("wa_verify_token")
-    
-    # Очищаем контекст
-    context.active_company = None
 
 
 @pytest.mark.asyncio

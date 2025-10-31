@@ -99,7 +99,8 @@ class ReActAgent(BaseAgent):
         local_vars = self.config.local_variables if hasattr(self.config, 'local_variables') else {}
         static_rendered_prompt = VariableResolver.render_template(
             self.config.prompt,
-            local_vars=local_vars
+            local_vars=local_vars,
+            include_system=False
         )
         logger.info(f"Статические переменные подставлены для {self.config.agent_id}")
 
@@ -127,9 +128,15 @@ class ReActAgent(BaseAgent):
                     if key not in context:
                         context[key] = value
             
+            # Добавляем системные переменные на каждом шаге (актуальное время/дата)
+            sys_vars = VariableResolver.resolve_all(include_system=True)
+
+            combined_context = dict(sys_vars)
+            combined_context.update(context)
+
             rendered = render_state_variables(
                 static_rendered_prompt,
-                context=context,
+                context=combined_context,
                 full_state=state
             )
             

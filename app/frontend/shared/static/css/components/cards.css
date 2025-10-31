@@ -22,7 +22,7 @@
     border-color: var(--glass-border-hover) !important;
     box-shadow: var(--shadow-lg) !important;
     transform: translateY(-4px) scale(1.01) !important;
-    background: rgba(255, 255, 255, 0.08) !important;
+    background: var(--bg-hover) !important;
 }
 
 /* Иконка карточки - градиентный стиль */

@@ -28,6 +28,9 @@ class AdminPlugin(Plugin):
             "icon": "shield-lock",
             "type": "submenu",
             "order": 100,
+            "group": "Система",
+            "group_icon": "settings",
+            "group_order": 90,
             "children": [
                 {
                     "id": "admin_users",

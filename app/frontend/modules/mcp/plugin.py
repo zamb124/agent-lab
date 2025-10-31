@@ -27,7 +27,10 @@ class MCPPlugin(Plugin):
             "icon": "plug",
             "url": "/frontend/mcp/",
             "order": 60,
-            "type": "htmx"
+            "type": "htmx",
+            "group": "Инструменты",
+            "group_icon": "tools",
+            "group_order": 50
         }
     ]
     

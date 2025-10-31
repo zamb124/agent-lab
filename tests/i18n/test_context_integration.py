@@ -266,16 +266,29 @@ class TestAuthMiddlewareContextCreation:
             active_company_id="test_company"
         )
         
-        # Мокаем request и auth service
+        # Мокаем request с JWT токеном
         request = Mock(spec=Request)
-        request.cookies.get.return_value = "test_session"
+        request.cookies.get.side_effect = lambda key, default=None: {
+            "auth_token": "valid.jwt.token.here"
+        }.get(key, default)
         request.headers.get.return_value = ""
-        
-        with patch.object(self.middleware, '_get_user_by_session', new_callable=AsyncMock) as mock_get_user:
-            mock_get_user.return_value = test_user
-            
-            with patch.object(self.middleware, '_update_user_active_company', new_callable=AsyncMock):
-                context = await self.middleware._create_api_context(request, self.test_company)
+
+        with patch('app.middleware.auth.get_token_service') as mock_token_service:
+            # Мокаем валидацию токена
+            mock_token = Mock()
+            mock_token.user_id = "test_user"
+            mock_token.session_id = "api_session_456"
+            mock_token.company_id = "test_company"  # Должен совпадать с requested_company
+            mock_token_service.return_value.validate_token.return_value = mock_token
+
+            with patch.object(self.middleware, '_get_user_by_id', new_callable=AsyncMock) as mock_get_user:
+                mock_get_user.return_value = test_user
+
+                with patch.object(self.middleware, '_get_user_companies', new_callable=AsyncMock) as mock_get_companies:
+                    mock_get_companies.return_value = [self.test_company]
+
+                    with patch.object(self.middleware, '_update_user_active_company', new_callable=AsyncMock):
+                        context = await self.middleware._create_api_context(request, self.test_company)
         
         assert context.language == Language.EN
         assert context.platform == "api"
@@ -317,18 +330,28 @@ class TestAuthMiddlewareContextCreation:
             active_company_id="test_company"
         )
         
-        # Мокаем request
+        # Мокаем request с JWT токеном
         request = Mock(spec=Request)
         request.cookies.get.side_effect = lambda key, default=None: {
-            "session_id": "frontend_session"
+            "auth_token": "valid.jwt.token.here"
         }.get(key, default)
-        request.cookies.keys.return_value = ["session_id"]
-        
-        with patch.object(self.middleware, '_get_user_by_session', new_callable=AsyncMock) as mock_get_user:
-            mock_get_user.return_value = test_user
-            
-            with patch.object(self.middleware, '_update_user_active_company', new_callable=AsyncMock):
-                context = await self.middleware._create_frontend_context(request, self.test_company, has_subdomain=True)
+        request.cookies.keys.return_value = ["auth_token"]
+
+        with patch('app.middleware.auth.get_token_service') as mock_token_service:
+            # Мокаем валидацию токена
+            mock_token = Mock()
+            mock_token.user_id = "frontend_user"
+            mock_token.session_id = "frontend_session_123"
+            mock_token_service.return_value.validate_token.return_value = mock_token
+
+            with patch.object(self.middleware, '_get_user_by_id', new_callable=AsyncMock) as mock_get_user:
+                mock_get_user.return_value = test_user
+
+                with patch.object(self.middleware, '_get_user_companies', new_callable=AsyncMock) as mock_get_companies:
+                    mock_get_companies.return_value = [self.test_company]
+
+                    with patch.object(self.middleware, '_update_user_active_company', new_callable=AsyncMock):
+                        context = await self.middleware._create_frontend_context(request, self.test_company, has_subdomain=True)
         
         assert context.language == Language.RU
         assert context.platform == "frontend"

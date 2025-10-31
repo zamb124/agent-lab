@@ -397,6 +397,25 @@ class TaskProcessor:
                 user_message="Прошу прощения, сейчас в сервисе технические проблемы связанные с биллингом. Попробуйте позже или обратитесь к администратору."
             )
 
+        except ValueError as e:
+            # Специальная обработка ошибки недостатка кредитов OpenRouter (402)
+            err_text = str(e)
+            if "OpenRouter API error: 402" in err_text or "Insufficient credits" in err_text:
+                logger.error(f"❌ {task.task_id} ошибка OpenRouter 402: {e}")
+                await self._handle_task_error(
+                    task,
+                    e,
+                    interface,
+                    user_message=(
+                        "Недостаточно кредитов для LLM. Обратитесь к администратору, "
+                        "чтобы пополнить баланс, и повторите попытку."
+                    ),
+                )
+            else:
+                logger.error(f"❌ {task.task_id} ValueError: {e}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                await self._handle_task_error(task, e, interface)
+
         except Exception as e:
             logger.error(f"❌ {task.task_id} неожиданная ошибка: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
@@ -410,8 +429,9 @@ class TaskProcessor:
             await interface.stop_typing_indicator(task.session_id)
             await asyncio.sleep(0.1)
 
-        if user_message:
-            await self._send_error_message_to_user(task, user_message)
+        # Всегда уведомляем пользователя об ошибке, чтобы не зависал индикатор "печатает"
+        message_to_user = user_message or "Произошла ошибка при обработке запроса. Попробуйте позже или обратитесь к администратору."
+        await self._send_error_message_to_user(task, message_to_user)
 
         task.status = TaskStatus.FAILED
         task.error_message = str(error)

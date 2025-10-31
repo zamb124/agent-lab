@@ -48,23 +48,10 @@ class APP {
             console.log('🔄 Инициализируем chat manager...');
             this.chatManager.init();
             
-            // Обработчик HTMX для переинициализации кнопки темы
-            // Используем afterSettle для гарантии что DOM обновлен
-            document.addEventListener('htmx:afterSettle', (e) => {
-                // Проверяем был ли обновлен header
-                const headerRight = document.getElementById('header-right');
-                if (headerRight && this.themeManager && this.themeManager.reinitialize) {
-                    this.themeManager.reinitialize();
-                }
-            });
-            
-            // Создаем глобальный API для чата
-            this.chat = {
-                open: async (options) => await this.chatManager.open(options),
-                openExistingSession: async (agent_id, session_id) => await this.chatManager.openExistingSession(agent_id, session_id),
-                close: () => this.chatManager.closeChat(),
-                send: (message) => this.chatManager.sendUserMessage(message)
-            };
+            // Ждем полной инициализации переводов перед загрузкой плагинов
+            console.log('🔄 Ждем инициализации переводов...');
+            await this.languageManager.refreshTranslations();
+            console.log('✅ Переводы загружены');
             
             // Создаем глобальный API для интернационализации
             this.i18n = {
@@ -74,7 +61,15 @@ class APP {
                 getSupportedLanguages: () => this.languageManager.getSupportedLanguages(),
                 refreshTranslations: async () => await this.languageManager.refreshTranslations()
             };
-            
+
+            // Создаем глобальный API для чата
+            this.chat = {
+                open: async (options) => await this.chatManager.open(options),
+                openExistingSession: async (agent_id, session_id) => await this.chatManager.openExistingSession(agent_id, session_id),
+                close: () => this.chatManager.closeChat(),
+                send: (message) => this.chatManager.sendUserMessage(message)
+            };
+
             // Загружаем PromptEditor
             if (typeof PromptEditor !== 'undefined') {
                 this.PromptEditor = PromptEditor;

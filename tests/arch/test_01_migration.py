@@ -9,9 +9,9 @@ from app.models import AgentType
 
 
 @pytest.mark.asyncio
-async def test_flows_migration_from_code(migrated_db, storage, agent_repo, flow_repo):
+async def test_flows_migration_from_code(migrated_db, storage, agent_repo, flow_repo, system_context):
     """Тест миграции weather_flow и smart_flow из кода"""
-    
+
     # 2. ПРОВЕРКА WEATHER_FLOW
     weather_flow = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert weather_flow is not None, "weather_flow не найден в БД"

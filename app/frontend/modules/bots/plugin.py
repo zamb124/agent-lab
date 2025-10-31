@@ -27,7 +27,10 @@ class BotsPlugin(Plugin):
             "icon": "users",
             "url": "/frontend/bots/",
             "order": 10,
-            "type": "htmx"
+            "type": "htmx",
+            "group": "Агенты и Боты",
+            "group_icon": "users",
+            "group_order": 10
         }
     ]
     

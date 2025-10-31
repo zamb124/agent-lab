@@ -32,6 +32,8 @@ class ModalManager {
         const modal = document.createElement('div');
         modal.className = 'modal-overlay';
         modal.setAttribute('data-modal-id', id);
+        const isFullscreen = size === 'full';
+
         modal.style.cssText = `
             position: fixed !important;
             top: 0 !important;
@@ -40,23 +42,29 @@ class ModalManager {
             bottom: 0 !important;
             z-index: 99999 !important;
             display: flex !important;
-            align-items: center !important;
+            align-items: ${isFullscreen ? 'stretch' : 'center'} !important;
             justify-content: center !important;
             background: rgba(0,0,0,0.8) !important;
             opacity: 1 !important;
             visibility: visible !important;
+            min-height: -webkit-fill-available !important;
         `;
-        
+
         const dialog = document.createElement('div');
         dialog.className = `modal-dialog modal-${size}`;
         dialog.style.cssText = `
             background: var(--bg-primary);
-            border-radius: 12px;
-            max-width: ${this.getSizeValue(size)};
-            width: 100%;
-            max-height: 90vh;
-            overflow: auto;
-            margin: 20px;
+            border-radius: ${isFullscreen ? '0' : '12px'};
+            max-width: ${isFullscreen ? '100vw' : this.getSizeValue(size)};
+            width: ${isFullscreen ? '100vw' : '100%'};
+            max-height: ${isFullscreen ? '100vh' : '90vh'};
+            height: ${isFullscreen ? '100vh' : 'auto'};
+            min-height: ${isFullscreen ? '-webkit-fill-available' : 'auto'};
+            overflow: hidden;
+            margin: ${isFullscreen ? '0' : '20px'};
+            display: flex;
+            flex-direction: column;
+            flex: ${isFullscreen ? '1 1 auto' : '0 0 auto'};
         `;
         
         let html = '';
@@ -74,8 +82,12 @@ class ModalManager {
             `;
         }
         
+        const bodyStyles = isFullscreen
+            ? 'padding: 0; flex: 1 1 auto; overflow: auto; min-height: 0;'
+            : 'padding: 20px; overflow: auto;';
+
         html += `
-            <div class="modal-body" style="padding: 20px;">
+            <div class="modal-body" style="${bodyStyles}">
                 ${content}
             </div>
         `;

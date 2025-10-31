@@ -60,7 +60,10 @@ class MCPServerRepository(BaseRepository[MCPServerConfig]):
 
     async def set(self, config: MCPServerConfig) -> bool:
         """Сохранить MCP сервер с типизацией"""
-        return await self._set_typed(config)
+        # MCP серверы имеют специальную логику с company_id в ключе
+        key = self._get_key(config.server_id, config.company_id)
+        data = config.model_dump_json()
+        return await super(BaseRepository, self).set(key, data)
 
     async def delete(self, server_id: str, company_id: Optional[str] = None) -> bool:
         """Удалить MCP сервер и все его тулы"""
