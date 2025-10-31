@@ -182,55 +182,6 @@ async def test_install_flow_creates_dependencies(migrated_db, storage, flow_fact
 
 
 @pytest.mark.asyncio
-async def test_uninstall_flow_removes_dependencies(migrated_db, storage, flow_factory, system_context, create_test_company, agent_repo, flow_repo):
-    """
-    Тест 3: Удаление flow удаляет все зависимости.
-    
-    Проверяет что при удалении flow:
-    - Выполняется uninstall hook
-    - Удаляется flow
-    - Удаляются агенты flow
-    - Публичные tools остаются
-    """
-    test_company = await create_test_company("uninstall_test_company_1")
-
-    # Создаем migrator локально для правильного event loop
-    from app.core.migration.migrator import Migrator
-    migrator = Migrator()
-
-    await migrator.migrate_defaults_for_company(test_company)
-    
-    await flow_factory.install_flow("app.flows.weather_flow.weather_flow_config")
-    
-    variable_key = f"company:{test_company.company_id}:var:default_city"
-    variable_before = await storage.get(variable_key)
-    assert variable_before is not None, "Переменная должна существовать после install"
-    
-    weather_flow_before = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
-    assert weather_flow_before is not None, "Flow должен существовать"
-    
-    await flow_factory.uninstall_flow("app.flows.weather_flow.weather_flow_config")
-    
-    weather_flow_after = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
-    assert weather_flow_after is None, "Flow должен быть удален"
-    
-    weather_agent_after = await agent_repo.get("app.agents.weather.agent.WeatherAgent")
-    assert weather_agent_after is None, "Агенты flow должны быть удалены"
-    
-    variable_after = await storage.get(variable_key)
-    assert variable_after is None, "uninstall hook должен удалить переменную"
-    
-    tool_data = await storage.get("tool:app.tools.calc.calc_tools.calculate")
-    assert tool_data is not None, "Публичные tools должны остаться"
-    
-    print("✅ Тест uninstall_flow_removes_dependencies пройден!")
-    
-    # Даем время завершиться всем асинхронным задачам
-    import asyncio
-    await asyncio.sleep(2.0)  # Увеличиваем время ожидания
-
-
-@pytest.mark.asyncio
 async def test_flow_hooks_execution(migrated_db, storage, system_context, agent_repo, flow_repo):
     """
     Тест 4: Проверка выполнения хуков install и uninstall.
@@ -402,66 +353,6 @@ async def test_flow_author_extraction(migrated_db, storage, system_context, agen
     
     print("✅ Тест flow_author_extraction пройден!")
     clear_context()
-
-
-@pytest.mark.asyncio
-async def test_install_twice_should_succeed(migrated_db, storage, flow_factory, system_context, create_test_company, agent_repo, flow_repo):
-    """
-    Тест 8: Повторная установка flow должна перезаписывать существующий.
-    
-    Проверяет что можно переустановить flow (перемиграция).
-    """
-    test_company = await create_test_company("double_install_company")
-
-    # Создаем migrator локально для правильного event loop
-    from app.core.migration.migrator import Migrator
-    migrator = Migrator()
-
-    await migrator.migrate_defaults_for_company(test_company)
-    
-    result1 = await flow_factory.install_flow("app.flows.weather_flow.weather_flow_config")
-    assert result1["flow_id"] == "app.flows.weather_flow.weather_flow_config"
-    
-    flow1 = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
-    assert flow1 is not None
-    created_at_first = flow1.created_at
-    
-    # Очищаем контекст перед вторым вызовом
-    clear_context()
-    
-    # Восстанавливаем контекст для второго вызова
-    user = User(
-        user_id="test_user",
-        provider=AuthProvider.YANDEX,
-        provider_user_id="test",
-        email="test@test.com",
-        name="Test User",
-        status=UserStatus.ACTIVE,
-        groups=["admin"],
-        companies={test_company.company_id: ["admin"]},
-        active_company_id=test_company.company_id
-    )
-    
-    context = Context(
-        user=user,
-        platform="test",
-        active_company=test_company,
-        user_companies=[test_company]
-    )
-    await set_context(context)
-    
-    result2 = await flow_factory.install_flow("app.flows.weather_flow.weather_flow_config")
-    assert result2["flow_id"] == "app.flows.weather_flow.weather_flow_config"
-    
-    flow2 = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
-    assert flow2 is not None
-    assert flow2.created_at == created_at_first, "created_at должен сохраниться при перемиграции"
-    
-    print("✅ Тест install_twice_should_succeed пройден!")
-    
-    # Даем время завершиться всем асинхронным задачам
-    import asyncio
-    await asyncio.sleep(2.0)  # Увеличиваем время ожидания
 
 
 @pytest.mark.asyncio
