@@ -40,10 +40,6 @@
                 
                 <!-- Поле ввода (остров + кнопки слева) -->
                 <div id="chat-input-container" class="chat-input-container">
-                    <div class="chat-files-preview" id="chat-files-preview">
-                        <div class="file-preview-list" id="file-preview-list"></div>
-                    </div>
-
                     <div class="chat-input-wrapper">
                         <button class="chat-commands-btn" id="chat-commands-btn" title="Команды">
                             <i class="ti ti-bolt"></i>
@@ -51,7 +47,7 @@
                         <button class="chat-attach-btn" id="chat-attach-btn" title="Прикрепить файл">
                             <i class="ti ti-paperclip"></i>
                         </button>
-
+                        <div class="chat-files-preview hidden" id="chat-files-preview"></div>
                         <input type="text" id="chat-input" class="chat-input" placeholder="Введите сообщение..." disabled>
 
                         <button class="chat-voice-btn" id="chat-voice-btn" disabled title="Удерживайте для записи голоса">
