@@ -14,6 +14,8 @@ from app.clients.amo_crm_integration import get_amocrm_client
 from app.core.config import settings
 from app.core.checkpointer import get_checkpointer
 from app.core.container import get_container
+from app.core.tracing.decorators import trace_span
+from app.models.trace_models import SpanType
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,11 @@ class AmoCRMInterface(BaseInterface):
         self.scope_id = scope_id
         self.subdomain = subdomain
 
+    @trace_span(
+        name="amocrm_interface.handle_message",
+        span_type=SpanType.OTHER,
+        metadata={"component": "amocrm_interface", "operation": "handle_message"}
+    )
     async def handle_message(
         self, raw_data: Dict[str, Any], flow_id: str
     ) -> Optional[Message]:
@@ -68,7 +75,7 @@ class AmoCRMInterface(BaseInterface):
         access_token = getattr(settings, 'amocrm', None) and settings.amocrm.access_token
         if not access_token:
             raise ValueError("AMOCRM_ACCESS_TOKEN не настроен в settings - невозможно работать с AmoCRM")
-        
+
         source_id = None
 
         client = get_amocrm_client(subdomain=self.subdomain, access_token=access_token)
@@ -127,6 +134,11 @@ class AmoCRMInterface(BaseInterface):
             },
         )
 
+    @trace_span(
+        name="amocrm_interface.send_message",
+        span_type=SpanType.OTHER,
+        metadata={"component": "amocrm_interface", "operation": "send_message"}
+    )
     async def send_message(self, message: Message):
         """Отправка сообщения в AmoCRM через Internal API"""
         chat_id = message.metadata.get("chat_id")
@@ -209,6 +221,11 @@ class AmoCRMInterface(BaseInterface):
         logger.info(f"📚 Импортирована история чата {chat_id}: {len(messages)} сообщений")
         return messages
 
+    @trace_span(
+        name="amocrm_interface._add_chat_history_to_checkpointer",
+        span_type=SpanType.OTHER,
+        metadata={"component": "amocrm_interface", "operation": "import_chat_history"}
+    )
     async def _add_chat_history_to_checkpointer(self, session_id: str, chat_history: List[Dict[str, Any]], chat_id: str):
         """
         Добавляет историю чата в checkpointer через thread_id (session_id).
@@ -303,6 +320,11 @@ class AmoCRMInterface(BaseInterface):
 
 
 
+    @trace_span(
+        name="amocrm_interface.send_typing_notification",
+        span_type=SpanType.OTHER,
+        metadata={"component": "amocrm_interface", "operation": "send_typing_notification"}
+    )
     async def send_typing_notification(self, session_id: str, is_typing: bool):
         """Отправка уведомления о печати в AmoCRM"""
 
@@ -348,6 +370,11 @@ class AmoCRMInterface(BaseInterface):
 
 
     @staticmethod
+    @trace_span(
+        name="amocrm_interface.get_credentials_for_flow",
+        span_type=SpanType.OTHER,
+        metadata={"component": "amocrm_interface", "operation": "get_credentials"}
+    )
     async def get_credentials_for_flow(
         flow_id: str, platform_config: Dict[str, Any]
     ) -> Optional[Dict[str, str]]:

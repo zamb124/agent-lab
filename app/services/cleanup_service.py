@@ -9,7 +9,6 @@ from sqlalchemy import select, delete
 
 from app.db.repositories import Storage
 from app.core.core_clients.s3_client import S3ClientFactory
-from app.db.database import AsyncSessionLocal
 from app.db.models import Storage as StorageModel
 from app.core.container import get_container
 
@@ -31,7 +30,7 @@ class CleanupService:
         Returns:
             Количество удаленных записей
         """
-        async with AsyncSessionLocal() as session:
+        async with self.storage._get_session() as session:
             now = datetime.now(timezone.utc)
 
             # Сначала находим истекшие записи для проверки S3 файлов

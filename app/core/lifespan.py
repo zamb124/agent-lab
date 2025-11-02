@@ -60,7 +60,7 @@ def _setup_otel_instrumentation():
 
     _tracer_provider = TracerProvider(resource=resource)
 
-    span_exporter = DatabaseSpanExporter()
+    span_exporter = DatabaseSpanExporter(main_loop=None)
     span_processor = SimpleSpanProcessor(span_exporter)
     _tracer_provider.add_span_processor(span_processor)
 
@@ -68,9 +68,9 @@ def _setup_otel_instrumentation():
 
     logger.info(f"✅ OTEL TracerProvider инициализирован (service={settings.otel.service_name})")
 
-    if settings.otel.instrument_langchain:
-        LangChainInstrumentor().instrument(tracer_provider=_tracer_provider)
-        logger.info("✅ LangChain/LangGraph инструментирован для OTEL")
+    # if settings.otel.instrument_langchain:
+    #     LangChainInstrumentor().instrument(tracer_provider=_tracer_provider)
+    #     logger.info("✅ LangChain/LangGraph инструментирован для OTEL")
 
     if settings.otel.instrument_asyncpg:
         AsyncPGInstrumentor().instrument(tracer_provider=_tracer_provider)
@@ -142,11 +142,13 @@ async def lifespan(app: FastAPI):
             platform="system"
         )
 
-        await set_context(system_context)
+        set_context(system_context)
         logger.info("✅ Системный контекст установлен")
 
         # Сохраняем системный контейнер для глобального доступа (например, в middleware)
-        set_system_container(system_context.container)
+        # Контейнер привязан к event loop, получаем его из глобального словаря
+        system_container = get_container()
+        set_system_container(system_container)
         logger.info("✅ Системный контейнер сохранен для глобального доступа")
 
         # Инициализация БД

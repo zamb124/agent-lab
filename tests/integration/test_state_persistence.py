@@ -16,7 +16,7 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
     Проверяет что изменения state персистятся между вызовами.
     """
     from app.core.context import get_context, set_context
-    
+
     # Создаем агента
     agent_config = AgentConfig(
         agent_id="state_test_agent",
@@ -26,34 +26,34 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
         tools=DELAYED_TASK_TOOLS,
         llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1, context_window=10000),
     )
-    
+
     await agent_repo.set(agent_config)
-    
+
     # Создаем Flow
     flow_config = FlowConfig(
         flow_id="state_test_flow",
         name="State Test Flow",
         entry_point_agent="state_test_agent"
     )
-    
+
     await flow_repo.set(flow_config)
-    
+
     # Устанавливаем flow_config в контекст
     current_context = get_context()
     current_context.flow_config = flow_config
-    await set_context(current_context)
-    
+    set_context(current_context)
+
     # Загружаем агента
     agent = await agent_factory.get_agent("state_test_agent")
-    
+
     thread_id = unique_id("state_persist_test")
     config = {"configurable": {"thread_id": thread_id}}
-    
+
     # ШАГ 1: Агент создает задачу
     print("\n" + "="*60)
     print("ШАГ 1: Создание задачи")
     print("="*60)
-    
+
     mock_llm.configure(
         tool_responses={
             "создай": {
@@ -65,23 +65,23 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
             }
         }
     )
-    
+
     result1 = await agent.ainvoke({
         "messages": [HumanMessage(content="Создай задачу")]
     }, config)
-    
+
     print(f"\n✅ Результат 1:")
     print(f"   Store keys: {list(result1.get('store', {}).keys())}")
     print(f"   delayed_tasks: {'delayed_tasks' in result1.get('store', {})}")
-    
+
     if "store" in result1 and "delayed_tasks" in result1["store"]:
         print(f"   Задач создано: {len(result1['store']['delayed_tasks'])}")
-    
+
     # ШАГ 2: Агент показывает список задач (новый вызов, должен загрузить state из checkpointer)
     print("\n" + "="*60)
     print("ШАГ 2: Список задач")
     print("="*60)
-    
+
     # Настраиваем MockLLM для второго вызова
     mock_llm.reset_call_counts()  # Сбрасываем счетчики
     mock_llm.configure(
@@ -92,15 +92,15 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
             }
         }
     )
-    
+
     result2 = await agent.ainvoke({
         "messages": [HumanMessage(content="покажи")]
     }, config)
-    
+
     print(f"\n✅ Результат 2:")
     print(f"   Store keys: {list(result2.get('store', {}).keys())}")
     print(f"   delayed_tasks: {'delayed_tasks' in result2.get('store', {})}")
-    
+
     if "store" in result2 and "delayed_tasks" in result2["store"]:
         print(f"   Задач в store: {len(result2['store']['delayed_tasks'])}")
         assert len(result2["store"]["delayed_tasks"]) > 0, "Задачи НЕ сохранились в checkpointer!"
@@ -108,7 +108,7 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
     else:
         print(f"   ❌ delayed_tasks отсутствует в store после второго вызова!")
         raise AssertionError("State НЕ персистится между вызовами!")
-    
+
     # Проверяем сообщения
     messages = result2.get("messages", [])
     list_response = None
@@ -117,11 +117,11 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
         if "📅 Отложенные задачи" in content or "Тестовая задача" in content:
             list_response = content
             break
-    
+
     if list_response:
         print(f"\n✅ Список задач получен:")
         print(list_response[:200])
-    
+
     print(f"\n" + "="*60)
     print("✅ ТЕСТ ПРОШЕЛ: State персистится между вызовами!")
     print("="*60)

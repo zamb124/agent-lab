@@ -2,14 +2,15 @@
 Dependency Injection Container для управления зависимостями.
 
 Архитектура:
-- Container - объект с ленивой инициализацией через __getattr__
-- Каждый контекст имеет свой изолированный Container
+- Container создается каждый раз при вызове get_container()
+- Сервисы внутри контейнера инициализируются лениво через __getattr__
+- Один глобальный engine и session_factory (определены в database.py)
 - Доступ через атрибуты: container.storage, container.agent_factory (синхронный)
-- Сервисы инициализируются только при первом обращении
+- Сервисы инициализируются только при первом обращении к конкретному атрибуту
 - Отложенные импорты избегают циркулярных зависимостей
-- Сохранен тот же синхронный интерфейс доступа
 """
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Optional
 
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
     from app.core.flow_factory import FlowFactory
     from app.core.tool_factory import ToolFactory
     from app.core.graph_builder import GraphBuilder
+    from app.core.migration import Migrator
     from app.services.variables_service import VariablesService
     from app.core.core_clients.s3_client import S3ClientFactory
     from app.identity.auth_service import AuthService
@@ -135,8 +137,7 @@ class Container:
             if name == 'storage':
                 from app.db.repositories import Storage
                 service = Storage()
-                # Устанавливаем session_factory из контейнера
-                service.session_factory = self._session_factory
+                # session_factory будет инициализирован лениво через ensure_initialized()
 
             elif name == 'agent_repository':
                 from app.db.repositories import AgentRepository
@@ -211,67 +212,40 @@ class Container:
 
         return service
 
-    @property
-    def session_factory(self):
-        """Ленивая инициализация session_factory"""
+    async def session_factory(self):
+        """Получает session_factory с ленивой инициализацией"""
         if self._session_factory is None:
-            # В ленивой инициализации мы не можем синхронно инициализировать session_factory
-            # Полагаемся на то, что он будет инициализирован через AsyncSessionLocal
-            # при первом использовании Storage
-            raise RuntimeError(
-                "Session factory не инициализирован! "
-                "Используйте await get_session_factory() для инициализации или "
-                "обратитесь к storage через get_container().storage"
-            )
-
+            self._session_factory = await get_session_factory()
+            logger.debug("✅ Session factory инициализирован в контейнере")
         return self._session_factory
 
 
-async def initialize_context_services_async(context) -> None:
-    """Создает контейнер с ленивой инициализацией сервисов"""
-    from app.db.database import get_session_factory
-
-    container = Container()
-    # Инициализируем session_factory для контекста
-    container._session_factory = await get_session_factory()
-    context.container = container
-
-    logger.debug(f"Создан контейнер с ленивой инициализацией для контекста: session_id={context.session_id}")
-
-
-def initialize_context_services(context) -> None:
-    """Создает контейнер с ленивой инициализацией сервисов"""
-    import asyncio
-
-    # Создаем новую event loop для инициализации если текущей нет
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # Если loop уже запущен, создаем task
-            asyncio.create_task(initialize_context_services_async(context))
-        else:
-            # Синхронно запускаем в существующем loop
-            loop.run_until_complete(initialize_context_services_async(context))
-    except RuntimeError:
-        # Нет текущего loop, создаем новый
-        asyncio.run(initialize_context_services_async(context))
-
-
 def get_container() -> Container:
-    """Получает контейнер зависимостей из текущего контекста"""
-    from app.core.context import get_context
+    """
+    Создает новый контейнер зависимостей.
 
+    Session factory будет инициализирован лениво при первом обращении к storage.
+    """
+    # Проверяем наличие контекста (должен быть установлен для большинства операций)
+    from app.core.context import get_context
     context = get_context()
     if context is None:
-        raise RuntimeError(
-            "Контекст не установлен! Используйте set_context() перед использованием get_container(). "
-            "В тестах контекст создается автоматически через фикстуру test_context."
+        logger.warning(
+            "⚠️ ВНИМАНИЕ: get_container() вызван без установленного контекста! "
+            "Это может привести к проблемам с изоляцией данных между компаниями. "
+            "В тестах убедитесь, что migrated_db фикстура создала миграционный контекст."
         )
 
-    if context.container is None:
-        raise RuntimeError(
-            "Container не инициализирован в контексте! "
-            "Вызовите initialize_context_services(context) после создания контекста."
-        )
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError as e:
+        if "no running event loop" in str(e):
+            raise RuntimeError(
+                "get_container() требует запущенный event loop. "
+                "Используйте get_system_container() для системных операций."
+            ) from e
+        raise
 
-    return context.container
+    # Всегда создаем новый контейнер
+    return Container()
+

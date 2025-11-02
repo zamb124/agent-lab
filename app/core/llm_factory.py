@@ -7,7 +7,6 @@ from typing import Optional, Dict
 from langchain_core.language_models import BaseLLM, BaseChatModel
 from langchain_core.messages import BaseMessage, AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-from app.core.tracing.langfuse_init import get_langfuse_callback
 
 from app.core.config import get_settings
 
@@ -284,18 +283,6 @@ def get_llm(model: Optional[str] = None, **kwargs) -> BaseLLM:
         if key not in ["api_key", "base_url"]:
             llm_kwargs[key] = value
 
-    # Добавляем Langfuse callback для трейсинга
-    langfuse_callback = get_langfuse_callback()
-    if langfuse_callback:
-        # Если уже есть callbacks - добавляем к ним
-        if "callbacks" in llm_kwargs:
-            if isinstance(llm_kwargs["callbacks"], list):
-                llm_kwargs["callbacks"].append(langfuse_callback)
-            else:
-                llm_kwargs["callbacks"] = [llm_kwargs["callbacks"], langfuse_callback]
-        else:
-            llm_kwargs["callbacks"] = [langfuse_callback]
-        logger.debug(f"Добавлен Langfuse callback для модели {model_name}")
 
     logger.info(f"Создаем LLM через OpenRouter: {model_name}")
 

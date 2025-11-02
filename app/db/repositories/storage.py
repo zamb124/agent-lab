@@ -12,7 +12,6 @@ from sqlalchemy import select, delete, Table, MetaData, text
 from sqlalchemy.dialects.postgresql import insert
 
 from app.models import AgentConfig, FlowConfig, TaskConfig, SessionConfig, SessionStatus
-from app.db.database import AsyncSessionLocal
 from app.db.models import Storage as StorageModel, Users as UsersModel, Variables as VariablesModel, Tasks as TasksModel, OtelSpans as OtelSpansModel
 from app.core.context import get_context
 from app.core.config import settings
@@ -31,6 +30,27 @@ TABLE_ROUTING = {
 }
 
 
+class _SessionContextManager:
+    """Асинхронный контекстный менеджер для сессий БД"""
+
+    def __init__(self, storage: "Storage"):
+        self.storage = storage
+        self.session = None
+
+    async def __aenter__(self):
+        if self.storage.session_factory is None:
+            from app.db.database import get_session_factory
+            self.storage.session_factory = await get_session_factory()
+            logger.debug("✅ Session factory инициализирован в Storage")
+
+        self.session = self.storage.session_factory()
+        return await self.session.__aenter__()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.session:
+            return await self.session.__aexit__(exc_type, exc_val, exc_tb)
+
+
 class Storage:
     """
     Key-value storage с поддержкой маршрутизации по таблицам.
@@ -42,23 +62,8 @@ class Storage:
         self._metadata = MetaData()
 
     def _get_session(self):
-        """Создает новую сессию БД"""
-        if self.session_factory:
-            return self.session_factory()
-
-        # Fallback для случаев когда Storage создан напрямую
-        # В ленивой инициализации контейнера session_factory может быть None
-        # Используем AsyncSessionLocal как fallback
-        try:
-            return AsyncSessionLocal()
-        except RuntimeError as e:
-            if "Session factory не инициализирован" in str(e):
-                raise RuntimeError(
-                    "Session factory не инициализирован! "
-                    "Storage должен быть создан через get_container().storage "
-                    "или вызовите await get_session_factory() для инициализации"
-                ) from e
-            raise
+        """Возвращает асинхронный контекстный менеджер для сессии БД"""
+        return _SessionContextManager(self)
 
     def _get_table_name(self, key: str, company_id: Optional[str] = None) -> str:
         """

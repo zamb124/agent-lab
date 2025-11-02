@@ -8,11 +8,13 @@ DatabaseSpanExporter - стандартный OpenTelemetry exporter для со
 import logging
 import asyncio
 import json
-from typing import Sequence, Set, Any
+import threading
+from typing import Sequence, Set, Any, Optional
 from datetime import datetime, timezone
 
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult, ReadableSpan
 from opentelemetry.trace import StatusCode
+from opentelemetry import context
 
 from app.models.trace_models import SpanRecord, SpanType, SpanStatus
 from app.core.container import get_container
@@ -37,11 +39,15 @@ class DatabaseSpanExporter(SpanExporter):
     - Совместимость с OpenTelemetry ecosystem
     """
 
-    def __init__(self):
+    def __init__(self, main_loop: Optional[asyncio.AbstractEventLoop] = None):
         """
         Инициализирует exporter.
 
         Storage получается из контейнера для поддержки DI.
+
+        Args:
+            main_loop: Главный event loop для запуска задач из других потоков.
+                      Если None, будет определен автоматически при первом использовании.
         """
         self._background_tasks: Set[asyncio.Task] = set()
         logger.info("✅ DatabaseSpanExporter инициализирован")
@@ -51,8 +57,8 @@ class DatabaseSpanExporter(SpanExporter):
         Экспортирует spans в БД.
 
         Это синхронный метод согласно спецификации OpenTelemetry.
-        Вызывается из SimpleSpanProcessor синхронно в том же потоке,
-        где вызывается span.end() - гарантирует наличие event loop.
+        Может вызываться из разных потоков, поэтому использует
+        get_or_create_loop() для получения доступного event loop.
 
         Args:
             spans: Последовательность spans для экспорта
@@ -60,31 +66,23 @@ class DatabaseSpanExporter(SpanExporter):
         Returns:
             SpanExportResult.SUCCESS
         """
-        # Получаем или создаем event loop
+
+
+        # Определяем, можем ли мы использовать create_task (если мы в том же потоке)
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_closed():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            loop = asyncio.get_running_loop()
+        except RuntimeError as e:
+            raise
 
-        # Проверяем что loop запущен
-        if loop.is_running():
-            # Loop запущен - создаем задачи асинхронно (fire-and-forget)
-            for span in spans:
-                task = loop.create_task(self._export_span(span))
-                # Сохраняем ссылку на задачу и удаляем после завершения
-                self._background_tasks.add(task)
-                task.add_done_callback(self._background_tasks.discard)
-            logger.debug(f"✅ Экспортировано {len(spans)} spans в БД (fire-and-forget)")
-        else:
-            # Loop не запущен - экспортируем синхронно в новом loop
-            logger.warning(f"⚠️ Event loop не запущен, экспортируем {len(spans)} spans синхронно")
-            for span in spans:
-                asyncio.run(self._export_span(span))
+        for span in spans:
 
+            # Используем create_task если мы в том же потоке где запущен loop
+            task = loop.create_task(self._export_span(span))
+            self._background_tasks.add(task)
+            task.add_done_callback(lambda _: self._background_tasks.discard(task))
+
+
+        logger.debug(f"✅ Экспортировано {len(spans)} spans в БД (fire-and-forget)")
         return SpanExportResult.SUCCESS
 
     async def _export_span(self, otel_span: ReadableSpan):
@@ -97,12 +95,40 @@ class DatabaseSpanExporter(SpanExporter):
         Args:
             otel_span: OpenTelemetry span для сохранения
         """
+        # Извлекаем attributes один раз
+        attributes = dict(otel_span.attributes or {})
+
+        # Если контекста нет, пытаемся восстановить его из атрибутов span
+        if not get_context():
+            company_id = attributes.get("context_company_id") or attributes.get("company_id")
+            user_id = attributes.get("context_user_id") or attributes.get("user_id")
+
+            if company_id:
+                # Создаём минимальный контекст с company
+                restored_context = Context(
+                    user=User(
+                        user_id=user_id or "system",
+                        name="System",
+                        companies={},
+                        active_company_id=company_id
+                    ),
+                    active_company=Company(
+                        company_id=company_id,
+                        name="Unknown",
+                        subdomain="unknown"
+                    ),
+                    session_id=attributes.get("context_session_id") or attributes.get("session_id"),
+                    platform=attributes.get("platform", "system")
+                )
+                set_context(restored_context)
+                logger.debug(
+                    f"✅ Контекст восстановлен из span атрибутов: company_id={company_id}, "
+                    f"user_id={user_id or 'system'}"
+                )
+
         # Конвертируем IDs в hex формат
         span_id = format(otel_span.context.span_id, '016x')
         trace_id = format(otel_span.context.trace_id, '032x')
-
-        # Извлекаем attributes
-        attributes = dict(otel_span.attributes or {})
 
         # Определяем тип span
         span_type_str = attributes.get("span_type", "agent")
@@ -161,26 +187,6 @@ class DatabaseSpanExporter(SpanExporter):
             usage=usage,
             error=error,
         )
-
-        # Создаем системный контекст для фоновых задач
-        system_context = Context(
-            user=User(
-                user_id="system",
-                name="System",
-                companies={},
-                active_company_id="system"
-            ),
-            active_company=Company(
-                company_id="system",
-                name="System",
-                subdomain="system"
-            ),
-            session_id="otel_tracing",
-            platform="system"
-        )
-        await set_context(system_context)
-
-        # Сохраняем в БД
         storage = get_container().storage
         await storage.set(f"otel:{trace_id}:span:{span_id}", span_record.model_dump_json())
 

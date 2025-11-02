@@ -31,47 +31,47 @@ class Migrator:
     async def run_full_migration(self):
         """
         Запускает полную миграцию для системной компании.
-        
+
         Мигрирует ВСЕ flows, агентов и tools (игнорирует is_public).
         """
         logger.info("Запуск полной миграции для системной компании...")
 
         await self._ensure_system_company()
         await self._set_system_context()
-        
+
         await self._migrate_all_tools()
         await self._migrate_all_agents()
         await self._migrate_all_flows()
-        
+
         logger.info("Полная миграция завершена успешно")
 
     async def _ensure_system_company(self):
         """Создает системную компанию если не существует"""
         logger.info("Проверка системной компании...")
-        
+
         # Проверяем существует ли системная компания
         company_data = await get_container().storage.get("company:system", force_global=True)
         if company_data:
             logger.info("Системная компания уже существует")
             return
-        
+
         # Создаем системную компанию
         system_company = Company(
             company_id="system",
-            subdomain="system", 
+            subdomain="system",
             name="System Company",
             status="active"
         )
-        
+
         await get_container().storage.set("company:system", system_company.model_dump_json(), force_global=True)
         await get_container().storage.set("subdomain:system", '"system"', force_global=True)
-        
+
         logger.info("✅ Создана системная компания: system")
 
     async def _migrate_all_tools(self):
         """
         Мигрирует ВСЕ @tool функции из кода в текущую компанию.
-        
+
         Сканирует код и вызывает ToolReference.migrate для каждого.
         """
         logger.info("Миграция всех tools...")
@@ -96,7 +96,7 @@ class Migrator:
     async def _migrate_all_agents(self):
         """
         Мигрирует ВСЕ агентов из кода в текущую компанию с зависимостями.
-        
+
         Сканирует код и вызывает AgentConfig.migrate для каждого.
         Рекурсивно мигрирует все tools агента.
         """
@@ -116,7 +116,7 @@ class Migrator:
     async def _migrate_all_flows(self):
         """
         Мигрирует ВСЕ flows из кода в текущую компанию с зависимостями.
-        
+
         Сканирует код и вызывает FlowConfig.migrate для каждого.
         Рекурсивно мигрирует entry_point_agent и все его зависимости.
         """
@@ -137,7 +137,7 @@ class Migrator:
         # Получаем системную компанию
         company_data = await get_container().storage.get("company:system", force_global=True)
         system_company = Company.model_validate_json(company_data)
-        
+
         # Используем общий метод
         await self._set_company_context(system_company)
         logger.info("✅ Установлен контекст системной компании для миграции")
@@ -145,14 +145,14 @@ class Migrator:
     async def _set_company_context(self, company: Company):
         """
         Устанавливает контекст указанной компании для миграции.
-        
+
         Args:
             company: Компания для которой устанавливается контекст
         """
         system_user = User(
             user_id="system_migrator",
             provider=AuthProvider.YANDEX,
-            provider_user_id="system_migrator", 
+            provider_user_id="system_migrator",
             email="system@agents-lab.ru",
             name="System Migrator",
             status=UserStatus.ACTIVE,
@@ -160,15 +160,15 @@ class Migrator:
             companies={company.company_id: ["admin"]},
             active_company_id=company.company_id
         )
-        
+
         context = Context(
             user=system_user,
             platform="migration",
             active_company=company,
             user_companies=[company]
         )
-        
-        await set_context(context)
+
+        set_context(context)
         logger.info(f"✅ Установлен контекст компании {company.company_id} для миграции")
 
     async def _create_default_mcp_servers(self, company: Company):
@@ -176,14 +176,14 @@ class Migrator:
         Создает дефолтные MCP серверы для новой компании:
         - Context7
         - GitHub Copilot
-        
+
         Также создает переменные для API ключей.
         """
         logger.info(f"Создание дефолтных MCP серверов для {company.company_id}...")
-        
+
         mcp_repo = MCPServerRepository(get_container().storage)
         variables_service = get_variables_service()
-        
+
         # 1. Context7
         context7_var_key = "mcp_context7_api_key"
         await variables_service.set_var(
@@ -193,7 +193,7 @@ class Migrator:
             description="API ключ для Context7 MCP",
             groups=["mcp", "mcp:context7"]
         )
-        
+
         context7_server = MCPServerConfig(
             server_id="context7",
             company_id=company.company_id,
@@ -208,7 +208,7 @@ class Migrator:
         )
         await mcp_repo.set(context7_server)
         logger.info(f"✅ Создан MCP сервер: context7")
-        
+
         # 2. GitHub Copilot
         copilot_var_key = "mcp_copilot_api_key"
         await variables_service.set_var(
@@ -218,7 +218,7 @@ class Migrator:
             description="API ключ для GitHub Copilot MCP",
             groups=["mcp", "mcp:copilot"]
         )
-        
+
         copilot_server = MCPServerConfig(
             server_id="copilot",
             company_id=company.company_id,
@@ -233,13 +233,13 @@ class Migrator:
         )
         await mcp_repo.set(copilot_server)
         logger.info(f"✅ Создан MCP сервер: copilot")
-        
+
         logger.info(f"✅ Создано 2 дефолтных MCP сервера для {company.company_id}")
 
     async def get_public_flows(self) -> List[tuple[str, FlowConfig]]:
         """
         Находит все публичные FlowConfig объекты в коде.
-        
+
         Returns:
             Список кортежей (full_flow_id, FlowConfig) с is_public=True
         """
@@ -269,18 +269,18 @@ class Migrator:
         Мигрирует дефолтные сущности для новой компании:
         - Публичные tools
         - Flows из settings.migration.default_flows
-        
+
         Args:
             company: Компания для миграции
         """
         logger.info(f"Миграция дефолтных сущностей для {company.company_id}...")
-        
+
         await self._set_company_context(company)
 
         # 1. Мигрируем публичные tools
         packages_to_scan = ["app.tools", "app.custom_flows"]
         all_tool_functions = []
-        
+
         for package_name in packages_to_scan:
             tool_functions = await self.scanner.find_tool_functions(package_name)
             all_tool_functions.extend(tool_functions)
@@ -296,23 +296,23 @@ class Migrator:
 
         # 2. Устанавливаем дефолтные flows из конфига
         from app.core.config import settings
-        
+
         default_flows = settings.migration.default_flows
         if default_flows:
             logger.info(f"Установка {len(default_flows)} дефолтных flows...")
-            
+
             for flow_id in default_flows:
                 try:
                     await FlowConfig.migrate(flow_id, migrator=self, with_dependencies=True)
                     logger.info(f"✅ Flow {flow_id} установлен")
                 except Exception as e:
                     logger.error(f"❌ Ошибка установки flow {flow_id}: {e}")
-            
+
             logger.info(f"✅ Установлено {len(default_flows)} дефолтных flows")
-        
+
         # 3. Создаем дефолтные MCP серверы
         await self._create_default_mcp_servers(company)
-        
+
         logger.info(f"✅ Миграция дефолтных сущностей завершена для {company.company_id}")
 
     async def migrate_for_company(
@@ -325,31 +325,31 @@ class Migrator:
     ):
         """
         Мигрирует выбранные сущности в компанию (установка из Store).
-        
+
         Используется для установки конкретных flows/agents/tools.
         Игнорирует is_public - мигрирует всё что указано.
-        
+
         Args:
             company: Целевая компания
             flows: Список flow_id для миграции
-            agents: Список agent_id для миграции  
+            agents: Список agent_id для миграции
             tools: Список tool_id для миграции
             with_dependencies: Мигрировать ли зависимости рекурсивно
         """
         logger.info(f"Миграция выбранных сущностей для {company.company_id}...")
-        
+
         await self._set_company_context(company)
-        
+
         if flows:
             for flow_id in flows:
                 await FlowConfig.migrate(flow_id, migrator=self, with_dependencies=with_dependencies)
-        
+
         if agents:
             for agent_id in agents:
                 await AgentConfig.migrate(agent_id, migrator=self, with_tools=with_dependencies)
-        
+
         if tools:
             for tool_id in tools:
                 await ToolReference.migrate(tool_id, migrator=self)
-        
+
         logger.info("✅ Миграция завершена")

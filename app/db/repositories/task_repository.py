@@ -13,7 +13,6 @@ from sqlalchemy import select, or_
 from app.db.repositories.base import BaseRepository
 from app.db.repositories.storage import Storage
 from app.models import TaskConfig
-from app.db.database import AsyncSessionLocal
 from app.db.models import Tasks as TasksModel
 
 logger = logging.getLogger(__name__)
@@ -85,16 +84,16 @@ class TaskRepository(BaseRepository[TaskConfig]):
         """
         Получает список задач в статусе pending готовых к выполнению.
         Фильтрует по execute_at: задачи без execute_at или с execute_at <= now().
-        
+
         Args:
             limit: Максимальное количество результатов
-            
+
         Returns:
             Список задач в статусе pending готовых к выполнению
         """
         now = datetime.now(timezone.utc).isoformat()
-        
-        async with AsyncSessionLocal() as session:
+
+        async with self._get_session() as session:
             result = await session.execute(
                 select(TasksModel.key, TasksModel.value)
                 .where(TasksModel.value["status"].astext == "pending")
@@ -111,7 +110,7 @@ class TaskRepository(BaseRepository[TaskConfig]):
             tasks = []
             rows = list(result)
             logger.info(f"Найдено {len(rows)} pending задач готовых к выполнению")
-            
+
             for row in rows:
                 try:
                     task_data = json.dumps(row.value)
@@ -129,15 +128,15 @@ class TaskRepository(BaseRepository[TaskConfig]):
     ) -> Optional[TaskConfig]:
         """
         Находит прерванную задачу (в статусе waiting_for_input).
-        
+
         Args:
             session_id: ID сессии
             flow_id: ID flow
-            
+
         Returns:
             Прерванная задача или None
         """
-        async with AsyncSessionLocal() as session:
+        async with self._get_session() as session:
             result = await session.execute(
                 select(TasksModel.key, TasksModel.value)
                 .where(TasksModel.value["status"].astext == "waiting_for_input")
@@ -158,15 +157,15 @@ class TaskRepository(BaseRepository[TaskConfig]):
     ) -> Optional[TaskConfig]:
         """
         Находит pending задачу для указанной сессии и flow.
-        
+
         Args:
             session_id: ID сессии
             flow_id: ID flow
-            
+
         Returns:
             Pending задача или None
         """
-        async with AsyncSessionLocal() as session:
+        async with self._get_session() as session:
             result = await session.execute(
                 select(TasksModel.key, TasksModel.value)
                 .where(TasksModel.value["status"].astext == "pending")

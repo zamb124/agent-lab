@@ -21,7 +21,7 @@ class Context(BaseModel):
     )
     session_id: Optional[str] = Field(
         default=None,
-        title="ID сессии", 
+        title="ID сессии",
         description="Идентификатор сессии",
     )
     platform: str = Field(
@@ -30,7 +30,7 @@ class Context(BaseModel):
     )
     active_company: Optional[Company] = Field(
         default=None,
-        title="Активная компания", 
+        title="Активная компания",
         description="Текущая активная компания пользователя",
     )
     user_companies: List[Company] = Field(
@@ -43,13 +43,13 @@ class Context(BaseModel):
         title="Метаданные",
         description="Дополнительные метаданные контекста",
     )
-    
+
     language: Language = Field(
         default=Language.RU,
         title="Язык пользователя",
         description="Предпочитаемый язык интерфейса пользователя",
     )
-    
+
     flow_variables: Dict[str, Any] = Field(
         default_factory=dict,
         title="Переменные flow",
@@ -60,39 +60,39 @@ class Context(BaseModel):
         title="Переменные компании",
         description="Переменные компании для использования в промптах",
     )
-    
+
     state: Optional[Dict[str, Any]] = Field(
         default=None,
         title="State агента",
         description="Ссылка на текущий state агента (доступен в тулах)",
     )
-    
+
     flow_config: Optional[Any] = Field(
         default=None,
         title="Конфигурация flow",
         description="FlowConfig для текущего запроса (устанавливается в API/TaskProcessor/Interface)",
     )
-    
+
     agent_config: Optional[Any] = Field(
         default=None,
         title="Конфигурация агента",
         description="AgentConfig для текущего запроса (устанавливается при выполнении агента)",
     )
-    
+
     interface: Optional[Any] = Field(
         default=None,
         title="Интерфейс",
         description="Интерфейс BaseInterface для отправки промежуточных сообщений (reasoning, thinking, etc)",
         exclude=True,
     )
-    
+
     container: Optional[Any] = Field(
         default=None,
         title="Container",
         description="Контейнер с изолированными сервисами для данного контекста",
         exclude=True,
     )
-    
+
     @field_validator('flow_config', mode='before')
     @classmethod
     def validate_flow_config(cls, v):
@@ -101,7 +101,7 @@ class Context(BaseModel):
             return v
         from app.models.core_models import FlowConfig
         return FlowConfig(**v)
-    
+
     @field_validator('agent_config', mode='before')
     @classmethod
     def validate_agent_config(cls, v):
@@ -110,6 +110,6 @@ class Context(BaseModel):
             return v
         from app.models.core_models import AgentConfig
         return AgentConfig(**v)
-    
+
     class Config:
         arbitrary_types_allowed = True

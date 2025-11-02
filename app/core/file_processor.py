@@ -17,6 +17,8 @@ from .core_clients.s3_client import S3ClientFactory, get_default_s3_client
 from app.models import FileRecord, FileStatus
 from .config import settings
 from app.core.container import get_container
+from app.core.tracing.decorators import trace_span
+from app.models.trace_models import SpanType
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +61,11 @@ class FileProcessor:
             await self._s3_client.close()
             self._s3_client = None
 
+    @trace_span(
+        name="file_processor.process_file_from_bytes",
+        span_type=SpanType.OTHER,
+        metadata={"component": "file_processor", "operation": "write"}
+    )
     async def process_file_from_bytes(
         self,
         data: bytes,
@@ -159,6 +166,11 @@ class FileProcessor:
 
         return file_record
 
+    @trace_span(
+        name="file_processor.process_file_from_url",
+        span_type=SpanType.OTHER,
+        metadata={"component": "file_processor", "operation": "write"}
+    )
     async def process_file_from_url(
         self,
         file_url: str,
@@ -210,6 +222,11 @@ class FileProcessor:
                 tags=tags,
             )
 
+    @trace_span(
+        name="file_processor.get_file_record",
+        span_type=SpanType.OTHER,
+        metadata={"component": "file_processor", "operation": "read"}
+    )
     async def get_file_record(
         self, file_id: str, provider: Optional[str] = None
     ) -> Optional[FileRecord]:
@@ -250,6 +267,11 @@ class FileProcessor:
         logger.warning(f"⚠️ Файл {file_id} не найден ни по одному ключу")
         return None
 
+    @trace_span(
+        name="file_processor.delete_file",
+        span_type=SpanType.OTHER,
+        metadata={"component": "file_processor", "operation": "delete"}
+    )
     async def delete_file(self, file_id: str, provider: Optional[str] = None) -> bool:
         """
         Удаляет файл из S3 и обновляет запись в БД.
@@ -329,7 +351,7 @@ class FileProcessor:
             Список словарей с информацией о файлах
         """
         files = []
-        
+
         # Новый компактный формат: 📎 [filename](url) (size)
         compact_pattern = r"📎 \[([^\]]+)\]\(([^)]+)\) \(([^)]+)\)"
         for match in re.finditer(compact_pattern, message):
@@ -340,7 +362,7 @@ class FileProcessor:
                 "content_type": None,  # В компактном формате нет типа
                 "size": match.group(3).strip(),
             })
-        
+
         # Старый подробный формат: 📎 Файл: name (ID: id, [Скачать](url), Тип: type, Размер: size)
         detailed_pattern = r"📎 Файл: ([^(]+) \(ID: ([^,]+), \[Скачать\]\(([^)]+)\), Тип: ([^,]+), Размер: ([^)]+)\)"
         for match in re.finditer(detailed_pattern, message):
@@ -351,7 +373,7 @@ class FileProcessor:
                 "content_type": match.group(4).strip(),
                 "size": match.group(5).strip(),
             })
-        
+
         # Формат: [FILE] Файл: name (ID: id, URL: url, тип: type, размер: size) [/FILE]
         current_pattern = r"\[FILE\]\s*Файл: ([^(]+) \(ID: ([^,]+),\s*URL: ([^,]+),\s*тип: ([^,]+),\s*размер: ([^)]+)\)\s*\[/FILE\]"
         for match in re.finditer(current_pattern, message):
@@ -362,7 +384,7 @@ class FileProcessor:
                 "content_type": match.group(4).strip(),
                 "size": match.group(5).strip(),
             })
-        
+
         # Старый формат с эмодзи: [FILE] 📎 Файл: name (ID: id, URL: url, тип: type, размер: size) [/FILE]
         old_pattern = r"\[FILE\]\s*📎 Файл: ([^(]+) \(ID: ([^,]+), URL: ([^,]+), тип: ([^,]+), размер: ([^)]+)\)\s*\[/FILE\]"
         for match in re.finditer(old_pattern, message):

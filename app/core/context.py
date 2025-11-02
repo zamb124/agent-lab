@@ -16,15 +16,12 @@ _context: contextvars.ContextVar[Optional["Context"]] = contextvars.ContextVar(
 )
 
 
-async def set_context(context: "Context") -> None:
-    """Устанавливает контекст с автоматической инициализацией сервисов
-    
+def set_context(context: "Context") -> None:
+    """Устанавливает контекст
+
     Использование:
-        await set_context(context)
+        set_context(context)
     """
-    if context.container is None:
-        from app.core.container import initialize_context_services_async
-        await initialize_context_services_async(context)
     _context.set(context)
 
 

@@ -26,10 +26,10 @@ def test_migration_company(storage):
             status="active",
             created_at=datetime.now(timezone.utc)
         )
-        
+
         await storage.set(f"company:{company.company_id}", company.model_dump_json(), force_global=True)
         return company
-    
+
     async def _cleanup(company):
         user = User(
             user_id="test_cleanup",
@@ -42,15 +42,15 @@ def test_migration_company(storage):
             companies={company.company_id: ["admin"]},
             active_company_id=company.company_id
         )
-        
+
         context = Context(
             user=user,
             platform="test",
             active_company=company,
             user_companies=[company]
         )
-        await set_context(context)
-        
+        set_context(context)
+
         prefixes = [
             "flow:",
             "agent:",
@@ -58,15 +58,15 @@ def test_migration_company(storage):
             "session:",
             f"company:{company.company_id}:",
         ]
-        
+
         for prefix in prefixes:
             keys = await storage.list_by_prefix(prefix)
             for key in keys:
                 await storage.delete(key, force_global=True)
-        
+
         await storage.delete(f"company:{company.company_id}", force_global=True)
         clear_context()
-    
+
     return _create, _cleanup
 
 
@@ -74,7 +74,7 @@ def test_migration_company(storage):
 async def test_migrate_defaults_for_company(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 1: Миграция только публичных tools для новой компании.
-    
+
     Проверяет что при вызове migrate_defaults_for_company():
     - Мигрируются ТОЛЬКО публичные tools (is_public=True)
     - Flows НЕ мигрируются (устанавливаются через Store)
@@ -82,7 +82,7 @@ async def test_migrate_defaults_for_company(migrated_db, storage, migrator, test
     """
     create_company, cleanup_company = test_migration_company
     test_company = await create_company()
-    
+
     user = User(
         user_id="test_user",
         provider=AuthProvider.YANDEX,
@@ -94,7 +94,7 @@ async def test_migrate_defaults_for_company(migrated_db, storage, migrator, test
         companies={test_company.company_id: ["admin"]},
         active_company_id=test_company.company_id
     )
-    
+
     context = Context(
         user=user,
         platform="test",
@@ -102,27 +102,27 @@ async def test_migrate_defaults_for_company(migrated_db, storage, migrator, test
         user_companies=[test_company]
     )
     set_context(context)
-    
+
     await migrator.migrate_defaults_for_company(test_company)
-    
+
     # Проверяем что flows НЕ мигрировались
     simple_flow_config = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
     assert simple_flow_config is None, "Flows НЕ должны автоматически мигрироваться"
-    
+
     weather_flow_config = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert weather_flow_config is None, "Flows НЕ должны автоматически мигрироваться"
-    
+
     # Проверяем что агенты НЕ мигрировались
     weather_agent = await agent_repo.get("app.agents.weather.agent.WeatherAgent")
     assert weather_agent is None, "Агенты НЕ должны автоматически мигрироваться"
-    
+
     # Проверяем что публичные tools мигрировались
     tool1_data = await storage.get("tool:app.tools.calc.calc_tools.calculate")
     assert tool1_data is not None, "Публичные tools должны быть мигрированы"
-    
+
     tool2_data = await storage.get("tool:app.tools.calc.calc_tools.get_math_help")
     assert tool2_data is not None, "Публичные tools должны быть мигрированы"
-    
+
     print("✅ Тест migrate_defaults_for_company пройден!")
     clear_context()
     await cleanup_company(test_company)
@@ -132,13 +132,13 @@ async def test_migrate_defaults_for_company(migrated_db, storage, migrator, test
 async def test_migrate_single_flow_for_company(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 2: Миграция отдельного flow в компанию.
-    
+
     Проверяет что можно мигрировать отдельный flow
     со всеми зависимостями.
     """
     create_company, cleanup_company = test_migration_company
     test_company = await create_company()
-    
+
     # Устанавливаем контекст
     user = User(
         user_id="test_user",
@@ -151,7 +151,7 @@ async def test_migrate_single_flow_for_company(migrated_db, storage, migrator, t
         companies={test_company.company_id: ["admin"]},
         active_company_id=test_company.company_id
     )
-    
+
     context = Context(
         user=user,
         platform="test",
@@ -159,22 +159,22 @@ async def test_migrate_single_flow_for_company(migrated_db, storage, migrator, t
         user_companies=[test_company]
     )
     set_context(context)
-    
+
     # Мигрируем конкретный flow
     await migrator.migrate_for_company(
         company=test_company,
         flows=["app.flows.simple_flow.simple_flow_config"],
         with_dependencies=True
     )
-    
+
     # Проверяем flow
     flow_config = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
     assert flow_config is not None, "Flow должен быть мигрирован"
-    
+
     # Проверяем зависимости
     agent_config = await agent_repo.get("app.flows.simple_flow.SimpleFlowAgent")
     assert agent_config is not None, "Зависимые агенты должны быть мигрированы"
-    
+
     print("✅ Тест migrate_single_flow_for_company пройден!")
     clear_context()
     await cleanup_company(test_company)
@@ -184,13 +184,13 @@ async def test_migrate_single_flow_for_company(migrated_db, storage, migrator, t
 async def test_migrate_single_agent_for_company(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 3: Миграция отдельного агента в компанию.
-    
+
     Проверяет что можно мигрировать отдельный агент
     без зависимостей.
     """
     create_company, cleanup_company = test_migration_company
     test_company = await create_company()
-    
+
     # Устанавливаем контекст
     user = User(
         user_id="test_user",
@@ -203,7 +203,7 @@ async def test_migrate_single_agent_for_company(migrated_db, storage, migrator, 
         companies={test_company.company_id: ["admin"]},
         active_company_id=test_company.company_id
     )
-    
+
     context = Context(
         user=user,
         platform="test",
@@ -211,18 +211,18 @@ async def test_migrate_single_agent_for_company(migrated_db, storage, migrator, 
         user_companies=[test_company]
     )
     set_context(context)
-    
+
     # Мигрируем конкретного агента
     await migrator.migrate_for_company(
         company=test_company,
         agents=["app.flows.simple_flow.SimpleFlowAgent"],
         with_dependencies=False
     )
-    
+
     # Проверяем агента
     agent_config = await agent_repo.get("app.flows.simple_flow.SimpleFlowAgent")
     assert agent_config is not None, "Агент должен быть мигрирован"
-    
+
     print("✅ Тест migrate_single_agent_for_company пройден!")
     clear_context()
     await cleanup_company(test_company)
@@ -232,13 +232,13 @@ async def test_migrate_single_agent_for_company(migrated_db, storage, migrator, 
 async def test_remigrate_flow(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 4: Перемиграция flow для отката к базовому состоянию.
-    
+
     Проверяет что можно перемигрировать flow и
     откатить изменения к коду.
     """
     create_company, cleanup_company = test_migration_company
     test_company = await create_company()
-    
+
     # Устанавливаем контекст
     user = User(
         user_id="test_user",
@@ -251,7 +251,7 @@ async def test_remigrate_flow(migrated_db, storage, migrator, test_migration_com
         companies={test_company.company_id: ["admin"]},
         active_company_id=test_company.company_id
     )
-    
+
     context = Context(
         user=user,
         platform="test",
@@ -259,35 +259,35 @@ async def test_remigrate_flow(migrated_db, storage, migrator, test_migration_com
         user_companies=[test_company]
     )
     set_context(context)
-    
+
     # 1. Первая миграция
     await migrator.migrate_for_company(
         company=test_company,
         flows=["app.flows.simple_flow.simple_flow_config"],
         with_dependencies=True
     )
-    
+
     # 2. Получаем flow из БД (Storage использует контекст компании)
     flow_config = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
     original_updated_at = flow_config.updated_at
-    
+
     # 3. "Изменяем" flow в БД (симулируем изменение)
     flow_config.description = "ИЗМЕНЕНО!!!"
     await flow_repo.set(flow_config)
-    
+
     # 4. Перемигрируем flow (откат к коду)
     await migrator.remigrate_flow(
         "app.flows.simple_flow.simple_flow_config",
         test_company
     )
-    
+
     # 5. Проверяем что откатилось к базовому состоянию
     flow_config_after = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
-    
+
     assert flow_config_after.description != "ИЗМЕНЕНО!!!", "Описание должно откатиться к базовому"
     assert flow_config_after.description == "Простой тестовый флоу без LLM", "Описание должно быть из кода"
     assert flow_config_after.updated_at > original_updated_at, "updated_at должен обновиться"
-    
+
     print("✅ Тест remigrate_flow пройден!")
     clear_context()
     await cleanup_company(test_company)
@@ -300,7 +300,7 @@ async def test_remigrate_agent(migrated_db, storage, migrator, test_migration_co
     """
     create_company, cleanup_company = test_migration_company
     test_company = await create_company()
-    
+
     # Устанавливаем контекст
     user = User(
         user_id="test_user",
@@ -313,7 +313,7 @@ async def test_remigrate_agent(migrated_db, storage, migrator, test_migration_co
         companies={test_company.company_id: ["admin"]},
         active_company_id=test_company.company_id
     )
-    
+
     context = Context(
         user=user,
         platform="test",
@@ -321,34 +321,34 @@ async def test_remigrate_agent(migrated_db, storage, migrator, test_migration_co
         user_companies=[test_company]
     )
     set_context(context)
-    
+
     # 1. Первая миграция
     await migrator.migrate_for_company(
         company=test_company,
         agents=["app.flows.simple_flow.SimpleFlowAgent"],
         with_dependencies=False
     )
-    
+
     # 2. Получаем агента из БД
     agent_config = await agent_repo.get("app.flows.simple_flow.SimpleFlowAgent")
     original_name = agent_config.name
-    
+
     # 3. "Изменяем" агента в БД
     agent_config.name = "ИЗМЕНЕННОЕ ИМЯ"
     await agent_repo.set(agent_config)
-    
+
     # 4. Перемигрируем агента
     await migrator.remigrate_agent(
         "app.flows.simple_flow.SimpleFlowAgent",
         test_company
     )
-    
+
     # 5. Проверяем откат
     agent_config_after = await agent_repo.get("app.flows.simple_flow.SimpleFlowAgent")
-    
+
     assert agent_config_after.name != "ИЗМЕНЕННОЕ ИМЯ", "Имя должно откатиться"
     assert agent_config_after.name == original_name, "Имя должно быть из кода"
-    
+
     print("✅ Тест remigrate_agent пройден!")
     clear_context()
     await cleanup_company(test_company)
@@ -358,13 +358,13 @@ async def test_remigrate_agent(migrated_db, storage, migrator, test_migration_co
 async def test_migrate_with_nested_dependencies(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 6: Миграция с вложенными зависимостями.
-    
+
     Проверяет что при миграции flow с зависимостями,
     все субагенты и их tools тоже мигрируются.
     """
     create_company, cleanup_company = test_migration_company
     test_company = await create_company()
-    
+
     # Устанавливаем контекст
     user = User(
         user_id="test_user",
@@ -377,7 +377,7 @@ async def test_migrate_with_nested_dependencies(migrated_db, storage, migrator, 
         companies={test_company.company_id: ["admin"]},
         active_company_id=test_company.company_id
     )
-    
+
     context = Context(
         user=user,
         platform="test",
@@ -385,21 +385,21 @@ async def test_migrate_with_nested_dependencies(migrated_db, storage, migrator, 
         user_companies=[test_company]
     )
     set_context(context)
-    
+
     # Мигрируем flow со всеми зависимостями
     await migrator.migrate_for_company(
         company=test_company,
         flows=["app.flows.simple_flow.simple_flow_config"],
         with_dependencies=True
     )
-    
+
     # Проверяем что все сущности мигрировались в компанию
     flow_config = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
     assert flow_config is not None, "Flow должен быть в компании"
-    
+
     agent_config = await agent_repo.get("app.flows.simple_flow.SimpleFlowAgent")
     assert agent_config is not None, "Агент должен быть в компании"
-    
+
     print("✅ Тест migrate_with_nested_dependencies пройден!")
     clear_context()
     await cleanup_company(test_company)
@@ -409,12 +409,12 @@ async def test_migrate_with_nested_dependencies(migrated_db, storage, migrator, 
 async def test_migrate_single_tool(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 7: Миграция отдельного tool.
-    
+
     Проверяет что можно мигрировать отдельный tool.
     """
     create_company, cleanup_company = test_migration_company
     test_company = await create_company()
-    
+
     # Устанавливаем контекст
     user = User(
         user_id="test_user",
@@ -427,7 +427,7 @@ async def test_migrate_single_tool(migrated_db, storage, migrator, test_migratio
         companies={test_company.company_id: ["admin"]},
         active_company_id=test_company.company_id
     )
-    
+
     context = Context(
         user=user,
         platform="test",
@@ -435,19 +435,19 @@ async def test_migrate_single_tool(migrated_db, storage, migrator, test_migratio
         user_companies=[test_company]
     )
     set_context(context)
-    
+
     # Мигрируем конкретный tool
     await migrator.migrate_for_company(
         company=test_company,
         tools=["app.tools.calc.calc_tools.calculate"],
         with_dependencies=False
     )
-    
+
     # Проверяем tool
     tool_key = "tool:app.tools.calc.calc_tools.calculate"
     tool_data = await storage.get(tool_key)
     assert tool_data is not None, "Tool должен быть мигрирован"
-    
+
     print("✅ Тест migrate_single_tool пройден!")
     clear_context()
     await cleanup_company(test_company)
@@ -460,7 +460,7 @@ async def test_remigrate_tool(migrated_db, storage, migrator, test_migration_com
     """
     create_company, cleanup_company = test_migration_company
     test_company = await create_company()
-    
+
     # Устанавливаем контекст
     user = User(
         user_id="test_user",
@@ -473,7 +473,7 @@ async def test_remigrate_tool(migrated_db, storage, migrator, test_migration_com
         companies={test_company.company_id: ["admin"]},
         active_company_id=test_company.company_id
     )
-    
+
     context = Context(
         user=user,
         platform="test",
@@ -481,38 +481,38 @@ async def test_remigrate_tool(migrated_db, storage, migrator, test_migration_com
         user_companies=[test_company]
     )
     set_context(context)
-    
+
     # 1. Первая миграция
     await migrator.migrate_for_company(
         company=test_company,
         tools=["app.tools.calc.calc_tools.calculate"],
         with_dependencies=False
     )
-    
+
     # 2. Получаем tool из БД
     from app.models import ToolReference
     tool_key = "tool:app.tools.calc.calc_tools.calculate"
     tool_data = await storage.get(tool_key)
     tool_ref = ToolReference.model_validate_json(tool_data)
     original_description = tool_ref.description
-    
+
     # 3. "Изменяем" tool в БД
     tool_ref.description = "ИЗМЕНЕНО!!!"
     await storage.set(tool_key, tool_ref.model_dump_json())
-    
+
     # 4. Перемигрируем tool
     await migrator.remigrate_tool(
         "app.tools.calc.calc_tools.calculate",
         test_company
     )
-    
+
     # 5. Проверяем откат
     tool_data_after = await storage.get(tool_key)
     tool_ref_after = ToolReference.model_validate_json(tool_data_after)
-    
+
     assert tool_ref_after.description != "ИЗМЕНЕНО!!!", "Описание должно откатиться"
     assert tool_ref_after.description == original_description, "Описание должно быть из кода"
-    
+
     print("✅ Тест remigrate_tool пройден!")
     clear_context()
     await cleanup_company(test_company)
@@ -522,13 +522,13 @@ async def test_remigrate_tool(migrated_db, storage, migrator, test_migration_com
 async def test_react_agent_migration(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 9: Проверка миграции ReAct агента.
-    
-    Проверяет что ReAct агенты (WeatherAgent, CalculatorAgent) 
+
+    Проверяет что ReAct агенты (WeatherAgent, CalculatorAgent)
     мигрируются с правильным типом и настройками.
     """
     create_company, cleanup_company = test_migration_company
     test_company = await create_company()
-    
+
     # Устанавливаем контекст
     user = User(
         user_id="test_user",
@@ -541,7 +541,7 @@ async def test_react_agent_migration(migrated_db, storage, migrator, test_migrat
         companies={test_company.company_id: ["admin"]},
         active_company_id=test_company.company_id
     )
-    
+
     context = Context(
         user=user,
         platform="test",
@@ -549,7 +549,7 @@ async def test_react_agent_migration(migrated_db, storage, migrator, test_migrat
         user_companies=[test_company]
     )
     set_context(context)
-    
+
     # Мигрируем ReAct агентов
     await migrator.migrate_for_company(
         company=test_company,
@@ -559,20 +559,20 @@ async def test_react_agent_migration(migrated_db, storage, migrator, test_migrat
         ],
         with_dependencies=False
     )
-    
+
     # Проверяем CalculatorAgent
     calc_agent = await agent_repo.get("app.agents.calculator.agent.CalculatorAgent")
     assert calc_agent is not None, "CalculatorAgent должен быть мигрирован"
     assert calc_agent.type == AgentType.REACT, f"CalculatorAgent должен быть REACT, получили {calc_agent.type}"
     assert calc_agent.prompt is not None, "ReAct агент должен иметь prompt"
     assert calc_agent.graph_definition is None, "ReAct агент не должен иметь graph_definition"
-    
+
     # Проверяем WeatherAgent
     weather_agent = await agent_repo.get("app.agents.weather.agent.WeatherAgent")
     assert weather_agent is not None, "WeatherAgent должен быть мигрирован"
     assert weather_agent.type == AgentType.REACT, f"WeatherAgent должен быть REACT, получили {weather_agent.type}"
     assert weather_agent.prompt is not None, "ReAct агент должен иметь prompt"
-    
+
     print("✅ Тест react_agent_migration пройден!")
     clear_context()
     await cleanup_company(test_company)
@@ -582,13 +582,13 @@ async def test_react_agent_migration(migrated_db, storage, migrator, test_migrat
 async def test_stategraph_agent_migration(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 10: Проверка миграции StateGraph агента.
-    
+
     Проверяет что StateGraph агенты (SimpleFlowAgent)
     мигрируются с правильным типом и graph_definition.
     """
     create_company, cleanup_company = test_migration_company
     test_company = await create_company()
-    
+
     # Устанавливаем контекст
     user = User(
         user_id="test_user",
@@ -601,7 +601,7 @@ async def test_stategraph_agent_migration(migrated_db, storage, migrator, test_m
         companies={test_company.company_id: ["admin"]},
         active_company_id=test_company.company_id
     )
-    
+
     context = Context(
         user=user,
         platform="test",
@@ -609,14 +609,14 @@ async def test_stategraph_agent_migration(migrated_db, storage, migrator, test_m
         user_companies=[test_company]
     )
     set_context(context)
-    
+
     # Мигрируем StateGraph агента
     await migrator.migrate_for_company(
         company=test_company,
         agents=["app.flows.simple_flow.SimpleFlowAgent"],
         with_dependencies=False
     )
-    
+
     # Проверяем SimpleFlowAgent
     agent_config = await agent_repo.get("app.flows.simple_flow.SimpleFlowAgent")
     assert agent_config is not None, "SimpleFlowAgent должен быть мигрирован"
@@ -625,7 +625,7 @@ async def test_stategraph_agent_migration(migrated_db, storage, migrator, test_m
     assert agent_config.graph_definition.nodes is not None, "graph_definition должен содержать nodes"
     assert agent_config.graph_definition.edges is not None, "graph_definition должен содержать edges"
     assert len(agent_config.graph_definition.nodes) > 0, "graph_definition должен содержать хотя бы одну ноду"
-    
+
     print("✅ Тест stategraph_agent_migration пройден!")
     clear_context()
     await cleanup_company(test_company)
@@ -635,7 +635,7 @@ async def test_stategraph_agent_migration(migrated_db, storage, migrator, test_m
 async def test_company_isolation(migrated_db, storage, migrator, agent_repo, flow_repo):
     """
     Тест 11: Проверка изоляции данных между компаниями.
-    
+
     Проверяет что сущности одной компании не видны другой компании.
     """
     company1 = Company(
@@ -645,7 +645,7 @@ async def test_company_isolation(migrated_db, storage, migrator, agent_repo, flo
         status="active",
         created_at=datetime.now(timezone.utc)
     )
-    
+
     company2 = Company(
         company_id="test_company_2",
         subdomain="test2",
@@ -653,10 +653,10 @@ async def test_company_isolation(migrated_db, storage, migrator, agent_repo, flo
         status="active",
         created_at=datetime.now(timezone.utc)
     )
-    
+
     await storage.set(f"company:{company1.company_id}", company1.model_dump_json(), force_global=True)
     await storage.set(f"company:{company2.company_id}", company2.model_dump_json(), force_global=True)
-    
+
     try:
         # 1. Мигрируем flow в первую компанию
         user1 = User(
@@ -670,25 +670,25 @@ async def test_company_isolation(migrated_db, storage, migrator, agent_repo, flo
             companies={company1.company_id: ["admin"]},
             active_company_id=company1.company_id
         )
-        
+
         context1 = Context(
             user=user1,
             platform="test",
             active_company=company1,
             user_companies=[company1]
         )
-        await set_context(context1)
-        
+        set_context(context1)
+
         await migrator.migrate_for_company(
             company=company1,
             flows=["app.flows.simple_flow.simple_flow_config"],
             with_dependencies=True
         )
-        
+
         # 2. Проверяем что flow есть в первой компании
         flow_config_1 = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
         assert flow_config_1 is not None, "Flow должен быть в компании 1"
-        
+
         # 3. Переключаемся на вторую компанию
         user2 = User(
             user_id="test_user_2",
@@ -701,39 +701,39 @@ async def test_company_isolation(migrated_db, storage, migrator, agent_repo, flo
             companies={company2.company_id: ["admin"]},
             active_company_id=company2.company_id
         )
-        
+
         context2 = Context(
             user=user2,
             platform="test",
             active_company=company2,
             user_companies=[company2]
         )
-        await set_context(context2)
-        
+        set_context(context2)
+
         # 4. Проверяем что flow НЕТ во второй компании
         flow_config_2 = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
         assert flow_config_2 is None, "Flow НЕ должен быть виден в компании 2"
-        
+
         # 5. Мигрируем агента во вторую компанию
         await migrator.migrate_for_company(
             company=company2,
             agents=["app.agents.calculator.agent.CalculatorAgent"],
             with_dependencies=False
         )
-        
+
         # 6. Проверяем что агент есть во второй компании
         agent_config_2 = await agent_repo.get("app.agents.calculator.agent.CalculatorAgent")
         assert agent_config_2 is not None, "Агент должен быть в компании 2"
-        
+
         # 7. Переключаемся обратно на первую компанию
-        await set_context(context1)
-        
+        set_context(context1)
+
         # 8. Проверяем что агента НЕТ в первой компании
         agent_config_1 = await agent_repo.get("app.agents.calculator.agent.CalculatorAgent")
         assert agent_config_1 is None, "Агент НЕ должен быть виден в компании 1"
-        
+
         print("✅ Тест company_isolation пройден!")
-        
+
     finally:
         clear_context()
         await storage.delete(f"company:{company1.company_id}", force_global=True)
@@ -744,7 +744,7 @@ async def test_company_isolation(migrated_db, storage, migrator, agent_repo, flo
 async def test_migrate_without_dependencies(migrated_db, storage, migrator, agent_repo, flow_repo):
     """
     Тест 12: Миграция flow без зависимостей.
-    
+
     Проверяет что при with_dependencies=False зависимости не мигрируются.
     """
     fresh_company = Company(
@@ -754,9 +754,9 @@ async def test_migrate_without_dependencies(migrated_db, storage, migrator, agen
         status="active",
         created_at=datetime.now(timezone.utc)
     )
-    
+
     await storage.set(f"company:{fresh_company.company_id}", fresh_company.model_dump_json(), force_global=True)
-    
+
     # Устанавливаем контекст
     user = User(
         user_id="test_user",
@@ -769,7 +769,7 @@ async def test_migrate_without_dependencies(migrated_db, storage, migrator, agen
         companies={fresh_company.company_id: ["admin"]},
         active_company_id=fresh_company.company_id
     )
-    
+
     context = Context(
         user=user,
         platform="test",
@@ -777,22 +777,22 @@ async def test_migrate_without_dependencies(migrated_db, storage, migrator, agen
         user_companies=[fresh_company]
     )
     set_context(context)
-    
+
     # Мигрируем weather_flow БЕЗ зависимостей
     await migrator.migrate_for_company(
         company=fresh_company,
         flows=["app.flows.weather_flow.weather_flow_config"],
         with_dependencies=False
     )
-    
+
     # Проверяем что flow мигрировался
     flow_config = await flow_repo.get("app.flows.weather_flow.weather_flow_config")
     assert flow_config is not None, "Flow должен быть мигрирован"
-    
+
     # Проверяем что зависимости НЕ мигрировались
     agent_config = await agent_repo.get("app.agents.weather.agent.WeatherAgent")
     assert agent_config is None, "Зависимости НЕ должны быть мигрированы при with_dependencies=False"
-    
+
     print("✅ Тест migrate_without_dependencies пройден!")
     clear_context()
     await storage.delete(f"company:{fresh_company.company_id}", force_global=True)
@@ -802,12 +802,12 @@ async def test_migrate_without_dependencies(migrated_db, storage, migrator, agen
 async def test_api_remigrate_endpoints(migrated_db, storage, migrator, test_migration_company, agent_repo, flow_repo):
     """
     Тест 13: Проверка API endpoints для перемиграции.
-    
+
     Проверяет что API endpoints работают корректно.
     """
     create_company, cleanup_company = test_migration_company
     test_company = await create_company()
-    
+
     # Устанавливаем контекст
     user = User(
         user_id="test_user",
@@ -820,7 +820,7 @@ async def test_api_remigrate_endpoints(migrated_db, storage, migrator, test_migr
         companies={test_company.company_id: ["admin"]},
         active_company_id=test_company.company_id
     )
-    
+
     context = Context(
         user=user,
         platform="test",
@@ -828,7 +828,7 @@ async def test_api_remigrate_endpoints(migrated_db, storage, migrator, test_migr
         user_companies=[test_company]
     )
     set_context(context)
-    
+
     # Сначала мигрируем сущности
     await migrator.migrate_for_company(
         company=test_company,
@@ -837,16 +837,16 @@ async def test_api_remigrate_endpoints(migrated_db, storage, migrator, test_migr
         tools=["app.tools.calc.calc_tools.calculate"],
         with_dependencies=False
     )
-    
+
     # Проверяем что сущности есть
     flow_config = await flow_repo.get("app.flows.simple_flow.simple_flow_config")
     agent_config = await agent_repo.get("app.agents.calculator.agent.CalculatorAgent")
     tool_data = await storage.get("tool:app.tools.calc.calc_tools.calculate")
-    
+
     assert flow_config is not None
     assert agent_config is not None
     assert tool_data is not None
-    
+
     print("✅ Тест api_remigrate_endpoints пройден (сущности подготовлены)!")
     clear_context()
     await cleanup_company(test_company)
@@ -856,10 +856,10 @@ if __name__ == "__main__":
     # Прямой запуск для отладки
     import asyncio
     from app.db.repositories import Storage
-    
+
     async def run_all_tests():
         from app.identity.models import Company
-        
+
         # Создаем тестовую компанию
         test_company = Company(
             company_id="test_company_migration",
@@ -868,50 +868,50 @@ if __name__ == "__main__":
             status="active",
             created_at=datetime.now(timezone.utc)
         )
-        
+
         storage = Storage()
         await storage.set(f"company:{test_company.company_id}", test_company.model_dump_json(), force_global=True)
-        
+
         try:
             print("\n=== Запуск теста 1: migrate_defaults_for_company ===")
             await test_migrate_defaults_for_company()
-            
+
             print("\n=== Запуск теста 2: migrate_single_flow_for_company ===")
             await test_migrate_single_flow_for_company()
-            
+
             print("\n=== Запуск теста 3: migrate_single_agent_for_company ===")
             await test_migrate_single_agent_for_company()
-            
+
             print("\n=== Запуск теста 4: remigrate_flow ===")
             await test_remigrate_flow()
-            
+
             print("\n=== Запуск теста 5: remigrate_agent ===")
             await test_remigrate_agent()
-            
+
             print("\n=== Запуск теста 6: migrate_with_nested_dependencies ===")
             await test_migrate_with_nested_dependencies()
-            
+
             print("\n=== Запуск теста 7: migrate_single_tool ===")
             await test_migrate_single_tool()
-            
+
             print("\n=== Запуск теста 8: remigrate_tool ===")
             await test_remigrate_tool()
-            
+
             print("\n=== Запуск теста 9: react_agent_migration ===")
             await test_react_agent_migration()
-            
+
             print("\n=== Запуск теста 10: stategraph_agent_migration ===")
             await test_stategraph_agent_migration()
-            
+
             print("\n=== Запуск теста 11: company_isolation ===")
             await test_company_isolation()
-            
+
             print("\n=== Запуск теста 12: migrate_without_dependencies ===")
             await test_migrate_without_dependencies()
-            
+
             print("\n=== Запуск теста 13: api_remigrate_endpoints ===")
             await test_api_remigrate_endpoints()
-            
+
             print("\n" + "="*60)
             print("✅ ВСЕ 13 ТЕСТОВ ПРОЙДЕНЫ!")
             print("="*60)
@@ -921,6 +921,6 @@ if __name__ == "__main__":
             traceback.print_exc()
         finally:
             clear_context()
-    
+
     asyncio.run(run_all_tests())
 
