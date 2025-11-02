@@ -4,6 +4,7 @@
 
 import asyncio
 import logging
+import weakref
 from typing import AsyncGenerator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine, create_async_engine, async_sessionmaker
@@ -14,33 +15,44 @@ from app.db.models import Base
 
 logger = logging.getLogger(__name__)
 
-# Глобальный engine и session factory
-_engine: AsyncEngine | None = None
-_session_factory: async_sessionmaker | None = None
+# Кэш engine и session factory по event loop
+_engines: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+_session_factories: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+
+
+def _get_loop_id() -> int:
+    """Получает ID текущего event loop для кэширования"""
+    try:
+        loop = asyncio.get_running_loop()
+        return id(loop)
+    except RuntimeError:
+        # Если нет запущенного loop, используем id текущего потока
+        import threading
+        return id(threading.current_thread())
 
 
 async def get_engine() -> AsyncEngine:
-    """Лениво создает глобальный engine"""
-    global _engine
+    """Лениво создает engine для текущего event loop"""
+    loop_id = _get_loop_id()
 
-    if _engine is not None:
-        return _engine
+    if loop_id in _engines:
+        return _engines[loop_id]
 
     import os
-    logger.debug("🔧 Создаем глобальный engine")
+    logger.debug(f"🔧 Создаем engine для event loop {loop_id}")
 
     # В тестах используем NullPool чтобы избежать проблем с event loop
     is_testing = os.environ.get("PYTEST_CURRENT_TEST") is not None
 
     if is_testing:
-        _engine = create_async_engine(
+        engine = create_async_engine(
             settings.database.url,
             echo=False,
             poolclass=NullPool,
         )
-        logger.debug("🔧 Engine создан с NullPool для тестов")
+        logger.debug(f"🔧 Engine создан с NullPool для тестов (loop {loop_id})")
     else:
-        _engine = create_async_engine(
+        engine = create_async_engine(
             settings.database.url,
             echo=False,
             pool_pre_ping=True,
@@ -48,24 +60,27 @@ async def get_engine() -> AsyncEngine:
             pool_size=5,
             max_overflow=10,
         )
+        logger.debug(f"🔧 Engine создан (loop {loop_id})")
 
-    return _engine
+    _engines[loop_id] = engine
+    return engine
 
 
 async def get_session_factory() -> async_sessionmaker:
-    """Лениво создает глобальную session factory"""
-    global _session_factory
+    """Лениво создает session factory для текущего event loop"""
+    loop_id = _get_loop_id()
 
-    if _session_factory is not None:
-        return _session_factory
+    if loop_id in _session_factories:
+        return _session_factories[loop_id]
 
     engine = await get_engine()
-    _session_factory = async_sessionmaker(
+    session_factory = async_sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
     )
 
-    logger.debug("✅ Session factory создана")
-    return _session_factory
+    _session_factories[loop_id] = session_factory
+    logger.debug(f"✅ Session factory создана (loop {loop_id})")
+    return session_factory
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -133,19 +148,21 @@ async def drop_tables():
 
 
 async def close_db():
-    """Закрывает соединения с БД"""
-    global _engine, _session_factory
+    """Закрывает соединения с БД для текущего event loop"""
+    loop_id = _get_loop_id()
 
-    if _engine is not None:
-        logger.info("Закрываем engine")
+    engine = _engines.get(loop_id)
+    if engine is not None:
+        logger.info(f"Закрываем engine для event loop {loop_id}")
         try:
-            await _engine.dispose()
-            logger.debug("✅ Engine закрыт")
+            await engine.dispose()
+            logger.debug(f"✅ Engine закрыт (loop {loop_id})")
         except Exception as e:
             logger.error(f"❌ Ошибка при закрытии engine: {e}")
 
-        _engine = None
-        _session_factory = None
-        logger.info("Соединения с БД закрыты")
+        # Удаляем из кэша
+        _engines.pop(loop_id, None)
+        _session_factories.pop(loop_id, None)
+        logger.info(f"Соединения с БД закрыты (loop {loop_id})")
 
 

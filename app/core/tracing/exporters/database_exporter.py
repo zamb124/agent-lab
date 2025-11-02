@@ -50,9 +50,6 @@ class DatabaseSpanExporter(SpanExporter):
                       Если None, будет определен автоматически при первом использовании.
         """
         self._background_tasks: Set[asyncio.Task] = set()
-        self._write_lock: Optional[asyncio.Lock] = None
-        self._main_loop = main_loop
-        self._loop_lock = asyncio.Lock() if main_loop else None
         logger.info("✅ DatabaseSpanExporter инициализирован")
 
     def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
