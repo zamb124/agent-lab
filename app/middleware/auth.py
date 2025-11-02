@@ -30,34 +30,34 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app):
         super().__init__(app)
-    
+
     @property
     def storage(self):
         """Получить Storage из системного контейнера"""
         return get_system_container().storage
-    
+
     @storage.setter
     def storage(self, value):
         """Установить Storage (для тестов)"""
         # Это только для тестов - в продакшене не используется
         pass
-    
+
     async def _setup_webhook_context(self, request: Request, platform: str) -> None:
         """Устанавливает контекст для webhook запросов (Telegram/WhatsApp)"""
         flow_key = request.url.path.split(f"/api/v1/webhook/{platform}/")[1]
-        
+
         parts = flow_key.split(":")
         if len(parts) < 4 or parts[0] != "company" or parts[2] != "flow":
             raise HTTPException(status_code=400, detail=f"Invalid flow key format: {flow_key}")
-        
+
         company_id = parts[1]
-        
+
         company_data = await self.storage.get(f"company:{company_id}", force_global=True)
         if not company_data:
             raise HTTPException(status_code=404, detail=f"Company {company_id} not found")
-        
+
         requested_company = Company.model_validate_json(company_data)
-        
+
         # Для GET (верификация WhatsApp) используем анонимный контекст
         # Для остальных создаем контекст с реальным пользователем
         if platform == "whatsapp" and request.method == "GET":
@@ -66,8 +66,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             context = await self._create_telegram_context(request, requested_company)
         else:
             context = await self._create_whatsapp_context(request, requested_company)
-        
-        await set_context(context)
+
+        set_context(context)
         request.state.context = context
         request.state.user = context.user
         request.state.language = context.language.value
@@ -83,12 +83,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
             or request.url.path == "/health"
         ):
             return await call_next(request)
-        
+
         # Для Telegram webhook
         if request.url.path.startswith("/api/v1/webhook/telegram/"):
             await self._setup_webhook_context(request, "telegram")
             return await call_next(request)
-        
+
         # Для WhatsApp webhook
         if request.url.path.startswith("/api/v1/webhook/whatsapp/"):
             await self._setup_webhook_context(request, "whatsapp")
@@ -100,7 +100,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 host = request.headers.get("host", "")
                 domain = settings.server.domain
                 requested_company = None
-                
+
                 # Для локальной разработки: требуем поддомен
                 if settings.server.env == "local":
                     if ".localhost" in host:
@@ -112,7 +112,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                             if company_data:
                                 requested_company = Company.model_validate_json(company_data)
                                 logger.info(f"📂 Файл: найдена компания {company_id} по поддомену {subdomain}")
-                    
+
                     if not requested_company:
                         logger.warning(f"⚠️ Запрос файла без поддомена: {host}")
                         raise HTTPException(status_code=400, detail="Для скачивания файла требуется указать поддомен компании (например, ssd.localhost:8001)")
@@ -126,13 +126,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
                             company_data = await self.storage.get(f"company:{company_id}", force_global=True)
                             if company_data:
                                 requested_company = Company.model_validate_json(company_data)
-                    
+
                     if not requested_company:
                         raise HTTPException(status_code=400, detail="Для скачивания файла требуется указать поддомен компании")
 
                 # Создаем минимальный анонимный контекст с этой компанией
                 context = await self._create_anonymous_context(request, requested_company)
-                await set_context(context)
+                set_context(context)
                 request.state.context = context
                 request.state.user = context.user
                 request.state.language = context.language.value
@@ -154,7 +154,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             context = await self._create_request_context(request)
 
             # Устанавливаем глобальный контекст
-            await set_context(context)
+            set_context(context)
 
             # Также сохраняем в request.state для совместимости
             request.state.context = context
@@ -347,7 +347,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def _create_telegram_context(self, request: Request, requested_company: Company) -> Context:
         """Создает контекст для Telegram запросов"""
-        
+
         body = await request.body()
         data = json.loads(body)
 
@@ -394,7 +394,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 "last_name": last_name,
             },
         )
-        
+
         return context
 
     async def _create_whatsapp_context(self, request: Request, requested_company: Company) -> Context:
@@ -406,17 +406,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
         entry = data.get("entry", [{}])[0]
         changes = entry.get("changes", [{}])
         value = changes[0].get("value", {}) if changes else {}
-        
+
         messages = value.get("messages", [])
         contacts = value.get("contacts", [])
-        
+
         # Получаем информацию о пользователе
         if messages:
             wa_message = messages[0]
             phone_number = wa_message.get("from", "unknown")
         else:
             phone_number = "unknown"
-        
+
         # Профиль пользователя
         profile_name = "User"
         if contacts:
@@ -455,7 +455,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Получаем токен из куки auth_token или заголовка Authorization
         token = request.cookies.get("auth_token")
-        
+
         # Если нет куки, проверяем заголовок Authorization
         if not token:
             auth_header = request.headers.get("authorization", "")
@@ -469,7 +469,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Проверяем токен через централизованную систему
         token_service = get_token_service()
         token_data = token_service.validate_token(token)
-        
+
         if not token_data:
             raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -477,7 +477,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         user = None
         if token_data.user_id:
             user = await self._get_user_by_id(token_data.user_id)
-        
+
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
 
@@ -487,7 +487,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Проверяем доступ к запрашиваемой компании (если указана в токене)
         if token_data.company_id and token_data.company_id != requested_company.company_id:
             raise HTTPException(status_code=403, detail="Token company mismatch")
-        
+
         # Проверяем доступ к запрашиваемой компании
         if requested_company.company_id not in user.companies:
             # Если у пользователя нет доступа к запрашиваемой компании,
@@ -522,7 +522,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             user_companies=user_companies,
             language=language,
             metadata={
-                "authenticated": True, 
+                "authenticated": True,
                 "api_request": True,
                 "jwt_token": True
             },
@@ -530,7 +530,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def _create_anonymous_context(self, request: Request, requested_company: Company) -> Context:
         """Создает анонимный контекст"""
-        
+
         user = User(
             user_id="anonymous",
             provider=AuthProvider.YANDEX,  # Placeholder
@@ -554,12 +554,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
             language=language,
             metadata={"anonymous": True}
         )
-        
+
         return context
 
     async def _create_amocrm_context(self, request: Request, requested_company: Company) -> Context:
         """Создает анонимный контекст"""
-        
+
         user = User(
             user_id="anonymous",
             provider=None,  # TODO: сделать провайдера API?
@@ -581,14 +581,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
             language=language,
             metadata={"anonymous": True}
         )
-        
+
         return context
 
     async def _create_frontend_context(self, request: Request, requested_company: Company, allow_no_company: bool = False, has_subdomain: bool = False) -> Context:
         """Создает контекст для frontend запросов на основе JWT токена"""
         # Получаем JWT токен из куки auth_token
         token = request.cookies.get("auth_token")
-        
+
         logger.info(f"🍪 Проверка cookies: auth_token={'найден' if token else 'НЕ найден'}, все cookies={list(request.cookies.keys())}")
 
         if not token:
@@ -597,7 +597,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Проверяем JWT токен
         token_service = get_token_service()
         token_data = token_service.validate_token(token)
-        
+
         if not token_data:
             raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -682,7 +682,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         from app.identity.auth_service import get_auth_service
         auth_service = get_auth_service()
         return await auth_service.get_user_by_session(session_id)
-    
+
     async def _get_user_by_id(self, user_id: str) -> Optional[User]:
         """Получает пользователя по user_id"""
         user_key = f"user:{user_id}"
@@ -690,7 +690,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if user_data:
             return User.model_validate_json(user_data)
         return None
-    
+
     async def _update_user_active_company(self, user: User):
         """Обновляет активную компанию пользователя в БД"""
         user_key = f"user:{user.user_id}"

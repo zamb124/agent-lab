@@ -21,40 +21,40 @@ router = APIRouter()
 
 async def _poll_notifications(session_id: str, context: Context):
     """Polling уведомлений из БД для конкретной сессии
-    
+
     Args:
         session_id: ID сессии для polling
         context: Контекст пользователя (передается явно, т.к. asyncio.create_task теряет contextvars)
     """
-    
-    await set_context(context)
-    
+
+    set_context(context)
+
     storage = get_container().storage
     processed_notifications = set()
-    
+
     logger.info(f"🔄 Начинаем polling уведомлений для сессии {session_id}")
     iteration = 0
     consecutive_errors = 0
     max_consecutive_errors = 5
-    
+
     user_id = context.user.user_id
     company_id = context.active_company.company_id if context.active_company else "НЕТ"
     logger.info(f"✅ Контекст установлен: user_id={user_id}, company={company_id}")
-    
+
     while session_id in websocket_manager.connections["chat"]:
             try:
                 iteration += 1
                 notification_pattern = f"web_notification:web:{user_id}:"
-                
+
                 if iteration == 1 or iteration % 10 == 0:
                     connection_status = session_id in websocket_manager.connections["chat"]
                     logger.info(f"🔍 [Итерация {iteration}] Polling активен: connection={connection_status}, pattern={notification_pattern}")
-                
+
                 keys = await storage.list_by_prefix(notification_pattern, limit=1000, force_global=True)
-                
+
                 if keys:
                     logger.info(f"📬 [Итерация {iteration}] Найдено {len(keys)} уведомлений: {keys[:3]}...")
-                    
+
                     for key in keys:
                         if key not in processed_notifications:
                             notification_data = await storage.get(key)
@@ -63,10 +63,10 @@ async def _poll_notifications(session_id: str, context: Context):
                                     notification = json.loads(notification_data)
                                     notification_type = notification.get('type', 'unknown')
                                     logger.info(f"📨 Отправляем уведомление типа {notification_type}: {key}")
-                                    
+
                                     await websocket_manager.send_to_session(session_id, notification, "chat")
                                     processed_notifications.add(key)
-                                    
+
                                     await storage.delete(key)
                                     logger.debug(f"🗑️ Уведомление удалено: {key}")
                                 except json.JSONDecodeError as e:
@@ -74,20 +74,20 @@ async def _poll_notifications(session_id: str, context: Context):
                                     await storage.delete(key)
                                 except Exception as e:
                                     logger.error(f"❌ Ошибка обработки уведомления {key}: {e}", exc_info=True)
-                
+
                 if len(processed_notifications) > 300:
                     logger.info(f"🧹 Очистка кэша обработанных уведомлений: {len(processed_notifications)} -> 0")
                     processed_notifications.clear()
-                
+
                 consecutive_errors = 0
 
             except Exception as e:
                 consecutive_errors += 1
                 logger.error(
-                    f"❌ Ошибка в polling для {session_id} [Итерация {iteration}, ошибка #{consecutive_errors}]: {e}", 
+                    f"❌ Ошибка в polling для {session_id} [Итерация {iteration}, ошибка #{consecutive_errors}]: {e}",
                     exc_info=True
                 )
-                
+
                 if consecutive_errors >= max_consecutive_errors:
                     logger.error(
                         f"🛑 Критическая ошибка: {consecutive_errors} последовательных ошибок в polling для {session_id}. "
@@ -96,7 +96,7 @@ async def _poll_notifications(session_id: str, context: Context):
                     break
 
             await asyncio.sleep(2)
-    
+
     connection_still_exists = session_id in websocket_manager.connections["chat"]
     logger.info(
         f"🔄 Polling завершен для сессии {session_id}. "
@@ -110,7 +110,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str = None):
     """WebSocket endpoint для чата"""
 
     chat_session_id = None  # Инициализируем переменную
-    
+
     try:
         # Получаем session_id из cookies (как в AuthMiddleware)
         auth_session_id = websocket.cookies.get("session_id")
@@ -131,25 +131,25 @@ async def websocket_chat(websocket: WebSocket, session_id: str = None):
 
         # Получаем активную компанию пользователя
         storage = get_system_container().storage
-        
+
         if not user.active_company_id:
             await websocket.close(code=4003, reason="User has no active company")
             return
-            
+
         company_data = await storage.get(f"company:{user.active_company_id}", force_global=True)
         if not company_data:
             await websocket.close(code=4003, reason=f"Company {user.active_company_id} not found")
             return
-        
+
         active_company = Company.model_validate_json(company_data)
-        
+
         # Получаем все компании пользователя
         user_companies = []
         for company_id in user.companies.keys():
             comp_data = await storage.get(f"company:{company_id}", force_global=True)
             if comp_data:
                 user_companies.append(Company.model_validate_json(comp_data))
-        
+
         # Создаем контекст с правильной компанией
         context = Context(
             user=user,
@@ -159,7 +159,7 @@ async def websocket_chat(websocket: WebSocket, session_id: str = None):
             user_companies=user_companies,
             metadata={"websocket": True, "authenticated": True},
         )
-        await set_context(context)
+        set_context(context)
 
         # Используем auth_session_id как session_id для чата
         chat_session_id = auth_session_id
@@ -168,11 +168,11 @@ async def websocket_chat(websocket: WebSocket, session_id: str = None):
         )
 
         await websocket_manager.connect(websocket, chat_session_id, "chat")
-        
+
         # Запускаем polling уведомлений (передаем контекст явно)
         logger.info(f"🚀 Запускаем polling для {chat_session_id}, user_id={user.user_id}, company={context.active_company.company_id}")
         websocket_manager.start_polling(
-            chat_session_id, 
+            chat_session_id,
             _poll_notifications(chat_session_id, context),
             "chat"
         )

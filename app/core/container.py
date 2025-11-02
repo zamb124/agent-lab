@@ -2,18 +2,17 @@
 Dependency Injection Container для управления зависимостями.
 
 Архитектура:
-- Container - объект с ленивой инициализацией через __getattr__
-- Один Container на event loop (аналогично engine в database.py)
-- Контекстов может быть много в одном loop (разные Task), но контейнер один
+- Container создается каждый раз при вызове get_container()
+- Сервисы внутри контейнера инициализируются лениво через __getattr__
+- Один глобальный engine и session_factory (определены в database.py)
 - Доступ через атрибуты: container.storage, container.agent_factory (синхронный)
-- Сервисы инициализируются только при первом обращении
+- Сервисы инициализируются только при первом обращении к конкретному атрибуту
 - Отложенные импорты избегают циркулярных зависимостей
-- Сохранен тот же синхронный интерфейс доступа
 """
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Optional, Dict
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
@@ -35,9 +34,6 @@ logger = logging.getLogger(__name__)
 
 # Глобальный системный контейнер для сервисов, используемых ДО установки request-контекста
 _system_container: Optional["Container"] = None
-
-# Словарь для хранения Container для каждого event loop (аналогично _engines в database.py)
-_containers: Dict[int, "Container"] = {}
 
 
 def get_system_container() -> "Container":
@@ -64,35 +60,6 @@ def initialize_system_container() -> "Container":
         _system_container = Container()
         logger.info("Системный контейнер инициализирован")
     return _system_container
-
-
-async def get_container_for_loop() -> "Container":
-    """
-    Лениво создает Container для текущего event loop.
-
-    Аналогично get_session_factory() в database.py.
-    Один контейнер на event loop - все контексты в этом loop используют общий контейнер.
-    """
-    from app.db.database import get_session_factory
-
-    loop = asyncio.get_running_loop()
-    loop_id = id(loop)
-
-    # Если контейнер для этого loop'а уже есть, возвращаем его
-    if loop_id in _containers:
-        return _containers[loop_id]
-
-    # Создаем новый контейнер для этого event loop
-    logger.debug(f"🔧 Создаем новый Container для event loop {loop_id}")
-    container = Container()
-
-    # Инициализируем session_factory для этого loop
-    container._session_factory = await get_session_factory()
-
-    _containers[loop_id] = container
-    logger.info(f"✅ Container создан для event loop {loop_id}")
-
-    return container
 
 
 class Container:
@@ -170,8 +137,7 @@ class Container:
             if name == 'storage':
                 from app.db.repositories import Storage
                 service = Storage()
-                # Устанавливаем session_factory из контейнера
-                service.session_factory = self._session_factory
+                # session_factory будет инициализирован лениво через ensure_initialized()
 
             elif name == 'agent_repository':
                 from app.db.repositories import AgentRepository
@@ -246,63 +212,40 @@ class Container:
 
         return service
 
-    @property
-    def session_factory(self):
-        """Ленивая инициализация session_factory"""
+    async def session_factory(self):
+        """Получает session_factory с ленивой инициализацией"""
         if self._session_factory is None:
-            # В ленивой инициализации мы не можем синхронно инициализировать session_factory
-            # Полагаемся на то, что он будет инициализирован через AsyncSessionLocal
-            # при первом использовании Storage
-            raise RuntimeError(
-                "Session factory не инициализирован! "
-                "Используйте await get_session_factory() для инициализации или "
-                "обратитесь к storage через get_container().storage"
-            )
-
+            self._session_factory = await get_session_factory()
+            logger.debug("✅ Session factory инициализирован в контейнере")
         return self._session_factory
 
 
 def get_container() -> Container:
     """
-    Получает контейнер зависимостей для текущего event loop.
+    Создает новый контейнер зависимостей.
 
-    Контейнер привязан к event loop, а не к контексту!
-    Один контейнер на loop - все контексты (Task) в этом loop используют общий контейнер.
-    Аналогично архитектуре в database.py (engine и session_factory).
+    Session factory будет инициализирован лениво при первом обращении к storage.
     """
     # Проверяем наличие контекста (должен быть установлен для большинства операций)
     from app.core.context import get_context
     context = get_context()
     if context is None:
-        logger.error(
+        logger.warning(
             "⚠️ ВНИМАНИЕ: get_container() вызван без установленного контекста! "
             "Это может привести к проблемам с изоляцией данных между компаниями. "
-            "Убедитесь, что set_context() был вызван перед использованием контейнера."
-        )
-        raise RuntimeError(
-            "Контекст не установлен! "
-            "Используйте set_context() для установки контекста перед использованием контейнера."
+            "В тестах убедитесь, что migrated_db фикстура создала миграционный контекст."
         )
 
     try:
-        loop = asyncio.get_running_loop()
-        loop_id = id(loop)
-
-        # Если контейнер для этого loop'а уже есть, возвращаем его
-        if loop_id in _containers:
-            return _containers[loop_id]
-
-        # Если контейнера еще нет - это ошибка (должен быть создан через get_container_for_loop)
-        raise RuntimeError(
-            f"Container для event loop {loop_id} не инициализирован! "
-            f"Используйте await get_container_for_loop() для инициализации."
-        )
-
+        asyncio.get_running_loop()
     except RuntimeError as e:
         if "no running event loop" in str(e):
             raise RuntimeError(
                 "get_container() требует запущенный event loop. "
-                "Используйте get_system_container() для системных операций или "
-                "await get_container_for_loop() для создания контейнера."
+                "Используйте get_system_container() для системных операций."
             ) from e
         raise
+
+    # Всегда создаем новый контейнер
+    return Container()
+

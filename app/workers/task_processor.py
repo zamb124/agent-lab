@@ -134,7 +134,7 @@ class TaskProcessor:
             f"📨 {task.task_id}: '{user_msg[:50]}' | {task.context.user.name} → {task.flow_id}"
         )
 
-        await set_context(task.context)
+        set_context(task.context)
 
         # Вызываем основную логику обработки через декоратор трейсинга
         await self._process_task_core(task)

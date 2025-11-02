@@ -66,36 +66,36 @@ class TelegramPoller:
     async def reload(self):
         """Перезагружает список ботов без полной остановки сервиса"""
         logger.info("🔄 Перезагрузка Telegram ботов...")
-        
+
         # Останавливаем текущие polling tasks
         for task in self.polling_tasks:
             task.cancel()
-        
+
         if self.polling_tasks:
             await asyncio.gather(*self.polling_tasks, return_exceptions=True)
-        
+
         self.polling_tasks.clear()
-        
+
         # Сохраняем старые офсеты
         old_offsets = {username: bot_data["offset"] for username, bot_data in self.active_bots.items()}
-        
+
         # Очищаем список ботов
         self.active_bots.clear()
-        
+
         # Заново ищем ботов
         await self._discover_bots()
-        
+
         # Восстанавливаем офсеты для существующих ботов
         for username, bot_data in self.active_bots.items():
             if username in old_offsets:
                 bot_data["offset"] = old_offsets[username]
-        
+
         # Запускаем polling для всех ботов
         for username, bot_data in self.active_bots.items():
             task = asyncio.create_task(self._poll_bot(username, bot_data))
             self.polling_tasks.append(task)
             logger.info(f"🤖 Запущен polling для @{username}")
-        
+
         logger.info(f"✅ Перезагрузка завершена. Активных ботов: {len(self.active_bots)}")
 
     async def _discover_bots(self):
@@ -105,26 +105,26 @@ class TelegramPoller:
         # Получаем все flows динамически - ищем во всех компаниях
         all_keys = await storage.list_by_prefix("", 1000, force_global=True)
         flow_keys = [key for key in all_keys if ":flow:" in key]
-        
+
         for flow_key in flow_keys:
             flow_data = await storage.get(flow_key, force_global=True)
             if not flow_data:
                 continue
-            
+
             flow_config = FlowConfig.model_validate_json(flow_data)
             flow_id = flow_config.flow_id
 
             telegram_config = flow_config.platforms.get("telegram")
             if not telegram_config:
                 continue
-            
+
             # Резолвим весь telegram_config (username и token могут быть @var:key)
             # Создаем контекст для резолюции
             company_id = flow_key.split(":")[1] if ":" in flow_key else "system"
             company_data = await storage.get(f"company:{company_id}", force_global=True)
             if not company_data:
                 continue
-            
+
             company = Company.model_validate_json(company_data)
             user = User(
                 user_id="system",
@@ -144,23 +144,23 @@ class TelegramPoller:
                 user_companies=[company],
                 language=Language.RU
             )
-            await set_context(context)
+            set_context(context)
 
             # Резолвим telegram_config
             variables_service = get_container().variables_service
             resolved_config = await variables_service.resolve(telegram_config, auto_create=True)
-            
+
             username = resolved_config.get("username")
             token = resolved_config.get("token")
-            
+
             if not username:
                 logger.warning(f"⚠️ Flow {flow_id} не имеет username после резолюции")
                 continue
-            
+
             if not token:
                 logger.warning(f"⚠️ Flow {flow_id} не имеет token после резолюции")
                 continue
-            
+
             logger.info(f"✅ Резолвнуто: username={username}, token={'***'}")
 
             self.active_bots[username] = {
@@ -234,7 +234,7 @@ class TelegramPoller:
         """Обрабатывает одно обновление от Telegram через webhook endpoint"""
         webhook_url = f"http://127.0.0.1:{settings.server.port}/api/v1/webhook/telegram/{flow_key}"
         update_id = update.get('update_id', 'unknown')
-        
+
         logger.info(f"📤 Отправка update {update_id} в webhook: {webhook_url}")
 
         async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:

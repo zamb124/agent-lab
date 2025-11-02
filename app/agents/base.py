@@ -257,7 +257,7 @@ class BaseAgent(ABC):
             current_context = get_context()
             if current_context:
                 current_context.agent_config = self.config
-                await set_context(current_context)
+                set_context(current_context)
 
 
             # Загружаем state из checkpointer перед выполнением графа

@@ -4,90 +4,68 @@
 
 import asyncio
 import logging
-from typing import AsyncGenerator, Dict
+from typing import AsyncGenerator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine, create_async_engine, async_sessionmaker
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 from app.db.models import Base
 
 logger = logging.getLogger(__name__)
 
-# Словари для хранения engine и session factory для каждого event loop
-_engines: Dict[int, AsyncEngine] = {}
-_session_factories: Dict[int, async_sessionmaker] = {}
+# Глобальный engine и session factory
+_engine: AsyncEngine | None = None
+_session_factory: async_sessionmaker | None = None
 
 
 async def get_engine() -> AsyncEngine:
-    """Лениво создает engine для текущего event loop"""
+    """Лениво создает глобальный engine"""
+    global _engine
 
-    current = asyncio.get_running_loop()
-    loop_id = id(current)
+    if _engine is not None:
+        return _engine
 
-    # Если engine для этого loop'а уже есть, возвращаем его
-    if loop_id in _engines:
-        return _engines[loop_id]
+    import os
+    logger.debug("🔧 Создаем глобальный engine")
 
-    # Создаем новый engine для этого event loop
-    logger.debug(f"🔧 Создаем новый engine для event loop {loop_id}")
-    engine = create_async_engine(
-        settings.database.url,
-        echo=False,
-        pool_pre_ping=True,
-        pool_recycle=3600,
-        pool_size=5,
-        max_overflow=10,
-    )
-    _engines[loop_id] = engine
+    # В тестах используем NullPool чтобы избежать проблем с event loop
+    is_testing = os.environ.get("PYTEST_CURRENT_TEST") is not None
 
-    return engine
+    if is_testing:
+        _engine = create_async_engine(
+            settings.database.url,
+            echo=False,
+            poolclass=NullPool,
+        )
+        logger.debug("🔧 Engine создан с NullPool для тестов")
+    else:
+        _engine = create_async_engine(
+            settings.database.url,
+            echo=False,
+            pool_pre_ping=True,
+            pool_recycle=3600,
+            pool_size=5,
+            max_overflow=10,
+        )
+
+    return _engine
 
 
 async def get_session_factory() -> async_sessionmaker:
-    """Лениво создает session factory для текущего event loop"""
+    """Лениво создает глобальную session factory"""
+    global _session_factory
 
-    current = asyncio.get_running_loop()
-    loop_id = id(current)
+    if _session_factory is not None:
+        return _session_factory
 
-    # Если session factory для этого loop'а уже есть, возвращаем его
-    if loop_id in _session_factories:
-        return _session_factories[loop_id]
-
-    # Создаем новый session factory для этого event loop
     engine = await get_engine()
-    session_factory = async_sessionmaker(
+    _session_factory = async_sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
     )
-    _session_factories[loop_id] = session_factory
 
-    return session_factory
-
-
-class AsyncSessionLocalProxy:
-    """Proxy для ленивой инициализации session factory"""
-
-    def __call__(self):
-        import asyncio
-        try:
-            loop = asyncio.get_running_loop()
-            loop_id = id(loop)
-
-            if loop_id not in _session_factories:
-                raise RuntimeError(
-                    "Session factory не инициализирован. "
-                    "Используйте await get_session_factory() или get_container().session_factory"
-                )
-            return _session_factories[loop_id]()
-        except RuntimeError as e:
-            if "no running event loop" in str(e) or "no current event loop" in str(e):
-                raise RuntimeError(
-                    "AsyncSessionLocal требует event loop. "
-                    "Используйте get_container().session_factory в async контексте"
-                )
-            raise
-
-
-AsyncSessionLocal = AsyncSessionLocalProxy()
+    logger.debug("✅ Session factory создана")
+    return _session_factory
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -155,20 +133,19 @@ async def drop_tables():
 
 
 async def close_db():
-    """Закрывает соединения с БД для всех event loop'ов"""
-    global _engines, _session_factories
+    """Закрывает соединения с БД"""
+    global _engine, _session_factory
 
-    if _engines:
-        logger.info(f"Закрываем {len(_engines)} engine(s)")
-        for loop_id, engine in _engines.items():
-            try:
-                await engine.dispose()
-                logger.debug(f"✅ Engine для loop {loop_id} закрыт")
-            except Exception as e:
-                logger.error(f"❌ Ошибка при закрытии engine для loop {loop_id}: {e}")
+    if _engine is not None:
+        logger.info("Закрываем engine")
+        try:
+            await _engine.dispose()
+            logger.debug("✅ Engine закрыт")
+        except Exception as e:
+            logger.error(f"❌ Ошибка при закрытии engine: {e}")
 
-        _engines.clear()
-        _session_factories.clear()
-        logger.info("Все соединения с БД закрыты")
+        _engine = None
+        _session_factory = None
+        logger.info("Соединения с БД закрыты")
 
 

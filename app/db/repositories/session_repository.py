@@ -13,7 +13,6 @@ from sqlalchemy import select
 from app.db.repositories.base import BaseRepository
 from app.db.repositories.storage import Storage
 from app.models import SessionConfig, SessionStatus
-from app.db.database import AsyncSessionLocal
 from app.db.models import Storage as StorageModel
 
 logger = logging.getLogger(__name__)
@@ -85,12 +84,12 @@ class SessionRepository(BaseRepository[SessionConfig]):
     ) -> List[SessionConfig]:
         """
         Находит активные сессии пользователя.
-        
+
         Args:
             platform: Платформа (telegram, web, api)
             user_id: ID пользователя
             flow_id: ID flow
-            
+
         Returns:
             Список активных сессий
         """
@@ -102,15 +101,15 @@ class SessionRepository(BaseRepository[SessionConfig]):
             session_json = await self.storage.get(key)
             if not session_json:
                 continue
-                
+
             data = json.loads(session_json)
-            
+
             if not isinstance(data, dict):
                 continue
             if not all(field in data for field in ['session_id', 'platform', 'user_id']):
                 logger.debug(f"Ключ {key} не содержит обязательные поля SessionConfig, пропускаем")
                 continue
-                
+
             session = SessionConfig.model_validate_json(session_json)
             if (
                 session.platform == platform
@@ -125,16 +124,16 @@ class SessionRepository(BaseRepository[SessionConfig]):
     async def list_all(self, limit: int = 100) -> List[SessionConfig]:
         """
         Возвращает список всех сессий.
-        
+
         Args:
             limit: Максимальное количество результатов
-            
+
         Returns:
             Список конфигураций сессий
         """
         prefix = self._get_prefix()
         keys = await self.storage.list_by_prefix(prefix, limit=limit)
-        
+
         sessions = []
         for key in keys:
             data = await self.storage.get(key)
@@ -145,6 +144,6 @@ class SessionRepository(BaseRepository[SessionConfig]):
                 except Exception as e:
                     logger.error(f"Ошибка парсинга сессии {key}: {e}")
                     continue
-        
+
         return sessions
 

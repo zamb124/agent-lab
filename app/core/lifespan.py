@@ -142,7 +142,7 @@ async def lifespan(app: FastAPI):
             platform="system"
         )
 
-        await set_context(system_context)
+        set_context(system_context)
         logger.info("✅ Системный контекст установлен")
 
         # Сохраняем системный контейнер для глобального доступа (например, в middleware)

@@ -123,7 +123,7 @@ class DatabaseSpanExporter(SpanExporter):
                     session_id=attributes.get("context_session_id") or attributes.get("session_id"),
                     platform=attributes.get("platform", "system")
                 )
-                await set_context(restored_context)
+                set_context(restored_context)
                 logger.debug(
                     f"✅ Контекст восстановлен из span атрибутов: company_id={company_id}, "
                     f"user_id={user_id or 'system'}"
