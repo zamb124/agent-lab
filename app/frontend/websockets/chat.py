@@ -53,7 +53,8 @@ async def _poll_notifications(session_id: str, context: Context):
                 keys = await storage.list_by_prefix(notification_pattern, limit=1000, force_global=True)
 
                 if keys:
-                    logger.info(f"📬 [Итерация {iteration}] Найдено {len(keys)} уведомлений: {keys[:3]}...")
+                    logger.info(f"📬 [Итерация {iteration}] Найдено {len(keys)} уведомлений для user_id={user_id}")
+                    logger.debug(f"📬 Ключи уведомлений: {keys[:5]}")
 
                     for key in keys:
                         if key not in processed_notifications:
@@ -62,9 +63,23 @@ async def _poll_notifications(session_id: str, context: Context):
                                 try:
                                     notification = json.loads(notification_data)
                                     notification_type = notification.get('type', 'unknown')
-                                    logger.info(f"📨 Отправляем уведомление типа {notification_type}: {key}")
+                                    notification_session = notification.get('session_id', 'unknown')
+                                    logger.info(
+                                        f"📨 Отправляем уведомление типа {notification_type}: "
+                                        f"ws_session={session_id}, notification_session={notification_session}, key={key}"
+                                    )
 
+                                    # Проверяем, что WebSocket соединение все еще активно
+                                    if session_id not in websocket_manager.connections["chat"]:
+                                        logger.warning(f"⚠️ WebSocket сессия {session_id} уже отключена, пропускаем уведомление")
+                                        continue
+                                    
                                     await websocket_manager.send_to_session(session_id, notification, "chat")
+                                    logger.info(
+                                        f"✅ Уведомление отправлено в WebSocket: "
+                                        f"ws_session={session_id}, notification_session={notification_session}, "
+                                        f"type={notification_type}, content={notification.get('data', {}).get('content', '')[:50]}"
+                                    )
                                     processed_notifications.add(key)
 
                                     await storage.delete(key)
@@ -106,42 +121,97 @@ async def _poll_notifications(session_id: str, context: Context):
 
 
 @router.websocket("/ws/chat")
-async def websocket_chat(websocket: WebSocket, session_id: str = None):
+async def websocket_chat(websocket: WebSocket):
     """WebSocket endpoint для чата"""
+    
+    from app.core.tokens import get_token_service
 
     chat_session_id = None  # Инициализируем переменную
 
     try:
-        # Получаем session_id из cookies (как в AuthMiddleware)
+        # Получаем токен из query параметров (для embed чата)
+        embed_token = websocket.query_params.get("token")
+        
+        logger.info(f"🔍 WebSocket подключение: token в query={'есть' if embed_token else 'нет'}, cookies={list(websocket.cookies.keys())}")
+        
+        # Принимаем WebSocket соединение
+        await websocket.accept()
+        
+        # Получаем session_id из cookies (для обычного чата)
         auth_session_id = websocket.cookies.get("session_id")
-
-        if not auth_session_id:
+        
+        # Если нет cookie, пытаемся получить токен из query параметров
+        is_embed_chat = False
+        if not auth_session_id and embed_token:
+            logger.info("🔑 Используем токен для встроенного чата")
+            is_embed_chat = True
+            token_service = get_token_service()
+            token_data = token_service.validate_token(embed_token)
+            
+            if not token_data:
+                logger.error("❌ Невалидный токен для embed чата")
+                await websocket.close(code=4001, reason="Invalid embed token")
+                return
+            
+            # Для embed чата создаем контекст из токена
+            storage = get_system_container().storage
+            company_data = await storage.get(f"company:{token_data.company_id}", force_global=True)
+            if not company_data:
+                logger.error(f"❌ Компания {token_data.company_id} не найдена")
+                await websocket.close(code=4003, reason=f"Company {token_data.company_id} not found")
+                return
+            
+            active_company = Company.model_validate_json(company_data)
+            
+            # Получаем пользователя через приватный метод _get_user
+            auth_service = get_auth_service()
+            # Используем _get_user напрямую, так как это внутренний метод AuthService
+            user = await auth_service._get_user(token_data.user_id)
+            
+            if not user:
+                logger.error(f"❌ Пользователь {token_data.user_id} не найден")
+                await websocket.close(code=4001, reason="User not found")
+                return
+            
+            # Используем session_id из токена
+            auth_session_id = token_data.session_id
+            
+        elif not auth_session_id:
             # Нет авторизации - закрываем соединение
-            await websocket.close(code=4001, reason="Unauthorized - no session")
+            logger.error("❌ Нет авторизации - нет session и токена")
+            await websocket.close(code=4001, reason="Unauthorized - no session or token")
             return
-
-        # Получаем пользователя по сессии (как в AuthMiddleware)
-        auth_service = get_auth_service()
-        user = await auth_service.get_user_by_session(auth_session_id)
+        else:
+            # Получаем пользователя по сессии (обычный чат)
+            auth_service = get_auth_service()
+            user = await auth_service.get_user_by_session(auth_session_id)
 
         if not user:
             # Невалидная сессия - закрываем соединение
+            logger.error(f"❌ Невалидная сессия: {auth_session_id}")
             await websocket.close(code=4001, reason="Invalid session")
             return
 
         # Получаем активную компанию пользователя
         storage = get_system_container().storage
 
-        if not user.active_company_id:
-            await websocket.close(code=4003, reason="User has no active company")
-            return
+        if is_embed_chat:
+            # Для embed чата используем компанию из токена (уже получена выше)
+            logger.info(f"✅ Embed чат: используем компанию из токена {active_company.company_id}")
+        else:
+            # Для обычного чата используем активную компанию пользователя
+            if not user.active_company_id:
+                logger.error(f"❌ У пользователя {user.user_id} нет активной компании")
+                await websocket.close(code=4003, reason="User has no active company")
+                return
 
-        company_data = await storage.get(f"company:{user.active_company_id}", force_global=True)
-        if not company_data:
-            await websocket.close(code=4003, reason=f"Company {user.active_company_id} not found")
-            return
+            company_data = await storage.get(f"company:{user.active_company_id}", force_global=True)
+            if not company_data:
+                logger.error(f"❌ Компания {user.active_company_id} не найдена")
+                await websocket.close(code=4003, reason=f"Company {user.active_company_id} not found")
+                return
 
-        active_company = Company.model_validate_json(company_data)
+            active_company = Company.model_validate_json(company_data)
 
         # Получаем все компании пользователя
         user_companies = []
@@ -213,7 +283,10 @@ async def handle_chat_message(message: dict, session_id: str):
         await process_interrupt_response(message["data"], session_id)
     elif message_type == "PING":
         # Ping/pong для поддержания соединения
-        await websocket_manager.send_to_session(session_id, {"type": "PONG"}, "chat")
+        logger.debug(f"📡 Получен PING от {session_id}, отправляем PONG")
+        pong_message = {"type": "PONG"}
+        await websocket_manager.send_to_session(session_id, pong_message, "chat")
+        logger.debug(f"✅ PONG отправлен в {session_id}")
 
 
 async def process_user_message(

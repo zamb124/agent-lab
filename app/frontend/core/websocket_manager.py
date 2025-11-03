@@ -34,8 +34,10 @@ class WebSocketManager:
         session_id: str, 
         connection_type: ConnectionType = "notifications"
     ):
-        """Подключить WebSocket"""
-        await websocket.accept()
+        """Подключить WebSocket (websocket.accept() должен быть вызван до этого)"""
+        # НЕ вызываем accept() здесь - он должен быть вызван в роутере до вызова connect()
+        # Просто добавляем в список соединений - роутер уже принял соединение
+        
         self.connections[connection_type][session_id] = websocket
         logger.info(f"WebSocket подключен: {connection_type}:{session_id}")
 
@@ -205,6 +207,9 @@ async def websocket_notifications(websocket: WebSocket, session_id: str = None):
     if not session_id:
         session_id = websocket.cookies.get("session_id", "anonymous")
 
+    # Принимаем WebSocket соединение перед вызовом connect()
+    await websocket.accept()
+    
     await websocket_manager.connect(websocket, session_id, "notifications")
 
     try:

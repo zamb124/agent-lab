@@ -5,21 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Встраиваемый Чат</title>
     <!-- Tabler Icons -->
-    <link rel="stylesheet" href="/static/fonts/tabler-icons/tabler-icons.min.css">
+    <link rel="stylesheet" href="{{ base_url }}/static/fonts/tabler-icons/tabler-icons.min.css">
     <!-- Базовые CSS переменные и утилиты -->
-    <link rel="stylesheet" href="/static/css/core/variables.css">
-    <link rel="stylesheet" href="/static/css/utilities/colors.css">
-    <link rel="stylesheet" href="/static/css/utilities/spacing.css">
-    <link rel="stylesheet" href="/static/css/utilities/sizing.css">
-    <link rel="stylesheet" href="/static/css/utilities/flexbox.css">
-    <link rel="stylesheet" href="/static/css/utilities/borders.css">
+    <link rel="stylesheet" href="{{ base_url }}/static/css/core/variables.css">
+    <link rel="stylesheet" href="{{ base_url }}/static/css/utilities/colors.css">
+    <link rel="stylesheet" href="{{ base_url }}/static/css/utilities/spacing.css">
+    <link rel="stylesheet" href="{{ base_url }}/static/css/utilities/sizing.css">
+    <link rel="stylesheet" href="{{ base_url }}/static/css/utilities/flexbox.css">
+    <link rel="stylesheet" href="{{ base_url }}/static/css/utilities/borders.css">
     <!-- Компоненты -->
-    <link rel="stylesheet" href="/static/css/components/buttons.css">
-    <link rel="stylesheet" href="/static/css/components/icons.css">
+    <link rel="stylesheet" href="{{ base_url }}/static/css/components/buttons.css">
+    <link rel="stylesheet" href="{{ base_url }}/static/css/components/icons.css">
     <!-- Основные стили чата -->
-    <link rel="stylesheet" href="/static/css/main.css">
-    <link rel="stylesheet" href="/static/chat/css/chat-widget.css">
+    <link rel="stylesheet" href="{{ base_url }}/static/css/main.css">
+    <link rel="stylesheet" href="{{ base_url }}/static/chat/css/chat-widget.css?v={{ timestamp }}">
     <style>
+        /* Изоляция стилей для встроенного чата */
         body, html {
             margin: 0;
             padding: 0;
@@ -30,6 +31,109 @@
             justify-content: center;
             align-items: center;
             background-color: var(--bg-secondary, #f8fafc);
+        }
+        
+        /* Усиление стилей для контейнера ввода в embed чате */
+        #chat-widget .chat-input-container {
+            background: var(--chat-input-bg, #ffffff) !important;
+            border: 1px solid var(--chat-border, #e5e7eb) !important;
+            border-radius: 18px !important;
+            box-shadow: 0 6px 16px rgba(17, 24, 39, 0.08) !important;
+            padding: 14px 16px 96px 16px !important;
+            min-height: 92px !important;
+            position: relative !important;
+            box-sizing: border-box !important;
+        }
+        
+        #chat-widget .chat-input-wrapper {
+            position: static !important;
+            width: 100% !important;
+            border-radius: 12px !important;
+            background: transparent !important;
+            border: none !important;
+        }
+        
+        #chat-widget .chat-input {
+            flex: 1 !important;
+            border: none !important;
+            padding: 16px !important;
+            font-size: 15px !important;
+            outline: none !important;
+            background: transparent !important;
+            color: var(--chat-input-text, #111827) !important;
+            min-width: 0 !important;
+            min-height: 64px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+            display: block !important;
+        }
+        
+        #chat-widget .chat-commands-btn,
+        #chat-widget .chat-attach-btn,
+        #chat-widget .chat-voice-btn {
+            flex-shrink: 0 !important;
+            border: none !important;
+            border-radius: 10px !important;
+            background: transparent !important;
+            color: var(--chat-input-text, #64748b) !important;
+            padding: 8px 10px !important;
+            cursor: pointer !important;
+            min-width: 40px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            position: absolute !important;
+            transition: all 0.25s ease !important;
+        }
+        
+        #chat-widget .chat-commands-btn {
+            left: 12px !important;
+            bottom: 24px !important;
+        }
+        
+        #chat-widget .chat-attach-btn {
+            left: 68px !important;
+            bottom: 24px !important;
+        }
+        
+        #chat-widget .chat-voice-btn {
+            left: 124px !important;
+            bottom: 24px !important;
+        }
+        
+        #chat-widget .chat-commands-btn:hover,
+        #chat-widget .chat-attach-btn:hover,
+        #chat-widget .chat-voice-btn:hover {
+            background: var(--chat-agent-msg-bg, #f6f8ff) !important;
+            opacity: 0.8 !important;
+        }
+        
+        #chat-widget .chat-send-btn {
+            flex-shrink: 0 !important;
+            border: none !important;
+            border-radius: 12px !important;
+            background: var(--chat-user-msg-bg, #e0f2fe) !important;
+            color: var(--chat-user-msg-text, #04324d) !important;
+            padding: 8px 12px !important;
+            cursor: pointer !important;
+            min-width: 45px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            transition: all 0.25s ease !important;
+            position: absolute !important;
+            right: 12px !important;
+            bottom: 24px !important;
+        }
+        
+        #chat-widget .chat-send-btn:hover {
+            opacity: 0.9 !important;
+            transform: translateY(-1px) !important;
+        }
+        
+        #chat-widget .chat-input::placeholder {
+            color: var(--chat-input-text, #111827) !important;
+            opacity: 0.6 !important;
         }
         /* Стили для режима кнопки чата */
         .chat-widget.widget-mode {
@@ -63,9 +167,17 @@
     
     <!-- Подключаем основной ChatManager -->
     <script type="module">
-        import ChatManager from '/static/js/chat/manager.js';
+        const BASE_URL = '{{ base_url }}';
+        // Импортируем ChatManager с абсолютным путем (с версией для обхода кэша)
+        const VERSION = new Date().getTime();
+        const MANAGER_URL = BASE_URL + '/static/js/chat/manager.js?v=' + VERSION;
         
-        document.addEventListener('DOMContentLoaded', () => {
+        // Используем динамический импорт, так как ES6 не поддерживает template literals в статических импортах
+        const modulePromise = import(MANAGER_URL);
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Ждем загрузки модуля
+            const { default: ChatManager } = await modulePromise;
             const chatWidget = document.getElementById('chat-widget');
             const chatToggle = document.getElementById('chat-widget-toggle');
             const mode = "{{ mode }}";
@@ -102,18 +214,44 @@
             // Инициализируем ChatManager для встраиваемого чата
             const chatManager = new ChatManager(null);
             
+            // Устанавливаем токен для WebSocket (для встроенного чата)
+            const token = "{{ token }}";
+            console.log("🔍 Проверка токена в шаблоне:");
+            console.log("  - token из шаблона (raw):", token);
+            console.log("  - token длина:", token.length);
+            console.log("  - token пустой?:", !token || token.trim() === "");
+            
+            if (!token || token.trim() === "") {
+                console.error("❌ КРИТИЧНО: Токен пустой или не передан в шаблон!");
+            } else {
+                chatManager.embedToken = token;
+                console.log("✅ Токен установлен в ChatManager");
+            }
+            
             // Устанавливаем параметры из URL
             chatManager.currentAgent = "{{ flow_id }}";
-            const sessionId = "{{ session_id }}" || `web:${Date.now()}`;
+            
+            // Создаем session_id если не передан (для embed чата)
+            let sessionId = "{{ session_id }}";
+            if (!sessionId || sessionId === "None" || sessionId.trim() === "") {
+                // Формат: web:user_id:flow_id:uuid
+                const userId = "{{ user_id }}";
+                const flowId = "{{ flow_id }}";
+                const uuid = crypto.randomUUID ? crypto.randomUUID() : 
+                    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                        const r = Math.random() * 16 | 0;
+                        const v = c == 'x' ? r : (r & 0x3 | 0x8);
+                        return v.toString(16);
+                    });
+                sessionId = `web:${userId}:${flowId}:${uuid}`;
+                console.log("📝 Создан новый session_id для embed чата:", sessionId);
+            }
             
             // Устанавливаем сессию правильно через метод
             if (chatManager.agentSessions) {
                 chatManager.agentSessions[chatManager.currentAgent] = sessionId;
             }
             chatManager.currentSession = sessionId;
-            
-            // Инициализируем чат
-            chatManager.init();
             
             console.log("✅ Embedded Chat Manager initialized:");
             console.log("Mode:", mode);
@@ -125,6 +263,11 @@
             console.log("Theme: {{ theme }}");
             console.log("Width: {{ width }}");
             console.log("Height: {{ height }}");
+            console.log("Embed Token:", token ? token.substring(0, 20) + '...' : 'НЕТ ТОКЕНА!');
+            console.log("ChatManager embedToken:", chatManager.embedToken ? chatManager.embedToken.substring(0, 20) + '...' : 'НЕТ ТОКЕНА!');
+            
+            // Инициализируем чат ПОСЛЕ установки всех параметров
+            chatManager.init();
         });
     </script>
 </body>

@@ -25,6 +25,7 @@ class ChatManager {
         this.voiceRecorder = new VoiceRecorder();
         this.checkpointInspector = new CheckpointInspector(app, this);
         this.selectedFiles = null;
+        this.embedToken = null; // Токен для встроенного чата
         
         this.isReconnecting = false;
         this.reconnectAttempts = 0;
@@ -1296,10 +1297,32 @@ class ChatManager {
             return;
         }
 
+        // ВАЖНО: Логирование для отладки
+        console.log('🔍 [DEBUG] Проверка перед подключением WebSocket:');
+        console.log('🔍 [DEBUG]   - this.embedToken:', this.embedToken);
+        console.log('🔍 [DEBUG]   - typeof this.embedToken:', typeof this.embedToken);
+        console.log('🔍 [DEBUG]   - this.embedToken значение:', JSON.stringify(this.embedToken));
+        console.log('🔍 [DEBUG]   - this.embedToken длина:', this.embedToken ? this.embedToken.length : 0);
+        console.log('🔍 [DEBUG]   - this.embedToken пустой?:', !this.embedToken || (typeof this.embedToken === 'string' && this.embedToken.trim() === ''));
+
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/frontend/chat/ws/chat`;
+        let wsUrl = `${protocol}//${window.location.host}/frontend/chat/ws/chat`;
         
-        console.log('🔌 Подключение к WebSocket:', wsUrl);
+        // Если есть токен для встроенного чата, добавляем его в URL
+        if (this.embedToken && typeof this.embedToken === 'string' && this.embedToken.trim() !== '') {
+            wsUrl += `?token=${encodeURIComponent(this.embedToken)}`;
+            console.log('🔑 [SUCCESS] Используем токен для встроенного чата, токен:', this.embedToken.substring(0, 20) + '...');
+            console.log('🔑 [SUCCESS] Полный URL (замаскирован):', wsUrl.replace(/\?token=[^&]+/, '?token=***'));
+        } else {
+            console.error('❌ [ERROR] НЕТ ТОКЕНА для встроенного чата!');
+            console.error('❌ [ERROR]   this.embedToken =', this.embedToken);
+            console.error('❌ [ERROR]   typeof =', typeof this.embedToken);
+            console.error('❌ [ERROR]   пустая строка? =', this.embedToken === '');
+            console.error('❌ [ERROR]   null? =', this.embedToken === null);
+            console.error('❌ [ERROR]   undefined? =', this.embedToken === undefined);
+        }
+        
+        console.log('🔌 [FINAL] Подключение к WebSocket:', wsUrl.replace(/\?token=[^&]+/, '?token=***'));
         this.updateConnectionStatus('connecting');
 
         this.websocket = new WebSocket(wsUrl);
@@ -1355,6 +1378,7 @@ class ChatManager {
         this.reconnectAttempts++;
         
         console.log(`🔄 Планируем переподключение #${this.reconnectAttempts} через ${this.reconnectDelay}ms`);
+        console.log(`🔍 [RECONNECT] Проверка токена при переподключении:`, this.embedToken ? this.embedToken.substring(0, 20) + '...' : 'НЕТ ТОКЕНА!');
         this.updateConnectionStatus('reconnecting');
         
         setTimeout(() => {

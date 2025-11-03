@@ -73,6 +73,12 @@ async def embed_chat(
     if mode not in ["widget", "expanded"]:
         mode = "widget"
     
+    # Получаем базовый URL как строку
+    base_url = str(request.base_url).rstrip('/')
+    
+    import time
+    timestamp = int(time.time())
+    
     # Подготавливаем контекст для шаблона
     context = {
         "request": request,
@@ -84,7 +90,9 @@ async def embed_chat(
         "height": height,
         "user_id": user_id or token_data.user_id,
         "mode": mode,
-        "token_data": token_data
+        "token_data": token_data,
+        "base_url": base_url,
+        "timestamp": timestamp
     }
     
     return templates.TemplateResponse("embed_chat.html", context)

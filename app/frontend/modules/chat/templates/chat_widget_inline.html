@@ -1,5 +1,9 @@
 {% import 'components.html' as c %}
+{% if base_url is defined %}
+<link rel="stylesheet" href="{{ base_url }}/static/chat/css/chat-widget.css">
+{% else %}
 <link rel="stylesheet" href="/static/chat/css/chat-widget.css">
+{% endif %}
 
 <div id="chat-widget" class="chat-widget hidden">
     <div class="chat-widget-header">
