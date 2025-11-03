@@ -224,6 +224,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         elif path.startswith("/frontend/models/create_company_form/"):
             logger.info("🏢 API для формы создания компании - требует авторизации")
             return await self._create_frontend_context(request, requested_company, allow_no_company=True, has_subdomain=has_subdomain)
+        elif path.startswith("/frontend/chat/embed"):
+            logger.info("💬 Embed чат - публичный доступ через токен в URL")
+            return await self._create_anonymous_context(request, requested_company)
         elif path.startswith("/frontend/"):
             logger.info("🖥️ Frontend контекст - требует авторизации")
             return await self._create_frontend_context(request, requested_company, has_subdomain=has_subdomain)

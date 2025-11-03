@@ -173,3 +173,30 @@ async def create_embed_token(
         "embed_url": f"/frontend/chat/embed?token={embed_token}&flow_id={flow_id}"
     }
 
+
+@router.get("/test", response_class=HTMLResponse)
+async def test_embed(request: Request):
+    """
+    Тестовая страница для проверки встроенного чата
+    
+    Позволяет протестировать встроенный чат с различными параметрами
+    Доступна без авторизации для удобства тестирования
+    """
+    # Получаем параметры из URL
+    api_url = request.query_params.get("api_url")
+    token = request.query_params.get("token")
+    flow_id = request.query_params.get("flow_id", "app.flows.faq_flow.faq_flow_config")
+    
+    # Если api_url не указан, используем текущий домен
+    if not api_url:
+        api_url = str(request.base_url).rstrip('/')
+    
+    context = {
+        "request": request,
+        "api_url": api_url,
+        "token": token,
+        "flow_id": flow_id
+    }
+    
+    return templates.TemplateResponse("test_embed.html", context)
+

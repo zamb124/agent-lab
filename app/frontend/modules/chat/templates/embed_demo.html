@@ -272,43 +272,68 @@ Content-Type: application/json
                     </div>
                 </div>
 
-                <!-- Способ 2: JavaScript API -->
+                <!-- Способ 2: JavaScript API (рекомендуемый) -->
                 <div class="demo-section">
-                    <h3>⚙️ Способ 2: JavaScript API</h3>
-                    <p>Для более гибкого управления используйте JavaScript API:</p>
+                    <h3>⚙️ Способ 2: JavaScript API (рекомендуемый)</h3>
+                    <p>Самый простой способ - подключите скрипт и настройте одной командой. Кнопка чата появится автоматически!</p>
                     
                     <div class="step">
                         <span class="step-number">1</span>
-                        <strong>Подключите скрипт</strong>
+                        <strong>Получите токен доступа</strong>
+                        <p>Создайте токен для встраивания через API:</p>
                         <div class="code-block">
-&lt;script src="https://your-domain.com/static/chat/js/embed-chat.js"&gt;&lt;/script&gt;
+POST {{ request.base_url }}frontend/chat/create-embed-token?flow_id=your_flow_id
+Cookie: session_id=your_session_token
+
+Ответ:
+{
+    "token": "eyJ...",
+    "flow_id": "your_flow_id",
+    "embed_url": "..."
+}
                         </div>
                     </div>
 
                     <div class="step">
                         <span class="step-number">2</span>
-                        <strong>Инициализируйте чат</strong>
+                        <strong>Подключите скрипт и инициализируйте</strong>
                         <div class="code-block">
+&lt;!-- Подключите скрипт перед закрывающим тегом &lt;/body&gt; --&gt;
+&lt;script src="https://your-domain.com/static/js/chat/embed-chat.js"&gt;&lt;/script&gt;
 &lt;script&gt;
-// Инициализация чата
-EmbedChat.init({
-    container: '#chat-container',
-    token: '{{ token }}',
-    flowId: '{{ flow_id }}',
-    sessionId: 'optional_session_id',
+  EmbedChat.init({
+    apiUrl: 'https://your-domain.com',
+    token: 'ваш_токен',
+    flowId: 'app.flows.faq_flow.faq_flow_config',
+    position: 'bottom-right', // или 'bottom-left'
     theme: 'light', // или 'dark'
-    width: '100%',
-    height: '500px'
-});
+    buttonText: 'Чат', // опционально
+    buttonIcon: '💬' // опционально, по умолчанию 💬
+  });
 &lt;/script&gt;
                         </div>
                     </div>
 
                     <div class="step">
                         <span class="step-number">3</span>
-                        <strong>HTML контейнер</strong>
+                        <strong>Готово! Кнопка чата появится автоматически</strong>
+                        <p>Кнопка будет закреплена в правом нижнем углу (или левом, если указали <code>position: 'bottom-left'</code>).</p>
                         <div class="code-block">
-&lt;div id="chat-container"&gt;&lt;/div&gt;
+// Все параметры опциональны кроме apiUrl, token и flowId:
+EmbedChat.init({
+  apiUrl: 'https://your-domain.com',    // ✅ Обязательно
+  token: 'your-token',                   // ✅ Обязательно
+  flowId: 'your.flow.id',               // ✅ Обязательно
+  position: 'bottom-right',             // Опционально
+  theme: 'light',                        // Опционально
+  sessionId: 'optional-session-id',     // Опционально
+  userId: 'optional-user-id',            // Опционально
+  buttonText: 'Написать',               // Опционально
+  buttonIcon: '💬'                      // Опционально
+});
+
+// Для удаления виджета (если нужно):
+EmbedChat.destroy();
                         </div>
                     </div>
                 </div>

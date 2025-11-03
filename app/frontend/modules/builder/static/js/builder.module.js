@@ -450,7 +450,6 @@ export default class BuilderModule {
 
             // Разворачиваем вручную с layoutManager и canvasNodes
             await flowNode.expand(layoutManager, this.currentFlow.canvas_data?.nodes);
-            debugger
             
             // Fit to screen после разворачивания
             setTimeout(() => {
@@ -533,7 +532,6 @@ export default class BuilderModule {
             console.log('🎯 canvasNodes to pass:', canvasNodes);
             const flowNode = await this.canvas.addNode(flowNodeData);
             await flowNode.expand(canvasNodes);
-            debugger;
 
             // Применяем zoom/pan если есть
             if (this.currentFlow.canvas_data) {

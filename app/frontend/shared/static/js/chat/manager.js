@@ -129,24 +129,65 @@ class ChatManager {
         const widget = document.getElementById('chat-widget');
         if (!widget) return;
 
+        // Если чат в fullscreen режиме - не применяем сохраненную позицию
+        if (widget.classList.contains('fullscreen')) {
+            return;
+        }
+
         const savedPosition = this.loadChatPosition();
-        if (savedPosition) {
+        if (savedPosition && typeof savedPosition.x === 'number' && typeof savedPosition.y === 'number') {
             const { x, y } = savedPosition;
             
-            // Проверяем, что позиция не выходит за границы экрана
-            const maxX = window.innerWidth - widget.offsetWidth;
-            const maxY = window.innerHeight - widget.offsetHeight;
-            
-            const validX = Math.max(0, Math.min(x, maxX));
-            const validY = Math.max(0, Math.min(y, maxY));
-            
-            widget.style.left = validX + 'px';
-            widget.style.top = validY + 'px';
-            widget.style.right = 'auto';
-            widget.style.bottom = 'auto';
-            
-            console.log('📍 Применена сохраненная позиция чата:', { x: validX, y: validY });
+            // Ждем пока виджет отрисуется, чтобы получить его размеры
+            setTimeout(() => {
+                const rect = widget.getBoundingClientRect();
+                const widgetWidth = rect.width || widget.offsetWidth || 380;
+                const widgetHeight = rect.height || widget.offsetHeight || 520;
+                
+                // Проверяем, что позиция не выходит за границы экрана
+                const maxX = window.innerWidth - widgetWidth;
+                const maxY = window.innerHeight - widgetHeight;
+                
+                const validX = Math.max(0, Math.min(x, maxX));
+                const validY = Math.max(0, Math.min(y, maxY));
+                
+                if (!isNaN(validX) && !isNaN(validY)) {
+                    widget.style.left = validX + 'px';
+                    widget.style.top = validY + 'px';
+                    widget.style.right = 'auto';
+                    widget.style.bottom = 'auto';
+                    
+                    console.log('📍 Применена сохраненная позиция чата:', { x: validX, y: validY });
+                } else {
+                    console.warn('⚠️ Некорректная сохраненная позиция, используем дефолтную');
+                    this.resetChatPosition();
+                }
+            }, 10);
+        } else {
+            // Если нет сохраненной позиции или она некорректная - используем дефолтную
+            this.resetChatPosition();
         }
+    }
+    
+    resetChatPosition() {
+        const widget = document.getElementById('chat-widget');
+        if (!widget) return;
+        
+        // Удаляем некорректную позицию из localStorage
+        try {
+            localStorage.removeItem('chat_position');
+            console.log('🗑️ Некорректная позиция удалена из localStorage');
+        } catch (error) {
+            console.warn('⚠️ Не удалось удалить позицию из localStorage:', error);
+        }
+        
+        // Сбрасываем на дефолтную позицию (right: 20px, bottom: 80px)
+        widget.style.left = 'auto';
+        widget.style.top = 'auto';
+        widget.style.right = '20px';
+        widget.style.bottom = '80px';
+        
+        console.log('📍 Позиция чата сброшена на дефолтную');
     }
 
     getOrCreateSessionForAgent(agent_id) {
@@ -794,22 +835,53 @@ class ChatManager {
         const fullscreenBtn = document.getElementById('chat-widget-fullscreen');
         const minimizeBtn = document.getElementById('chat-widget-minimize');
         
-        if (widget) {
-            widget.classList.remove('hidden');
-            widget.style.display = 'flex';
-            widget.classList.remove('minimized');
-            this.isVisible = true;
-            
-            if (this.isMobileDevice()) {
-                widget.classList.add('fullscreen');
-                
-                if (fullscreenBtn) fullscreenBtn.style.display = 'none';
-                if (minimizeBtn) minimizeBtn.style.display = 'none';
-            } else {
-                if (fullscreenBtn) fullscreenBtn.style.display = '';
-                if (minimizeBtn) minimizeBtn.style.display = '';
-            }
+        if (!widget) {
+            console.error('❌ Виджет чата не найден в DOM');
+            return;
         }
+        
+        console.log('🔵 showChat() вызван');
+        console.log('📋 Состояние виджета до изменений:', {
+            hasHidden: widget.classList.contains('hidden'),
+            hasWidgetMode: widget.classList.contains('widget-mode'),
+            hasMinimized: widget.classList.contains('minimized'),
+            display: window.getComputedStyle(widget).display,
+            visibility: window.getComputedStyle(widget).visibility,
+            opacity: window.getComputedStyle(widget).opacity,
+            zIndex: window.getComputedStyle(widget).zIndex
+        });
+        
+        widget.classList.remove('hidden');
+        widget.classList.remove('widget-mode');
+        widget.classList.remove('minimized');
+        this.isVisible = true;
+        
+        if (this.isMobileDevice()) {
+            widget.classList.add('fullscreen');
+            
+            if (fullscreenBtn) fullscreenBtn.style.display = 'none';
+            if (minimizeBtn) minimizeBtn.style.display = 'none';
+        } else {
+            if (fullscreenBtn) fullscreenBtn.style.display = '';
+            if (minimizeBtn) minimizeBtn.style.display = '';
+        }
+        
+        console.log('📋 Состояние виджета после изменений:', {
+            hasHidden: widget.classList.contains('hidden'),
+            hasWidgetMode: widget.classList.contains('widget-mode'),
+            hasMinimized: widget.classList.contains('minimized'),
+            display: window.getComputedStyle(widget).display,
+            visibility: window.getComputedStyle(widget).visibility,
+            opacity: window.getComputedStyle(widget).opacity,
+            zIndex: window.getComputedStyle(widget).zIndex,
+            position: window.getComputedStyle(widget).position,
+            top: window.getComputedStyle(widget).top,
+            right: window.getComputedStyle(widget).right,
+            bottom: window.getComputedStyle(widget).bottom,
+            left: window.getComputedStyle(widget).left,
+            width: window.getComputedStyle(widget).width,
+            height: window.getComputedStyle(widget).height
+        });
         
         if (toggle) {
             toggle.style.display = 'none';
@@ -818,6 +890,54 @@ class ChatManager {
         // Применяем сохраненную позицию чата
         this.applyChatPosition();
         
+        // Финальная проверка видимости через небольшую задержку
+        setTimeout(() => {
+            const finalDisplay = window.getComputedStyle(widget).display;
+            const finalVisibility = window.getComputedStyle(widget).visibility;
+            const rect = widget.getBoundingClientRect();
+            const computedLeft = window.getComputedStyle(widget).left;
+            const computedTop = window.getComputedStyle(widget).top;
+            const computedRight = window.getComputedStyle(widget).right;
+            const computedBottom = window.getComputedStyle(widget).bottom;
+            
+            const isVisible = rect.width > 0 && rect.height > 0 && 
+                            rect.top >= -rect.height && rect.left >= -rect.width && 
+                            rect.top < window.innerHeight && rect.left < window.innerWidth;
+            
+            console.log('✅ Финальная проверка видимости чата:', {
+                display: finalDisplay,
+                visibility: finalVisibility,
+                position: {
+                    left: computedLeft,
+                    top: computedTop,
+                    right: computedRight,
+                    bottom: computedBottom
+                },
+                rect: {
+                    top: rect.top,
+                    left: rect.left,
+                    width: rect.width,
+                    height: rect.height,
+                    visible: isVisible
+                },
+                viewport: {
+                    width: window.innerWidth,
+                    height: window.innerHeight
+                }
+            });
+            
+            if (finalDisplay === 'none') {
+                console.error('❌ Чат все еще скрыт через display: none! Принудительно устанавливаем display: flex');
+                widget.style.display = 'flex';
+            }
+            
+            // Проверяем, не находится ли чат за пределами экрана
+            if (!isVisible && finalDisplay !== 'none') {
+                console.warn('⚠️ Чат находится вне видимой области! Сбрасываем позицию на дефолтную.');
+                this.resetChatPosition();
+            }
+        }, 100);
+        
         if (!this.currentAgent) {
             console.log('📌 Чат открывается без агента, автоматически выбираем дефолтный');
             this.open({});
@@ -825,6 +945,7 @@ class ChatManager {
     }
 
     toggleChat() {
+        console.log('🔄 toggleChat() вызван, isVisible:', this.isVisible);
         if (this.isVisible) {
             this.closeChat();
         } else {
@@ -849,7 +970,6 @@ class ChatManager {
         
         if (widget) {
             widget.classList.add('hidden');
-            widget.style.display = 'none';
             this.isVisible = false;
         }
         
