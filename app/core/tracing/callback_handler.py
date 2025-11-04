@@ -18,10 +18,10 @@ from opentelemetry.trace import Status, StatusCode, Span
 
 import langchain
 
-from langchain.callbacks.base import BaseCallbackHandler  # type: ignore
-from langchain.schema.agent import AgentAction, AgentFinish  # type: ignore
-from langchain.schema.document import Document  # type: ignore
-from langchain.callbacks.base import AsyncCallbackHandler  # type: ignore
+from langchain_core.callbacks.base import BaseCallbackHandler  # type: ignore
+from langchain_core.agents import AgentAction, AgentFinish  # type: ignore
+from langchain_core.documents import Document  # type: ignore
+from langchain_core.callbacks.base import AsyncCallbackHandler  # type: ignore
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
