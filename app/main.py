@@ -64,9 +64,16 @@ app.add_middleware(AuthMiddleware)
 app.add_middleware(HTMXHeaderMiddleware)
 
 # CORS middleware
+allowed_origins = ["*"] if settings.server.debug else [
+    "http://localhost:3000",
+    f"https://{settings.server.domain}",
+    f"https://*.{settings.server.domain}",
+    f"http://{settings.server.domain}",
+    f"http://*.{settings.server.domain}",
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.server.debug else ["http://localhost:3000"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

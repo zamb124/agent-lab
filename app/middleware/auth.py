@@ -206,9 +206,26 @@ class AuthMiddleware(BaseHTTPMiddleware):
         elif path == "/api/v1/admin/create-my-company":
             logger.info("🏢 API создания компании - требует авторизации")
             return await self._create_frontend_context(request, requested_company, allow_no_company=True, has_subdomain=has_subdomain)
+        elif "/api/v1/admin/" in path or "/api/v1/history/" in path:
+            # Frontend endpoints - используют токен из куки
+            logger.info("🖥️ Frontend API контекст (токен из куки)")
+            return await self._create_frontend_context(request, requested_company, has_subdomain=has_subdomain)
         elif "/api/v1/" in path:
-            logger.info("🔌 API контекст")
-            return await self._create_api_context(request, requested_company)
+            # Публичные API endpoints - проверяем наличие токена
+            token = request.cookies.get("auth_token")
+            if not token:
+                auth_header = request.headers.get("authorization", "")
+                if auth_header.startswith("Bearer "):
+                    token = auth_header[7:]
+            
+            if token:
+                # Есть токен - используем API контекст
+                logger.info("🔌 API контекст (с токеном)")
+                return await self._create_api_context(request, requested_company)
+            else:
+                # Нет токена - создаем анонимный контекст для публичных endpoints
+                logger.info("🔓 Публичный API контекст (без токена)")
+                return await self._create_anonymous_context(request, requested_company)
         elif "/api/amocrm" in path:
             logger.info("🔌 AmoCRM контекст")
             return await self._create_amocrm_context(request, requested_company)
