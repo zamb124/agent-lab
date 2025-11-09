@@ -940,7 +940,7 @@ class ChatManager {
     }
 
     minimizeChat() {
-        if (this.isMobileDevice()) {
+        if (this.isMobileDevice() && !this.isEmbedded) {
             return;
         }
         
@@ -1016,7 +1016,7 @@ class ChatManager {
     }
 
     toggleFullscreen() {
-        if (this.isMobileDevice()) {
+        if (this.isMobileDevice() && !this.isEmbedded) {
             return;
         }
         
@@ -1030,13 +1030,20 @@ class ChatManager {
         
         if (isFullscreen) {
             widget.classList.remove('fullscreen');
-            widget.style.left = '';
-            widget.style.top = '';
-            widget.style.right = '20px';
-            widget.style.bottom = '80px';
-            
-            // Применяем сохраненную позицию при выходе из полноэкранного режима
-            this.applyChatPosition();
+
+            if (this.isEmbedded) {
+                widget.style.left = '';
+                widget.style.top = '';
+                widget.style.right = '';
+                widget.style.bottom = '';
+            } else {
+                widget.style.left = '';
+                widget.style.top = '';
+                widget.style.right = '20px';
+                widget.style.bottom = '80px';
+                // Применяем сохраненную позицию при выходе из полноэкранного режима
+                this.applyChatPosition();
+            }
             
             if (fullscreenIcon) {
                 fullscreenIcon.className = 'ti ti-maximize';
@@ -1047,10 +1054,18 @@ class ChatManager {
         } else {
             widget.classList.add('fullscreen');
             widget.classList.remove('minimized');
-            widget.style.left = '0';
-            widget.style.top = '0';
-            widget.style.right = '0';
-            widget.style.bottom = '0';
+
+            if (this.isEmbedded) {
+                widget.style.left = '';
+                widget.style.top = '';
+                widget.style.right = '';
+                widget.style.bottom = '';
+            } else {
+                widget.style.left = '0';
+                widget.style.top = '0';
+                widget.style.right = '0';
+                widget.style.bottom = '0';
+            }
             if (fullscreenIcon) {
                 fullscreenIcon.className = 'ti ti-minimize';
             }
