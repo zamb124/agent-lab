@@ -26,6 +26,7 @@ class ChatManager {
         this.checkpointInspector = new CheckpointInspector(app, this);
         this.selectedFiles = null;
         this.embedToken = null; // Токен для встроенного чата
+        this.isEmbedded = false; // Флаг для режима встраивания
         
         this.isReconnecting = false;
         this.reconnectAttempts = 0;
@@ -46,7 +47,7 @@ class ChatManager {
         
         if (!widget) return;
         
-        if (this.isMobileDevice()) {
+        if (this.isMobileDevice() && !this.isEmbedded) {
             widget.classList.add('fullscreen');
             widget.classList.remove('minimized');
             
@@ -857,7 +858,7 @@ class ChatManager {
         widget.classList.remove('minimized');
         this.isVisible = true;
         
-        if (this.isMobileDevice()) {
+        if (this.isMobileDevice() && !this.isEmbedded) {
             widget.classList.add('fullscreen');
             
             if (fullscreenBtn) fullscreenBtn.style.display = 'none';

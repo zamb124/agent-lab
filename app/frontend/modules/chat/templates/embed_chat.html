@@ -207,6 +207,7 @@
 
             // Инициализируем ChatManager для встраиваемого чата
             const chatManager = new ChatManager(null);
+            chatManager.isEmbedded = true; // Сообщаем менеджеру, что это встроенный чат
             
             // Устанавливаем токен для WebSocket (для встроенного чата)
             const token = "{{ token }}";
