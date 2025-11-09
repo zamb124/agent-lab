@@ -46,6 +46,21 @@
 
             this.createButton();
             this.attachStyles();
+            this.listenForCloseCommand();
+        }
+
+        listenForCloseCommand() {
+            window.addEventListener('message', (event) => {
+                // ВАЖНО: для безопасности стоит проверять origin
+                // if (event.origin !== new URL(this.config.apiUrl).origin) {
+                //     return;
+                // }
+
+                if (event.data && event.data.action === 'closeChatModal') {
+                    console.log('📬 Получена команда closeChatModal от iframe');
+                    this.closeChat();
+                }
+            });
         }
 
         createButton() {

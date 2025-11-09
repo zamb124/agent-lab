@@ -966,6 +966,10 @@ class ChatManager {
     }
 
     closeChat() {
+        // Отправляем сообщение родительскому окну, чтобы оно могло закрыть модалку
+        console.log('🚀 Отправка postMessage для закрытия чата');
+        parent.postMessage({ action: 'closeChatModal' }, '*');
+
         const widget = document.getElementById('chat-widget');
         const toggle = document.getElementById('chat-widget-toggle');
         
