@@ -1395,11 +1395,6 @@
         max-width: none !important;
     }
     
-    #chat-widget-fullscreen,
-    #chat-widget-minimize {
-        display: none !important;
-    }
-    
     .chat-widget-header .btn {
         padding: 0.4rem;
         min-width: 36px;

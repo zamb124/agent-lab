@@ -42,20 +42,12 @@ class ChatManager {
         if (!this.isVisible) return;
         
         const widget = document.getElementById('chat-widget');
-        const fullscreenBtn = document.getElementById('chat-widget-fullscreen');
-        const minimizeBtn = document.getElementById('chat-widget-minimize');
         
         if (!widget) return;
         
         if (this.isMobileDevice() && !this.isEmbedded) {
             widget.classList.add('fullscreen');
             widget.classList.remove('minimized');
-            
-            if (fullscreenBtn) fullscreenBtn.style.display = 'none';
-            if (minimizeBtn) minimizeBtn.style.display = 'none';
-        } else {
-            if (fullscreenBtn) fullscreenBtn.style.display = '';
-            if (minimizeBtn) minimizeBtn.style.display = '';
         }
     }
 
@@ -834,8 +826,6 @@ class ChatManager {
     showChat() {
         const widget = document.getElementById('chat-widget');
         const toggle = document.getElementById('chat-widget-toggle');
-        const fullscreenBtn = document.getElementById('chat-widget-fullscreen');
-        const minimizeBtn = document.getElementById('chat-widget-minimize');
         
         if (!widget) {
             console.error('❌ Виджет чата не найден в DOM');
@@ -860,12 +850,6 @@ class ChatManager {
         
         if (this.isMobileDevice() && !this.isEmbedded) {
             widget.classList.add('fullscreen');
-            
-            if (fullscreenBtn) fullscreenBtn.style.display = 'none';
-            if (minimizeBtn) minimizeBtn.style.display = 'none';
-        } else {
-            if (fullscreenBtn) fullscreenBtn.style.display = '';
-            if (minimizeBtn) minimizeBtn.style.display = '';
         }
         
         console.log('📋 Состояние виджета после изменений:', {
