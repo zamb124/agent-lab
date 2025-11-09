@@ -230,8 +230,8 @@
 
                 .embed-chat-close {
                     position: absolute;
-                    top: -12px;
-                    ${this.config.position === 'bottom-left' ? 'right: -12px;' : 'right: -12px;'}
+                    top: 10px;
+                    right: 10px;
                     width: 32px;
                     height: 32px;
                     border-radius: 50%;
@@ -246,7 +246,7 @@
                     justify-content: center;
                     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
                     transition: all 0.2s ease;
-                    z-index: 999999;
+                    z-index: 1000000;
                 }
 
                 .embed-chat-close:hover {
@@ -287,6 +287,8 @@
 
     window.EmbedChat = new EmbedChat();
 })(window, document);
+
+
 
 
 
