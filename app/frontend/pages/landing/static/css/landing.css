@@ -20,88 +20,81 @@
     padding: 1rem 0;
 }
 
-.header-content {
+.landing-header .header-content {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    height: 40px;
 }
 
-.brand {
+.landing-header .brand {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    font-size: 1.5rem;
-    font-weight: 700;
+    gap: 12px;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--color-text-primary);
     text-decoration: none;
-    color: var(--text-primary);
-    width: 200px; /* Задать ширину */
+    width: 200px;
+}
+.landing-header .brand-text {
+    color: var(--color-text-primary);
 }
 
-.brand-text {
-    background: var(--accent-gradient);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-.header-nav {
+.landing-header .header-nav {
     display: flex;
-    justify-content: center; /* Центрировать ссылки */
-    flex-grow: 1; /* Занять доступное пространство */
-    align-items: center;
-    gap: 1.5rem;
+    justify-content: center;
+    flex-grow: 1;
+    gap: 30px;
 }
 
-.header-nav a {
+.landing-header .header-nav a {
+    color: var(--color-text-secondary);
     text-decoration: none;
-    color: var(--text-secondary);
-    font-weight: 500;
-    font-size: 0.9rem;
-    padding: 0.5rem 0.75rem;
-    border-radius: var(--radius-md);
-    transition: all 0.2s ease;
+    font-size: 16px;
+    transition: color 0.2s;
 }
 
-.header-nav a:hover {
-    color: var(--text-primary);
-    background-color: var(--bg-hover);
+.landing-header .header-nav a:hover {
+    color: var(--color-text-primary);
 }
 
-.header-right {
+.landing-header .header-right {
     display: flex;
     align-items: center;
-    gap: 1.5rem;
-    width: 200px; /* Задать ширину */
-    justify-content: flex-end; /* Выровнять вправо */
-}
-
-.header-divider {
-    width: 1px;
-    height: 24px;
-    background-color: var(--border-primary);
-    margin: 0 0.5rem;
+    justify-content: flex-end;
+    gap: 20px;
+    width: 200px;
 }
 
 .language-switcher {
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    color: var(--text-secondary);
+    gap: 10px;
 }
 
 .language-switcher a {
-    color: var(--text-secondary);
-    padding: 0;
-}
-
-.language-switcher a.active {
-    color: var(--text-primary);
-    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: 500;
+    transition: color 0.2s;
+    border-bottom: 2px solid transparent;
+    padding-bottom: 2px;
 }
 
 .language-switcher a:hover {
-    background: none;
-    color: var(--text-primary);
+    color: var(--color-text-primary);
+}
+
+.language-switcher a.active {
+    color: var(--color-text-primary);
+    border-bottom-color: var(--color-primary);
+}
+
+.language-switcher span {
+    color: var(--color-border);
 }
 
 
@@ -166,26 +159,24 @@
 
 .hero-bottom-bar {
     position: absolute;
-    bottom: 80px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 100%;
-    max-width: 1200px;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: rgba(16, 17, 21, 0.7);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--color-border);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 20px;
-    z-index: 3;
+    padding: 20px 5%;
+    color: var(--color-text-secondary);
 }
 
 .hero-bottom-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1rem;
-    font-size: 14px;
-    color: #a0a0a0;
     text-align: center;
+    font-size: 16px;
+    line-height: 1.4;
+    width: 200px;
 }
 
 .hero-bottom-item i {
@@ -880,6 +871,19 @@
     }
     .footer-logo {
         font-size: 4rem;
+    }
+    .hero-bottom-bar {
+        flex-direction: column;
+        gap: 20px;
+        padding: 30px 20px;
+        position: relative; 
+        background-color: var(--color-bg-primary); 
+        border-top: 1px solid var(--color-border);
+        backdrop-filter: none;
+    }
+    
+    .hero-bottom-item {
+        width: 100%;
     }
 }
 

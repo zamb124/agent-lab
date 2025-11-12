@@ -18,26 +18,33 @@
                 
                 <!-- Desktop navigation -->
                 <nav class="header-nav desktop-nav">
-                    <a href="#about">О нас</a>
-                    <a href="#features">Возможности</a>
-                    <a href="#solutions">Наши решения</a>
-                    <a href="/docs/" target="_blank">Документация</a>
+                    <a href="#about">{{ t('landing.header.about') }}</a>
+                    <a href="#features">{{ t('landing.header.features') }}</a>
+                    <a href="#solutions">{{ t('landing.header.solutions') }}</a>
+                    <a href="/docs/" target="_blank">{{ t('landing.header.docs') }}</a>
                 </nav>
 
                 <div class="header-right desktop-nav">
                     <div class="language-switcher">
-                        <a href="#" class="active">RU</a>
-                        <span>|</span>
-                        <a href="#">EN</a>
+                        {% for lang_code, lang_name in supported_languages.items() %}
+                            <a href="#" 
+                               class="{% if lang_code == active_language %}active{% endif %}" 
+                               onclick="event.preventDefault(); setLandingLanguage('{{ lang_code }}')">
+                                {{ lang_code | upper }}
+                            </a>
+                            {% if not loop.last %}
+                                <span>|</span>
+                            {% endif %}
+                        {% endfor %}
                     </div>
 
                     {% if is_authenticated %}
                         <a href="/frontend/dashboard" class="btn btn-outline-primary">
-                            <span>Dashboard</span>
+                            <span>{{ t('landing.header.dashboard') }}</span>
                         </a>
                     {% else %}
                         <a href="/frontend/auth" class="btn btn-gradient">
-                            <span>Войти</span>
+                            <span>{{ t('landing.header.login') }}</span>
                         </a>
                     {% endif %}
                 </div>
@@ -64,7 +71,7 @@
         <nav class="mobile-menu-nav">
             <a href="/docs/" target="_blank" class="mobile-menu-item">
                 <i class="ti ti-book"></i>
-                <span>Документация</span>
+                <span>{{ t('landing.header.docs') }}</span>
             </a>
             <a href="/frontend/builder/" class="mobile-menu-item">
                 <i class="ti ti-diagram-3"></i>
@@ -86,14 +93,12 @@
             
             <div class="mobile-menu-section">
                 <div class="mobile-menu-section-title">{{ t('dashboard.header.language_toggle') }}</div>
-                <button class="mobile-menu-item" onclick="event.preventDefault(); setLandingLanguage('ru'); closeMobileMenu();">
-                    <i class="ti ti-check invisible" id="mobile-lang-ru"></i>
-                    <span>{{ t('languages.ru') }}</span>
+                 {% for lang_code, lang_name in supported_languages.items() %}
+                <button class="mobile-menu-item" onclick="event.preventDefault(); setLandingLanguage('{{ lang_code }}'); closeMobileMenu();">
+                    <i class="ti ti-check {% if lang_code != active_language %}invisible{% endif %}" id="mobile-lang-{{ lang_code }}"></i>
+                    <span>{{ lang_name }}</span>
                 </button>
-                <button class="mobile-menu-item" onclick="event.preventDefault(); setLandingLanguage('en'); closeMobileMenu();">
-                    <i class="ti ti-check invisible" id="mobile-lang-en"></i>
-                    <span>{{ t('languages.en') }}</span>
-                </button>
+                {% endfor %}
             </div>
         </nav>
     </div>
@@ -106,11 +111,11 @@
         </div>
         <div class="hero-bottom-bar">
             <div class="hero-bottom-item">
-                <span>Доверьте<br>процессы AI-агентам</span>
+                <span>{{ t('landing.hero.trust_process') | safe }}</span>
             </div>
-            <button class="btn btn-gradient btn-lg" onclick="openContactModal()">Запустить цифровых сотрудников</button>
+            <button class="btn btn-gradient btn-lg" onclick="openContactModal()">{{ t('landing.hero.start_button') }}</button>
             <div class="hero-bottom-item">
-                <span>Эволюция вашего<br>бизнеса уже здесь</span>
+                <span>{{ t('landing.hero.evolution') | safe }}</span>
             </div>
         </div>
     </section>
@@ -120,30 +125,30 @@
         <section id="about" class="about-section">
             <div class="container">
                 <div class="section-header">
-                    <span class="section-tag">/ О нас</span>
-                    <h2 class="section-title">Neuroflow — ваша команда AI-сотрудников</h2>
+                    <span class="section-tag">{{ t('landing.about.tag') }}</span>
+                    <h2 class="section-title">{{ t('landing.about.title') }}</h2>
                     <p class="section-subtitle">
-                        Наша платформа позволяет запускать AI-агентов для автоматизации их проектов, коммуникаций и управления. Они работают 24/7, освобождая вас от рутины.
+                        {{ t('landing.about.subtitle1') }}
                         <br><br>
-                        Агенты совершают звонки, ведут переписки и с клиентами.
+                        {{ t('landing.about.subtitle2') }}
                     </p>
                 </div>
                 <div class="metrics-grid">
                     <div class="metric-card">
-                        <span class="metric-value">25+</span>
-                        <span class="metric-label">встроенных<br>инструментов</span>
+                        <span class="metric-value">{{ t('landing.about.metric1_value') }}</span>
+                        <span class="metric-label">{{ t('landing.about.metric1_label') | safe }}</span>
                     </div>
                     <div class="metric-card">
-                        <span class="metric-value">500+</span>
-                        <span class="metric-label">вариантов<br>AI-моделей</span>
+                        <span class="metric-value">{{ t('landing.about.metric2_value') }}</span>
+                        <span class="metric-label">{{ t('landing.about.metric2_label') | safe }}</span>
                     </div>
                     <div class="metric-card">
-                        <span class="metric-value">500 ₽</span>
-                        <span class="metric-label">для старта<br>на платформе</span>
+                        <span class="metric-value">{{ t('landing.about.metric3_value') }}</span>
+                        <span class="metric-label">{{ t('landing.about.metric3_label') | safe }}</span>
                     </div>
                     <div class="metric-card">
-                        <span class="metric-value">&infin;</span>
-                        <span class="metric-label">возможности<br>автоматизации</span>
+                        <span class="metric-value">{{ t('landing.about.metric4_value') | safe }}</span>
+                        <span class="metric-label">{{ t('landing.about.metric4_label') | safe }}</span>
                     </div>
                 </div>
                 <div class="tags-grid">
@@ -167,42 +172,42 @@
         <section id="features" class="features-section">
              <div class="container">
                 <div class="section-header">
-                    <span class="section-tag">/ Возможности платформы</span>
+                    <span class="section-tag">{{ t('landing.features.tag') }}</span>
                 </div>
                 <div class="feature-item">
                     <div class="feature-text">
-                        <h3 class="feature-title">Автономные агенты</h3>
-                        <p>Агенты, которые действуют вместо человека, принимают решения самостоятельно и обучаются в процессе работы, выполняя задачи без вашего участия.</p>
+                        <h3 class="feature-title">{{ t('landing.features.feature1_title') }}</h3>
+                        <p>{{ t('landing.features.feature1_description') }}</p>
                     </div>
                     <div class="feature-image">
-                        <img src="/static/design/first.jpg" alt="Автономные агенты">
+                        <img src="/static/design/first.jpg" alt="{{ t('landing.features.feature1_title') }}">
                     </div>
                 </div>
                 <div class="feature-item">
                     <div class="feature-text">
-                        <h3 class="feature-title">Мультиагентные системы</h3>
-                        <p>Координирующие системы агентов, где разные роли, задачи и промты позволяют создавать более сложные сценарии решения, имитируя работу целых отделов.</p>
+                        <h3 class="feature-title">{{ t('landing.features.feature2_title') }}</h3>
+                        <p>{{ t('landing.features.feature2_description') }}</p>
                     </div>
                      <div class="feature-image">
-                        <img src="/static/design/two.jpg" alt="Мультиагентные системы">
+                        <img src="/static/design/two.jpg" alt="{{ t('landing.features.feature2_title') }}">
                     </div>
                 </div>
                 <div class="feature-item">
                     <div class="feature-text">
-                        <h3 class="feature-title">Гибкие интеграции</h3>
-                        <p>Шаблоны для подключения к вашим CRM и базам знаний помогут агентам интегрироваться в бизнес-процессы вашей компании.</p>
+                        <h3 class="feature-title">{{ t('landing.features.feature3_title') }}</h3>
+                        <p>{{ t('landing.features.feature3_description') }}</p>
                     </div>
                      <div class="feature-image">
-                        <img src="/static/design/three.jpg" alt="Гибкие интеграции">
+                        <img src="/static/design/three.jpg" alt="{{ t('landing.features.feature3_title') }}">
                     </div>
                 </div>
                 <div class="feature-item">
                     <div class="feature-text">
-                        <h3 class="feature-title">Low-code / No-code</h3>
-                        <p>Визуальный редактор и готовые шаблоны для создания и настройки работы AI-агентов. Без навыков программирования и сложных технических затрат — с помощью Agent Builder.</p>
+                        <h3 class="feature-title">{{ t('landing.features.feature4_title') }}</h3>
+                        <p>{{ t('landing.features.feature4_description') }}</p>
                     </div>
                     <div class="feature-image">
-                        <img src="/static/design/four.jpg" alt="Low-code / No-code">
+                        <img src="/static/design/four.jpg" alt="{{ t('landing.features.feature4_title') }}">
                     </div>
                 </div>
             </div>
@@ -211,13 +216,13 @@
         <!-- Results Section -->
         <section class="results-section">
             <div class="container">
-                <h2 class="results-title">Обеспечим впечатляющие<br><span class="highlight">результаты</span> вашему бизнесу</h2>
+                <h2 class="results-title">{{ t('landing.results.title') | safe }}</h2>
                 <div class="floating-tags-container">
-                    <div class="floating-tag" style="top: 10%; left: 15%;">Автоматизация под индивидуальный запрос</div>
-                    <div class="floating-tag" style="top: 45%; left: 55%;">Масштабируемость от одного агента до сети</div>
-                    <div class="floating-tag" style="top: 65%; left: 10%;">MVP продукта за 3 дня</div>
-                    <div class="floating-tag" style="top: 80%; left: 55%;">Мониторинги и развёрнутая аналитика</div>
-                    <div class="floating-tag" style="top: 85%; left: 25%;">Шифрование данных и SAAS версия</div>
+                    <div class="floating-tag" style="top: 10%; left: 15%;">{{ t('landing.results.tag1') }}</div>
+                    <div class="floating-tag" style="top: 45%; left: 55%;">{{ t('landing.results.tag2') }}</div>
+                    <div class="floating-tag" style="top: 65%; left: 10%;">{{ t('landing.results.tag3') }}</div>
+                    <div class="floating-tag" style="top: 80%; left: 55%;">{{ t('landing.results.tag4') }}</div>
+                    <div class="floating-tag" style="top: 85%; left: 25%;">{{ t('landing.results.tag5') }}</div>
                 </div>
             </div>
         </section>
@@ -226,42 +231,40 @@
         <section id="solutions" class="solutions-section">
             <div class="container">
                 <div class="section-header">
-                    <span class="section-tag">/ Наши решения</span>
+                    <span class="section-tag">{{ t('landing.solutions.tag') }}</span>
                 </div>
                 <div class="solutions-grid">
                     <div class="solution-card">
-                        <h3 class="solution-title">Конструктор</h3>
+                        <h3 class="solution-title">{{ t('landing.solutions.constructor_title') }}</h3>
                         <p class="solution-description">
-                            Свобода и контроль в ваших руках.<br>
-                            Автоматизируйте самостоятельно в удобном темпе
+                            {{ t('landing.solutions.constructor_description') | safe }}
                         </p>
                         <ul class="solution-features">
-                            <li><i class="ti ti-infinity"></i><span>Полный доступ к библиотеке готовых модулей и интеграций</span></li>
-                            <li><i class="ti ti-box-multiple"></i><span>Готовые сценарии автоматизации для популярных задач</span></li>
-                            <li><i class="ti ti-file-text"></i><span>Доступ к подробной документации</span></li>
-                            <li><i class="ti ti-help-circle"></i><span>Помощь в решении вопросов по работе платформы</span></li>
+                            <li><i class="ti ti-infinity"></i><span>{{ t('landing.solutions.constructor_feature1') }}</span></li>
+                            <li><i class="ti ti-box-multiple"></i><span>{{ t('landing.solutions.constructor_feature2') }}</span></li>
+                            <li><i class="ti ti-file-text"></i><span>{{ t('landing.solutions.constructor_feature3') }}</span></li>
+                            <li><i class="ti ti-help-circle"></i><span>{{ t('landing.solutions.constructor_feature4') }}</span></li>
                         </ul>
                         <p class="solution-note">
-                            Подходит для команд с техническими специалистами, стартапов с типовыми процессами и энтузиастов
+                            {{ t('landing.solutions.constructor_note') }}
                         </p>
-                        <button class="btn btn-dark-purple">Получить ранний доступ</button>
+                        <button class="btn btn-dark-purple">{{ t('landing.solutions.constructor_button') }}</button>
                     </div>
                     <div class="solution-card">
-                        <h3 class="solution-title">Эксперт</h3>
+                        <h3 class="solution-title">{{ t('landing.solutions.expert_title') }}</h3>
                         <p class="solution-description">
-                            Проведем анализ ваших процессов и сделаем всё за вас.
-                            Вы получаете готовое решение под ключ.
+                            {{ t('landing.solutions.expert_description') | safe }}
                         </p>
                          <ul class="solution-features">
-                            <li><i class="ti ti-search"></i><span>Аудит ваших бизнес-процессов</span></li>
-                            <li><i class="ti ti-settings"></i><span>Проектирование масштабируемых систем автоматизации вашего бизнеса</span></li>
-                            <li><i class="ti ti-code"></i><span>Разработка и внедрение индивидуальных AI-агентов специально для ваших задач</span></li>
-                            <li><i class="ti ti-headset"></i><span>Полное сопровождение и техническая поддержка</span></li>
+                            <li><i class="ti ti-search"></i><span>{{ t('landing.solutions.expert_feature1') }}</span></li>
+                            <li><i class="ti ti-settings"></i><span>{{ t('landing.solutions.expert_feature2') }}</span></li>
+                            <li><i class="ti ti-code"></i><span>{{ t('landing.solutions.expert_feature3') }}</span></li>
+                            <li><i class="ti ti-headset"></i><span>{{ t('landing.solutions.expert_feature4') }}</span></li>
                         </ul>
                          <p class="solution-note">
-                            Подходит для бизнесов со сложными бизнес-процессами и занятых предпринимателей
+                            {{ t('landing.solutions.expert_note') }}
                         </p>
-                        <button class="btn btn-primary-glow">Оставить заявку</button>
+                        <button class="btn btn-primary-glow">{{ t('landing.solutions.expert_button') }}</button>
                     </div>
                 </div>
             </div>
@@ -271,43 +274,43 @@
         <section id="testimonials" class="testimonials-section">
             <div class="container">
                 <div class="section-header">
-                    <span class="section-tag">/ Нам доверяют предприниматели и малый бизнес</span>
+                    <span class="section-tag">{{ t('landing.testimonials.tag') }}</span>
                 </div>
                 <div class="testimonials-wrapper">
                     <div class="testimonial-card active">
                         <div class="testimonial-author">
                             <img src="/static/design/avatars/avatar_1.png" alt="Author">
                             <div>
-                                <span class="author-name">Игорь</span>
-                                <span class="author-title">Руководитель интернет-магазина</span>
+                                <span class="author-name">{{ t('landing.testimonials.author1_name') }}</span>
+                                <span class="author-title">{{ t('landing.testimonials.author1_title') }}</span>
                             </div>
                         </div>
                         <p class="testimonial-text">
-                            Мы сосредоточились не одну задачу, а целый цикл задач для внедрения фильтров для 60к+ типичных вопросов, второй — отлаженный скрипт, дальше ассистент квалифицирует входящие звонки и распределяет по категориям. Они забирают все нужные инициативы. Таким образом, за последние 4-5 месяца мы ощутили снижение нагрузки на отделы и росте лояльности клиентов. Входят и инвестиции в бизнес за последний год.
+                           {{ t('landing.testimonials.author1_text') }}
                         </p>
                     </div>
                     <div class="testimonial-card">
                         <div class="testimonial-author">
                             <img src="/static/design/avatars/avatar_2.png" alt="Author">
                             <div>
-                                <span class="author-name">Мария</span>
-                                <span class="author-title">Руководитель интернет-магазина</span>
+                                <span class="author-name">{{ t('landing.testimonials.author2_name') }}</span>
+                                <span class="author-title">{{ t('landing.testimonials.author2_title') }}</span>
                             </div>
                         </div>
                         <p class="testimonial-text">
-                            Мы автоматизировали не одну задачу, а целый цикл: агент для поддержки фильтрует 80% типичных вопросов, второй — отслеживает статусы доставки и информирует клиентов, а третий — готовит аналитику по возвратам. Они работают как единый механизм. Платформа окупилась за 3 месяца за счёт снижения нагрузки на отделы и роста лояльности клиентов. Лучшая инвестиция в бизнес за последний год.
+                            {{ t('landing.testimonials.author2_text') }}
                         </p>
                     </div>
                     <div class="testimonial-card">
                         <div class="testimonial-author">
                             <img src="/static/design/avatars/avatar_3.png" alt="Author">
                             <div>
-                                <span class="author-name">Алексей</span>
-                                <span class="author-title">Владелец E-commerce</span>
+                                <span class="author-name">{{ t('landing.testimonials.author3_name') }}</span>
+                                <span class="author-title">{{ t('landing.testimonials.author3_title') }}</span>
                             </div>
                         </div>
                         <p class="testimonial-text">
-                            Интеграция с нашей CRM прошла гладко. AI-агенты обрабатывают запросы клиентов 24/7, что значительно повысило уровень сервиса. Мы видим рост продаж и лояльности. Это лучшее вложение в наш бизнес за последний год.
+                           {{ t('landing.testimonials.author3_text') }}
                         </p>
                     </div>
                 </div>
@@ -323,34 +326,34 @@
         <section id="faq" class="faq-section">
             <div class="container">
                 <div class="section-header">
-                    <span class="section-tag">/ Вопросы и ответы</span>
+                    <span class="section-tag">{{ t('landing.faq.tag') }}</span>
                 </div>
                 <div class="faq-accordion">
                     <div class="faq-item">
                         <button class="faq-question">
-                            <span>У нас нестандартный бизнес-процесс или нужные интеграции отсутствуют на платформе. Могу ли я оставить заявку на автоматизацию под ключ вашими силами?</span>
+                            <span>{{ t('landing.faq.q1') }}</span>
                             <i class="ti ti-chevron-down"></i>
                         </button>
                         <div class="faq-answer">
-                            <p>Именно для таких сложных и третичных в защиту у нас создан план «Эксперт»! Мы выделим вашу специфику, разрабатываем индивидуальных агентов и интегрируем с необходимыми системами, даже если их нет в стандартном каталоге.</p>
+                            <p>{{ t('landing.faq.a1') }}</p>
                         </div>
                     </div>
                      <div class="faq-item">
                         <button class="faq-question">
-                            <span>Насколько безопасно доверять данные моего бизнеса вашей системе?</span>
+                            <span>{{ t('landing.faq.q2') }}</span>
                             <i class="ti ti-chevron-down"></i>
                         </button>
                         <div class="faq-answer">
-                            <p>Мы предлагаем on-premise решение, которое позволяет развернуть платформу на ваших серверах, обеспечивая полный контроль над данными.</p>
+                            <p>{{ t('landing.faq.a2') }}</p>
                         </div>
                     </div>
                      <div class="faq-item">
                         <button class="faq-question">
-                            <span>В моей команде нет технических специалистов. Сможем ли мы легко разобраться с платформой и управлять автоматизацией?</span>
+                            <span>{{ t('landing.faq.q3') }}</span>
                             <i class="ti ti-chevron-down"></i>
                         </button>
                         <div class="faq-answer">
-                            <p>Да, наша платформа создана с упором на Low-code/No-code, что позволяет управлять агентами и процессами через интуитивно понятный визуальный интерфейс без необходимости в программировании.</p>
+                            <p>{{ t('landing.faq.a3') }}</p>
                         </div>
                     </div>
                 </div>
@@ -360,8 +363,8 @@
         <!-- CTA Section -->
         <section class="final-cta-section">
             <div class="container">
-                <h2>Автоматизируйте ваш бизнес<br>с NeuroFlow</h2>
-                <button class="btn btn-primary btn-lg" onclick="openContactModal()">Заказать аудит</button>
+                <h2>{{ t('landing.cta.title') | safe }}</h2>
+                <button class="btn btn-primary btn-lg" onclick="openContactModal()">{{ t('landing.cta.button') }}</button>
             </div>
         </section>
 
@@ -376,9 +379,9 @@
                     <span>© 2025 NeuroFlow</span>
                 </div>
                 <div class="footer-links">
-                    <a href="#">Документация</a>
-                    <a href="#">Политика конфиденциальности</a>
-                    <a href="#">Пользовательское соглашение</a>
+                    <a href="#">{{ t('landing.footer.docs') }}</a>
+                    <a href="#">{{ t('landing.footer.privacy') }}</a>
+                    <a href="#">{{ t('landing.footer.terms') }}</a>
                 </div>
             </div>
             <div class="footer-bottom">
@@ -659,9 +662,9 @@ function updateLanguageIndicator(language) {
         }
         
         // Обновляем галочки в mobile menu
-        const mobileIndicator = document.querySelector(`#mobile-lang-${lang}`);
+        const mobileIndicator = document.querySelector(`#mobile-lang-${lang} i.ti-check`);
         if (mobileIndicator) {
-            mobileIndicator.style.visibility = (lang === language) ? 'visible' : 'hidden';
+            mobileIndicator.classList.toggle('invisible', lang !== language);
         }
     });
     
@@ -685,7 +688,7 @@ function getCookie(name) {
 // Инициализация языкового индикатора при загрузке
 document.addEventListener('DOMContentLoaded', function() {
     // Определяем текущий язык из localStorage или cookie
-    let currentLang = localStorage.getItem('language') || getCookie('language') || 'ru';
+    let currentLang = localStorage.getItem('language') || getCookie('language') || '{{ active_language }}';
     
     // Обновляем индикатор
     updateLanguageIndicator(currentLang);
@@ -717,6 +720,24 @@ document.addEventListener('DOMContentLoaded', function() {
         let nextTestimonial = (currentTestimonial + 1) % testimonials.length;
         showTestimonial(nextTestimonial);
     }, 5000);
+
+    // Language Switcher Dropdown
+    const languageSwitcher = document.getElementById('language-switcher-desktop');
+    if (languageSwitcher) {
+        const trigger = languageSwitcher.querySelector('.language-switcher-trigger');
+        const dropdown = languageSwitcher.querySelector('.language-dropdown');
+
+        trigger.addEventListener('click', (event) => {
+            event.stopPropagation();
+            dropdown.classList.toggle('active');
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!languageSwitcher.contains(event.target)) {
+                dropdown.classList.remove('active');
+            }
+        });
+    }
 });
 </script>
 {% endblock %}

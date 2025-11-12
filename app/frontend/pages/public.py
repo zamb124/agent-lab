@@ -12,6 +12,8 @@ from app.frontend.dependencies import StorageDep
 from app.models.core_models import FlowConfig
 from app.models.i18n_models import Language
 from app.core.context import get_context
+from app.core.translation_manager import get_translation_manager
+from app.models.i18n_models import Language
 
 router = APIRouter(tags=["public-pages"])
 templates = get_templates()
@@ -22,7 +24,22 @@ async def landing_page(request: Request):
     """Главная страница - лендинг Agents Lab"""
     from app.frontend.core.plugin_loader import get_plugins_for_template
     
+    # Определяем язык из cookie ПЕРЕД получением контекста
+    lang_cookie = request.cookies.get("language", "ru")
+    try:
+        active_lang_enum = Language(lang_cookie)
+    except ValueError:
+        active_lang_enum = Language.RU
+        
+    # Устанавливаем язык в request.state, чтобы контекст его подхватил
+    request.state.language = active_lang_enum
+    
     context = getattr(request.state, 'context', None)
+    
+    # Дополнительно проверяем и устанавливаем язык в контексте, если он уже создан
+    if context:
+        context.language = active_lang_enum
+        
     is_authenticated = (
         context and 
         context.user and 
@@ -31,12 +48,25 @@ async def landing_page(request: Request):
     
     plugins_data = get_plugins_for_template(request)
     
+    # Получаем менеджер переводов и данные для шаблона
+    manager = get_translation_manager()
+    active_language = active_lang_enum.value
+    
+    ru_translations = manager.get_translations(Language.RU)
+    supported_languages = {}
+    for lang in Language:
+        lang_key = f"languages.{lang.value}"
+        lang_name = ru_translations.get(lang_key, lang.value.upper())
+        supported_languages[lang.value] = lang_name
+        
     return templates.TemplateResponse(
         "landing.html", 
         {
             "request": request, 
             "is_authenticated": is_authenticated,
-            "dashboard_widgets": plugins_data.get("dashboard_widgets", [])
+            "dashboard_widgets": plugins_data.get("dashboard_widgets", []),
+            "supported_languages": supported_languages,
+            "active_language": active_language
         }
     )
 
