@@ -9,51 +9,37 @@
     <header class="landing-header">
         <div class="container">
             <div class="header-content">
-                <div class="brand">
-                    <button class="app-launcher-trigger" onclick="toggleAppLauncher()" title="Все приложения">
+                <a href="/" class="brand">
+                    <button class="app-launcher-trigger" onclick="event.preventDefault(); toggleAppLauncher()" title="Все приложения">
                         <i class="ti ti-apps"></i>
                     </button>
-                    <span class="brand-text langflow-gradient">Agents Lab</span>
-                </div>
+                    <span class="brand-text">NeuroFlow</span>
+                </a>
                 
                 <!-- Desktop navigation -->
-                <div class="header-actions desktop-nav">
-                    <a href="/docs/" target="_blank" class="btn btn-outline-primary">
-                        <i class="ti ti-book"></i>
-                        Документация
-                    </a>
-                    <a href="/frontend/builder/" class="btn btn-outline-primary">
-                        <i class="ti ti-diagram-3"></i>
-                        {{ t('landing.header.builder') }}
-                    </a>
+                <nav class="header-nav desktop-nav">
+                    <a href="#about">О нас</a>
+                    <a href="#features">Возможности</a>
+                    <a href="#solutions">Наши решения</a>
+                    <a href="/docs/" target="_blank">Документация</a>
+                </nav>
+
+                <div class="header-right desktop-nav">
+                    <div class="language-switcher">
+                        <a href="#" class="active">RU</a>
+                        <span>|</span>
+                        <a href="#">EN</a>
+                    </div>
+
                     {% if is_authenticated %}
                         <a href="/frontend/dashboard" class="btn btn-outline-primary">
-                            <i class="ti ti-speedometer2"></i>
-                            {{ t('landing.header.dashboard') }}
+                            <span>Dashboard</span>
                         </a>
                     {% else %}
-                        <a href="/frontend/auth" class="btn btn-outline-primary">
-                            <i class="ti ti-box-arrow-in-right"></i>
-                            {{ t('landing.header.login') }}
+                        <a href="/frontend/auth" class="btn btn-gradient">
+                            <span>Войти</span>
                         </a>
                     {% endif %}
-                    
-                    <div class="dropdown">
-                        <button class="btn btn-ghost btn-sm" data-dropdown-toggle data-tooltip="{{ t('dashboard.header.language_toggle') }}">
-                            <i class="ti ti-translate"></i>
-                            <span id="current-language">{{ get_current_language().upper() }}</span>
-                        </button>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setLandingLanguage('ru');">
-                            <i class="ti ti-check invisible" id="lang-ru"></i> 
-                            {{ t('languages.ru') }}
-                        </a></li>
-                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setLandingLanguage('en');">
-                            <i class="ti ti-check invisible" id="lang-en"></i> 
-                            {{ t('languages.en') }}
-                        </a></li>
-                        </ul>
-                    </div>
                 </div>
                 
                 <!-- Mobile burger button -->
@@ -114,274 +100,302 @@
 
     <!-- Hero Section -->
     <section class="hero-section">
-        <div class="container">
-            <div class="hero-content">
-                <div class="hero-text">
-                    <h1 class="hero-title">
-                        {{ t('landing.hero.title_main') }}
-                        <span class="langflow-gradient">{{ t('landing.hero.title_accent') }}</span>
-                    </h1>
-                    <p class="hero-subtitle">
-                        {{ t('landing.hero.subtitle') }}
-                    </p>
-                    <div class="hero-actions">
-                        <button class="btn btn-primary btn-lg" onclick="openContactModal()">
-                            <i class="ti ti-rocket"></i>
-                            {{ t('landing.hero.start_button') }}
-                        </button>
-                        <button class="btn btn-outline-primary btn-lg" onclick="scrollToSection('about')">
-                            <i class="ti ti-info-circle"></i>
-                            {{ t('landing.hero.learn_more') }}
-                        </button>
-                    </div>
-                </div>
-                <div class="hero-visual">
-                    <div class="hero-image">
-                        <img src="/static/img/main.png" alt="Agents Lab Platform" class="platform-preview">
-                        <div class="visual-overlay">
-                            <div class="floating-card card-1">
-                                <i class="ti ti-cpu"></i>
-                                <span>{{ t('landing.hero.floating_tags.ai') }}</span>
-                            </div>
-                            <div class="floating-card card-2">
-                                <i class="ti ti-gear"></i>
-                                <span>{{ t('landing.hero.floating_tags.automation') }}</span>
-                            </div>
-                            <div class="floating-card card-3">
-                                <i class="ti ti-database"></i>
-                                <span>{{ t('landing.hero.floating_tags.rag') }}</span>
-                            </div>
-                            <div class="floating-card card-4">
-                                <i class="ti ti-search"></i>
-                                <span>{{ t('landing.hero.floating_tags.search') }}</span>
-                            </div>
-                            <div class="floating-card card-5">
-                                <i class="ti ti-headset"></i>
-                                <span>{{ t('landing.hero.floating_tags.support') }}</span>
-                            </div>
-                            <div class="floating-card card-6">
-                                <i class="ti ti-graph-up"></i>
-                                <span>{{ t('landing.hero.floating_tags.efficiency') }}</span>
-                            </div>
-                            <div class="floating-card card-7">
-                                <i class="ti ti-arrow-up-circle"></i>
-                                <span>{{ t('landing.hero.floating_tags.growth') }}</span>
-                            </div>
-                            <div class="floating-card card-8">
-                                <i class="ti ti-puzzle"></i>
-                                <span>{{ t('landing.hero.floating_tags.integrations') }}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+        <div class="hero-visual-container">
+            <h1 class="hero-title">NEUROFLOW</h1>
+            <img src="/static/design/back-Photoroom.png" alt="NeuroFlow Background" class="hero-background-img">
+        </div>
+        <div class="hero-bottom-bar">
+            <div class="hero-bottom-item">
+                <span>Доверьте<br>процессы AI-агентам</span>
+            </div>
+            <button class="btn btn-gradient btn-lg" onclick="openContactModal()">Запустить цифровых сотрудников</button>
+            <div class="hero-bottom-item">
+                <span>Эволюция вашего<br>бизнеса уже здесь</span>
             </div>
         </div>
     </section>
 
     <!-- About Section -->
-    <section id="about" class="about-section">
-        <div class="container">
-            <div class="section-header">
-                <h2 class="section-title">{{ t('landing.about.title') }}</h2>
-                <p class="section-subtitle">
-                    {{ t('landing.about.subtitle') }}
-                </p>
-            </div>
-            
-            <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="ti ti-robot"></i>
-                    </div>
-                    <h3 class="feature-title">{{ t('landing.features.autonomous_agents.title') }}</h3>
-                    <p class="feature-description">
-                        {{ t('landing.features.autonomous_agents.description') }}
+    <main class="landing-main">
+        <section id="about" class="about-section">
+            <div class="container">
+                <div class="section-header">
+                    <span class="section-tag">/ О нас</span>
+                    <h2 class="section-title">Neuroflow — ваша команда AI-сотрудников</h2>
+                    <p class="section-subtitle">
+                        Наша платформа позволяет запускать AI-агентов для автоматизации их проектов, коммуникаций и управления. Они работают 24/7, освобождая вас от рутины.
+                        <br><br>
+                        Агенты совершают звонки, ведут переписки и с клиентами.
                     </p>
                 </div>
-                
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="ti ti-diagram-3"></i>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <span class="metric-value">25+</span>
+                        <span class="metric-label">встроенных<br>инструментов</span>
                     </div>
-                    <h3 class="feature-title">{{ t('landing.features.multi_agent.title') }}</h3>
-                    <p class="feature-description">
-                        {{ t('landing.features.multi_agent.description') }}
-                    </p>
+                    <div class="metric-card">
+                        <span class="metric-value">500+</span>
+                        <span class="metric-label">вариантов<br>AI-моделей</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-value">500 ₽</span>
+                        <span class="metric-label">для старта<br>на платформе</span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-value">&infin;</span>
+                        <span class="metric-label">возможности<br>автоматизации</span>
+                    </div>
                 </div>
-                
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="ti ti-code-slash"></i>
-                    </div>
-                    <h3 class="feature-title">{{ t('landing.features.low_code.title') }}</h3>
-                    <p class="feature-description">
-                        {{ t('landing.features.low_code.description') }}
-                    </p>
-                </div>
-                
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="ti ti-puzzle"></i>
-                    </div>
-                    <h3 class="feature-title">{{ t('landing.features.integrations.title') }}</h3>
-                    <p class="feature-description">
-                        {{ t('landing.features.integrations.description') }}
-                    </p>
-                </div>
-                
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="ti ti-shield-check"></i>
-                    </div>
-                    <h3 class="feature-title">{{ t('landing.features.security.title') }}</h3>
-                    <p class="feature-description">
-                        {{ t('landing.features.security.description') }}
-                    </p>
-                </div>
-                
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="ti ti-graph-up"></i>
-                    </div>
-                    <h3 class="feature-title">{{ t('landing.features.scalability.title') }}</h3>
-                    <p class="feature-description">
-                        {{ t('landing.features.scalability.description') }}
-                    </p>
+                <div class="tags-grid">
+                    <span class="tag">amoCRM</span>
+                    <span class="tag">telegram</span>
+                    <span class="tag">amazon s3</span>
+                    <span class="tag">whatsapp</span>
+                    <span class="tag">функция python</span>
+                    <span class="tag">sgr</span>
+                    <span class="tag">nano banana</span>
+                    <span class="tag">agent builder</span>
+                    <span class="tag">работа с базами знаний</span>
+                    <span class="tag">mcp</span>
+                    <span class="tag">распознавание аудио</span>
+                    <span class="tag">обработка фактов</span>
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- Benefits Section -->
-    <section class="benefits-section">
-        <div class="container">
-            <div class="section-header">
-                <h2 class="section-title">{{ t('landing.benefits.title') }}</h2>
+        <!-- Features Section -->
+        <section id="features" class="features-section">
+             <div class="container">
+                <div class="section-header">
+                    <span class="section-tag">/ Возможности платформы</span>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-text">
+                        <h3 class="feature-title">Автономные агенты</h3>
+                        <p>Агенты, которые действуют вместо человека, принимают решения самостоятельно и обучаются в процессе работы, выполняя задачи без вашего участия.</p>
+                    </div>
+                    <div class="feature-image">
+                        <img src="/static/design/first.jpg" alt="Автономные агенты">
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-text">
+                        <h3 class="feature-title">Мультиагентные системы</h3>
+                        <p>Координирующие системы агентов, где разные роли, задачи и промты позволяют создавать более сложные сценарии решения, имитируя работу целых отделов.</p>
+                    </div>
+                     <div class="feature-image">
+                        <img src="/static/design/two.jpg" alt="Мультиагентные системы">
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-text">
+                        <h3 class="feature-title">Гибкие интеграции</h3>
+                        <p>Шаблоны для подключения к вашим CRM и базам знаний помогут агентам интегрироваться в бизнес-процессы вашей компании.</p>
+                    </div>
+                     <div class="feature-image">
+                        <img src="/static/design/three.jpg" alt="Гибкие интеграции">
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-text">
+                        <h3 class="feature-title">Low-code / No-code</h3>
+                        <p>Визуальный редактор и готовые шаблоны для создания и настройки работы AI-агентов. Без навыков программирования и сложных технических затрат — с помощью Agent Builder.</p>
+                    </div>
+                    <div class="feature-image">
+                        <img src="/static/design/four.jpg" alt="Low-code / No-code">
+                    </div>
+                </div>
             </div>
-            
-            <div class="benefits-grid">
-                <div class="benefit-item">
-                    <div class="benefit-header">
-                        <i class="ti ti-lightning"></i>
-                        <h3>{{ t('landing.benefits.speed.title') }}</h3>
-                    </div>
-                    <p>{{ t('landing.benefits.speed.description') }}</p>
-                </div>
-                
-                <div class="benefit-item">
-                    <div class="benefit-header">
-                        <i class="ti ti-shield-lock"></i>
-                        <h3>{{ t('landing.benefits.control_security.title') }}</h3>
-                    </div>
-                    <p>{{ t('landing.benefits.control_security.description') }}</p>
-                </div>
-                
-                <div class="benefit-item">
-                    <div class="benefit-header">
-                        <i class="ti ti-arrows-expand"></i>
-                        <h3>{{ t('landing.benefits.scalability.title') }}</h3>
-                    </div>
-                    <p>{{ t('landing.benefits.scalability.description') }}</p>
-                </div>
-                
-                <div class="benefit-item">
-                    <div class="benefit-header">
-                        <i class="ti ti-gear"></i>
-                        <h3>{{ t('landing.benefits.manageability.title') }}</h3>
-                    </div>
-                    <p>{{ t('landing.benefits.manageability.description') }}</p>
-                </div>
-            </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- Target Audience Section -->
-    <section class="audience-section">
-        <div class="container">
-            <div class="section-header">
-                <h2 class="section-title">{{ t('landing.audience.title') }}</h2>
-                <p class="section-subtitle">{{ t('landing.audience.subtitle') }}</p>
-            </div>
-            
-            <div class="audience-list">
-                 <div class="audience-item">
-                    <i class="ti ti-graph-down"></i>
-                    <p>{{ t('landing.audience.cost_reduction') }}</p>
-                </div>
-                <div class="audience-item">
-                    <i class="ti ti-building"></i>
-                    <p>{{ t('landing.audience.repetitive_tasks') }}</p>
-                </div>
-                <div class="audience-item">
-                    <i class="ti ti-code"></i>
-                    <p>{{ t('landing.audience.no_dev_team') }}</p>
-                </div>
-                
-                <div class="audience-item">
-                    <i class="ti ti-shield"></i>
-                    <p>{{ t('landing.audience.security_control') }}</p>
+        <!-- Results Section -->
+        <section class="results-section">
+            <div class="container">
+                <h2 class="results-title">Обеспечим впечатляющие<br><span class="highlight">результаты</span> вашему бизнесу</h2>
+                <div class="floating-tags-container">
+                    <div class="floating-tag" style="top: 10%; left: 15%;">Автоматизация под индивидуальный запрос</div>
+                    <div class="floating-tag" style="top: 45%; left: 55%;">Масштабируемость от одного агента до сети</div>
+                    <div class="floating-tag" style="top: 65%; left: 10%;">MVP продукта за 3 дня</div>
+                    <div class="floating-tag" style="top: 80%; left: 55%;">Мониторинги и развёрнутая аналитика</div>
+                    <div class="floating-tag" style="top: 85%; left: 25%;">Шифрование данных и SAAS версия</div>
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- CTA Section -->
-    <section class="cta-section">
-        <div class="container">
-            <div class="cta-content">
-                <h2 class="cta-title">{{ t('landing.cta.title') }}</h2>
-                <p class="cta-subtitle">
-                    {{ t('landing.cta.subtitle') }}
-                </p>
-                    <div class="cta-actions">
-                        {% if is_authenticated %}
-                            <a href="/frontend/dashboard" class="btn btn-primary btn-lg">
-                                <i class="ti ti-speedometer2"></i>
-                                {{ t('landing.header.dashboard') }}
-                            </a>
-                        {% else %}
-                            <a href="/frontend/auth" class="btn btn-primary btn-lg">
-                                <i class="ti ti-rocket"></i>
-                                {{ t('landing.cta.login_button') }}
-                            </a>
-                        {% endif %}
-                        <button class="btn btn-outline-primary btn-lg" onclick="openContactModal()">
-                            <i class="ti ti-envelope"></i>
-                            {{ t('landing.cta.contact_button') }}
+        <!-- Solutions Section -->
+        <section id="solutions" class="solutions-section">
+            <div class="container">
+                <div class="section-header">
+                    <span class="section-tag">/ Наши решения</span>
+                </div>
+                <div class="solutions-grid">
+                    <div class="solution-card">
+                        <h3 class="solution-title">Конструктор</h3>
+                        <p class="solution-description">
+                            Свобода и контроль в ваших руках.<br>
+                            Автоматизируйте самостоятельно в удобном темпе
+                        </p>
+                        <ul class="solution-features">
+                            <li><i class="ti ti-infinity"></i><span>Полный доступ к библиотеке готовых модулей и интеграций</span></li>
+                            <li><i class="ti ti-box-multiple"></i><span>Готовые сценарии автоматизации для популярных задач</span></li>
+                            <li><i class="ti ti-file-text"></i><span>Доступ к подробной документации</span></li>
+                            <li><i class="ti ti-help-circle"></i><span>Помощь в решении вопросов по работе платформы</span></li>
+                        </ul>
+                        <p class="solution-note">
+                            Подходит для команд с техническими специалистами, стартапов с типовыми процессами и энтузиастов
+                        </p>
+                        <button class="btn btn-dark-purple">Получить ранний доступ</button>
+                    </div>
+                    <div class="solution-card">
+                        <h3 class="solution-title">Эксперт</h3>
+                        <p class="solution-description">
+                            Проведем анализ ваших процессов и сделаем всё за вас.
+                            Вы получаете готовое решение под ключ.
+                        </p>
+                         <ul class="solution-features">
+                            <li><i class="ti ti-search"></i><span>Аудит ваших бизнес-процессов</span></li>
+                            <li><i class="ti ti-settings"></i><span>Проектирование масштабируемых систем автоматизации вашего бизнеса</span></li>
+                            <li><i class="ti ti-code"></i><span>Разработка и внедрение индивидуальных AI-агентов специально для ваших задач</span></li>
+                            <li><i class="ti ti-headset"></i><span>Полное сопровождение и техническая поддержка</span></li>
+                        </ul>
+                         <p class="solution-note">
+                            Подходит для бизнесов со сложными бизнес-процессами и занятых предпринимателей
+                        </p>
+                        <button class="btn btn-primary-glow">Оставить заявку</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Testimonials Section -->
+        <section id="testimonials" class="testimonials-section">
+            <div class="container">
+                <div class="section-header">
+                    <span class="section-tag">/ Нам доверяют предприниматели и малый бизнес</span>
+                </div>
+                <div class="testimonials-wrapper">
+                    <div class="testimonial-card active">
+                        <div class="testimonial-author">
+                            <img src="/static/design/avatars/avatar_1.png" alt="Author">
+                            <div>
+                                <span class="author-name">Игорь</span>
+                                <span class="author-title">Руководитель интернет-магазина</span>
+                            </div>
+                        </div>
+                        <p class="testimonial-text">
+                            Мы сосредоточились не одну задачу, а целый цикл задач для внедрения фильтров для 60к+ типичных вопросов, второй — отлаженный скрипт, дальше ассистент квалифицирует входящие звонки и распределяет по категориям. Они забирают все нужные инициативы. Таким образом, за последние 4-5 месяца мы ощутили снижение нагрузки на отделы и росте лояльности клиентов. Входят и инвестиции в бизнес за последний год.
+                        </p>
+                    </div>
+                    <div class="testimonial-card">
+                        <div class="testimonial-author">
+                            <img src="/static/design/avatars/avatar_2.png" alt="Author">
+                            <div>
+                                <span class="author-name">Мария</span>
+                                <span class="author-title">Руководитель интернет-магазина</span>
+                            </div>
+                        </div>
+                        <p class="testimonial-text">
+                            Мы автоматизировали не одну задачу, а целый цикл: агент для поддержки фильтрует 80% типичных вопросов, второй — отслеживает статусы доставки и информирует клиентов, а третий — готовит аналитику по возвратам. Они работают как единый механизм. Платформа окупилась за 3 месяца за счёт снижения нагрузки на отделы и роста лояльности клиентов. Лучшая инвестиция в бизнес за последний год.
+                        </p>
+                    </div>
+                    <div class="testimonial-card">
+                        <div class="testimonial-author">
+                            <img src="/static/design/avatars/avatar_3.png" alt="Author">
+                            <div>
+                                <span class="author-name">Алексей</span>
+                                <span class="author-title">Владелец E-commerce</span>
+                            </div>
+                        </div>
+                        <p class="testimonial-text">
+                            Интеграция с нашей CRM прошла гладко. AI-агенты обрабатывают запросы клиентов 24/7, что значительно повысило уровень сервиса. Мы видим рост продаж и лояльности. Это лучшее вложение в наш бизнес за последний год.
+                        </p>
+                    </div>
+                </div>
+                <div class="testimonial-nav">
+                    <button class="nav-dot active" data-slide="0"></button>
+                    <button class="nav-dot" data-slide="1"></button>
+                    <button class="nav-dot" data-slide="2"></button>
+                </div>
+            </div>
+        </section>
+
+        <!-- FAQ Section -->
+        <section id="faq" class="faq-section">
+            <div class="container">
+                <div class="section-header">
+                    <span class="section-tag">/ Вопросы и ответы</span>
+                </div>
+                <div class="faq-accordion">
+                    <div class="faq-item">
+                        <button class="faq-question">
+                            <span>У нас нестандартный бизнес-процесс или нужные интеграции отсутствуют на платформе. Могу ли я оставить заявку на автоматизацию под ключ вашими силами?</span>
+                            <i class="ti ti-chevron-down"></i>
                         </button>
+                        <div class="faq-answer">
+                            <p>Именно для таких сложных и третичных в защиту у нас создан план «Эксперт»! Мы выделим вашу специфику, разрабатываем индивидуальных агентов и интегрируем с необходимыми системами, даже если их нет в стандартном каталоге.</p>
+                        </div>
                     </div>
+                     <div class="faq-item">
+                        <button class="faq-question">
+                            <span>Насколько безопасно доверять данные моего бизнеса вашей системе?</span>
+                            <i class="ti ti-chevron-down"></i>
+                        </button>
+                        <div class="faq-answer">
+                            <p>Мы предлагаем on-premise решение, которое позволяет развернуть платформу на ваших серверах, обеспечивая полный контроль над данными.</p>
+                        </div>
+                    </div>
+                     <div class="faq-item">
+                        <button class="faq-question">
+                            <span>В моей команде нет технических специалистов. Сможем ли мы легко разобраться с платформой и управлять автоматизацией?</span>
+                            <i class="ti ti-chevron-down"></i>
+                        </button>
+                        <div class="faq-answer">
+                            <p>Да, наша платформа создана с упором на Low-code/No-code, что позволяет управлять агентами и процессами через интуитивно понятный визуальный интерфейс без необходимости в программировании.</p>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
-    </section>
+        </section>
+
+        <!-- CTA Section -->
+        <section class="final-cta-section">
+            <div class="container">
+                <h2>Автоматизируйте ваш бизнес<br>с NeuroFlow</h2>
+                <button class="btn btn-primary btn-lg" onclick="openContactModal()">Заказать аудит</button>
+            </div>
+        </section>
+
+    </main>
 
     <!-- Footer -->
     <footer class="landing-footer">
         <div class="container">
-            <div class="footer-content">
-                <div class="footer-brand">
-                    <i class="ti ti-robot icon-lg"></i>
-                    <span class="brand-text langflow-gradient">Agents Lab</span>
+            <div class="footer-top">
+                <div class="footer-contact">
+                    <a href="mailto:helpme@neuroflow.ru">helpme@neuroflow.ru</a>
+                    <span>© 2025 NeuroFlow</span>
                 </div>
                 <div class="footer-links">
-                    <a href="/docs/" target="_blank" class="footer-link">
-                        <i class="ti ti-book"></i>
-                        Документация
-                    </a>
-                    <a href="/api/docs" target="_blank" class="footer-link">
-                        <i class="ti ti-code-square"></i>
-                        API
-                    </a>
+                    <a href="#">Документация</a>
+                    <a href="#">Политика конфиденциальности</a>
+                    <a href="#">Пользовательское соглашение</a>
                 </div>
-                <div class="footer-text">
-                    <p>{{ t('landing.footer.copyright') }}</p>
-                </div>
+            </div>
+            <div class="footer-bottom">
+                <span class="footer-logo">NeuroFlow</span>
             </div>
         </div>
     </footer>
 </div>
 
 <!-- Модальное окно для связи -->
-<div id="contactModal" class="modal-overlay" onclick="closeContactModal()">
+<div id="contactModal" class="modal-overlay" onclick="closeContactModal()"
+    data-sending="{{ t('landing.contact_modal.sending') }}"
+    data-success-title="{{ t('landing.contact_modal.notification_success_title') }}"
+    data-success-message="{{ t('landing.contact_modal.notification_success_message') }}"
+    data-error-title="{{ t('landing.contact_modal.notification_error_title') }}"
+    data-error-default="{{ t('landing.contact_modal.notification_error_message_default') }}"
+    data-error-email="{{ t('landing.contact_modal.notification_error_message_email_invalid') }}">
     <div class="modal-content" onclick="event.stopPropagation()">
         <div class="modal-header">
             <h3>{{ t('landing.contact_modal.title') }}</h3>
@@ -490,29 +504,32 @@ async function submitContactForm(event) {
     const submitButton = event.target.querySelector('button[type="submit"]');
     const originalText = submitButton.innerHTML;
     submitButton.disabled = true;
-            submitButton.innerHTML = `<i class="ti ti-hourglass-split"></i> ${t('landing.contact_modal.sending')}`;
+    
+    const modal = document.getElementById('contactModal');
+    submitButton.innerHTML = `<i class="ti ti-hourglass-split"></i> ${modal.dataset.sending}`;
     
     try {
         const response = await fetch('/api/v1/lead', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'X-CSRF-Token': getCookie('csrftoken')
             },
             body: JSON.stringify(data)
         });
         
         if (response.ok) {
-            showNotification(t('landing.contact_modal.notification_success_title'), t('landing.contact_modal.notification_success_message'), 'success');
+            showNotification(modal.dataset.successTitle, modal.dataset.successMessage, 'success');
             closeContactModal();
         } else {
             const errorData = await response.json();
-            let errorMessage = t('landing.contact_modal.notification_error_message_default');
+            let errorMessage = modal.dataset.errorDefault;
             
             // Обрабатываем ошибки валидации
             if (errorData.detail && Array.isArray(errorData.detail)) {
                 const emailError = errorData.detail.find(err => err.loc && err.loc.includes('email'));
                 if (emailError) {
-                    errorMessage = t('landing.contact_modal.notification_error_message_email_invalid');
+                    errorMessage = modal.dataset.errorEmail;
                 }
             }
             
@@ -520,7 +537,7 @@ async function submitContactForm(event) {
         }
     } catch (error) {
         console.error('Ошибка:', error);
-        showNotification(t('landing.contact_modal.notification_error_title'), error.message, 'error');
+        showNotification(modal.dataset.errorTitle, error.message, 'error');
     } finally {
         // Восстанавливаем кнопку
         submitButton.disabled = false;
@@ -674,6 +691,32 @@ document.addEventListener('DOMContentLoaded', function() {
     updateLanguageIndicator(currentLang);
     
     console.log(`✅ Landing page язык инициализирован: ${currentLang}`);
+
+    // Testimonial Slider
+    const testimonials = document.querySelectorAll('.testimonial-card');
+    const dots = document.querySelectorAll('.nav-dot');
+    let currentTestimonial = 0;
+
+    function showTestimonial(index) {
+        testimonials.forEach((card, i) => {
+            card.classList.toggle('active', i === index);
+        });
+        dots.forEach((dot, i) => {
+            dot.classList.toggle('active', i === index);
+        });
+        currentTestimonial = index;
+    }
+
+    dots.forEach(dot => {
+        dot.addEventListener('click', () => {
+            showTestimonial(parseInt(dot.dataset.slide));
+        });
+    });
+
+    setInterval(() => {
+        let nextTestimonial = (currentTestimonial + 1) % testimonials.length;
+        showTestimonial(nextTestimonial);
+    }, 5000);
 });
 </script>
 {% endblock %}

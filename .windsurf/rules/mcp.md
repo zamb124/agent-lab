@@ -1,0 +1,750 @@
+---
+trigger: model_decision
+description: mcp tools mcp servers
+globs:
+---
+# Правила работы с MCP (Model Context Protocol)
+
+## Обзор
+
+MCP (Model Context Protocol) - протокол для подключения внешних инструментов к агентам.
+
+**Ключевые принципы:**
+- Database-First: конфигурация MCP серверов хранится в БД
+- Мультитенантность: каждая компания имеет свои MCP серверы
+- Единая ToolFactory: MCP тулы создаются как обычные
+- State-aware: MCP тулы могут читать/писать state
+
+## Архитектура
+
+```
+User → Agent → ToolFactory → MCPHttpClient → MCP Server
+                    ↓
+              @tool decorator
+                    ↓
+            LangChain StructuredTool
+```
+
+## Модели данных
+
+### MCPServerConfig
+
+Конфигурация MCP сервера для компании:
+
+<good_example>
+from app.models.mcp_models import MCPServerConfig, MCPTransportType
+
+server = MCPServerConfig(
+    server_id="context7",
+    company_id="company_123",  # Автоматически из контекста
+    name="Context7 Documentation",
+    url="https://mcp.context7.com/mcp",
+    transport_type=MCPTransportType.HTTP,
+    headers={"Authorization": "@var:context7_api_key"},  # Поддержка переменных
+    is_active=True,
+    auto_sync_tools=True
+)
+</good_example>
+
+### CodeMode.MCP_TOOL
+
+Новый тип тула для внешних MCP инструментов:
+
+<good_example>
+from app.models.core_models import CodeMode
+
+# Три типа тулов:
+CodeMode.CODE_REFERENCE  # Python функция в коде
+CodeMode.INLINE_CODE     # Python код в БД
+CodeMode.MCP_TOOL        # Внешний MCP инструмент (HTTP/SSE)
+</good_example>
+
+## Repository Pattern
+
+### MCPServerRepository
+
+CRUD для MCP серверов с мультитенантностью:
+
+<good_example>
+from app.db.repositories.mcp_repository import MCPServerRepository
+from app.core.container import get_container
+
+mcp_repo = get_container().mcp_server_repository
+
+# Получить (автоматически для текущей компании)
+server = await mcp_repo.get("context7")
+
+# Сохранить
+await mcp_repo.set(server_config)
+
+# Список активных
+active_servers = await mcp_repo.list_active()
+</good_example>
+
+<bad_example>
+# НЕ используй Storage напрямую для MCP серверов
+storage = Storage()
+data = await storage.get("mcp_server:company:server_id")  # Используй репозиторий!
+</bad_example>
+
+## Синхронизация тулов
+
+### sync_mcp_server_tools
+
+Синхронизирует тулы MCP сервера с БД:
+
+<good_example>
+from app.core.mcp_sync import sync_mcp_server_tools
+
+# Синхронизировать для текущей компании
+tools = await sync_mcp_server_tools("context7")
+
+# Явно указать company_id
+tools = await sync_mcp_server_tools("context7", company_id="company_123")
+
+# Результат: List[ToolReference]
+# - mcp:context7:resolve-library-id
+# - mcp:context7:get-library-docs
+</good_example>
+
+### Автосинхронизация
+
+При старте приложения автоматически синхронизируются все активные MCP серверы:
+
+<good_example>
+# app/main.py
+async def lifespan(app: FastAPI):
+    # ...
+    from app.core.mcp_sync import sync_all_companies_mcp_servers
+    await sync_all_companies_mcp_servers()
+</good_example>
+
+## Использование в агентах
+
+### ReAct агенты
+
+MCP тулы добавляются как обычные tools:
+
+<good_example>
+from app.agents.react_agent import ReActAgent
+
+class MyAgent(ReActAgent):
+    name = "doc_helper"
+    
+    tools = [
+        ask_user,
+        "mcp:context7:resolve-library-id",  # MCP тул
+        "mcp:context7:get-library-docs",     # MCP тул
+    ]
+    
+    prompt = """
+    Ты помощник по документации.
+    
+    ИНСТРУМЕНТЫ:
+    - resolve_library_id: поиск библиотек
+    - get_library_docs: получение документации
+    
+    Используй их для ответов на вопросы о библиотеках.
+    """
+</good_example>
+
+### StateGraph агенты
+
+MCP тулы используются в TOOL_NODE:
+
+<good_example>
+from app.models.core_models import GraphDefinition, GraphNode, NodeType
+
+graph_definition = GraphDefinition(
+    nodes=[
+        GraphNode(
+            id="search_docs",
+            type=NodeType.TOOL_NODE,
+            params={
+                "tool_id": "mcp:context7:resolve-library-id",
+                "input_key": "store.library_name",  # Берем из store
+                "output_key": "store.library_info"  # Сохраняем в store
+            }
+        ),
+    ],
+    edges=[
+        GraphEdge(source="START", target="search_docs"),
+        GraphEdge(source="search_docs", target="END"),
+    ],
+    entry_point="START"
+)
+</good_example>
+
+## HTTP клиент
+
+### MCPHttpClient
+
+JSON-RPC 2.0 клиент для MCP серверов:
+
+<good_example>
+from app.core.mcp_client import get_mcp_client
+
+# Получить клиент для MCP сервера
+client = await get_mcp_client("context7")
+
+# Клиент автоматически:
+# 1. Инициализирует сессию (JSON-RPC initialize)
+# 2. Резолвит @var: в headers через VariablesService
+# 3. Кэшируется по {company_id}:{server_id}
+</good_example>
+
+### Методы клиента
+
+<good_example>
+# Список тулов (JSON-RPC tools/list)
+tools = await client.list_tools()
+# [{"name": "tool-name", "inputSchema": {...}}]
+
+# Вызов тула (JSON-RPC tools/call)
+result = await client.call_tool("tool-name", {"param": "value"})
+# {"isError": false, "content": [{"type": "text", "text": "..."}]}
+</good_example>
+
+## ToolFactory интеграция
+
+### _create_mcp_tool
+
+MCP тулы создаются через единую ToolFactory:
+
+<good_example>
+# В ToolFactory
+async def _create_single_tool(self, ref: ToolReference):
+    if ref.code_mode == CodeMode.MCP_TOOL:
+        return await self._create_mcp_tool(ref)  # ✅ MCP тул
+    elif ref.code_mode == CodeMode.INLINE_CODE:
+        return await self._create_inline_code_tool(ref)
+    # ...
+</good_example>
+
+### Динамическое создание
+
+MCP тулы создаются динамически через `@tool` декоратор:
+
+<good_example>
+# Создается функция с правильным именем
+safe_tool_name = tool_name.replace("-", "_")
+
+async def dynamic_mcp_func(**kwargs):
+    result = await mcp_client.call_tool(tool_name, kwargs)
+    return format_mcp_result(result)
+
+# Устанавливаем имя ДО декоратора
+dynamic_mcp_func.__name__ = safe_tool_name
+
+# Применяем @tool декоратор
+mcp_tool = tool(
+    description=description,
+    args_schema=pydantic_model,
+    state_aware=True,  # ✅ Поддержка state
+    cost=cost,
+    billing_name=billing_name
+)(dynamic_mcp_func)
+</good_example>
+
+<bad_example>
+# НЕ применяй декоратор с параметром name
+@tool(name="my_tool")  # ❌ langchain_tool не принимает name
+async def func():
+    pass
+
+# ПРАВИЛЬНО: установи __name__ ДО декоратора
+func.__name__ = "my_tool"
+@tool(description="...")
+async def func():
+    pass
+</bad_example>
+
+## Переменные и секреты
+
+### Использование @var: ссылок
+
+MCP серверы поддерживают ссылки на переменные компании:
+
+<good_example>
+server_config = MCPServerConfig(
+    headers={
+        "Authorization": "@var:context7_api_key",  # ✅ Ссылка
+        "X-Custom": "@var:custom_header"
+    }
+)
+
+# При создании клиента ссылки резолвятся:
+# app/core/mcp_client.py:
+resolved_headers = await variables_service.resolve(server_config.headers)
+# → {"Authorization": "Bearer sk-xxx", "X-Custom": "value"}
+</good_example>
+
+## StateGraph TOOL_NODE
+
+### Вложенные ключи store.key
+
+TOOL_NODE поддерживает вложенные ключи для работы со store:
+
+<good_example>
+GraphNode(
+    id="mcp_node",
+    type=NodeType.TOOL_NODE,
+    params={
+        "tool_id": "mcp:context7:resolve-library-id",
+        "input_key": "store.library_name",  # ✅ Берем из store
+        "output_key": "store.library_info"  # ✅ Сохраняем в store
+    }
+)
+
+# Граф выполняется:
+await graph.ainvoke({
+    "messages": [HumanMessage(content="Test")],
+    "store": {
+        "library_name": "fastapi"  # Вход для ноды
+    }
+})
+
+# Результат:
+{
+    "messages": [...],
+    "store": {
+        "library_name": "fastapi",
+        "library_info": "Available Libraries..."  # Выход ноды
+    }
+}
+</good_example>
+
+### Передача state в тулы
+
+TOOL_NODE автоматически передает state в state_aware тулы:
+
+<good_example>
+# В GraphBuilder._create_tool_node:
+async def tool_node(state: State) -> State:
+    # Подготовка аргументов
+    tool_args = {"param": input_data}
+    
+    # Добавляем state и tool_call_id для state_aware тулов
+    tool_args['state'] = state  # ✅ Декоратор @tool извлечет через kwargs.pop('state')
+    tool_args['tool_call_id'] = str(uuid.uuid4())
+    
+    # Вызываем через ainvoke
+    result = await tool.ainvoke(tool_args)
+    
+    return state
+</good_example>
+
+<bad_example>
+# НЕ вызывай tool.coroutine напрямую
+result = await tool.coroutine(**kwargs)  # ❌ Минует декоратор @tool
+
+# НЕ передавай state через RunnableConfig
+config = RunnableConfig(configurable={"state": state})  # ❌ Не работает
+result = await tool.ainvoke(tool_args, config=config)
+</bad_example>
+
+## API Endpoints
+
+### Создание сервера
+
+<good_example>
+POST /api/mcp/servers
+{
+  "server_id": "context7",
+  "name": "Context7",
+  "url": "https://mcp.context7.com/mcp",
+  "transport_type": "http",
+  "headers": {
+    "Authorization": "@var:context7_api_key"
+  }
+}
+</good_example>
+
+### Синхронизация тулов
+
+<good_example>
+POST /api/mcp/servers/context7/sync
+
+# Ответ:
+{
+  "success": true,
+  "tools_count": 2,
+  "tools": [
+    {"tool_id": "mcp:context7:resolve-library-id", ...},
+    {"tool_id": "mcp:context7:get-library-docs", ...}
+  ]
+}
+</good_example>
+
+### Тест подключения
+
+<good_example>
+POST /api/mcp/servers/context7/test
+
+# Ответ:
+{
+  "success": true,
+  "message": "Подключение успешно",
+  "tools_count": 2,
+  "transport_type": "http",
+  "url": "https://mcp.context7.com/mcp"
+}
+</good_example>
+
+## Тестирование
+
+### End-to-end тесты
+
+Обязательно пиши end-to-end тесты для MCP интеграции:
+
+<good_example>
+@pytest.mark.asyncio
+async def test_agent_with_mcp_tools(setup_mcp_servers, test_company):
+    """End-to-end: агент + MCP тулы + мок LLM"""
+    
+    # 1. Синхронизация
+    mcp_tools = await sync_mcp_server_tools("context7", test_company.company_id)
+    
+    # 2. Создание агента
+    agent_config = AgentConfig(
+        agent_id="test_agent",
+        tools=mcp_tools
+    )
+    
+    # 3. Загрузка через фабрику
+    agent = await agent_factory.get_agent("test_agent")
+    
+    # 4. Проверка что тулы загрузились
+    loaded_tools = await agent.get_tools()
+    assert len(loaded_tools) == 2
+    
+    # 5. Компиляция и вызов
+    compiled_graph = await agent.compile_graph()
+    result = await compiled_graph.ainvoke(
+        {"messages": [HumanMessage(content="Test")]},
+        config={"configurable": {"thread_id": str(uuid.uuid4())}}
+    )
+    
+    # 6. Проверка результата
+    tool_messages = [m for m in result["messages"] if isinstance(m, ToolMessage)]
+    assert len(tool_messages) > 0  # MCP тул вызвался
+</good_example>
+
+### Фикстуры
+
+Используй готовую фикстуру для MCP серверов:
+
+<good_example>
+@pytest.mark.asyncio
+async def test_my_feature(setup_mcp_servers, test_company):
+    """
+    setup_mcp_servers создает:
+    - Context7 MCP сервер с API ключом
+    - Автоматическая очистка после теста
+    """
+    servers = setup_mcp_servers
+    context7 = servers[0]
+    
+    # Используй готовый сервер
+    tools = await sync_mcp_server_tools("context7", test_company.company_id)
+</good_example>
+
+## Типичные ошибки
+
+### ❌ Вызов tool.coroutine напрямую
+
+<bad_example>
+# НЕ вызывай coroutine - минует @tool декоратор
+result = await tool.coroutine(libraryName="fastapi")
+</bad_example>
+
+<good_example>
+# Вызывай через ainvoke - работает @tool декоратор
+result = await tool.ainvoke({"libraryName": "fastapi"})
+</good_example>
+
+### ❌ Забыть про company_id
+
+<bad_example>
+# МCP серверы НЕ глобальные
+server = await mcp_repo.get("context7")  # Где company_id?
+</bad_example>
+
+<good_example>
+# Используй контекст
+from app.core.context import get_context
+
+context = get_context()
+server = await mcp_repo.get("context7", context.active_company.id)
+
+# Или пусть репозиторий сам возьмет из контекста
+server = await mcp_repo.get("context7")  # ✅ Автоматически из контекста
+</good_example>
+
+### ❌ Не установить __name__ перед @tool
+
+<bad_example>
+@tool(name="my_tool", description="...")  # ❌ langchain_tool не принимает name
+async def wrapper():
+    pass
+</bad_example>
+
+<good_example>
+# Установи __name__ ДО декоратора
+async def wrapper():
+    pass
+
+wrapper.__name__ = "my_tool"
+wrapper.__qualname__ = "my_tool"
+
+decorated = tool(description="...")(wrapper)  # ✅
+</good_example>
+
+### ❌ Не передать state в TOOL_NODE
+
+<bad_example>
+# В tool_node НЕ вызывай без state
+result = await tool.ainvoke({"param": value})  # ❌ state_aware не работает
+</bad_example>
+
+<good_example>
+# Передай state и tool_call_id в kwargs
+tool_args = {"param": value}
+tool_args['state'] = state  # ✅ Для state_aware
+tool_args['tool_call_id'] = str(uuid.uuid4())
+
+result = await tool.ainvoke(tool_args)
+</good_example>
+
+## Примеры MCP серверов
+
+### Context7 (Documentation)
+
+<good_example>
+{
+  "server_id": "context7",
+  "url": "https://mcp.context7.com/mcp",
+  "headers": {"Authorization": "@var:context7_api_key"},
+  "transport_type": "http"
+}
+
+# Тулы:
+# - resolve-library-id: поиск библиотек
+# - get-library-docs: документация библиотек
+</good_example>
+
+### Cloudflare MCP серверы
+
+<good_example>
+# Требуют Cloudflare API токен
+
+# Documentation
+https://docs.mcp.cloudflare.com/mcp
+
+# Radar (Internet insights)
+https://radar.mcp.cloudflare.com/mcp
+
+# Browser Rendering
+https://browser.mcp.cloudflare.com/mcp
+
+# Workers Bindings
+https://bindings.mcp.cloudflare.com/mcp
+</good_example>
+
+## JSON-RPC 2.0 Протокол
+
+### Структура запросов
+
+MCP использует JSON-RPC 2.0, НЕ REST:
+
+<good_example>
+# Initialize
+POST https://mcp.example.com/mcp
+Headers:
+  Content-Type: application/json
+  Accept: application/json, text/event-stream
+  Mcp-Session-Id: {uuid}
+
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "protocolVersion": "2024-11-05",
+    "capabilities": {},
+    "clientInfo": {"name": "agent-lab", "version": "1.0.0"}
+  }
+}
+
+# List tools
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/list"
+}
+
+# Call tool
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "tool-name",
+    "arguments": {"param": "value"}
+  }
+}
+</good_example>
+
+<bad_example>
+# НЕ используй REST endpoints
+POST /list_tools  # ❌
+POST /call_tool   # ❌
+
+# Правильно - JSON-RPC метод
+{
+  "jsonrpc": "2.0",
+  "method": "tools/list"  # ✅
+}
+</bad_example>
+
+## Frontend (плагин MCP)
+
+### Структура плагина
+
+<good_example>
+app/frontend/modules/mcp/
+├── __init__.py
+├── plugin.py                    # Описание плагина
+├── router.py                    # FastAPI роутер
+├── static/
+│   ├── css/mcp.css
+│   └── js/mcp.module.js        # JavaScript модуль
+└── templates/
+    ├── mcp.html                 # Главная страница
+    └── mcp_servers_list.html    # Список серверов
+</good_example>
+
+### Регистрация плагина
+
+<good_example>
+# app/frontend/modules/mcp/plugin.py
+class MCPPlugin(Plugin):
+    name = "mcp"
+    display_name = "MCP Серверы"
+    
+    sidebar_items = [{
+        "id": "mcp",
+        "label": "mcp.title",
+        "icon": "bi-plug",
+        "url": "/frontend/mcp/",
+        "type": "htmx"
+    }]
+    
+    def get_router(self):
+        from .router import router
+        return router
+</good_example>
+
+## Быстрая справка
+
+### Создание MCP сервера
+
+```python
+# 1. Модель
+server = MCPServerConfig(
+    server_id="my_server",
+    url="https://mcp.example.com/mcp",
+    transport_type=MCPTransportType.HTTP
+)
+
+# 2. Сохранение
+await mcp_repo.set(server)
+
+# 3. Синхронизация
+tools = await sync_mcp_server_tools("my_server")
+
+# 4. Использование
+class Agent(ReActAgent):
+    tools = ["mcp:my_server:tool-name"]
+```
+
+### Добавление в агента
+
+```python
+# ReAct
+tools = ["mcp:server_id:tool-name"]
+
+# StateGraph
+GraphNode(
+    type=NodeType.TOOL_NODE,
+    params={
+        "tool_id": "mcp:server_id:tool-name",
+        "input_key": "store.input",
+        "output_key": "store.output"
+    }
+)
+```
+
+## Отладка
+
+### Проверка подключения
+
+<good_example>
+# Через API
+POST /api/mcp/servers/{server_id}/test
+
+# Логи клиента
+logger.info(f"✅ MCP сессия инициализирована: {session_id}")
+logger.info(f"Получено {len(tools)} тулов от {url}")
+logger.info(f"🔧 MCP вызов: {tool_name}")
+</good_example>
+
+### Проверка синхронизации
+
+<good_example>
+# Через API
+GET /api/mcp/servers/{server_id}
+
+# Проверить cached_tools и last_sync_at
+{
+  "cached_tools": [
+    "mcp:context7:resolve-library-id",
+    "mcp:context7:get-library-docs"
+  ],
+  "last_sync_at": "2025-10-19T14:30:00Z"
+}
+</good_example>
+
+## Ссылки
+
+- MCP Specification: https://modelcontextprotocol.io
+- MCP Registry: https://github.com/modelcontextprotocol/registry
+- Awesome MCP Servers: https://github.com/punkpeye/awesome-mcp-servers
+- Cloudflare MCP: https://github.com/cloudflare/mcp-server-cloudflare
+- Context7 MCP: https://mcp.context7.com
+# Правила работы с MCP (Model Context Protocol)
+
+## Обзор
+
+MCP (Model Context Protocol) - протокол для подключения внешних инструментов к агентам.
+
+**Ключевые принципы:**
+- Database-First: конфигурация MCP серверов хранится в БД
+- Мультитенантность: каждая компания имеет свои MCP серверы
+- Единая ToolFactory: MCP тулы создаются как обычные
+- State-aware: MCP тулы могут читать/писать state
+
+## Архитектура
+
+```
+User → Agent → ToolFactory → MCPHttpClient → MCP Server
+                    ↓
+              @tool decorator
+                    ↓
+            LangChain StructuredTool
+```
+
+## Модели данных
+
+### MCPServerConfig
+

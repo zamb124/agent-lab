@@ -1,0 +1,158 @@
+---
+trigger: always_on
+description: "Правила проекта Agent Lab"
+globs:
+---
+# Правила проекта Agent Lab
+
+## Язык
+
+Всегда отвечай на русском языке.
+
+## Управление зависимостями
+
+Используй UV для управления зависимостями:
+- Добавление: `uv add package`
+- Синхронизация: `uv sync`
+- Запуск: `uv run python file.py`
+
+<good_example>
+# Добавить зависимость
+uv add httpx
+
+# Запустить скрипт
+uv run python run.py
+
+# Запустить тесты
+uv run pytest
+</good_example>
+
+<bad_example>
+pip install httpx
+python run.py
+</bad_example>
+
+## Структура импортов
+
+Импорты должны быть в начале файла:
+- Не делай локальные импорты внутри функций
+- Группируй: stdlib → third-party → local
+
+<good_example>
+import asyncio
+from typing import Optional
+
+from langchain_core.tools import tool
+from fastapi import APIRouter
+
+from app.core.container import get_container
+from app.models.core_models import AgentConfig
+
+# Доступ к сущностям через контейнер
+storage = get_container().storage
+agent_repo = get_container().agent_repository
+</good_example>
+
+<bad_example>
+def my_function():
+    from app.db.repositories import Storage  # НЕТ!
+    from app.core.agent_factory import AgentFactory  # НЕТ!
+    storage = Storage()  # НЕТ!
+    factory = AgentFactory()  # НЕТ!
+
+    # Правильно: через контейнер
+    storage = get_container().storage
+    factory = get_container().agent_factory
+</bad_example>
+
+## Переменные и константы
+
+Не создавай переменные с префиксами `new_`, `old_`, `temp_`:
+- Используй осмысленные имена
+- Избегай магических чисел
+
+<good_example>
+max_retries = 3
+timeout_seconds = 30
+user_warehouse_id = "12345"
+</good_example>
+
+<bad_example>
+new_config = {...}
+temp_data = "..."
+old_value = 123
+</bad_example>
+
+## Обработка ошибок
+
+Не используй излишние try-except блоки:
+- Добавляй проверки перед операциями
+- Пробрасывай исключения с контекстом
+- Логируй с `exc_info=True` если нужен лог
+
+<good_example>
+if not user_id:
+    raise ValueError("user_id не может быть пустым")
+
+try:
+    result = await external_api.fetch()
+except httpx.HTTPStatusError as e:
+    raise ValueError(
+        f"Ошибка API ({e.response.status_code}): {e.response.text}"
+    ) from e
+</good_example>
+
+<bad_example>
+try:
+    result = await external_api.fetch()
+except Exception as e:
+    logger.error(f"Ошибка: {e}")
+    return None  # Фолбэк скрывает проблему
+</bad_example>
+
+## Фолбэки
+
+НЕ делай фолбэки на все подряд:
+- Если что-то не работает - бросай исключение
+- Система должна быть прозрачной и надежной
+- Фолбэки делают сервис непредсказуемым
+
+<good_example>
+# Миграция обязательна
+await migrator.migrate()
+# Если упала - приложение не стартует
+</good_example>
+
+<bad_example>
+try:
+    await migrator.migrate()
+except Exception:
+    logger.warning("Миграция не удалась, продолжаем")
+    # Теперь непонятно в каком состоянии система
+</bad_example>
+
+## Порт по умолчанию
+
+Сервер должен запускаться на порту 8001:
+- В `run.py` используй порт 8001
+- В документации указывай 8001
+- В примерах curl используй 8001
+
+<good_example>
+uvicorn.run("app.main:app", host="0.0.0.0", port=8001)
+</good_example>
+
+## Не генерируй лишнее
+
+НЕ создавай без явного запроса:
+- Документацию после каждого рефакторинга
+- Demo скрипты для демонстрации
+- Новые файлы если можно обновить существующие
+- Тесты автоматически
+
+## Context7 для документации
+
+Используй Context7 для получения актуальной документации библиотек:
+- LangGraph: https://langchain-ai.github.io/langgraph/
+- FastAPI, SQLAlchemy и другие библиотеки
+- Всегда проверяй актуальность подхода через документацию

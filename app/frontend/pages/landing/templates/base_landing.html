@@ -28,6 +28,34 @@
     <!-- Контейнер для модальных окон -->
     <div id="modal-container"></div>
 
+    <script>
+        // App Launcher
+        function toggleAppLauncher() {
+            const launcher = document.getElementById('app-launcher');
+            if (launcher) {
+                launcher.classList.toggle('active');
+                document.body.style.overflow = launcher.classList.contains('active') ? 'hidden' : '';
+            }
+        }
+
+        // FAQ Accordion
+        document.querySelectorAll('.faq-question').forEach(button => {
+            button.addEventListener('click', () => {
+                const faqItem = button.parentElement;
+                faqItem.classList.toggle('active');
+            });
+        });
+
+        // Закрытие по ESC
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                const launcher = document.getElementById('app-launcher');
+                if (launcher && launcher.classList.contains('active')) {
+                    toggleAppLauncher();
+                }
+            }
+        });
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

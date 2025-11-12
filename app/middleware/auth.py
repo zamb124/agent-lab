@@ -81,6 +81,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             or request.url.path.startswith("/favicon.ico")
             or request.url.path.startswith("/api/v1/payments/webhook/")
             or request.url.path == "/health"
+            or request.url.path == "/api/v1/lead"
         ):
             return await call_next(request)
 
