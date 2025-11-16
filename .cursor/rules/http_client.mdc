@@ -1,0 +1,178 @@
+---
+alwaysApply: true
+---
+
+# Правила работы с HTTP клиентами
+
+## Обязательное использование утилит
+
+**ВСЕГДА** используй `get_httpx_client` из `app.core.http_utils` для создания HTTP клиентов. **НИКОГДА** не создавай `httpx.AsyncClient` напрямую!
+
+<good_example>
+from app.core.http_utils import get_httpx_client
+
+async def fetch_data(url: str):
+    async with get_httpx_client(timeout=30.0, use_proxy_from_config=False) as client:
+        response = await client.get(url)
+        return response.json()
+</good_example>
+
+<bad_example>
+import httpx
+
+async def fetch_data(url: str):
+    async with httpx.AsyncClient() as client:  # НЕТ!
+        response = await client.get(url)
+        return response.json()
+</bad_example>
+
+## Управление прокси
+
+### OAuth провайдеры (Google, Yandex, GitHub)
+
+Для OAuth провайдеров **ВСЕГДА** используй `use_proxy_from_config=False`, чтобы гарантировать прямой доступ к API провайдера:
+
+<good_example>
+from app.core.http_utils import get_httpx_client
+
+async def exchange_code_for_token(self, code: str, redirect_uri: str):
+    data = self._build_token_data(code, redirect_uri)
+    async with get_httpx_client(timeout=30.0, use_proxy_from_config=False) as client:
+        response = await client.post(
+            self.token_url,
+            data=data,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        return response.json()
+</good_example>
+
+<bad_example>
+async def exchange_code_for_token(self, code: str, redirect_uri: str):
+    async with httpx.AsyncClient() as client:  # НЕТ!
+        response = await client.post(self.token_url, data=data)
+        return response.json()
+</bad_example>
+
+### Внутренние API и MCP серверы
+
+Для внутренних API и MCP серверов можно использовать прокси из конфигурации:
+
+<good_example>
+from app.core.http_utils import get_httpx_client
+
+async def call_internal_api(url: str):
+    async with get_httpx_client(timeout=30.0, use_proxy_from_config=True) as client:
+        response = await client.get(url)
+        return response.json()
+</good_example>
+
+## Параметры get_httpx_client
+
+### Обязательные параметры
+
+- `timeout`: Таймаут запросов (обычно 30.0 секунд)
+- `use_proxy_from_config`: 
+  - `False` для OAuth провайдеров (Google, Yandex, GitHub)
+  - `True` для внутренних API и MCP серверов
+
+### Опциональные параметры
+
+- `proxy`: Явно указанный прокси URL (если нужен конкретный прокси)
+- `**kwargs`: Дополнительные параметры для `httpx.AsyncClient`
+
+<good_example>
+# OAuth провайдер - без прокси
+async with get_httpx_client(timeout=30.0, use_proxy_from_config=False) as client:
+    pass
+
+# Внутренний API - с прокси из конфига
+async with get_httpx_client(timeout=30.0, use_proxy_from_config=True) as client:
+    pass
+
+# Явный прокси
+async with get_httpx_client(timeout=30.0, proxy="http://proxy.example.com:8080") as client:
+    pass
+</good_example>
+
+## Контекстный менеджер
+
+**ВСЕГДА** используй `async with` для автоматического закрытия клиента:
+
+<good_example>
+async with get_httpx_client(timeout=30.0, use_proxy_from_config=False) as client:
+    response = await client.get(url)
+    return response.json()
+</good_example>
+
+<bad_example>
+client = get_httpx_client(timeout=30.0)  # НЕТ! Клиент не закроется
+response = await client.get(url)
+</bad_example>
+
+## Обработка ошибок
+
+Используй стандартную обработку ошибок httpx:
+
+<good_example>
+from app.core.http_utils import get_httpx_client
+import httpx
+
+async def fetch_data(url: str):
+    async with get_httpx_client(timeout=30.0, use_proxy_from_config=False) as client:
+        try:
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Ошибка HTTP: {e.response.status_code} - {e.response.text}")
+            raise
+</good_example>
+
+## Примеры использования
+
+### OAuth провайдер (Google/Yandex/GitHub)
+
+<good_example>
+from app.core.http_utils import get_httpx_client
+
+class GoogleProvider(BaseAuthProvider):
+    async def exchange_code_for_token(self, code: str, redirect_uri: str):
+        data = self._build_token_data(code, redirect_uri)
+        async with get_httpx_client(timeout=30.0, use_proxy_from_config=False) as client:
+            response = await client.post(
+                self.token_url,
+                data=data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            response.raise_for_status()
+            return response.json()
+    
+    async def get_user_info(self, access_token: str):
+        headers = {"Authorization": f"Bearer {access_token}"}
+        async with get_httpx_client(timeout=30.0, use_proxy_from_config=False) as client:
+            response = await client.get(self.userinfo_url, headers=headers)
+            response.raise_for_status()
+            return response.json()
+</good_example>
+
+### Внутренний API с прокси
+
+<good_example>
+from app.core.http_utils import get_httpx_client
+
+async def call_external_api(url: str):
+    async with get_httpx_client(timeout=30.0, use_proxy_from_config=True) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        return response.json()
+</good_example>
+
+## Важные напоминания
+
+1. **НИКОГДА** не создавай `httpx.AsyncClient` напрямую
+2. **ВСЕГДА** используй `get_httpx_client` из `app.core.http_utils`
+3. **ВСЕГДА** используй `use_proxy_from_config=False` для OAuth провайдеров
+4. **ВСЕГДА** используй `async with` для автоматического закрытия клиента
+5. **ВСЕГДА** указывай `timeout` явно (обычно 30.0 секунд)
+
+**Нарушение этих правил приведет к проблемам с прокси, утечкам ресурсов и непредсказуемому поведению!**

@@ -16,6 +16,7 @@
 - **database.mdc** - Работа с базой данных (Storage, изоляция по компаниям)
 - **tools.mdc** - Создание инструментов (@tool decorator, типизация)
 - **project.mdc** - Общие правила проекта (UV, импорты, обработка ошибок)
+- **http_client.mdc** - Правила работы с HTTP клиентами (get_httpx_client, прокси)
 - **main.mdc** - Конфигурация чтения README файлов
 
 ### Контекстные (alwaysApply: false)
@@ -62,6 +63,7 @@
 - `makefile.mdc` ← `docs/makefile.md`
 - `langgraph.mdc` ← `docs/architecture.md` + LangGraph docs
 - `database.mdc` ← `docs/architecture.md`
+- `http_client.mdc` ← `app/core/http_utils.py` + паттерны использования
 - `frontend.mdc` ← `docs/frontend.md`
 - `testing.mdc` ← опыт разработки + memories
 
