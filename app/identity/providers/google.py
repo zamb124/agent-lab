@@ -10,6 +10,7 @@ import httpx
 from ..base_provider import BaseAuthProvider
 from ..models import ProviderUserInfo, AuthProvider
 from ...core.config import AuthProviderConfig
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +39,9 @@ class GoogleProvider(BaseAuthProvider):
     ) -> Tuple[str, Optional[str]]:
         """Обменивает код на токены Google"""
         data = self._build_token_data(code, redirect_uri)
-        
-        async with httpx.AsyncClient() as client:
+
+        logger.info("🔍 Начинаем обмен кода на токены Google (без прокси)")
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 self.token_url,
                 data=data,
@@ -64,8 +66,8 @@ class GoogleProvider(BaseAuthProvider):
     async def get_user_info(self, access_token: str) -> ProviderUserInfo:
         """Получает информацию о пользователе из Google"""
         headers = {"Authorization": f"Bearer {access_token}"}
-        
-        async with httpx.AsyncClient() as client:
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(self.userinfo_url, headers=headers)
             
             if response.status_code != 200:

@@ -169,7 +169,9 @@ class AuthService:
                             # Получаем токен из кеша
                             cached_token = result_data.get("token")
                             return AuthResult(success=True, user=user, session=session, token=cached_token)
-                raise
+            except Exception as e:
+                logger.error(f"❌ Ошибка авторизации: {e}")
+                return AuthResult(success=False, error_message=str(e))
 
             # Получаем информацию о пользователе
             user_info = await provider.get_user_info(access_token)

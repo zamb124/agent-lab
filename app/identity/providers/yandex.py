@@ -40,12 +40,11 @@ class YandexProvider(BaseAuthProvider):
     ) -> Tuple[str, Optional[str]]:
         """Обменивает код на токены Yandex"""
         data = self._build_token_data(code, redirect_uri)
-
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=20) as client:
             response = await client.post(
                 self.token_url,
                 data=data,
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                headers={"Content-Type": "application/x-www-form-urlencoded"}
             )
 
             if response.status_code != 200:
