@@ -47,12 +47,14 @@ def get_httpx_client(
         **kwargs
     }
     
-    # Явно передаем proxy (даже если None), чтобы переопределить переменные окружения
-    if proxy_url is not None:
-        client_kwargs["proxy"] = proxy_url
-    else:
-        # Явно отключаем прокси, чтобы игнорировать HTTP_PROXY/HTTPS_PROXY из окружения
+    # Управляем прокси и окружением:
+    # Если прокси из конфигурации не используется и явный proxy не передан,
+    # гарантированно отключаем ENV-прокси.
+    if not use_proxy_from_config and proxy is None:
+        client_kwargs["trust_env"] = False
         client_kwargs["proxy"] = None
+    else:
+        client_kwargs["proxy"] = proxy_url
     
     return httpx.AsyncClient(**client_kwargs)
 

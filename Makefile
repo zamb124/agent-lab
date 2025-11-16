@@ -3,6 +3,22 @@
 build:
 	docker-compose build
 
+prod:
+	@echo "🔄 Обновление репозитория (git pull)..."
+	@git pull --rebase --autostash
+	@echo "🛑 Остановка текущих контейнеров..."
+	docker-compose down
+	@echo "🧹 Очистка висячих образов и builder cache..."
+	docker image prune -f
+	docker builder prune -f
+	@echo "🏗️  Сборка образов (pull базовых образов)..."
+	docker-compose build --pull
+	@echo "🚀 Запуск сервисов в фоне..."
+	docker-compose up -d
+	@echo "🧽 Финальная очистка висячих образов..."
+	docker image prune -f
+	@echo "✅ Прод-запуск завершён"
+
 up:
 	docker-compose up -d
 
@@ -21,6 +37,7 @@ clean:
 help:
 	@echo "Основные команды:"
 	@echo "  make build         - Собрать образы"
+	@echo "  make prod          - Git pull, prune, build --pull, up -d (прод-запуск)"
 	@echo "  make up           - Запустить все сервисы"
 	@echo "  make down         - Остановить все сервисы"
 	@echo "  make logs         - Показать логи всех сервисов"
