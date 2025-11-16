@@ -41,7 +41,7 @@ class GoogleProvider(BaseAuthProvider):
         data = self._build_token_data(code, redirect_uri)
 
         logger.info("🔍 Начинаем обмен кода на токены Google (без прокси)")
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, trust_env=False, proxies=None) as client:
             response = await client.post(
                 self.token_url,
                 data=data,
@@ -67,7 +67,7 @@ class GoogleProvider(BaseAuthProvider):
         """Получает информацию о пользователе из Google"""
         headers = {"Authorization": f"Bearer {access_token}"}
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, trust_env=False, proxies=None) as client:
             response = await client.get(self.userinfo_url, headers=headers)
             
             if response.status_code != 200:
