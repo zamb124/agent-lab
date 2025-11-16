@@ -3,6 +3,7 @@
 Управляет всеми провайдерами и пользователями.
 """
 
+import httpx
 import json
 import logging
 import uuid
@@ -20,6 +21,7 @@ from .models import (
 from .base_provider import BaseAuthProvider
 from .providers.yandex import YandexProvider
 from .providers.google import GoogleProvider
+from .providers.github import GithubProvider
 from ..core.config import settings
 from app.db.repositories import Storage
 from ..core.container import get_system_container
@@ -46,6 +48,7 @@ class AuthService:
         provider_classes: Dict[AuthProvider, Type[BaseAuthProvider]] = {
             AuthProvider.YANDEX: YandexProvider,
             AuthProvider.GOOGLE: GoogleProvider,
+            AuthProvider.GITHUB: GithubProvider,
         }
 
         for provider_name, provider_class in provider_classes.items():
@@ -145,7 +148,6 @@ class AuthService:
                     success=False,
                     error_message=f"Провайдер {auth_request.provider.value} недоступен",
                 )
-
             try:
                 # Обмениваем код на токены
                 access_token, refresh_token = await provider.exchange_code_for_token(
@@ -169,9 +171,20 @@ class AuthService:
                             # Получаем токен из кеша
                             cached_token = result_data.get("token")
                             return AuthResult(success=True, user=user, session=session, token=cached_token)
-            except Exception as e:
-                logger.error(f"❌ Ошибка авторизации: {e}")
+                logger.error(f"❌ Ошибка обмена кода на токен: {e}", exc_info=True)
                 return AuthResult(success=False, error_message=str(e))
+            except httpx.HTTPStatusError as e:
+                logger.error(
+                    "❌ Ошибка обмена кода на токен от %s: status=%s, response='%s'",
+                    auth_request.provider.value,
+                    getattr(e.response, "status_code", None),
+                    getattr(e.response, "text", None),
+                    exc_info=True,
+                )
+                return AuthResult(success=False, error_message="Ошибка ответа от провайдера")
+            except Exception as e:
+                logger.error("❌ Не удалось обменять код на токен %s", auth_request.provider.value, exc_info=True)
+                return AuthResult(success=False, error_message="Ошибка обмена кода на токен")
 
             # Получаем информацию о пользователе
             user_info = await provider.get_user_info(access_token)
@@ -209,7 +222,7 @@ class AuthService:
             return AuthResult(success=True, user=user, session=session, token=jwt_token)
 
         except Exception as e:
-            logger.error(f"❌ Ошибка авторизации: {e}")
+            logger.error(f"❌ Ошибка авторизации: {e}", exc_info=True)
             return AuthResult(success=False, error_message=str(e))
 
     async def get_user_by_session(self, session_id: str) -> Optional[User]:

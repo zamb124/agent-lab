@@ -17,10 +17,11 @@ class UserStatus(str, Enum):
 
 
 class AuthProvider(str, Enum):
-    """Поддерживаемые провайдеры авторизации"""
+    """Перечисление доступных провайдеров авторизации."""
 
-    GOOGLE = "google"
     YANDEX = "yandex"
+    GOOGLE = "google"
+    GITHUB = "github"
 
 
 class User(BaseModel):
