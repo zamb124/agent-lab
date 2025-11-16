@@ -162,14 +162,22 @@
     bottom: 0;
     left: 0;
     right: 0;
-    background-color: rgba(16, 17, 21, 0.7);
-    backdrop-filter: blur(10px);
-    border-top: 1px solid var(--color-border);
+    z-index: 3;
+    background-color: transparent;
+    backdrop-filter: none;
+    border-top: none;
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 20px 5%;
     color: var(--color-text-secondary);
+}
+
+/* На десктопе поднимаем панель вверх, чтобы она находилась над изображением */
+@media (min-width: 993px) {
+    .hero-bottom-bar {
+        bottom: 12vh;
+    }
 }
 
 .hero-bottom-item {
