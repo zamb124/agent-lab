@@ -148,7 +148,13 @@
             <li class="company-item">
                 <a href="{{ company.url }}" class="company-link">
                     <div class="company-name">{{ company.name }}</div>
-                    <div class="company-subdomain">{{ company.subdomain }}.localhost</div>
+                    <div class="company-subdomain">
+                        {% if 'localhost' in company.url %}
+                            {{ company.subdomain }}.localhost
+                        {% else %}
+                            {{ company.subdomain }}.{{ domain }}
+                        {% endif %}
+                    </div>
                     <div class="company-roles">{{ company.roles | join(', ') }}</div>
                 </a>
             </li>
