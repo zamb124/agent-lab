@@ -839,6 +839,21 @@
 }
 
 @media (max-width: 768px) {
+    /* Герой-секция: убираем фиксированную высоту и лишнее пустое пространство */
+    .landing-page .hero-section {
+        height: auto;
+        min-height: 70vh;
+        justify-content: flex-start;
+        padding-top: 5rem;
+        padding-bottom: 0;
+    }
+    .hero-visual-container {
+        flex-grow: 0;
+    }
+    .landing-page .hero-section .hero-background-img {
+        width: 85%;
+        max-width: 360px;
+    }
     .landing-header {
         padding: 0.5rem 0;
     }
@@ -882,12 +897,13 @@
     }
     .hero-bottom-bar {
         flex-direction: column;
-        gap: 20px;
+        gap: 16px;
         padding: 30px 20px;
         position: relative; 
         background-color: var(--color-bg-primary); 
         border-top: 1px solid var(--color-border);
         backdrop-filter: none;
+        margin-top: 1rem;
     }
     
     .hero-bottom-item {
