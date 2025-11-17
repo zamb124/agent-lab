@@ -15,7 +15,7 @@ from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_agent_node_with_params_agent_id(migrated_db, storage, flow_factory, mock_llm, agent_repo, flow_repo):
+async def test_agent_node_with_params_agent_id(migrated_db, storage, flow_factory, mock_llm, agent_repo, flow_repo, system_context):
     """Тест: AGENT_NODE с agent_id в params"""
     
     # Создаем граф с нодой агента через params['agent_id']
@@ -78,7 +78,7 @@ async def test_agent_node_with_params_agent_id(migrated_db, storage, flow_factor
 
 
 @pytest.mark.asyncio
-async def test_agent_node_with_function_class(migrated_db, storage, flow_factory, mock_llm, agent_repo, flow_repo):
+async def test_agent_node_with_function_class(migrated_db, storage, flow_factory, mock_llm, agent_repo, flow_repo, system_context):
     """Тест: AGENT_NODE с function_class"""
     
     # Создаем граф с нодой агента через function_class
@@ -141,7 +141,7 @@ async def test_agent_node_with_function_class(migrated_db, storage, flow_factory
 
 
 @pytest.mark.asyncio
-async def test_agent_node_with_id_fallback(migrated_db, storage, flow_factory, mock_llm, agent_factory, agent_repo, flow_repo):
+async def test_agent_node_with_id_fallback(migrated_db, storage, flow_factory, mock_llm, agent_factory, agent_repo, flow_repo, system_context):
     """Тест: AGENT_NODE с id ноды как agent_id (fallback)"""
     
     # Создаем граф с нодой агента без agent_id и function_class

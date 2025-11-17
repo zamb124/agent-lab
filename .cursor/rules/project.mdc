@@ -152,6 +152,5 @@ uvicorn.run("app.main:app", host="0.0.0.0", port=8001)
 ## Context7 для документации
 
 Используй Context7 для получения актуальной документации библиотек:
-- LangGraph: https://langchain-ai.github.io/langgraph/
 - FastAPI, SQLAlchemy и другие библиотеки
 - Всегда проверяй актуальность подхода через документацию

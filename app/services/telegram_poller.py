@@ -103,6 +103,7 @@ class TelegramPoller:
         storage = get_container().storage
 
         # Получаем все flows динамически - ищем во всех компаниях
+        # Используем пустой префикс для поиска всех ключей, но ограничиваем результат
         all_keys = await storage.list_by_prefix("", 1000, force_global=True)
         flow_keys = [key for key in all_keys if ":flow:" in key]
 

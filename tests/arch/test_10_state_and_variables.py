@@ -222,11 +222,11 @@ async def counter_node(state):
     thread_id = unique_id("test_thread_persistence")
     config = {"configurable": {"thread_id": thread_id}}
     
+    # НЕ передаем session_id в input_data, чтобы использовался thread_id из config
     input_data_1 = {
         "messages": [HumanMessage(content="Первое сообщение")],
         "store": {},
         "remaining_steps": 25,
-        "session_id": "test_session",
         "task_id": "task_1",
         "user_id": "user_1",
     }
@@ -381,11 +381,11 @@ async def tool_node(state):
     thread_id = unique_id("test_thread_tool")
     config = {"configurable": {"thread_id": thread_id}}
     
+    # НЕ передаем session_id в input_data, чтобы использовался thread_id из config
     input_data_1 = {
         "messages": [HumanMessage(content="Вызов тула")],
         "store": {},
         "remaining_steps": 25,
-        "session_id": "test_session",
         "task_id": "task_1",
         "user_id": "user_1",
     }

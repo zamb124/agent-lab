@@ -2,12 +2,14 @@
 Стандартные инструменты для всех агентов.
 """
 
-from langgraph.types import interrupt
+from app.agents.base import AgentInterrupt
+from app.core.variables import get_state
+from langchain_core.messages import HumanMessage
 
 from app.core.tool_decorator import tool
 
 
-@tool(group="Система")
+@tool(group="Система", state_aware=False)
 def ask_user(question: str) -> str:
     """
     ⚠️ ОБЯЗАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ВОПРОСОВ К ПОЛЬЗОВАТЕЛЮ ⚠️
@@ -26,9 +28,11 @@ def ask_user(question: str) -> str:
     Returns:
         Ответ пользователя в формате "QUESTION: вопрос\nANSWER: ответ"
     """
-    result = interrupt(question)
-    formatted_result = f"{result}"
-    return formatted_result
+    state = get_state()
+    if state and state.get("interrupt_context") and state.get("messages") and isinstance(state["messages"][-1], HumanMessage):
+        state.pop("interrupt_context", None)
+        return f"QUESTION: {question}\nANSWER: {state['messages'][-1].content}"
+    raise AgentInterrupt(question)
 
 
 # Импортируем сессионные тулы

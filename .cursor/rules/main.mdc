@@ -12,5 +12,4 @@ alwaysApply: false
 - `docs/api.md` - API документация
 - `docs/frontend.md` - фронтенд архитектура
 
-Используй Context7 для получения актуальной документации LangGraph:
-- https://langchain-ai.github.io/langgraph/
+Используй Context7 для получения актуальной документации библиотек при необходимости.

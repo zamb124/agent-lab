@@ -8,8 +8,17 @@ import pytest
 from langchain_core.messages import HumanMessage
 
 @pytest.mark.asyncio
-async def test_weather_flow_execution(migrated_db, flow_factory, system_context, unique_id):
+async def test_weather_flow_execution(migrated_db, flow_factory, system_context, unique_id, mock_llm):
     """Тест выполнения weather_flow из БД"""
+    
+    mock_llm.reset_call_counts()
+    mock_llm.configure(
+        responses={
+            "погода": "Погода в Москве: +5°C, облачно",
+            "москва": "Погода в Москве: +5°C, облачно"
+        },
+        default_response="Погода в Москве: +5°C, облачно"
+    )
     
     weather_flow = await flow_factory.get_flow("app.flows.weather_flow.weather_flow_config")
     
@@ -48,14 +57,16 @@ async def test_smart_flow_math_execution(migrated_db, flow_factory, system_conte
     )
     
     print(f"🔍 РЕЗУЛЬТАТ: {result}")
-    print(f"🔍 original_question: {result.get('original_question', 'НЕТ')}")
-    print(f"🔍 selected_agent: {result.get('selected_agent', 'НЕТ')}")
+    store = result.get("store", {})
+    print(f"🔍 original_question: {store.get('original_question', 'НЕТ')}")
+    print(f"🔍 selected_agent: {store.get('selected_agent', 'НЕТ')}")
     print(f"🔍 final_message: {result['messages'][-1].content}")
     
     assert "messages" in result
-    assert "original_question" in result
-    assert "selected_agent" in result
-    assert result["selected_agent"] == "calculator"
+    assert "store" in result
+    assert "original_question" in store
+    assert "selected_agent" in store
+    assert store["selected_agent"] == "calculator"
     
     final_message = result["messages"][-1].content
     assert "56" in final_message or "7*8" in final_message
@@ -74,9 +85,10 @@ async def test_smart_flow_weather_execution(migrated_db, flow_factory, system_co
     )
     
     assert "messages" in result
-    assert "original_question" in result
-    assert "selected_agent" in result
-    assert result["selected_agent"] == "weather"
+    store = result.get("store", {})
+    assert "original_question" in store
+    assert "selected_agent" in store
+    assert store["selected_agent"] == "weather"
     
     final_message = result["messages"][-1].content
     assert len(final_message) > 0
@@ -89,14 +101,31 @@ async def test_flow_isolation(migrated_db, flow_factory, system_context, mock_ll
     
     import asyncio
     
+    mock_llm.reset_call_counts()
     mock_llm.configure(
+        tool_responses={
+            "посчитай 2+2": {"tool": "calculator_agent_tool", "args": {"request": "Посчитай 2+2"}},
+        },
         responses={
             "посчитай 2+2": "Я выполню вычисление 2+2 = 4 используя калькулятор.",
             "2+2": "Результат вычисления 2+2 равен 4.",
             "исходный вопрос": "Пользователь спросил про вычисление 2+2, результат: 4",
             "калькулятор": "Калькулятор выполнил вычисление и получил результат 4."
-        }
+        },
+        default_response="Готово"
     )
+    
+    # Устанавливаем context_window для агентов, используемых в flow
+    from app.core.container import get_container
+    agent_factory = get_container().agent_factory
+    
+    calculator_agent = await agent_factory.get_agent("app.agents.calculator.agent.CalculatorAgent")
+    if calculator_agent and calculator_agent.config and calculator_agent.config.llm_config:
+        calculator_agent.config.llm_config.context_window = 8192
+    
+    explainer_agent = await agent_factory.get_agent("app.agents.explainer.agent.ExplainerAgent")
+    if explainer_agent and explainer_agent.config and explainer_agent.config.llm_config:
+        explainer_agent.config.llm_config.context_window = 8192
     
     smart_flow = await flow_factory.get_flow("app.flows.smart_flow.smart_flow_config")
     
@@ -112,7 +141,10 @@ async def test_flow_isolation(migrated_db, flow_factory, system_context, mock_ll
     
     # Все результаты должны быть правильными
     for i, result in enumerate(results):
-        assert result["selected_agent"] == "calculator", f"Результат {i} неправильный"
-        assert "4" in result["messages"][-1].content, f"Результат {i} не содержит правильный ответ"
+        store = result.get("store", {})
+        assert store.get("selected_agent") == "calculator", f"Результат {i} неправильный: selected_agent={store.get('selected_agent')}"
+        last_message = result["messages"][-1]
+        message_content = last_message.content if hasattr(last_message, 'content') else str(last_message)
+        assert "4" in message_content, f"Результат {i} не содержит правильный ответ: {message_content}"
     
     print("✅ Изоляция флоу работает корректно")

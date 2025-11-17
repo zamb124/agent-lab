@@ -22,12 +22,12 @@ async def test_react_agent_requires_prompt():
     agent = ReActAgent(config)
     
     with pytest.raises(ValueError, match="требует prompt"):
-        await agent.compile_graph()
+        await agent.get_runner()
 
 
 @pytest.mark.asyncio
 async def test_react_agent_compiles_with_prompt():
-    """ReAct агент успешно компилируется при наличии prompt"""
+    """ReAct агент успешно создает раннер при наличии prompt"""
     config = AgentConfig(
         agent_id="test.react.with_prompt",
         name="Test ReAct With Prompt",
@@ -38,8 +38,8 @@ async def test_react_agent_compiles_with_prompt():
     agent = ReActAgent(config)
     agent.set_tools([])
     
-    graph = await agent.compile_graph()
-    assert graph is not None
+    runner = await agent.get_runner()
+    assert runner is not None
 
 
 @pytest.mark.asyncio
@@ -53,13 +53,13 @@ async def test_stategraph_agent_requires_definition():
     )
     agent = StateGraphAgent(config)
     
-    with pytest.raises(ValueError, match="требует graph_definition"):
-        await agent.compile_graph()
+    with pytest.raises(NotImplementedError, match="должен переопределить метод graph_definition"):
+        await agent.get_runner()
 
 
 @pytest.mark.asyncio
 async def test_stategraph_agent_compiles_with_definition():
-    """StateGraph агент успешно компилируется при наличии graph_definition"""
+    """StateGraph агент успешно создает раннер при наличии graph_definition"""
     config = AgentConfig(
         agent_id="test.stategraph.with_definition",
         name="Test StateGraph With Definition",
@@ -78,8 +78,8 @@ async def test_stategraph_agent_compiles_with_definition():
     )
     agent = StateGraphAgent(config)
     
-    graph = await agent.compile_graph()
-    assert graph is not None
+    runner = await agent.get_runner()
+    assert runner is not None
 
 
 @pytest.mark.asyncio
@@ -145,8 +145,8 @@ async def test_react_agent_with_llm_config():
     agent = ReActAgent(config)
     agent.set_tools([])
     
-    graph = await agent.compile_graph()
-    assert graph is not None
+    runner = await agent.get_runner()
+    assert runner is not None
 
 
 @pytest.mark.asyncio
@@ -163,6 +163,6 @@ async def test_react_agent_dynamic_prompt():
     agent = ReActAgent(config)
     agent.set_tools([])
     
-    graph = await agent.compile_graph()
-    assert graph is not None
+    runner = await agent.get_runner()
+    assert runner is not None
 

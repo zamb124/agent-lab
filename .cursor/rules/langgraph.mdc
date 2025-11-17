@@ -1,8 +1,8 @@
 ---
-description: "Правила работы с LangGraph"
+description: "Правила работы с графами состояний и раннерами"
 alwaysApply: false
 ---
-# Правила работы с LangGraph
+# Правила работы с графами состояний и раннерами
 
 ## State как единое хранилище
 
@@ -10,6 +10,7 @@ alwaysApply: false
 - `messages` - история диалога
 - `store` - сессионное хранилище для данных между запросами
 - `task_id`, `session_id`, `user_id` - метаданные
+- `interrupt_context` - контекст прерывания для восстановления
 
 <good_example>
 from app.core.state import State
@@ -21,13 +22,13 @@ def my_node(state: State) -> State:
 
 ## Запрос данных у пользователя
 
-Используй `ask_user` из `app/tools/standard.py`:
-- Вызывает `GraphInterrupt` для приостановки графа
+Используй `ask_user` из `app/tools/misc/standard.py`:
+- Вызывает `AgentInterrupt` для приостановки выполнения
 - TaskProcessor отправляет вопрос через Interface
-- При ответе граф продолжается с того же места
+- При ответе выполнение продолжается с того же места
 
 <good_example>
-from app.tools.standard import ask_user
+from app.tools.misc.standard import ask_user
 
 # В агенте
 tools = [ask_user]
@@ -45,25 +46,64 @@ ask_user("Какой ваш склад?")
 Классический агент с промптом и инструментами:
 
 <good_example>
-class MyAgent(BaseAgent):
-    agent_id = "my_agent"
-    name = "My Agent"
-    type = "react"
+from app.agents.react_agent import ReActAgent
+
+class MyAgent(ReActAgent):
+    name = "my_agent"
+    description = "My Agent"
     prompt = "Ты помощник..."
     tools = [tool1, tool2]
 </good_example>
+
+**Выполнение**: Автоматически через `ReActAgentRunner` в методе `get_runner()`.
 
 ### 2. StateGraph агент
 Граф состояний для сложной логики:
 
 <good_example>
-class MyAgent(BaseAgent):
-    agent_id = "my_graph_agent"
-    type = "state_graph"
+from app.agents.stategraph_agent import StateGraphAgent
+from app.models.core_models import GraphDefinition, GraphNode, GraphEdge, NodeType
+
+class MyAgent(StateGraphAgent):
+    name = "my_graph_agent"
+    description = "Граф с условной логикой"
+    
     graph_definition = GraphDefinition(
-        nodes=[...],
-        edges=[...],
+        nodes=[
+            GraphNode(
+                id="start",
+                type=NodeType.FUNCTION_NODE,
+                params={"function": "app.agents.my.start_node"},
+                description="Начальная нода"
+            ),
+        ],
+        edges=[
+            GraphEdge(source="START", target="start"),
+            GraphEdge(source="start", target="END"),
+        ],
         entry_point="start"
+    )
+</good_example>
+
+**Выполнение**: Автоматически через `StateGraphRunner` в методе `get_runner()`.
+
+## Создание раннера
+
+Все агенты реализуют метод `get_runner()`:
+
+<good_example>
+async def get_runner(self) -> BaseAgentRunner:
+    """Создает раннер для выполнения агента"""
+    from app.core.agent_runner import ReactAgentRunner
+    
+    llm = get_llm()
+    tools = await self.get_tools()
+    
+    return ReactAgentRunner(
+        agent_config=self.config,
+        tools=tools,
+        llm=llm,
+        prompt=self._create_dynamic_prompt()
     )
 </good_example>
 
@@ -75,48 +115,72 @@ class MyAgent(BaseAgent):
 - Каждый агент может иметь свои tools и sub-агентов
 
 <good_example>
-class SupervisorAgent(BaseAgent):
-    agent_id = "supervisor"
+class SupervisorAgent(ReActAgent):
+    name = "supervisor"
     tools = [
-        SubAgent1().as_tool(),
-        SubAgent2().as_tool(),
+        "agent:app.agents.sub.SubAgent1",  # Субагент как tool
+        "agent:app.agents.sub.SubAgent2",  # Еще субагент
         regular_tool
     ]
 </good_example>
 
 ## Память и история
 
-Используй shared memory:
-- Все агенты получают доступ к одному `State`
+Используй StateManager для персистентности:
+- Все агенты получают доступ к одному `State` через `session_id`
 - История диалога в `state["messages"]`
 - Сессионные данные в `state["store"]`
 - Не дублируй данные между агентами
 
 <good_example>
 # Агент сохраняет
-state["store"]["warehouse_id"] = "12345"
+from app.tools.session.session_tools import session_set
+
+session_set("warehouse_id", "12345")
 
 # Другой агент читает
-warehouse_id = state["store"].get("warehouse_id")
+from app.tools.session.session_tools import session_get
+
+warehouse_id = session_get("warehouse_id")
 </good_example>
 
-## Checkpointer
+## StateManager
 
-Используй PostgreSQL checkpointer для персистентности:
-- Автоматически сохраняет состояние графа
-- Позволяет возобновлять выполнение после interrupt
-- Не используй MemorySaver в production
+Используй StateManager для персистентности состояния:
+- Автоматически сохраняет состояние по `session_id`
+- Позволяет возобновлять выполнение после `AgentInterrupt`
+- Использует PostgreSQL для хранения
 
 <good_example>
-from app.core.checkpointer import get_checkpointer
+from app.core.state_manager import get_state_manager
 
-checkpointer = await get_checkpointer()
-graph = agent.compile_graph(checkpointer=checkpointer)
+state_manager = await get_state_manager()
+
+# Сохранение
+await state_manager.save_state(session_id, state)
+
+# Загрузка
+saved_state = await state_manager.load_state(session_id)
 </good_example>
 
-## Документация
+## Выполнение агента
 
-Всегда изучай актуальную документацию LangGraph:
-- https://langchain-ai.github.io/langgraph/
-- Используй современные паттерны и best practices
-- Избегай устаревших подходов
+Все агенты выполняются через `ainvoke()`:
+
+<good_example>
+from app.core.container import get_container
+
+agent_factory = get_container().agent_factory
+agent = await agent_factory.get_agent("my_agent")
+
+result = await agent.ainvoke({
+    "messages": [HumanMessage(content="Привет")],
+    "session_id": "user_session_123"
+})
+
+# Внутри ainvoke:
+# 1. Определяется session_id (из input_data или context)
+# 2. Создается config с thread_id
+# 3. Вызывается runner.arun(state)
+# 4. State сохраняется через StateManager
+</good_example>

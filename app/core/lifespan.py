@@ -9,7 +9,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.core.config import settings
-from app.core.checkpointer import init_checkpointer, close_checkpointer
 from app.db.database import create_tables, close_db
 from app.core.migration import Migrator
 from app.core.translation_manager import get_translation_manager
@@ -154,14 +153,12 @@ async def lifespan(app: FastAPI):
         # Инициализация БД
         logger.info("📊 Создание таблиц БД...")
         await create_tables()
+        logger.info("✅ Таблицы БД созданы и проверены")
 
         # Настройка OTEL инструментации (после инициализации системного контейнера)
         logger.info("🔍 Настройка OpenTelemetry инструментации...")
         _setup_otel_instrumentation()
 
-        # Инициализация checkpointer для LangGraph
-        logger.info("🔄 Инициализация checkpointer...")
-        await init_checkpointer()
 
         # Запуск миграций в фоне (неблокирующая операция)
         logger.info("🔄 Запуск миграций в фоновом режиме...")
@@ -264,6 +261,5 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.debug(f"Предупреждение при закрытии HTTP сессий: {e}")
 
-        await close_checkpointer()
         await close_db()
         logger.info("✅ Agents Lab остановлена")

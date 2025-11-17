@@ -104,18 +104,23 @@ async def get_agent(agent_id: str) -> AgentConfig:
     return await agent_repo.get(agent_id)
 </good_example>
 
-## PostgreSQL Checkpointer
+## StateManager
 
-Для LangGraph используй PostgreSQL checkpointer:
-- Не используй MemorySaver в production
-- Checkpointer создается через `get_checkpointer()`
-- Автоматически сохраняет state графов
+Для персистентности состояния используй StateManager:
+- Автоматически сохраняет состояние по `session_id`
+- Позволяет возобновлять выполнение после `AgentInterrupt`
+- StateManager создается через `get_state_manager()`
 
 <good_example>
-from app.core.checkpointer import get_checkpointer
+from app.core.state_manager import get_state_manager
 
-checkpointer = await get_checkpointer()
-graph = graph.compile(checkpointer=checkpointer)
+state_manager = await get_state_manager()
+
+# Сохранение состояния
+await state_manager.save_state(session_id, state)
+
+# Загрузка состояния
+saved_state = await state_manager.load_state(session_id)
 </good_example>
 
 ## Транзакции

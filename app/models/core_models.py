@@ -62,6 +62,15 @@ class ConditionType(str, Enum):
     EXPRESSION = "expression"  # Простое условное выражение (true/false)
 
 
+class SubAgentMemoryPolicy(str, Enum):
+    """Политики управления памятью для субагентов"""
+    
+    ISOLATED = "isolated"      # По умолчанию: каждый вызов - новая сессия с новой памятью
+    ACCUMULATED = "accumulated" # Накапливает память между вызовами (один session_id для всех вызовов)
+    SNAPSHOT = "snapshot"       # Копирует память родителя при вызове, но возвращает только результат
+    SHARED = "shared"           # Работает в одной памяти с родителем (один session_id)
+
+
 class GraphNode(BaseModel):
     """Нода в графе"""
 
@@ -210,7 +219,9 @@ class GraphDefinition(BaseModel):
             return None
         
         if hasattr(source, 'nodes') and hasattr(source, 'edges'):
-            return await cls._migrate_from_stategraph(source)
+            # Устаревший метод миграции из LangGraph StateGraph - больше не используется
+            logger.warning(f"Попытка миграции из LangGraph StateGraph для {source} - метод устарел, используйте graph_definition()")
+            return None
         
         if inspect.isclass(source):
             return await cls._migrate_from_agent_class(source)
@@ -221,39 +232,42 @@ class GraphDefinition(BaseModel):
     async def _migrate_from_agent_class(cls, agent_class) -> Optional["GraphDefinition"]:
         """Извлекает GraphDefinition из класса агента"""
         logger.info(f"🔍 Анализируем граф агента {agent_class.__name__}")
-        
-        if hasattr(agent_class, "graph_definition") and agent_class.graph_definition:
-            logger.info("🔍 Найден статический graph_definition в классе")
-            return agent_class.graph_definition
-        
+
         temp_config = AgentConfig(
             agent_id=f"{agent_class.__module__}.{agent_class.__name__}",
             name="temp",
             description="temp",
         )
-        
+
         try:
             agent_instance = agent_class(temp_config)
+
+            # Проверяем метод graph_definition()
+            if hasattr(agent_instance, "graph_definition") and callable(getattr(agent_instance, "graph_definition", None)):
+                logger.info("🔍 Вызываем метод graph_definition()")
+                try:
+                    graph_def = agent_instance.graph_definition()
+                    if isinstance(graph_def, dict):
+                        return GraphDefinition(**graph_def)
+                    elif isinstance(graph_def, GraphDefinition):
+                        return graph_def
+                except NotImplementedError:
+                    # Базовый класс StateGraphAgent выбрасывает NotImplementedError
+                    # Это нормально - значит это базовый класс, а не конкретная реализация
+                    logger.debug(f"🔍 {agent_class.__name__} - базовый класс без graph_definition, пропускаем")
+                    pass
+
+            # Проверяем config.graph_definition
+            if hasattr(agent_instance, "config") and agent_instance.config and agent_instance.config.graph_definition:
+                graph_def = agent_instance.config.graph_definition
+                if isinstance(graph_def, dict):
+                    return GraphDefinition(**graph_def)
+                elif isinstance(graph_def, GraphDefinition):
+                    return graph_def
             
-            if not hasattr(agent_instance, "build_graph"):
-                logger.info(f"🔍 Агент {agent_class.__name__} - простой ReAct агент (нет StateGraph)")
-                return None
-            
-            langgraph_graph = agent_instance.build_graph()
-            
-            if not langgraph_graph:
-                logger.info(f"🔍 build_graph() вернул None для {agent_class.__name__}")
-                return None
-            
-            logger.info(f"🔍 Найден StateGraph: {type(langgraph_graph)}")
-            
-            if hasattr(langgraph_graph, "nodes"):
-                logger.info(f"🔍 Найдены nodes: {list(langgraph_graph.nodes.keys())}")
-            
-            if hasattr(langgraph_graph, "edges"):
-                logger.info(f"🔍 Найдены edges: {langgraph_graph.edges}")
-            
-            return await cls._migrate_from_stategraph(langgraph_graph)
+            # Если не нашли graph_definition - это ReAct агент или базовый класс
+            logger.debug(f"🔍 Агент {agent_class.__name__} - ReAct агент или базовый класс без graph_definition")
+            return None
             
         except Exception as e:
             logger.warning(f"Не удалось проанализировать граф {agent_class.__name__}: {e}")
@@ -262,97 +276,19 @@ class GraphDefinition(BaseModel):
     @classmethod
     async def _migrate_from_stategraph(cls, stategraph) -> "GraphDefinition":
         """
-        Извлекает GraphDefinition из LangGraph StateGraph.
+        УСТАРЕВШИЙ МЕТОД: Извлекал GraphDefinition из LangGraph StateGraph.
+        
+        Больше не используется - все агенты используют graph_definition() метод.
+        Оставлен для обратной совместимости, но всегда возвращает None.
         
         Args:
-            stategraph: StateGraph объект из LangGraph
+            stategraph: StateGraph объект из LangGraph (не используется)
             
         Returns:
-            GraphDefinition с нодами и ребрами
+            None (метод устарел)
         """
-        nodes = []
-        edges = []
-        
-        logger.info(f"🔍 Анализируем StateGraph с {len(stategraph.nodes)} нодами")
-        
-        for node_id, node_spec in stategraph.nodes.items():
-            node_func = node_spec
-            
-            if hasattr(node_spec, 'runnable'):
-                runnable = node_spec.runnable
-                if hasattr(runnable, 'afunc') and runnable.afunc:
-                    node_func = runnable.afunc
-                elif hasattr(runnable, 'func') and runnable.func:
-                    node_func = runnable.func
-                else:
-                    node_func = runnable
-            elif hasattr(node_spec, '__wrapped__'):
-                node_func = node_spec.__wrapped__
-            elif hasattr(node_spec, 'func'):
-                node_func = node_spec.func
-            
-            node_type = cls._determine_node_type(node_func)
-            
-            function_path = None
-            function_class = None
-            
-            if node_type == NodeType.FUNCTION_NODE:
-                if hasattr(node_func, '__module__') and hasattr(node_func, '__name__'):
-                    function_path = f"{node_func.__module__}.{node_func.__name__}"
-            elif node_type == NodeType.AGENT_NODE:
-                if hasattr(node_func, '__self__'):
-                    agent_class = node_func.__self__.__class__
-                    function_class = f"{agent_class.__module__}.{agent_class.__name__}"
-            
-            nodes.append(
-                GraphNode(
-                    id=node_id,
-                    type=node_type,
-                    function_path=function_path,
-                    function_class=function_class,
-                    params={}
-                )
-            )
-        
-        for source, target in stategraph.edges:
-            if source == "__start__":
-                source = "START"
-            if target == "__end__":
-                target = "END"
-            
-            edges.append(GraphEdge(source=source, target=target))
-        
-        if hasattr(stategraph, 'branches') and stategraph.branches:
-            for source, branches_dict in stategraph.branches.items():
-                source_name = "START" if source == "__start__" else source
-                
-                for cond_name, branch_spec in branches_dict.items():
-                    condition_path = None
-                    if hasattr(branch_spec, 'path'):
-                        cond_runnable = branch_spec.path
-                        cond_func = None
-                        if hasattr(cond_runnable, 'afunc') and cond_runnable.afunc:
-                            cond_func = cond_runnable.afunc
-                        elif hasattr(cond_runnable, 'func') and cond_runnable.func:
-                            cond_func = cond_runnable.func
-                        
-                        if cond_func and hasattr(cond_func, '__module__') and hasattr(cond_func, '__name__'):
-                            condition_path = f"{cond_func.__module__}.{cond_func.__name__}"
-                    
-                    if hasattr(branch_spec, 'ends') and branch_spec.ends:
-                        for target in set(branch_spec.ends.values()):
-                            target_name = "END" if target == "__end__" else target
-                            
-                            edges.append(
-                                GraphEdge(
-                                    source=source_name,
-                                    target=target_name,
-                                    condition=condition_path,
-                                    condition_type=ConditionType.ROUTER,
-                                )
-                            )
-        
-        return cls(nodes=nodes, edges=edges, entry_point="START")
+        logger.warning("_migrate_from_stategraph устарел - используйте graph_definition() метод")
+        return None
     
     @staticmethod
     def _determine_node_type(node_func) -> NodeType:
@@ -476,6 +412,13 @@ class ToolReference(BuilderEntity):
         default=False,
         title="Публичный",
         description="Доступен ли инструмент в публичном редакторе ботов"
+    )
+    
+    # Политика памяти для субагентов (только для agent: инструментов)
+    memory_policy: Optional["SubAgentMemoryPolicy"] = Field(
+        default=None,
+        title="Политика памяти",
+        description="Политика управления памятью для субагентов (только для agent: инструментов). По умолчанию ISOLATED.",
     )
     
     @classmethod
@@ -693,8 +636,22 @@ class AgentConfig(BuilderEntity):
     @field_validator('type', mode='before')
     @classmethod
     def auto_determine_type(cls, v, info):
-        """Автоматически определяет тип агента на основе graph_definition"""
+        """Автоматически определяет тип агента на основе graph_definition или наследования"""
         data = info.data
+
+        # Проверяем наследование от StateGraphAgent через function_class
+        if 'function_class' in data:
+            function_class = data.get('function_class')
+            if function_class:
+                try:
+                    module_path, class_name = function_class.rsplit(".", 1)
+                    module = __import__(module_path, fromlist=[class_name])
+                    agent_class = getattr(module, class_name)
+                    from app.agents.stategraph_agent import StateGraphAgent
+                    if issubclass(agent_class, StateGraphAgent):
+                        return AgentType.STATEGRAPH
+                except (ImportError, AttributeError, ValueError):
+                    pass
 
         if 'graph_definition' in data:
             graph_def = data.get('graph_definition')
@@ -764,6 +721,13 @@ class AgentConfig(BuilderEntity):
         default=None,
         title="Конфигурация LLM",
         description="Конфигурация языковой модели",
+    )
+    
+    # Политика памяти по умолчанию для субагентов
+    default_memory_policy: Optional[SubAgentMemoryPolicy] = Field(
+        default=None,
+        title="Политика памяти по умолчанию",
+        description="Политика управления памятью по умолчанию для всех субагентов этого агента. Если не указана, используется ISOLATED. Можно переопределить в каждом ToolReference.",
     )
 
     # История диалогов

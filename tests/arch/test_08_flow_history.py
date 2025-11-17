@@ -11,7 +11,7 @@ from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_flow_history_from_smart_flow(migrated_db, storage, flow_factory, system_context, unique_id, session_repo):
+async def test_flow_history_from_smart_flow(migrated_db, storage, flow_factory, system_context, unique_id, session_repo, mock_llm):
     """
     Тест получения истории сообщений из выполненного smart_flow
     """
@@ -21,6 +21,18 @@ async def test_flow_history_from_smart_flow(migrated_db, storage, flow_factory, 
     flow = await flow_factory.get_flow(flow_id)
     
     print(f"✅ Flow загружен: {flow_id}")
+    
+    # Устанавливаем context_window для агентов, используемых в flow
+    from app.core.container import get_container
+    agent_factory = get_container().agent_factory
+    
+    calculator_agent = await agent_factory.get_agent("app.agents.calculator.agent.CalculatorAgent")
+    if calculator_agent and calculator_agent.config and calculator_agent.config.llm_config:
+        calculator_agent.config.llm_config.context_window = 8192
+    
+    explainer_agent = await agent_factory.get_agent("app.agents.explainer.agent.ExplainerAgent")
+    if explainer_agent and explainer_agent.config and explainer_agent.config.llm_config:
+        explainer_agent.config.llm_config.context_window = 8192
     
     thread_id = unique_id("history")
     config = {"configurable": {"thread_id": thread_id}}
@@ -33,6 +45,23 @@ async def test_flow_history_from_smart_flow(migrated_db, storage, flow_factory, 
         status=SessionStatus.ACTIVE,
     )
     await session_repo.set(session)
+    
+    # Настраиваем mock_llm для выполнения flow
+    mock_llm.reset_call_counts()
+    mock_llm.configure(
+        tool_responses={
+            "посчитай 15 + 27": {"tool": "calculator_agent_tool", "args": {"request": "Посчитай 15 + 27"}},
+            "15 + 27": {"tool": "calculator_agent_tool", "args": {"request": "15 + 27"}},
+        },
+        responses={
+            "посчитай 15 + 27": "Я выполню вычисление 15 + 27 = 42 используя калькулятор.",
+            "15 + 27": "Результат вычисления 15 + 27 равен 42.",
+            "исходный вопрос": "Пользователь спросил про вычисление 15 + 27, результат: 42",
+            "калькулятор": "Калькулятор выполнил вычисление и получил результат 42.",
+            "42": "Финальный ответ: Результат вычисления 15 + 27 равен 42."
+        },
+        default_response="Финальный ответ: Результат вычисления 15 + 27 равен 42."
+    )
     
     print("🔄 Выполняем flow с вопросом о математике...")
     result = await flow.ainvoke(

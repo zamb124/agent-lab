@@ -8,8 +8,6 @@ import inspect
 import importlib
 import uuid
 from typing import Optional
-from langgraph.graph import StateGraph, END
-from langchain_core.runnables import Runnable
 from langchain_core.messages import AIMessage
 
 from app.models import (
@@ -22,7 +20,6 @@ from app.models import (
 )
 from app.core.container import get_container
 from app.core.tool_factory import ToolFactory
-from app.core.checkpointer import get_checkpointer
 from app.core.agent_factory import AgentFactory
 from app.core.flow_factory import FlowFactory
 from app.core.state import State
@@ -35,175 +32,6 @@ class GraphBuilder:
 
     def __init__(self):
         self.tool_factory = get_container().tool_factory
-
-    async def build_from_definition(
-        self, graph_def: GraphDefinition, llm_config: Optional[LLMConfig] = None
-    ) -> Runnable:
-        """
-        Строит исполняемый граф на основе определения.
-
-        Args:
-            graph_def: Определение графа
-            llm_config: Конфигурация LLM
-
-        Returns:
-            Скомпилированный граф
-        """
-        logger.info(
-            f"Строим граф с {len(graph_def.nodes)} нодами и {len(graph_def.edges)} ребрами"
-        )
-
-        # Создаем StateGraph с единым State
-        graph = StateGraph(State)
-
-        # Добавляем ноды
-        for node in graph_def.nodes:
-            node_func = await self._create_node_function(node, llm_config)
-            graph.add_node(node.id, node_func)
-
-        # Добавляем ребра
-        start_target = None  # Запоминаем куда ведет START
-        conditional_groups = {}  # Группируем conditional edges по источнику
-        expression_edges = []  # Собираем EXPRESSION ребра для отдельной обработки
-
-        for edge in graph_def.edges:
-            if edge.source == "START":
-                # Ребро от START - запоминаем для set_entry_point
-                start_target = edge.target
-                continue
-
-            if edge.condition_type == ConditionType.ROUTER:
-                # Группируем ROUTER edges по источнику
-                if edge.source not in conditional_groups:
-                    conditional_groups[edge.source] = {}
-                conditional_groups[edge.source][edge.target] = edge.target
-            elif edge.condition_type == ConditionType.EXPRESSION:
-                # EXPRESSION ребра обрабатываем отдельно
-                expression_edges.append(edge)
-            elif edge.condition_type is None or edge.condition is None:
-                # Обычное ребро (без условия)
-                if edge.target == "END":
-                    graph.add_edge(edge.source, END)
-                else:
-                    graph.add_edge(edge.source, edge.target)
-            else:
-                logger.warning(f"Неизвестный condition_type для {edge.source} -> {edge.target}: {edge.condition_type}")
-
-        # Добавляем conditional edges группами
-        for source, mapping in conditional_groups.items():
-            # Находим функцию условия
-            condition_func = None
-
-            # Сначала ищем в inline коде source ноды
-            source_node = next((n for n in graph_def.nodes if n.id == source), None)
-            if (
-                source_node
-                and hasattr(source_node, "code_mode")
-                and source_node.code_mode == CodeMode.INLINE_CODE
-                and source_node.inline_code
-            ):
-                # Извлекаем функцию условия из inline кода
-                try:
-                    local_namespace = {}
-                    exec(source_node.inline_code, globals(), local_namespace)
-
-                    # Ищем функцию условия
-                    condition_names = [f"{source}_condition", "router_condition"]
-                    for cond_name in condition_names:
-                        if cond_name in local_namespace:
-                            condition_func = local_namespace[cond_name]
-                            logger.info(
-                                f"✅ INLINE функция условия найдена: {cond_name}"
-                            )
-                            break
-
-                except Exception as e:
-                    logger.error(
-                        f"❌ Ошибка извлечения функции условия из inline кода: {e}",
-                        exc_info=True
-                    )
-
-            # Если не нашли в inline коде, ищем по пути
-            if not condition_func:
-                for edge in graph_def.edges:
-                    if (
-                        edge.source == source
-                        and edge.condition_type == ConditionType.ROUTER
-                        and edge.condition
-                    ):
-                        try:
-                            # Импортируем функцию по пути
-                            module_path, func_name = edge.condition.rsplit(".", 1)
-                            module = importlib.import_module(module_path)
-                            condition_func = getattr(module, func_name)
-                            break
-                        except Exception as e:
-                            logger.warning(
-                                f"Не удалось импортировать функцию условия {edge.condition}: {e}"
-                            )
-
-            if condition_func:
-                # Добавляем маппинг "END" → END константу если её нет
-                if "END" not in mapping:
-                    mapping["END"] = END
-                    logger.info(f"✅ Добавлен автоматический маппинг 'END' → END для {source}")
-                
-                graph.add_conditional_edges(source, condition_func, mapping)
-            else:
-                logger.warning(f"Не найдена функция условия для {source}")
-
-        # Добавляем EXPRESSION ребра
-        for edge in expression_edges:
-            condition_expr = edge.condition
-            
-            if not condition_expr:
-                logger.warning(f"EXPRESSION edge {edge.source} -> {edge.target} не содержит условия")
-                continue
-            
-            target = END if edge.target == "END" else edge.target
-            
-            # Создаем функцию условия для EXPRESSION
-            def make_condition_func(expr: str, edge_info: str):
-                def condition_func(state: State) -> bool:
-                    """Функция проверки EXPRESSION условия"""
-                    try:
-                        # Выполняем выражение в контексте state
-                        result = eval(expr, {"state": state, "State": State})
-                        logger.info(f"✅ EXPRESSION {edge_info}: {expr} = {result}")
-                        return bool(result)
-                    except Exception as e:
-                        logger.error(f"❌ Ошибка в EXPRESSION {edge_info}: {e}", exc_info=True)
-                        return False
-                return condition_func
-            
-            condition_func = make_condition_func(condition_expr, f"{edge.source} -> {edge.target}")
-            
-            # Добавляем условное ребро
-            # LangGraph поддерживает добавление ребра с условием через add_conditional_edges
-            graph.add_conditional_edges(
-                edge.source,
-                condition_func,
-                {True: target, False: END}  # Если true - идем к target, если false - END
-            )
-            logger.info(f"✅ Добавлено EXPRESSION ребро: {edge.source} -> {edge.target}")
-
-        # Устанавливаем точку входа
-        if start_target:
-            # Используем ноду куда ведет START
-            graph.set_entry_point(start_target)
-        elif graph_def.entry_point == "START":
-            # Если entry_point это START, находим первую ноду без входящих ребер
-            first_node = self._find_first_node(graph_def)
-            graph.set_entry_point(first_node)
-        else:
-            graph.set_entry_point(graph_def.entry_point)
-
-        # Компилируем граф с checkpointer для сохранения состояния
-        checkpointer = await get_checkpointer()
-        compiled_graph = graph.compile(checkpointer=checkpointer)
-
-        logger.info("Граф успешно скомпилирован")
-        return compiled_graph
 
     async def _create_node_function(self, node, llm_config: Optional[LLMConfig] = None):
         """Создает функцию для ноды на основе ее типа"""
@@ -371,17 +199,15 @@ class GraphBuilder:
                 else:
                     tool_args = input_data
             
-            # Проверяем нужны ли тулу state и tool_call_id
-            # (Декоратор @tool с state_aware=True добавляет их в args_schema)
+            # Устанавливаем state в контекст для state_aware тулов
+            from app.core.variables import set_state_in_context
+            if hasattr(tool, '_is_platform_tool') and tool._is_platform_tool:
+                set_state_in_context(state)
+                logger.debug(f"   State установлен в контекст для тула (state_aware)")
+            
+            # Добавляем tool_call_id только если он есть в схеме
             if hasattr(tool, 'args_schema') and tool.args_schema:
                 schema_fields = tool.args_schema.model_fields if hasattr(tool.args_schema, 'model_fields') else {}
-                
-                # Добавляем state только если он есть в схеме (state_aware=True)
-                if 'state' in schema_fields and 'state' not in tool_args:
-                    tool_args['state'] = state
-                    logger.debug(f"   Добавляем state в аргументы тула (state_aware)")
-                
-                # Добавляем tool_call_id только если он есть в схеме
                 if 'tool_call_id' in schema_fields and 'tool_call_id' not in tool_args:
                     tool_args['tool_call_id'] = str(uuid.uuid4())
                     logger.debug(f"   Добавляем tool_call_id в аргументы тула")
@@ -652,13 +478,3 @@ class GraphBuilder:
                 return "end"
 
         return condition_func
-
-    def _find_first_node(self, graph_def: GraphDefinition) -> str:
-        """Находит первую ноду (без входящих ребер)"""
-        all_targets = {edge.target for edge in graph_def.edges}
-        for node in graph_def.nodes:
-            if node.id not in all_targets:
-                return node.id
-
-        # Если не нашли, берем первую ноду
-        return graph_def.nodes[0].id if graph_def.nodes else "start"

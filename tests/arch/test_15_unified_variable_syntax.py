@@ -135,6 +135,7 @@ STATE ПЕРЕМЕННЫЕ:
             provider="mock",
             model="mock-gpt-4",
             temperature=0.1,
+            context_window=10000,
         ),
     )
     
@@ -155,7 +156,6 @@ STATE ПЕРЕМЕННЫЕ:
             # counter НЕТ - должно быть "0"
         },
         "remaining_steps": 25,
-        "session_id": "test_session",
         "task_id": "task_1",
         "user_id": "user_1",
     }

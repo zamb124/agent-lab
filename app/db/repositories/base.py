@@ -4,7 +4,7 @@
 """
 
 import logging
-from typing import Generic, TypeVar, Optional, List, Type
+from typing import Generic, TypeVar, Optional, List, Type, Any
 from abc import ABC, abstractmethod
 
 from app.db.repositories.storage import Storage
@@ -188,19 +188,106 @@ class BaseRepository(Storage, ABC, Generic[T]):
             raise ValueError(f"Не удалось определить ID сущности {entity} (prefix: {prefix})")
 
         key = self._get_key(entity_id)
-        data = entity.model_dump_json()
-
-        # Проверяем специальные параметры
-        set_kwargs = {}
+        
+        # Для TaskConfig используем безопасную сериализацию (избегаем циклических ссылок)
         if hasattr(entity, '__class__') and 'TaskConfig' in str(entity.__class__):
-            # TaskConfig всегда использует глобальный scope
-            set_kwargs['force_global'] = True
+            import json
+            # Получаем словарь, исключая context
+            try:
+                task_dict = entity.model_dump(exclude={'context'}, mode='python')
+            except ValueError:
+                # Если все еще есть циклические ссылки, используем более агрессивный подход
+                task_dict = {}
+                for field_name, field_value in entity.model_fields.items():
+                    if field_name == 'context':
+                        continue
+                    try:
+                        field_data = getattr(entity, field_name, None)
+                        task_dict[field_name] = self._sanitize_for_json(field_data)
+                    except Exception:
+                        task_dict[field_name] = None
+            
+            # Санитизируем весь словарь рекурсивно
+            sanitized_dict = self._sanitize_for_json(task_dict)
+            data = json.dumps(sanitized_dict, default=str)
+            set_kwargs = {'force_global': True}
+        else:
+            data = entity.model_dump_json()
+            set_kwargs = {}
 
         # Объединяем с переданными kwargs
         set_kwargs.update(kwargs)
 
         # Используем Storage.set напрямую через super() чтобы избежать рекурсии
         return await super().set(key, data, **set_kwargs)
+    
+    def _sanitize_for_json(self, value: Any, _depth: int = 0, _seen: Optional[set] = None) -> Any:
+        """Рекурсивно санитизирует значение для JSON сериализации, избегая циклических ссылок"""
+        if _seen is None:
+            _seen = set()
+        
+        if _depth > 10:  # Защита от бесконечной рекурсии
+            return str(value)
+        
+        # Проверка на циклические ссылки
+        obj_id = id(value)
+        if obj_id in _seen:
+            return f"<circular reference: {type(value).__name__}>"
+        
+        if value is None or isinstance(value, (bool, int, float, str)):
+            return value
+        
+        # Для примитивных типов не добавляем в _seen
+        if isinstance(value, (dict, list, tuple)) or (hasattr(value, '__dict__') and not isinstance(value, type)):
+            _seen.add(obj_id)
+        
+        try:
+            if isinstance(value, dict):
+                result = {
+                    str(k): self._sanitize_for_json(v, _depth + 1, _seen)
+                    for k, v in value.items()
+                }
+                _seen.discard(obj_id)
+                return result
+            
+            if isinstance(value, (list, tuple)):
+                result = [self._sanitize_for_json(item, _depth + 1, _seen) for item in value]
+                _seen.discard(obj_id)
+                return result
+            
+            # Для объектов с model_dump используем его
+            if hasattr(value, 'model_dump'):
+                try:
+                    # Исключаем проблемные поля
+                    excluded = {'context', 'container', 'interface', '_state', '_context'}
+                    dumped = value.model_dump(mode='python', exclude=excluded)
+                    result = self._sanitize_for_json(dumped, _depth + 1, _seen)
+                    _seen.discard(obj_id)
+                    return result
+                except Exception:
+                    _seen.discard(obj_id)
+                    return str(value)
+            
+            # Для объектов с __dict__ - извлекаем атрибуты
+            if hasattr(value, '__dict__'):
+                try:
+                    obj_dict = {}
+                    for key, val in value.__dict__.items():
+                        if key.startswith('_') and key not in ('_state', '_context'):
+                            continue
+                        obj_dict[key] = self._sanitize_for_json(val, _depth + 1, _seen)
+                    _seen.discard(obj_id)
+                    return obj_dict
+                except Exception:
+                    _seen.discard(obj_id)
+                    return str(value)
+            
+            # Для других объектов - конвертируем в строку
+            _seen.discard(obj_id)
+            return str(value)
+        except Exception as e:
+            _seen.discard(obj_id)
+            return f"<error serializing {type(value).__name__}: {str(e)}>"
 
     async def _delete_typed(self, entity_id: str, **kwargs) -> bool:
         """

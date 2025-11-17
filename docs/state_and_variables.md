@@ -7,7 +7,7 @@
 ### State
 
 `State` - единый TypedDict для всех агентов (ReAct и StateGraph), который:
-- Автоматически персистится через checkpointer
+- Автоматически персистится через StateManager
 - Доступен в тулах через контекст `get_state()`
 - Содержит сессионное хранилище `store`
 
@@ -267,7 +267,7 @@ def courier_node(state: State) -> State:
 ### Что персистится автоматически:
 - `messages` - история диалога
 - `store` - сессионное хранилище
-- Весь `State` через checkpointer
+- Весь `State` через StateManager
 
 ### Что НЕ персистится:
 - `variables` из Context (заполняются при каждом запросе)

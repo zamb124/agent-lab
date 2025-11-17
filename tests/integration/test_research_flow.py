@@ -296,23 +296,20 @@ async def test_research_flow_end_to_end_REAL(migrated_db, flow_factory, agent_fa
     # Создаем новый flow instance с тем же thread_id
     research_flow_2 = await flow_factory.get_flow("app.flows.research_flow.research_flow_config")
     
-    # Получаем state из checkpoint
-    from app.core.checkpointer import get_checkpointer
-    checkpointer = await get_checkpointer()
+    # Получаем state из state_manager
+    from app.core.state_manager import get_state_manager
+    state_manager = await get_state_manager()
     
-    # Для получения state нужно использовать compiled graph
-    coordinator_2 = await agent_factory.get_agent("research_coordinator")
-    graph_2 = await coordinator_2.compile_graph()
+    # Для получения state используем state_manager
+    state = await state_manager.load_state(thread_id)
+    assert state is not None, "State не сохранился в state_manager"
+    assert state.get("messages") is not None, "State messages пусты"
     
-    state = await graph_2.aget_state({"configurable": {"thread_id": thread_id}})
-    assert state is not None, "State не сохранился в checkpoint"
-    assert state.values is not None, "State values пусты"
-    
-    persisted_store = state.values.get("store", {})
+    persisted_store = state.get("store", {})
     assert "final_report" in persisted_store, "final_report не персистнулся"
     assert "quality_decision" in persisted_store, "quality_decision не персистнулся"
     
-    print("   ✅ State корректно персистится в checkpointer")
+    print("   ✅ State корректно персистится в state_manager")
     
     print(f"\n{'='*60}")
     print(f"✅ ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ!")

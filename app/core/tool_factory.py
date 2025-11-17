@@ -22,7 +22,11 @@ from app.tools.session.session_tools import (
 )
 from app.tools.misc.standard import ask_user
 from app.core.tool_decorator import tool
-from langgraph.types import interrupt
+from app.agents.base import AgentInterrupt
+
+def interrupt(message: str):
+    """Функция для прерывания выполнения с запросом ввода от пользователя"""
+    raise AgentInterrupt(message)
 from app.services.billing_service import BillingService
 from app.models.billing_models import UsageType
 
@@ -298,7 +302,7 @@ from app.core.tool_decorator import tool
 
     async def _create_agent_tool(self, ref: ToolReference) -> Any:
         """Создает инструмент из агента"""
-
+        
         try:
             # Убираем префикс agent: если он есть
             agent_class_path = ref.tool_id
@@ -310,8 +314,20 @@ from app.core.tool_decorator import tool
             agent_factory = container.agent_factory
             agent = await agent_factory.get_agent(agent_class_path)
 
-            # Превращаем агента в инструмент
-            return agent.as_tool()
+            # Определяем политику памяти (приоритет: ToolReference > родительский агент > ISOLATED)
+            memory_policy = None
+            if ref.memory_policy is not None:
+                # Явно указанная в ToolReference - самый высокий приоритет
+                memory_policy = ref.memory_policy
+            else:
+                # Получаем родительского агента из контекста
+                context = get_context()
+                if context and context.agent_config and context.agent_config.default_memory_policy is not None:
+                    # default_memory_policy из родительского AgentConfig - средний приоритет
+                    memory_policy = context.agent_config.default_memory_policy
+                # Иначе останется None, и as_tool() использует ISOLATED по умолчанию
+
+            return agent.as_tool(memory_policy=memory_policy)
 
         except Exception as e:
             logger.error(f"Ошибка создания агента-инструмента {ref.tool_id}: {e}")

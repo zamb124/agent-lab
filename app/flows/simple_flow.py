@@ -2,24 +2,21 @@
 Test Flow - простой флоу без LLM для тестирования интерфейсов.
 """
 
-from typing import TypedDict, List
-from langchain_core.messages import BaseMessage, AIMessage
-from langgraph.graph import StateGraph, END
+from typing import Dict, Any
+from langchain_core.messages import AIMessage
+from app.core.state import State
 
 from app.agents.stategraph_agent import StateGraphAgent
-from app.models import FlowConfig
+from app.models import FlowConfig, NodeType, ConditionType, CodeMode
 
 
-class TestState(TypedDict):
-    messages: List[BaseMessage]
-
-
-async def test_response_node(state: TestState) -> TestState:
+async def test_response_node(state: State) -> State:
     """Простая нода которая возвращает ОК"""
-    user_message = state["messages"][0].content if state["messages"] else "неизвестно"
+    messages = state.get("messages", [])
+    user_message = messages[0].content if messages else "неизвестно"
 
     response = AIMessage(content=f"✅ ОК! Получил сообщение: '{user_message}'")
-    state["messages"].append(response)
+    state["messages"] = messages + [response]
 
     return state
 
@@ -30,25 +27,29 @@ class SimpleFlowAgent(StateGraphAgent):
     name = "Test Flow Agent"
     description = "Простой агент для тестирования интерфейсов"
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.graph = self.build_graph()
-        self.compiled_graph = self.graph.compile()
-
-    def build_graph(self):
-        """Создает и возвращает граф"""
-        graph = StateGraph(TestState)
-        
-        graph.add_node("test_response", test_response_node)
-        
-        graph.set_entry_point("test_response")
-        graph.add_edge("test_response", END)
-        
-        return graph
-
-    async def ainvoke(self, input_data, config=None):
-        """Стандартный LangGraph ainvoke"""
-        return await self.compiled_graph.ainvoke(input_data, config)
+    def graph_definition(self) -> Dict[str, Any]:
+        """Определение графа для StateGraphRunner"""
+        return {
+            "entry_point": "test_response",
+            "nodes": [
+                {
+                    "id": "test_response",
+                    "type": NodeType.FUNCTION_NODE,
+                    "code_mode": CodeMode.CODE_REFERENCE,
+                    "function_path": "app.flows.simple_flow.test_response_node",
+                },
+            ],
+            "edges": [
+                {
+                    "source": "START",
+                    "target": "test_response",
+                },
+                {
+                    "source": "test_response",
+                    "target": "END",
+                },
+            ],
+        }
 
 
 # Test Flow конфигурация

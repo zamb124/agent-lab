@@ -1,6 +1,6 @@
 # Агенты в Agent Lab
 
-Полное руководство по созданию и управлению агентами на базе LangGraph.
+Полное руководство по созданию и управлению агентами.
 
 ## Оглавление
 
@@ -27,7 +27,7 @@
     ↓ миграция
 Конфигурация в БД (AgentConfig)
     ↓ фабрика
-Живой экземпляр агента (LangGraph граф)
+Живой экземпляр агента (Runner)
 ```
 
 **Ключевые принципы:**
@@ -50,8 +50,8 @@ class MyAgent(BaseAgent):
     prompt = "Промпт агента..."
     tools = [...]
     
-    async def compile_graph(self) -> Runnable:
-        """Компиляция LangGraph графа"""
+    async def get_runner(self) -> BaseAgentRunner:
+        """Создание раннера для выполнения агента"""
         pass
 ```
 
@@ -60,7 +60,7 @@ class MyAgent(BaseAgent):
 - `description` - описание (опционально)
 
 **Ключевые методы:**
-- `compile_graph()` - создание и компиляция LangGraph графа
+- `get_runner()` - создание раннера для выполнения агента
 - `ainvoke()` - унифицированный метод вызова
 - `get_tools()` - загрузка инструментов из БД
 - `as_tool()` - превращение агента в инструмент
@@ -80,7 +80,7 @@ Agent Lab поддерживает три типа агентов:
 
 **Преимущества:**
 - Быстрая разработка (только prompt и tools)
-- Автоматическая компиляция через `create_react_agent`
+- Автоматическое выполнение через `ReActAgentRunner`
 - Поддержка динамических переменных в промпте
 
 **Пример:** `app/agents/weather/agent.py`, `app/agents/calculator/agent.py`
@@ -93,7 +93,7 @@ Agent Lab поддерживает три типа агентов:
 - Нестандартные State или структура графа
 
 **Преимущества:**
-- Полный контроль над LangGraph
+- Полный контроль над структурой графа
 - Кастомные State типы
 - Гибкая структура графа
 
@@ -185,20 +185,19 @@ ReActAgent поддерживает систему переменных:
 **Счетчики:**
 - `{#messages.count}` - количество сообщений в диалоге
 
-### Компиляция графа
+### Выполнение агента
 
-ReActAgent автоматически компилирует граф через `create_react_agent`:
+ReActAgent автоматически выполняется через `ReActAgentRunner`:
 
 ```python
-# Внутри ReActAgent.compile_graph()
-from langgraph.prebuilt import create_react_agent
+# Внутри ReActAgent.get_runner()
+from app.core.agent_runner import ReactAgentRunner
 
-graph = create_react_agent(
-    model=llm,
+runner = ReactAgentRunner(
+    agent_config=self.config,
     tools=tools,
-    prompt=dynamic_prompt,  # Функция для динамического рендеринга
-    checkpointer=checkpointer,
-    state_schema=State
+    llm=llm,
+    prompt=dynamic_prompt  # Функция для динамического рендеринга
 )
 ```
 
@@ -206,7 +205,7 @@ graph = create_react_agent(
 1. Создается LLM на основе `llm_config`
 2. Загружаются tools из БД по ссылкам
 3. Промпт рендерится с переменными
-4. Создается ReAct граф с автоматическим циклом
+4. Создается ReAct раннер с автоматическим циклом выполнения
 
 ---
 
@@ -214,17 +213,21 @@ graph = create_react_agent(
 
 ### Кастомные StateGraph агенты
 
-Для полного контроля переопределяй `build_graph()`:
+Для полного контроля используй `GraphDefinition`:
 
 ```python
 from app.agents.stategraph_agent import StateGraphAgent
-from langgraph.graph import StateGraph, START, END
-from typing import TypedDict, List
-from langchain_core.messages import BaseMessage
+from app.models.core_models import (
+    GraphDefinition, GraphNode, GraphEdge, 
+    NodeType, ConditionType
+)
+from app.core.state import State
 
-class RouterState(TypedDict):
-    messages: List[BaseMessage]
-    selected_agent: str
+def router_condition(state: State) -> str:
+    """Условие для выбора агента"""
+    if "math" in state["messages"][0].content:
+        return "calculator"
+    return "weather"
 
 class SmartFlowAgent(StateGraphAgent):
     """Кастомный граф с роутингом"""
@@ -232,68 +235,52 @@ class SmartFlowAgent(StateGraphAgent):
     name = "smart_flow"
     description = "Граф с условным роутингом"
     
-    def build_graph(self):
-        """Создание кастомного графа"""
-        graph = StateGraph(RouterState)
-        
-        # Добавляем ноды
-        graph.add_node("router", self.router_function)
-        graph.add_node("agent_a", self.agent_a_node)
-        graph.add_node("agent_b", self.agent_b_node)
-        
-        # Добавляем edges
-        graph.add_edge(START, "router")
-        
-        # Условный переход
-        graph.add_conditional_edges(
-            "router",
-            self.router_condition,
-            {
-                "agent_a": "agent_a",
-                "agent_b": "agent_b"
-            }
-        )
-        
-        graph.add_edge("agent_a", END)
-        graph.add_edge("agent_b", END)
-        
-        return graph
-    
-    def router_function(self, state):
-        """Функция роутера"""
-        if "math" in state["messages"][0].content:
-            state["selected_agent"] = "agent_a"
-        else:
-            state["selected_agent"] = "agent_b"
-        return state
-    
-    def router_condition(self, state):
-        """Условие для выбора"""
-        return state["selected_agent"]
-    
-    async def agent_a_node(self, state):
-        """Нода с вызовом другого агента"""
-        from app.core.agent_factory import AgentFactory
-        
-        factory = AgentFactory()
-        agent = await factory.get_agent("app.agents.calculator.agent.CalculatorAgent")
-        result = await agent.ainvoke({"messages": state["messages"]})
-        
-        state["messages"] = result["messages"]
-        return state
-    
-    async def compile_graph(self):
-        """Компиляция с checkpointer"""
-        from app.core.checkpointer import get_checkpointer
-        
-        checkpointer = await get_checkpointer()
-        return self.build_graph().compile(checkpointer=checkpointer)
+    graph_definition = GraphDefinition(
+        nodes=[
+            GraphNode(
+                id="router",
+                type=NodeType.AGENT_NODE,
+                params={"agent_id": "app.agents.router.RouterAgent"},
+                description="Роутинг запросов"
+            ),
+            GraphNode(
+                id="calculator",
+                type=NodeType.AGENT_NODE,
+                params={"agent_id": "app.agents.calculator.agent.CalculatorAgent"},
+                description="Математические вычисления"
+            ),
+            GraphNode(
+                id="weather",
+                type=NodeType.AGENT_NODE,
+                params={"agent_id": "app.agents.weather.agent.WeatherAgent"},
+                description="Погода"
+            ),
+        ],
+        edges=[
+            GraphEdge(source="START", target="router"),
+            GraphEdge(
+                source="router",
+                target="calculator",
+                condition_type=ConditionType.ROUTER,
+                condition="app.flows.smart_flow.router_condition"
+            ),
+            GraphEdge(
+                source="router",
+                target="weather",
+                condition_type=ConditionType.ROUTER,
+                condition="app.flows.smart_flow.router_condition"
+            ),
+            GraphEdge(source="calculator", target="END"),
+            GraphEdge(source="weather", target="END"),
+        ],
+        entry_point="router"
+    )
 ```
 
 **Ключевые моменты:**
-- Переопределяй `build_graph()` для создания графа
-- Используй `StateGraph` из LangGraph
-- Обязательно реализуй `compile_graph()` с checkpointer
+- Используй `GraphDefinition` для декларативного описания графа
+- Ноды автоматически выполняются через `StateGraphRunner`
+- State автоматически персистится через StateManager
 - Можешь использовать любой TypedDict как State
 
 ### Декларативные StateGraph агенты
@@ -585,9 +572,10 @@ async def as_tool(self) -> StructuredTool:
                 "messages": [{"role": "user", "content": request}]
             })
             
-            # GraphInterrupt - пробрасываем дальше
+            # AgentInterrupt - пробрасываем дальше
             if "__interrupt__" in result:
-                raise GraphInterrupt(...)
+                from app.agents.base import AgentInterrupt
+                raise AgentInterrupt(...)
             
             # Извлекаем ответ
             if result.get("messages"):
@@ -595,7 +583,7 @@ async def as_tool(self) -> StructuredTool:
                 
             return str(result)
             
-        except GraphInterrupt as e:
+        except AgentInterrupt as e:
             # Субагент запросил данные у пользователя
             raise e
     
@@ -607,7 +595,7 @@ async def as_tool(self) -> StructuredTool:
 ```
 
 **Ключевые моменты:**
-- Субагент может вызывать `ask_user()` → GraphInterrupt пробрасывается
+- Субагент может вызывать `ask_user()` → AgentInterrupt пробрасывается
 - Родительский агент получит вопрос и сможет передать его пользователю
 - После ответа выполнение продолжится с места прерывания
 
@@ -836,60 +824,69 @@ class MainAgent(ReActAgent):
 
 ```python
 from app.agents.stategraph_agent import StateGraphAgent
-from langgraph.graph import StateGraph, START, END
-from typing import TypedDict
+from app.models.core_models import (
+    GraphDefinition, GraphNode, GraphEdge, 
+    NodeType, ConditionType
+)
+from app.core.state import State
 
-class LoopState(TypedDict):
-    messages: list
-    iteration: int
-    max_iterations: int
+def should_continue(state: State) -> str:
+    """Решение продолжать или нет"""
+    iteration = state.get("store", {}).get("iteration", 0)
+    max_iterations = state.get("store", {}).get("max_iterations", 3)
+    if iteration >= max_iterations:
+        return "end"
+    return "continue"
+
+async def process_node(state: State) -> State:
+    """Обработка данных"""
+    iteration = state.get("store", {}).get("iteration", 0) + 1
+    state["store"]["iteration"] = iteration
+    # Логика обработки
+    return state
+
+async def check_node(state: State) -> State:
+    """Проверка условия"""
+    return state
 
 class IterativeAgent(StateGraphAgent):
     """Агент с циклической обработкой"""
     
     name = "iterative_agent"
     
-    def build_graph(self):
-        graph = StateGraph(LoopState)
-        
-        graph.add_node("process", self.process_node)
-        graph.add_node("check", self.check_node)
-        
-        graph.add_edge(START, "process")
-        graph.add_edge("process", "check")
-        
-        # Условный переход: продолжить или завершить
-        graph.add_conditional_edges(
-            "check",
-            self.should_continue,
-            {
-                "continue": "process",
-                "end": END
-            }
-        )
-        
-        return graph
-    
-    async def process_node(self, state):
-        """Обработка данных"""
-        state["iteration"] = state.get("iteration", 0) + 1
-        # Логика обработки
-        return state
-    
-    async def check_node(self, state):
-        """Проверка условия"""
-        return state
-    
-    def should_continue(self, state):
-        """Решение продолжать или нет"""
-        if state["iteration"] >= state.get("max_iterations", 3):
-            return "end"
-        return "continue"
-    
-    async def compile_graph(self):
-        from app.core.checkpointer import get_checkpointer
-        checkpointer = await get_checkpointer()
-        return self.build_graph().compile(checkpointer=checkpointer)
+    graph_definition = GraphDefinition(
+        nodes=[
+            GraphNode(
+                id="process",
+                type=NodeType.FUNCTION_NODE,
+                params={"function": "app.agents.iterative.process_node"},
+                description="Обработка данных"
+            ),
+            GraphNode(
+                id="check",
+                type=NodeType.FUNCTION_NODE,
+                params={"function": "app.agents.iterative.check_node"},
+                description="Проверка условия"
+            ),
+        ],
+        edges=[
+            GraphEdge(source="START", target="process"),
+            GraphEdge(source="process", target="check"),
+            GraphEdge(
+                source="check",
+                target="process",
+                condition_type=ConditionType.ROUTER,
+                condition="app.agents.iterative.should_continue"
+            ),
+            GraphEdge(
+                source="check",
+                target="END",
+                condition_type=ConditionType.ROUTER,
+                condition="app.agents.iterative.should_continue"
+            ),
+        ],
+        entry_point="process"
+    )
 ```
 
 ### Пример 4: Декларативный multi-agent
@@ -1081,14 +1078,14 @@ assert result["messages"][-1].content
 3. Проверь что tools помечены `@tool` декоратором
 4. Смотри логи `AgentFactory._create_tool_from_reference`
 
-### GraphInterrupt не работает
+### AgentInterrupt не работает
 
 **Проблема:** `ask_user()` не запрашивает данные
 
 **Решение:**
-1. Проверь что агент скомпилирован с `checkpointer`
+1. Проверь что у агента есть `session_id` в `input_data`
 2. Проверь что у задачи есть `session_id`
-3. Убедись что `TaskProcessor` ловит `GraphInterrupt`
+3. Убедись что `TaskProcessor` ловит `AgentInterrupt`
 
 ### Переменные не подставляются
 

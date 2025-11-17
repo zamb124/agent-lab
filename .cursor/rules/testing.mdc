@@ -16,19 +16,17 @@ alwaysApply: false
 
 <good_example>
 import pytest
-from app.core.checkpointer import get_checkpointer
+from app.core.state_manager import get_state_manager
 
 @pytest.mark.asyncio
 async def test_agent_execution():
-    checkpointer = await get_checkpointer()
-    # Тест с реальным checkpointer
+    state_manager = await get_state_manager()
+    # Тест с реальным StateManager
 </good_example>
 
 <bad_example>
-from langgraph.checkpoint.memory import MemorySaver
-
-def test_agent():
-    checkpointer = MemorySaver()  # НЕ используй для platform
+# НЕ используй моки для StateManager в platform тестах
+# Используй реальный StateManager через get_state_manager()
 </bad_example>
 
 ## Фикстуры

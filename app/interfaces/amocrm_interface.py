@@ -12,7 +12,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from app.interfaces.base import BaseInterface, Message
 from app.clients.amo_crm_integration import get_amocrm_client
 from app.core.config import settings
-from app.core.checkpointer import get_checkpointer
+from app.core.state_manager import get_state_manager
 from app.core.container import get_container
 from app.core.tracing.decorators import trace_span
 from app.models.trace_models import SpanType
@@ -228,7 +228,7 @@ class AmoCRMInterface(BaseInterface):
     )
     async def _add_chat_history_to_checkpointer(self, session_id: str, chat_history: List[Dict[str, Any]], chat_id: str):
         """
-        Добавляет историю чата в checkpointer через thread_id (session_id).
+        Добавляет историю чата в state_manager через session_id.
 
         Args:
             session_id: ID сессии (используется как thread_id для checkpointer)
@@ -236,11 +236,10 @@ class AmoCRMInterface(BaseInterface):
             chat_id: ID чата для логирования
         """
         try:
-            checkpointer = await get_checkpointer()
-            config = {"configurable": {"thread_id": session_id}}
-
+            state_manager = await get_state_manager()
+            
             # Получаем текущее состояние
-            current_state = await checkpointer.aget_tuple(config)
+            current_state = await state_manager.load_state(session_id)
 
             # Создаем langchain сообщения из истории чата
             langchain_messages = []
@@ -283,40 +282,34 @@ class AmoCRMInterface(BaseInterface):
                 langchain_messages.append(langchain_message)
 
             if not langchain_messages:
-                logger.info(f"📭 Нет сообщений для импорта в checkpointer для чата {chat_id}")
+                logger.info(f"📭 Нет сообщений для импорта в state_manager для чата {chat_id}")
                 return
 
             # Если есть текущее состояние, добавляем сообщения к существующим
-            if current_state and current_state.checkpoint:
-                existing_messages = current_state.checkpoint.get("channel_values", {}).get("messages", [])
+            if current_state:
+                existing_messages = current_state.get("messages", [])
                 all_messages = existing_messages + langchain_messages
             else:
                 all_messages = langchain_messages
-
-            # Создаем новое состояние с добавленными сообщениями
-            new_checkpoint = {
-                "channel_values": {
-                    "messages": all_messages
+                current_state = {
+                    "messages": [],
+                    "store": {},
+                    "session_id": session_id,
+                    "task_id": "",
+                    "user_id": "",
+                    "remaining_steps": 25
                 }
-            }
 
-            # Сохраняем в checkpointer
-            await checkpointer.aput(
-                config=config,
-                checkpoint=new_checkpoint,
-                metadata={
-                    "source": "amocrm_history_import",
-                    "chat_id": chat_id,
-                    "imported_messages_count": len(langchain_messages),
-                    "ts": datetime.now(timezone.utc).isoformat()
-                },
-                new_versions={}
-            )
+            # Обновляем состояние с добавленными сообщениями
+            current_state["messages"] = all_messages
 
-            logger.info(f"✅ Импортировано {len(langchain_messages)} сообщений в checkpointer для сессии {session_id}")
+            # Сохраняем в state_manager
+            await state_manager.save_state(session_id, current_state)
+
+            logger.info(f"✅ Импортировано {len(langchain_messages)} сообщений в state_manager для сессии {session_id}")
 
         except Exception as e:
-            logger.error(f"❌ Ошибка импорта истории чата в checkpointer: {e}", exc_info=True)
+            logger.error(f"❌ Ошибка импорта истории чата в state_manager: {e}", exc_info=True)
 
 
 

@@ -85,7 +85,7 @@ async def test_stategraph_flow_migration(flow_repo, test_context):
 
 
 @pytest.mark.asyncio
-async def test_stategraph_agent_execution(agent_factory, agent_repo, test_context):
+async def test_stategraph_agent_execution(agent_factory, agent_repo, test_context, system_context):
     """Тест выполнения StateGraph агента"""
     
     # Сохраняем агент в БД
@@ -160,7 +160,7 @@ async def test_all_node_types_present(agent_repo, test_context):
 
 
 @pytest.mark.asyncio
-async def test_message_node_adds_messages(agent_factory, agent_repo, test_context):
+async def test_message_node_adds_messages(agent_factory, agent_repo, test_context, system_context):
     """Тест что MESSAGE_NODE добавляет сообщения в state"""
     
     # Сохраняем агент в БД
@@ -207,7 +207,7 @@ async def test_message_node_adds_messages(agent_factory, agent_repo, test_contex
 
 
 @pytest.mark.asyncio  
-async def test_condition_types_work(agent_factory, agent_repo, test_context):
+async def test_condition_types_work(agent_factory, agent_repo, test_context, system_context):
     """Тест что оба типа условий (ROUTER и EXPRESSION) работают"""
     
     # Сохраняем агент в БД

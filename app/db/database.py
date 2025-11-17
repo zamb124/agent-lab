@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine, create_async_engin
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
-from app.db.models import Base
+from app.db.models import Base, Storage, Users, Tasks, Variables, AgentStates, OtelSpans
 
 logger = logging.getLogger(__name__)
 
@@ -124,18 +124,26 @@ async def create_tables():
     """Создает таблицы в БД если их нет"""
     await wait_for_db()
 
-    try:
-        engine = await get_engine()
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all, checkfirst=True)
-        logger.info("✅ Таблицы проверены/созданы")
-    except Exception as e:
-        error_msg = str(e)
-        if "already exists" in error_msg or "duplicate key" in error_msg:
-            logger.info("ℹ️ Таблицы уже существуют, пропускаем создание")
-        else:
-            logger.error(f"❌ Ошибка при создании таблиц: {e}")
-            raise
+    # Импортируем все модели чтобы они зарегистрировались в Base.metadata
+    from app.db.models import Storage, Users, Tasks, Variables, Stores, AgentStates, OtelSpans
+
+    logger.info(f"📋 Зарегистрировано таблиц в Base.metadata: {len(Base.metadata.tables)}")
+    for table_name in sorted(Base.metadata.tables.keys()):
+        logger.debug(f"  - {table_name}")
+
+    engine = await get_engine()
+    logger.info(f"🔧 Engine получен: {engine.url}")
+    
+    async with engine.begin() as conn:
+        logger.info("🔄 Вызываем Base.metadata.create_all...")
+        def _create_all(sync_conn):
+            logger.info(f"📝 Создание таблиц через sync_conn...")
+            Base.metadata.create_all(sync_conn, checkfirst=True)
+            logger.info("✅ create_all завершен")
+        
+        await conn.run_sync(_create_all)
+    
+    logger.info("✅ Таблицы проверены/созданы")
 
 
 async def drop_tables():

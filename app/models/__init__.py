@@ -21,6 +21,7 @@ from .core_models import (
     VariableDefinition,
     VariableDefinitionInput,
     FlowConfig,
+    SubAgentMemoryPolicy,
 )
 from .task_models import (
     TaskStatus,
@@ -62,6 +63,7 @@ __all__ = [
     "FlowAuthor",
     "VariableDefinition",
     "FlowConfig",
+    "SubAgentMemoryPolicy",
     "TaskStatus",
     "TaskConfig",
     "SessionStatus",

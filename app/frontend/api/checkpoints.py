@@ -6,7 +6,7 @@ import logging
 from typing import Dict, Any
 from fastapi import APIRouter, HTTPException, Query
 
-from app.core.checkpointer import CheckpointInspector
+from app.core.state_inspector import StateInspector
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ async def get_checkpoint_timeline(
     """
     logger.info(f"🔍 Запрос timeline для thread_id: {thread_id}")
     
-    inspector = CheckpointInspector()
+    inspector = StateInspector()
     timeline_data = await inspector.get_timeline(thread_id, include_values=include_values)
     
     logger.info(f"📊 Получены данные timeline: tree={len(timeline_data.get('tree', []))} элементов, summary={timeline_data.get('summary', {})}")
@@ -57,8 +57,8 @@ async def get_checkpoint_history(thread_id: str) -> Dict[str, Any]:
     Returns:
         Список чекпоинтеров с метаданными
     """
-    inspector = CheckpointInspector()
-    history = await inspector.get_checkpoint_history(thread_id)
+    inspector = StateInspector()
+    history = await inspector.get_state_history(thread_id)
     return {"thread_id": thread_id, "history": history}
 
 
@@ -73,7 +73,7 @@ async def get_checkpoint_connections(thread_id: str) -> Dict[str, Any]:
     Returns:
         Словарь с информацией о связях чекпоинтеров
     """
-    inspector = CheckpointInspector()
-    connections = await inspector.get_checkpoint_connections(thread_id)
+    inspector = StateInspector()
+    connections = await inspector.get_state_connections(thread_id)
     return connections
 

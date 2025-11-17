@@ -6,10 +6,10 @@ StateGraphAgent - агент на базе кастомного StateGraph.
 import logging
 from typing import Any, Dict, Optional
 
-from langchain_core.runnables import Runnable
-
 from app.agents.base import BaseAgent
-from app.core.container import get_container
+from app.core.llm_factory import get_llm
+from app.core.agent_runner import StateGraphRunner
+from app.models import GraphDefinition
 
 logger = logging.getLogger(__name__)
 
@@ -20,33 +20,63 @@ class StateGraphAgent(BaseAgent):
     Агент на базе кастомного StateGraph.
     
     Создает граф из декларативного graph_definition через GraphBuilder.
-    Требует наличия graph_definition в конфигурации.
+    Переопредели метод graph_definition() для определения графа.
     """
 
-    async def compile_graph(self) -> Runnable:
+    def graph_definition(self) -> Dict[str, Any]:
         """
-        Компилирует StateGraph из graph_definition.
+        Возвращает определение графа.
+        Переопредели этот метод в подклассе для определения структуры графа.
         
         Returns:
-            Скомпилированный граф LangGraph
+            Словарь с определением графа (nodes, edges, entry_point)
             
         Raises:
-            ValueError: Если не указан graph_definition в конфигурации
+            NotImplementedError: Если метод не переопределен и нет graph_definition в config
         """
-        logger.info(f"Компиляция StateGraph графа для агента: {self.config.agent_id}")
+        if self.config and self.config.graph_definition:
+            return self.config.graph_definition
         
-        if not self.config.graph_definition:
-            raise ValueError(
-                f"StateGraph агент {self.config.agent_id} требует graph_definition"
-            )
-
-        container = get_container()
-        builder = container.graph_builder
-        graph = await builder.build_from_definition(
-            self.config.graph_definition, 
-            self.config.llm_config
+        raise NotImplementedError(
+            f"StateGraph агент {type(self).__name__} должен переопределить метод graph_definition() "
+            f"или иметь graph_definition в конфигурации"
         )
 
-        logger.info(f"StateGraph граф создан для агента {self.config.agent_id}")
-        return graph
+    async def get_runner(self):
+        """
+        Создает StateGraphRunner для выполнения агента.
+        
+        Returns:
+            StateGraphRunner для выполнения графа
+        """
+        graph_def = self.graph_definition()
+        
+        llm_kwargs = {}
+        if self.config and self.config.llm_config:
+            if self.config.llm_config.model:
+                llm_kwargs["model"] = self.config.llm_config.model
+            if self.config.llm_config.temperature is not None:
+                llm_kwargs["temperature"] = self.config.llm_config.temperature
+            if self.config.llm_config.max_tokens is not None:
+                llm_kwargs["max_tokens"] = self.config.llm_config.max_tokens
+        
+        llm = get_llm(**llm_kwargs) if llm_kwargs else get_llm()
+        
+        tools = await self.get_tools()
+        if isinstance(graph_def, GraphDefinition):
+            graph_definition = graph_def
+        else:
+            graph_definition = GraphDefinition(**graph_def)
+        prompt = self.config.prompt if self.config else None
+        
+        runner = StateGraphRunner(
+            agent_config=self.config,
+            tools=tools,
+            llm=llm,
+            graph_definition=graph_definition,
+            prompt=prompt
+        )
+        # Инициализируем граф сразу, чтобы ошибки обнаруживались при создании раннера
+        await runner._ensure_initialized()
+        return runner
 

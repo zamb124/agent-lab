@@ -4,7 +4,14 @@ State для агентов.
 """
 
 from typing import Annotated, TypedDict, Dict, Any, List
-from langgraph.graph.message import add_messages
+
+
+def add_messages(left: List[Any], right: List[Any]) -> List[Any]:
+    """
+    Простая функция для объединения списков сообщений.
+    Заменяет add_messages из langgraph.
+    """
+    return left + right
 
 
 def merge_store(left: Dict[str, Any], right: Dict[str, Any]) -> Dict[str, Any]:
@@ -36,7 +43,8 @@ class State(TypedDict, total=False):
     - task_id: ID текущей задачи
     - session_id: ID текущей сессии
     - user_id: ID пользователя
-    - remaining_steps: Оставшееся количество шагов для ReAct агента (требуется для create_react_agent)
+    - remaining_steps: Оставшееся количество шагов для ReAct агента
+    - interrupt_context: Контекст прерывания для возобновления выполнения с того же места
     """
     
     messages: Annotated[List, add_messages]
@@ -46,6 +54,7 @@ class State(TypedDict, total=False):
     session_id: str
     user_id: str
     remaining_steps: int
+    interrupt_context: Dict[str, Any]
 
 
 def get_default_state() -> State:

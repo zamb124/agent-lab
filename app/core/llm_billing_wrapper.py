@@ -106,7 +106,7 @@ class ChatOpenAIWithBilling(BaseChatModel):
                             "type": "function",
                             "function": {
                                 "name": tc["name"],
-                                "arguments": json.dumps(tc["args"]) if isinstance(tc["args"], dict) else tc["args"]
+                                "arguments": json.dumps(tc["args"], default=str) if isinstance(tc["args"], dict) else json.dumps(tc["args"], default=str) if tc["args"] else "{}"
                             }
                         }
                         for tc in message.tool_calls

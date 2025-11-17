@@ -63,13 +63,13 @@ async def test_stategraph_tool(test_user, test_company):
     )
     set_context(context)
 
-    logger.info("📋 Исходный state:", mock_state)
+    logger.info(f"📋 Исходный state: {mock_state}")
 
     # Вызываем tool как StateGraph node (с state параметром)
     result = test_state_tool.invoke({"message": "Привет StateGraph!", "state": mock_state})
 
-    logger.info("📋 Результат:", result)
-    logger.info("📋 Обновленный state:", mock_state)
+    logger.info(f"📋 Результат: {result}")
+    logger.info(f"📋 Обновленный state: {mock_state}")
 
     # Проверяем, что state изменился
     assert "test_data" in mock_state, "test_data должен быть в state"

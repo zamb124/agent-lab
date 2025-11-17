@@ -57,7 +57,6 @@ async def test_01_store_variables_in_prompt(migrated_db, storage, agent_factory,
             "request_count": 5,
         },
         "remaining_steps": 25,
-        "session_id": "test_session",
         "task_id": "task_1",
         "user_id": "user_1",
     }
@@ -123,7 +122,6 @@ async def test_02_store_variables_in_subagent_prompt(migrated_db, storage, agent
             "warehouse_requests": 10,
         },
         "remaining_steps": 25,
-        "session_id": "test_session",
         "task_id": "task_1",
         "user_id": "user_1",
     }
@@ -174,7 +172,6 @@ ID СКЛАДА: {?store.warehouse_id|НЕТ}
         "messages": [HumanMessage(content="Какой склад?")],
         "store": {},
         "remaining_steps": 25,
-        "session_id": "test_session",
         "task_id": "task_1",
         "user_id": "user_1",
     }
@@ -286,7 +283,6 @@ async def test_04_optional_and_default_values(migrated_db, storage, agent_factor
             # some_flag НЕТ - должно быть "false"
         },
         "remaining_steps": 25,
-        "session_id": "test_session",
         "task_id": "task_1",
         "user_id": "user_1",
     }
@@ -344,7 +340,6 @@ async def test_05_special_functions(migrated_db, storage, agent_factory, test_he
         "messages": [HumanMessage(content="Первое сообщение")],
         "store": {},
         "remaining_steps": 25,
-        "session_id": "test_session",
         "task_id": "task_1",
         "user_id": "user_1",
     }
@@ -431,7 +426,6 @@ async def test_06_nested_store_access(migrated_db, storage, agent_factory, test_
             },
         },
         "remaining_steps": 25,
-        "session_id": "test_session",
         "task_id": "task_1",
         "user_id": "user_1",
     }

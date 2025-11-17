@@ -286,7 +286,8 @@ class BaseInterface(ABC):
                 session_config.status = SessionStatus.PROCESSING
                 logger.info(f"🔄 Сессия {message.session_id} переведена в статус PROCESSING")
             session_config.last_activity = datetime.now(timezone.utc)
-            await storage.set(session_key, session_config.model_dump_json())
+            session_dict = session_config.model_dump(mode='json')
+            await storage.set(session_key, json.dumps(session_dict, default=str))
         else:
             # Создаем новую сессию в БД
             logger.info(f"🆕 Создаем новую сессию в БД: {message.session_id}")
@@ -300,7 +301,9 @@ class BaseInterface(ABC):
                 created_at=datetime.now(timezone.utc),
                 last_activity=datetime.now(timezone.utc),
             )
-            await storage.set(session_key, session_config.model_dump_json())
+            import json
+            session_dict = session_config.model_dump(mode='json')
+            await storage.set(session_key, json.dumps(session_dict, default=str))
             logger.info(f"✅ Новая сессия {message.session_id} создана в БД")
 
         task_id = f"task_{uuid.uuid4().hex[:8]}"

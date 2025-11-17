@@ -173,6 +173,63 @@ class Variables(Base):
         return f"<Variables(key='{self.key}', updated_at='{self.updated_at}')>"
 
 
+class Stores(Base):
+    """
+    Таблица для хранения store (единого для всего flow).
+    Все агенты в flow используют один и тот же store через store_id.
+    """
+
+    __tablename__ = "stores"
+
+    store_id = Column(String(255), primary_key=True, index=True)
+    store_data = Column(JSONB, nullable=False, default={})
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        Index("ix_stores_updated_at", "updated_at"),
+    )
+
+    def __repr__(self):
+        return f"<Stores(store_id='{self.store_id}', updated_at='{self.updated_at}')>"
+
+
+class AgentStates(Base):
+    """
+    Таблица для хранения состояний агентов (замена checkpointer из LangGraph).
+    Хранит состояние сессий в формате JSONB.
+    store хранится отдельно в таблице Stores и ссылается через store_id.
+    """
+
+    __tablename__ = "agent_states"
+
+    session_id = Column(String(255), primary_key=True, index=True)
+    store_id = Column(String(255), nullable=False, index=True)
+    state_data = Column(JSONB, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        Index("ix_agent_states_store_id", "store_id"),
+        Index("ix_agent_states_updated_at", "updated_at"),
+    )
+
+    def __repr__(self):
+        return f"<AgentStates(session_id='{self.session_id}', store_id='{self.store_id}', updated_at='{self.updated_at}')>"
+
+
 class OtelSpans(Base):
     """
     Таблица для OpenTelemetry.

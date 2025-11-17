@@ -234,23 +234,43 @@ class DocSearchAgent(ReActAgent):
 MCP тулы работают как обычные тулы в нодах графа:
 
 ```python
-from langgraph.graph import StateGraph
+from app.agents.stategraph_agent import StateGraphAgent
+from app.models.core_models import GraphDefinition, GraphNode, GraphEdge, NodeType
+from app.core.state import State
 
 class MyStateGraphAgent(StateGraphAgent):
-    def build_graph(self):
-        workflow = StateGraph(MyState)
-        
-        # Добавляем ноду с MCP тулом
-        workflow.add_node("search_docs", self.search_node)
-        
-        return workflow
+    name = "my_stategraph_agent"
     
-    async def search_node(self, state):
-        # MCP тул вызывается как обычный
-        result = await self.call_tool("mcp:context7:search_docs", {
-            "query": state["query"]
-        })
-        return {"result": result}
+    graph_definition = GraphDefinition(
+        nodes=[
+            GraphNode(
+                id="search_docs",
+                type=NodeType.FUNCTION_NODE,
+                params={"function": "app.agents.my.search_node"},
+                description="Поиск документов"
+            ),
+        ],
+        edges=[
+            GraphEdge(source="START", target="search_docs"),
+            GraphEdge(source="search_docs", target="END"),
+        ],
+        entry_point="search_docs"
+    )
+
+async def search_node(state: State) -> State:
+    """Нода с вызовом MCP тула"""
+    from app.core.container import get_container
+    
+    tool_factory = get_container().tool_factory
+    mcp_tool = await tool_factory.create_tool("mcp:context7:search_docs")
+    
+    # MCP тул вызывается как обычный
+    result = await mcp_tool.ainvoke({
+        "query": state.get("store", {}).get("query", "")
+    })
+    
+    state["store"]["result"] = result
+    return state
 ```
 
 ## Переменные и секреты

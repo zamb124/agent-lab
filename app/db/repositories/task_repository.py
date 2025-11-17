@@ -109,14 +109,15 @@ class TaskRepository(BaseRepository[TaskConfig]):
 
             tasks = []
             rows = list(result)
-            logger.info(f"Найдено {len(rows)} pending задач готовых к выполнению")
+            if len(rows) > 0:
+                logger.info(f"Найдено {len(rows)} pending задач готовых к выполнению")
 
             for row in rows:
                 try:
                     task_data = json.dumps(row.value)
                     task = TaskConfig.model_validate_json(task_data)
                     tasks.append(task)
-                    logger.info(f"Задача {task.task_id} загружена (key={row.key})")
+                    logger.debug(f"Задача {task.task_id} загружена (key={row.key})")
                 except Exception as e:
                     logger.error(f"Ошибка парсинга задачи {row.key}: {e}")
                     continue

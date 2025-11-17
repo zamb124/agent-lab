@@ -417,11 +417,12 @@ async def test_agent_with_mcp_tools(setup_mcp_servers, test_company):
     loaded_tools = await agent.get_tools()
     assert len(loaded_tools) == 2
     
-    # 5. Компиляция и вызов
-    compiled_graph = await agent.compile_graph()
-    result = await compiled_graph.ainvoke(
-        {"messages": [HumanMessage(content="Test")]},
-        config={"configurable": {"thread_id": str(uuid.uuid4())}}
+    # 5. Выполнение агента
+    result = await agent.ainvoke(
+        {
+            "messages": [HumanMessage(content="Test")],
+            "session_id": str(uuid.uuid4())
+        }
     )
     
     # 6. Проверка результата

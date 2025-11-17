@@ -27,8 +27,6 @@ from app.core.context import get_context
 from app.core.migration import Migrator
 from app.services.variables_service import VariablesService
 from app.core.container import get_container
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -68,11 +66,11 @@ class FlowFactory:
         include_checkpoints: bool = False
     ) -> MessageHistoryResponse:
         """
-        Получает полную историю выполнения flow для сессии из LangGraph checkpointer.
+        Получает полную историю выполнения flow для сессии из StateManager.
         
         Args:
-            session_id: ID сессии (thread_id для LangGraph)
-            limit: Максимальное количество checkpoint'ов для загрузки
+            session_id: ID сессии
+            limit: Максимальное количество checkpoint'ов для загрузки (не используется, оставлено для совместимости)
             include_checkpoints: Включать ли детальную информацию о checkpoint'ах
             
         Returns:
@@ -80,93 +78,42 @@ class FlowFactory:
         """
         logger.info(f"📜 Получение истории flow для сессии {session_id}")
         
-
+        from app.core.state_manager import get_state_manager
         
-        settings = get_settings()
-        config = {"configurable": {"thread_id": session_id}}
+        state_manager = await get_state_manager()
+        state = await state_manager.load_state(session_id)
         
         all_messages = []
         all_checkpoints = []
         checkpoint_count = 0
         
-        checkpointer_cm = AsyncPostgresSaver.from_conn_string(settings.database.checkpointer_url)
-        async with checkpointer_cm as checkpointer:
-            latest_checkpoint = None
+        if state:
+            messages = state.get("messages", [])
+            checkpoint_count = 1
             
-            async for checkpoint_tuple in checkpointer.alist(config, limit=limit):
-                checkpoint_count += 1
-                
-                if not checkpoint_tuple or not checkpoint_tuple.checkpoint:
-                    continue
-                
-                if checkpoint_count == 1:
-                    latest_checkpoint = checkpoint_tuple
-                
-                checkpoint_data = checkpoint_tuple.checkpoint
-                checkpoint_metadata = checkpoint_tuple.metadata or {}
-                checkpoint_config = checkpoint_tuple.config or {}
-                
-                checkpoint_id = checkpoint_config.get("configurable", {}).get("checkpoint_id", f"checkpoint_{checkpoint_count}")
-                checkpoint_ns = checkpoint_config.get("configurable", {}).get("checkpoint_ns", "")
-                
-                step = checkpoint_metadata.get("step", checkpoint_count)
-                raw_source_node = checkpoint_metadata.get("source")
-                
-                # Фильтруем служебные названия LangGraph
-                source_node = None
-                if raw_source_node and raw_source_node not in ["__start__", "__end__", "loop"]:
-                    source_node = raw_source_node
-                
-                timestamp_str = checkpoint_metadata.get("ts")
-                timestamp = None
-                if timestamp_str:
-                    timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                
-                if include_checkpoints:
-                    channel_values = checkpoint_data.get("channel_values", {})
-                    messages_in_checkpoint = channel_values.get("messages", [])
-                    checkpoint_messages = []
-                    
-                    for msg in messages_in_checkpoint:
-                        message_item = self._parse_message(msg, timestamp, source_node)
-                        if message_item:
-                            checkpoint_messages.append(message_item)
-                    
-                    if checkpoint_messages:
-                        checkpoint_info = CheckpointInfo(
-                            checkpoint_id=checkpoint_id,
-                            thread_id=session_id,
-                            checkpoint_ns=checkpoint_ns,
-                            step=step,
-                            source_node=source_node,
-                            timestamp=timestamp,
-                            messages=checkpoint_messages,
-                            metadata=checkpoint_metadata
-                        )
-                        all_checkpoints.append(checkpoint_info)
+            for msg in messages:
+                message_item = self._parse_message(msg, None, None)
+                if message_item:
+                    all_messages.append(message_item)
             
-            if latest_checkpoint:
-                latest_metadata = latest_checkpoint.metadata or {}
-                raw_latest_source = latest_metadata.get("source")
-                
-                # Фильтруем служебные названия LangGraph
-                latest_source_node = None
-                if raw_latest_source and raw_latest_source not in ["__start__", "__end__", "loop"]:
-                    latest_source_node = raw_latest_source
-                
-                channel_values = latest_checkpoint.checkpoint.get("channel_values", {})
-                messages_in_checkpoint = channel_values.get("messages", [])
-                
-                for msg in messages_in_checkpoint:
-                    message_item = self._parse_message(msg, None, latest_source_node)
-                    if message_item:
-                        all_messages.append(message_item)
-            
-            # Дедупликация сообщений по содержимому
-            all_messages = self._deduplicate_messages(all_messages)
+            if include_checkpoints and messages:
+                checkpoint_info = CheckpointInfo(
+                    checkpoint_id=f"checkpoint_1",
+                    thread_id=session_id,
+                    checkpoint_ns="",
+                    step=len(messages),
+                    source_node=None,
+                    timestamp=datetime.now(timezone.utc),
+                    messages=all_messages.copy(),
+                    metadata={"message_count": len(messages)}
+                )
+                all_checkpoints.append(checkpoint_info)
         
-            created_at = all_messages[0].timestamp if all_messages else None
-            last_activity = all_messages[-1].timestamp if all_messages else None
+        # Дедупликация сообщений по содержимому
+        all_messages = self._deduplicate_messages(all_messages)
+        
+        created_at = all_messages[0].timestamp if all_messages else None
+        last_activity = all_messages[-1].timestamp if all_messages else None
         
         session_config = await self.session_repository.get(session_id)
         flow_id = session_config.flow_id if session_config else None
@@ -403,11 +350,22 @@ class FlowFactory:
                 content=msg.content or "",
                 timestamp=default_timestamp or datetime.now(timezone.utc),
                 source_node=source_node,
-                metadata=msg.additional_kwargs or {}
+                metadata={}
+            )
+        
+        elif isinstance(msg, str):
+            # Строковые сообщения (например, из MESSAGE_NODE) обрабатываем как системные
+            return MessageItem(
+                role=MessageRole.SYSTEM,
+                content=msg,
+                timestamp=default_timestamp or datetime.now(timezone.utc),
+                source_node=source_node,
+                metadata={}
             )
         
         else:
-            logger.warning(f"⚠️ Неизвестный тип сообщения: {type(msg)}")
+            # Для неизвестных типов - конвертируем в строку
+            logger.warning(f"⚠️ Неизвестный тип сообщения: {type(msg)}, конвертируем в строку")
             return MessageItem(
                 role=MessageRole.SYSTEM,
                 content=str(msg),
@@ -445,7 +403,7 @@ class FlowFactory:
     async def _get_session_info(self, session_id: str) -> tuple[int, Optional[str]]:
         """
         Получает информацию о сессии: количество сообщений и первое сообщение пользователя.
-        Оптимизирован для получения обеих данных за один проход.
+        Использует StateManager для получения данных.
         
         Args:
             session_id: ID сессии
@@ -453,32 +411,23 @@ class FlowFactory:
         Returns:
             Tuple (количество сообщений, первое сообщение пользователя)
         """
-        settings = get_settings()
-        config = {"configurable": {"thread_id": session_id}}
+        from app.core.state_manager import get_state_manager
+        
+        state_manager = await get_state_manager()
+        state = await state_manager.load_state(session_id)
         
         message_count = 0
         first_message = None
-        oldest_checkpoint = None
         
-        checkpointer_cm = AsyncPostgresSaver.from_conn_string(settings.database.checkpointer_url)
-        async with checkpointer_cm as checkpointer:
-            async for checkpoint_tuple in checkpointer.alist(config, limit=20):
-                if not checkpoint_tuple or not checkpoint_tuple.checkpoint:
-                    continue
-                
-                channel_values = checkpoint_tuple.checkpoint.get("channel_values", {})
-                messages = channel_values.get("messages", [])
-                message_count = max(message_count, len(messages))
-                
-                oldest_checkpoint = checkpoint_tuple
+        if state:
+            messages = state.get("messages", [])
+            message_count = len(messages)
             
-            if oldest_checkpoint:
-                channel_values = oldest_checkpoint.checkpoint.get("channel_values", {})
-                messages = channel_values.get("messages", [])
-                
-                for msg in messages:
-                    if isinstance(msg, HumanMessage):
-                        content = msg.content or ""
+            # Ищем первое сообщение пользователя
+            for msg in messages:
+                if isinstance(msg, HumanMessage):
+                    content = msg.content if hasattr(msg, 'content') else str(msg)
+                    if content:
                         first_message = content[:60] if len(content) > 60 else content
                         break
         

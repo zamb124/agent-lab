@@ -427,7 +427,7 @@ async def step3_verify(state):
 
 
 @pytest.mark.asyncio
-async def test_04_store_persists_across_agent_chain(migrated_db, storage, agent_factory, test_helpers, unique_id, agent_repo):
+async def test_04_store_persists_across_agent_chain(migrated_db, storage, agent_factory, test_helpers, unique_id, agent_repo, mock_llm):
     """
     Тест 4: Store персистится на протяжении всей цепочки агентов.
     
@@ -468,7 +468,7 @@ def mark_visited_a(agent_name: str) -> str:
     return f"{agent_name} отметился"
 """,
         )],
-        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1),
+        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1, context_window=10000),
     )
     
     agent_b = AgentConfig(
@@ -502,7 +502,7 @@ def mark_visited_b(agent_name: str) -> str:
     return f"{agent_name} отметился"
 """,
         )],
-        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1),
+        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1, context_window=10000),
     )
     
     agent_c = AgentConfig(
@@ -523,7 +523,7 @@ STORE (должны быть данные от A и B):
 Ответь: "Agent C видит: A={store.agent_a_visited}, B={store.agent_b_visited}"
 """,
         tools=[],
-        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1),
+        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1, context_window=10000),
     )
     
     # Координатор вызывает всех по порядку
@@ -546,7 +546,7 @@ STORE (должны быть данные от A и B):
             "agent:test_agent_b",
             "agent:test_agent_c"
         ],
-        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1),
+        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1, context_window=10000),
     )
     
     await agent_repo.set(agent_a)
@@ -555,6 +555,29 @@ STORE (должны быть данные от A и B):
     await agent_repo.set(coordinator_config)
     
     coordinator = await agent_factory.get_agent("test_chain_coordinator")
+    
+    # Настраиваем mock_llm для вызовов инструментов
+    # ВАЖНО: настраиваем глобальный mock, который используется агентами
+    from app.core.llm_factory import get_global_mock_llm
+    global_mock = get_global_mock_llm("mock-gpt-4")
+    if global_mock:
+        global_mock.reset_call_counts()
+        global_mock.configure(
+            tool_responses={
+                "запусти цепочку": {"tool": "agent:test_agent_a", "args": {}},
+                "mark_visited": {"tool": "mark_visited_a", "args": {"agent_name": "agent_a"}},
+                "agent_a": {"tool": "agent:test_agent_b", "args": {}},
+                "agent_b": {"tool": "agent:test_agent_c", "args": {}},
+            },
+            responses={
+                "запусти цепочку": "Agent A видит: ключей=0",
+                "mark_visited": "Agent A отметился",
+                "agent_a": "Agent A видит: ключей=0",
+                "agent_b": "Agent B видит: A=True",
+                "agent_c": "Agent C видит: A=True, B=True",
+            },
+            default_response="Готово"
+        )
     
     thread_id = unique_id("thread")
     config = {"configurable": {"thread_id": thread_id}}
@@ -586,7 +609,7 @@ STORE (должны быть данные от A и B):
 
 
 @pytest.mark.asyncio
-async def test_05_initial_store_from_flow_config(migrated_db, storage, agent_factory, test_helpers, unique_id, agent_repo, flow_repo):
+async def test_05_initial_store_from_flow_config(migrated_db, storage, agent_factory, test_helpers, unique_id, agent_repo, flow_repo, mock_llm):
     """
     Тест 5: Начальные значения store из FlowConfig.
     
@@ -614,7 +637,7 @@ async def test_05_initial_store_from_flow_config(migrated_db, storage, agent_fac
 Ответь: "Вижу начальные данные: max_requests={store.max_requests}"
 """,
         tools=[],
-        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1),
+        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1, context_window=10000),
     )
     
     await agent_repo.set(agent_config)
@@ -641,6 +664,18 @@ async def test_05_initial_store_from_flow_config(migrated_db, storage, agent_fac
     
     agent = await agent_factory.get_agent("test_initial_store_agent")
     
+    # Настраиваем mock_llm
+    from app.core.llm_factory import get_global_mock_llm
+    global_mock = get_global_mock_llm("mock-gpt-4")
+    if global_mock:
+        global_mock.reset_call_counts()
+        global_mock.configure(
+            responses={
+                "проверь начальные данные": "Вижу начальные данные: max_requests=10"
+            },
+            default_response="Готово"
+        )
+    
     thread_id = unique_id("thread")
     config = {"configurable": {"thread_id": thread_id}}
     
@@ -665,7 +700,7 @@ async def test_05_initial_store_from_flow_config(migrated_db, storage, agent_fac
 
 
 @pytest.mark.asyncio
-async def test_06_store_merge_not_overwrite(migrated_db, storage, agent_factory, test_helpers, unique_id, agent_repo, flow_repo):
+async def test_06_store_merge_not_overwrite(migrated_db, storage, agent_factory, test_helpers, unique_id, agent_repo, flow_repo, mock_llm):
     """
     Тест 6: Store мержится, а не перезаписывается.
     
@@ -717,7 +752,7 @@ def update_settings(timeout: int, theme: str) -> str:
     return f"Обновлено: timeout={timeout}, theme={theme}, counter={state['store']['counter']}"
 """,
         )],
-        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1),
+        llm_config=LLMConfig(model="mock-gpt-4", temperature=0.1, context_window=10000),
     )
     
     await agent_repo.set(agent_config)
@@ -745,6 +780,21 @@ def update_settings(timeout: int, theme: str) -> str:
     context.flow_config = flow_config
     
     agent = await agent_factory.get_agent("test_merge_store_agent")
+    
+    # Настраиваем mock_llm
+    from app.core.llm_factory import get_global_mock_llm
+    global_mock = get_global_mock_llm("mock-gpt-4")
+    if global_mock:
+        global_mock.reset_call_counts()
+        global_mock.configure(
+            tool_responses={
+                "обнови настройки": {"tool": "update_settings", "args": {"timeout": 30, "theme": "dark"}}
+            },
+            responses={
+                "обнови настройки": "Настройки обновлены: timeout=30, theme=dark"
+            },
+            default_response="Готово"
+        )
     
     thread_id = unique_id("thread")
     config = {"configurable": {"thread_id": thread_id}}
@@ -774,7 +824,7 @@ def update_settings(timeout: int, theme: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_07_react_agent_session_set_then_prompt_substitution(migrated_db, storage, agent_factory, unique_id, agent_repo, flow_repo):
+async def test_07_react_agent_session_set_then_prompt_substitution(migrated_db, storage, agent_factory, unique_id, agent_repo, flow_repo, mock_llm):
     """
     Тест 7: ReAct Agent A вызывает session_set → ReAct Agent B видит в промпте.
     

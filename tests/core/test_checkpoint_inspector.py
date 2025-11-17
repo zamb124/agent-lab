@@ -9,7 +9,7 @@
 import pytest
 from langchain_core.messages import HumanMessage
 
-from app.core.checkpointer import CheckpointInspector
+from app.core.state_inspector import StateInspector
 from app.models import AgentConfig, AgentType, GraphDefinition, GraphNode, GraphEdge, NodeType, CodeMode, LLMConfig
 
 
@@ -80,7 +80,7 @@ async def calculate_tool(a: int, b: int, operation: str = "add") -> str:
 
     assert "messages" in result2
 
-    inspector = CheckpointInspector()
+    inspector = StateInspector()
 
     history = await inspector.get_checkpoint_history(thread_id)
     assert len(history) > 0, "Должна быть история чекпоинтеров"
@@ -224,7 +224,7 @@ async def result_node(state):
     assert "messages" in result
     assert "store" in result
 
-    inspector = CheckpointInspector()
+    inspector = StateInspector()
 
     history = await inspector.get_checkpoint_history(thread_id)
     assert len(history) > 0

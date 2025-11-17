@@ -71,7 +71,7 @@ Factory (создание объектов)
 ### Другие
 - `storage` - Storage для низкоуровневого доступа к БД
 - `interface_factory` - InterfaceFactory для создания интерфейсов платформ
-- `graph_builder` - GraphBuilder для построения LangGraph
+- `graph_builder` - GraphBuilder для построения графов состояний
 - `s3_factory` - S3ClientFactory для работы с S3
 
 ## Dependency Injection

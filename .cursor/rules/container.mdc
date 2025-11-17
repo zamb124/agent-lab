@@ -69,7 +69,7 @@ graph_builder = container.graph_builder
 - `billing_service` - BillingService (биллинг)
 - `payment_service` - PaymentService (платежи)
 - `variables_service` - VariablesService (переменные)
-- `graph_builder` - GraphBuilder (построение LangGraph)
+- `graph_builder` - GraphBuilder (построение графов состояний)
 
 ### Инфраструктура
 - `storage` - Storage (низкоуровневый key-value доступ)

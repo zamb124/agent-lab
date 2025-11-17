@@ -1,6 +1,6 @@
 """
 Менеджер контекстного окна для управления размером диалога и автосуммаризации.
-Интегрируется с LangGraph checkpointer для обновления истории сообщений.
+Интегрируется с StateManager для обновления истории сообщений.
 """
 
 import logging
@@ -10,7 +10,7 @@ from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AI
 from app.core.config import get_settings
 from app.core.llm_factory import get_llm
 from app.core.context import get_context
-from app.core.checkpointer import get_checkpointer
+from app.core.state_manager import get_state_manager
 from app.interfaces.base import Message
 
 logger = logging.getLogger(__name__)
@@ -352,35 +352,19 @@ class ContextWindowManager:
         if not thread_id:
             raise ValueError("thread_id обязателен для обновления checkpoint")
         
-        checkpointer = await get_checkpointer()
+        state_manager = get_state_manager()
         
-        # Получаем текущий checkpoint
-        checkpoint_tuple = await checkpointer.aget_tuple(config)
+        # Загружаем текущий state
+        state = await state_manager.load_state(thread_id)
+        if not state:
+            raise ValueError(f"State не найден для thread_id={thread_id}")
         
-        if not checkpoint_tuple or not checkpoint_tuple.checkpoint:
-            raise ValueError(f"Checkpoint не найден для thread_id={thread_id}")
+        # Обновляем messages в state
+        old_count = len(state.get("messages", []))
+        state["messages"] = new_messages
         
-        # Обновляем messages в checkpoint
-        checkpoint = checkpoint_tuple.checkpoint
-        if "channel_values" not in checkpoint:
-            raise ValueError(f"Checkpoint для thread_id={thread_id} не содержит channel_values")
-        
-        if "messages" not in checkpoint["channel_values"]:
-            raise ValueError(f"Checkpoint для thread_id={thread_id} не содержит messages в channel_values")
-        
-        old_count = len(checkpoint["channel_values"]["messages"])
-        checkpoint["channel_values"]["messages"] = new_messages
-        
-        # ВАЖНО: Используем config из checkpoint_tuple (там есть все нужные поля)
-        checkpoint_config = checkpoint_tuple.config
-        
-        # Сохраняем обновленный checkpoint
-        await checkpointer.aput(
-            config=checkpoint_config,
-            checkpoint=checkpoint,
-            metadata=checkpoint_tuple.metadata,
-            new_versions=checkpoint_tuple.checkpoint.get("channel_versions", {})
-        )
+        # Сохраняем обновленный state
+        await state_manager.save_state(thread_id, state)
         
         logger.info(
             f"✅ Checkpoint обновлен для thread_id={thread_id}: "

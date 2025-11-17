@@ -12,14 +12,13 @@ from app.core.container import get_container, initialize_system_container
 from app.models import TaskStatus, SessionConfig, SessionStatus
 from app.core.context import set_context, clear_context, get_context
 from app.db.database import create_tables, get_session_factory
-from app.core.checkpointer import init_checkpointer
 from app.interfaces.factory import InterfaceFactory
 from app.db.repositories import Storage
 from app.interfaces.base import Message
 from app.exceptions import TariffError, BillingError
-from langgraph.errors import GraphInterrupt
-from langchain_core.messages import HumanMessage, AIMessage
-from langgraph.types import Command
+from app.agents.base import AgentInterrupt
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from app.core.state_manager import get_state_manager
 from app.services.variables_service import get_variables_service
 from app.core.tracing.decorators import trace_span
 from app.models.trace_models import SpanType
@@ -85,8 +84,6 @@ class TaskProcessor:
         logger.info("✅ Системный контейнер инициализирован")
 
         logger.info("🔄 Инициализация checkpointer...")
-        await init_checkpointer()
-        logger.info("✅ Checkpointer инициализирован")
 
         self.running = True
         logger.info(f"✅ Воркер готов к работе (интервал опроса: {settings.worker.task_poll_interval}сек)")
@@ -96,9 +93,9 @@ class TaskProcessor:
         while self.running:
             try:
                 iteration += 1
-                logger.info(f"🔄 Итерация #{iteration}")
+                logger.debug(f"🔄 Итерация #{iteration}")
                 await self._process_pending_tasks()
-                logger.info(f"✅ Итерация #{iteration} завершена, ожидание {settings.worker.task_poll_interval}сек")
+                logger.debug(f"✅ Итерация #{iteration} завершена, ожидание {settings.worker.task_poll_interval}сек")
                 await asyncio.sleep(settings.worker.task_poll_interval)
             except Exception as e:
                 logger.error(f"❌ Ошибка в воркере (итерация #{iteration}): {e}", exc_info=True)
@@ -136,8 +133,38 @@ class TaskProcessor:
 
         set_context(task.context)
 
-        # Вызываем основную логику обработки через декоратор трейсинга
-        await self._process_task_core(task)
+        try:
+            await self._process_task_core(task)
+        except AgentInterrupt as interrupt:
+            await self._handle_agent_interrupt(task, interrupt)
+        except TariffError as e:
+            logger.warning(f"🎯 {task.task_id} TariffError: {e}")
+            await self._handle_task_error(
+                task, e,
+                "Данная функция недоступна на вашем тарифном плане. Обратитесь к администратору для обновления тарифа."
+            )
+        except BillingError as e:
+            logger.warning(f"🎯 {task.task_id} BillingError: {e}")
+            await self._handle_task_error(
+                task, e,
+                "Прошу прощения, сейчас в сервисе технические проблемы связанные с биллингом. Попробуйте позже или обратитесь к администратору."
+            )
+        except ValueError as e:
+            err_text = str(e)
+            if "OpenRouter API error: 402" in err_text or "Insufficient credits" in err_text:
+                logger.error(f"❌ {task.task_id} ошибка OpenRouter 402: {e}")
+                await self._handle_task_error(
+                    task, e,
+                    "Недостаточно кредитов для LLM. Обратитесь к администратору, чтобы пополнить баланс, и повторите попытку."
+                )
+            else:
+                logger.error(f"❌ {task.task_id} ValueError: {e}", exc_info=True)
+                await self._handle_task_error(task, e)
+        except Exception as e:
+            logger.error(f"❌ {task.task_id} неожиданная ошибка: {e}", exc_info=True)
+            await self._handle_task_error(task, e)
+        finally:
+            clear_context()
 
     @trace_span(
         name="task_processor.process_task",
@@ -148,295 +175,275 @@ class TaskProcessor:
         }
     )
     async def _process_task_core(self, task):
-        """Основная логика обработки задачи с трейсингом"""
-        user_msg = task.input_data.get("message", "")
+        """Основная логика обработки задачи"""
+        self._setup_tracing(task)
+        interface = await self._setup_interface(task)
+        
+        task.status = TaskStatus.PROCESSING
+        task.started_at = datetime.now(timezone.utc)
+        await self.task_repository.set(task)
 
-        # Устанавливаем дополнительные атрибуты span через текущий активный span
+        if hasattr(task, 'skip_agent') and task.skip_agent:
+            await self._handle_skip_agent(task, interface)
+            return
+
+        flow_config = await self._get_flow_config(task.flow_id)
+        entry_agent = await self.agent_factory.get_agent(flow_config.entry_point_agent)
+        config = {"configurable": {"thread_id": task.session_id}}
+        user_message = self._extract_user_message(task)
+        
+        await self._setup_flow_variables(flow_config)
+        self._setup_callbacks(config)
+
+        result = await self._execute_agent(entry_agent, task.session_id, user_message, config)
+        
+        if "__interrupt__" in result:
+            await self._handle_interrupt(task, result, interface)
+            return
+
+        await self._complete_task(task, result, user_message, interface, config)
+
+    def _setup_tracing(self, task):
+        """Настраивает трейсинг для задачи"""
         current_span = trace.get_current_span()
-        if current_span:
-            current_span.set_attribute("task_id", task.task_id)
-            current_span.set_attribute("flow_id", task.flow_id)
-            current_span.set_attribute("session_id", task.session_id)
-            current_span.set_attribute("platform", task.context.platform)
-            current_span.set_attribute("user_msg", user_msg)
-            if task.context and task.context.user:
-                current_span.set_attribute("user_id", task.context.user.user_id)
-            if task.context and task.context.active_company:
-                current_span.set_attribute("company_id", task.context.active_company.company_id)
+        if not current_span:
+            return
+            
+        current_span.set_attribute("task_id", task.task_id)
+        current_span.set_attribute("flow_id", task.flow_id)
+        current_span.set_attribute("session_id", task.session_id)
+        current_span.set_attribute("platform", task.context.platform)
+        current_span.set_attribute("user_msg", task.input_data.get("message", ""))
+        
+        if task.context and task.context.user:
+            current_span.set_attribute("user_id", task.context.user.user_id)
+        if task.context and task.context.active_company:
+            current_span.set_attribute("company_id", task.context.active_company.company_id)
 
+    async def _setup_interface(self, task):
+        """Настраивает интерфейс для задачи"""
+        platform = task.context.platform
+        
+        if platform in ("migration", "system"):
+            return None
+        
         interface_factory = get_container().interface_factory
         metadata = task.input_data.get("metadata", {})
-
-        # Добавляем flow_id для telegram интерфейса
-        if task.context.platform == "telegram":
+        
+        if platform == "telegram":
             metadata["flow_id"] = task.flow_id
 
-        interface = await interface_factory.create_interface(task.context.platform, metadata)
+        interface = await interface_factory.create_interface(platform, metadata)
 
-        # Устанавливаем interface в контекст для доступа из LLM (reasoning)
         current_context = get_context()
         if current_context and interface:
             current_context.interface = interface
-            logger.debug(f"✅ Interface установлен в контекст для reasoning")
 
         if interface:
             await interface.start_typing_indicator(task.session_id)
+            
+        return interface
 
-        try:
-            task.status = TaskStatus.PROCESSING
-            task.started_at = datetime.now(timezone.utc)
-            await self.task_repository.set(task)
+    async def _handle_skip_agent(self, task, interface):
+        """Обрабатывает задачу с skip_agent=True"""
+        response_text = task.input_data.get("message", "")
+        task.status = TaskStatus.COMPLETED
+        task.output_data = {"message": response_text, "skipped_agent": True}
+        task.completed_at = datetime.now(timezone.utc)
+        await self.task_repository.set(task)
 
-            # Если skip_agent=True, просто отправляем сообщение напрямую
-            if hasattr(task, 'skip_agent') and task.skip_agent:
-                logger.info(f"📬 {task.task_id}: skip_agent=True, отправляем напрямую без агента")
-
-                # Формируем сообщение от ассистента
-                response_text = task.input_data.get("message", "")
-
-                # Сохраняем результат
-                task.status = TaskStatus.COMPLETED
-                task.output_data = {"message": response_text, "skipped_agent": True}
-                task.completed_at = datetime.now(timezone.utc)
-
-                await self.task_repository.set(task)
-                logger.info(f"✅ {task.task_id} завершена (без агента)")
-
-                # Помечаем задачу как executed в state (нужно получить граф для доступа к state)
-                # TODO: Для задач с skip_agent нужно обновить state через API или напрямую
-                # Пока задача удаляется из БД, а в state остается (можно очистить вручную)
-
-                # Обновляем статистику сессии
-                await self._update_session_stats(task.session_id, user_msg)
-
-                # Возвращаем сессию в статус ACTIVE
-                await self._set_session_active(task.session_id, task.context.platform)
-
-                # Отправляем уведомление об окончании печати
-                if interface:
-                    await interface.stop_typing_indicator(task.session_id)
-
-                # Отправляем сообщение через интерфейс
-                result = {"messages": [AIMessage(content=response_text)]}
-                await self._send_result_via_interface(task, result)
-
-                return
-
-            flow_config = await self.storage.get_flow_config(task.flow_id)
-            if not flow_config:
-                current_context = get_context()
-                company_id = current_context.active_company.company_id if current_context and current_context.active_company else 'НЕТ'
-                raise ValueError(f"Flow {task.flow_id} не найден в БД (контекст: company={company_id})")
-
-            # Устанавливаем переменные flow в контекст с резолюцией @var:key
-            current_context = get_context()
-            if current_context:
-                if hasattr(flow_config, 'variables') and flow_config.variables:
-                    variables_service = get_container().variables_service
-                    resolved_variables = await variables_service.resolve(flow_config.variables)
-                    current_context.flow_variables = resolved_variables
-                    logger.info(f"📝 Переменные flow резолвнуты и установлены в контекст: {list(resolved_variables.keys())}")
-
-            entry_agent = await self.agent_factory.get_agent(flow_config.entry_point_agent)
-
-            config = {"configurable": {"thread_id": task.session_id}}
-            input_data_with_context = dict(task.input_data)
-            input_data_with_context["task_id"] = task.task_id
-            input_data_with_context["session_id"] = task.session_id
-
-            # Проверяем тип задачи - message или tool_call
-            if "tool_call" in task.input_data:
-                # Это задача на вызов тула - формируем сообщение для агента
-                tool_call_info = task.input_data["tool_call"]
-                tool_name = tool_call_info["tool_name"]
-                tool_args = tool_call_info.get("tool_args", {})
-                user_message = f"Выполнить отложенную задачу: {tool_name} с аргументами {tool_args}"
-                input_data_with_context["message"] = user_message
-                logger.info(f"📋 {task.task_id}: отложенный вызов тула {tool_name}")
-            else:
-                user_message = input_data_with_context.get("message", "")
-
-            compiled_graph = await entry_agent.compile_graph()
-            state = await compiled_graph.aget_state(config)
-            has_pending = state.next and len(state.next) > 0
-
-            # Добавляем OTEL и Langfuse callbacks для трейсинга если включены
-            callbacks = get_callbacks_for_agent()
-            if callbacks:
-                if "callbacks" not in config:
-                    config["callbacks"] = []
-                config["callbacks"].extend(callbacks)
-                logger.debug(f"🔍 Добавлено {len(callbacks)} callback handlers для трейсинга")
-
-            if has_pending:
-                logger.info("🔄 Возобновляем выполнение (суммаризация не применяется)")
-                result = await compiled_graph.ainvoke(Command(resume=user_message), config)
-            else:
-                logger.info("🆕 Новый запрос (суммаризация через BaseAgent.ainvoke)")
-                # Вызываем через entry_agent.ainvoke() чтобы сработала проверка контекста
-                result = await entry_agent.ainvoke(
-                    {"messages": [HumanMessage(content=user_message)], **input_data_with_context},
-                    config=config
-                )
-
-            # Проверяем на interrupt в результате (как в старой архитектуре)
-            logger.info(
-                f"🔍 Проверяем результат на interrupt: type={type(result)}, keys={list(result.keys()) if isinstance(result, dict) else 'НЕ DICT'}"
-            )
-
-            if "__interrupt__" in result:
-                logger.info("🔄 Получен interrupt в результате - граф остановлен")
-                interrupts = result["__interrupt__"]
-
-                # Извлекаем значение interrupt для API
-                if interrupts:
-                    if isinstance(interrupts, list) and interrupts:
-                        # Если это список символов - собираем в строку
-                        if all(isinstance(x, str) and len(x) == 1 for x in interrupts):
-                            interrupt_value = "".join(interrupts)
-                        # Если это список Interrupt объектов
-                        elif hasattr(interrupts[0], "value"):
-                            interrupt_value = interrupts[0].value
-                        # Иначе берем первый элемент
-                        else:
-                            interrupt_value = str(interrupts[0])
-                    else:
-                        interrupt_value = str(interrupts)
-                else:
-                    interrupt_value = "Пользователь должен ответить"
-
-                # Сохраняем задачу в состоянии ожидания ввода
-                task.status = TaskStatus.WAITING_FOR_INPUT
-                task.output_data = {
-                    "status": "waiting_for_input",
-                    "question": interrupt_value,
-                    "interrupt_data": str(interrupts),
-                }
-
-                logger.info(f"🔄 Сохраняем задачу с interrupt: {task.task_id}")
-                await self.task_repository.set(task)
-                logger.info(f"🔄 Задача с interrupt сохранена: {task.task_id}")
-
-                # Обновляем статистику сессии
-                await self._update_session_stats(task.session_id, user_msg)
-
-                # КРИТИЧНО: Переводим сессию в WAITING_INPUT чтобы разблокировать новые сообщения
-                await self._set_session_waiting_input(task.session_id, task.context.platform)
-
-                # ВАЖНО: Отправляем вопрос пользователю через интерфейс
-                logger.info(
-                    f"📤 Отправляем interrupt вопрос пользователю: {interrupt_value}"
-                )
-                await self._send_result_via_interface(task, interrupt_value)
-
-                return  # Выходим без завершения задачи
-            else:
-                logger.info(
-                    "🔍 НЕТ __interrupt__ в результате, продолжаем обычное выполнение"
-                )
-
-            # Сохраняем результат
-            task.status = TaskStatus.COMPLETED
-            task.output_data = (
-                result if isinstance(result, dict) else {"result": str(result)}
-            )
-            task.completed_at = datetime.now(timezone.utc)
-
-            await self.task_repository.set(task)
-            logger.info(f"✅ {task.task_id} завершена")
-
-            # Если это была отложенная задача - помечаем как executed в сессионной памяти
-            if task.execute_at:
-                await self._mark_delayed_task_as_executed(task.task_id, compiled_graph, config)
-
-            # ВАЖНО: Обновляем статистику сессии (Database-First)
-            await self._update_session_stats(task.session_id, user_message)
-
-            # Возвращаем сессию в статус ACTIVE
-            await self._set_session_active(task.session_id, task.context.platform)
-
-            # Отправляем уведомление об окончании печати
-            if interface:
-                await interface.stop_typing_indicator(task.session_id)
-
-            # Отправляем результат обратно пользователю через интерфейс
-            await self._send_result_via_interface(task, result)
-
-        except GraphInterrupt as interrupt:
-            logger.info(f"❓ {task.task_id} ждет ответа: {interrupt.value}")
-
-            if interface:
-                await interface.stop_typing_indicator(task.session_id)
-
-            task.status = TaskStatus.PROCESSING
-            task.output_data = {
-                "status": "waiting_for_input",
-                "question": str(interrupt.value),
-                "interrupt_data": str(interrupt),
-            }
-            await self.task_repository.set(task)
-
-            # Обновляем статистику сессии
-            await self._update_session_stats(task.session_id, user_message)
-
-            await self._set_session_waiting_input(task.session_id, task.context.platform)
-            await self._send_result_via_interface(task, str(interrupt.value))
-            return
-
-        except TariffError as e:
-            logger.warning(f"🎯 {task.task_id} TariffError: {e}")
-            await self._handle_task_error(
-                task, e, interface,
-                user_message="Данная функция недоступна на вашем тарифном плане. Обратитесь к администратору для обновления тарифа."
-            )
-
-        except BillingError as e:
-            logger.warning(f"🎯 {task.task_id} BillingError: {e}")
-            await self._handle_task_error(
-                task, e, interface,
-                user_message="Прошу прощения, сейчас в сервисе технические проблемы связанные с биллингом. Попробуйте позже или обратитесь к администратору."
-            )
-
-        except ValueError as e:
-            # Специальная обработка ошибки недостатка кредитов OpenRouter (402)
-            err_text = str(e)
-            if "OpenRouter API error: 402" in err_text or "Insufficient credits" in err_text:
-                logger.error(f"❌ {task.task_id} ошибка OpenRouter 402: {e}")
-                await self._handle_task_error(
-                    task,
-                    e,
-                    interface,
-                    user_message=(
-                        "Недостаточно кредитов для LLM. Обратитесь к администратору, "
-                        "чтобы пополнить баланс, и повторите попытку."
-                    ),
-                )
-            else:
-                logger.error(f"❌ {task.task_id} ValueError: {e}")
-                logger.error(f"Traceback: {traceback.format_exc()}")
-                await self._handle_task_error(task, e, interface)
-
-        except Exception as e:
-            logger.error(f"❌ {task.task_id} неожиданная ошибка: {e}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            await self._handle_task_error(task, e, interface)
-        finally:
-            clear_context()
-
-    async def _handle_task_error(self, task, error: Exception, interface, user_message: str = None):
-        """Обработка ошибки задачи"""
+        await self._update_session_stats(task.session_id, response_text)
+        await self._set_session_active(task.session_id, task.context.platform)
+        
         if interface:
             await interface.stop_typing_indicator(task.session_id)
-            await asyncio.sleep(0.1)
 
-        # Всегда уведомляем пользователя об ошибке, чтобы не зависал индикатор "печатает"
+        result = {"messages": [AIMessage(content=response_text)]}
+        await self._send_result_via_interface(task, result)
+
+    async def _get_flow_config(self, flow_id):
+        """Получает конфигурацию flow"""
+        flow_config = await self.storage.get_flow_config(flow_id)
+        if not flow_config:
+            current_context = get_context()
+            company_id = current_context.active_company.company_id if current_context and current_context.active_company else 'НЕТ'
+            raise ValueError(f"Flow {flow_id} не найден в БД (контекст: company={company_id})")
+        return flow_config
+
+    async def _setup_flow_variables(self, flow_config):
+        """Настраивает переменные flow в контексте"""
+        current_context = get_context()
+        if not current_context:
+            return
+            
+        if hasattr(flow_config, 'variables') and flow_config.variables:
+            variables_service = get_container().variables_service
+            resolved_variables = await variables_service.resolve(flow_config.variables)
+            current_context.flow_variables = resolved_variables
+            logger.debug(f"📝 Переменные flow установлены: {list(resolved_variables.keys())}")
+
+    def _setup_callbacks(self, config):
+        """Настраивает callbacks для трейсинга"""
+        callbacks = get_callbacks_for_agent()
+        if callbacks:
+            if "callbacks" not in config:
+                config["callbacks"] = []
+            config["callbacks"].extend(callbacks)
+
+    def _extract_user_message(self, task):
+        """Извлекает сообщение пользователя из задачи"""
+        if "tool_call" in task.input_data:
+            tool_call_info = task.input_data["tool_call"]
+            tool_name = tool_call_info["tool_name"]
+            tool_args = tool_call_info.get("tool_args", {})
+            logger.info(f"📋 {task.task_id}: отложенный вызов тула {tool_name}")
+            return f"Выполнить отложенную задачу: {tool_name} с аргументами {tool_args}"
+        return task.input_data.get("message", "")
+
+    async def _execute_agent(self, entry_agent, session_id, user_message, config):
+        """Выполняет агента с учетом восстановления после interrupt"""
+        state_manager = await get_state_manager()
+        saved_state = await state_manager.load_state(session_id)
+        
+        if not saved_state or not saved_state.get("messages"):
+            return await entry_agent.ainvoke(
+                {"messages": [HumanMessage(content=user_message)], "task_id": config.get("task_id", ""), "session_id": session_id},
+                config=config
+            )
+        
+        interrupt_context = saved_state.get("interrupt_context")
+        if interrupt_context and interrupt_context["type"] == "tool_call":
+            return await self._resume_sub_agent(entry_agent, saved_state, user_message, config, interrupt_context)
+        
+        saved_state["messages"].append(HumanMessage(content=user_message))
+        return await entry_agent.ainvoke(saved_state, config=config)
+
+    async def _resume_sub_agent(self, entry_agent, saved_state, user_message, config, interrupt_context):
+        """Возобновляет выполнение субагента после interrupt"""
+        sub_agent_id = interrupt_context.get("sub_agent_id")
+        sub_session_id = interrupt_context.get("sub_session_id")
+        
+        if not sub_agent_id or not sub_session_id:
+            logger.error(f"❌ Неполный interrupt_context: {interrupt_context}")
+            saved_state["messages"].append(HumanMessage(content=user_message))
+            return await entry_agent.ainvoke(saved_state, config=config)
+        
+        state_manager = await get_state_manager()
+        sub_agent_state = await state_manager.load_state(sub_session_id, parent_state=saved_state)
+        
+        if not sub_agent_state:
+            logger.error(f"❌ Не удалось загрузить состояние субагента {sub_agent_id} для сессии {sub_session_id}")
+            saved_state["messages"].append(HumanMessage(content=user_message))
+            return await entry_agent.ainvoke(saved_state, config=config)
+        
+        sub_agent_state["messages"].append(HumanMessage(content=user_message))
+        
+        if "interrupt_context" in sub_agent_state:
+            sub_agent_state.pop("interrupt_context", None)
+        
+        sub_agent = await self.agent_factory.get_agent(sub_agent_id)
+        sub_result = await sub_agent.ainvoke(
+            sub_agent_state,
+            config={"configurable": {"thread_id": sub_session_id}}
+        )
+        
+        if "__interrupt__" in sub_result:
+            return sub_result
+        
+        from langchain_core.messages import ToolMessage
+        last_message = sub_result.get("messages", [])[-1] if sub_result.get("messages") else None
+        if last_message:
+            saved_state.pop("interrupt_context", None)
+            saved_state["messages"].append(ToolMessage(
+                content=getattr(last_message, "content", str(last_message)),
+                tool_call_id=interrupt_context.get("tool_call_id", ""),
+                name=interrupt_context.get("tool_name", "")
+            ))
+            await state_manager.save_state(saved_state["session_id"], saved_state)
+            return await entry_agent.ainvoke(saved_state, config=config)
+        
+        return sub_result
+
+    async def _handle_agent_interrupt(self, task, interrupt):
+        """Обрабатывает AgentInterrupt исключение"""
+        interface = await self._setup_interface(task)
+        
+        if interface:
+            await interface.stop_typing_indicator(task.session_id)
+
+        task.status = TaskStatus.WAITING_FOR_INPUT
+        task.output_data = {
+            "status": "waiting_for_input",
+            "question": str(interrupt.value),
+            "interrupt_data": str(interrupt),
+        }
+        await self.task_repository.set(task)
+
+        await self._update_session_stats(task.session_id, task.input_data.get("message", ""))
+        await self._set_session_waiting_input(task.session_id, task.context.platform)
+        await self._send_result_via_interface(task, str(interrupt.value))
+
+    async def _handle_interrupt(self, task, result, interface):
+        """Обрабатывает interrupt в результате выполнения агента"""
+        interrupt_value = self._extract_interrupt_value(result["__interrupt__"])
+        
+        task.status = TaskStatus.WAITING_FOR_INPUT
+        task.output_data = {
+            "status": "waiting_for_input",
+            "question": interrupt_value,
+            "interrupt_data": str(result["__interrupt__"]),
+        }
+        await self.task_repository.set(task)
+
+        await self._update_session_stats(task.session_id, task.input_data.get("message", ""))
+        await self._set_session_waiting_input(task.session_id, task.context.platform)
+        await self._send_result_via_interface(task, interrupt_value)
+
+    def _extract_interrupt_value(self, interrupts):
+        """Извлекает значение interrupt из результата"""
+        if not interrupts:
+            return "Пользователь должен ответить"
+            
+        if isinstance(interrupts, list) and interrupts:
+            if all(isinstance(x, str) and len(x) == 1 for x in interrupts):
+                return "".join(interrupts)
+            if hasattr(interrupts[0], "value"):
+                return interrupts[0].value
+            return str(interrupts[0])
+            
+        return str(interrupts)
+
+    async def _complete_task(self, task, result, user_message, interface, config):
+        """Завершает задачу и отправляет результат"""
+        task.status = TaskStatus.COMPLETED
+        task.output_data = result if isinstance(result, dict) else {"result": str(result)}
+        task.completed_at = datetime.now(timezone.utc)
+        await self.task_repository.set(task)
+
+        if task.execute_at:
+            await self._mark_delayed_task_as_executed(task.task_id, config)
+
+        await self._update_session_stats(task.session_id, user_message)
+        await self._set_session_active(task.session_id, task.context.platform)
+        
+        if interface:
+            await interface.stop_typing_indicator(task.session_id)
+
+        await self._send_result_via_interface(task, result)
+
+    async def _handle_task_error(self, task, error: Exception, user_message: str = None):
+        """Обработка ошибки задачи"""
+        interface = await self._setup_interface(task)
+        if interface:
+            await interface.stop_typing_indicator(task.session_id)
+
         message_to_user = user_message or "Произошла ошибка при обработке запроса. Попробуйте позже или обратитесь к администратору."
         await self._send_error_message_to_user(task, message_to_user)
 
         task.status = TaskStatus.FAILED
         task.error_message = str(error)
         task.completed_at = datetime.now(timezone.utc)
-        await self.storage.set_task_config(task)
+        await self.task_repository.set(task)
         await self._set_session_active(task.session_id, task.context.platform)
 
     async def _set_session_active(self, session_id: str, platform: str):
@@ -475,28 +482,26 @@ class TaskProcessor:
         else:
             logger.warning(f"Сессия {session_id} не найдена для перевода в WAITING_INPUT")
 
-    async def _mark_delayed_task_as_executed(self, task_id: str, compiled_graph, config):
+    async def _mark_delayed_task_as_executed(self, task_id: str, config):
         """Помечает отложенную задачу как executed в сессионной памяти"""
-        try:
-            graph_state = await compiled_graph.aget_state(config)
-
-            if graph_state and graph_state.values:
-                state = graph_state.values
-
-                if "store" in state and "delayed_tasks" in state["store"]:
-                    tasks = state["store"]["delayed_tasks"]
-                    if task_id in tasks:
-                        tasks[task_id]["status"] = "executed"
-                        tasks[task_id]["executed_at"] = datetime.now(timezone.utc).isoformat()
-
-                        await compiled_graph.aupdate_state(config, {"store": state["store"]})
-                        logger.info(f"✅ Задача {task_id} помечена как executed в сессионной памяти")
-                    else:
-                        logger.debug(f"⚠️ Задача {task_id} не найдена в delayed_tasks сессии")
-                else:
-                    logger.debug(f"⚠️ В state нет delayed_tasks для пометки задачи {task_id}")
-        except Exception as e:
-            logger.warning(f"⚠️ Не удалось пометить задачу {task_id} как executed в памяти: {e}")
+        session_id = config.get("configurable", {}).get("thread_id") if config else None
+        if not session_id:
+            return
+        
+        state_manager = await get_state_manager()
+        state = await state_manager.load_state(session_id)
+        
+        if state and "store" in state and "delayed_tasks" in state["store"]:
+            tasks = state["store"]["delayed_tasks"]
+            if task_id in tasks:
+                tasks[task_id]["status"] = "executed"
+                tasks[task_id]["executed_at"] = datetime.now(timezone.utc).isoformat()
+                await state_manager.save_state(session_id, state)
+                logger.info(f"✅ Задача {task_id} помечена как executed в сессионной памяти")
+            else:
+                logger.debug(f"⚠️ Задача {task_id} не найдена в delayed_tasks сессии")
+        else:
+            logger.debug(f"⚠️ В state нет delayed_tasks для пометки задачи {task_id}")
 
     async def _update_session_stats(self, session_id: str, user_message: str):
         """Обновляет статистику сессии: message_count и first_message"""
@@ -521,10 +526,16 @@ class TaskProcessor:
 
     async def _send_error_message_to_user(self, task, error_message: str):
         """Отправляет сообщение об ошибке пользователю"""
+        platform = task.platform
+        
+        if platform in ("migration", "system"):
+            logger.debug(f"⏭️ Пропускаем отправку ошибки для системной платформы {platform}")
+            return
+        
         metadata = task.input_data.get("metadata", {})
 
         config = {**metadata, "flow_id": task.flow_id}
-        interface = await self.interface_factory.create_interface(task.platform, config)
+        interface = await self.interface_factory.create_interface(platform, config)
 
         if interface is None:
             logger.error("❌ Не удалось создать интерфейс для отправки ошибки")
@@ -544,10 +555,16 @@ class TaskProcessor:
 
     async def _send_result_via_interface(self, task, result):
         """Отправляет результат через соответствующий интерфейс платформы"""
+        platform = task.platform
+        
+        if platform in ("migration", "system"):
+            logger.debug(f"⏭️ Пропускаем отправку результата для системной платформы {platform}")
+            return
+        
         metadata = task.input_data.get("metadata", {})
 
         config = {**metadata, "flow_id": task.flow_id}
-        interface = await self.interface_factory.create_interface(task.platform, config)
+        interface = await self.interface_factory.create_interface(platform, config)
 
         if interface is None:
             # Для API или если интерфейс не нужен

@@ -211,19 +211,20 @@ Bot: Отличный выбор! Это платье артикул #12345.
      [Кнопки: "S" | "M" | "L" | "XL"]
 ```
 
-## Интеграция с LangGraph агентами
+## Интеграция с агентами
 
-WhatsApp прозрачно работает с LangGraph:
+WhatsApp прозрачно работает с агентами:
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from app.agents.react_agent import ReActAgent
+
+class WeatherAgent(ReActAgent):
+    name = "weather_agent"
+    prompt = "Ты помощник по погоде"
+    tools = [weather_tool, image_tool, voice_tool]
 
 # Агент автоматически поддерживает WhatsApp
-agent = create_react_agent(
-    llm=llm,
-    tools=[weather_tool, image_tool, voice_tool],
-    state_modifier=prompt
-)
+agent = WeatherAgent()
 ```
 
 Все инструменты работают одинаково в Telegram и WhatsApp:

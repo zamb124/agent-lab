@@ -52,7 +52,9 @@ async def test_flows_migration_from_code(migrated_db, storage, agent_repo, flow_
         assert expected in node_ids, f"Нода {expected} не найдена в графе"
     
     # Проверяем entry point
-    assert graph_def.entry_point == "START"
+    # Если есть edge от START к ноде, entry_point = target этого edge
+    # Если нет edge от START, entry_point может быть указан напрямую или "START" по умолчанию
+    assert graph_def.entry_point == "router", f"Ожидали entry_point='router', получили '{graph_def.entry_point}'"
     
     # 5. ПРОВЕРКА ЗАВИСИМЫХ АГЕНТОВ
     # Все агенты используемые в SmartFlowAgent должны быть мигрированы

@@ -11,7 +11,6 @@ dependencies = [
     "python-multipart>=0.0.6",
     # LangChain & LangGraph Core
     "langchain>=0.1.0",
-    "langgraph>=0.0.40",
     "langchain-core>=0.1.0",
     "langchain-community>=0.0.20",
     # LLM Integrations
@@ -25,7 +24,6 @@ dependencies = [
     "asyncpg>=0.29.0",
     "alembic>=1.13.0",
     "psycopg2-binary>=2.9.9",
-    "langgraph-checkpoint-postgres>=1.0.0",
     # Asynchronous HTTP Client
     "httpx>=0.25.0",
     # S3 Client

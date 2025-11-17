@@ -138,7 +138,7 @@ async def test_smart_flow_executes_different_nodes(migrated_db, agent_factory, m
 async def test_smart_flow_router_condition(agent_repo):
     """Тест: проверка логики роутера SmartFlow"""
     
-    from app.flows.smart_flow import router_function, router_condition
+    from app.flows.smart_flow import router_node, router_condition
     
     print("\n" + "="*70)
     print("ТЕСТ ЛОГИКИ РОУТЕРА")
@@ -147,19 +147,18 @@ async def test_smart_flow_router_condition(agent_repo):
     # Тест 1: Математический запрос
     state1 = {
         "messages": [HumanMessage(content="Посчитай 10 + 20")],
-        "original_question": "",
-        "selected_agent": ""
+        "store": {}
     }
     
-    state1 = router_function(state1)
+    state1 = await router_node(state1)
     selected1 = router_condition(state1)
     
     print(f"\nЗапрос: 'Посчитай 10 + 20'")
-    print(f"  → selected_agent в state: '{state1['selected_agent']}'")
+    print(f"  → selected_agent в store: '{state1.get('store', {}).get('selected_agent', '')}'")
     print(f"  → router_condition вернул: '{selected1}'")
     
-    assert state1["selected_agent"] == "calculator", \
-        f"Роутер должен выбрать 'calculator', а выбрал '{state1['selected_agent']}'"
+    assert state1.get("store", {}).get("selected_agent") == "calculator", \
+        f"Роутер должен выбрать 'calculator', а выбрал '{state1.get('store', {}).get('selected_agent', '')}'"
     assert selected1 == "calculator", \
         f"router_condition должен вернуть 'calculator', а вернул '{selected1}'"
     
@@ -168,19 +167,18 @@ async def test_smart_flow_router_condition(agent_repo):
     # Тест 2: Погодный запрос
     state2 = {
         "messages": [HumanMessage(content="Какая погода?")],
-        "original_question": "",
-        "selected_agent": ""
+        "store": {}
     }
     
-    state2 = router_function(state2)
+    state2 = await router_node(state2)
     selected2 = router_condition(state2)
     
     print(f"\nЗапрос: 'Какая погода?'")
-    print(f"  → selected_agent в state: '{state2['selected_agent']}'")
+    print(f"  → selected_agent в store: '{state2.get('store', {}).get('selected_agent', '')}'")
     print(f"  → router_condition вернул: '{selected2}'")
     
-    assert state2["selected_agent"] == "weather", \
-        f"Роутер должен выбрать 'weather', а выбрал '{state2['selected_agent']}'"
+    assert state2.get("store", {}).get("selected_agent") == "weather", \
+        f"Роутер должен выбрать 'weather', а выбрал '{state2.get('store', {}).get('selected_agent', '')}'"
     assert selected2 == "weather", \
         f"router_condition должен вернуть 'weather', а вернул '{selected2}'"
     
@@ -201,10 +199,9 @@ async def test_smart_flow_router_condition(agent_repo):
     for query, expected in test_cases:
         state = {
             "messages": [HumanMessage(content=query)],
-            "original_question": "",
-            "selected_agent": ""
+            "store": {}
         }
-        state = router_function(state)
+        state = await router_node(state)
         selected = router_condition(state)
         
         status = "✅" if selected == expected else "❌"
@@ -273,7 +270,10 @@ async def test_smart_flow_graph_structure(migrated_db, storage, migrator, agent_
     print(f"✅ От calculator и weather есть переходы к explainer")
     
     # Проверяем точку входа
-    assert graph_def.entry_point == "START", f"Точка входа должна быть START, а не {graph_def.entry_point}"
+    # entry_point может быть любой нодой (не обязательно START)
+    # START - это виртуальная нода для обозначения начала
+    assert graph_def.entry_point in ["START", "router"], \
+        f"Точка входа должна быть START или router, а не {graph_def.entry_point}"
     print(f"✅ Точка входа: {graph_def.entry_point}")
     
     print("="*70 + "\n")

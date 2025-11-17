@@ -30,10 +30,9 @@ from app.core.container import get_container
 
 logger = logging.getLogger(__name__)
 
-# LangGraph control flow exceptions
-from langgraph.errors import GraphBubbleUp
-
-CONTROL_FLOW_EXCEPTION_TYPES: Set[type[BaseException]] = {GraphBubbleUp}
+# Control flow exceptions (убрали зависимость от LangGraph)
+# GraphBubbleUp больше не используется, оставляем пустой набор
+CONTROL_FLOW_EXCEPTION_TYPES: Set[type[BaseException]] = set()
 
 
 class OpenTelemetryCallbackHandler(AsyncCallbackHandler):
