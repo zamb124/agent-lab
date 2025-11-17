@@ -497,9 +497,9 @@ class FashnApp {
                 
                 if (photoImage && photoPreview && uploadZone) {
                     photoImage.src = e.target.result;
-                uploadZone.style.display = 'none';
-                    photoPreview.style.display = 'block';
-                    if (removeBtn) removeBtn.style.display = 'flex';
+                    uploadZone.classList.add('hidden');
+                    photoPreview.classList.remove('hidden');
+                    if (removeBtn) removeBtn.classList.remove('hidden');
                 }
             };
             reader.readAsDataURL(file);
@@ -522,9 +522,9 @@ class FashnApp {
         const removeBtn = document.getElementById('removePhoto');
         const photoInput = document.getElementById('photoInput');
         
-        if (photoPreview) photoPreview.style.display = 'none';
-        if (uploadZone) uploadZone.style.display = 'block';
-        if (removeBtn) removeBtn.style.display = 'none';
+        if (photoPreview) photoPreview.classList.add('hidden');
+        if (uploadZone) uploadZone.classList.remove('hidden');
+        if (removeBtn) removeBtn.classList.add('hidden');
         if (photoInput) photoInput.value = '';
         
         this.updateGenerateButton();

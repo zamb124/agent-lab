@@ -8,6 +8,21 @@
     box-sizing: border-box;
 }
 
+.hidden {
+    display: none;
+}
+
+input.hidden,
+input[type="file"].hidden {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    position: absolute !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+}
+
 :root {
     --primary-green: #4a5d4a;
     --light-green: #6b7d6b;
