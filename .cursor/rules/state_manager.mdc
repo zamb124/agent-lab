@@ -1,0 +1,433 @@
+---
+description: "Правила работы с StateManager и персистентностью состояния"
+alwaysApply: false
+---
+# Правила работы с StateManager
+
+## Обзор
+
+`StateManager` - менеджер состояния для агентов, который обеспечивает персистентность через PostgreSQL. Использует две таблицы:
+- `stores` - единое хранилище `store` для всего flow (по `store_id`)
+- `agent_states` - состояние агента с `messages` и метаданными (по `session_id`)
+
+## Архитектура
+
+### Разделение данных
+
+**Store (единый для flow):**
+- Хранится в таблице `stores` по `store_id`
+- Для родительских сессий: `store_id = session_id`
+- Для sub-сессий: `store_id` наследуется от родителя
+- Все агенты в flow видят один и тот же `store`
+
+**State (индивидуальный для сессии):**
+- Хранится в таблице `agent_states` по `session_id`
+- Содержит `messages`, `task_id`, `user_id`, `remaining_steps`, `interrupt_context`
+- Ссылается на `store` через `store_id`
+
+### Схема данных
+
+```python
+# Stores
+store_id: str -> store_data: JSONB
+
+# AgentStates
+session_id: str -> store_id: str, state_data: JSONB
+```
+
+## Основные методы
+
+### load_state
+
+Загружает состояние для сессии. Для sub-сессий автоматически определяет политику памяти из формата `session_id`.
+
+<good_example>
+from app.core.state_manager import get_state_manager
+
+state_manager = await get_state_manager()
+
+# Обычная сессия
+state = await state_manager.load_state("user_session_123")
+
+# Sub-сессия (автоматически применяет политику)
+sub_state = await state_manager.load_state("parent:sub:agent:accumulated")
+</good_example>
+
+### save_state
+
+Сохраняет состояние для сессии и синхронизирует `store` в контексте.
+
+**ВАЖНО**: `store` всегда берется из контекста (обновлен через `session_set`).
+
+<good_example>
+from app.core.state_manager import get_state_manager
+
+state_manager = await get_state_manager()
+
+# Сохранение (store автоматически синхронизируется)
+await state_manager.save_state(session_id, state)
+
+# Для sub-сессий автоматически обновляется parent_state["store"] в контексте
+</good_example>
+
+### load_state_for_sub_agent
+
+Загружает состояние для субагента с учетом политики памяти.
+
+**ВАЖНО**: `store` всегда берется из родительской сессии (единый для всего flow).
+
+<good_example>
+from app.core.state_manager import get_state_manager
+
+state_manager = await get_state_manager()
+
+# Загрузка для субагента (store из родителя)
+sub_state = await state_manager.load_state_for_sub_agent(
+    sub_session_id="parent:sub:agent:accumulated",
+    parent_state=parent_state
+)
+</good_example>
+
+## Политики памяти для субагентов
+
+### ISOLATED (по умолчанию)
+
+Каждый вызов субагента создает новую сессию с новой памятью.
+
+**Формат session_id:**
+```
+{parent_session_id}:sub:{agent_id}:{unique_uuid}
+```
+
+**Поведение:**
+- Новые `messages` для каждого вызова
+- `store` единый через ссылку на родителя
+- Состояние сохраняется только для interrupt
+
+<good_example>
+# Первый вызов
+sub_session_id = "parent:sub:agent:abc123"
+sub_state = await state_manager.load_state_for_sub_agent(sub_session_id, parent_state)
+
+# Второй вызов (новая сессия)
+sub_session_id = "parent:sub:agent:def456"  # Новый UUID!
+sub_state = await state_manager.load_state_for_sub_agent(sub_session_id, parent_state)
+</good_example>
+
+### ACCUMULATED
+
+Накопление памяти между вызовами (один `session_id` для всех вызовов).
+
+**Формат session_id:**
+```
+{parent_session_id}:sub:{agent_id}:accumulated
+```
+
+**Поведение:**
+- Фиксированный `session_id` для всех вызовов
+- `messages` накапливаются между вызовами
+- `store` единый через ссылку на родителя
+- Состояние сохраняется после каждого вызова
+
+<good_example>
+# Все вызовы используют один session_id
+sub_session_id = "parent:sub:agent:accumulated"
+
+# Первый вызов
+sub_state = await state_manager.load_state_for_sub_agent(sub_session_id, parent_state)
+# messages: []
+
+# Второй вызов (продолжение)
+sub_state = await state_manager.load_state_for_sub_agent(sub_session_id, parent_state)
+# messages: [предыдущие сообщения + новые]
+</good_example>
+
+### SNAPSHOT
+
+Копирует память родителя при вызове, но возвращает только результат.
+
+**Формат session_id:**
+```
+{parent_session_id}:sub:{agent_id}:snapshot:{unique_uuid}
+```
+
+**Поведение:**
+- Новый `session_id` для каждого вызова (с маркером `snapshot`)
+- `messages` копируются из родителя при первом вызове
+- `store` единый через ссылку на родителя
+- Состояние сохраняется только для interrupt
+
+<good_example>
+# Первый вызов
+sub_session_id = "parent:sub:agent:snapshot:abc123"
+sub_state = await state_manager.load_state_for_sub_agent(sub_session_id, parent_state)
+# messages: [копия из parent_state]
+
+# Второй вызов (новая сессия)
+sub_session_id = "parent:sub:agent:snapshot:def456"
+sub_state = await state_manager.load_state_for_sub_agent(sub_session_id, parent_state)
+# messages: [копия из parent_state]
+</good_example>
+
+### SHARED
+
+Работает в одной памяти с родителем (один `session_id`).
+
+**Формат session_id:**
+```
+{parent_session_id}  # Та же сессия!
+```
+
+**Поведение:**
+- Использует `session_id` родителя напрямую
+- Полный доступ к `messages` и `store` родителя
+- Изменения видны родителю сразу
+
+<good_example>
+# Субагент использует session_id родителя
+sub_session_id = parent_session_id  # "parent_session"
+
+# Субагент видит все сообщения родителя
+sub_state = await state_manager.load_state_for_sub_agent(sub_session_id, parent_state)
+# sub_state == parent_state (та же ссылка)
+</good_example>
+
+## Определение политики из session_id
+
+StateManager автоматически определяет политику из формата `session_id`:
+
+<good_example>
+# ISOLATED (по умолчанию)
+session_id = "parent:sub:agent:abc123"
+policy = state_manager._detect_memory_policy(session_id)  # ISOLATED
+
+# ACCUMULATED
+session_id = "parent:sub:agent:accumulated"
+policy = state_manager._detect_memory_policy(session_id)  # ACCUMULATED
+
+# SNAPSHOT
+session_id = "parent:sub:agent:snapshot:abc123"
+policy = state_manager._detect_memory_policy(session_id)  # SNAPSHOT
+
+# SHARED (нет :sub: в session_id)
+session_id = "parent_session"
+policy = state_manager._detect_memory_policy(session_id)  # None (не sub-сессия)
+</good_example>
+
+## Генерация sub_session_id
+
+Используй `get_sub_session_id` для генерации правильного `sub_session_id`:
+
+<good_example>
+from app.core.state_manager import get_state_manager
+from app.models.core_models import SubAgentMemoryPolicy
+
+state_manager = await get_state_manager()
+
+# ISOLATED
+sub_session_id = await state_manager.get_sub_session_id(
+    parent_session_id="parent",
+    sub_agent_id="app.agents.weather.agent.WeatherAgent",
+    policy=SubAgentMemoryPolicy.ISOLATED
+)
+# "parent:sub:app.agents.weather.agent.WeatherAgent:abc123"
+
+# ACCUMULATED
+sub_session_id = await state_manager.get_sub_session_id(
+    parent_session_id="parent",
+    sub_agent_id="app.agents.weather.agent.WeatherAgent",
+    policy=SubAgentMemoryPolicy.ACCUMULATED
+)
+# "parent:sub:app.agents.weather.agent.WeatherAgent:accumulated"
+
+# SHARED
+sub_session_id = await state_manager.get_sub_session_id(
+    parent_session_id="parent",
+    sub_agent_id="app.agents.weather.agent.WeatherAgent",
+    policy=SubAgentMemoryPolicy.SHARED
+)
+# "parent" (та же сессия)
+</good_example>
+
+## Синхронизация store
+
+### Единый store для flow
+
+**ВАЖНО**: `store` всегда единый для всего flow через `store_id`.
+
+<good_example>
+# Родительская сессия
+parent_state = {
+    "session_id": "parent",
+    "store_id": "parent",  # store_id = session_id для родителя
+    "store": {"warehouse_id": "12345"}
+}
+
+# Sub-сессия наследует store_id
+sub_state = {
+    "session_id": "parent:sub:agent:abc123",
+    "store_id": "parent",  # Наследуется от родителя!
+    "store": parent_state["store"]  # Та же ссылка
+}
+
+# Изменения в sub_state["store"] видны в parent_state["store"]
+sub_state["store"]["courier_id"] = "67890"
+# parent_state["store"]["courier_id"] == "67890"  # Видно сразу!
+</good_example>
+
+### Автоматическая синхронизация
+
+После сохранения sub-сессии `store` автоматически синхронизируется в контексте родителя:
+
+<good_example>
+# В save_state для sub-сессии
+await state_manager.save_state(sub_session_id, sub_state)
+
+# Автоматически вызывается _sync_parent_store_to_context
+# Обновляет parent_state["store"] в контексте из БД
+</good_example>
+
+## Работа с контекстом
+
+### Получение store из контекста
+
+`save_state` получает `store` из контекста (обновлен через `session_set`):
+
+<good_example>
+from app.core.variables import get_state
+from app.core.state_manager import get_state_manager
+
+# В session_set обновляется контекст
+session_set("warehouse_id", "12345")
+
+# В save_state берется из контекста
+context_state = get_state()
+state["store"] = context_state["store"]  # Автоматически в save_state
+await state_manager.save_state(session_id, state)
+</good_example>
+
+### Условия использования store из контекста
+
+Store из контекста используется только если:
+1. Контекст соответствует текущей сессии, ИЛИ
+2. Это sub-сессия и контекст для родительской сессии
+
+<good_example>
+# Условие 1: та же сессия
+context_state["session_id"] == session_id  # True
+state["store"] = context_state["store"]  # Используется
+
+# Условие 2: sub-сессия с родительским контекстом
+session_id = "parent:sub:agent:abc123"
+context_state["session_id"] = "parent"  # Родительская сессия
+state["store"] = context_state["store"]  # Используется
+</good_example>
+
+## Внутренние методы
+
+### _load_state_direct
+
+Прямая загрузка состояния из БД без проверки политик.
+
+**Используй только внутри StateManager!**
+
+<good_example>
+# Внутри StateManager
+state = await self._load_state_direct(session_id)
+</good_example>
+
+### _save_state_direct
+
+Прямое сохранение состояния в БД.
+
+**ВАЖНО**: Сохраняет `store` в `Stores` и `state_data` в `AgentStates` с `store_id`.
+
+<good_example>
+# Внутри StateManager
+await self._save_state_direct(session_id, state)
+</good_example>
+
+### _extract_parent_session_id
+
+Извлекает `parent_session_id` из `sub_session_id`.
+
+<good_example>
+# Форматы:
+# parent:sub:agent:accumulated -> parent
+# parent:sub:agent:snapshot:uuid -> parent
+# parent:sub:agent:uuid -> parent
+
+parent_id = state_manager._extract_parent_session_id("parent:sub:agent:abc123")
+# "parent"
+</good_example>
+
+## Правила использования
+
+### ✅ Правильно
+
+1. **Используй `load_state` для загрузки состояния:**
+```python
+state = await state_manager.load_state(session_id)
+```
+
+2. **Используй `save_state` для сохранения состояния:**
+```python
+await state_manager.save_state(session_id, state)
+```
+
+3. **Используй `load_state_for_sub_agent` для субагентов:**
+```python
+sub_state = await state_manager.load_state_for_sub_agent(sub_session_id, parent_state)
+```
+
+4. **Используй `get_sub_session_id` для генерации sub_session_id:**
+```python
+sub_session_id = await state_manager.get_sub_session_id(
+    parent_session_id, sub_agent_id, policy
+)
+```
+
+### ❌ Неправильно
+
+1. **НЕ используй `_load_state_direct` или `_save_state_direct` напрямую:**
+```python
+# НЕТ!
+state = await state_manager._load_state_direct(session_id)
+await state_manager._save_state_direct(session_id, state)
+```
+
+2. **НЕ создавай sub_session_id вручную:**
+```python
+# НЕТ!
+sub_session_id = f"{parent_session_id}_sub_{agent_id}"
+
+# ТАК!
+sub_session_id = await state_manager.get_sub_session_id(
+    parent_session_id, agent_id, policy
+)
+```
+
+3. **НЕ копируй store между сессиями:**
+```python
+# НЕТ!
+sub_state["store"] = parent_state["store"].copy()
+
+# ТАК! Используй ссылку (автоматически в load_state_for_sub_agent)
+sub_state = await state_manager.load_state_for_sub_agent(sub_session_id, parent_state)
+```
+
+## Важные принципы
+
+1. **Store единый для flow** - все агенты видят один `store` через `store_id`
+2. **Политика определяется из session_id** - формат `session_id` определяет политику памяти
+3. **Автоматическая синхронизация** - `store` автоматически синхронизируется между родителем и sub-сессиями
+4. **Контекст как источник истины** - `save_state` берет `store` из контекста
+5. **Не используй внутренние методы** - используй только публичные методы API
+
+## КРИТИЧНЫЕ НАПОМИНАНИЯ
+
+🚨 **ВСЕГДА** используй публичные методы (`load_state`, `save_state`, `load_state_for_sub_agent`)
+🚨 **НИКОГДА** не используй `_load_state_direct` или `_save_state_direct` напрямую
+🚨 **НИКОГДА** не создавай `sub_session_id` вручную - используй `get_sub_session_id`
+🚨 **ПОМНИ**: `store` единый для всего flow через `store_id`
+🚨 **ПОМНИ**: Политика памяти определяется из формата `session_id`
