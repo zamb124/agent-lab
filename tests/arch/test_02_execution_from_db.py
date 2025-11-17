@@ -11,30 +11,47 @@ from langchain_core.messages import HumanMessage
 async def test_weather_flow_execution(migrated_db, flow_factory, system_context, unique_id, mock_llm):
     """Тест выполнения weather_flow из БД"""
     
+    from app.agents.base import AgentInterrupt
+    from app.core.container import get_container
+    
     mock_llm.reset_call_counts()
     mock_llm.configure(
+        tool_responses={
+            "какая погода": {"tool": "get_weather", "args": {"city": "Москва"}},
+            "погода в москве": {"tool": "get_weather", "args": {"city": "Москва"}},
+        },
         responses={
-            "погода": "Погода в Москве: +5°C, облачно",
-            "москва": "Погода в Москве: +5°C, облачно"
+            "погода": "Я проверю погоду в Москве используя инструмент get_weather.",
+            "москва": "Я проверю погоду в Москве используя инструмент get_weather.",
+            "какая погода": "Я проверю погоду в Москве используя инструмент get_weather.",
         },
         default_response="Погода в Москве: +5°C, облачно"
     )
     
     weather_flow = await flow_factory.get_flow("app.flows.weather_flow.weather_flow_config")
     
-    result = await weather_flow.ainvoke(
-        {"messages": [HumanMessage(content="Какая погода в Москве?")]},
-        config={"configurable": {"thread_id": unique_id("test_weather")}}
-    )
+    if not weather_flow.entry_agent:
+        await weather_flow.initialize()
     
-    assert "messages" in result
-    assert len(result["messages"]) > 0
+    if weather_flow.entry_agent and weather_flow.entry_agent.config and weather_flow.entry_agent.config.llm_config:
+        weather_flow.entry_agent.config.llm_config.context_window = 8192
     
-    final_message = result["messages"][-1].content
-    assert isinstance(final_message, str)
-    assert len(final_message) > 0
-    
-    print(f"✅ Weather flow выполнен из БД: {final_message[:100]}...")
+    try:
+        result = await weather_flow.ainvoke(
+            {"messages": [HumanMessage(content="Какая погода в Москве?")]},
+            config={"configurable": {"thread_id": unique_id("test_weather")}}
+        )
+        
+        assert "messages" in result
+        assert len(result["messages"]) > 0
+        
+        final_message = result["messages"][-1].content
+        assert isinstance(final_message, str)
+        assert len(final_message) > 0
+        
+        print(f"✅ Weather flow выполнен из БД: {final_message[:100]}...")
+    except AgentInterrupt as interrupt:
+        pytest.fail(f"Неожиданный interrupt в тесте: {interrupt.value}")
 
 @pytest.mark.asyncio
 async def test_smart_flow_math_execution(migrated_db, flow_factory, system_context, mock_llm, unique_id):

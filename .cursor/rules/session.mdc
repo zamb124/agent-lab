@@ -155,20 +155,35 @@ if (parent_interrupt and
 `StateManager` сохраняет состояние по `session_id`:
 
 ```python
+from app.core.state_manager import get_state_manager
+
 state_manager = await get_state_manager()
 await state_manager.save_state(session_id, state)
 ```
 
+**ВАЖНО**: `store` всегда берется из контекста (обновлен через `session_set`).
+
 ### Загрузка состояния
 
 ```python
+from app.core.state_manager import get_state_manager
+
+state_manager = await get_state_manager()
 saved_state = await state_manager.load_state(session_id)
 ```
+
+Для sub-сессий автоматически применяется политика памяти из формата `session_id`.
 
 ### Связь session_id и thread_id
 
 - `session_id` в `State` = `thread_id` в `config["configurable"]["thread_id"]`
 - Это одно и то же значение, используются синонимы
+
+### Подробнее о StateManager
+
+Подробная документация по StateManager, политикам памяти и синхронизации store:
+- Правила: `.cursor/rules/state_manager.mdc`
+- Документация: `docs/state_and_variables.md` (раздел StateManager)
 
 ## Правила для нод StateGraph
 

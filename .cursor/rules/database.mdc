@@ -110,6 +110,8 @@ async def get_agent(agent_id: str) -> AgentConfig:
 - Автоматически сохраняет состояние по `session_id`
 - Позволяет возобновлять выполнение после `AgentInterrupt`
 - StateManager создается через `get_state_manager()`
+- Интегрирован с database.py - использует общий engine и создание таблиц через `create_tables()`
+- Поддерживает политики памяти для субагентов
 
 <good_example>
 from app.core.state_manager import get_state_manager
@@ -122,6 +124,8 @@ await state_manager.save_state(session_id, state)
 # Загрузка состояния
 saved_state = await state_manager.load_state(session_id)
 </good_example>
+
+**Подробнее**: См. `.cursor/rules/state_manager.mdc` для детальной документации по StateManager, политикам памяти и синхронизации store.
 
 ## Транзакции
 

@@ -4,6 +4,8 @@ alwaysApply: false
 ---
 # Правила работы с графами состояний и раннерами
 
+**ВАЖНО**: В проекте используется кастомный StateGraph (не библиотека LangGraph). Графы строятся через `GraphBuilder` и выполняются через `StateGraphRunner`.
+
 ## State как единое хранилище
 
 Используй `State` из `app/core/state.py` для всех агентов:
@@ -150,6 +152,7 @@ warehouse_id = session_get("warehouse_id")
 - Автоматически сохраняет состояние по `session_id`
 - Позволяет возобновлять выполнение после `AgentInterrupt`
 - Использует PostgreSQL для хранения
+- Поддерживает политики памяти для субагентов
 
 <good_example>
 from app.core.state_manager import get_state_manager
@@ -162,6 +165,8 @@ await state_manager.save_state(session_id, state)
 # Загрузка
 saved_state = await state_manager.load_state(session_id)
 </good_example>
+
+**Подробнее**: См. `.cursor/rules/state_manager.mdc` для детальной документации по StateManager, политикам памяти и синхронизации store.
 
 ## Выполнение агента
 

@@ -12,7 +12,8 @@
 - **exception.mdc** - Правила обработки исключений
 - **architecture.mdc** - Архитектурные принципы (Database-First, асинхронность)
 - **container.mdc** - Контейнер зависимостей (DI, доступ к сущностям)
-- **langgraph.mdc** - Работа с графами состояний и раннерами (State, agents, StateManager)
+- **langgraph.mdc** - Работа с графами состояний и раннерами (StateGraph агенты, ReAct агенты, State)
+- **state_manager.mdc** - Работа с StateManager и персистентностью состояния (политики памяти, синхронизация store)
 - **session.mdc** - Правила работы с сессиями и session_id
 - **database.mdc** - Работа с базой данных (Storage, изоляция по компаниям)
 - **tools.mdc** - Создание инструментов (@tool decorator, типизация)
@@ -63,6 +64,8 @@
 - `documentation.mdc` ← `mkdocs.yml` + правила работы с MkDocs
 - `makefile.mdc` ← `docs/makefile.md`
 - `langgraph.mdc` ← `docs/architecture.md`
+- `state_manager.mdc` ← `app/core/state_manager.py` + `docs/state_and_variables.md`
+- `session.mdc` ← `docs/state_and_variables.md` + `app/core/state_manager.py`
 - `database.mdc` ← `docs/architecture.md`
 - `http_client.mdc` ← `app/core/http_utils.py` + паттерны использования
 - `frontend.mdc` ← `docs/frontend.md`
