@@ -210,7 +210,7 @@ class AgentStates(Base):
     __tablename__ = "agent_states"
 
     session_id = Column(String(255), primary_key=True, index=True)
-    store_id = Column(String(255), nullable=False, index=True)
+    store_id = Column(String(255), nullable=False)
     state_data = Column(JSONB, nullable=False)
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

@@ -126,6 +126,7 @@ async def create_tables():
 
     # Импортируем все модели чтобы они зарегистрировались в Base.metadata
     from app.db.models import Storage, Users, Tasks, Variables, Stores, AgentStates, OtelSpans
+    from sqlalchemy.exc import ProgrammingError
 
     logger.info(f"📋 Зарегистрировано таблиц в Base.metadata: {len(Base.metadata.tables)}")
     for table_name in sorted(Base.metadata.tables.keys()):
@@ -138,8 +139,15 @@ async def create_tables():
         logger.info("🔄 Вызываем Base.metadata.create_all...")
         def _create_all(sync_conn):
             logger.info(f"📝 Создание таблиц через sync_conn...")
-            Base.metadata.create_all(sync_conn, checkfirst=True)
-            logger.info("✅ create_all завершен")
+            try:
+                Base.metadata.create_all(sync_conn, checkfirst=True)
+                logger.info("✅ create_all завершен")
+            except ProgrammingError as e:
+                error_str = str(e.orig) if hasattr(e, 'orig') else str(e)
+                if "already exists" in error_str.lower():
+                    logger.warning(f"⚠️ Некоторые объекты БД уже существуют (индексы/таблицы), пропускаем: {error_str[:200]}")
+                else:
+                    raise
         
         await conn.run_sync(_create_all)
     
