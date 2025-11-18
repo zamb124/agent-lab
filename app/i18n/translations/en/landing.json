@@ -86,6 +86,18 @@
     "q3": "My team has no technical specialists. Can we easily understand the platform and manage automation?",
     "a3": "Yes, our platform is designed with a focus on Low-code/No-code, which allows you to manage agents and processes through an intuitive visual interface without the need for programming."
   },
+  "team": {
+    "tag": "/ Team",
+    "title": "Our Team",
+    "member1_name": "Viktor",
+    "member1_role": "AI Architect",
+    "member2_name": "Jane (Evgenia)",
+    "member2_role": "Business Development",
+    "member3_name": "Vladimir",
+    "member3_role": "AI Engineer",
+    "member4_name": "Alexey",
+    "member4_role": "ML Solution Engineer"
+  },
   "cta": {
     "title": "Automate your business<br>with NeuroFlow",
     "button": "Request an audit"
