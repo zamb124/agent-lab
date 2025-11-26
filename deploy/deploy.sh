@@ -21,7 +21,7 @@ echo "Remote dir: $REMOTE_DIR"
 echo ""
 
 echo "[1/7] Git pull на сервере..."
-$SSH_CMD "cd $REMOTE_DIR && git pull"
+$SSH_CMD "cd $REMOTE_DIR && git fetch origin && git reset --hard origin/main"
 
 echo "[2/7] Подготовка конфигов..."
 TMP_DIR=$(mktemp -d)
