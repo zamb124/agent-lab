@@ -16,6 +16,7 @@ from core.files.processors import FileProcessor
 from core.context import get_context
 from core.config import get_settings
 from apps.agents.container import get_container, get_agents_container
+from core.container import get_system_container
 from apps.agents.dependencies import (
     AgentRepositoryDep,
     FlowRepositoryDep,
@@ -505,10 +506,10 @@ async def create_my_company(request: Request):
     if not slug:
         raise HTTPException(status_code=400, detail="Slug компании обязателен")
     
-    container = get_container()
-    subdomain_repo = container.subdomain_repository
-    company_repo = container.company_repository
-    user_repo = container.user_repository
+    system_container = get_system_container()
+    subdomain_repo = system_container.subdomain_repository
+    company_repo = system_container.company_repository
+    user_repo = system_container.user_repository
     
     existing = await subdomain_repo.get_company_id(slug)
     if existing:
