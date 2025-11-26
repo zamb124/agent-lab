@@ -60,10 +60,10 @@ def create_app() -> FastAPI:
     """Создает FastAPI приложение"""
     
     project_root = Path(__file__).parent.parent.parent
-    service_config_path = Path(__file__).parent / "config.json"
+    service_config_path = Path(__file__).parent / "conf.json"
     
     merged_config = load_merged_config(
-        base_config_path=project_root / "config.json",
+        base_config_path=project_root / "conf.json",
         service_config_path=service_config_path
     )
     

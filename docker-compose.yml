@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # PostgreSQL база данных (только для локальной разработки)
+  # PostgreSQL база данных
   postgres:
     image: postgres:15
     environment:
@@ -19,20 +19,19 @@ services:
       timeout: 5s
       retries: 5
 
-  # Agents Lab API
-  app:
+  # Agents Service (API для агентов)
+  agents:
     build:
       context: .
       dockerfile: Dockerfile
-      target: app
-      args:
-        - CONFIG_FILE=${CONFIG_FILE:-deploy/conf.json}
+      target: agents
     ports:
-      - "${APP_PORT:-8001}:8001"
+      - "${AGENTS_PORT:-8001}:8001"
     environment:
-      - ENVIRONMENT=${ENVIRONMENT:-local}
+      - DATABASE__URL=postgresql+asyncpg://${POSTGRES_USER:-agent_user}:${POSTGRES_PASSWORD:-agent_password}@postgres:5432/agents_db
+      - DATABASE__SHARED_URL=postgresql+asyncpg://${POSTGRES_USER:-agent_user}:${POSTGRES_PASSWORD:-agent_password}@postgres:5432/shared_db
     volumes:
-      - app_logs:/app/logs
+      - agents_logs:/app/logs
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,16 +39,37 @@ services:
     restart: unless-stopped
     command: python run_prod.py
 
-  # Task Worker
+  # Frontend Service (UI)
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend
+    ports:
+      - "${FRONTEND_PORT:-8002}:8002"
+    environment:
+      - DATABASE__URL=postgresql+asyncpg://${POSTGRES_USER:-agent_user}:${POSTGRES_PASSWORD:-agent_password}@postgres:5432/shared_db
+      - DATABASE__SHARED_URL=postgresql+asyncpg://${POSTGRES_USER:-agent_user}:${POSTGRES_PASSWORD:-agent_password}@postgres:5432/shared_db
+    volumes:
+      - frontend_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+    restart: unless-stopped
+    command: python run_frontend_prod.py
+
+  # Task Worker (для agents)
   worker:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        - CONFIG_FILE=${CONFIG_FILE:-deploy/conf.json}
+      target: worker
     environment:
-      - ENVIRONMENT=${ENVIRONMENT:-local}
-    volumes: []
+      - DATABASE__URL=postgresql+asyncpg://${POSTGRES_USER:-agent_user}:${POSTGRES_PASSWORD:-agent_password}@postgres:5432/agents_db
+      - DATABASE__SHARED_URL=postgresql+asyncpg://${POSTGRES_USER:-agent_user}:${POSTGRES_PASSWORD:-agent_password}@postgres:5432/shared_db
+    volumes:
+      - worker_logs:/app/logs
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,15 +77,8 @@ services:
     restart: unless-stopped
     command: python run_worker.py
 
-  # SGR Deep Research Service
-  sgr:
-    build:
-      context: .
-      dockerfile: ./sgr-service/Dockerfile
-    ports:
-      - "${SGR_PORT:-8010}:8010"
-    restart: unless-stopped
-
 volumes:
   postgres_data:
-  app_logs:
+  agents_logs:
+  frontend_logs:
+  worker_logs:
