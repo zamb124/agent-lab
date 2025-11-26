@@ -67,7 +67,7 @@ rm -rf "$TMP_DIR"
 echo "[4/7] Проверка nginx конфига..."
 $SCP_CMD "$LOCAL_DIR/deploy/nginx.conf" "$SSH_USER@$SSH_HOST:/tmp/nginx.conf"
 sleep 2
-$SSH_CMD "sudo cp /tmp/nginx.conf /etc/nginx/sites-available/agents-lab.conf && sudo nginx -t"
+$SSH_CMD "sudo cp /tmp/nginx.conf /etc/nginx/sites-available/agents-lab.conf && sudo rm -f /etc/nginx/sites-enabled/agents-lab.ru /etc/nginx/sites-enabled/agents-lab.conf && sudo ln -s /etc/nginx/sites-available/agents-lab.conf /etc/nginx/sites-enabled/agents-lab.conf && sudo nginx -t"
 sleep 2
 
 echo "[5/7] Проверка SSL сертификатов..."
