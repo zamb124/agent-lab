@@ -46,8 +46,7 @@ CMD ["python", "run_prod.py"]
 FROM base AS frontend
 
 COPY core/ ./core/
-COPY apps/frontend/ ./apps/frontend/
-COPY apps/__init__.py ./apps/
+COPY apps/ ./apps/
 COPY run_frontend_prod.py ./
 COPY conf.json ./
 
