@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
     
     logger.info("Запуск миграции системной компании...")
     migrator = container.migrator
-    await migrator.migrate()
+    await migrator.run_full_migration()
     logger.info("Миграция завершена")
     
     logger.info("Agents Service запущен")
