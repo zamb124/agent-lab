@@ -86,24 +86,33 @@ def create_app() -> FastAPI:
     
     logger.info("Подключение роутеров...")
     
-    from apps.agents.api.v1 import (
-        agents, tools, flows, tasks, sessions, whatsapp, 
-        history, files, payments, fashn, webhooks, leads, knowledge_base
-    )
+    from apps.agents.api.v1.agents import router as agents_router
+    from apps.agents.api.v1.tools import router as tools_router
+    from apps.agents.api.v1.flows import router as flows_router
+    from apps.agents.api.v1.tasks import router as tasks_router
+    from apps.agents.api.v1.sessions import router as sessions_router
+    from apps.agents.api.v1.whatsapp import router as whatsapp_router
+    from apps.agents.api.v1.history import router as history_router
+    from apps.agents.api.v1.files import router as files_router
+    from apps.agents.api.v1.payments import router as payments_router
+    from apps.agents.api.v1.fashn import router as fashn_router
+    from apps.agents.api.v1.webhooks import router as webhooks_router
+    from apps.agents.api.v1.leads import router as leads_router
+    from apps.agents.api.v1.knowledge_base import router as kb_router
     
-    app.include_router(agents.router, prefix="/agents/api/v1", tags=["agents"])
-    app.include_router(tools.router, prefix="/agents/api/v1", tags=["tools"])
-    app.include_router(flows.router, prefix="/agents/api/v1", tags=["flows"])
-    app.include_router(tasks.router, prefix="/agents/api/v1", tags=["tasks"])
-    app.include_router(sessions.router, prefix="/agents/api/v1", tags=["sessions"])
-    app.include_router(whatsapp.router, prefix="/agents/api/v1", tags=["whatsapp"])
-    app.include_router(history.router, prefix="/agents/api/v1", tags=["history"])
-    app.include_router(files.router, prefix="/agents/api/v1", tags=["files"])
-    app.include_router(payments.router, prefix="/agents/api/v1", tags=["payments"])
-    app.include_router(fashn.router, prefix="/agents/api/v1", tags=["fashn"])
-    app.include_router(webhooks.router, prefix="/agents/api/v1", tags=["webhooks"])
-    app.include_router(leads.router, prefix="/agents/api/v1", tags=["leads"])
-    app.include_router(knowledge_base.router, prefix="/agents/api/v1", tags=["knowledge-base"])
+    app.include_router(agents_router, prefix="/agents/api/v1", tags=["agents"])
+    app.include_router(tools_router, prefix="/agents/api/v1", tags=["tools"])
+    app.include_router(flows_router, prefix="/agents/api/v1", tags=["flows"])
+    app.include_router(tasks_router, prefix="/agents/api/v1", tags=["tasks"])
+    app.include_router(sessions_router, prefix="/agents/api/v1", tags=["sessions"])
+    app.include_router(whatsapp_router, prefix="/agents/api/v1", tags=["whatsapp"])
+    app.include_router(history_router, prefix="/agents/api/v1", tags=["history"])
+    app.include_router(files_router, prefix="/agents/api/v1", tags=["files"])
+    app.include_router(payments_router, prefix="/agents/api/v1", tags=["payments"])
+    app.include_router(fashn_router, prefix="/agents/api/v1", tags=["fashn"])
+    app.include_router(webhooks_router, prefix="/agents/api/v1", tags=["webhooks"])
+    app.include_router(leads_router, prefix="/agents/api/v1", tags=["leads"])
+    app.include_router(kb_router, prefix="/agents/api/v1", tags=["knowledge-base"])
     
     logger.info("Agents Service создан")
     

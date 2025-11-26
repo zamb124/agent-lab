@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import Response
 import httpx
 from core.files.processors import get_default_file_processor
-from apps.agents.services.core_clients.s3_client import S3ClientFactory
+from core.files.s3_client import S3ClientFactory
 from core.context import get_context
 
 logger = logging.getLogger(__name__)

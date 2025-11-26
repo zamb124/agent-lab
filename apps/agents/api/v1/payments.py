@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 
 from apps.agents.dependencies import ContextDep
-from apps.agents.services.clients.payment_providers.factory import PaymentProviderFactory
+from core.clients.payment.factory import PaymentProviderFactory
 from core.payments import PaymentService
 from core.models.payment_models import (
     CreatePaymentRequest,
