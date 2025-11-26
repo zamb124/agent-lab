@@ -246,7 +246,7 @@ class ChatManager {
 
     async getFlowInfo(flowId) {
         try {
-            const response = await fetch(`/api/v1/flows/${encodeURIComponent(flowId)}/info`);
+            const response = await fetch(`/agents/api/v1/flows/${encodeURIComponent(flowId)}/info`);
             if (response.ok) {
                 return await response.json();
             }
@@ -753,7 +753,7 @@ class ChatManager {
             
             let userId = 'unknown';
             try {
-                const userResponse = await fetch('/api/v1/admin/me');
+                const userResponse = await fetch('/frontend/api/admin/me');
                 if (userResponse.ok) {
                     const userData = await userResponse.json();
                     userId = userData.user_id;
@@ -779,7 +779,7 @@ class ChatManager {
             }
             
             const encodedSessionId = encodeURIComponent(fullSessionId);
-            const response = await fetch(`/api/v1/history/sessions/${encodedSessionId}/messages?limit=100`);
+            const response = await fetch(`/agents/api/v1/history/sessions/${encodedSessionId}/messages?limit=100`);
             
             if (!response.ok) {
                 throw new Error(`Ошибка загрузки истории: ${response.status}`);

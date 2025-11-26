@@ -104,7 +104,7 @@ export async function testApiEndpoint(flowId, authToken) {
     resultContent.className = '';
     
     try {
-        const response = await fetch(`/api/v1/flows/${flowId}/message`, {
+        const response = await fetch(`/agents/api/v1/flows/${flowId}/message`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

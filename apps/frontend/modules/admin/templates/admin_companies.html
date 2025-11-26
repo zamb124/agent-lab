@@ -459,7 +459,7 @@ async function remigrateAllPublic(companyId, companyName) {
     }
     
     try {
-        const response = await fetch(`/api/v1/admin/remigrate-all-public/${companyId}`, {
+        const response = await fetch(`/frontend/api/admin/remigrate-all-public/${companyId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

@@ -229,7 +229,7 @@ class PromptEditor {
             // Но загружаем для dropdown при создании Flow переменных
             window.availableCompanyVars = [];
             try {
-                const varsResponse = await fetch('/api/v1/admin/variables');
+                const varsResponse = await fetch('/frontend/api/admin/variables');
                 if (varsResponse.ok) {
                     const varsData = await varsResponse.json();
                     window.availableCompanyVars = Object.entries(varsData).map(([key, varInfo]) => ({

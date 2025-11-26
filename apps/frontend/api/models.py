@@ -110,7 +110,7 @@ async def get_model(
         if model_type == "create_company_form":
             # Рендерим только форму с HTMX атрибутами
             html = f"""
-            <form hx-post="/api/v1/admin/create-my-company"
+            <form hx-post="/frontend/api/admin/create-my-company"
                   hx-ext="json-enc"
                   hx-trigger="submit"
                   class="space-y-6">

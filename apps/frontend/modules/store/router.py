@@ -52,7 +52,7 @@ async def store_list(request: Request, flow_repo: FlowRepositoryDep):
         if hasattr(flow_config, 'image_path') and flow_config.image_path:
             image_url = f"/frontend/store/flow-image/{full_flow_id}"
         elif hasattr(flow_config, 'image_file_id') and flow_config.image_file_id:
-            image_url = f"/api/v1/files/{flow_config.image_file_id}"
+            image_url = f"/agents/api/v1/files/{flow_config.image_file_id}"
         
         flow_info = {
             "flow_id": full_flow_id,
@@ -107,7 +107,7 @@ async def flow_details(request: Request, flow_id: str):
     if hasattr(flow_config, 'image_path') and flow_config.image_path:
         image_url = f"/frontend/store/flow-image/{flow_id}"
     elif hasattr(flow_config, 'image_file_id') and flow_config.image_file_id:
-        image_url = f"/api/v1/files/{flow_config.image_file_id}"
+        image_url = f"/agents/api/v1/files/{flow_config.image_file_id}"
     
     flow_info = {
         "flow_id": flow_id,

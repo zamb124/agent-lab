@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 
-from apps.agents.api.v1.auth import router as auth_router
+from core.api import auth_router
 from core.utils.tokens import get_token_service
 
 

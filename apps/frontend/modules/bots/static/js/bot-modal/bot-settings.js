@@ -143,7 +143,7 @@ export class BotSettingsManager {
         if (this.llmModelsData) return this.llmModelsData;
         
         try {
-            const response = await fetch('/api/v1/admin/llm/models', {
+            const response = await fetch('/frontend/api/admin/llm/models', {
                 headers: {
                     'Authorization': `Bearer ${this.app.authToken}`
                 }

@@ -14,7 +14,7 @@ export class MCPManager {
         }
         
         try {
-            const serversResponse = await fetch('/api/v1/mcp/servers', {
+            const serversResponse = await fetch('/frontend/api/mcp/servers', {
                 headers: {
                     'Authorization': `Bearer ${this.authToken}`
                 }

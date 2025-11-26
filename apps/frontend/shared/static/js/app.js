@@ -204,7 +204,7 @@ class APP {
     
     async loadUserProfile() {
         try {
-            const response = await fetch('/api/v1/admin/me', {
+            const response = await fetch('/frontend/api/admin/me', {
                 headers: {
                     'Authorization': this.authToken ? `Bearer ${this.authToken}` : '',
                     'Content-Type': 'application/json'

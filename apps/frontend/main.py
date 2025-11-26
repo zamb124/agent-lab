@@ -159,15 +159,16 @@ def create_app() -> FastAPI:
     from apps.frontend.api import models as frontend_models
     from core.api import auth_router
     from apps.agents.api.v1.admin import router as admin_router
+    from apps.frontend.api.mcp import router as mcp_api_router
     
     app.include_router(frontend_api_router, prefix="/frontend/api")
     app.include_router(frontend_pages_router)
     app.include_router(frontend_websockets_router, prefix="/frontend")
     app.include_router(websocket_notifications_router, tags=["websocket-notifications"], include_in_schema=False)
     app.include_router(frontend_models.router, tags=["frontend-models-direct"], include_in_schema=False)
-    app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
     app.include_router(auth_router, prefix="/auth", tags=["auth-callback"])
-    app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
+    app.include_router(admin_router, prefix="/frontend/api/admin", tags=["admin"])
+    app.include_router(mcp_api_router, prefix="/frontend/api", tags=["mcp-api"])
     
     logger.info("Монтирование статических файлов...")
     

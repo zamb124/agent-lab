@@ -59,7 +59,7 @@ export class KnowledgeBaseUploader {
         try {
             showNotification('Загрузка текста...', 'info');
 
-            const response = await fetch(`/api/v1/knowledge-base/flows/${flowId}/text`, {
+            const response = await fetch(`/agents/api/v1/knowledge-base/flows/${flowId}/text`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -117,7 +117,7 @@ export class KnowledgeBaseUploader {
             try {
                 showNotification('Загрузка документа...', 'info');
                 
-                const response = await fetch(`/api/v1/knowledge-base/flows/${flowId}/documents`, {
+                const response = await fetch(`/agents/api/v1/knowledge-base/flows/${flowId}/documents`, {
                     method: 'POST',
                     body: formData
                 });

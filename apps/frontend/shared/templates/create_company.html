@@ -179,7 +179,7 @@
 
         <div id="error-message" class="error-message"></div>
 
-        <form id="create-company-form" action="/api/v1/admin/create-my-company" method="post">
+        <form id="create-company-form" action="/frontend/api/admin/create-my-company" method="post">
             <div class="form-group">
                 <label for="name">Название компании</label>
                 <input 
@@ -276,7 +276,7 @@
                 const formData = new FormData(form);
                 
                 try {
-                    const response = await fetch('/api/v1/admin/create-my-company', {
+                    const response = await fetch('/frontend/api/admin/create-my-company', {
                         method: 'POST',
                         body: formData,
                         redirect: 'manual'

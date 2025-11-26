@@ -13,7 +13,7 @@ export async function getFlow(flowId) {
 }
 
 export async function getFlowInfo(flowId) {
-    return apiClient.get(`/api/v1/flows/${encodeURIComponent(flowId)}/info`);
+    return apiClient.get(`/agents/api/v1/flows/${encodeURIComponent(flowId)}/info`);
 }
 
 export async function getFlowCanvas(flowId) {
@@ -37,6 +37,6 @@ export async function deleteFlow(flowId) {
 }
 
 export async function remigrateFlow(flowId) {
-    return apiClient.post(`/api/v1/admin/remigrate-flow-with-deps/${flowId}`);
+    return apiClient.post(`/frontend/api/admin/remigrate-flow-with-deps/${flowId}`);
 }
 

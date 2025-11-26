@@ -72,7 +72,7 @@ export default class MCPModule {
         this.editingServerId = serverId;
         
         try {
-            const response = await fetch(`/api/v1/mcp/servers/${serverId}`, {
+            const response = await fetch(`/frontend/api/mcp/servers/${serverId}`, {
                 headers: {'Authorization': `Bearer ${this.app.authToken}`}
             });
             
@@ -168,7 +168,7 @@ export default class MCPModule {
         try {
             const isEdit = this.editingServerId !== null;
             const method = isEdit ? 'PUT' : 'POST';
-            const endpoint = isEdit ? `/api/v1/mcp/servers/${serverId}` : '/api/v1/mcp/servers';
+            const endpoint = isEdit ? `/frontend/api/mcp/servers/${serverId}` : '/frontend/api/mcp/servers';
             
             const response = await fetch(endpoint, {
                 method: method,
@@ -203,7 +203,7 @@ export default class MCPModule {
         }
         
         try {
-            const response = await fetch(`/api/v1/mcp/servers/${serverId}`, {
+            const response = await fetch(`/frontend/api/mcp/servers/${serverId}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${this.app.authToken}`
@@ -236,7 +236,7 @@ export default class MCPModule {
         try {
             this.app.showNotification('Синхронизация тулов...', 'info');
             
-            const response = await fetch(`/api/v1/mcp/servers/${serverId}/sync`, {
+            const response = await fetch(`/frontend/api/mcp/servers/${serverId}/sync`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${this.app.authToken}`
@@ -271,7 +271,7 @@ export default class MCPModule {
         try {
             this.app.showNotification('Тестирование подключения...', 'info');
             
-            const response = await fetch(`/api/v1/mcp/servers/${serverId}/test`, {
+            const response = await fetch(`/frontend/api/mcp/servers/${serverId}/test`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${this.app.authToken}`

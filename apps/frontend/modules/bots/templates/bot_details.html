@@ -414,7 +414,7 @@
                         <div class="input-group mb-2">
                             <input type="text" class="form-control font-monospace" 
                                    id="whatsapp-webhook-url-{{ bot.flow_id }}" 
-                                   value="https://{{ request.headers.get('host') }}/api/v1/webhook/whatsapp/company:{{ request.state.context.active_company.company_id }}:flow:{{ bot.flow_id }}" 
+                                   value="https://{{ request.headers.get('host') }}/agents/api/v1/webhook/whatsapp/company:{{ request.state.context.active_company.company_id }}:flow:{{ bot.flow_id }}" 
                                    readonly>
                             <button class="btn btn-outline-secondary" onclick="copyToClipboard('whatsapp-webhook-url-{{ bot.flow_id }}')">
                                 <i class="ti ti-clipboard"></i>
@@ -433,7 +433,7 @@
                                 <input type="text" 
                                        class="form-control font-monospace" 
                                        id="api-endpoint-{{ bot.flow_id }}" 
-                                       value="https://{{ request.headers.get('host') }}/api/v1/flows/{{ bot.flow_id }}/message" 
+                                       value="https://{{ request.headers.get('host') }}/agents/api/v1/flows/{{ bot.flow_id }}/message" 
                                        readonly>
                                 <button class="btn btn-outline-secondary" 
                                         onclick="copyToClipboard('api-endpoint-{{ bot.flow_id }}')">
@@ -445,7 +445,7 @@
                         <div class="api-section">
                             <h6><i class="ti ti-code-square"></i> Пример curl запроса</h6>
                             <div class="code-block-wrapper">
-                                <pre class="code-block" id="api-curl-example-{{ bot.flow_id }}">curl -X POST "https://{{ request.headers.get('host') }}/api/v1/flows/{{ bot.flow_id }}/message" \
+                                <pre class="code-block" id="api-curl-example-{{ bot.flow_id }}">curl -X POST "https://{{ request.headers.get('host') }}/agents/api/v1/flows/{{ bot.flow_id }}/message" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_TOKEN" \
   -d '{

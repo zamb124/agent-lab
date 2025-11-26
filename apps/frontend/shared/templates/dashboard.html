@@ -582,7 +582,7 @@ document.addEventListener('DOMContentLoaded', function() {
 async function switchCompany(companyId) {
     try {
         console.log('Switching to company:', companyId);
-        const response = await fetch(`/api/v1/admin/switch-company/${companyId}`, {
+        const response = await fetch(`/frontend/api/admin/switch-company/${companyId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

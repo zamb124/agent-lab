@@ -24,7 +24,7 @@ export class PlatformManager {
         modal.dataset.editPlatform = '';
         
         try {
-            const response = await fetch('/api/v1/admin/variables', {
+            const response = await fetch('/frontend/api/admin/variables', {
                 headers: {
                     'Authorization': `Bearer ${this.app.authToken}`
                 }
@@ -286,7 +286,7 @@ export class PlatformManager {
     
     async loadVariablesForWhatsApp() {
         try {
-            const response = await fetch('/api/v1/admin/variables', {
+            const response = await fetch('/frontend/api/admin/variables', {
                 headers: {
                     'Authorization': `Bearer ${this.app.authToken}`
                 }
@@ -375,7 +375,7 @@ export class PlatformManager {
         try {
             showNotification('Регистрация WhatsApp...', 'info');
             
-            const response = await fetch(`/api/v1/admin/whatsapp/register/${flowId}`, {
+            const response = await fetch(`/frontend/api/admin/whatsapp/register/${flowId}`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${this.app.authToken}`

@@ -16,7 +16,7 @@ export class KnowledgeBaseManager {
         listContainer.innerHTML = '<div class="loading-indicator"><div class="spinner"></div></div>';
         
         try {
-            const response = await fetch(`/api/v1/knowledge-base/flows/${flowId}/documents`);
+            const response = await fetch(`/agents/api/v1/knowledge-base/flows/${flowId}/documents`);
             
             if (!response.ok) {
                 throw new Error('Ошибка получения списка документов');
@@ -117,7 +117,7 @@ export class KnowledgeBaseManager {
         }
         
         try {
-            const response = await fetch(`/api/v1/knowledge-base/flows/${flowId}/documents/${documentId}`, {
+            const response = await fetch(`/agents/api/v1/knowledge-base/flows/${flowId}/documents/${documentId}`, {
                 method: 'DELETE'
             });
             

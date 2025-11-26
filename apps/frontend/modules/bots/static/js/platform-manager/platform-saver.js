@@ -144,7 +144,7 @@ export class PlatformSaver {
             currentFlow.platforms[platformType] = platformConfig;
 
             if (savedToken && savedUsername) {
-                const tokenResponse = await fetch('/api/v1/admin/tokens', {
+                const tokenResponse = await fetch('/frontend/api/admin/tokens', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

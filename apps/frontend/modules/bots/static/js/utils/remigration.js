@@ -51,7 +51,7 @@ export class RemigrationManager {
             this.app.showNotification('Выполняется сброс к коду...', 'info');
         }
         
-        const response = await fetch(`/api/v1/admin/remigrate-flow-with-deps/${flowId}`, { 
+        const response = await fetch(`/frontend/api/admin/remigrate-flow-with-deps/${flowId}`, { 
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

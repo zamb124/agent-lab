@@ -86,15 +86,24 @@ def create_app() -> FastAPI:
     
     logger.info("Подключение роутеров...")
     
-    from apps.agents.api.v1 import agents, tools, flows, tasks, sessions, whatsapp
-    from core.api import auth_router
-    app.include_router(agents.router, prefix="/api/v1", tags=["agents"])
-    app.include_router(tools.router, prefix="/api/v1", tags=["tools"])
-    app.include_router(flows.router, prefix="/api/v1", tags=["flows"])
-    app.include_router(tasks.router, prefix="/api/v1", tags=["tasks"])
-    app.include_router(sessions.router, prefix="/api/v1", tags=["sessions"])
-    app.include_router(whatsapp.router, prefix="/api/v1", tags=["whatsapp"])
-    app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+    from apps.agents.api.v1 import (
+        agents, tools, flows, tasks, sessions, whatsapp, 
+        history, files, payments, fashn, webhooks, leads, knowledge_base
+    )
+    
+    app.include_router(agents.router, prefix="/agents/api/v1", tags=["agents"])
+    app.include_router(tools.router, prefix="/agents/api/v1", tags=["tools"])
+    app.include_router(flows.router, prefix="/agents/api/v1", tags=["flows"])
+    app.include_router(tasks.router, prefix="/agents/api/v1", tags=["tasks"])
+    app.include_router(sessions.router, prefix="/agents/api/v1", tags=["sessions"])
+    app.include_router(whatsapp.router, prefix="/agents/api/v1", tags=["whatsapp"])
+    app.include_router(history.router, prefix="/agents/api/v1", tags=["history"])
+    app.include_router(files.router, prefix="/agents/api/v1", tags=["files"])
+    app.include_router(payments.router, prefix="/agents/api/v1", tags=["payments"])
+    app.include_router(fashn.router, prefix="/agents/api/v1", tags=["fashn"])
+    app.include_router(webhooks.router, prefix="/agents/api/v1", tags=["webhooks"])
+    app.include_router(leads.router, prefix="/agents/api/v1", tags=["leads"])
+    app.include_router(knowledge_base.router, prefix="/agents/api/v1", tags=["knowledge-base"])
     
     logger.info("Agents Service создан")
     
@@ -105,6 +114,7 @@ app = create_app()
 
 
 @app.get("/health")
+@app.get("/agents/health")
 async def health():
     """Health check endpoint"""
     return {"status": "healthy", "service": "agents"}

@@ -249,7 +249,7 @@ export default class BotsModule {
         }
         
         try {
-            const response = await fetch(`/api/v1/flows/${botId}`, {
+            const response = await fetch(`/agents/api/v1/flows/${botId}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${this.app.authToken}`,

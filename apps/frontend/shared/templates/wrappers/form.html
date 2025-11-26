@@ -64,7 +64,7 @@
         function remigrateAgent(agentId) {
             if (!confirm('Сбросить агента к базовому состоянию из кода? Все изменения будут потеряны.')) return;
             
-            fetch(`/api/v1/admin/remigrate/agent/${agentId}`, { method: 'POST' })
+            fetch(`/frontend/api/admin/remigrate/agent/${agentId}`, { method: 'POST' })
                 .then(r => r.json())
                 .then(data => {
                     alert(data.message);
@@ -76,7 +76,7 @@
         function remigrateFlow(flowId) {
             if (!confirm('Сбросить flow к базовому состоянию из кода? Все изменения будут потеряны.')) return;
             
-            fetch(`/api/v1/admin/remigrate/flow/${flowId}`, { method: 'POST' })
+            fetch(`/frontend/api/admin/remigrate/flow/${flowId}`, { method: 'POST' })
                 .then(r => r.json())
                 .then(data => {
                     alert(data.message);
@@ -88,7 +88,7 @@
         function remigrateTool(toolId) {
             if (!confirm('Сбросить tool к базовому состоянию из кода? Все изменения будут потеряны.')) return;
             
-            fetch(`/api/v1/admin/remigrate/tool/${toolId}`, { method: 'POST' })
+            fetch(`/frontend/api/admin/remigrate/tool/${toolId}`, { method: 'POST' })
                 .then(r => r.json())
                 .then(data => {
                     alert(data.message);

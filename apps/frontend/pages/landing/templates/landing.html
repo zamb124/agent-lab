@@ -574,7 +574,7 @@ async function submitContactForm(event) {
     submitButton.innerHTML = `<i class="ti ti-hourglass-split"></i> ${modal.dataset.sending}`;
     
     try {
-        const response = await fetch('/api/v1/lead', {
+        const response = await fetch('/agents/api/v1/lead', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

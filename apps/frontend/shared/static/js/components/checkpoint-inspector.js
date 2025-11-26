@@ -438,7 +438,7 @@ class CheckpointInspector {
         
         let userId = 'unknown';
         try {
-            const userResponse = await fetch('/api/v1/admin/me');
+            const userResponse = await fetch('/frontend/api/admin/me');
             if (userResponse.ok) {
                 const userData = await userResponse.json();
                 userId = userData.user_id;

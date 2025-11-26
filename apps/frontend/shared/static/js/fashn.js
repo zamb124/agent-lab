@@ -300,7 +300,7 @@ class FashnApp {
         }
 
         try {
-            const response = await fetch(`/api/v1/admin/parse-product?url=${encodeURIComponent(url)}`);
+            const response = await fetch(`/frontend/api/admin/parse-product?url=${encodeURIComponent(url)}`);
             
             if (!response.ok) {
                 const errorData = await response.json();
@@ -582,7 +582,7 @@ class FashnApp {
             }
 
             // Вызываем API виртуальной примерки
-            const response = await fetch('/api/v1/fashn/try-on', {
+            const response = await fetch('/agents/api/v1/fashn/try-on', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
