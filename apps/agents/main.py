@@ -29,14 +29,14 @@ async def lifespan(app: FastAPI):
     logger.info("Создание таблиц в service БД...")
     await create_tables(
         db_url=container.db_url,
-        table_names=["storage", "variables", "stores", "agent_states", "otel_spans"]
+        table_names=["storage", "stores", "agent_states", "otel_spans"]
     )
     
     if container.shared_db_url:
         logger.info("Создание таблиц в shared БД...")
         await create_tables(
             db_url=container.shared_db_url,
-            table_names=["users", "tasks", "storage"]
+            table_names=["users", "tasks", "storage", "variables"]
         )
     
     logger.info("Запуск миграции системной компании...")
