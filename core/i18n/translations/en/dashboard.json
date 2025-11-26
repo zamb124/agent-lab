@@ -1,0 +1,109 @@
+{
+  "title": "Dashboard",
+  "welcome_message": "Welcome, {user_name}!",
+  "navigation": {
+    "bots": "Bots",
+    "abilities": "Abilities",
+    "chats": "Chats",
+    "store": "Store",
+    "history": "History",
+    "builder": "Agent Builder",
+    "admin": "Administration",
+    "billing": "Billing & Payment",
+    "docs": "Documentation",
+    "agents": "Agents",
+    "flows": "Flows",
+    "tasks": "Tasks",
+    "users": "Users",
+    "company_management": "Company Management",
+    "mcp": "MCP"
+  },
+  "header": {
+    "theme_toggle": "Toggle theme",
+    "language_toggle": "Select language",
+    "logout": "Logout",
+    "collapse_menu": "Collapse menu",
+    "switch_company": "Switch company"
+  },
+  "footer": {
+    "user": "User",
+    "online": "Online"
+  },
+  "empty_state": {
+    "welcome_title": "Welcome to Agents Lab",
+    "welcome_description": "Select a section from the left menu to start working with agents and flows",
+    "view_flows": "View flows",
+    "view_agents": "View agents"
+  },
+  "widgets": {
+    "title": "Agent Apps",
+    "builder": "Flow Builder",
+    "bots": "My Bots",
+    "abilities": "Abilities",
+    "store": "Store",
+    "chats": "Chats",
+    "history": "History",
+    "variables": "Keys and Variables",
+    "billing": "Billing & Plans",
+    "mcp": "MCP"
+  },
+  "welcome": {
+    "title": "Welcome",
+    "hero_title": "Welcome to <span class=\"langflow-gradient\">Agent Lab</span>",
+    "hero_subtitle": "Platform for creating smart AI agents and automating business processes",
+    "intro_text": "We are glad to welcome you to the <strong>Agent Lab</strong> platform! Here you can create intelligent bots, automate routine tasks and connect them to your favorite communication channels - all without a single line of code.",
+    "features": {
+      "create_bots": {
+        "title": "Create bots easily",
+        "description": "Visual editor and ready-made templates will allow you to launch your first bot in a matter of minutes"
+      },
+      "builder": {
+        "title": "Builder for complex scenarios",
+        "description": "Create multi-agent systems using a visual constructor and customize the logic of operation"
+      },
+      "channels": {
+        "title": "Multiple channels",
+        "description": "Connect Telegram, WhatsApp, Web Chat, API and AmoCRM - all in one place"
+      },
+      "rag": {
+        "title": "Knowledge Base (RAG)",
+        "description": "Upload documents and your bot will answer based on your data"
+      },
+      "tools": {
+        "title": "Rich set of tools",
+        "description": "Integrations with external services, file operations, API and much more"
+      },
+      "analytics": {
+        "title": "Analytics and monitoring",
+        "description": "Track bot effectiveness, view conversation history and optimize performance"
+      }
+    },
+    "cta": {
+      "title": "Get started right now!",
+      "text": "Create your first bot or choose a ready-made solution from the store",
+      "create_bot": "Create bot",
+      "store": "Solution store"
+    },
+    "quickstart": {
+      "title": "Quick start",
+      "steps": {
+        "1": {
+          "title": "Go to the \"Bots\" section",
+          "description": "Create your first bot or choose a template from the store"
+        },
+        "2": {
+          "title": "Configure prompt and capabilities",
+          "description": "Describe what your bot should do and add the necessary tools"
+        },
+        "3": {
+          "title": "Connect channels",
+          "description": "Add Telegram, WhatsApp or other communication channels"
+        },
+        "4": {
+          "title": "Test and launch",
+          "description": "Test the bot in the built-in chat and launch in production"
+        }
+      }
+    }
+  }
+}

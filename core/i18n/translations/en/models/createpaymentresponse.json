@@ -1,0 +1,19 @@
+{
+  "fields": {
+    "transaction_id": {
+      "description": "Created transaction identifier"
+    },
+    "payment_url": {
+      "description": "URL for payment redirect"
+    },
+    "provider": {
+      "description": "Selected payment provider"
+    },
+    "status": {
+      "description": "Initial transaction status"
+    },
+    "amount": {
+      "description": "Payment amount"
+    }
+  }
+}

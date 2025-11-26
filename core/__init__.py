@@ -29,7 +29,7 @@ from core.models import User, Company, Context, Language, AuthProvider, Provider
 from core.context import get_context, set_context, clear_context
 from core.http import get_httpx_client
 from core.logging import setup_logging, get_logger
-from core.container import BaseContainer, get_system_container, initialize_system_container
+from core.container import BaseContainer, get_system_container, set_system_container, initialize_system_container
 from core.variables import VariablesService, VariableResolver, get_state, set_state_in_context
 from core.rag import (
     BaseRAGProvider,
@@ -74,6 +74,7 @@ __all__ = [
     "get_logger",
     "BaseContainer",
     "get_system_container",
+    "set_system_container",
     "initialize_system_container",
     "VariablesService",
     "VariableResolver",

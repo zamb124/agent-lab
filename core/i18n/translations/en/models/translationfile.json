@@ -1,0 +1,22 @@
+{
+  "fields": {
+    "language": {
+      "description": "Language file"
+    },
+    "version": {
+      "description": "Translation file version"
+    },
+    "last_updated": {
+      "description": "Last update time"
+    },
+    "completeness": {
+      "description": "Translation completion percentage (0-100)"
+    },
+    "total_keys": {
+      "description": "Total number of keys"
+    },
+    "translated_keys": {
+      "description": "Number of translated keys"
+    }
+  }
+}

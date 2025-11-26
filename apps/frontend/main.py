@@ -14,12 +14,14 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from contextlib import asynccontextmanager
 
 from core.config.loader import load_merged_config
-from core.config import BaseSettings
+from core.config import BaseSettings, set_settings
 from core.logging import setup_logging
 from core.db import create_tables
 from core.middleware.auth import AuthMiddleware
 from core.middleware.profiling import ProfilingMiddleware
+from core.container import set_system_container
 from apps.frontend.container import FrontendContainer, set_frontend_container
+from apps.agents.container import AgentsContainer, set_agents_container
 from apps.frontend.core.htmx_helpers import HTMXHeaderMiddleware
 
 logger = logging.getLogger(__name__)
@@ -68,6 +70,9 @@ def create_app() -> FastAPI:
     )
     
     settings = FrontendSettings(**merged_config)
+    set_settings(settings)
+    
+    logger.info(f"Frontend config: env={settings.server.env}, port={settings.server.port}")
     
     setup_logging("frontend", settings.logging)
     
@@ -76,6 +81,15 @@ def create_app() -> FastAPI:
         shared_db_url=settings.database.shared_url
     )
     set_frontend_container(container)
+    set_system_container(container)
+    
+    if settings.database.agents_db_url:
+        agents_container = AgentsContainer(
+            service_db_url=settings.database.agents_db_url,
+            shared_db_url=settings.database.shared_url
+        )
+        set_agents_container(agents_container)
+        logger.info(f"AgentsContainer инициализирован для frontend")
     
     app = FastAPI(
         title="Frontend Service",
@@ -143,12 +157,17 @@ def create_app() -> FastAPI:
     from apps.frontend.websockets_router import router as frontend_websockets_router
     from apps.frontend.websockets.notifications import router as websocket_notifications_router
     from apps.frontend.api import models as frontend_models
+    from core.api import auth_router
+    from apps.agents.api.v1.admin import router as admin_router
     
     app.include_router(frontend_api_router, prefix="/frontend/api")
     app.include_router(frontend_pages_router)
     app.include_router(frontend_websockets_router, prefix="/frontend")
     app.include_router(websocket_notifications_router, tags=["websocket-notifications"], include_in_schema=False)
     app.include_router(frontend_models.router, tags=["frontend-models-direct"], include_in_schema=False)
+    app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+    app.include_router(auth_router, prefix="/auth", tags=["auth-callback"])
+    app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
     
     logger.info("Монтирование статических файлов...")
     

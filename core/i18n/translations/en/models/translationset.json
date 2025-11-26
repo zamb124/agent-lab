@@ -1,0 +1,13 @@
+{
+  "fields": {
+    "key": {
+      "description": "Translation key"
+    },
+    "translations": {
+      "description": "Translations in different languages"
+    },
+    "context": {
+      "description": "Usage context"
+    }
+  }
+}

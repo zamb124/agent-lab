@@ -80,12 +80,14 @@ def create_app() -> FastAPI:
     logger.info("Подключение роутеров...")
     
     from apps.agents.api.v1 import agents, tools, flows, tasks, sessions, whatsapp
+    from core.api import auth_router
     app.include_router(agents.router, prefix="/api/v1", tags=["agents"])
     app.include_router(tools.router, prefix="/api/v1", tags=["tools"])
     app.include_router(flows.router, prefix="/api/v1", tags=["flows"])
     app.include_router(tasks.router, prefix="/api/v1", tags=["tasks"])
     app.include_router(sessions.router, prefix="/api/v1", tags=["sessions"])
     app.include_router(whatsapp.router, prefix="/api/v1", tags=["whatsapp"])
+    app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
     
     logger.info("Agents Service создан")
     

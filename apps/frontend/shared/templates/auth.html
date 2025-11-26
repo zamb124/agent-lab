@@ -21,7 +21,7 @@
                 
                 <div class="auth-providers">
                     {% for provider in providers %}
-                    <a href="/auth/login/{{ provider.value }}" 
+                    <a href="/api/v1/auth/login/{{ provider.value }}" 
                        class="btn btn-outline interactive glow-primary auth-btn">
                         {% if provider.value == 'yandex' %}
                             <i class="ti ti-cloud"></i>

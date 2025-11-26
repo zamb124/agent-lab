@@ -1,0 +1,28 @@
+{
+  "fields": {
+    "role": {
+      "title": "Role",
+      "description": "Role of the message sender"
+    },
+    "content": {
+      "title": "Content",
+      "description": "Message text"
+    },
+    "timestamp": {
+      "title": "Time",
+      "description": "Message send time"
+    },
+    "tool_calls": {
+      "title": "Tool Calls",
+      "description": "List of tool calls in this message"
+    },
+    "source_node": {
+      "title": "Source Node",
+      "description": "Name of the node/agent that created this message"
+    },
+    "metadata": {
+      "title": "Metadata",
+      "description": "Additional message metadata"
+    }
+  }
+}

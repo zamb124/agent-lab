@@ -224,7 +224,7 @@ class TranslationManager:
         logger.debug("Сканирование Pydantic моделей...")
         
         # Сканируем директории с моделями
-        model_dirs = [Path("app/models"), Path("app/frontend")]
+        model_dirs = [Path("apps/agents/models"), Path("apps/frontend")]
         
         for model_dir in model_dirs:
             if model_dir.exists():
@@ -303,8 +303,8 @@ class TranslationManager:
         logger.debug("Сканирование HTML шаблонов...")
         
         template_dirs = [
-            Path("app/frontend/shared/templates"),
-            Path("app/frontend/modules")
+            Path("apps/frontend/shared/templates"),
+            Path("apps/frontend/modules")
         ]
         
         for template_dir in template_dirs:
@@ -343,7 +343,7 @@ class TranslationManager:
         """Сканирует JavaScript файлы для поиска вызовов app.i18n.t()"""
         logger.debug("Сканирование JavaScript файлов...")
         
-        js_dirs = [Path("app/frontend/shared/static")]
+        js_dirs = [Path("apps/frontend/shared/static")]
         
         for js_dir in js_dirs:
             if js_dir.exists():
@@ -554,7 +554,7 @@ class TranslationManager:
         logger.debug("Генерация JavaScript модулей...")
         
         # Генерируем только в static директорию для веб-доступа
-        frontend_static_path = Path("app/frontend/shared/static/i18n/generated")
+        frontend_static_path = Path("apps/frontend/shared/static/i18n/generated")
         frontend_static_path.mkdir(parents=True, exist_ok=True)
         
         for language in Language:

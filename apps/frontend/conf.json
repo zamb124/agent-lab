@@ -1,11 +1,13 @@
 {
   "server": {
     "port": 8002,
-    "env": "local"
+    "env": "local",
+    "domain": "localhost"
   },
   "database": {
     "url": "postgresql+asyncpg://agent_user:agent_password@localhost:5432/shared_db",
-    "shared_url": "postgresql+asyncpg://agent_user:agent_password@localhost:5432/shared_db"
+    "shared_url": "postgresql+asyncpg://agent_user:agent_password@localhost:5432/shared_db",
+    "agents_db_url": "postgresql+asyncpg://agent_user:agent_password@localhost:5432/agents_db"
   },
   "logging": {
     "level": "INFO",

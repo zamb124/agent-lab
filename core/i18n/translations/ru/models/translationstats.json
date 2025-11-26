@@ -1,0 +1,13 @@
+{
+  "fields": {
+    "total_languages": {
+      "description": "Общее количество языков"
+    },
+    "total_keys": {
+      "description": "Общее количество ключей"
+    },
+    "languages_stats": {
+      "description": "Статистика по языкам"
+    }
+  }
+}

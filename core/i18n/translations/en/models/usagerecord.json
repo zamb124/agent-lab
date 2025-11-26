@@ -1,0 +1,31 @@
+{
+  "fields": {
+    "usage_id": {
+      "title": "Record ID"
+    },
+    "user_id": {
+      "title": "User ID"
+    },
+    "company_id": {
+      "title": "Company ID"
+    },
+    "session_id": {
+      "title": "Session ID"
+    },
+    "usage_type": {
+      "title": "Usage Type"
+    },
+    "resource_name": {
+      "title": "Resource Name"
+    },
+    "cost": {
+      "title": "Cost in RUB"
+    },
+    "quantity": {
+      "title": "Quantity"
+    },
+    "metadata": {
+      "title": "Additional Data"
+    }
+  }
+}

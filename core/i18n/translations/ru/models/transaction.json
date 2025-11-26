@@ -1,0 +1,48 @@
+{
+  "fields": {
+    "transaction_id": {
+      "title": "ID транзакции",
+      "description": "Уникальный ID транзакции в нашей системе"
+    },
+    "company_id": {
+      "title": "ID компании",
+      "description": "Компания, которая пополняет баланс"
+    },
+    "user_id": {
+      "title": "ID пользователя",
+      "description": "Пользователь, который инициировал пополнение"
+    },
+    "amount": {
+      "title": "Сумма",
+      "description": "Сумма пополнения в рублях"
+    },
+    "status": {
+      "title": "Статус",
+      "description": "Текущий статус транзакции"
+    },
+    "payment_provider": {
+      "title": "Платежный провайдер",
+      "description": "Через какой провайдер производится оплата"
+    },
+    "external_payment_id": {
+      "title": "ID платежа у провайдера",
+      "description": "ID операции в системе платежного провайдера"
+    },
+    "payment_url": {
+      "title": "URL для оплаты",
+      "description": "Ссылка для перехода на страницу оплаты"
+    },
+    "created_at": {
+      "title": "Создано",
+      "description": "Время создания транзакции"
+    },
+    "completed_at": {
+      "title": "Завершено",
+      "description": "Время завершения транзакции"
+    },
+    "metadata": {
+      "title": "Метаданные",
+      "description": "Дополнительные данные о транзакции"
+    }
+  }
+}

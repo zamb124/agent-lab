@@ -28,7 +28,7 @@ class TranslationKey(BaseModel):
             "example": {
                 "key": "models.user.fields.name",
                 "context": "User model, field name",
-                "source_file": "app/models/core_models.py",
+                "source_file": "apps/agents/models/core_models.py",
                 "default_value": "Имя пользователя",
                 "category": "models"
             }
@@ -105,8 +105,8 @@ class I18nConfig(BaseModel):
     auto_generate_missing: bool = Field(default=True, description="Автоматически генерировать отсутствующие ключи")
     auto_generate_on_startup: bool = Field(default=True, description="Генерировать переводы при запуске приложения")
     scan_directories: List[str] = Field(
-        default_factory=lambda: ["app/models", "app/frontend"], 
+        default_factory=lambda: ["apps/agents/models", "apps/frontend"], 
         description="Директории для сканирования ключей"
     )
-    translations_directory: str = Field(default="app/i18n", description="Директория с файлами переводов")
+    translations_directory: str = Field(default="core/i18n", description="Директория с файлами переводов")
 

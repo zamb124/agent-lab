@@ -38,6 +38,7 @@ class DatabaseConfig(BaseModel):
         "postgresql://agent_user:agent_password@localhost:5432/agent_platform"
     )
     shared_url: Optional[str] = None  # URL для shared БД (users, companies, files)
+    agents_db_url: Optional[str] = None  # URL для agents БД (agents, flows, tools)
 
 
 class OpenRouterConfig(BaseModel):

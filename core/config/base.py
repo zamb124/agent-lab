@@ -90,5 +90,12 @@ def get_settings() -> BaseSettings:
     return _settings_instance
 
 
+def set_settings(new_settings: BaseSettings) -> None:
+    """Устанавливает глобальный settings instance"""
+    global _settings_instance
+    _settings_instance = new_settings
+    logger.info(f"Settings обновлены: env={new_settings.server.env}, port={new_settings.server.port}")
+
+
 settings = get_settings()
 

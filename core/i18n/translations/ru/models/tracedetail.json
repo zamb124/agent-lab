@@ -1,0 +1,10 @@
+{
+  "fields": {
+    "trace_info": {
+      "description": "Общая информация о трейсе"
+    },
+    "spans": {
+      "description": "Список всех spans трейса"
+    }
+  }
+}
