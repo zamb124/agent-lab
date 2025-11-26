@@ -22,6 +22,7 @@ echo ""
 
 echo "[1/7] Git pull на сервере..."
 $SSH_CMD "cd $REMOTE_DIR && git fetch origin && git reset --hard origin/main"
+sleep 3
 
 echo "[2/7] Подготовка конфигов..."
 TMP_DIR=$(mktemp -d)
@@ -53,30 +54,39 @@ sed -i.bak 's|"domain": "localhost"|"domain": "agents-lab.ru"|g' "$TMP_DIR/front
 rm -f "$TMP_DIR"/*.bak
 
 echo "[3/7] Копирование конфигов на сервер..."
+sleep 2
 $SCP_CMD "$TMP_DIR/conf.json" "$SSH_USER@$SSH_HOST:$REMOTE_DIR/conf.json"
+sleep 2
 $SCP_CMD "$TMP_DIR/agents_conf.json" "$SSH_USER@$SSH_HOST:$REMOTE_DIR/apps/agents/conf.json"
+sleep 2
 $SCP_CMD "$TMP_DIR/frontend_conf.json" "$SSH_USER@$SSH_HOST:$REMOTE_DIR/apps/frontend/conf.json"
+sleep 2
 
 rm -rf "$TMP_DIR"
 
 echo "[4/7] Проверка nginx конфига..."
 $SCP_CMD "$LOCAL_DIR/deploy/nginx.conf" "$SSH_USER@$SSH_HOST:/tmp/nginx.conf"
+sleep 2
 $SSH_CMD "sudo cp /tmp/nginx.conf /etc/nginx/sites-available/agents-lab.conf && sudo nginx -t"
+sleep 2
 
 echo "[5/7] Проверка SSL сертификатов..."
 $SSH_CMD "sudo ls -la /etc/letsencrypt/live/agents-lab.ru-0001/ | head -5"
+sleep 2
 
 echo "[6/7] Перезапуск сервисов..."
 $SSH_CMD "cd $REMOTE_DIR && sudo docker compose down && sudo docker compose up -d --build"
 
 echo "[7/7] Проверка сервисов..."
-sleep 15
+sleep 20
 
 echo "Checking agents service (8001)..."
 $SSH_CMD "curl -sf http://localhost:8001/health || echo 'FAIL: agents'"
+sleep 2
 
 echo "Checking frontend service (8002)..."
 $SSH_CMD "curl -sf http://localhost:8002/health || echo 'FAIL: frontend'"
+sleep 2
 
 echo "Reloading nginx..."
 $SSH_CMD "sudo systemctl reload nginx"
