@@ -20,6 +20,14 @@ from .client import (
 )
 
 
+def get_amocrm_chat_client(subdomain: str):
+    """
+    Заглушка для Chat API клиента.
+    TODO: Реализовать полноценный Chat API клиент.
+    """
+    raise NotImplementedError("AmoCRM Chat API client не реализован")
+
+
 __all__ = [
     # Основной клиент API v4
     "AmoCRMClient",
@@ -27,5 +35,7 @@ __all__ = [
     "AmoCRMContact",
     "get_amocrm_client",
     "register_subdomain",
+    # Chat API (заглушка)
+    "get_amocrm_chat_client",
 ]
 

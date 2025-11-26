@@ -3,7 +3,6 @@
 """
 
 import pytest
-from apps.agents.db.repositories import AgentRepository
 from apps.agents.models import AgentConfig, AgentType
 
 

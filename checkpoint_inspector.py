@@ -13,8 +13,7 @@
 import asyncio
 import logging
 import argparse
-from typing import Dict, List, Any, Optional
-from datetime import datetime
+from typing import Dict, List, Any
 import os
 import sys
 
@@ -431,7 +430,7 @@ class CheckpointInspector:
             Timeline диаграмма в формате текста
         """
         lines = []
-        lines.append(f"🕐 TIMELINE ВЫПОЛНЕНИЯ АГЕНТА")
+        lines.append("🕐 TIMELINE ВЫПОЛНЕНИЯ АГЕНТА")
         lines.append(f"Поток: {thread_id}")
         lines.append("=" * 80)
         lines.append("")
@@ -527,7 +526,7 @@ class CheckpointInspector:
         """
         lines = []
         lines.append("timeline")
-        lines.append(f"    title Timeline выполнения агента")
+        lines.append("    title Timeline выполнения агента")
         lines.append(f"    Поток: {thread_id[:20]}...")
         lines.append("")
 

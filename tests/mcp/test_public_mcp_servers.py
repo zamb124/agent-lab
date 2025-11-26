@@ -100,7 +100,7 @@ async def test_public_server_list_tools(server_name, server_info):
         assert len(tools) > 0, f"Сервер {server_name} должен вернуть хотя бы один тул"
         
         # Показываем доступные тулы
-        print(f"\n📋 Доступные тулы:")
+        print("\n📋 Доступные тулы:")
         for i, tool in enumerate(tools, 1):
             tool_name = tool.get("name", "unknown")
             tool_desc = tool.get("description", "")[:100]
@@ -108,8 +108,8 @@ async def test_public_server_list_tools(server_name, server_info):
             print(f"      {tool_desc}...")
             
             # Проверяем структуру тула
-            assert "name" in tool, f"Тул должен иметь 'name'"
-            assert "inputSchema" in tool, f"Тул должен иметь 'inputSchema'"
+            assert "name" in tool, "Тул должен иметь 'name'"
+            assert "inputSchema" in tool, "Тул должен иметь 'inputSchema'"
             
             schema = tool["inputSchema"]
             assert isinstance(schema, dict), "inputSchema должна быть dict"
@@ -167,7 +167,7 @@ async def test_context7_resolve_library():
             assert len(content_text) > 0
             print(f"   ✅ Найдена информация: {content_text[:150]}...")
         
-        print(f"\n✅ Все библиотеки успешно найдены")
+        print("\n✅ Все библиотеки успешно найдены")
     
     finally:
         await client.close()
@@ -231,7 +231,7 @@ async def test_context7_get_docs():
             print(f"   ✅ Получено {len(docs_text)} символов документации")
             print(f"   📝 Превью: {docs_text[:200]}...")
         
-        print(f"\n✅ Документация успешно получена")
+        print("\n✅ Документация успешно получена")
     
     finally:
         await client.close()

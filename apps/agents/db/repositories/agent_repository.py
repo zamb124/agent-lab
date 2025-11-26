@@ -4,7 +4,6 @@
 """
 
 import logging
-from typing import Optional
 from datetime import datetime, timezone
 
 from core.db.base_repository import BaseRepository

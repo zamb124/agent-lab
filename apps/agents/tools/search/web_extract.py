@@ -5,7 +5,7 @@
 
 import logging
 import httpx
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from bs4 import BeautifulSoup
 
 from apps.agents.services.tool_decorator import tool

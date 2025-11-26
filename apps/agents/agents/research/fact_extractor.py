@@ -7,8 +7,7 @@ FactExtractorAgent - агент для извлечения фактов из и
 
 import logging
 from apps.agents.agents.react_agent import ReActAgent
-from apps.agents.tools.session.session_tools import session_set, session_get
-from apps.agents.tools.analysis.fact_extraction import extract_facts, verify_facts, structure_facts
+from apps.agents.tools.session.session_tools import session_set
 
 logger = logging.getLogger(__name__)
 

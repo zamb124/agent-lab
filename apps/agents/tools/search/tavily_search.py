@@ -5,8 +5,7 @@ Tavily - специализированный поисковый API для LLM 
 
 import logging
 import httpx
-from typing import Optional, List, Dict, Any
-import json
+from typing import Optional, Dict, Any
 
 from apps.agents.services.tool_decorator import tool
 from apps.agents.config import get_agents_settings

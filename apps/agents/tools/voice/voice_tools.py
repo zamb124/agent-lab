@@ -8,8 +8,8 @@ import uuid
 from pathlib import Path
 from apps.agents.services.tool_decorator import tool
 
-from core.clients.cloud_voice import CloudVoiceClientFactory
 from core.files.processors import get_default_audio_processor
+from core.clients.cloud_voice import get_default_cloud_voice_client
 
 logger = logging.getLogger(__name__)
 

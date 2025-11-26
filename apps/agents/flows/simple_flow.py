@@ -7,7 +7,7 @@ from langchain_core.messages import AIMessage
 from apps.agents.services.state import State
 
 from apps.agents.agents.stategraph_agent import StateGraphAgent
-from apps.agents.models import FlowConfig, NodeType, ConditionType, CodeMode
+from apps.agents.models import FlowConfig, NodeType, CodeMode
 
 
 async def test_response_node(state: State) -> State:

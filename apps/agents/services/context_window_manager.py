@@ -4,8 +4,8 @@
 """
 
 import logging
-from typing import List, Dict, Any, Optional, Tuple
-from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AIMessage
+from typing import List, Dict, Any, Tuple
+from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
 
 from core.config import get_settings
 from core.clients.llm import get_llm
@@ -189,7 +189,7 @@ class ContextWindowManager:
         total_tokens = estimated_tokens + total_messages_overhead
         
         # Логируем детали подсчета
-        logger.debug(f"📊 Подсчет токенов:")
+        logger.debug("📊 Подсчет токенов:")
         logger.debug(f"  Всего сообщений: {len(messages)}")
         logger.debug(f"  Всего символов: {total_chars}")
         logger.debug(f"  Токены (символы/4): {estimated_tokens}")

@@ -56,7 +56,6 @@ async def session_set(key: str, value: str) -> str:
     logger.info(f"🔵 session_set: ПОСЛЕ изменения store={dict(state['store'])}")
     
     # Сохраняем сразу в БД чтобы субагенты видели изменения
-    import asyncio
     await state["store"].ensure_saved()
     
     logger.info(f"📦 session_set: key={key}, value={value}, store_id={store_id}, session_id={session_id}, store={dict(state['store'])}")

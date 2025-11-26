@@ -16,8 +16,6 @@
 import asyncio
 import functools
 import logging
-import inspect
-import copy
 import json
 from typing import Optional, Callable, List, Annotated, Any, Dict
 from pydantic import create_model, Field
@@ -25,8 +23,6 @@ from dataclasses import dataclass
 
 from opentelemetry import trace
 from langchain_core.tools import tool as langchain_tool
-from apps.agents.agents.base import AgentInterrupt
-from langchain_core.messages import ToolMessage
 
 from core.variables import set_state_in_context, get_state
 from core.context import get_context
@@ -397,7 +393,7 @@ def tool(
                         f"{original_schema.__name__}WithState",
                         **field_definitions
                     )
-                    logger.debug(f"✅ Схема создана успешно")
+                    logger.debug("✅ Схема создана успешно")
                 except Exception as e:
                     logger.error(f"❌ Ошибка создания схемы: {e}")
                     logger.error(f"❌ Поля: {field_definitions}")

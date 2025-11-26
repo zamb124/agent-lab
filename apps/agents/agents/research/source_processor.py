@@ -7,9 +7,7 @@ SourceProcessorAgent - агент для обработки найденных �
 
 import logging
 from apps.agents.agents.react_agent import ReActAgent
-from apps.agents.tools.session.session_tools import session_set, session_get
-from apps.agents.tools.search.web_extract import extract_web_content, extract_metadata
-from apps.agents.tools.analysis.text_analysis import analyze_text, extract_key_points
+from apps.agents.tools.session.session_tools import session_set
 
 logger = logging.getLogger(__name__)
 

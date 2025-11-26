@@ -7,7 +7,7 @@ import asyncio
 import logging
 import uuid
 from typing import List, Any, Dict, Optional
-from langchain_core.messages import ToolMessage, AIMessage
+from langchain_core.messages import ToolMessage
 from langchain_core.tools import StructuredTool
 from apps.agents.container import get_agents_container
 from apps.agents.services.state import State

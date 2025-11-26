@@ -14,7 +14,6 @@ from apps.agents.config import get_agents_settings
 settings = get_agents_settings()
 from core.files.processors import get_default_audio_processor
 from apps.agents.container import get_agents_container
-from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 

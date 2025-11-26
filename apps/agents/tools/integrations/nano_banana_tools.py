@@ -6,8 +6,8 @@ import logging
 from typing import Optional
 from apps.agents.services.tool_decorator import tool
 
-from core.clients.nano_banana import NanoBananaClientFactory
 from core.files.processors import get_default_file_processor
+from core.clients.nano_banana import get_default_nano_banana_client
 
 logger = logging.getLogger(__name__)
 

@@ -178,7 +178,7 @@ async def test_nested_agent_interrupts_three_levels(
             subsub_interrupt = subsub_state["interrupt_context"]
             assert subsub_interrupt["interrupt_message"] == "Какой город?"
             
-            print(f"✅ Все 3 уровня сохранили interrupt_context")
+            print("✅ Все 3 уровня сохранили interrupt_context")
             
             # Шаг 2: Ответ "Москва" -> возврат в SubSubAgentB -> SubAgentA -> ask_user
             print(f"\n{'='*60}\n📝 Шаг 2: Пользователь отвечает 'Москва'\n{'='*60}\n")
@@ -198,7 +198,7 @@ async def test_nested_agent_interrupts_three_levels(
                 sub_interrupt = sub_state["interrupt_context"]
                 assert sub_interrupt["interrupt_message"] == "Какая погода нужна?"
                 
-                print(f"✅ Управление вернулось в SubAgentA")
+                print("✅ Управление вернулось в SubAgentA")
                 
                 # Шаг 3: Ответ "Температура" -> возврат в SubAgentA -> EntryAgent -> ask_user
                 print(f"\n{'='*60}\n📝 Шаг 3: Пользователь отвечает 'Температура'\n{'='*60}\n")
@@ -214,7 +214,7 @@ async def test_nested_agent_interrupts_three_levels(
                     entry_interrupt = saved_state["interrupt_context"]
                     assert entry_interrupt["interrupt_message"] == "Показать результат?"
                     
-                    print(f"✅ Управление вернулось в EntryAgent")
+                    print("✅ Управление вернулось в EntryAgent")
                     
                     # Шаг 4: Ответ "Да" -> EntryAgent завершается
                     print(f"\n{'='*60}\n📝 Шаг 4: Пользователь отвечает 'Да'\n{'='*60}\n")

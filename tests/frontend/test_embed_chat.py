@@ -2,7 +2,6 @@
 Тесты для встраиваемого чата
 """
 import pytest
-import pytest_asyncio
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 

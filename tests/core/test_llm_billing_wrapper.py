@@ -4,15 +4,11 @@
 
 import pytest
 import pytest_asyncio
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 
 from apps.agents.services.llm_billing_wrapper import ChatOpenAIWithBilling
-from core.context import set_context
-from core.models.context_models import Context
-from core.models import User, Company
 
 
 @tool

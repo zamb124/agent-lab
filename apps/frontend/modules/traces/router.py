@@ -8,8 +8,7 @@ from typing import Optional
 
 from apps.frontend.core.template_loader import get_templates
 from apps.frontend.core.utils import render_with_dashboard
-
-from core.models.trace_models import TraceInfo, SpanStatus
+from apps.frontend.container import get_frontend_container
 
 from .services import (
     load_spans_from_storage,
@@ -44,6 +43,7 @@ async def get_traces_table(
 ):
     """Получает таблицу трейсов с фильтрацией (HTMX endpoint)"""
 
+    storage = get_frontend_container().storage
     spans = await load_spans_from_storage(storage)
     spans = filter_spans(spans, status=status)
 
@@ -80,6 +80,7 @@ async def get_trace_detail_modal(
 ):
     """Получает модальное окно с детальной информацией о трейсе (HTMX endpoint)"""
 
+    storage = get_frontend_container().storage
     spans = await load_spans_from_storage(storage)
     spans = [s for s in spans if s.trace_id == trace_id]
 

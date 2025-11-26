@@ -81,7 +81,7 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
         "messages": [HumanMessage(content="Создай задачу")]
     }, config)
 
-    print(f"\n✅ Результат 1:")
+    print("\n✅ Результат 1:")
     print(f"   Store keys: {list(result1.get('store', {}).keys())}")
     print(f"   delayed_tasks: {'delayed_tasks' in result1.get('store', {})}")
 
@@ -110,16 +110,16 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
         "messages": [HumanMessage(content="покажи")]
     }, config)
 
-    print(f"\n✅ Результат 2:")
+    print("\n✅ Результат 2:")
     print(f"   Store keys: {list(result2.get('store', {}).keys())}")
     print(f"   delayed_tasks: {'delayed_tasks' in result2.get('store', {})}")
 
     if "store" in result2 and "delayed_tasks" in result2["store"]:
         print(f"   Задач в store: {len(result2['store']['delayed_tasks'])}")
         assert len(result2["store"]["delayed_tasks"]) > 0, "Задачи НЕ сохранились в checkpointer!"
-        print(f"   ✅ Задачи сохранились между вызовами!")
+        print("   ✅ Задачи сохранились между вызовами!")
     else:
-        print(f"   ❌ delayed_tasks отсутствует в store после второго вызова!")
+        print("   ❌ delayed_tasks отсутствует в store после второго вызова!")
         raise AssertionError("State НЕ персистится между вызовами!")
 
     # Проверяем сообщения
@@ -132,10 +132,10 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
             break
 
     if list_response:
-        print(f"\n✅ Список задач получен:")
+        print("\n✅ Список задач получен:")
         print(list_response[:200])
 
-    print(f"\n" + "="*60)
+    print("\n" + "="*60)
     print("✅ ТЕСТ ПРОШЕЛ: State персистится между вызовами!")
     print("="*60)
 

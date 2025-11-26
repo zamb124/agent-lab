@@ -141,7 +141,7 @@ class ReactAgentRunner(BaseAgentRunner):
                 llm_with_tools = self.llm.bind_tools(self.tools)
                 logger.info(f"🟡 ReAct: привязано {len(self.tools)} тулов к LLM")
 
-            logger.info(f"🟡 ReAct: вызываем LLM.ainvoke...")
+            logger.info("🟡 ReAct: вызываем LLM.ainvoke...")
             response = await llm_with_tools.ainvoke(llm_messages)
             logger.info(f"🟡 ReAct: LLM вернул ответ, type={type(response).__name__}")
 
@@ -162,7 +162,6 @@ class ReactAgentRunner(BaseAgentRunner):
             logger.info(f"🟡 ReAct: выполняем {len(tool_calls)} инструментов")
             
             from apps.agents.agents.base import AgentInterrupt
-            from apps.agents.services.state_manager import get_state_manager
             
             try:
                 tool_messages = await self.tool_executor.execute(

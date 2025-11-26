@@ -9,10 +9,9 @@ import uuid
 
 from apps.agents.models import AgentConfig, AgentType, CodeMode, FlowConfig
 from apps.frontend.dependencies import CanvasServiceDep, FlowRepositoryDep, AgentRepositoryDep, VariablesServiceDep, InterfaceFactoryDep
-from apps.agents.services.migration.migrator import Migrator
 from apps.agents.container import get_agents_container
 from pydantic import BaseModel
-from typing import Dict, Any, Optional
+from typing import Optional
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/flows", tags=["builder-flows"])
@@ -333,7 +332,7 @@ async def install_flow(
 
 
 @router.post("/{flow_id:path}/uninstall")
-async def uninstall_flow(flow_id: str, flow_repo: FlowRepositoryDep):
+async def uninstall_flow(flow_id: str, flow_repo: FlowRepositoryDep, agent_repo: AgentRepositoryDep):
     """
     Удалить установленный flow.
     Запускает uninstall() хук если он определен в flow.

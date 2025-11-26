@@ -7,9 +7,9 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse
 
 
-from core.db.storage.mcp_repository import MCPServerRepository
 from apps.frontend.core.template_loader import get_templates
 from apps.frontend.core.utils import render_with_dashboard
+from apps.frontend.container import get_frontend_container
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,8 @@ async def mcp_page(request: Request):
 @router.get("/list", response_class=HTMLResponse)
 async def mcp_servers_list(request: Request):
     """Список MCP серверов (HTMX endpoint)"""
-    mcp_repo = MCPServerRepository(storage)
+    agents_container = get_frontend_container().get_agents_container()
+    mcp_repo = agents_container.mcp_server_repository
     
     servers = await mcp_repo.list_all()
     
@@ -68,7 +69,8 @@ async def server_details(request: Request, server_id: str):
             {"request": request, "server": server_info}
         )
     
-    mcp_repo = MCPServerRepository(storage)
+    agents_container = get_frontend_container().get_agents_container()
+    mcp_repo = agents_container.mcp_server_repository
     server = await mcp_repo.get(server_id)
     
     if not server:

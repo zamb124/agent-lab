@@ -8,13 +8,11 @@ DatabaseSpanExporter - стандартный OpenTelemetry exporter для со
 import logging
 import asyncio
 import json
-import threading
 from typing import Sequence, Set, Any, Optional
 from datetime import datetime, timezone
 
 from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult, ReadableSpan
 from opentelemetry.trace import StatusCode
-from opentelemetry import context
 
 from apps.agents.models.trace_models import SpanRecord, SpanType, SpanStatus
 from apps.agents.container import get_agents_container
@@ -71,7 +69,7 @@ class DatabaseSpanExporter(SpanExporter):
         # Определяем, можем ли мы использовать create_task (если мы в том же потоке)
         try:
             loop = asyncio.get_running_loop()
-        except RuntimeError as e:
+        except RuntimeError:
             raise
 
         for span in spans:

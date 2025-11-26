@@ -2,8 +2,6 @@
 Юнит тесты для MCP моделей.
 """
 
-import pytest
-from datetime import datetime, timezone
 from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
 from apps.agents.models.core_models import CodeMode
 

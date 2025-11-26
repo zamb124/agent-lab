@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from core.variables import VariableResolver
 from core.context import get_context
 from apps.agents.dependencies import get_variables_service
+from apps.frontend.container import get_frontend_container
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/variables", tags=["variables"])
@@ -54,6 +55,10 @@ async def get_flow_variables(flow_id: str) -> VariablesResponse:
         agent_config = None
     else:
         # Получаем flow config
+        agents_container = get_frontend_container().get_agents_container()
+        flow_repo = agents_container.flow_repository
+        agent_repo = agents_container.agent_repository
+        
         flow_config = await flow_repo.get(flow_id)
         if not flow_config:
             raise HTTPException(status_code=404, detail="Flow not found")

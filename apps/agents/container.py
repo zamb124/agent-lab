@@ -11,13 +11,10 @@ AgentsContainer - DI контейнер для сервиса агентов.
 - shared БД (shared_db) - для users, companies, files, sessions
 """
 
-import asyncio
 import logging
 from typing import Optional, TYPE_CHECKING
 
 from core.container import BaseContainer
-from core.db.storage import Storage
-from core.context import get_context
 
 if TYPE_CHECKING:
     from apps.agents.db.repositories.agent_repository import AgentRepository

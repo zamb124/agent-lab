@@ -13,7 +13,7 @@ from apps.agents.models import FlowConfig
 from core.models.i18n_models import Language
 from core.context import get_context
 from core.i18n import get_translation_manager
-from core.models.i18n_models import Language
+from apps.frontend.container import get_frontend_container
 
 router = APIRouter(tags=["public-pages"])
 templates = get_templates()
@@ -101,9 +101,10 @@ async def privacy_policy(
     
     flow_info = None
     if flow_id:
-        flow_data = await storage.get(flow_id, force_global=True)
-        if flow_data:
-            flow_config = FlowConfig.model_validate_json(flow_data)
+        agents_container = get_frontend_container().get_agents_container()
+        flow_repo = agents_container.flow_repository
+        flow_config = await flow_repo.get(flow_id)
+        if flow_config:
             flow_info = {
                 "name": flow_config.name,
                 "description": flow_config.description
@@ -167,9 +168,10 @@ async def terms_of_service(
     
     flow_info = None
     if flow_id:
-        flow_data = await storage.get(flow_id, force_global=True)
-        if flow_data:
-            flow_config = FlowConfig.model_validate_json(flow_data)
+        agents_container = get_frontend_container().get_agents_container()
+        flow_repo = agents_container.flow_repository
+        flow_config = await flow_repo.get(flow_id)
+        if flow_config:
             flow_info = {
                 "name": flow_config.name,
                 "description": flow_config.description

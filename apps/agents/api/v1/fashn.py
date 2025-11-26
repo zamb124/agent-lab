@@ -21,8 +21,8 @@ from core.files.processors import FileProcessor, get_default_file_processor
 from apps.agents.tools.integrations.fashn_tools import virtual_try_on
 from apps.agents.tools.integrations.nano_banana_tools import generate_images
 from core.context import get_context
+from apps.agents.container import get_agents_container
 
-from apps.agents.container import get_container
 from . import admin
 logger = logging.getLogger(__name__)
 
@@ -793,6 +793,7 @@ async def get_try_on_details(try_on_id: str):
         raise HTTPException(status_code=403, detail="Access denied to this try-on record")
     
     try:
+        storage = get_agents_container().storage
         data = await storage.get(try_on_id)
         
         if not data:
@@ -838,6 +839,7 @@ async def get_history_panel():
     logger.info(f"📜 Запрос истории примерок для пользователя: {user_id}")
 
     try:
+        storage = get_agents_container().storage
         # Получаем все ключи примерок для пользователя
         prefix = f"try_on:{user_id}:"
         logger.info(f"🔍 Ищем ключи по префиксу: {prefix}")

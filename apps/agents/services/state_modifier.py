@@ -5,7 +5,6 @@
 
 import re
 import logging
-import json
 from typing import Dict, Any, Optional
 
 from apps.agents.services.tracing.decorators import trace_span

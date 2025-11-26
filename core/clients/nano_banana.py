@@ -164,3 +164,16 @@ class NanoBananaClientFactory:
             timeout=settings.nano_banana.timeout,
         )
 
+
+async def get_default_nano_banana_client() -> NanoBananaClient:
+    """
+    Создает клиент NanoBanana с дефолтным storage из контейнера.
+    
+    Returns:
+        NanoBananaClient: Настроенный клиент для генерации изображений
+    """
+    from apps.agents.container import get_agents_container
+    
+    container = get_agents_container()
+    return NanoBananaClientFactory.create_client(container.storage)
+

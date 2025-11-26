@@ -174,15 +174,15 @@ class BaseContainer:
         if name == 'usage_repository':
             if self._usage_repository is None:
                 from core.db.repositories.usage_repository import UsageRepository
-                self._usage_repository = UsageRepository(storage=self.storage)
-                logger.debug("UsageRepository инициализирован в BaseContainer")
+                self._usage_repository = UsageRepository(storage=self.shared_storage)
+                logger.debug("UsageRepository инициализирован в BaseContainer (shared БД)")
             return self._usage_repository
         
         if name == 'file_repository':
             if self._file_repository is None:
                 from core.files.file_repository import FileRepository
-                self._file_repository = FileRepository(storage=self.storage)
-                logger.debug("FileRepository инициализирован в BaseContainer")
+                self._file_repository = FileRepository(storage=self.shared_storage)
+                logger.debug("FileRepository инициализирован в BaseContainer (shared БД)")
             return self._file_repository
         
         if name == 'variables_service':

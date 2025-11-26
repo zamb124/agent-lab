@@ -11,17 +11,12 @@ from typing import Optional
 from langchain_core.messages import AIMessage
 
 from apps.agents.models import (
-    GraphDefinition,
     NodeType,
     LLMConfig,
     ToolReference,
-    ConditionType,
     CodeMode,
 )
 from apps.agents.container import get_agents_container
-from apps.agents.services.tool_factory import ToolFactory
-from apps.agents.services.agent_factory import AgentFactory
-from apps.agents.services.flow_factory import FlowFactory
 from apps.agents.services.state import State
 
 logger = logging.getLogger(__name__)
@@ -203,14 +198,14 @@ class GraphBuilder:
             from core.variables import set_state_in_context
             if hasattr(tool, '_is_platform_tool') and tool._is_platform_tool:
                 set_state_in_context(state)
-                logger.debug(f"   State установлен в контекст для тула (state_aware)")
+                logger.debug("   State установлен в контекст для тула (state_aware)")
             
             # Добавляем tool_call_id только если он есть в схеме
             if hasattr(tool, 'args_schema') and tool.args_schema:
                 schema_fields = tool.args_schema.model_fields if hasattr(tool.args_schema, 'model_fields') else {}
                 if 'tool_call_id' in schema_fields and 'tool_call_id' not in tool_args:
                     tool_args['tool_call_id'] = str(uuid.uuid4())
-                    logger.debug(f"   Добавляем tool_call_id в аргументы тула")
+                    logger.debug("   Добавляем tool_call_id в аргументы тула")
 
             # Вызываем тул через ainvoke для корректной работы @tool декоратора
             if hasattr(tool, "ainvoke"):

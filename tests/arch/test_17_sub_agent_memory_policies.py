@@ -25,7 +25,6 @@ from apps.agents.models import (
     SubAgentMemoryPolicy
 )
 from apps.agents.services.state_manager import get_state_manager
-from apps.agents.container import get_agents_container
 
 
 @pytest.mark.asyncio
@@ -88,7 +87,6 @@ async def test_isolated_policy_new_session_each_call(
     state_manager = await get_state_manager()
     
     # Создаем начальное состояние с store['city'] = 'Москва'
-    from apps.agents.services.state_manager import StoreProxy
     initial_state = await state_manager.get_or_create_session(parent_session_id)
     initial_state["store"]["city"] = "Москва"
     await state_manager.save_session(initial_state)
@@ -811,11 +809,11 @@ async def test_sub_session_id_inherits_parent_id(
     
     # Проверяем что все ID разные (кроме SHARED)
     assert isolated_id != accumulated_id, \
-        f"ISOLATED и ACCUMULATED должны иметь разные ID"
+        "ISOLATED и ACCUMULATED должны иметь разные ID"
     assert isolated_id != snapshot_id, \
-        f"ISOLATED и SNAPSHOT должны иметь разные ID"
+        "ISOLATED и SNAPSHOT должны иметь разные ID"
     assert accumulated_id != snapshot_id, \
-        f"ACCUMULATED и SNAPSHOT должны иметь разные ID"
+        "ACCUMULATED и SNAPSHOT должны иметь разные ID"
 
 
 @pytest.mark.asyncio

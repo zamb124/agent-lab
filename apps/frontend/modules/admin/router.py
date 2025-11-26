@@ -7,7 +7,6 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from apps.frontend.core.template_loader import get_templates
 from core.context import get_context
 from apps.frontend.container import get_frontend_container
-from core.models import Company
 from core.models.billing_models import TariffPlan
 
 router = APIRouter(prefix="/frontend/admin", tags=["admin-pages"])

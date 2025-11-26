@@ -160,9 +160,9 @@ async def test_react_agent_interrupt_resumption_in_subagent(
     state_manager = await get_state_manager()
     
     print(f"\n{'='*60}")
-    print(f"🔄 ТЕСТ ВОССТАНОВЛЕНИЯ ПОСЛЕ INTERRUPT В СУБАГЕНТЕ")
+    print("🔄 ТЕСТ ВОССТАНОВЛЕНИЯ ПОСЛЕ INTERRUPT В СУБАГЕНТЕ")
     print(f"{'='*60}")
-    print(f"📝 Шаг 1: WeatherAgent вызывает TravelInfoAgent")
+    print("📝 Шаг 1: WeatherAgent вызывает TravelInfoAgent")
     print(f"   Session ID: {session_id}")
     print(f"{'='*60}\n")
     
@@ -230,7 +230,7 @@ async def test_react_agent_interrupt_resumption_in_subagent(
         
         # Шаг 2: Симулируем ответ пользователя "Париж"
         print(f"\n{'='*60}")
-        print(f"📝 Шаг 2: Симулируем ответ пользователя 'Париж'")
+        print("📝 Шаг 2: Симулируем ответ пользователя 'Париж'")
         print(f"{'='*60}\n")
         
         # Настраиваем mock LLM для TravelInfoAgent с ответом пользователя
@@ -249,7 +249,7 @@ async def test_react_agent_interrupt_resumption_in_subagent(
         sub_state.pop("interrupt_context", None)
         
         # Продолжаем выполнение TravelInfoAgent (УПРАВЛЕНИЕ ВОЗВРАЩАЕТСЯ В НЕГО!)
-        print(f"🔄 Продолжаем выполнение TravelInfoAgent с ответом пользователя")
+        print("🔄 Продолжаем выполнение TravelInfoAgent с ответом пользователя")
         result = await travel_agent.ainvoke(sub_state, config={"configurable": {"thread_id": sub_session_id}})
         
         assert "messages" in result, "Результат не содержит messages"
@@ -259,7 +259,7 @@ async def test_react_agent_interrupt_resumption_in_subagent(
         final_message = result["messages"][-1]
         final_content = final_message.content if hasattr(final_message, "content") else str(final_message)
         
-        print(f"✅ TravelInfoAgent завершил работу")
+        print("✅ TravelInfoAgent завершил работу")
         print(f"   Финальное сообщение: {final_content[:200]}...")
         
         # Проверяем что ответ пользователя был в контексте
@@ -270,16 +270,16 @@ async def test_react_agent_interrupt_resumption_in_subagent(
         assert "__interrupt__" not in result, "Агент не должен был вызвать interrupt второй раз"
         
         print(f"\n{'='*60}")
-        print(f"✅ ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ")
-        print(f"   - Состояние субагента сохранено при interrupt")
-        print(f"   - Состояние родительского агента сохранено")
-        print(f"   - Управление вернулось в TravelInfoAgent")
-        print(f"   - Ответ пользователя попал в контекст TravelInfoAgent")
+        print("✅ ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ")
+        print("   - Состояние субагента сохранено при interrupt")
+        print("   - Состояние родительского агента сохранено")
+        print("   - Управление вернулось в TravelInfoAgent")
+        print("   - Ответ пользователя попал в контекст TravelInfoAgent")
         print(f"{'='*60}\n")
         
         # Дополнительная проверка: новый вызов субагента создает новую сессию
         print(f"\n{'='*60}")
-        print(f"📝 Дополнительная проверка: новый вызов субагента создает новую сессию")
+        print("📝 Дополнительная проверка: новый вызов субагента создает новую сессию")
         print(f"{'='*60}\n")
         
         # Очищаем interrupt_context из parent_state (как это делается после завершения субагента)
@@ -287,7 +287,7 @@ async def test_react_agent_interrupt_resumption_in_subagent(
         await state_manager.save_session(parent_state)
         
         # Вызываем субагента второй раз через родительский агент - должна быть создана новая сессия
-        print(f"🔄 Второй вызов TravelInfoAgent через WeatherAgent (после завершения первого)")
+        print("🔄 Второй вызов TravelInfoAgent через WeatherAgent (после завершения первого)")
         travel_tool = None
         for tool in await weather_agent.get_tools():
             if hasattr(tool, 'name') and tool.name == travel_tool_name:
@@ -299,7 +299,7 @@ async def test_react_agent_interrupt_resumption_in_subagent(
         # Второй вызов должен создать новую сессию
         try:
             second_result_text = await travel_tool.ainvoke({"request": "путешествие"})
-            print(f"✅ Второй вызов успешно завершился")
+            print("✅ Второй вызов успешно завершился")
         except AgentInterrupt:
             second_result = await state_manager.get_or_create_session(session_id)
             second_interrupt_ctx = second_result.get("interrupt_context", {}) if second_result else {}
@@ -317,7 +317,7 @@ async def test_react_agent_interrupt_resumption_in_subagent(
                 assert "sub:" in second_sub_session_id, "Новая сессия должна быть сессией субагента"
         
         print(f"\n{'='*60}")
-        print(f"✅ ДОПОЛНИТЕЛЬНЫЕ ПРОВЕРКИ ПРОЙДЕНЫ")
-        print(f"   - Новый вызов субагента работает корректно")
-        print(f"   - Сессия наследуется от родительской")
+        print("✅ ДОПОЛНИТЕЛЬНЫЕ ПРОВЕРКИ ПРОЙДЕНЫ")
+        print("   - Новый вызов субагента работает корректно")
+        print("   - Сессия наследуется от родительской")
         print(f"{'='*60}\n")

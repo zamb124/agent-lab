@@ -1,5 +1,4 @@
 """
-from apps.agents.container import get_agents_container
 End-to-end тест: StateGraph агент + MCP тулы + обычные тулы.
 
 Проверяем что StateGraph агент может использовать:
@@ -16,7 +15,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-async def test_stategraph_agent_with_mcp_and_regular_tools(setup_mcp_servers, test_company):
+async def test_stategraph_agent_with_mcp_and_regular_tools(setup_mcp_servers, test_company, agent_repo, tool_repo, agent_factory):
     """
     End-to-end тест: StateGraph агент с MCP и обычными тулами в нодах.
     
@@ -29,52 +28,42 @@ async def test_stategraph_agent_with_mcp_and_regular_tools(setup_mcp_servers, te
     - Результаты передаются между нодами через state
     """
     from apps.agents.services.mcp_sync import sync_mcp_server_tools
-    from apps.agents.services.agent_factory import AgentFactory
     from apps.agents.models import AgentConfig
     from apps.agents.models.core_models import GraphDefinition, GraphNode, GraphEdge, NodeType
-    from core.db.agent_repository import AgentRepository
-    from core.db.storage import Storage
-    
-    storage = Storage()
-    agent_repo = AgentRepository(storage)
     
     try:
         print("\n" + "="*70)
         print("📝 Шаг 1: Подготовка тулов")
         print("="*70)
         
-        # Синхронизируем MCP тулы
         mcp_tools = await sync_mcp_server_tools("context7", test_company.company_id)
         resolve_tool = next((t for t in mcp_tools if "resolve" in t.tool_id), None)
         
         print(f"✅ MCP тул: {resolve_tool.tool_id}")
-        print(f"✅ Обычный тул: apps.agents.tools.calc.calc_tools.calculate")
+        print("✅ Обычный тул: apps.agents.tools.calc.calc_tools.calculate")
         
         print("\n" + "="*70)
         print("🤖 Шаг 2: Создаем StateGraph агента с нодами")
         print("="*70)
         
-        # Создаем GraphDefinition с двумя TOOL_NODE
         graph_definition = GraphDefinition(
             nodes=[
-                # Нода с обычным тулом (калькулятор)
                 GraphNode(
                     id="calc_node",
                     type=NodeType.TOOL_NODE,
                     params={
                         "tool_id": "apps.agents.tools.calc.calc_tools.calculate",
-                        "input_key": "store.calc_input",  # Берем из store
-                        "output_key": "store.calc_result"  # Сохраняем в store
+                        "input_key": "store.calc_input",
+                        "output_key": "store.calc_result"
                     }
                 ),
-                # Нода с MCP тулом
                 GraphNode(
                     id="mcp_node",
                     type=NodeType.TOOL_NODE,
                     params={
                         "tool_id": resolve_tool.tool_id,
-                        "input_key": "store.mcp_input",  # Берем из store
-                        "output_key": "store.mcp_result"  # Сохраняем в store
+                        "input_key": "store.mcp_input",
+                        "output_key": "store.mcp_result"
                     }
                 ),
             ],
@@ -86,24 +75,22 @@ async def test_stategraph_agent_with_mcp_and_regular_tools(setup_mcp_servers, te
             entry_point="START"
         )
         
-        # Создаем StateGraph агента
         agent_config = AgentConfig(
             agent_id="stategraph_with_mcp",
             name="StateGraph with MCP",
             description="StateGraph агент с обычными и MCP тулами",
             graph_definition=graph_definition,
-            tools=[]  # Тулы в нодах, не в tools
+            tools=[]
         )
         
         await agent_repo.set(agent_config)
-        print(f"✅ StateGraph агент создан")
-        print(f"   Ноды: calc_node (обычный тул), mcp_node (MCP тул)")
+        print("✅ StateGraph агент создан")
+        print("   Ноды: calc_node (обычный тул), mcp_node (MCP тул)")
         
         print("\n" + "="*70)
         print("🏭 Шаг 3: Загружаем агента через AgentFactory")
         print("="*70)
         
-        agent_factory = get_agents_container().agent_factory
         agent = await agent_factory.get_agent("stategraph_with_mcp")
         
         print(f"✅ Агент загружен: {type(agent).__name__}")
@@ -115,7 +102,6 @@ async def test_stategraph_agent_with_mcp_and_regular_tools(setup_mcp_servers, te
         compiled_graph = await agent.compile_graph()
         print("✅ Граф скомпилирован")
         
-        # Выполняем граф с входными данными через store
         import uuid
         thread_id = str(uuid.uuid4())
         
@@ -123,34 +109,30 @@ async def test_stategraph_agent_with_mcp_and_regular_tools(setup_mcp_servers, te
             {
                 "messages": [HumanMessage(content="Test")],
                 "store": {
-                    "calc_input": "2+2",  # Для calc_node
-                    "mcp_input": "fastapi",  # Для mcp_node
+                    "calc_input": "2+2",
+                    "mcp_input": "fastapi",
                 }
             },
             config={"configurable": {"thread_id": thread_id}}
         )
         
-        print(f"✅ Граф выполнен")
+        print("✅ Граф выполнен")
         
         print("\n" + "="*70)
         print("📋 Шаг 5: Проверка результатов")
         print("="*70)
         
-        # Проверяем результаты в store
         assert "store" in result, "Должен быть store в результате"
         store = result['store']
         
-        # Проверяем результат calc_node (обычный тул)
         assert "calc_result" in store, "Должен быть calc_result в store"
-        print(f"✅ calc_node выполнена:")
+        print("✅ calc_node выполнена:")
         print(f"   Результат: {store['calc_result']}")
         
-        # Проверяем результат mcp_node (MCP тул)
         assert "mcp_result" in store, "Должен быть mcp_result в store"
-        print(f"\n✅ mcp_node выполнена:")
+        print("\n✅ mcp_node выполнена:")
         print(f"   Результат: {store['mcp_result'][:300]}...")
         
-        # Проверяем что MCP тул вернул реальные данные от Context7
         mcp_result_lower = store['mcp_result'].lower()
         assert "library" in mcp_result_lower or "fastapi" in mcp_result_lower or "available" in mcp_result_lower
         
@@ -158,22 +140,21 @@ async def test_stategraph_agent_with_mcp_and_regular_tools(setup_mcp_servers, te
         print("✅ STATEGRAPH END-TO-END ТЕСТ УСПЕШНО ПРОЙДЕН!")
         print("="*70)
         print("\n📊 Резюме:")
-        print(f"   - Обычный тул (calculate): ✅ работает")
-        print(f"   - MCP тул (resolve-library-id): ✅ работает")
-        print(f"   - Результаты передаются через state.store: ✅")
+        print("   - Обычный тул (calculate): ✅ работает")
+        print("   - MCP тул (resolve-library-id): ✅ работает")
+        print("   - Результаты передаются через state.store: ✅")
         print(f"   - calc_result: {store.get('calc_result', 'N/A')}")
         print(f"   - mcp_result длина: {len(store.get('mcp_result', ''))} символов")
     
     finally:
-        # Очистка
         await agent_repo.delete("stategraph_with_mcp")
         if 'mcp_tools' in locals():
             for tool in mcp_tools:
-                await storage.delete(f"tool:{tool.tool_id}")
+                await tool_repo.delete(tool.tool_id)
 
 
 @pytest.mark.asyncio
-async def test_stategraph_with_only_mcp_tools(setup_mcp_servers, test_company):
+async def test_stategraph_with_only_mcp_tools(setup_mcp_servers, test_company, agent_repo, tool_repo, agent_factory):
     """
     Тест StateGraph агента только с MCP тулами.
     
@@ -183,14 +164,8 @@ async def test_stategraph_with_only_mcp_tools(setup_mcp_servers, test_company):
     Две MCP ноды последовательно.
     """
     from apps.agents.services.mcp_sync import sync_mcp_server_tools
-    from apps.agents.services.agent_factory import AgentFactory
     from apps.agents.models import AgentConfig
     from apps.agents.models.core_models import GraphDefinition, GraphNode, GraphEdge, NodeType
-    from core.db.agent_repository import AgentRepository
-    from core.db.storage import Storage
-    
-    storage = Storage()
-    agent_repo = AgentRepository(storage)
     
     try:
         print("\n📝 Синхронизация Context7 тулов...")
@@ -199,9 +174,8 @@ async def test_stategraph_with_only_mcp_tools(setup_mcp_servers, test_company):
         resolve_tool = next((t for t in mcp_tools if "resolve" in t.tool_id), None)
         docs_tool = next((t for t in mcp_tools if "get-library" in t.tool_id), None)
         
-        print(f"✅ Найдено 2 MCP тула")
+        print("✅ Найдено 2 MCP тула")
         
-        # Создаем граф с двумя MCP нодами
         graph_definition = GraphDefinition(
             nodes=[
                 GraphNode(
@@ -238,10 +212,8 @@ async def test_stategraph_with_only_mcp_tools(setup_mcp_servers, test_company):
         )
         
         await agent_repo.set(agent_config)
-        print(f"✅ Агент создан с 2 MCP нодами")
+        print("✅ Агент создан с 2 MCP нодами")
         
-        # Загружаем и компилируем
-        agent_factory = get_agents_container().agent_factory
         agent = await agent_factory.get_agent("two_mcp_nodes")
         compiled_graph = await agent.compile_graph()
         
@@ -250,7 +222,6 @@ async def test_stategraph_with_only_mcp_tools(setup_mcp_servers, test_company):
         import uuid
         thread_id = str(uuid.uuid4())
         
-        # Для второй ноды нужны параметры get-library-docs
         result = await compiled_graph.ainvoke(
             {
                 "messages": [HumanMessage(content="Test")],
@@ -263,28 +234,26 @@ async def test_stategraph_with_only_mcp_tools(setup_mcp_servers, test_company):
             config={"configurable": {"thread_id": thread_id}}
         )
         
-        print(f"✅ Граф с 2 MCP нодами выполнен")
+        print("✅ Граф с 2 MCP нодами выполнен")
         
-        # Проверяем результаты
         assert "library_info" in result
         assert "documentation" in result
         
-        print(f"\n📋 Результаты:")
+        print("\n📋 Результаты:")
         print(f"   resolve_node: {result['library_info'][:200]}...")
         print(f"   docs_node: {result['documentation'][:200]}...")
         
-        print(f"\n✅ Обе MCP ноды работают!")
+        print("\n✅ Обе MCP ноды работают!")
     
     finally:
-        # Очистка
         await agent_repo.delete("two_mcp_nodes")
         if 'mcp_tools' in locals():
             for tool in mcp_tools:
-                await storage.delete(f"tool:{tool.tool_id}")
+                await tool_repo.delete(tool.tool_id)
 
 
 @pytest.mark.asyncio
-async def test_stategraph_mixed_tools_complex_graph(setup_mcp_servers, test_company):
+async def test_stategraph_mixed_tools_complex_graph(setup_mcp_servers, test_company, agent_repo, tool_repo, agent_factory):
     """
     Сложный граф с обычными и MCP тулами.
     
@@ -302,14 +271,8 @@ async def test_stategraph_mixed_tools_complex_graph(setup_mcp_servers, test_comp
               END
     """
     from apps.agents.services.mcp_sync import sync_mcp_server_tools
-    from apps.agents.services.agent_factory import AgentFactory
     from apps.agents.models import AgentConfig
-    from apps.agents.models.core_models import GraphDefinition, GraphNode, GraphEdge, NodeType, ConditionType
-    from core.db.agent_repository import AgentRepository
-    from core.db.storage import Storage
-    
-    storage = Storage()
-    agent_repo = AgentRepository(storage)
+    from apps.agents.models.core_models import GraphDefinition, GraphNode, GraphEdge, NodeType
     
     try:
         print("\n📝 Подготовка: синхронизация тулов...")
@@ -318,7 +281,6 @@ async def test_stategraph_mixed_tools_complex_graph(setup_mcp_servers, test_comp
         resolve_tool = next((t for t in mcp_tools if "resolve" in t.tool_id), None)
         docs_tool = next((t for t in mcp_tools if "get-library" in t.tool_id), None)
         
-        # Создаем сложный граф
         graph_definition = GraphDefinition(
             nodes=[
                 GraphNode(
@@ -367,12 +329,10 @@ async def test_stategraph_mixed_tools_complex_graph(setup_mcp_servers, test_comp
         
         await agent_repo.set(agent_config)
         
-        print(f"✅ Сложный StateGraph агент создан")
-        print(f"   Ноды: calc_node, mcp_resolve, mcp_docs")
-        print(f"   Граф: START → calc → (mcp_resolve, mcp_docs) → END")
+        print("✅ Сложный StateGraph агент создан")
+        print("   Ноды: calc_node, mcp_resolve, mcp_docs")
+        print("   Граф: START → calc → (mcp_resolve, mcp_docs) → END")
         
-        # Загружаем и выполняем
-        agent_factory = get_agents_container().agent_factory
         agent = await agent_factory.get_agent("complex_stategraph_mcp")
         compiled_graph = await agent.compile_graph()
         
@@ -394,10 +354,9 @@ async def test_stategraph_mixed_tools_complex_graph(setup_mcp_servers, test_comp
             config={"configurable": {"thread_id": thread_id}}
         )
         
-        print(f"✅ Граф выполнен")
+        print("✅ Граф выполнен")
         
-        # Проверяем результаты всех нод
-        print(f"\n📊 Результаты:")
+        print("\n📊 Результаты:")
         print(f"   calc_node: {result.get('calc_result', 'N/A')}")
         print(f"   mcp_resolve: {result.get('lib1_info', 'N/A')[:100]}...")
         print(f"   mcp_docs: {result.get('docs_result', 'N/A')[:100]}...")
@@ -406,12 +365,10 @@ async def test_stategraph_mixed_tools_complex_graph(setup_mcp_servers, test_comp
         assert "lib1_info" in result
         assert "docs_result" in result
         
-        print(f"\n✅ Все 3 ноды (1 обычная + 2 MCP) работают!")
+        print("\n✅ Все 3 ноды (1 обычная + 2 MCP) работают!")
     
     finally:
-        # Очистка
         await agent_repo.delete("complex_stategraph_mcp")
         if 'mcp_tools' in locals():
             for tool in mcp_tools:
-                await storage.delete(f"tool:{tool.tool_id}")
-
+                await tool_repo.delete(tool.tool_id)

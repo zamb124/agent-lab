@@ -7,7 +7,7 @@ QualityCheckerAgent - агент для проверки качества отч
 
 import logging
 from apps.agents.agents.react_agent import ReActAgent
-from apps.agents.tools.session.session_tools import session_set, session_get
+from apps.agents.tools.session.session_tools import session_set
 
 logger = logging.getLogger(__name__)
 

@@ -4,7 +4,7 @@ Dependency Injection для фронтенда
 Общие зависимости для API роутеров
 """
 
-from typing import Annotated, Any, TYPE_CHECKING
+from typing import Annotated, TYPE_CHECKING
 from fastapi import Depends
 
 from core.context import get_context

@@ -10,7 +10,6 @@
 """
 
 import logging
-from typing import Optional
 from apps.agents.models import (
     AgentConfig,
     GraphDefinition,

@@ -1,5 +1,4 @@
 """
-from apps.agents.container import get_agents_container
 End-to-end тест: AgentFactory + MCP тулы + мок LLM.
 
 Проверяем что агент может использовать MCP тулы через мокированный LLM.
@@ -14,7 +13,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_company):
+async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_company, agent_repo, tool_repo, agent_factory):
     """
     End-to-end тест: WeatherAgent + Context7 MCP тулы.
     
@@ -25,14 +24,8 @@ async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_com
     4. Проверяем что тул выполнился успешно
     """
     from apps.agents.services.mcp_sync import sync_mcp_server_tools
-    from apps.agents.services.agent_factory import AgentFactory
     from apps.agents.models import AgentConfig
-    from core.db.agent_repository import AgentRepository
-    from core.db.storage import Storage
     from apps.agents.tools.misc.standard import ask_user
-    
-    storage = Storage()
-    agent_repo = AgentRepository(storage)
     
     try:
         print("\n" + "="*70)
@@ -48,7 +41,6 @@ async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_com
         print("🤖 Шаг 2: Создаем агента с MCP тулами")
         print("="*70)
         
-        # Создаем WeatherAgent с MCP тулами
         agent_config = AgentConfig(
             agent_id="weather_with_mcp",
             name="Weather Agent with MCP",
@@ -66,7 +58,7 @@ async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_com
 """,
             tools=[
                 ask_user,
-                *mcp_tools,  # Добавляем MCP тулы
+                *mcp_tools,
             ]
         )
         
@@ -77,31 +69,25 @@ async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_com
         print("🏭 Шаг 3: Загружаем агента через AgentFactory")
         print("="*70)
         
-        # Проверяем что конфиг сохранился
         saved_config = await agent_repo.get("weather_with_mcp")
-        print(f"   Конфиг из БД:")
+        print("   Конфиг из БД:")
         print(f"   - agent_id: {saved_config.agent_id}")
         print(f"   - tools в конфиге: {len(saved_config.tools)}")
         for t in saved_config.tools:
             print(f"      • {t.tool_id} (code_mode: {t.code_mode})")
         
-        agent_factory = get_agents_container().agent_factory
-        
-        # Включаем DEBUG логирование для отладки
         import logging
         logging.getLogger('app.core.agent_factory').setLevel(logging.DEBUG)
         logging.getLogger('app.core.tool_factory').setLevel(logging.DEBUG)
         
         agent = await agent_factory.get_agent("weather_with_mcp")
         
-        print(f"\n✅ Агент загружен")
+        print("\n✅ Агент загружен")
         print(f"   Тип агента: {type(agent).__name__}")
         
-        # Получаем тулы через метод get_tools (асинхронный!)
         loaded_tools = await agent.get_tools()
         print(f"   Всего тулов через get_tools(): {len(loaded_tools)}")
         
-        # Проверяем что MCP тулы загружены
         mcp_tool_names = []
         for tool in loaded_tools:
             tool_name = getattr(tool, 'name', 'unknown')
@@ -116,7 +102,6 @@ async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_com
         print("🎭 Шаг 4: Мокаем LLM для вызова MCP тула")
         print("="*70)
         
-        # Создаем мок LLM который вызовет MCP тул
         mock_llm_response = AIMessage(
             content="",
             tool_calls=[
@@ -129,12 +114,10 @@ async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_com
             ]
         )
         
-        # Мокаем метод bind_tools и invoke у LLM
         mock_llm = MagicMock()
         mock_llm.bind_tools = MagicMock(return_value=mock_llm)
         mock_llm.ainvoke = AsyncMock(return_value=mock_llm_response)
         
-        # Подменяем LLM в агенте
         agent.llm = mock_llm
         
         print("✅ LLM замокан для вызова resolve_library_id('fastapi')")
@@ -143,10 +126,8 @@ async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_com
         print("🚀 Шаг 5: Вызываем агента")
         print("="*70)
         
-        # Компилируем граф (обязательно для ReActAgent)
         compiled_graph = await agent.compile_graph()
         
-        # Вызываем агента с thread_id для checkpointer
         from langchain_core.messages import HumanMessage
         import uuid
         
@@ -159,25 +140,22 @@ async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_com
         
         print("✅ Агент выполнен")
         
-        # Проверяем что в результате есть сообщения
         assert "messages" in result
         assert len(result["messages"]) > 0
         
-        print(f"\n📋 Результат выполнения:")
+        print("\n📋 Результат выполнения:")
         print(f"   Всего сообщений: {len(result['messages'])}")
         
-        # Проверяем что есть ToolMessage (результат выполнения тула)
         from langchain_core.messages import ToolMessage
         
         tool_messages = [m for m in result["messages"] if isinstance(m, ToolMessage)]
         print(f"   Tool messages: {len(tool_messages)}")
         
         if tool_messages:
-            print(f"\n   📦 Первый ToolMessage:")
+            print("\n   📦 Первый ToolMessage:")
             first_tool_msg = tool_messages[0]
             print(f"      Content: {first_tool_msg.content[:300]}...")
             
-            # Проверяем что в ответе есть что-то от Context7
             assert len(first_tool_msg.content) > 0
             assert isinstance(first_tool_msg.content, str)
         
@@ -186,32 +164,23 @@ async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_com
         print("="*70)
     
     finally:
-        # Очистка
         await agent_repo.delete("weather_with_mcp")
         if 'mcp_tools' in locals():
             for tool in mcp_tools:
-                await storage.delete(f"tool:{tool.tool_id}")
+                await tool_repo.delete(tool.tool_id)
 
 
 @pytest.mark.asyncio
-async def test_agent_calls_mcp_tool_directly(test_company, storage):
+async def test_agent_calls_mcp_tool_directly(test_company, mcp_repo, tool_repo, tool_factory):
     """
     Прямой тест вызова MCP тула через ToolFactory.
     
     Без агента - просто вызываем MCP тул напрямую.
     """
     from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
-    from apps.agents.db.repositories.mcp_repository import MCPServerRepository
     from apps.agents.services.mcp_sync import sync_mcp_server_tools
-    from apps.agents.services.tool_factory import ToolFactory
-    from core.db.storage import Storage
     import os
     
-    storage = Storage()
-    mcp_repo = MCPServerRepository(storage)
-    tool_factory = ToolFactory()
-    
-    # Создаем MCP сервер
     api_key = os.getenv("CONTEXT7_API_KEY", "ctx7sk-00fdd198-322d-4fe7-b63d-43a479dd5ff0")
     
     server_config = MCPServerConfig(
@@ -230,7 +199,6 @@ async def test_agent_calls_mcp_tool_directly(test_company, storage):
         print("\n📝 Синхронизируем Context7 тулы")
         mcp_tools = await sync_mcp_server_tools("context7", test_company.company_id)
         
-        # Берем resolve-library-id тул
         resolve_tool_ref = next((t for t in mcp_tools if "resolve" in t.tool_id), None)
         assert resolve_tool_ref is not None
         
@@ -244,27 +212,25 @@ async def test_agent_calls_mcp_tool_directly(test_company, storage):
         print("\n🚀 Вызываем MCP тул напрямую")
         result = await langchain_tool.ainvoke({"libraryName": "langchain"})
         
-        print(f"✅ Тул выполнен")
-        print(f"\n📋 Результат:")
+        print("✅ Тул выполнен")
+        print("\n📋 Результат:")
         print(f"   {result[:500]}...")
         
-        # Проверки
         assert result is not None
         assert len(result) > 0
         assert "langchain" in result.lower() or "library" in result.lower()
         
-        print(f"\n✅ MCP тул работает корректно!")
+        print("\n✅ MCP тул работает корректно!")
     
     finally:
-        # Очистка
-        await mcp_repo.delete("context7", test_company.company_id)
+        await mcp_repo.delete("context7")
         if 'mcp_tools' in locals():
             for tool in mcp_tools:
-                await storage.delete(f"tool:{tool.tool_id}")
+                await tool_repo.delete(tool.tool_id)
 
 
 @pytest.mark.asyncio
-async def test_weather_agent_with_mcp_real_execution(setup_mcp_servers, test_company):
+async def test_weather_agent_with_mcp_real_execution(setup_mcp_servers, test_company, agent_repo, tool_repo, agent_factory):
     """
     Реальное выполнение WeatherAgent с MCP тулом (с мок LLM).
     
@@ -276,23 +242,15 @@ async def test_weather_agent_with_mcp_real_execution(setup_mcp_servers, test_com
     - Результат возвращается пользователю
     """
     from apps.agents.services.mcp_sync import sync_mcp_server_tools
-    from apps.agents.services.agent_factory import AgentFactory
     from apps.agents.models import AgentConfig
-    from core.db.agent_repository import AgentRepository
-    from core.db.storage import Storage
     from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
     
-    storage = Storage()
-    agent_repo = AgentRepository(storage)
-    
     try:
-        # 1. Синхронизируем MCP тулы
         print("\n1️⃣ Синхронизация Context7 MCP тулов...")
         mcp_tools = await sync_mcp_server_tools("context7", test_company.company_id)
         resolve_tool = next((t for t in mcp_tools if "resolve" in t.tool_id), None)
         print(f"   ✅ MCP тул: {resolve_tool.tool_id}")
         
-        # 2. Создаем агента
         print("\n2️⃣ Создание агента с MCP тулами...")
         agent_config = AgentConfig(
             agent_id="weather_mcp_test",
@@ -302,25 +260,18 @@ async def test_weather_agent_with_mcp_real_execution(setup_mcp_servers, test_com
         )
         await agent_repo.set(agent_config)
         
-        # 3. Загружаем через фабрику
         print("\n3️⃣ Загрузка агента через AgentFactory...")
-        agent_factory = get_agents_container().agent_factory
         agent = await agent_factory.get_agent("weather_mcp_test")
         print(f"   ✅ Агент загружен с {len(agent.tools)} тулами")
         
-        # 4. Создаем мок LLM который последовательно:
-        #    - Сначала вызовет MCP тул
-        #    - Потом даст финальный ответ
         print("\n4️⃣ Мокирование LLM для вызова MCP тула...")
         
         call_count = [0]
         
         async def mock_ainvoke(messages, **kwargs):
-            """Мок LLM который вызывает MCP тул на первом вызове"""
             call_count[0] += 1
             
             if call_count[0] == 1:
-                # Первый вызов - вызываем MCP тул
                 return AIMessage(
                     content="",
                     tool_calls=[
@@ -333,7 +284,6 @@ async def test_weather_agent_with_mcp_real_execution(setup_mcp_servers, test_com
                     ]
                 )
             else:
-                # Второй вызов - даем финальный ответ
                 return AIMessage(
                     content="Нашел информацию о FastAPI через Context7 MCP!"
                 )
@@ -345,7 +295,6 @@ async def test_weather_agent_with_mcp_real_execution(setup_mcp_servers, test_com
         agent.llm = mock_llm
         print("   ✅ LLM настроен на вызов resolve_library_id")
         
-        # 5. Вызываем агента
         print("\n5️⃣ Выполнение агента...")
         compiled_graph = await agent.compile_graph()
         
@@ -359,38 +308,32 @@ async def test_weather_agent_with_mcp_real_execution(setup_mcp_servers, test_com
         
         print("   ✅ Агент выполнен")
         
-        # 6. Проверяем результат
         print("\n6️⃣ Проверка результата...")
         
         messages = result.get("messages", [])
         print(f"   Всего сообщений: {len(messages)}")
         
-        # Должны быть: HumanMessage, AIMessage (с tool_call), ToolMessage, AIMessage (финальный)
         assert len(messages) >= 3
         
-        # Проверяем ToolMessage
         tool_messages = [m for m in messages if isinstance(m, ToolMessage)]
         assert len(tool_messages) >= 1, "Должен быть ToolMessage от MCP тула"
         
         first_tool_message = tool_messages[0]
-        print(f"\n   📦 ToolMessage от MCP тула:")
+        print("\n   📦 ToolMessage от MCP тула:")
         print(f"      Tool call ID: {first_tool_message.tool_call_id}")
         print(f"      Content preview: {first_tool_message.content[:200]}...")
         
-        # Проверяем что это реальный ответ от Context7
         assert len(first_tool_message.content) > 0
         assert isinstance(first_tool_message.content, str)
         
-        # В ответе Context7 обычно есть "Library" или "Available"
         content_lower = first_tool_message.content.lower()
         assert "library" in content_lower or "available" in content_lower or "fastapi" in content_lower
         
-        # Проверяем финальный ответ
         ai_messages = [m for m in messages if isinstance(m, AIMessage)]
         final_message = ai_messages[-1] if ai_messages else None
         
         if final_message:
-            print(f"\n   💬 Финальный ответ агента:")
+            print("\n   💬 Финальный ответ агента:")
             print(f"      {final_message.content}")
             assert "FastAPI" in final_message.content or "Context7" in final_message.content
         
@@ -406,14 +349,13 @@ async def test_weather_agent_with_mcp_real_execution(setup_mcp_servers, test_com
         print("   - MCP тул реально выполнился: ✅")
     
     finally:
-        # Очистка
         await agent_repo.delete("weather_mcp_test")
         for tool in mcp_tools:
-            await storage.delete(f"tool:{tool.tool_id}")
+            await tool_repo.delete(tool.tool_id)
 
 
 @pytest.mark.asyncio
-async def test_agent_with_multiple_mcp_tools(test_company):
+async def test_agent_with_multiple_mcp_tools(test_company, mcp_repo, agent_repo, tool_repo, agent_factory):
     """
     Тест агента с несколькими MCP тулами в одном запросе.
     
@@ -422,20 +364,11 @@ async def test_agent_with_multiple_mcp_tools(test_company):
     2. get-library-docs
     """
     from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
-    from apps.agents.db.repositories.mcp_repository import MCPServerRepository
     from apps.agents.services.mcp_sync import sync_mcp_server_tools
-    from apps.agents.services.agent_factory import AgentFactory
     from apps.agents.models import AgentConfig
-    from core.db.agent_repository import AgentRepository
-    from core.db.storage import Storage
     from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
     import os
     
-    storage = Storage()
-    agent_repo = AgentRepository(storage)
-    mcp_repo = MCPServerRepository(storage)
-    
-    # Создаем MCP сервер
     api_key = os.getenv("CONTEXT7_API_KEY", "ctx7sk-00fdd198-322d-4fe7-b63d-43a479dd5ff0")
     
     server_config = MCPServerConfig(
@@ -463,19 +396,16 @@ async def test_agent_with_multiple_mcp_tools(test_company):
         )
         await agent_repo.set(agent_config)
         
-        agent_factory = get_agents_container().agent_factory
         agent = await agent_factory.get_agent("multi_mcp_test")
         
         print(f"✅ Агент создан с {len(agent.tools)} тулами")
         
-        # Мокаем LLM для последовательного вызова двух тулов
         call_count = [0]
         
         async def mock_sequential_calls(messages, **kwargs):
             call_count[0] += 1
             
             if call_count[0] == 1:
-                # Вызов 1: resolve-library-id
                 return AIMessage(
                     content="",
                     tool_calls=[{
@@ -486,7 +416,6 @@ async def test_agent_with_multiple_mcp_tools(test_company):
                     }]
                 )
             elif call_count[0] == 2:
-                # Вызов 2: get-library-docs
                 return AIMessage(
                     content="",
                     tool_calls=[{
@@ -500,7 +429,6 @@ async def test_agent_with_multiple_mcp_tools(test_company):
                     }]
                 )
             else:
-                # Финальный ответ
                 return AIMessage(content="Документация получена через оба MCP тула!")
         
         mock_llm = MagicMock()
@@ -523,21 +451,18 @@ async def test_agent_with_multiple_mcp_tools(test_company):
         messages = result.get("messages", [])
         tool_messages = [m for m in messages if isinstance(m, ToolMessage)]
         
-        print(f"\n✅ Результат:")
+        print("\n✅ Результат:")
         print(f"   LLM вызовов: {call_count[0]}")
         print(f"   Tool messages: {len(tool_messages)}")
         
-        # Должно быть 2 ToolMessage (от двух MCP тулов)
         assert len(tool_messages) >= 2, "Должно быть 2 ToolMessage от двух MCP тулов"
         
         print(f"\n   📦 ToolMessage 1: {tool_messages[0].content[:150]}...")
         print(f"   📦 ToolMessage 2: {tool_messages[1].content[:150]}...")
         
-        print(f"\n✅ Оба MCP тула успешно выполнены!")
+        print("\n✅ Оба MCP тула успешно выполнены!")
     
     finally:
-        # Очистка
         await agent_repo.delete("multi_mcp_test")
         for tool in mcp_tools:
-            await storage.delete(f"tool:{tool.tool_id}")
-
+            await tool_repo.delete(tool.tool_id)

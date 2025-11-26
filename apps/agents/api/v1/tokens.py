@@ -7,6 +7,7 @@ import logging
 import json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from apps.agents.container import get_agents_container
 
 
 
@@ -43,7 +44,8 @@ async def set_platform_token(request: TokenRequest):
     """
     token_key = f"token:{request.platform}:{request.username}"
 
-    await storage.set(token_key, json.dumps(request.token), force_global=True)
+    storage = get_agents_container().storage
+    await storage.set(token_key, json.dumps(request.token))
 
     logger.info(f"✅ Токен установлен: {token_key}")
 
@@ -62,7 +64,8 @@ async def get_platform_token(platform: str, username: str):
     """
     token_key = f"token:{platform}:{username}"
 
-    token_json = await storage.get(token_key, force_global=True)
+    storage = get_agents_container().storage
+    token_json = await storage.get(token_key)
 
     if token_json:
         return {
@@ -88,7 +91,8 @@ async def delete_platform_token(platform: str, username: str):
     """
     token_key = f"token:{platform}:{username}"
 
-    token_json = await storage.get(token_key, force_global=True)
+    storage = get_agents_container().storage
+    token_json = await storage.get(token_key)
     if not token_json:
         raise HTTPException(status_code=404, detail=f"Token {token_key} not found")
 

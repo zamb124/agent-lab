@@ -11,7 +11,7 @@
 import pytest
 from apps.agents.models import (
     AgentConfig, AgentType, GraphDefinition, GraphNode, GraphEdge,
-    NodeType, ConditionType, CodeMode, ToolReference, LLMConfig
+    NodeType, ConditionType, CodeMode, LLMConfig
 )
 from langchain_core.messages import HumanMessage
 
@@ -396,7 +396,7 @@ async def test_complete_stategraph_flow_with_final_agent(
 
     assert has_final_result, f"Финальный агент должен выполнить вычисление 7+3=10 с данными из state. Сообщения: {message_texts}"
 
-    print(f"✅ Полный StateGraph flow отработал: router → function_node → message_node → final_agent")
+    print("✅ Полный StateGraph flow отработал: router → function_node → message_node → final_agent")
     print(f"✅ Данные перешли между нодами: final_data = {result['store']['final_data']}")
     print(f"✅ Финальный агент использовал данные: {' '.join([m for m in message_texts if 'Финальный результат' in m])}")
     print("✅ StateGraph агент работает как единое целое!")

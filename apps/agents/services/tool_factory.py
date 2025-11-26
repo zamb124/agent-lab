@@ -12,7 +12,6 @@ from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 import typing
 from apps.agents.models import ToolReference, CodeMode
-from apps.agents.services.flow_factory import FlowFactory
 from apps.agents.container import get_agents_container
 from core.context import get_context
 from core.variables import get_state
@@ -400,7 +399,6 @@ from apps.agents.services.tool_decorator import tool
         logger.info(f"🎯 Создание MCP tool: {ref.tool_id}")
         from core.mcp_client import get_mcp_client, format_mcp_result
         from apps.agents.services.tool_decorator import tool
-        from pydantic import create_model, Field as PydanticField
 
         # Проверяем CodeMode для безопасности
         if ref.code_mode != CodeMode.MCP_TOOL:

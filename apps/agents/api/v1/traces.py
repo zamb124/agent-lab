@@ -6,10 +6,8 @@ API для работы с OpenTelemetry трейсами.
 
 from fastapi import APIRouter, Query, HTTPException
 from typing import Optional, List
-from datetime import datetime
-import json
 
-
+from apps.agents.container import get_agents_container
 from apps.agents.models.trace_models import TraceInfo, TraceDetail, SpanRecord, SpanStatus, SpanType
 
 router = APIRouter(prefix="/traces", tags=["traces"])
@@ -27,6 +25,7 @@ async def get_traces(
 
     Трейсы группируются по trace_id и сортируются по времени начала.
     """
+    storage = get_agents_container().storage
 
     # Получаем все spans из БД
     all_span_keys = await storage.list_by_prefix("otel:", limit= 10000)
@@ -132,6 +131,7 @@ async def get_trace_detail(
 
     Spans отсортированы по времени начала для построения таймлайна.
     """
+    storage = get_agents_container().storage
 
     # Получаем spans конкретного трейса (формат: otel:{trace_id}:span:{span_id})
     span_keys = await storage.list_by_prefix(f"otel:{trace_id}:span:", limit = 10000)

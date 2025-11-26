@@ -62,7 +62,7 @@ class CloudVoiceClient:
 
     async def _load_token_from_storage(self) -> Optional[dict]:
         """Загружает токен из Storage"""
-        token_json = await self.storage.get(self._token_key, force_global=True)
+        token_json = await self.storage.get(self._token_key)
         if token_json:
             return json.loads(token_json)
         return None
@@ -71,8 +71,7 @@ class CloudVoiceClient:
         """Сохраняет токен в Storage"""
         await self.storage.set(
             self._token_key,
-            json.dumps(token_data),
-            force_global=True
+            json.dumps(token_data)
         )
 
     async def _get_new_token(self) -> dict:
@@ -223,4 +222,17 @@ class CloudVoiceClientFactory:
             tts_url=settings.cloud_voice.tts_url,
             timeout=settings.cloud_voice.timeout,
         )
+
+
+def get_default_cloud_voice_client() -> CloudVoiceClient:
+    """
+    Создает клиент CloudVoice с дефолтным storage из контейнера.
+    
+    Returns:
+        CloudVoiceClient: Настроенный клиент для работы с голосом
+    """
+    from apps.agents.container import get_agents_container
+    
+    container = get_agents_container()
+    return CloudVoiceClientFactory.create_client(container.storage)
 

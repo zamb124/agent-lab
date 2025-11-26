@@ -10,11 +10,8 @@ from typing import Dict, Any, List, Optional
 
 from apps.agents.models.mcp_models import MCPTransportType
 from core.config import get_settings
-from apps.agents.db.repositories.mcp_repository import MCPServerRepository
 from apps.agents.container import get_agents_container
 from core.context import get_context
-from apps.agents.dependencies import get_variables_service
-from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 
@@ -401,10 +398,9 @@ async def get_mcp_client(server_id: str, company_id: Optional[str] = None) -> MC
     if cache_key in _mcp_clients:
         return _mcp_clients[cache_key]
     
-    storage = get_agents_container().storage
-    mcp_repo = MCPServerRepository(storage)
+    mcp_repo = get_agents_container().mcp_server_repository
     
-    server_config = await mcp_repo.get(server_id, company_id)
+    server_config = await mcp_repo.get(server_id)
     if not server_config:
         raise ValueError(f"MCP сервер {server_id} не найден для компании {company_id}")
     

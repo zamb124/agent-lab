@@ -18,12 +18,12 @@ async def test_smart_flow_migration(migrated_db,  agent_factory, agent_repo, sys
     agent_id = "apps.agents.flows.smart_flow.SmartFlowAgent"
     agent_config = await agent_repo.get(agent_id)
     
-    assert agent_config is not None, f"SmartFlowAgent не найден в БД"
+    assert agent_config is not None, "SmartFlowAgent не найден в БД"
     print(f"✅ SmartFlowAgent найден в БД: {agent_config.name}")
     
     # Проверяем что у него есть graph_definition
     if agent_config.graph_definition:
-        print(f"  Тип: StateGraph")
+        print("  Тип: StateGraph")
         print(f"  Нод: {len(agent_config.graph_definition.nodes)}")
         for node in agent_config.graph_definition.nodes:
             print(f"    - {node.id} ({node.type})")
@@ -31,16 +31,16 @@ async def test_smart_flow_migration(migrated_db,  agent_factory, agent_repo, sys
                 print(f"      function_class: {node.function_class}")
                 print(f"      params: {node.params}")
     else:
-        print(f"  Тип: ReAct")
+        print("  Тип: ReAct")
     
     # Проверяем что агент можно создать
     agent = await agent_factory.get_agent(agent_id)
-    print(f"✅ SmartFlowAgent создан успешно")
+    print("✅ SmartFlowAgent создан успешно")
     
     # Проверяем что граф компилируется
     try:
         compiled_graph = await agent.compile_graph()
-        print(f"✅ Граф SmartFlowAgent скомпилирован успешно")
+        print("✅ Граф SmartFlowAgent скомпилирован успешно")
     except Exception as e:
         print(f"❌ Ошибка компиляции графа: {e}")
         raise
@@ -79,7 +79,7 @@ async def test_smart_flow_calculator_routing(migrated_db, flow_factory, system_c
     
     # Проверяем что запрос обработан
     assert len(final_content) > 0
-    print(f"✅ Calculator routing работает")
+    print("✅ Calculator routing работает")
     print(f"   Результат: {result['messages'][-1].content[:100]}...")
 
 
@@ -111,7 +111,7 @@ async def test_smart_flow_weather_routing(migrated_db, flow_factory, system_cont
     
     # Проверяем что запрос обработан
     assert len(final_content) > 0
-    print(f"✅ Weather routing работает")
+    print("✅ Weather routing работает")
     print(f"   Результат: {result['messages'][-1].content[:100]}...")
 
 
@@ -155,7 +155,7 @@ async def test_smart_flow_different_paths(migrated_db, flow_factory, system_cont
     assert len(content1) > 0
     assert len(content2) > 0
     
-    print(f"✅ Разные пути работают корректно")
+    print("✅ Разные пути работают корректно")
     print(f"   Математика: {result1['messages'][-1].content[:50]}...")
     print(f"   Погода: {result2['messages'][-1].content[:50]}...")
 

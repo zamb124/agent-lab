@@ -12,7 +12,7 @@
 Это ЭТАЛОН для всех будущих тестов!
 """
 import pytest
-from apps.agents.models import AgentConfig, AgentType, CodeMode, ToolReference
+from apps.agents.models import CodeMode, ToolReference
 from langchain_core.messages import HumanMessage
 
 
@@ -152,7 +152,7 @@ def calculate_area(radius: float) -> str:
     assert len(final_message) > 0
     assert isinstance(final_message, str)
     
-    print(f"\n✅ ЭТАЛОННЫЙ ТЕСТ ПРОЙДЕН!")
+    print("\n✅ ЭТАЛОННЫЙ ТЕСТ ПРОЙДЕН!")
     print(f"   Финальный ответ: {final_message}")
     print("="*80)
 
@@ -249,7 +249,7 @@ def greet(name: str) -> str:
     final_message = result["messages"][-1].content
     assert len(final_message) > 0
     
-    print(f"\n✅ ПРОСТОЙ ЭТАЛОН ПРОЙДЕН!")
+    print("\n✅ ПРОСТОЙ ЭТАЛОН ПРОЙДЕН!")
     print(f"   Ответ: {final_message}")
     print("="*80)
 

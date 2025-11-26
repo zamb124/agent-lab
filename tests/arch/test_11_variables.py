@@ -102,23 +102,22 @@ async def test_variables_per_company_isolation(unique_id, flow_repo, company_rep
         user_companies=[company2]
     )
 
-    from core.variables import VariablesService
     from apps.agents.container import get_agents_container
-    variables_service = get_agents_container().variables_service
+    _variables_service = get_agents_container().variables_service
 
     set_context(context1)
-    await variables_service.set_var("shared_key", "value_from_company1", is_secret=False)
+    await _variables_service.set_var("shared_key", "value_from_company1", is_secret=False)
 
     set_context(context2)
-    value = await variables_service.get_var("shared_key")
+    value = await _variables_service.get_var("shared_key")
     assert value is None
 
-    await variables_service.set_var("shared_key", "value_from_company2", is_secret=False)
-    value = await variables_service.get_var("shared_key")
+    await _variables_service.set_var("shared_key", "value_from_company2", is_secret=False)
+    value = await _variables_service.get_var("shared_key")
     assert value == "value_from_company2"
 
     set_context(context1)
-    value = await variables_service.get_var("shared_key")
+    value = await _variables_service.get_var("shared_key")
     assert value == "value_from_company1"
 
 

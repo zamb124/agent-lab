@@ -107,7 +107,7 @@ async def calculate_tool(a: int, b: int, operation: str = "add") -> str:
     assert "calculate_tool" in timeline["summary"]["tool_stats"]
     assert timeline["summary"]["tool_stats"]["calculate_tool"] >= 1
 
-    print(f"✅ Тест 1 пройден: ReAct агент с калькулятором")
+    print("✅ Тест 1 пройден: ReAct агент с калькулятором")
     print(f"   Найдено чекпоинтеров: {len(history)}")
     print(f"   Найдено вызовов инструментов: {tool_calls_found}")
     print(f"   Статистика инструментов: {timeline['summary']['tool_stats']}")
@@ -251,7 +251,7 @@ async def result_node(state):
 
     assert steps_with_store > 0, "Должны быть шаги с переменными store"
 
-    print(f"✅ Тест 2 пройден: StateGraph агент с нодами")
+    print("✅ Тест 2 пройден: StateGraph агент с нодами")
     print(f"   Найдено чекпоинтеров: {len(history)}")
     print(f"   Найдено связей: {len(connections['connections'])}")
     print(f"   Шагов с переменными store: {steps_with_store}")

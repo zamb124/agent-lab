@@ -4,7 +4,7 @@ StateGraphAgent - агент на базе кастомного StateGraph.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from apps.agents.agents.base import BaseAgent
 from core.clients.llm import get_llm

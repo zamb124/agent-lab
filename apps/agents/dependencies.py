@@ -4,7 +4,7 @@ Dependency Injection для сервиса агентов
 Общие зависимости для API роутеров
 """
 
-from typing import Annotated, Any, TYPE_CHECKING
+from typing import Annotated, TYPE_CHECKING
 from fastapi import Depends
 
 from apps.agents.db.repositories import AgentRepository, FlowRepository, TaskRepository, SessionRepository, ToolRepository
@@ -67,7 +67,6 @@ async def get_variables_service() -> VariablesService:
 
 async def get_interface_factory() -> "InterfaceFactory":
     """Получить InterfaceFactory из контейнера"""
-    from apps.agents.interfaces.factory import InterfaceFactory
     container = get_agents_container()
     return container.interface_factory
 

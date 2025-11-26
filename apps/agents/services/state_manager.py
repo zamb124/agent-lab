@@ -3,20 +3,14 @@
 Единообразная рекурсивная архитектура без ветвлений и фолбеков.
 """
 
-import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
 from typing import Any, Dict, Optional, List
 from sqlalchemy import text
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
-from core.config import get_settings
 from apps.agents.services.state import State
-from apps.agents.services.tracing.decorators import trace_span
-from apps.agents.models.trace_models import SpanType
 from core.db.database import get_session_factory
-from core.db.models import Stores, AgentStates
 from apps.agents.models.core_models import SubAgentMemoryPolicy
 
 logger = logging.getLogger(__name__)
@@ -201,7 +195,7 @@ def _dicts_to_messages(msg_dicts: List[Dict[str, Any]]) -> List[BaseMessage]:
     logger = logging.getLogger(__name__)
     
     if not msg_dicts:
-        logger.info(f"🟢 StateManager._dicts_to_messages: пустой список сообщений")
+        logger.info("🟢 StateManager._dicts_to_messages: пустой список сообщений")
         return []
     
     logger.info(f"🟢 StateManager._dicts_to_messages: конвертируем {len(msg_dicts)} сообщений")
@@ -473,7 +467,7 @@ class StateManager:
             # 0 означает что агент завершился, и не нужно использовать это значение для нового запуска
             if remaining_steps_from_db == 0:
                 remaining_steps_final = 25
-                logger.info(f"🟢 StateManager: remaining_steps из БД=0 (старое значение), используем дефолт=25")
+                logger.info("🟢 StateManager: remaining_steps из БД=0 (старое значение), используем дефолт=25")
             else:
                 remaining_steps_final = remaining_steps_from_db if remaining_steps_from_db is not None else 25
                 logger.info(f"🟢 StateManager: remaining_steps из БД={remaining_steps_from_db}, финальное={remaining_steps_final}")

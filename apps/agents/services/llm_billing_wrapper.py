@@ -9,14 +9,13 @@ import base64
 import json
 import copy
 import httpx
-from typing import Optional, List, Any, Mapping
+from typing import Optional, List, Any
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.callbacks import CallbackManagerForLLMRun
 
 from core.context import get_context
-from core.billing import BillingService
 from core.models.billing_models import UsageType
 from apps.agents.exceptions import TariffError, BillingError
 from core.files.processors import get_default_file_processor, get_default_audio_processor

@@ -7,8 +7,8 @@ from typing import Optional
 from datetime import datetime
 from fastapi import APIRouter, Query
 
-from apps.agents.container import get_container
 from apps.agents.models.history_models import MessageHistoryResponse, SessionListResponse
+from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 

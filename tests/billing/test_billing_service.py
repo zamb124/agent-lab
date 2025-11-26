@@ -83,7 +83,6 @@ class TestBillingService:
     @pytest.mark.asyncio
     async def test_record_usage(self, billing_service, save_test_company, test_user, test_company, company_repo, usage_repo):
         """Тест записи использования"""
-        from core.models import Company
         from core.models.billing_models import TariffPlan
         
         test_company.tariff_plan = TariffPlan.ENTERPRISE
@@ -108,7 +107,7 @@ class TestBillingService:
         all_usage = await usage_repo.list_all(limit=10000)
         weather_usage = [u for u in all_usage if u.resource_name == "tool:weather_api"]
         
-        assert len(weather_usage) > 0, f"Записи использования не найдены"
+        assert len(weather_usage) > 0, "Записи использования не найдены"
         found_record = weather_usage[0]
         
         assert found_record.cost == 0.5

@@ -8,7 +8,6 @@ import os
 import uuid
 import threading
 import logging
-import asyncio
 from pathlib import Path
 from typing import Callable, Dict, Optional
 from unittest.mock import MagicMock
@@ -40,10 +39,6 @@ from core.models import User, Company, Context
 from core.clients import get_llm
 
 from apps.agents.container import get_agents_container, set_agents_container, AgentsContainer
-from apps.agents.services.migration.migrator import Migrator
-from apps.agents.services.agent_factory import AgentFactory
-from apps.agents.services.flow_factory import FlowFactory
-from apps.agents.services.tool_factory import ToolFactory
 from apps.agents.models import (
     AgentConfig, AgentType, CodeMode, FlowConfig,
     ToolReference, LLMConfig
@@ -272,30 +267,6 @@ async def file_repo(migrated_db):
 
 
 @pytest_asyncio.fixture
-async def storage(migrated_db):
-    """Storage для обратной совместимости с тестами (deprecated)"""
-    return get_agents_container().storage
-
-
-@pytest_asyncio.fixture
-async def variable_repo(migrated_db):
-    """VariableRepository из контейнера"""
-    return get_agents_container().variable_repository
-
-
-@pytest_asyncio.fixture
-async def usage_repo(migrated_db):
-    """UsageRepository из контейнера"""
-    return get_agents_container().usage_repository
-
-
-@pytest_asyncio.fixture
-async def file_repo(migrated_db):
-    """FileRepository из контейнера"""
-    return get_agents_container().file_repository
-
-
-@pytest_asyncio.fixture
 async def flow_factory(migrated_db):
     """FlowFactory из контейнера воркера"""
     return get_agents_container().flow_factory
@@ -310,7 +281,7 @@ async def tool_factory(migrated_db):
 @pytest_asyncio.fixture
 async def system_context(migrated_db):
     """Системный контекст для чтения системных сущностей (flows, agents)"""
-    from core.models import Company, User, AuthProvider, UserStatus
+    from core.models import Company, User
     from core.models.context_models import Context
 
     system_context = Context(
@@ -406,27 +377,6 @@ async def cleanup_after_test():
     # Очищаем контекст после каждого теста
     clear_context()
     
-    # Очищаем состояние из БД для тестовых session_id
-    # Это предотвращает накопление сообщений между тестами
-    try:
-        from apps.agents.services.state_manager import get_state_manager
-        from apps.agents.container import get_agents_container
-        from core.db.storage import Storage
-        
-        state_manager = await get_state_manager()
-        storage = get_agents_container().storage
-        
-        # Удаляем все тестовые сессии (начинающиеся с "test_")
-        # Это безопасно, так как тесты должны использовать уникальные session_id
-        # Но на всякий случай делаем это только если нет активного контекста
-        context = get_context()
-        if not context or not context.session_id:
-            # Если нет активного контекста, можем очистить старые тестовые сессии
-            # Но это может быть опасно, если тесты еще выполняются
-            # Поэтому просто делаем gc.collect()
-            pass
-    except Exception as e:
-        logger.debug(f"Ошибка при cleanup состояния (может быть нормально): {e}")
     
     # Принудительная сборка мусора для освобождения памяти
     import gc
@@ -496,7 +446,7 @@ async def setup_mcp_servers(mcp_repo, test_company: Company):
 
     # Очистка
     for server in servers:
-        await mcp_repo.delete(server.server_id, test_company.company_id)
+        await mcp_repo.delete(server.server_id)
 
 
 @pytest_asyncio.fixture
@@ -802,7 +752,12 @@ async def payment_service_with_mock():
     from core.payments import PaymentService
 
     mock_company_repo = AsyncMock()
+    mock_storage = AsyncMock()
+    mock_company_repo._storage = mock_storage
+    
     service = PaymentService(company_repository=mock_company_repo)
+    service._storage = mock_storage
+    
     return service
 
 

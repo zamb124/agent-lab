@@ -118,7 +118,7 @@ def main():
     print(f"Всего файлов: {len(test_files)}")
     print(f"Успешно: {sum(1 for r in results if r['success'])}")
     print(f"С ошибками: {sum(1 for r in results if not r['success'])}")
-    print(f"\nВсего тестов:")
+    print("\nВсего тестов:")
     print(f"  ✅ Passed: {total_passed}")
     print(f"  ❌ Failed: {total_failed}")
     print(f"  ⚠️  Errors: {total_errors}")

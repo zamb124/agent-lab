@@ -315,7 +315,7 @@ async def cancel_delayed_task(task_id: str) -> str:
             if task_id in state["store"]["delayed_tasks"]:
                 state["store"]["delayed_tasks"][task_id]["status"] = "cancelled"
                 state["store"]["delayed_tasks"][task_id]["cancelled_at"] = datetime.now(timezone.utc).isoformat()
-                logger.debug(f"📦 Задача помечена cancelled в state (локальный кэш)")
+                logger.debug("📦 Задача помечена cancelled в state (локальный кэш)")
         
         logger.info(f"🗑️ Задача {task_id} отменена")
         
@@ -356,7 +356,7 @@ async def get_delayed_task_status(task_id: str) -> str:
                 
                 result = [
                     f"📋 Задача {task_id}",
-                    f"",
+                    "",
                     f"🎯 Flow: {task_info['flow_id']}",
                     f"📝 Сообщение: {task_info['message']}",
                     f"⏰ Запланировано: {task_info['execute_at']}",
@@ -373,7 +373,7 @@ async def get_delayed_task_status(task_id: str) -> str:
                         minutes = int((remaining.total_seconds() % 3600) // 60)
                         result.append(f"⏳ Осталось: {hours}ч {minutes}м")
                     else:
-                        result.append(f"⏳ Время наступило, задача в очереди на выполнение")
+                        result.append("⏳ Время наступило, задача в очереди на выполнение")
                 
                 return "\n".join(result)
             else:

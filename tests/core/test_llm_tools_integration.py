@@ -4,7 +4,6 @@
 """
 
 import pytest
-import json
 import logging
 from langchain_core.messages import HumanMessage
 
@@ -51,7 +50,7 @@ class TestRealOpenRouterToolsIntegration:
         migrator = Migrator()
         await migrator._set_company_context(test_company)
 
-        print(f"\n🔄 Мигрируем WeatherAgent с tools...")
+        print("\n🔄 Мигрируем WeatherAgent с tools...")
         await AgentConfig.migrate(
             "apps.agents.agents.weather.agent.WeatherAgent",
             migrator=migrator,
@@ -83,9 +82,9 @@ class TestRealOpenRouterToolsIntegration:
         assert len(tools) > 0, "Агент должен иметь tools"
 
         # Делаем РЕАЛЬНЫЙ запрос к OpenRouter
-        print(f"\n🌐 Делаем РЕАЛЬНЫЙ запрос к OpenRouter API...")
-        print(f"   Model: anthropic/claude-sonnet-4.5")
-        print(f"   Запрос: Используй get_weather для проверки погоды в Москве")
+        print("\n🌐 Делаем РЕАЛЬНЫЙ запрос к OpenRouter API...")
+        print("   Model: anthropic/claude-sonnet-4.5")
+        print("   Запрос: Используй get_weather для проверки погоды в Москве")
 
         try:
             result = await weather_agent.ainvoke(
@@ -98,7 +97,7 @@ class TestRealOpenRouterToolsIntegration:
 
             # Проверки
             print(f"\n{'='*60}")
-            print(f"РЕЗУЛЬТАТЫ")
+            print("РЕЗУЛЬТАТЫ")
             print(f"{'='*60}")
 
             assert "messages" in result, "Результат должен содержать messages"
@@ -111,31 +110,31 @@ class TestRealOpenRouterToolsIntegration:
             for msg in result["messages"]:
                 if hasattr(msg, 'tool_calls') and msg.tool_calls:
                     tool_call_count += len(msg.tool_calls)
-                    print(f"\n🔧 Tool calls найдены:")
+                    print("\n🔧 Tool calls найдены:")
                     for tc in msg.tool_calls:
                         print(f"   - {tc.get('name')}: {tc.get('args')}")
 
             if tool_call_count > 0:
                 print(f"\n✅ OpenRouter вернул {tool_call_count} tool_calls")
             else:
-                print(f"\n⚠️  OpenRouter не вернул tool_calls")
-                print(f"   (LLM мог ответить напрямую или проблема с передачей tools)")
+                print("\n⚠️  OpenRouter не вернул tool_calls")
+                print("   (LLM мог ответить напрямую или проблема с передачей tools)")
 
             # Финальный ответ
             last_message = result["messages"][-1]
             if hasattr(last_message, 'content'):
-                print(f"\n💬 Финальный ответ:")
+                print("\n💬 Финальный ответ:")
                 print(f"   {last_message.content[:300]}...")
                 assert len(last_message.content) > 0, "Ответ не должен быть пустым"
 
             print(f"\n{'='*60}")
-            print(f"✅ ИНТЕГРАЦИОННЫЙ ТЕСТ С РЕАЛЬНЫМ OPENROUTER ПРОЙДЕН!")
+            print("✅ ИНТЕГРАЦИОННЫЙ ТЕСТ С РЕАЛЬНЫМ OPENROUTER ПРОЙДЕН!")
             print(f"{'='*60}")
             print(f"✓ Агент загружен с {len(tools)} tools")
-            print(f"✓ Запрос к OpenRouter выполнен успешно")
+            print("✓ Запрос к OpenRouter выполнен успешно")
             print(f"✓ Получен ответ с {len(result['messages'])} сообщениями")
             print(f"✓ Tool calls обработаны: {tool_call_count > 0}")
-            print(f"✓ Код передачи tools работает корректно!")
+            print("✓ Код передачи tools работает корректно!")
 
         except Exception as e:
             llm_logger.setLevel(original_level)

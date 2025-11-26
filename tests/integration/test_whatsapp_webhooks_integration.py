@@ -4,10 +4,7 @@
 """
 import pytest
 import pytest_asyncio
-import json
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.db import Storage
 from apps.agents.models import FlowConfig
 from core.models import Company
 
@@ -59,7 +56,7 @@ async def wa_test_flow(wa_test_company):
     container = get_agents_container()
     flow_repo = container.flow_repository
     
-    from core.models import User, UserStatus, AuthProvider
+    from core.models import User, UserStatus
     
     test_user = User(
         user_id="test_user",
@@ -251,7 +248,7 @@ class TestWhatsAppWebhookVerification:
                 }
             )
             
-            print(f"\n✅ Переменная @var:wa_verify_token резолвнулась правильно")
+            print("\n✅ Переменная @var:wa_verify_token резолвнулась правильно")
             print(f"✅ Статус: {response.status_code}")
             
             assert response.status_code == 200
@@ -294,7 +291,7 @@ class TestWhatsAppWebhookHandler:
         }
         
         # Мокаем только WhatsApp API (чтобы не слать реальные запросы)
-        from unittest.mock import patch, AsyncMock
+        from unittest.mock import patch
         from httpx import AsyncClient, ASGITransport
         
         with patch('apps.agents.interfaces.whatsapp_interface.WhatsAppInterface._get_media_url', return_value=None):
@@ -373,7 +370,7 @@ class TestContextAndVariables:
             }
         )
         
-        print(f"\n✅ Контекст компании был установлен для резолва переменных")
+        print("\n✅ Контекст компании был установлен для резолва переменных")
         assert response.status_code == 200
     
     async def wa_test_variables_resolve_correctly(self, wa_test_company, wa_test_flow, wa_test_variables):

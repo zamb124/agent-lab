@@ -2,7 +2,6 @@
 Базовая конфигурация приложения.
 """
 
-import os
 import logging
 from pydantic import Field, ConfigDict
 from pydantic_settings import BaseSettings as PydanticBaseSettings

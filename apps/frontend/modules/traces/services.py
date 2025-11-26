@@ -3,7 +3,6 @@
 """
 
 from typing import List, Dict, Optional
-from datetime import datetime
 
 from core.models.trace_models import SpanRecord, TraceInfo, SpanStatus
 

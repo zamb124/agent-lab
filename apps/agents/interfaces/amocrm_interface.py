@@ -6,7 +6,6 @@ AmoCRM Interface - адаптер для обработки webhook'ов от Am
 import logging
 from typing import Dict, Any, Optional, List
 import json
-from datetime import datetime, timezone
 
 from langchain_core.messages import HumanMessage, AIMessage
 from apps.agents.interfaces.base import BaseInterface, Message
@@ -17,7 +16,6 @@ from apps.agents.services.state_manager import get_state_manager
 from apps.agents.container import get_agents_container
 from apps.agents.services.tracing.decorators import trace_span
 from apps.agents.models.trace_models import SpanType
-from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 

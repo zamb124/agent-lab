@@ -2,7 +2,6 @@
 Инструменты для работы с файлами.
 """
 
-import json
 from typing import Optional
 from apps.agents.services.tool_decorator import tool
 

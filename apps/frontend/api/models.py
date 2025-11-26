@@ -36,6 +36,7 @@ async def show_inline_modal(request_data: Dict[str, Any]) -> HTMLResponse:
     parent_model_id = request_data.get("parent_model_id", "unknown")
 
     # Загружаем родительскую модель из storage
+    storage = get_frontend_container().storage
     key = f"{parent_model_type}:{parent_model_id}"
     data = await storage.get(key)
 
@@ -145,6 +146,7 @@ async def get_model(
         return HTMLResponse(content=html)
 
     # Обычный случай: загрузка существующей модели
+    storage = get_frontend_container().storage
     key = f"{model_type}:{model_id}"
     data = await storage.get(key)
 
@@ -229,6 +231,7 @@ async def create_model(model_type: str, model_data: Dict[str, Any]) -> HTMLRespo
         model_id = f"{model_type}_{uuid.uuid4().hex[:8]}"
         model_data[f"{model_type}_id"] = model_id
 
+    storage = get_frontend_container().storage
     key = f"{model_type}:{model_id}"
     await storage.set(key, json.dumps(model_data))
 
@@ -245,6 +248,7 @@ async def update_model(
     model_type: str, model_id: str, model_data: Dict[str, Any], view: str = "form"
 ) -> HTMLResponse:
     """Обновить модель и вернуть обновленную строку таблицы"""
+    storage = get_frontend_container().storage
     key = f"{model_type}:{model_id}"
 
     # Получаем существующие данные
@@ -370,6 +374,7 @@ async def update_model(
 @router.delete("/{model_type}/{model_id:path}")
 async def delete_model(model_type: str, model_id: str) -> Dict[str, Any]:
     """Удалить модель"""
+    storage = get_frontend_container().storage
     key = f"{model_type}:{model_id}"
 
     # Проверяем что модель существует

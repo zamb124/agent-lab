@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
 
 from apps.agents.flows.flow import Flow
-from core.models.identity_models import User, Company
 from apps.agents.models.history_models import (
     MessageItem,
     MessageRole,
@@ -20,10 +19,8 @@ from apps.agents.models.history_models import (
     SessionListItem,
     SessionListResponse,
 )
-from apps.agents.models.session_models import SessionConfig
 from apps.agents.models import FlowConfig, ToolReference
 from core.context import get_context
-from core.variables import VariablesService
 from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
@@ -111,7 +108,7 @@ class FlowFactory:
             
             if include_checkpoints and messages:
                 checkpoint_info = CheckpointInfo(
-                    checkpoint_id=f"checkpoint_1",
+                    checkpoint_id="checkpoint_1",
                     thread_id=session_id,
                     checkpoint_ns="",
                     step=len(messages),

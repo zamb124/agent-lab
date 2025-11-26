@@ -14,7 +14,6 @@ from apps.agents.models import AgentConfig
 from apps.agents.models.core_models import SubAgentMemoryPolicy
 from core.variables import set_state_in_context, get_state
 from apps.agents.container import get_agents_container
-from apps.agents.services.context_window_manager import ContextWindowManager
 from core.context import get_context, set_context
 from apps.agents.services.state_manager import get_state_manager, StoreProxy
 # Создаем свой класс для прерываний вместо GraphInterrupt из langgraph
@@ -26,7 +25,6 @@ class AgentInterrupt(Exception):
         super().__init__(message)
 from langchain_core.messages import HumanMessage
 from apps.agents.services.agent_runner import BaseAgentRunner
-from apps.agents.services.state import State
 from apps.agents.services.tracing.decorators import trace_span
 from apps.agents.models.trace_models import SpanType
 logger = logging.getLogger(__name__)
@@ -145,7 +143,6 @@ class BaseAgent(ABC):
         Единообразный рекурсивный метод вызова агента.
         Всегда работает с полным state через StateManager.get_or_create_session().
         """
-        from apps.agents.services.state_manager import get_state_manager
         
         run_config = config or {}
         state_manager = await get_state_manager()
@@ -360,8 +357,7 @@ class BaseAgent(ABC):
 
         async def agent_func(request: str, tool_call_id: Optional[str] = None) -> str:
             """Единообразная функция-обертка для вызова агента как инструмента"""
-            from core.variables import get_state, set_state_in_context
-            from apps.agents.services.state_manager import get_state_manager
+            from core.variables import get_state
             
             if isinstance(request, dict):
                 input_text = request.get("request", "")

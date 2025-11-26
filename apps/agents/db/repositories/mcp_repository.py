@@ -4,7 +4,7 @@
 """
 
 import logging
-from typing import Optional, List
+from typing import List
 
 from core.db.base_repository import BaseRepository
 from core.db.storage import Storage

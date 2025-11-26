@@ -4,7 +4,6 @@
 
 import logging
 import json
-from typing import List, Dict, Any
 
 from apps.agents.services.tool_decorator import tool
 from core.clients.llm import get_llm
@@ -42,11 +41,11 @@ async def extract_facts(
     
     logger.info(f"🔬 Извлечение фактов из текста ({len(text)} символов)")
     
-    await send_progress(f"🔬 Извлекаю факты из текста...")
+    await send_progress("🔬 Извлекаю факты из текста...")
     
     llm = get_llm()
     
-    status_message = f"🔬 Извлечение фактов\n\n"
+    status_message = "🔬 Извлечение фактов\n\n"
     
     prompt = f"""Извлеки конкретные, проверяемые факты из следующего текста.
 
@@ -121,7 +120,7 @@ async def verify_facts(
     if not facts_json:
         raise ValueError("facts_json не может быть пустым")
     
-    logger.info(f"✅ Верификация фактов")
+    logger.info("✅ Верификация фактов")
     
     try:
         facts = json.loads(facts_json)
@@ -148,7 +147,7 @@ async def verify_facts(
     response = await llm.ainvoke(prompt)
     result = response.content if hasattr(response, 'content') else str(response)
     
-    logger.info(f"✅ Верификация завершена")
+    logger.info("✅ Верификация завершена")
     return result
 
 
@@ -207,6 +206,6 @@ async def structure_facts(
     response = await llm.ainvoke(prompt)
     result = response.content if hasattr(response, 'content') else str(response)
     
-    logger.info(f"✅ Структурирование завершено")
+    logger.info("✅ Структурирование завершено")
     return result
 

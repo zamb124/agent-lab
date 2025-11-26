@@ -12,6 +12,7 @@ import json
 
 
 from apps.agents.config import get_agents_settings
+from apps.agents.container import get_agents_container
 settings = get_agents_settings()
 
 router = APIRouter(
@@ -76,6 +77,7 @@ async def create_lead(lead: LeadRequest):
         }
         
         # Сохраняем в базу данных
+        storage = get_agents_container().storage
         await storage.set(f"lead:{lead_id}", json.dumps(lead_data))
         
         # Отправляем уведомление в Telegram

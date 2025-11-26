@@ -7,8 +7,7 @@
 """
 
 import logging
-import json
-from typing import Generic, TypeVar, Optional, List, Dict, Type, Any
+from typing import Generic, TypeVar, Optional, List, Dict, Type
 from abc import ABC, abstractmethod
 
 from core.db.storage import Storage

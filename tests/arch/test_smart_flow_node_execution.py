@@ -60,8 +60,8 @@ async def test_smart_flow_executes_different_nodes(migrated_db, agent_factory, m
     all_messages_1 = [msg.content for msg in result1["messages"]]
     full_content_1 = " ".join(all_messages_1)
     
-    print(f"\nИсходный запрос: 'Посчитай 2+2'")
-    print(f"\nВсе сообщения в результате:")
+    print("\nИсходный запрос: 'Посчитай 2+2'")
+    print("\nВсе сообщения в результате:")
     for i, msg in enumerate(result1["messages"]):
         print(f"  {i+1}. {msg.content[:100]}...")
     
@@ -97,8 +97,8 @@ async def test_smart_flow_executes_different_nodes(migrated_db, agent_factory, m
     all_messages_2 = [msg.content for msg in result2["messages"]]
     full_content_2 = " ".join(all_messages_2)
     
-    print(f"\nИсходный запрос: 'Какая погода в Москве?'")
-    print(f"\nВсе сообщения в результате:")
+    print("\nИсходный запрос: 'Какая погода в Москве?'")
+    print("\nВсе сообщения в результате:")
     for i, msg in enumerate(result2["messages"]):
         print(f"  {i+1}. {msg.content[:100]}...")
     
@@ -128,9 +128,9 @@ async def test_smart_flow_executes_different_nodes(migrated_db, agent_factory, m
     print("\n" + "="*70)
     print("ИТОГОВАЯ ПРОВЕРКА")
     print("="*70)
-    print(f"✅ Разные запросы прошли через РАЗНЫЕ ноды")
-    print(f"   - Математика → calculator нода")
-    print(f"   - Погода → weather нода")
+    print("✅ Разные запросы прошли через РАЗНЫЕ ноды")
+    print("   - Математика → calculator нода")
+    print("   - Погода → weather нода")
     print("="*70 + "\n")
 
 
@@ -153,7 +153,7 @@ async def test_smart_flow_router_condition(agent_repo):
     state1 = await router_node(state1)
     selected1 = router_condition(state1)
     
-    print(f"\nЗапрос: 'Посчитай 10 + 20'")
+    print("\nЗапрос: 'Посчитай 10 + 20'")
     print(f"  → selected_agent в store: '{state1.get('store', {}).get('selected_agent', '')}'")
     print(f"  → router_condition вернул: '{selected1}'")
     
@@ -173,7 +173,7 @@ async def test_smart_flow_router_condition(agent_repo):
     state2 = await router_node(state2)
     selected2 = router_condition(state2)
     
-    print(f"\nЗапрос: 'Какая погода?'")
+    print("\nЗапрос: 'Какая погода?'")
     print(f"  → selected_agent в store: '{state2.get('store', {}).get('selected_agent', '')}'")
     print(f"  → router_condition вернул: '{selected2}'")
     
@@ -195,7 +195,7 @@ async def test_smart_flow_router_condition(agent_repo):
         ("Привет", "weather"),  # По умолчанию weather
     ]
     
-    print(f"\nПроверка различных запросов:")
+    print("\nПроверка различных запросов:")
     for query, expected in test_cases:
         state = {
             "messages": [HumanMessage(content=query)],
@@ -259,7 +259,7 @@ async def test_smart_flow_graph_structure(migrated_db,  migrator, agent_repo):
     router_targets = edges_map["router"]
     assert "calculator" in router_targets, "От router нет перехода к calculator!"
     assert "weather" in router_targets, "От router нет перехода к weather!"
-    print(f"\n✅ От router есть условные переходы к calculator и weather")
+    print("\n✅ От router есть условные переходы к calculator и weather")
     
     # Проверяем что calculator и weather ведут к explainer
     assert "calculator" in edges_map, "От ноды 'calculator' нет исходящих рёбер!"
@@ -267,7 +267,7 @@ async def test_smart_flow_graph_structure(migrated_db,  migrator, agent_repo):
     
     assert "weather" in edges_map, "От ноды 'weather' нет исходящих рёбер!"
     assert "explainer" in edges_map["weather"], "От weather нет перехода к explainer!"
-    print(f"✅ От calculator и weather есть переходы к explainer")
+    print("✅ От calculator и weather есть переходы к explainer")
     
     # Проверяем точку входа
     # entry_point может быть любой нодой (не обязательно START)

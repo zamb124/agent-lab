@@ -29,7 +29,6 @@ from core.config import get_settings
 from core.utils.tokens import get_token_service
 
 if TYPE_CHECKING:
-    from core.db.storage import Storage
     from core.db.repositories.user_repository import UserRepository
     from core.db.repositories.company_repository import CompanyRepository
     from core.db.repositories.auth_session_repository import AuthSessionRepository
@@ -129,7 +128,7 @@ class AuthService:
         """
         code_key = f"oauth_code:{auth_request.provider.value}:{auth_request.code}"
 
-        cached_result = await self._storage.get(code_key, force_global=True)
+        cached_result = await self._storage.get(code_key)
         if cached_result:
             logger.info("OAuth код уже использован - возвращаем кешированный результат")
             result_data = json.loads(cached_result)
@@ -180,7 +179,7 @@ class AuthService:
             "session_id": session.session_id,
             "token": jwt_token
         })
-        await self._storage.set(code_key, result_cache, ttl=300, force_global=True)
+        await self._storage.set(code_key, result_cache, ttl=300)
 
         await self._cleanup_auth_state(auth_request.state)
 
@@ -211,7 +210,7 @@ class AuthService:
         }
 
         key = f"auth_state:{state}"
-        await self._storage.set(key, json.dumps(state_data), ttl=600, force_global=True)
+        await self._storage.set(key, json.dumps(state_data), ttl=600)
 
     async def _get_auth_state(self, state: str) -> Optional[Dict]:
         """Получает временное состояние авторизации"""
@@ -219,7 +218,7 @@ class AuthService:
             return None
 
         key = f"auth_state:{state}"
-        data = await self._storage.get(key, force_global=True)
+        data = await self._storage.get(key)
 
         if data:
             return json.loads(data)
@@ -229,7 +228,7 @@ class AuthService:
         """Удаляет временное состояние авторизации"""
         if state:
             key = f"auth_state:{state}"
-            await self._storage.delete(key, force_global=True)
+            await self._storage.delete(key)
 
     async def _get_or_create_user(
         self, provider: AuthProvider, user_info: ProviderUserInfo
@@ -284,7 +283,7 @@ class AuthService:
     async def _add_user_provider(self, user_id: str, provider: AuthProvider, user_info: ProviderUserInfo):
         """Добавляет провайдера в список провайдеров пользователя"""
         providers_key = f"user_providers:{user_id}"
-        providers_data = await self._storage.get(providers_key, force_global=True)
+        providers_data = await self._storage.get(providers_key)
 
         if providers_data:
             providers = json.loads(providers_data)
@@ -298,7 +297,7 @@ class AuthService:
             "metadata": user_info.raw_data
         }
 
-        await self._storage.set(providers_key, json.dumps(providers), force_global=True)
+        await self._storage.set(providers_key, json.dumps(providers))
 
     async def _update_provider_data(self, user_id: str, provider: AuthProvider, user_info: ProviderUserInfo):
         """Обновляет данные провайдера"""
@@ -332,7 +331,7 @@ class AuthService:
     async def get_user_provider_info(self, user_id: str, provider: AuthProvider) -> Optional[dict]:
         """Получает информацию о провайдере пользователя"""
         providers_key = f"user_providers:{user_id}"
-        providers_data = await self._storage.get(providers_key, force_global=True)
+        providers_data = await self._storage.get(providers_key)
 
         if not providers_data:
             return None
@@ -347,7 +346,7 @@ class AuthService:
     async def get_all_user_providers_info(self, user_id: str) -> Optional[dict]:
         """Получает информацию о всех провайдерах пользователя"""
         providers_key = f"user_providers:{user_id}"
-        providers_data = await self._storage.get(providers_key, force_global=True)
+        providers_data = await self._storage.get(providers_key)
 
         if not providers_data:
             return None

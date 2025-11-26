@@ -3,13 +3,12 @@
 Тест для проверки работы @tool декоратора в StateGraph агенте
 """
 
-import asyncio
 import logging
 import pytest
 from apps.agents.services.tool_decorator import tool
 from core.variables import get_state, set_state_in_context
 from apps.agents.models.core_models import AgentConfig, AgentType
-from core.context import get_context, set_context
+from core.context import set_context
 from core.models.context_models import Context
 
 logger = logging.getLogger(__name__)

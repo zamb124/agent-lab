@@ -11,7 +11,6 @@ from core.db.storage import Storage
 from core.files.s3_client import S3ClientFactory
 from core.db.models import Storage as StorageModel
 from apps.agents.container import get_agents_container
-from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 

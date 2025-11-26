@@ -13,12 +13,10 @@ from core.config import get_settings
 settings = get_settings()
 from apps.agents.models import FlowConfig
 from apps.agents.container import get_agents_container
-from apps.agents.dependencies import get_variables_service
 from core.context import set_context
 from apps.agents.models import Context
 from core.models.identity_models import User, AuthProvider, UserStatus, Company
 from core.models.i18n_models import Language
-from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 

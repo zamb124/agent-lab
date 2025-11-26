@@ -18,7 +18,6 @@ from core.files.processors import (
 )
 from core.context import get_context
 from apps.agents.container import get_agents_container
-from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 

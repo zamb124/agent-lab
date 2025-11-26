@@ -110,7 +110,7 @@ async def test_smart_flow_math_execution(migrated_db, flow_factory, system_conte
         config={"configurable": {"thread_id": thread_id}}
     )
     
-    print(f"🔍 ТЕСТ: smart_flow завершен, получен результат")
+    print("🔍 ТЕСТ: smart_flow завершен, получен результат")
     
     print(f"🔍 РЕЗУЛЬТАТ: {result}")
     store = result.get("store", {})

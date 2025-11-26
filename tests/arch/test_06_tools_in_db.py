@@ -6,7 +6,7 @@
 2. Добавление tool из БД к агенту в коде через ссылку
 """
 import pytest
-from apps.agents.models import AgentConfig, AgentType, CodeMode, FlowConfig, ToolReference, LLMConfig
+from apps.agents.models import CodeMode, ToolReference
 from langchain_core.messages import HumanMessage
 
 
@@ -83,7 +83,7 @@ def show_sugar(request):
 
 
 @pytest.mark.asyncio
-async def test_code_agent_with_db_tool(migrated_db,  flow_factory, mock_llm, unique_id, test_helpers):
+async def test_code_agent_with_db_tool(migrated_db, tool_repo, flow_factory, mock_llm, unique_id, test_helpers):
     """
     Тест 2: Агент в коде использует tool из БД через ссылку
     """
@@ -111,9 +111,6 @@ def main(spell: str) -> str:
 ''',
         description="Магический инструмент из БД"
     )
-    
-    from apps.agents.container import get_agents_container
-    tool_repo = get_agents_container().tool_repository
     
     await tool_repo.set(magic_tool)
     print("✅ Magic tool сохранен в БД")

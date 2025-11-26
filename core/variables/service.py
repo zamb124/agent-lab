@@ -178,7 +178,9 @@ class VariablesService:
                 var_key = value[5:]
                 resolved = await self.get_var(var_key, create_if_missing=auto_create)
                 if resolved is None:
-                    raise ValueError(f"Variable {var_key} not found")
+                    # Если auto_create=False и переменная не найдена - возвращаем исходное значение
+                    # Переменные создадутся через install_hook с default_value
+                    return value
                 return resolved
             return value
         

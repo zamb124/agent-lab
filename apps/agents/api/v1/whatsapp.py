@@ -8,7 +8,6 @@ from fastapi import APIRouter, Request, HTTPException, Query
 
 from apps.agents.interfaces.whatsapp_interface import WhatsAppInterface
 from apps.agents.dependencies import FlowRepositoryDep, VariablesServiceDep
-from apps.agents.models import FlowConfig
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +17,7 @@ router = APIRouter()
 @router.get("/webhook/whatsapp/{flow_key:path}")
 async def whatsapp_webhook_verify(
     flow_key: str,
+    flow_repo: FlowRepositoryDep,
     variables_service: VariablesServiceDep,
     hub_mode: str = Query(alias="hub.mode"),
     hub_verify_token: str = Query(alias="hub.verify_token"),
@@ -29,12 +29,12 @@ async def whatsapp_webhook_verify(
     WhatsApp отправляет GET запрос с параметрами для верификации.
     Необходимо вернуть hub.challenge если verify_token совпадает.
     """
-    flow_data = await storage.get(flow_key, force_global=True)
+    # flow_key имеет формат company:{company_id}:flow:{flow_id}
+    flow_id = flow_key.split(":flow:")[-1] if ":flow:" in flow_key else flow_key
+    flow_config = await flow_repo.get(flow_id)
     
-    if not flow_data:
-        raise HTTPException(status_code=404, detail=f"Flow not found")
-    
-    flow_config = FlowConfig.model_validate_json(flow_data)
+    if not flow_config:
+        raise HTTPException(status_code=404, detail="Flow not found")
     whatsapp_config = flow_config.platforms.get("whatsapp")
     
     if not whatsapp_config:
@@ -49,28 +49,27 @@ async def whatsapp_webhook_verify(
         logger.error(f"❌ Неверный verify_token: ожидалось '{expected_verify_token}', получено '{hub_verify_token}'")
         raise HTTPException(status_code=403, detail="Invalid verify_token")
 
-    logger.info(f"✅ WhatsApp webhook верифицирован")
+    logger.info("✅ WhatsApp webhook верифицирован")
     return int(hub_challenge)
 
 
 @router.post("/webhook/whatsapp/{flow_key:path}")
-async def whatsapp_webhook(flow_key: str, request: Request):
+async def whatsapp_webhook(flow_key: str, request: Request, flow_repo: FlowRepositoryDep):
     """
     Обработка webhook от WhatsApp Business API.
     Получает входящие сообщения, статусы доставки и другие события.
     """
-    flow_data = await storage.get(flow_key, force_global=True)
+    # flow_key имеет формат company:{company_id}:flow:{flow_id}
+    flow_id = flow_key.split(":flow:")[-1] if ":flow:" in flow_key else flow_key
+    flow_config = await flow_repo.get(flow_id)
     
-    if not flow_data:
+    if not flow_config:
         raise HTTPException(status_code=404, detail="Flow not found")
     
-    flow_config = FlowConfig.model_validate_json(flow_data)
     whatsapp_config = flow_config.platforms.get("whatsapp")
     
     if not whatsapp_config:
         raise HTTPException(status_code=400, detail="Flow does not support WhatsApp")
-
-    flow_id = flow_key.split(":flow:")[-1]
     try:
         access_token = await WhatsAppInterface.get_access_token_for_flow(flow_id, whatsapp_config)
     except Exception as e:

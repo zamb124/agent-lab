@@ -4,7 +4,6 @@
 
 import logging
 import json
-from typing import Optional
 
 from apps.agents.services.tool_decorator import tool
 from core.clients.llm import get_llm
@@ -50,9 +49,9 @@ async def synthesize_report(
     
     logger.info(f"📝 Синтез отчета для запроса: {query[:100]}...")
     
-    await send_progress(f"📝 Синтезирую итоговый отчет...")
+    await send_progress("📝 Синтезирую итоговый отчет...")
     
-    status_message = f"📝 Синтез отчета\n\n"
+    status_message = "📝 Синтез отчета\n\n"
     
     try:
         facts = json.loads(facts_json)
@@ -151,7 +150,7 @@ async def format_markdown(
     response = await llm.ainvoke(prompt)
     result = response.content if hasattr(response, 'content') else str(response)
     
-    logger.info(f"✅ Форматирование завершено")
+    logger.info("✅ Форматирование завершено")
     return result
 
 
@@ -211,6 +210,6 @@ async def create_citations(
     response = await llm.ainvoke(prompt)
     result = response.content if hasattr(response, 'content') else str(response)
     
-    logger.info(f"✅ Цитирование создано")
+    logger.info("✅ Цитирование создано")
     return result
 

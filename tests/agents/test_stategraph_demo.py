@@ -57,7 +57,7 @@ async def test_stategraph_agent_migration(agent_repo, test_context):
     from apps.agents.models import AgentType
     assert agent.type == AgentType.STATEGRAPH, f"Агент с graph_definition должен автоматически стать STATEGRAPH, получили {agent.type}"
     
-    print(f"\n✅ Агент успешно протестирован:")
+    print("\n✅ Агент успешно протестирован:")
     print(f"   Нод: {len(nodes)}")
     print(f"   Рёбер: {len(edges)}")
     print(f"   Типы нод: {', '.join(str(t).split('.')[-1] for t in node_types)}")
@@ -116,7 +116,7 @@ async def test_stategraph_agent_execution(agent_factory, agent_repo, test_contex
     
     # Эти ключи устанавливаются функциями в графе
     # (но могут не установиться если граф не выполнился полностью)
-    print(f"\n✅ Граф выполнен успешно!")
+    print("\n✅ Граф выполнен успешно!")
     print(f"   Messages: {len(result.get('messages', []))} сообщений")
     print(f"   Store keys: {list(store.keys())}")
 
@@ -140,7 +140,7 @@ async def test_all_node_types_present(agent_repo, test_context):
             nodes_by_type[node_type] = []
         nodes_by_type[node_type].append(node.id)
     
-    print(f"\n📊 Распределение нод по типам:")
+    print("\n📊 Распределение нод по типам:")
     for node_type, node_list in sorted(nodes_by_type.items(), key=lambda x: str(x[0])):
         print(f"   {str(node_type).split('.')[-1]:<20} {len(node_list)} шт: {', '.join(node_list)}")
     
@@ -155,7 +155,7 @@ async def test_all_node_types_present(agent_repo, test_context):
     inline_nodes = [n for n in nodes if n.code_mode.value == "inline_code"]
     assert len(inline_nodes) > 0, "Должна быть хотя бы одна нода с inline кодом"
     
-    print(f"\n✅ Все основные типы нод присутствуют!")
+    print("\n✅ Все основные типы нод присутствуют!")
     print(f"   Inline code нод: {len(inline_nodes)}")
 
 
@@ -193,7 +193,7 @@ async def test_message_node_adds_messages(agent_factory, agent_repo, test_contex
     # Должно быть информационное сообщение от message_info ноды (если граф прошёл через неё)
     info_found = any("Промежуточное информационное сообщение" in content for content in message_contents)
     
-    print(f"\n✅ MESSAGE_NODE работает корректно!")
+    print("\n✅ MESSAGE_NODE работает корректно!")
     print(f"   Всего сообщений: {len(messages)}")
     print(f"   Приветственное сообщение: {'✅' if welcome_found else '❌'}")
     print(f"   Информационное сообщение: {'✅' if info_found else '❌'}")
@@ -225,7 +225,7 @@ async def test_condition_types_work(agent_factory, agent_repo, test_context, sys
     assert len(router_edges) > 0, f"Должны быть ROUTER edges. Найдено edges: {[(e.source, e.target, e.condition_type) for e in edges]}"
     assert len(expression_edges) > 0, f"Должны быть EXPRESSION edges. Найдено edges: {[(e.source, e.target, e.condition_type) for e in edges]}"
     
-    print(f"\n✅ Типы условий:")
+    print("\n✅ Типы условий:")
     print(f"   ROUTER edges: {len(router_edges)}")
     for edge in router_edges:
         print(f"      {edge.source} -> {edge.target}")
@@ -256,5 +256,5 @@ async def test_condition_types_work(agent_factory, agent_repo, test_context, sys
     assert "condition_passed" in store, "EXPRESSION должен установить condition_passed"
     assert store["condition_passed"] is True, "condition_passed должен быть True"
     
-    print(f"\n✅ Оба типа условий работают корректно!")
+    print("\n✅ Оба типа условий работают корректно!")
 

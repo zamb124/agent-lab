@@ -5,13 +5,12 @@
 АДАПТИРОВАНО: убраны зависимости от app/*, используется только core/*
 """
 
-import json
 import re
 import logging
 import hashlib
 import mimetypes
 import uuid
-from typing import Optional, Dict, Any, List, Union, TYPE_CHECKING
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from pathlib import Path
 
 from core.files.s3_client import S3ClientFactory, S3Client

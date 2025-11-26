@@ -14,16 +14,13 @@ from apps.agents.models import AgentConfig, FlowConfig
 from core.models.identity_models import Company
 from core.files.processors import FileProcessor
 from core.context import get_context
-from apps.agents.services.migration import Migrator
 from core.config import get_settings
-from apps.agents.container import get_container
+from apps.agents.container import get_container, get_agents_container
 from apps.agents.dependencies import (
     AgentRepositoryDep,
     FlowRepositoryDep,
-    VariablesServiceDep,
     AuthServiceDep
 )
-from core.db.repositories import CompanyRepository, SubdomainRepository, UserRepository
 from fastapi.responses import RedirectResponse
 from apps.agents.services.business.telegram_poller import telegram_poller
 
@@ -229,6 +226,15 @@ async def parse_product_url(url: str):
                     found_url = element.get("src")
                     logger.info(f"Найден img src: {found_url}")
 
+                # Вспомогательная функция для проверки валидности изображения
+                def _is_valid_product_image(url):
+                    return (
+                        "storage.yandexcloud.net" in url
+                        and "logo" not in url.lower()
+                        and "seo" not in url.lower()
+                        and url.endswith((".jpg", ".jpeg", ".png", ".webp"))
+                    )
+
                 # Проверяем и добавляем URL если подходит
                 if found_url and _is_valid_product_image(found_url):
                     if found_url not in image_urls:  # Избегаем дубликатов
@@ -240,15 +246,6 @@ async def parse_product_url(url: str):
                             main_image_url = found_url
                 elif found_url:
                     logger.info(f"❌ Отклонен URL: {found_url} (не подходит под критерии)")
-
-        # Вспомогательная функция для проверки валидности изображения
-        def _is_valid_product_image(url):
-            return (
-                "storage.yandexcloud.net" in url
-                and "logo" not in url.lower()
-                and "seo" not in url.lower()
-                and url.endswith((".jpg", ".jpeg", ".png", ".webp"))
-            )
 
         # Если основные селекторы не дали результатов, попробуем более общий поиск
         if not image_urls:

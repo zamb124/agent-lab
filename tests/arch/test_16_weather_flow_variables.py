@@ -10,9 +10,7 @@
 """
 
 import pytest
-from langchain_core.messages import HumanMessage
 
-from apps.agents.models import FlowConfig
 
 
 @pytest.mark.asyncio
@@ -51,7 +49,7 @@ async def test_01b_travel_info_agent_uses_store_in_prompt(migrated_db,  test_con
     travel_tools_ids = [str(t) for t in TravelInfoAgent.tools]
     assert any("session_set" in str(t) for t in travel_tools_ids)
     
-    print(f"✅ TravelInfoAgent использует store переменные в промпте")
+    print("✅ TravelInfoAgent использует store переменные в промпте")
 
 
 @pytest.mark.asyncio
@@ -88,7 +86,7 @@ async def test_02_weather_agent_prompt_has_variables(migrated_db,  test_context)
     # Условные блоки
     assert "{?store.last_city:" in prompt  # Начало условного блока
     
-    print(f"✅ WeatherAgent.prompt содержит все типы переменных")
+    print("✅ WeatherAgent.prompt содержит все типы переменных")
     print(f"   Длина промпта: {len(prompt)} символов")
 
 

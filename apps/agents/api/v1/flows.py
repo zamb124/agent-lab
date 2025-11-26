@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional, List
 from apps.agents.interfaces.api_interface import get_api_interface
 from apps.agents.models import TaskStatus
 from apps.agents.dependencies import FlowRepositoryDep
-from apps.agents.container import get_container
+from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +132,8 @@ async def send_message_to_flow(flow_id: str, request: FlowMessageRequest, flow_r
         raise HTTPException(status_code=400, detail="Не удалось обработать сообщение")
 
     # ПРОВЕРЯЕМ: есть ли прерванная задача для этой сессии
-    interrupted_task = await storage.find_interrupted_task(message.session_id, flow_id)
+    task_repo = get_agents_container().task_repository
+    interrupted_task = await task_repo.find_interrupted_task(message.session_id, flow_id)
 
     if interrupted_task:
         # ПРОДОЛЖАЕМ прерванную задачу вместо создания новой
@@ -153,7 +154,7 @@ async def send_message_to_flow(flow_id: str, request: FlowMessageRequest, flow_r
             TaskStatus.PENDING
         )  # Возвращаем в pending для обработки
 
-        await storage.set_task_config(interrupted_task)
+        await task_repo.set(interrupted_task)
         logger.info(
             f"🔄 Задача {interrupted_task.task_id} обновлена и сохранена в pending"
         )

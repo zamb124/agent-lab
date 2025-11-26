@@ -12,10 +12,10 @@ from apps.agents.services.tool_decorator import tool
 
 from apps.agents.clients.fashn_client import get_fashn_client
 from apps.agents.models import FileRecord
-from apps.agents.container import get_container
 from apps.agents.models.fashn_models import TryOnRecord, TryOnParameters
 from core.files.s3_client import S3ClientFactory
 from core.context import get_context
+from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 

@@ -26,7 +26,7 @@ import logging
 from typing import Optional
 from apps.agents.services.tool_decorator import tool
 
-from apps.agents.clients.amo_crm_integration import get_amocrm_client
+from apps.agents.clients.amo_crm_integration import get_amocrm_client, get_amocrm_chat_client
 
 logger = logging.getLogger(__name__)
 

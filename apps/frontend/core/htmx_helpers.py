@@ -3,9 +3,8 @@
 Автоматическое обновление header на уровне core
 """
 from fastapi import Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import StreamingResponse
 from apps.frontend.core.template_loader import get_templates
 from apps.frontend.core.plugin_loader import get_plugins_for_template
 

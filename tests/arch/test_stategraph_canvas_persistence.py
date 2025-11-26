@@ -3,20 +3,14 @@
 """
 
 import pytest
-from apps.agents.container import get_agents_container
 from apps.agents.models import FlowConfig, AgentConfig, AgentType, CodeMode
 
 
 @pytest.mark.asyncio
-async def test_stategraph_canvas_persistence(migrated_db):
+async def test_stategraph_canvas_persistence(migrated_db, flow_repo, agent_repo):
     """
     Проверяет что canvas для StateGraph flow сохраняется и загружается правильно
     """
-    from apps.agents.container import get_agents_container
-    container = get_agents_container()
-    storage = container.storage
-    flow_repo = container.flow_repository
-    agent_repo = container.agent_repository
     
     # Создаем тестовый StateGraph агент
     agent_id = "test_stategraph_agent_canvas"

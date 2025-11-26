@@ -32,19 +32,16 @@ async def sync_mcp_server_tools(server_id: str, company_id: Optional[str] = None
     Returns:
         Список созданных ToolReference
     """
-    from apps.agents.db.repositories.mcp_repository import MCPServerRepository
-    
-    # Определяем company_id
+    # Определяем company_id (для логирования)
     if company_id is None:
         context = get_context()
         if not context or not context.active_company:
             raise ValueError("Не удалось определить company_id для синхронизации")
         company_id = context.active_company.company_id
     
-    storage = get_agents_container().storage
-    mcp_repo = MCPServerRepository(storage)
+    mcp_repo = get_agents_container().mcp_server_repository
     
-    server_config = await mcp_repo.get(server_id, company_id)
+    server_config = await mcp_repo.get(server_id)
     if not server_config:
         raise ValueError(f"MCP сервер {server_id} не найден для компании {company_id}")
     
@@ -116,18 +113,15 @@ async def sync_all_mcp_servers_for_company(company_id: Optional[str] = None):
     Args:
         company_id: ID компании (опционально, из контекста)
     """
-    from apps.agents.db.repositories.mcp_repository import MCPServerRepository
-    
     if company_id is None:
         context = get_context()
         if not context or not context.active_company:
             raise ValueError("Не удалось определить company_id")
         company_id = context.active_company.company_id
     
-    storage = get_agents_container().storage
-    mcp_repo = MCPServerRepository(storage)
+    mcp_repo = get_agents_container().mcp_server_repository
     
-    active_servers = await mcp_repo.list_active(company_id=company_id)
+    active_servers = await mcp_repo.list_active()
     
     if not active_servers:
         logger.info(f"Нет активных MCP серверов для компании {company_id}")
@@ -155,33 +149,23 @@ async def sync_all_companies_mcp_servers():
     Синхронизирует MCP серверы для всех компаний.
     Используется при старте приложения.
     """
-    from apps.agents.db.repositories.mcp_repository import MCPServerRepository
+    container = get_agents_container()
+    mcp_repo = container.mcp_server_repository
     
-    storage = get_agents_container().storage
-    mcp_repo = MCPServerRepository(storage)
+    # Получаем все MCP серверы текущей компании
+    all_servers = await mcp_repo.list_all(limit=10000)
     
-    # Получаем список всех MCP серверов
-    prefix = "mcp_server:"
-    all_keys = await storage.list_by_prefix(prefix, limit=10000)
-    
-    # Группируем по company_id
-    companies = set()
-    for key in all_keys:
-        # key формат: mcp_server:{company_id}:{server_id}
-        parts = key.split(":")
-        if len(parts) >= 3:
-            company_id = parts[1]
-            companies.add(company_id)
-    
-    if not companies:
+    if not all_servers:
         logger.info("Нет MCP серверов для синхронизации")
         return
     
-    logger.info(f"🔌 Синхронизация MCP серверов для {len(companies)} компаний")
+    context = get_context()
+    company_id = context.active_company.company_id if context and context.active_company else "unknown"
     
-    for company_id in companies:
-        try:
-            await sync_all_mcp_servers_for_company(company_id)
-        except Exception as e:
-            logger.error(f"❌ Ошибка синхронизации MCP для компании {company_id}: {e}", exc_info=True)
+    logger.info(f"🔌 Синхронизация {len(all_servers)} MCP серверов для компании {company_id}")
+    
+    try:
+        await sync_all_mcp_servers_for_company(company_id)
+    except Exception as e:
+        logger.error(f"❌ Ошибка синхронизации MCP для компании {company_id}: {e}", exc_info=True)
 

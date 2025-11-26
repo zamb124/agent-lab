@@ -10,7 +10,6 @@
 
 import logging
 from apps.agents.models import FlowConfig, FlowAuthor
-from core.variables import VariablesService
 from apps.agents.agents.weather.agent import WeatherAgent
 
 logger = logging.getLogger(__name__)

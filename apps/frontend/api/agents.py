@@ -3,7 +3,7 @@ API для работы с агентами в Builder.
 """
 
 from fastapi import APIRouter, HTTPException
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Any
 import uuid
 
 from apps.agents.models import AgentConfig, AgentType, CodeMode

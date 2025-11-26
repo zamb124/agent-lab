@@ -3,8 +3,7 @@
 """
 
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-import httpx
+from unittest.mock import AsyncMock, MagicMock
 
 from apps.agents.services.mcp_client import MCPHttpClient, format_mcp_result
 from apps.agents.models.mcp_models import MCPTransportType

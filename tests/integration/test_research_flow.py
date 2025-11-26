@@ -174,11 +174,11 @@ async def test_research_flow_end_to_end_REAL(migrated_db, flow_factory, agent_fa
     thread_id = unique_id("research_e2e")
     
     print(f"\n{'='*60}")
-    print(f"🚀 ЗАПУСК END-TO-END ТЕСТА")
+    print("🚀 ЗАПУСК END-TO-END ТЕСТА")
     print(f"{'='*60}")
     print(f"📝 Запрос: {query}")
     print(f"🔑 Thread ID: {thread_id}")
-    print(f"⚠️  Используются РЕАЛЬНЫЕ API (Tavily + LLM)")
+    print("⚠️  Используются РЕАЛЬНЫЕ API (Tavily + LLM)")
     print(f"{'='*60}\n")
     
     # Выполняем flow
@@ -188,7 +188,7 @@ async def test_research_flow_end_to_end_REAL(migrated_db, flow_factory, agent_fa
     )
     
     print(f"\n{'='*60}")
-    print(f"📊 РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ")
+    print("📊 РЕЗУЛЬТАТ ВЫПОЛНЕНИЯ")
     print(f"{'='*60}")
     
     # Проверяем базовую структуру результата
@@ -285,7 +285,7 @@ async def test_research_flow_end_to_end_REAL(migrated_db, flow_factory, agent_fa
     
     print(f"   ✅ Сообщение получено: {len(final_message)} символов")
     print(f"\n{'-'*60}")
-    print(f"ОТЧЕТ (первые 500 символов):")
+    print("ОТЧЕТ (первые 500 символов):")
     print(f"{'-'*60}")
     print(report[:500])
     print(f"{'-'*60}\n")
@@ -312,9 +312,9 @@ async def test_research_flow_end_to_end_REAL(migrated_db, flow_factory, agent_fa
     print("   ✅ State корректно персистится в state_manager")
     
     print(f"\n{'='*60}")
-    print(f"✅ ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ!")
+    print("✅ ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ!")
     print(f"{'='*60}")
-    print(f"📊 Итоговая статистика:")
+    print("📊 Итоговая статистика:")
     print(f"   - Источников найдено: {sources_count}")
     print(f"   - Фактов извлечено: {facts_count}")
     print(f"   - Длина отчета: {report_length} символов")
@@ -343,7 +343,7 @@ async def test_research_flow_with_interrupts(migrated_db, flow_factory, unique_i
     query = "исследуй это"
     
     print(f"\n{'='*60}")
-    print(f"🔄 ТЕСТ С НЕОДНОЗНАЧНЫМ ЗАПРОСОМ")
+    print("🔄 ТЕСТ С НЕОДНОЗНАЧНЫМ ЗАПРОСОМ")
     print(f"{'='*60}")
     print(f"📝 Запрос: {query}")
     print(f"{'='*60}\n")
@@ -383,7 +383,7 @@ async def test_research_flow_reusable_agents(migrated_db, agent_factory, unique_
     """
     
     print(f"\n{'='*60}")
-    print(f"♻️  ТЕСТ ПЕРЕИСПОЛЬЗУЕМОСТИ АГЕНТОВ")
+    print("♻️  ТЕСТ ПЕРЕИСПОЛЬЗУЕМОСТИ АГЕНТОВ")
     print(f"{'='*60}\n")
     
     # Проверяем что можем использовать QueryAnalyzer отдельно
@@ -424,7 +424,7 @@ async def test_research_flow_reusable_agents(migrated_db, agent_factory, unique_
     print(f"   Найдено источников: {result['store']['sources_count']}")
     
     print(f"\n{'='*60}")
-    print(f"✅ ВСЕ АГЕНТЫ ПЕРЕИСПОЛЬЗУЕМЫ!")
+    print("✅ ВСЕ АГЕНТЫ ПЕРЕИСПОЛЬЗУЕМЫ!")
     print(f"{'='*60}\n")
 
 
@@ -447,7 +447,7 @@ async def test_research_flow_quality_loop(migrated_db, flow_factory, unique_id):
     query = "Сравни подробно все подходы к retrieval в RAG системах"
     
     print(f"\n{'='*60}")
-    print(f"🔄 ТЕСТ ЦИКЛА КАЧЕСТВА")
+    print("🔄 ТЕСТ ЦИКЛА КАЧЕСТВА")
     print(f"{'='*60}")
     print(f"📝 Запрос: {query}")
     print(f"{'='*60}\n")
@@ -479,6 +479,6 @@ async def test_research_flow_quality_loop(migrated_db, flow_factory, unique_id):
         print("   ✅ Качество достаточное, цикл завершен досрочно")
     
     print(f"\n{'='*60}")
-    print(f"✅ ЦИКЛ КАЧЕСТВА РАБОТАЕТ КОРРЕКТНО!")
+    print("✅ ЦИКЛ КАЧЕСТВА РАБОТАЕТ КОРРЕКТНО!")
     print(f"{'='*60}\n")
 

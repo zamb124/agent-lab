@@ -4,12 +4,11 @@
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from datetime import datetime
 from dataclasses import asdict, is_dataclass
 
 from apps.agents.services.state_manager import get_state_manager
-from apps.agents.services.state import State
 
 logger = logging.getLogger(__name__)
 

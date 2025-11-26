@@ -14,7 +14,6 @@ from core.models.context_models import Context
 from core.config import get_settings
 settings = get_settings()
 from core.models.identity_models import User, AuthProvider, UserStatus, Company
-from core.identity.auth_service import AuthService
 from core.container import get_system_container
 from core.models.i18n_models import Language
 from core.utils.tokens import get_token_service

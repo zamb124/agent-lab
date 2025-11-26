@@ -8,7 +8,7 @@ OpenTelemetry CallbackHandler для LangChain/LangGraph.
 
 import logging
 from contextvars import Token
-from typing import Any, Dict, List, Optional, Set, Union, Sequence
+from typing import Any, Dict, List, Optional, Set, Sequence
 from uuid import UUID
 from datetime import datetime, timezone
 
@@ -16,14 +16,12 @@ from opentelemetry import trace, context
 from opentelemetry.context import _RUNTIME_CONTEXT
 from opentelemetry.trace import Status, StatusCode, Span
 
-import langchain
 
-from langchain_core.callbacks.base import BaseCallbackHandler  # type: ignore
 from langchain_core.agents import AgentAction, AgentFinish  # type: ignore
 from langchain_core.documents import Document  # type: ignore
 from langchain_core.callbacks.base import AsyncCallbackHandler  # type: ignore
 from langchain_core.messages import BaseMessage
-from langchain_core.outputs import ChatGeneration, LLMResult
+from langchain_core.outputs import LLMResult
 
 from apps.agents.models.trace_models import TraceInfo, SpanStatus
 from apps.agents.container import get_agents_container

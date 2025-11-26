@@ -10,8 +10,6 @@ from apps.frontend.core.template_loader import get_templates
 from apps.frontend.core.utils import render_with_dashboard
 from apps.frontend.dependencies import FlowRepositoryDep
 
-from apps.agents.services.migration.migrator import Migrator
-from core.models import FlowConfig
 from apps.frontend.container import get_frontend_container
 
 router = APIRouter(prefix="/frontend/store", tags=["store-pages"])
@@ -97,6 +95,8 @@ async def flow_details(request: Request, flow_id: str):
             {"request": request, "error": "Flow не найден"}
         )
     
+    agents_container = get_frontend_container().get_agents_container()
+    flow_repo = agents_container.flow_repository
     installed = await flow_repo.get(flow_id) is not None
     
     author_dict = None

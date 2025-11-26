@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from core.context import get_context
 from core.models.identity_models import User, Company

@@ -7,8 +7,6 @@ from apps.agents.interfaces.amocrm_interface import AmoCRMInterface
 from apps.agents.interfaces.web_interface import WebInterface
 from apps.agents.interfaces.api_interface import APIInterface
 from apps.agents.interfaces.whatsapp_interface import WhatsAppInterface
-from apps.agents.models import FlowConfig
-from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 

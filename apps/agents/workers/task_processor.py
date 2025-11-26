@@ -3,24 +3,20 @@
 """
 
 import asyncio
-import traceback
 from datetime import datetime, timezone
 
 from apps.agents.config import get_agents_settings
 settings = get_agents_settings()
 from core.logging import setup_logging, get_logger
 from apps.agents.container import get_agents_container, initialize_system_container
-from apps.agents.models import TaskStatus, SessionConfig, SessionStatus
+from apps.agents.models import TaskStatus, SessionStatus
 from core.context import set_context, clear_context, get_context
 from core.db.database import create_tables, get_session_factory
-from apps.agents.interfaces.factory import InterfaceFactory
-from core.db import Storage
 from apps.agents.interfaces.base import Message
 from apps.agents.exceptions import TariffError, BillingError
 from apps.agents.agents.base import AgentInterrupt
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from apps.agents.services.state_manager import get_state_manager
-from apps.agents.dependencies import get_variables_service
 from apps.agents.services.tracing.decorators import trace_span
 from apps.agents.models.trace_models import SpanType
 from apps.agents.services.tracing.callback_factory import get_callbacks_for_agent

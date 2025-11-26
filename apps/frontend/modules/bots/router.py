@@ -6,8 +6,6 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from apps.frontend.core.template_loader import get_templates
 from apps.frontend.core.utils import render_with_dashboard
-from core.db.storage import Storage, FlowRepository
-from core.models import FlowConfig
 from apps.frontend.container import get_frontend_container
 
 router = APIRouter(prefix="/frontend/bots", tags=["bots-pages"])
@@ -28,7 +26,8 @@ async def bots_page(request: Request):
 @router.get("/list", response_class=HTMLResponse)
 async def bots_list(request: Request):
     """Список ботов в виде карточек"""
-    flow_repo = FlowRepository()
+    agents_container = get_frontend_container().get_agents_container()
+    flow_repo = agents_container.flow_repository
     
     flows = await flow_repo.list_all(limit=1000)
     bots = []
@@ -80,7 +79,10 @@ async def bot_details(request: Request, bot_id: str):
             {"request": request, "bot": bot_info}
         )
 
-    storage = get_frontend_container().storage
+    agents_container = get_frontend_container().get_agents_container()
+    flow_repo = agents_container.flow_repository
+    agent_repo = agents_container.agent_repository
+    
     flow_config = await flow_repo.get(bot_id)
     
     if not flow_config:

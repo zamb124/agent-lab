@@ -137,7 +137,7 @@ async def final_node(state):
     
     # Шаг 1: Вызываем агента - должна сработать check_node и ask_user
     print(f"\n{'='*60}")
-    print(f"📝 Шаг 1: Вызываем StateGraph агента (ожидаем interrupt в check_node)")
+    print("📝 Шаг 1: Вызываем StateGraph агента (ожидаем interrupt в check_node)")
     print(f"{'='*60}\n")
     
     initial_state = {
@@ -177,7 +177,7 @@ async def final_node(state):
         
         # Шаг 2: Симулируем ответ пользователя "Иван"
         print(f"\n{'='*60}")
-        print(f"📝 Шаг 2: Симулируем ответ пользователя 'Иван'")
+        print("📝 Шаг 2: Симулируем ответ пользователя 'Иван'")
         print(f"{'='*60}\n")
         
         # Добавляем ответ пользователя в состояние
@@ -187,7 +187,7 @@ async def final_node(state):
         saved_state.pop("interrupt_context")
         
         # Продолжаем выполнение агента (УПРАВЛЕНИЕ ВОЗВРАЩАЕТСЯ В check_node!)
-        print(f"🔄 Продолжаем выполнение StateGraph агента с ответом пользователя")
+        print("🔄 Продолжаем выполнение StateGraph агента с ответом пользователя")
         result = await agent.ainvoke(saved_state, config={"configurable": {"thread_id": session_id}})
         
         assert "store" in result, "Результат не содержит store"
@@ -201,19 +201,19 @@ async def final_node(state):
         assert "final_message" in result["store"], "final_message не создан"
         assert "Иван" in result["store"]["final_message"], "final_message не содержит имя пользователя"
         
-        print(f"✅ Граф завершил работу")
+        print("✅ Граф завершил работу")
         print(f"   Final message: {result['store']['final_message']}")
         
         # Проверяем что interrupt НЕ произошел второй раз
         assert "__interrupt__" not in result, "Агент не должен был вызвать interrupt второй раз"
         
         print(f"\n{'='*60}")
-        print(f"✅ ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ")
-        print(f"   - Interrupt произошел в check_node")
-        print(f"   - Состояние сохранено с interrupt_context")
-        print(f"   - Управление вернулось в check_node после ответа")
-        print(f"   - user_name сохранен в store из ответа пользователя")
-        print(f"   - Граф продолжил работу к final_node")
-        print(f"   - Все ноды выполнены успешно")
+        print("✅ ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ")
+        print("   - Interrupt произошел в check_node")
+        print("   - Состояние сохранено с interrupt_context")
+        print("   - Управление вернулось в check_node после ответа")
+        print("   - user_name сохранен в store из ответа пользователя")
+        print("   - Граф продолжил работу к final_node")
+        print("   - Все ноды выполнены успешно")
         print(f"{'='*60}\n")
 

@@ -3,11 +3,8 @@ API для профилирования
 """
 
 import logging
-import cProfile
-import pstats
-import io
-from typing import Dict, Any
-from fastapi import APIRouter, HTTPException
+from typing import Dict
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)

@@ -6,7 +6,7 @@
 import pytest
 from unittest.mock import AsyncMock
 from datetime import datetime, timezone
-from core.models import AuthProvider, AuthRequest, ProviderUserInfo, User, AuthSession
+from core.models import AuthProvider, AuthRequest, ProviderUserInfo, AuthSession
 
 
 @pytest.mark.asyncio

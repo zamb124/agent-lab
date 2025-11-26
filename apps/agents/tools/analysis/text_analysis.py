@@ -4,8 +4,6 @@
 """
 
 import logging
-import json
-from typing import Optional
 
 from apps.agents.services.tool_decorator import tool
 from core.clients.llm import get_llm
@@ -66,7 +64,7 @@ async def analyze_text(
     response = await llm.ainvoke(prompt)
     result = response.content if hasattr(response, 'content') else str(response)
     
-    logger.info(f"✅ Анализ текста завершен")
+    logger.info("✅ Анализ текста завершен")
     return status_message + result
 
 
@@ -174,6 +172,6 @@ async def summarize_text(
     response = await llm.ainvoke(prompt)
     result = response.content if hasattr(response, 'content') else str(response)
     
-    logger.info(f"✅ Суммаризация завершена")
+    logger.info("✅ Суммаризация завершена")
     return result
 

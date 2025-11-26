@@ -207,7 +207,7 @@ async def test_cloudflare_docs_search():
             assert "content" in result
             
             if result.get("isError"):
-                print(f"   ⚠️  Ошибка: ожидаемо для тестовых данных")
+                print("   ⚠️  Ошибка: ожидаемо для тестовых данных")
             else:
                 content_text = "".join([
                     item.get("text", "")

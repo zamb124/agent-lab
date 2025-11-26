@@ -6,7 +6,6 @@ from langchain_core.messages import HumanMessage
 
 from apps.agents.services.state_manager import get_state_manager, StoreProxy
 from apps.agents.models.core_models import AgentConfig, AgentType, LLMConfig, ToolReference, CodeMode, SubAgentMemoryPolicy
-from apps.agents.container import get_agents_container
 
 
 @pytest.mark.asyncio

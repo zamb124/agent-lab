@@ -2,12 +2,9 @@
 Тесты для единой системы токенов
 """
 import pytest
-import pytest_asyncio
 from datetime import datetime, timezone, timedelta
-from unittest.mock import patch, MagicMock
 
 from core.utils.tokens import TokenService, TokenData, get_token_service
-from core.config import get_settings
 
 
 class TestTokenService:

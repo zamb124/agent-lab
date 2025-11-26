@@ -12,8 +12,10 @@ class TestFileIntegration:
     """Тесты файловой интеграции"""
     
     @pytest.mark.skip(reason="Нестабилен при массовом запуске")
-    async def test_file_processor_basic(self):
+    async def test_file_processor_basic(self, migrated_db):
         """Базовый тест файлового процессора"""
+        from apps.agents.container import get_agents_container
+        storage = get_agents_container().storage
         processor = FileProcessor(storage=storage)
         
         test_data = b"Test file content for integration"

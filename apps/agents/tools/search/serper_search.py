@@ -5,7 +5,6 @@ Serper предоставляет доступ к Google Search результа
 
 import logging
 import httpx
-from typing import Optional
 
 from apps.agents.services.tool_decorator import tool
 

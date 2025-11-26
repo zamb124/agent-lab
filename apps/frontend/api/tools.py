@@ -5,7 +5,6 @@ API для работы с тулами в Builder.
 from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Any, Optional
 import inspect
-import json
 import uuid
 
 from apps.agents.models import CodeMode, ToolReference

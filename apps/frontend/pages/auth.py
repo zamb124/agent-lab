@@ -10,7 +10,6 @@ from core.models import AuthProvider
 
 from core.config import settings
 from core.context import get_context
-from core.db.storage import Storage
 from apps.frontend.container import get_frontend_container
 
 router = APIRouter(prefix="/frontend", tags=["auth-pages"])

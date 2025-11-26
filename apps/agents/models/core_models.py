@@ -19,7 +19,7 @@ settings = get_agents_settings()
 from core.fields import Field
 from core.utils.slug import generate_slug
 from core.context import get_context
-from apps.agents.container import get_container, get_agents_container
+from apps.agents.container import get_agents_container
 
 from core.rag.models import AgentRAGConfig
 from .types import HistorySource, PythonCode
@@ -877,11 +877,12 @@ class AgentConfig(BuilderEntity):
         
         variables_service = get_agents_container().variables_service
         
+        # НЕ создаем пустые переменные - они создаются через install_hook с default_value
         if agent_config.local_variables:
-            await variables_service.resolve(agent_config.local_variables, auto_create=True)
+            await variables_service.resolve(agent_config.local_variables, auto_create=False)
         
         if agent_config.store:
-            await variables_service.resolve(agent_config.store, auto_create=True)
+            await variables_service.resolve(agent_config.store, auto_create=False)
         
         if with_tools:
             for tool_ref in agent_config.tools:
@@ -1382,14 +1383,15 @@ class FlowConfig(BuilderEntity):
         
         variables_service = get_agents_container().variables_service
         
+        # НЕ создаем пустые переменные - они создаются через install_hook с default_value
         if flow_config.variables:
-            await variables_service.resolve(flow_config.variables, auto_create=True)
+            await variables_service.resolve(flow_config.variables, auto_create=False)
         
         if flow_config.platforms:
-            await variables_service.resolve(flow_config.platforms, auto_create=True)
+            await variables_service.resolve(flow_config.platforms, auto_create=False)
         
         if flow_config.store:
-            await variables_service.resolve(flow_config.store, auto_create=True)
+            await variables_service.resolve(flow_config.store, auto_create=False)
         
         flow_tag = flow_config.name
         data_sources = [

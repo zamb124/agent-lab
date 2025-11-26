@@ -1,11 +1,9 @@
-import asyncio
 import pytest
 
 from langchain_core.messages import HumanMessage
 
 from core.clients.llm import get_llm, setup_mock_responses
 from core.context import get_context
-from core.variables import VariableResolver
 from apps.agents.flows.flow import Flow
 from apps.agents.models import AgentConfig, FlowConfig, LLMConfig, AgentType, ToolReference, CodeMode
 
@@ -126,6 +124,6 @@ def set_location(city: str, country: str) -> str:
     assert len(final_message) > 0
 
     # Основная цель: state обновился через tool И системные переменные работают
-    print(f"✅ Тест пройден: state обновлен через tool, системные переменные резолвятся")
+    print("✅ Тест пройден: state обновлен через tool, системные переменные резолвятся")
 
 

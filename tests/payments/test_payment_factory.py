@@ -3,7 +3,7 @@
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from pydantic import BaseModel
 
 from core.clients.payment.factory import PaymentProviderFactory

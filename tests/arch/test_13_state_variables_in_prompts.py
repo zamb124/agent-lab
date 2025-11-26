@@ -14,8 +14,6 @@ from apps.agents.models import (
     AgentConfig,
     AgentType,
     LLMConfig,
-    ToolReference,
-    CodeMode,
 )
 
 

@@ -5,7 +5,6 @@
 только через БД API без написания кода.
 """
 import pytest
-from apps.agents.models import ToolReference, CodeMode
 from langchain_core.messages import HumanMessage
 
 @pytest.mark.asyncio

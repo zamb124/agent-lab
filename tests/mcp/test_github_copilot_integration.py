@@ -1,5 +1,4 @@
 """
-from apps.agents.container import get_agents_container
 Интеграционные тесты с GitHub Copilot MCP сервером.
 
 GitHub Copilot MCP - сервер для работы с AI-ассистентом GitHub.
@@ -65,18 +64,13 @@ async def test_github_copilot_list_tools():
 
 
 @pytest.mark.asyncio
-async def test_github_copilot_sync_to_db(mcp_repo, test_company, storage):
+async def test_github_copilot_sync_to_db(mcp_repo, tool_repo, test_company):
     """
     Полный тест синхронизации GitHub Copilot тулов в БД.
     """
     from apps.agents.services.mcp_sync import sync_mcp_server_tools
-    from core.db.tool_repository import ToolRepository
-    from core.db.storage import Storage
     from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
     import os
-    
-    storage = Storage()
-    tool_repo = ToolRepository(storage)
     
     api_key = os.getenv("GITHUB_COPILOT_TOKEN")
     if not api_key:
@@ -117,35 +111,29 @@ async def test_github_copilot_sync_to_db(mcp_repo, test_company, storage):
             assert saved_tool.params["company_id"] == test_company.company_id
             assert "input_schema" in saved_tool.params
         
-        server = await mcp_repo.get("github_copilot", test_company.company_id)
+        server = await mcp_repo.get("github_copilot")
         assert len(server.cached_tools) == len(tools)
         assert server.last_sync_at is not None
         
-        print(f"\n✅ Все тулы сохранены и закэшированы")
+        print("\n✅ Все тулы сохранены и закэшированы")
     
     finally:
         if 'tools' in locals():
             for tool in tools:
-                await storage.delete(f"tool:{tool.tool_id}")
-        await mcp_repo.delete("github_copilot", test_company.company_id)
+                await tool_repo.delete(tool.tool_id)
+        await mcp_repo.delete("github_copilot")
 
 
 @pytest.mark.asyncio
-async def test_github_copilot_in_agent(mcp_repo, test_company, storage):
+async def test_github_copilot_in_agent(mcp_repo, agent_repo, tool_repo, agent_factory, test_company):
     """
     Тест использования GitHub Copilot MCP тулов в реальном агенте.
     """
     from apps.agents.services.mcp_sync import sync_mcp_server_tools
-    from apps.agents.services.agent_factory import AgentFactory
     from apps.agents.models import AgentConfig
-    from core.db.agent_repository import AgentRepository
-    from core.db.storage import Storage
     from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
     from apps.agents.tools.misc.standard import ask_user
     import os
-    
-    storage = Storage()
-    agent_repo = AgentRepository(storage)
     
     api_key = os.getenv("GITHUB_COPILOT_TOKEN")
     if not api_key:
@@ -194,10 +182,9 @@ async def test_github_copilot_in_agent(mcp_repo, test_company, storage):
         print(f"✅ Агент создан с {len(tools)} MCP тулами")
         
         print("\n🏭 Шаг 3: Загружаем агента через AgentFactory")
-        agent_factory = get_agents_container().agent_factory
         agent = await agent_factory.get_agent("test_github_copilot_agent")
         
-        print(f"✅ Агент загружен")
+        print("✅ Агент загружен")
         print(f"   Количество тулов: {len(agent.tools)}")
         
         loaded_tools = await agent.get_tools()
@@ -206,29 +193,24 @@ async def test_github_copilot_in_agent(mcp_repo, test_company, storage):
         for tool in loaded_tools:
             print(f"   - {tool.name}")
         
-        print(f"\n✅ Все GitHub Copilot MCP тулы успешно загружены в агента!")
+        print("\n✅ Все GitHub Copilot MCP тулы успешно загружены в агента!")
     
     finally:
         await agent_repo.delete("test_github_copilot_agent")
         if 'tools' in locals():
             for tool in tools:
-                await storage.delete(f"tool:{tool.tool_id}")
-        await mcp_repo.delete("github_copilot", test_company.company_id)
+                await tool_repo.delete(tool.tool_id)
+        await mcp_repo.delete("github_copilot")
 
 
 @pytest.mark.asyncio
-async def test_github_copilot_full_workflow(test_company, storage):
+async def test_github_copilot_full_workflow(test_company, mcp_repo, tool_repo, test_context):
     """
     Полный workflow: создание сервера, синхронизация, проверка кэша.
     """
     from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
-    from apps.agents.db.repositories.mcp_repository import MCPServerRepository
-    from core.db.storage import Storage
     from apps.agents.services.mcp_sync import sync_mcp_server_tools
     import os
-    
-    storage = Storage()
-    mcp_repo = MCPServerRepository(storage)
     
     api_key = os.getenv("GITHUB_COPILOT_TOKEN")
     if not api_key:
@@ -265,14 +247,14 @@ async def test_github_copilot_full_workflow(test_company, storage):
         assert "tool_name" in first_tool.params
         assert "input_schema" in first_tool.params
         
-        print(f"\n📋 Первый синхронизированный тул:")
+        print("\n📋 Первый синхронизированный тул:")
         print(f"   tool_id: {first_tool.tool_id}")
         print(f"   title: {first_tool.title}")
         print(f"   description: {first_tool.description}")
         print(f"   group: {first_tool.group}")
         
         print("\n🔍 Шаг 3: Проверяем обновление кэша")
-        updated_server = await mcp_repo.get("github_copilot_workflow_test", test_company.company_id)
+        updated_server = await mcp_repo.get("github_copilot_workflow_test")
         assert len(updated_server.cached_tools) == len(tools)
         assert updated_server.last_sync_at is not None
         print(f"✅ Кэш обновлен: {len(updated_server.cached_tools)} тулов")
@@ -280,38 +262,29 @@ async def test_github_copilot_full_workflow(test_company, storage):
         print("\n✅ Полный workflow успешно выполнен!")
     
     finally:
-        await mcp_repo.delete("github_copilot_workflow_test", test_company.company_id)
+        await mcp_repo.delete("github_copilot_workflow_test")
         
         if 'tools' in locals():
             for tool in tools:
-                tool_key = f"tool:{tool.tool_id}"
-                await storage.delete(tool_key)
+                await tool_repo.delete(tool.tool_id)
         
         print("\n🧹 Очистка завершена")
 
 
 @pytest.mark.asyncio
-async def test_github_copilot_with_mock_llm(test_company):
+async def test_github_copilot_with_mock_llm(test_company, mcp_repo, agent_repo, tool_repo, agent_factory):
     """
     End-to-end тест: агент + GitHub Copilot MCP + мок LLM.
     
     Проверяем полную интеграцию с мокированным LLM.
     """
     from apps.agents.services.mcp_sync import sync_mcp_server_tools
-    from apps.agents.services.agent_factory import AgentFactory
     from apps.agents.models import AgentConfig
-    from core.db.agent_repository import AgentRepository
-    from core.db.storage import Storage
-    from apps.agents.db.repositories.mcp_repository import MCPServerRepository
     from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
     from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
     from unittest.mock import MagicMock, AsyncMock
     import uuid
     import os
-    
-    storage = Storage()
-    agent_repo = AgentRepository(storage)
-    mcp_repo = MCPServerRepository(storage)
     
     api_key = os.getenv("GITHUB_COPILOT_TOKEN")
     if not api_key:
@@ -365,7 +338,6 @@ async def test_github_copilot_with_mock_llm(test_company):
         print("3️⃣ Загрузка агента через AgentFactory")
         print("="*70)
         
-        agent_factory = get_agents_container().agent_factory
         agent = await agent_factory.get_agent("copilot_test_agent")
         
         loaded_tools = await agent.get_tools()
@@ -427,7 +399,7 @@ async def test_github_copilot_with_mock_llm(test_company):
         print(f"   Tool messages: {len(tool_messages)}")
         
         if tool_messages:
-            print(f"\n   📦 ToolMessage от GitHub Copilot:")
+            print("\n   📦 ToolMessage от GitHub Copilot:")
             first_tool_message = tool_messages[0]
             print(f"      Tool call ID: {first_tool_message.tool_call_id}")
             print(f"      Content preview: {first_tool_message.content[:200]}...")
@@ -443,6 +415,5 @@ async def test_github_copilot_with_mock_llm(test_company):
         await agent_repo.delete("copilot_test_agent")
         if 'mcp_tools' in locals():
             for tool in mcp_tools:
-                await storage.delete(f"tool:{tool.tool_id}")
-        await mcp_repo.delete("github_copilot", test_company.company_id)
-
+                await tool_repo.delete(tool.tool_id)
+        await mcp_repo.delete("github_copilot")

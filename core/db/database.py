@@ -17,13 +17,6 @@ from sqlalchemy.pool import NullPool
 from core.config import get_settings
 from core.db.models import (
     Base,
-    Storage,
-    Users,
-    Tasks,
-    Variables,
-    Stores,
-    AgentStates,
-    OtelSpans,
 )
 
 logger = logging.getLogger(__name__)
@@ -186,7 +179,7 @@ async def create_tables(db_url: Optional[str] = None, table_names: Optional[List
         logger.debug(f"  - {table_name}")
 
     session_factory = await get_session_factory(db_url)
-    logger.info(f"Session factory получена для создания таблиц")
+    logger.info("Session factory получена для создания таблиц")
     
     async with session_factory() as session:
         logger.info("Вызываем Base.metadata.create_all...")

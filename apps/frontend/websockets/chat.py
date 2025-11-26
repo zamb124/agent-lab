@@ -9,7 +9,6 @@ import asyncio
 from core.context import get_context, set_context, clear_context
 from core.container import get_system_container
 from core.models.context_models import Context
-from core.models import Company
 from apps.frontend.container import get_frontend_container
 from apps.frontend.core.websocket_manager import websocket_manager
 

@@ -3,7 +3,6 @@
 """
 
 import logging
-from typing import Optional
 from core.context import get_context
 
 logger = logging.getLogger(__name__)

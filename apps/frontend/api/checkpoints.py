@@ -4,7 +4,7 @@ API endpoints для инспекции чекпоинтеров
 
 import logging
 from typing import Dict, Any
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 
 from apps.agents.services.state_inspector import StateInspector
 

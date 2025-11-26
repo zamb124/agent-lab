@@ -804,7 +804,7 @@ class TelegramInterface(BaseInterface):
         media_group_key = f"media_group:{media_group_id}"
         
         # Получаем существующую группу или создаем новую
-        existing_group_data = await storage.get(media_group_key)
+        existing_group_data = await self._storage.get(media_group_key)
         if existing_group_data:
             group_data = json.loads(existing_group_data)
         else:
@@ -843,7 +843,7 @@ class TelegramInterface(BaseInterface):
         processing_key = f"media_group_processing:{media_group_id}"
         
         # Проверяем что группа еще не обрабатывается
-        already_processing = await storage.get(processing_key)
+        already_processing = await self._storage.get(processing_key)
         if already_processing:
             logger.info(f"⏭️ Медиа-группа {media_group_id} уже обрабатывается, пропускаем")
             return
@@ -852,7 +852,7 @@ class TelegramInterface(BaseInterface):
         await self._storage.set(processing_key, json.dumps({"status": "processing", "timestamp": datetime.now().isoformat()}), ttl=30)
         
         # Получаем группу из Storage
-        group_data_json = await storage.get(media_group_key)
+        group_data_json = await self._storage.get(media_group_key)
         if not group_data_json:
             logger.warning(f"⚠️ Медиа-группа {media_group_id} не найдена в Storage")
             await self._storage.delete(processing_key)
