@@ -27,9 +27,6 @@ services:
       target: agents
     ports:
       - "${AGENTS_PORT:-8001}:8001"
-    environment:
-      - DATABASE__URL=postgresql+asyncpg://${POSTGRES_USER:-agent_user}:${POSTGRES_PASSWORD:-agent_password}@postgres:5432/agents_db
-      - DATABASE__SHARED_URL=postgresql+asyncpg://${POSTGRES_USER:-agent_user}:${POSTGRES_PASSWORD:-agent_password}@postgres:5432/shared_db
     volumes:
       - agents_logs:/app/logs
     depends_on:
@@ -47,9 +44,6 @@ services:
       target: frontend
     ports:
       - "${FRONTEND_PORT:-8002}:8002"
-    environment:
-      - DATABASE__URL=postgresql+asyncpg://${POSTGRES_USER:-agent_user}:${POSTGRES_PASSWORD:-agent_password}@postgres:5432/shared_db
-      - DATABASE__SHARED_URL=postgresql+asyncpg://${POSTGRES_USER:-agent_user}:${POSTGRES_PASSWORD:-agent_password}@postgres:5432/shared_db
     volumes:
       - frontend_logs:/app/logs
     depends_on:
@@ -65,9 +59,6 @@ services:
       context: .
       dockerfile: Dockerfile
       target: worker
-    environment:
-      - DATABASE__URL=postgresql+asyncpg://${POSTGRES_USER:-agent_user}:${POSTGRES_PASSWORD:-agent_password}@postgres:5432/agents_db
-      - DATABASE__SHARED_URL=postgresql+asyncpg://${POSTGRES_USER:-agent_user}:${POSTGRES_PASSWORD:-agent_password}@postgres:5432/shared_db
     volumes:
       - worker_logs:/app/logs
     depends_on:
