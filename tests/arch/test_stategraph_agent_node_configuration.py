@@ -7,7 +7,7 @@
 3. Через id ноды (fallback)
 """
 import pytest
-from app.models import (
+from apps.agents.models import (
     AgentConfig, AgentType, CodeMode, FlowConfig, LLMConfig,
     GraphDefinition, GraphNode, GraphEdge, NodeType
 )
@@ -15,7 +15,7 @@ from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_agent_node_with_params_agent_id(migrated_db, storage, flow_factory, mock_llm, agent_repo, flow_repo, system_context):
+async def test_agent_node_with_params_agent_id(migrated_db,  flow_factory, mock_llm, agent_repo, flow_repo, system_context):
     """Тест: AGENT_NODE с agent_id в params"""
     
     # Создаем граф с нодой агента через params['agent_id']
@@ -25,7 +25,7 @@ async def test_agent_node_with_params_agent_id(migrated_db, storage, flow_factor
                 id="calc_node",
                 type=NodeType.AGENT_NODE,
                 code_mode=CodeMode.CODE_REFERENCE,
-                params={"agent_id": "app.agents.calculator.agent.CalculatorAgent"}
+                params={"agent_id": "apps.agents.agents.calculator.agent.CalculatorAgent"}
             )
         ],
         edges=[
@@ -58,15 +58,33 @@ async def test_agent_node_with_params_agent_id(migrated_db, storage, flow_factor
     
     await flow_repo.set(flow_config)
     
+    # Настраиваем mock_llm ДО создания flow
+    from core.clients.llm import get_llm, get_global_mock_llm
+    
+    # Создаем мок если его еще нет
+    _ = get_llm("mock-gpt-4")
+    
+    # Получаем и настраиваем мок
+    global_mock = get_global_mock_llm("mock-gpt-4")
+    if global_mock:
+        global_mock.reset_call_counts()
+        global_mock.configure(
+            responses={
+                "посчитай": "Результат: 12",
+            },
+            default_response="Готово"
+        )
+    
+    # Устанавливаем llm_config для CalculatorAgent если его нет
+    from apps.agents.container import get_agents_container
+    agent_factory = get_agents_container().agent_factory
+    calculator_agent = await agent_factory.get_agent("apps.agents.agents.calculator.agent.CalculatorAgent")
+    if calculator_agent and calculator_agent.config and not calculator_agent.config.llm_config:
+        calculator_agent.config.llm_config = LLMConfig(model="mock-gpt-4", context_window=8192)
+        await agent_factory.agent_repository.set(calculator_agent.config)
+    
     # Проверяем что граф компилируется
     flow = await flow_factory.get_flow("test_flow_params")
-    
-    # Проверяем выполнение
-    mock_llm.configure(
-        responses={
-            "посчитай": "Результат: 12",
-        }
-    )
     
     result = await flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 5 + 7")]},
@@ -78,7 +96,7 @@ async def test_agent_node_with_params_agent_id(migrated_db, storage, flow_factor
 
 
 @pytest.mark.asyncio
-async def test_agent_node_with_function_class(migrated_db, storage, flow_factory, mock_llm, agent_repo, flow_repo, system_context):
+async def test_agent_node_with_function_class(migrated_db,  flow_factory, mock_llm, agent_repo, flow_repo, system_context):
     """Тест: AGENT_NODE с function_class"""
     
     # Создаем граф с нодой агента через function_class
@@ -88,7 +106,7 @@ async def test_agent_node_with_function_class(migrated_db, storage, flow_factory
                 id="calc_node",
                 type=NodeType.AGENT_NODE,
                 code_mode=CodeMode.CODE_REFERENCE,
-                function_class="app.agents.calculator.agent.CalculatorAgent"
+                function_class="apps.agents.agents.calculator.agent.CalculatorAgent"
             )
         ],
         edges=[
@@ -121,15 +139,33 @@ async def test_agent_node_with_function_class(migrated_db, storage, flow_factory
     
     await flow_repo.set(flow_config)
     
+    # Настраиваем mock_llm ДО создания flow
+    from core.clients.llm import get_llm, get_global_mock_llm
+    
+    # Создаем мок если его еще нет
+    _ = get_llm("mock-gpt-4")
+    
+    # Получаем и настраиваем мок
+    global_mock = get_global_mock_llm("mock-gpt-4")
+    if global_mock:
+        global_mock.reset_call_counts()
+        global_mock.configure(
+            responses={
+                "посчитай": "Результат: 12",
+            },
+            default_response="Готово"
+        )
+    
+    # Устанавливаем llm_config для CalculatorAgent если его нет
+    from apps.agents.container import get_agents_container
+    agent_factory = get_agents_container().agent_factory
+    calculator_agent = await agent_factory.get_agent("apps.agents.agents.calculator.agent.CalculatorAgent")
+    if calculator_agent and calculator_agent.config and not calculator_agent.config.llm_config:
+        calculator_agent.config.llm_config = LLMConfig(model="mock-gpt-4", context_window=8192)
+        await agent_factory.agent_repository.set(calculator_agent.config)
+    
     # Проверяем что граф компилируется
     flow = await flow_factory.get_flow("test_flow_class")
-    
-    # Проверяем выполнение
-    mock_llm.configure(
-        responses={
-            "посчитай": "Результат: 12",
-        }
-    )
     
     result = await flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 5 + 7")]},
@@ -141,7 +177,7 @@ async def test_agent_node_with_function_class(migrated_db, storage, flow_factory
 
 
 @pytest.mark.asyncio
-async def test_agent_node_with_id_fallback(migrated_db, storage, flow_factory, mock_llm, agent_factory, agent_repo, flow_repo, system_context):
+async def test_agent_node_with_id_fallback(migrated_db,  flow_factory, mock_llm, agent_factory, agent_repo, flow_repo, system_context):
     """Тест: AGENT_NODE с id ноды как agent_id (fallback)"""
     
     # Создаем граф с нодой агента без agent_id и function_class
@@ -149,7 +185,7 @@ async def test_agent_node_with_id_fallback(migrated_db, storage, flow_factory, m
     graph_def = GraphDefinition(
         nodes=[
             GraphNode(
-                id="app.agents.calculator.agent.CalculatorAgent",
+                id="apps.agents.agents.calculator.agent.CalculatorAgent",
                 type=NodeType.AGENT_NODE,
                 code_mode=CodeMode.CODE_REFERENCE,
                 params={}  # НЕТ agent_id
@@ -157,8 +193,8 @@ async def test_agent_node_with_id_fallback(migrated_db, storage, flow_factory, m
             )
         ],
         edges=[
-            GraphEdge(source="START", target="app.agents.calculator.agent.CalculatorAgent"),
-            GraphEdge(source="app.agents.calculator.agent.CalculatorAgent", target="END")
+            GraphEdge(source="START", target="apps.agents.agents.calculator.agent.CalculatorAgent"),
+            GraphEdge(source="apps.agents.agents.calculator.agent.CalculatorAgent", target="END")
         ],
         entry_point="START"
     )
@@ -186,15 +222,33 @@ async def test_agent_node_with_id_fallback(migrated_db, storage, flow_factory, m
     
     await flow_repo.set(flow_config)
     
+    # Настраиваем mock_llm ДО создания flow
+    from core.clients.llm import get_llm, get_global_mock_llm
+    
+    # Создаем мок если его еще нет
+    _ = get_llm("mock-gpt-4")
+    
+    # Получаем и настраиваем мок
+    global_mock = get_global_mock_llm("mock-gpt-4")
+    if global_mock:
+        global_mock.reset_call_counts()
+        global_mock.configure(
+            responses={
+                "посчитай": "Результат: 12",
+            },
+            default_response="Готово"
+        )
+    
+    # Устанавливаем llm_config для CalculatorAgent если его нет
+    from apps.agents.container import get_agents_container
+    agent_factory = get_agents_container().agent_factory
+    calculator_agent = await agent_factory.get_agent("apps.agents.agents.calculator.agent.CalculatorAgent")
+    if calculator_agent and calculator_agent.config and not calculator_agent.config.llm_config:
+        calculator_agent.config.llm_config = LLMConfig(model="mock-gpt-4", context_window=8192)
+        await agent_factory.agent_repository.set(calculator_agent.config)
+    
     # Проверяем что граф компилируется
     flow = await flow_factory.get_flow("test_flow_fallback")
-    
-    # Проверяем выполнение
-    mock_llm.configure(
-        responses={
-            "посчитай": "Результат: 12",
-        }
-    )
     
     result = await flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 5 + 7")]},
@@ -206,7 +260,7 @@ async def test_agent_node_with_id_fallback(migrated_db, storage, flow_factory, m
 
 
 @pytest.mark.asyncio
-async def test_agent_node_short_id_fallback(migrated_db, storage, flow_factory, agent_factory, agent_repo, flow_repo):
+async def test_agent_node_short_id_fallback(migrated_db,  flow_factory, agent_factory, agent_repo, flow_repo):
     """Тест: AGENT_NODE с коротким id (как в логах ошибки)"""
     
     # Воспроизводим ошибку из логов: id="calculator" без agent_id и function_class
@@ -266,7 +320,7 @@ async def test_agent_node_short_id_fallback(migrated_db, storage, flow_factory, 
 
 
 @pytest.mark.asyncio
-async def test_agent_node_error_message_quality(migrated_db, storage, flow_factory, agent_factory, agent_repo, flow_repo):
+async def test_agent_node_error_message_quality(migrated_db,  flow_factory, agent_factory, agent_repo, flow_repo):
     """Тест: качество сообщения об ошибке для некорректной ноды"""
     
     # Создаем граф с ПОЛНОСТЬЮ пустой нодой агента

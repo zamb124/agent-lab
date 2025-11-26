@@ -6,8 +6,8 @@ import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.interfaces.whatsapp_interface import WhatsAppInterface
-from app.interfaces.base import Message
+from apps.agents.interfaces.whatsapp_interface import WhatsAppInterface
+from apps.agents.interfaces.base import Message
 
 
 @pytest.fixture
@@ -611,7 +611,7 @@ class TestWhatsAppInterfaceCredentials:
             "access_token": "@var:whatsapp_token"
         }
 
-        with patch('app.interfaces.whatsapp_interface.get_container') as mock_container:
+        with patch('apps.agents.interfaces.whatsapp_interface.get_agents_container') as mock_container:
             mock_vars = AsyncMock()
             mock_vars.resolve = AsyncMock(return_value="resolved_token_123")
             mock_container.return_value.variables_service = mock_vars
@@ -628,7 +628,7 @@ class TestWhatsAppInterfaceCredentials:
             "access_token": "hardcoded_token_xyz"
         }
 
-        with patch('app.interfaces.whatsapp_interface.get_container') as mock_container:
+        with patch('apps.agents.interfaces.whatsapp_interface.get_agents_container') as mock_container:
             mock_vars = AsyncMock()
             mock_vars.resolve = AsyncMock(return_value="hardcoded_token_xyz")
             mock_container.return_value.variables_service = mock_vars
@@ -712,7 +712,7 @@ class TestWhatsAppInterfaceRegistration:
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_phone_response)
 
-            with patch('app.db.repositories.Storage.list_by_prefix') as mock_list:
+            with patch('core.db.storage.Storage.list_by_prefix') as mock_list:
                 mock_list.return_value = ["company:test:flow:test_flow"]
 
                 result = await WhatsAppInterface.register(flow_id, username, platform_config)
@@ -752,7 +752,7 @@ class TestWhatsAppInterfaceRegistration:
             # Нет phone_number_id!
         }
 
-        with patch('app.services.variables_service.get_variables_service') as mock_service:
+        with patch('apps.agents.dependencies.get_variables_service') as mock_service:
             mock_vars = AsyncMock()
             mock_vars.resolve.return_value = "test_token"
             mock_service.return_value = mock_vars
@@ -943,8 +943,10 @@ class TestWhatsAppInterfaceSendAudio:
         mock_api_response.status_code = 200
         mock_api_response.json = MagicMock(return_value={"messages": [{"id": "wamid.audio"}]})
 
-        with patch('app.interfaces.whatsapp_interface.get_default_audio_processor', return_value=mock_audio_processor):
-            with patch.object(whatsapp_interface, '_upload_media', return_value="uploaded_media_456"):
+        with patch('apps.agents.interfaces.whatsapp_interface.get_default_audio_processor', new_callable=AsyncMock) as mock_get_processor:
+            mock_get_processor.return_value = mock_audio_processor
+            with patch.object(whatsapp_interface, '_upload_media', new_callable=AsyncMock) as mock_upload:
+                mock_upload.return_value = "uploaded_media_456"
                 with patch('httpx.AsyncClient') as mock_client:
                     mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_api_response)
 
@@ -960,7 +962,8 @@ class TestWhatsAppInterfaceSendAudio:
         mock_audio_processor = AsyncMock()
         mock_audio_processor.get_audio_record = AsyncMock(return_value=None)  # Аудио не найдено!
 
-        with patch('app.interfaces.whatsapp_interface.get_default_audio_processor', return_value=mock_audio_processor):
+        with patch('apps.agents.interfaces.whatsapp_interface.get_default_audio_processor', new_callable=AsyncMock) as mock_get_processor:
+            mock_get_processor.return_value = mock_audio_processor
             with pytest.raises(ValueError, match="не найден в системе"):
                 await whatsapp_interface._send_audio_message("9111111111111", audio_info, {})
 
@@ -982,7 +985,8 @@ class TestWhatsAppInterfaceSendAudio:
         mock_s3_client.download_bytes = AsyncMock(return_value=None)  # Не удалось скачать!
         mock_audio_processor._get_s3_client = AsyncMock(return_value=mock_s3_client)
 
-        with patch('app.interfaces.whatsapp_interface.get_default_audio_processor', return_value=mock_audio_processor):
+        with patch('apps.agents.interfaces.whatsapp_interface.get_default_audio_processor', new_callable=AsyncMock) as mock_get_processor:
+            mock_get_processor.return_value = mock_audio_processor
             with pytest.raises(ValueError, match="Не удалось скачать аудиофайл.*из S3"):
                 await whatsapp_interface._send_audio_message("9111111111111", audio_info, {})
 
@@ -1005,8 +1009,10 @@ class TestWhatsAppInterfaceSendAudio:
         mock_s3_client.download_bytes = AsyncMock(return_value=b"audio bytes")
         mock_audio_processor._get_s3_client = AsyncMock(return_value=mock_s3_client)
 
-        with patch('app.interfaces.whatsapp_interface.get_default_audio_processor', return_value=mock_audio_processor):
-            with patch.object(whatsapp_interface, '_upload_media', return_value=None):  # Загрузка не удалась!
+        with patch('apps.agents.interfaces.whatsapp_interface.get_default_audio_processor', new_callable=AsyncMock) as mock_get_processor:
+            mock_get_processor.return_value = mock_audio_processor
+            with patch.object(whatsapp_interface, '_upload_media', new_callable=AsyncMock) as mock_upload:
+                mock_upload.return_value = None  # Загрузка не удалась!
                 with pytest.raises(ValueError, match="Не удалось загрузить аудио в WhatsApp API"):
                     await whatsapp_interface._send_audio_message("9111111111111", audio_info, {})
 

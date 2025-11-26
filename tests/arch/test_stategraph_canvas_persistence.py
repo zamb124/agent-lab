@@ -3,16 +3,17 @@
 """
 
 import pytest
-from app.core.container import get_container
-from app.models import FlowConfig, AgentConfig, AgentType, CodeMode
+from apps.agents.container import get_agents_container
+from apps.agents.models import FlowConfig, AgentConfig, AgentType, CodeMode
 
 
 @pytest.mark.asyncio
-async def test_stategraph_canvas_persistence():
+async def test_stategraph_canvas_persistence(migrated_db):
     """
     Проверяет что canvas для StateGraph flow сохраняется и загружается правильно
     """
-    container = get_container()
+    from apps.agents.container import get_agents_container
+    container = get_agents_container()
     storage = container.storage
     flow_repo = container.flow_repository
     agent_repo = container.agent_repository
@@ -69,7 +70,7 @@ async def test_stategraph_canvas_persistence():
                 "type": "tool_node",
                 "params": {
                     "name": "test_tool",
-                    "tool_id": "app.tools.calc.calc_tools.calculate",
+                    "tool_id": "apps.agents.tools.calc.calc_tools.calculate",
                     "description": "Тестовый тул",
                     "category": "calculator"
                 },
@@ -94,9 +95,9 @@ async def test_stategraph_canvas_persistence():
     }
     
     # Сохраняем canvas
-    from app.frontend.services.canvas_service import CanvasService
+    from apps.frontend.services.canvas_service import CanvasService
     
-    canvas_service = CanvasService(storage)
+    canvas_service = CanvasService()
     await canvas_service.save_canvas_data(flow_id, canvas_data)
     
     # Проверяем что canvas сохранился в flow

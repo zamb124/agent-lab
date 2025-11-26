@@ -9,13 +9,13 @@
 import pytest
 from langchain_core.messages import HumanMessage
 
-from app.core.state_inspector import StateInspector
-from app.models import AgentConfig, AgentType, GraphDefinition, GraphNode, GraphEdge, NodeType, CodeMode, LLMConfig
+from apps.agents.services.state_inspector import StateInspector
+from apps.agents.models import AgentConfig, AgentType, GraphDefinition, GraphNode, GraphEdge, NodeType, CodeMode, LLMConfig
 
 
 @pytest.mark.asyncio
 async def test_checkpoint_inspector_react_agent_with_calculator(
-    migrated_db, storage, agent_factory, agent_repo, mock_llm, test_helpers, unique_id
+    migrated_db,  agent_factory, agent_repo, mock_llm, test_helpers, unique_id
 ):
     """
     Тест 1: ReAct агент с калькулятором.
@@ -46,7 +46,6 @@ async def calculate_tool(a: int, b: int, operation: str = "add") -> str:
     )
 
     await test_helpers.create_simple_agent(
-        storage=storage,
         agent_id="calc_react_agent",
         name="Calculator ReAct Agent",
         prompt="Ты математический помощник. Используй calculate_tool для вычислений.",
@@ -116,7 +115,7 @@ async def calculate_tool(a: int, b: int, operation: str = "add") -> str:
 
 @pytest.mark.asyncio
 async def test_checkpoint_inspector_stategraph_agent(
-    migrated_db, storage, agent_factory, agent_repo, mock_llm, test_helpers, unique_id
+    migrated_db,  agent_factory, agent_repo, mock_llm, test_helpers, unique_id
 ):
     """
     Тест 2: StateGraph агент с нодами.
@@ -139,7 +138,6 @@ async def calc_add(x: int, y: int) -> str:
     )
 
     await test_helpers.create_simple_agent(
-        storage=storage,
         agent_id="calc_sub_agent",
         name="Calculator Sub Agent",
         prompt="Ты простой калькулятор",

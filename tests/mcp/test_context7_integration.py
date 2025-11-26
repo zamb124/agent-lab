@@ -1,13 +1,13 @@
 """
-from app.core.container import get_container
+from apps.agents.container import get_agents_container
 Интеграционные тесты с Context7 MCP сервером.
 
 Context7 - AI-powered documentation MCP сервер.
 """
 
 import pytest
-from app.core.mcp_client import MCPHttpClient
-from app.models.mcp_models import MCPTransportType
+from apps.agents.services.mcp_client import MCPHttpClient
+from apps.agents.models.mcp_models import MCPTransportType
 import os
 
 
@@ -66,13 +66,13 @@ async def test_context7_list_tools():
 
 
 @pytest.mark.asyncio
-async def test_context7_sync_to_db(setup_mcp_servers, mcp_repo, test_company):
+async def test_context7_sync_to_db(setup_mcp_servers, mcp_repo, test_company, storage):
     """
     Полный тест синхронизации Context7 тулов в БД.
     """
-    from app.core.mcp_sync import sync_mcp_server_tools
-    from app.db.repositories.tool_repository import ToolRepository
-    from app.db.repositories.storage import Storage
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
+    from core.db.tool_repository import ToolRepository
+    from core.db.storage import Storage
     
     storage = Storage()
     tool_repo = ToolRepository(storage)
@@ -204,13 +204,13 @@ async def test_context7_call_get_library_docs():
 
 
 @pytest.mark.asyncio
-async def test_context7_full_workflow_with_toolfactory(setup_mcp_servers, test_company):
+async def test_context7_full_workflow_with_toolfactory(setup_mcp_servers, test_company, storage):
     """
     Полный workflow: синхронизация → создание тула через ToolFactory → использование.
     """
-    from app.core.mcp_sync import sync_mcp_server_tools
-    from app.core.tool_factory import ToolFactory
-    from app.db.repositories.storage import Storage
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
+    from apps.agents.services.tool_factory import ToolFactory
+    from core.db.storage import Storage
     
     storage = Storage()
     tool_factory = ToolFactory()
@@ -258,14 +258,14 @@ async def test_context7_full_workflow_with_toolfactory(setup_mcp_servers, test_c
 
 
 @pytest.mark.asyncio
-async def test_context7_full_workflow():
+async def test_context7_full_workflow(storage):
     """
     Полный workflow: создание сервера, синхронизация, проверка кэша.
     """
-    from app.models.mcp_models import MCPServerConfig
-    from app.db.repositories.mcp_repository import MCPServerRepository
-    from app.db.repositories.storage import Storage
-    from app.core.mcp_sync import sync_mcp_server_tools
+    from apps.agents.models.mcp_models import MCPServerConfig
+    from apps.agents.db.repositories.mcp_repository import MCPServerRepository
+    from core.db.storage import Storage
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
     import os
     
     storage = Storage()
@@ -334,15 +334,15 @@ async def test_context7_full_workflow():
 
 
 @pytest.mark.asyncio  
-async def test_context7_in_agent(setup_mcp_servers, test_company):
+async def test_context7_in_agent(setup_mcp_servers, test_company, storage):
     """
     Тест использования Context7 MCP тулов в реальном агенте.
     """
-    from app.core.mcp_sync import sync_mcp_server_tools
-    from app.core.agent_factory import AgentFactory
-    from app.models import AgentConfig, ToolReference
-    from app.models.core_models import CodeMode
-    from app.db.repositories.storage import Storage
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
+    from apps.agents.services.agent_factory import AgentFactory
+    from apps.agents.models import AgentConfig, ToolReference
+    from apps.agents.models.core_models import CodeMode
+    from core.db.storage import Storage
     
     storage = Storage()
     
@@ -363,7 +363,7 @@ async def test_context7_in_agent(setup_mcp_servers, test_company):
         )
         
         # Сохраняем агента
-        from app.db.repositories.agent_repository import AgentRepository
+        from core.db.agent_repository import AgentRepository
         agent_repo = AgentRepository(storage)
         await agent_repo.set(agent_config)
         
@@ -371,7 +371,7 @@ async def test_context7_in_agent(setup_mcp_servers, test_company):
         
         # Создаем агента через фабрику
         print("\n🏭 Шаг 3: Загружаем агента через AgentFactory")
-        agent_factory = get_container().agent_factory
+        agent_factory = get_agents_container().agent_factory
         agent = await agent_factory.get_agent("test_mcp_agent")
         
         print(f"✅ Агент загружен")

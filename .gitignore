@@ -28,3 +28,4 @@ docs/video/*.mov
 /logs/app.log.3
 /logs/app.log.4
 /logs/app.log.5
+/apps/agents/conf.json

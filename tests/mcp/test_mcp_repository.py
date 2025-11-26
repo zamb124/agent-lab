@@ -3,7 +3,7 @@
 """
 
 import pytest
-from app.models.mcp_models import MCPServerConfig, MCPTransportType
+from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
 
 
 @pytest.fixture
@@ -26,7 +26,7 @@ async def test_save_and_get_server(mcp_repo, sample_server_config):
     assert success is True
     
     # Получаем
-    retrieved = await mcp_repo.get("test_server", "test_company")
+    retrieved = await mcp_repo.get("test_server")
     assert retrieved is not None
     assert retrieved.server_id == "test_server"
     assert retrieved.company_id == "test_company"
@@ -37,7 +37,7 @@ async def test_save_and_get_server(mcp_repo, sample_server_config):
 @pytest.mark.asyncio
 async def test_get_nonexistent_server(mcp_repo):
     """Тест получения несуществующего сервера"""
-    result = await mcp_repo.get("nonexistent", "test_company")
+    result = await mcp_repo.get("nonexistent")
     assert result is None
 
 
@@ -48,15 +48,15 @@ async def test_delete_server(mcp_repo, sample_server_config):
     await mcp_repo.set(sample_server_config)
     
     # Проверяем что существует
-    retrieved = await mcp_repo.get("test_server", "test_company")
+    retrieved = await mcp_repo.get("test_server")
     assert retrieved is not None
     
     # Удаляем
-    success = await mcp_repo.delete("test_server", "test_company")
+    success = await mcp_repo.delete("test_server")
     assert success is True
     
     # Проверяем что удален
-    retrieved = await mcp_repo.get("test_server", "test_company")
+    retrieved = await mcp_repo.get("test_server")
     assert retrieved is None
 
 
@@ -64,11 +64,21 @@ async def test_delete_server(mcp_repo, sample_server_config):
 async def test_list_all_servers(mcp_repo, test_company):
     """Тест получения списка всех серверов компании"""
     # Очищаем все серверы test_company перед тестом
-    from app.core.container import get_container
-    storage = get_container().storage
-    existing_keys = await storage.list_by_prefix(f"mcp_server:{test_company.company_id}:", limit=100)
-    for key in existing_keys:
-        await storage.delete(key)
+    from apps.agents.container import get_agents_container
+    storage = get_agents_container().storage
+    
+    # Получаем все серверы компании через репозиторий
+    existing_servers = await mcp_repo.list_all(limit=1000)
+    for server in existing_servers:
+        await mcp_repo.delete(server.server_id)
+    
+    # Небольшая задержка для гарантии коммита транзакций удаления
+    import asyncio
+    await asyncio.sleep(0.1)
+    
+    # Дополнительная проверка - убеждаемся что все удалено
+    remaining_servers = await mcp_repo.list_all(limit=1000)
+    assert len(remaining_servers) == 0, f"Остались серверы после очистки: {[s.server_id for s in remaining_servers]}"
     
     # Создаем несколько серверов
     servers = [
@@ -85,7 +95,7 @@ async def test_list_all_servers(mcp_repo, test_company):
         await mcp_repo.set(server)
     
     # Получаем список
-    all_servers = await mcp_repo.list_all(company_id=test_company.company_id)
+    all_servers = await mcp_repo.list_all()
     assert len(all_servers) == 3
     
     server_ids = {s.server_id for s in all_servers}
@@ -96,11 +106,17 @@ async def test_list_all_servers(mcp_repo, test_company):
 async def test_list_active_servers(mcp_repo, test_company):
     """Тест получения только активных серверов"""
     # Очищаем все серверы test_company перед тестом
-    from app.core.container import get_container
-    storage = get_container().storage
-    existing_keys = await storage.list_by_prefix(f"mcp_server:{test_company.company_id}:", limit=100)
-    for key in existing_keys:
-        await storage.delete(key)
+    from apps.agents.container import get_agents_container
+    storage = get_agents_container().storage
+    
+    # Получаем все серверы компании через репозиторий
+    existing_servers = await mcp_repo.list_all(limit=1000)
+    for server in existing_servers:
+        await mcp_repo.delete(server.server_id)
+    
+    # Дополнительная проверка - убеждаемся что все удалено
+    remaining_servers = await mcp_repo.list_all(limit=1000)
+    assert len(remaining_servers) == 0, f"Остались серверы после очистки: {[s.server_id for s in remaining_servers]}"
     
     # Создаем активный и неактивный серверы
     active_server = MCPServerConfig(
@@ -123,21 +139,53 @@ async def test_list_active_servers(mcp_repo, test_company):
     await mcp_repo.set(inactive_server)
     
     # Получаем только активные
-    active_servers = await mcp_repo.list_active(company_id=test_company.company_id)
+    active_servers = await mcp_repo.list_active()
     assert len(active_servers) == 1
     assert active_servers[0].server_id == "active_server"
 
 
 @pytest.mark.asyncio
-async def test_company_isolation(mcp_repo):
+async def test_company_isolation(mcp_repo, company_repo, subdomain_repo):
     """Тест изоляции между компаниями"""
-    # Создаем серверы для разных компаний
+    from core.context import set_context, Context
+    from core.models import Company, User, UserStatus
+    from core.db.repositories.subdomain_repository import SubdomainMapping
+    
+    # Создаем компанию 1
+    company1 = Company(
+        company_id="company_1",
+        subdomain="company_1",
+        name="Company 1",
+        status="active"
+    )
+    await company_repo.set(company1)
+    await subdomain_repo.set(SubdomainMapping(subdomain="company_1", company_id="company_1"))
+    
+    user1 = User(user_id="user1", name="User 1", status=UserStatus.ACTIVE, companies={"company_1": ["user"]}, active_company_id="company_1")
+    context1 = Context(user=user1, platform="test", active_company=company1)
+    set_context(context1)
+    
     server1 = MCPServerConfig(
         server_id="server_1",
         company_id="company_1",
         name="Server 1",
         url="https://mcp1.example.com/mcp"
     )
+    await mcp_repo.set(server1)
+    
+    # Создаем компанию 2
+    company2 = Company(
+        company_id="company_2",
+        subdomain="company_2",
+        name="Company 2",
+        status="active"
+    )
+    await company_repo.set(company2)
+    await subdomain_repo.set(SubdomainMapping(subdomain="company_2", company_id="company_2"))
+    
+    user2 = User(user_id="user2", name="User 2", status=UserStatus.ACTIVE, companies={"company_2": ["user"]}, active_company_id="company_2")
+    context2 = Context(user=user2, platform="test", active_company=company2)
+    set_context(context2)
     
     server2 = MCPServerConfig(
         server_id="server_2",
@@ -145,18 +193,30 @@ async def test_company_isolation(mcp_repo):
         name="Server 2",
         url="https://mcp2.example.com/mcp"
     )
-    
-    await mcp_repo.set(server1)
     await mcp_repo.set(server2)
     
-    # Проверяем что каждая компания видит только свои серверы
-    company1_servers = await mcp_repo.list_all(company_id="company_1")
-    assert len(company1_servers) == 1
+    # Переключаемся в контекст компании 1
+    set_context(context1)
+    company1_servers = await mcp_repo.list_all()
+    assert len(company1_servers) == 1, f"Company 1 должна видеть 1 сервер, видит: {len(company1_servers)}"
     assert company1_servers[0].server_id == "server_1"
     
-    company2_servers = await mcp_repo.list_all(company_id="company_2")
-    assert len(company2_servers) == 1
+    # Переключаемся в контекст компании 2
+    set_context(context2)
+    company2_servers = await mcp_repo.list_all()
+    assert len(company2_servers) == 1, f"Company 2 должна видеть 1 сервер, видит: {len(company2_servers)}"
     assert company2_servers[0].server_id == "server_2"
+    
+    # Cleanup
+    set_context(context1)
+    await mcp_repo.delete("server_1")
+    await company_repo.delete("company_1")
+    await subdomain_repo.delete("company_1")
+    
+    set_context(context2)
+    await mcp_repo.delete("server_2")
+    await company_repo.delete("company_2")
+    await subdomain_repo.delete("company_2")
 
 
 @pytest.mark.asyncio
@@ -171,7 +231,7 @@ async def test_update_server(mcp_repo, sample_server_config):
     await mcp_repo.set(sample_server_config)
     
     # Проверяем обновление
-    retrieved = await mcp_repo.get("test_server", "test_company")
+    retrieved = await mcp_repo.get("test_server")
     assert retrieved.name == "Updated Name"
     assert retrieved.is_active is False
 

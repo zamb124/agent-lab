@@ -1,5 +1,5 @@
 """
-from app.core.container import get_container
+from apps.agents.container import get_agents_container
 End-to-end тест: StateGraph агент + MCP тулы + обычные тулы.
 
 Проверяем что StateGraph агент может использовать:
@@ -28,12 +28,12 @@ async def test_stategraph_agent_with_mcp_and_regular_tools(setup_mcp_servers, te
     - TOOL_NODE с MCP тулом работает
     - Результаты передаются между нодами через state
     """
-    from app.core.mcp_sync import sync_mcp_server_tools
-    from app.core.agent_factory import AgentFactory
-    from app.models import AgentConfig
-    from app.models.core_models import GraphDefinition, GraphNode, GraphEdge, NodeType
-    from app.db.repositories.agent_repository import AgentRepository
-    from app.db.repositories.storage import Storage
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
+    from apps.agents.services.agent_factory import AgentFactory
+    from apps.agents.models import AgentConfig
+    from apps.agents.models.core_models import GraphDefinition, GraphNode, GraphEdge, NodeType
+    from core.db.agent_repository import AgentRepository
+    from core.db.storage import Storage
     
     storage = Storage()
     agent_repo = AgentRepository(storage)
@@ -48,7 +48,7 @@ async def test_stategraph_agent_with_mcp_and_regular_tools(setup_mcp_servers, te
         resolve_tool = next((t for t in mcp_tools if "resolve" in t.tool_id), None)
         
         print(f"✅ MCP тул: {resolve_tool.tool_id}")
-        print(f"✅ Обычный тул: app.tools.calc.calc_tools.calculate")
+        print(f"✅ Обычный тул: apps.agents.tools.calc.calc_tools.calculate")
         
         print("\n" + "="*70)
         print("🤖 Шаг 2: Создаем StateGraph агента с нодами")
@@ -62,7 +62,7 @@ async def test_stategraph_agent_with_mcp_and_regular_tools(setup_mcp_servers, te
                     id="calc_node",
                     type=NodeType.TOOL_NODE,
                     params={
-                        "tool_id": "app.tools.calc.calc_tools.calculate",
+                        "tool_id": "apps.agents.tools.calc.calc_tools.calculate",
                         "input_key": "store.calc_input",  # Берем из store
                         "output_key": "store.calc_result"  # Сохраняем в store
                     }
@@ -103,7 +103,7 @@ async def test_stategraph_agent_with_mcp_and_regular_tools(setup_mcp_servers, te
         print("🏭 Шаг 3: Загружаем агента через AgentFactory")
         print("="*70)
         
-        agent_factory = get_container().agent_factory
+        agent_factory = get_agents_container().agent_factory
         agent = await agent_factory.get_agent("stategraph_with_mcp")
         
         print(f"✅ Агент загружен: {type(agent).__name__}")
@@ -182,12 +182,12 @@ async def test_stategraph_with_only_mcp_tools(setup_mcp_servers, test_company):
     
     Две MCP ноды последовательно.
     """
-    from app.core.mcp_sync import sync_mcp_server_tools
-    from app.core.agent_factory import AgentFactory
-    from app.models import AgentConfig
-    from app.models.core_models import GraphDefinition, GraphNode, GraphEdge, NodeType
-    from app.db.repositories.agent_repository import AgentRepository
-    from app.db.repositories.storage import Storage
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
+    from apps.agents.services.agent_factory import AgentFactory
+    from apps.agents.models import AgentConfig
+    from apps.agents.models.core_models import GraphDefinition, GraphNode, GraphEdge, NodeType
+    from core.db.agent_repository import AgentRepository
+    from core.db.storage import Storage
     
     storage = Storage()
     agent_repo = AgentRepository(storage)
@@ -241,7 +241,7 @@ async def test_stategraph_with_only_mcp_tools(setup_mcp_servers, test_company):
         print(f"✅ Агент создан с 2 MCP нодами")
         
         # Загружаем и компилируем
-        agent_factory = get_container().agent_factory
+        agent_factory = get_agents_container().agent_factory
         agent = await agent_factory.get_agent("two_mcp_nodes")
         compiled_graph = await agent.compile_graph()
         
@@ -301,12 +301,12 @@ async def test_stategraph_mixed_tools_complex_graph(setup_mcp_servers, test_comp
                ↓
               END
     """
-    from app.core.mcp_sync import sync_mcp_server_tools
-    from app.core.agent_factory import AgentFactory
-    from app.models import AgentConfig
-    from app.models.core_models import GraphDefinition, GraphNode, GraphEdge, NodeType, ConditionType
-    from app.db.repositories.agent_repository import AgentRepository
-    from app.db.repositories.storage import Storage
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
+    from apps.agents.services.agent_factory import AgentFactory
+    from apps.agents.models import AgentConfig
+    from apps.agents.models.core_models import GraphDefinition, GraphNode, GraphEdge, NodeType, ConditionType
+    from core.db.agent_repository import AgentRepository
+    from core.db.storage import Storage
     
     storage = Storage()
     agent_repo = AgentRepository(storage)
@@ -325,7 +325,7 @@ async def test_stategraph_mixed_tools_complex_graph(setup_mcp_servers, test_comp
                     id="calc_node",
                     type=NodeType.TOOL_NODE,
                     params={
-                        "tool_id": "app.tools.calc.calc_tools.calculate",
+                        "tool_id": "apps.agents.tools.calc.calc_tools.calculate",
                         "input_key": "expression",
                         "output_key": "calc_result"
                     }
@@ -372,7 +372,7 @@ async def test_stategraph_mixed_tools_complex_graph(setup_mcp_servers, test_comp
         print(f"   Граф: START → calc → (mcp_resolve, mcp_docs) → END")
         
         # Загружаем и выполняем
-        agent_factory = get_container().agent_factory
+        agent_factory = get_agents_container().agent_factory
         agent = await agent_factory.get_agent("complex_stategraph_mcp")
         compiled_graph = await agent.compile_graph()
         

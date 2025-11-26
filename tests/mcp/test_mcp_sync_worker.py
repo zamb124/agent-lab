@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 @pytest.mark.asyncio
 async def test_mcp_sync_worker_starts():
     """Тест запуска MCPSyncWorker"""
-    from app.workers.mcp_sync_worker import MCPSyncWorker
+    from apps.agents.workers.mcp_sync_worker import MCPSyncWorker
     
     worker = MCPSyncWorker(sync_interval=1)  # 1 секунда для теста
     
@@ -21,7 +21,7 @@ async def test_mcp_sync_worker_starts():
 @pytest.mark.asyncio
 async def test_mcp_sync_worker_runs_sync():
     """Тест что воркер действительно вызывает синхронизацию"""
-    from app.workers.mcp_sync_worker import MCPSyncWorker
+    from apps.agents.workers.mcp_sync_worker import MCPSyncWorker
     
     sync_called = []
     
@@ -32,7 +32,7 @@ async def test_mcp_sync_worker_runs_sync():
     
     worker = MCPSyncWorker(sync_interval=0.5)  # 0.5 секунды
     
-    with patch('app.core.mcp_sync.sync_all_companies_mcp_servers', new=mock_sync):
+    with patch('apps.agents.services.mcp_sync.sync_all_companies_mcp_servers', new=mock_sync):
         # Запускаем воркер в фоне
         task = asyncio.create_task(worker.start())
         
@@ -50,7 +50,7 @@ async def test_mcp_sync_worker_runs_sync():
 @pytest.mark.asyncio
 async def test_mcp_sync_worker_handles_errors():
     """Тест что воркер продолжает работать при ошибках"""
-    from app.workers.mcp_sync_worker import MCPSyncWorker
+    from apps.agents.workers.mcp_sync_worker import MCPSyncWorker
     
     call_count = []
     
@@ -61,7 +61,7 @@ async def test_mcp_sync_worker_handles_errors():
     
     worker = MCPSyncWorker(sync_interval=0.3)
     
-    with patch('app.core.mcp_sync.sync_all_companies_mcp_servers', new=mock_sync_with_error):
+    with patch('apps.agents.services.mcp_sync.sync_all_companies_mcp_servers', new=mock_sync_with_error):
         task = asyncio.create_task(worker.start())
         
         # Даем время на несколько попыток
@@ -77,14 +77,14 @@ async def test_mcp_sync_worker_handles_errors():
 @pytest.mark.asyncio
 async def test_mcp_sync_worker_stop():
     """Тест корректной остановки воркера"""
-    from app.workers.mcp_sync_worker import MCPSyncWorker
+    from apps.agents.workers.mcp_sync_worker import MCPSyncWorker
     
     async def mock_sync():
         await asyncio.sleep(0.1)
     
     worker = MCPSyncWorker(sync_interval=10)  # Большой интервал
     
-    with patch('app.core.mcp_sync.sync_all_companies_mcp_servers', new=mock_sync):
+    with patch('apps.agents.services.mcp_sync.sync_all_companies_mcp_servers', new=mock_sync):
         task = asyncio.create_task(worker.start())
         
         # Даем запуститься
@@ -117,7 +117,7 @@ async def test_non_blocking_mcp_sync():
     async def slow_sync():
         await asyncio.sleep(2)  # 2 секунды
     
-    with patch('app.core.mcp_sync.sync_all_companies_mcp_servers', new=slow_sync):
+    with patch('apps.agents.services.mcp_sync.sync_all_companies_mcp_servers', new=slow_sync):
         # Запускаем в фоне
         task = asyncio.create_task(slow_sync())
         
@@ -140,7 +140,7 @@ async def test_non_blocking_mcp_sync():
 @pytest.mark.asyncio
 async def test_mcp_sync_worker_configurable_interval():
     """Тест что можно настроить интервал синхронизации"""
-    from app.workers.mcp_sync_worker import MCPSyncWorker
+    from apps.agents.workers.mcp_sync_worker import MCPSyncWorker
     
     # Разные интервалы
     worker_1min = MCPSyncWorker(sync_interval=60)

@@ -6,7 +6,7 @@ import pytest
 from datetime import datetime, timezone
 from pydantic import ValidationError
 
-from app.models.payment_models import (
+from core.models.payment_models import (
     Transaction,
     PaymentNotification,
     PaymentStatus,

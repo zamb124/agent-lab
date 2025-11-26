@@ -6,13 +6,13 @@ alwaysApply: true
 
 ## Декоратор @tool
 
-Используй декоратор `@tool` из `app/core/tool_decorator.py`:
+Используй декоратор `@tool` из `apps/agents/services/tool_decorator.py`:
 - Добавляет метаданные для биллинга
 - Все тулы должны быть асинхронными
 - Указывай стоимость через параметр `cost`
 
 <good_example>
-from app.core.tool_decorator import tool
+from apps.agents.services.tool_decorator import tool
 
 @tool(cost=0.1, billing_name="weather_api")
 async def get_weather(city: str) -> str:
@@ -59,7 +59,7 @@ async def calculate(expression):
 Используй `get_state()` для доступа к текущему state:
 
 <good_example>
-from app.core.variables import get_state
+from core.variables import get_state
 
 @tool
 async def save_user_data(key: str, value: str) -> str:
@@ -79,7 +79,7 @@ async def save_user_data(key: str, value: str) -> str:
 Используй `get_context()` для доступа к пользователю, компании, переменным:
 
 <good_example>
-from app.core.context import get_context
+from core.context import get_context
 
 @tool
 async def get_company_info() -> str:
@@ -142,7 +142,7 @@ async def virtual_try_on(model_url: str, garment_url: str) -> str:
 
 ## Сессионные тулы
 
-Используй готовые сессионные тулы из `app/tools/session_tools.py`:
+Используй готовые сессионные тулы из `apps/agents/tools/session_tools.py`:
 - `session_set` - сохранить значение
 - `session_get` - получить значение
 - `session_has` - проверить наличие
@@ -151,7 +151,7 @@ async def virtual_try_on(model_url: str, garment_url: str) -> str:
 - `get_variable` - получить переменную
 
 <good_example>
-from app.tools.session_tools import session_set, session_get
+from apps.agents.tools.session.session_tools import session_set, session_get
 
 class MyAgent(BaseAgent):
     tools = [session_set, session_get]

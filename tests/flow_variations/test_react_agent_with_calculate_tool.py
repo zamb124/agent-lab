@@ -9,12 +9,12 @@
 from langchain_core.messages import HumanMessage
 import pytest
 
-from app.models import AgentConfig, AgentType, CodeMode, LLMConfig, ToolReference
+from apps.agents.models import AgentConfig, AgentType, CodeMode, LLMConfig, ToolReference
 
 
 @pytest.mark.asyncio
 async def test_react_agent_with_calculate_tool_in_db(
-    migrated_db, storage, agent_factory, agent_repo, test_helpers
+    migrated_db,  agent_factory, agent_repo, test_helpers
 ):
     """Создание и тестирование ReAct агента с calculate тулом в БД"""
 
@@ -32,7 +32,6 @@ def calculate_two_args(a: int, b: int) -> str:
 
     # Создаем агента в БД
     await test_helpers.create_simple_agent(
-        storage=storage,
         agent_id="react_calculate_agent",
         name="ReAct Calculate Agent",
         prompt="Ты математический помощник. Используй calculate_two_args для сложения чисел.",
@@ -50,13 +49,13 @@ def calculate_two_args(a: int, b: int) -> str:
 
 @pytest.mark.asyncio
 async def test_execute_react_agent_with_calculate_tool(
-    migrated_db, storage, agent_factory, agent_repo, mock_llm, test_helpers, unique_id
+    migrated_db,  agent_factory, agent_repo, mock_llm, test_helpers, unique_id
 ):
     """Выполнение ReAct агента с calculate тулом"""
 
     # Создаем агента
     await test_react_agent_with_calculate_tool_in_db(
-        migrated_db, storage, agent_factory, agent_repo, test_helpers
+        migrated_db,  agent_factory, agent_repo, test_helpers
     )
 
     # Настраиваем mock LLM для tool calling

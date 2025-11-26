@@ -1,0 +1,22 @@
+{
+  "server": {
+    "port": 8002,
+    "env": "local"
+  },
+  "database": {
+    "url": "postgresql+asyncpg://agent_user:agent_password@localhost:5432/shared_db",
+    "shared_url": "postgresql+asyncpg://agent_user:agent_password@localhost:5432/shared_db"
+  },
+  "logging": {
+    "level": "INFO",
+    "file_path": "logs/frontend.log",
+    "loggers_levels": {
+      "apps.frontend": "INFO",
+      "core": "WARNING"
+    }
+  }
+}
+
+
+
+

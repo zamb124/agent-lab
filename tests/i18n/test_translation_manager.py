@@ -7,8 +7,8 @@ import asyncio
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
-from app.core.translation_manager import TranslationManager, get_translation_manager, t
-from app.models.i18n_models import Language, I18nConfig
+from core.i18n import TranslationManager, get_translation_manager, t
+from core.models.i18n_models import Language, I18nConfig
 
 
 class TestTranslationManagerSingleton:
@@ -417,7 +417,7 @@ class TestTranslationManagerContextIntegration:
             Language.EN: {"test.key": "English text"}
         }
     
-    @patch('app.core.translation_manager.get_context')
+    @patch('core.i18n.service.get_context')
     def test_t_function_with_context_language(self, mock_get_context):
         """Проверяем автоматическое определение языка из контекста"""
         # Мокаем контекст с английским языком
@@ -429,7 +429,7 @@ class TestTranslationManagerContextIntegration:
         result = self.manager.t("test.key")
         assert result == "English text"
     
-    @patch('app.core.translation_manager.get_context')
+    @patch('core.i18n.service.get_context')
     def test_t_function_no_context(self, mock_get_context):
         """Проверяем работу без контекста (fallback на default)"""
         mock_get_context.return_value = None

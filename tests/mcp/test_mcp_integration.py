@@ -6,8 +6,8 @@
 """
 
 import pytest
-from app.core.mcp_client import MCPHttpClient
-from app.models.mcp_models import MCPTransportType
+from apps.agents.services.mcp_client import MCPHttpClient
+from apps.agents.models.mcp_models import MCPTransportType
 
 
 pytestmark = pytest.mark.integration
@@ -33,13 +33,13 @@ async def test_context7_server_available(setup_mcp_servers):
 
 
 @pytest.mark.asyncio
-async def test_sync_context7_tools(setup_mcp_servers, mcp_repo, test_company):
+async def test_sync_context7_tools(setup_mcp_servers, mcp_repo, test_company, storage):
     """
     Интеграционный тест синхронизации тулов с Context7.
     """
-    from app.core.mcp_sync import sync_mcp_server_tools
-    from app.db.repositories.tool_repository import ToolRepository
-    from app.db.repositories.storage import Storage
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
+    from core.db.tool_repository import ToolRepository
+    from core.db.storage import Storage
     
     storage = Storage()
     tool_repo = ToolRepository(storage)
@@ -159,13 +159,13 @@ PUBLIC_MCP_SERVERS = {
 
 
 @pytest.mark.asyncio
-async def test_create_mcp_tool_from_context7(setup_mcp_servers, test_company):
+async def test_create_mcp_tool_from_context7(setup_mcp_servers, test_company, storage):
     """
     Тест создания реального MCP тула через ToolFactory.
     """
-    from app.core.mcp_sync import sync_mcp_server_tools
-    from app.core.tool_factory import ToolFactory
-    from app.db.repositories.storage import Storage
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
+    from apps.agents.services.tool_factory import ToolFactory
+    from core.db.storage import Storage
     
     storage = Storage()
     tool_factory = ToolFactory()

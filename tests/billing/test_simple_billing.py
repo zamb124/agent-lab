@@ -5,7 +5,7 @@
 
 def test_billing_models_import():
     """Тест что модели биллинга импортируются без ошибок"""
-    from app.models.billing_models import TariffPlan, TARIFF_PRICES
+    from core.models.billing_models import TariffPlan, DEFAULT_TARIFF_PRICES as TARIFF_PRICES
     
     assert TariffPlan.FREE == "free"
     assert TariffPlan.BASIC == "basic"
@@ -23,7 +23,7 @@ def test_billing_models_import():
 
 def test_tool_decorator():
     """Тест платформенного декоратора @tool"""
-    from app.core.tool_decorator import tool, ToolReturn
+    from apps.agents.services.tool_decorator import tool, ToolReturn
     
     # Тест обычного tool
     @tool(cost=0.5, billing_name="test_tool")
@@ -61,13 +61,14 @@ def test_tool_decorator():
 
 def test_company_model_with_billing():
     """Тест что модель Company содержит поля биллинга"""
-    from app.identity.models import Company
+    from core.models import Company
+    from core.models.billing_models import TariffPlan
     
     company = Company(
         company_id="test_company",
         subdomain="test",
         name="Test Company",
-        tariff_plan="basic",
+        tariff_plan=TariffPlan.BASIC,
         monthly_budget=1000.0,
         current_month_spent=50.0
     )
@@ -79,12 +80,12 @@ def test_company_model_with_billing():
 
 def test_toolreference_with_billing():
     """Тест что ToolReference содержит поля биллинга"""
-    from app.models.core_models import ToolReference, CodeMode
+    from apps.agents.models.core_models import ToolReference, CodeMode
     
     tool_ref = ToolReference(
         tool_id="test_tool",
         code_mode=CodeMode.CODE_REFERENCE,
-        function_path="app.tools.test",
+        function_path="apps.agents.tools.test",
         cost=0.3,
         billing_name="custom_name",
         free_for_plans=["premium"],

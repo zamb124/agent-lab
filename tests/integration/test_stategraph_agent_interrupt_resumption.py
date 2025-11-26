@@ -11,9 +11,9 @@
 """
 import pytest
 from langchain_core.messages import HumanMessage
-from app.agents.base import AgentInterrupt
-from app.core.state_manager import get_state_manager
-from app.models import (
+from apps.agents.agents.base import AgentInterrupt
+from apps.agents.services.state_manager import get_state_manager
+from apps.agents.models import (
     AgentConfig,
     AgentType,
     GraphDefinition,
@@ -75,7 +75,7 @@ async def init_node(state):
                     type=NodeType.FUNCTION_NODE,
                     code_mode=CodeMode.INLINE_CODE,
                     inline_code="""
-from app.tools.misc.standard import ask_user
+from apps.agents.tools.misc.standard import ask_user
 
 async def check_node(state):
     '''Проверяет наличие user_name в store, если нет - спрашивает у пользователя'''
@@ -158,7 +158,7 @@ async def final_node(state):
         print(f"✅ Получен AgentInterrupt: {interrupt.value}")
         
         # Проверяем что interrupt_context сохранен
-        saved_state = await state_manager.load_state(session_id)
+        saved_state = await state_manager.get_or_create_session(session_id)
         assert saved_state is not None, "Состояние не сохранено"
         assert "interrupt_context" in saved_state, "interrupt_context отсутствует"
         

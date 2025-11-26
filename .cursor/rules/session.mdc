@@ -63,8 +63,8 @@ result = await agent.ainvoke(saved_state)  # session_id уже в saved_state
 1. **В нодах StateGraph:**
 ```python
 async def calculator_node(state: State) -> State:
-    factory = get_container().agent_factory
-    calculator = await factory.get_agent("app.agents.calculator.agent.CalculatorAgent")
+    factory = get_agents_container().agent_factory
+    calculator = await factory.get_agent("apps.agents.calculator.agent.CalculatorAgent")
     
     result = await calculator.ainvoke({
         "messages": [HumanMessage(content=original_question)]
@@ -114,7 +114,7 @@ result = await self.ainvoke(
 
 Пример:
 ```
-web:user_123:flow_abc:sub:app.agents.weather.agent.TravelInfoAgent:a1b2c3d4
+web:user_123:flow_abc:sub:apps.agents.weather.agent.TravelInfoAgent:a1b2c3d4
 ```
 
 ### Восстановление сессии субагента
@@ -155,7 +155,7 @@ if (parent_interrupt and
 `StateManager` сохраняет состояние по `session_id`:
 
 ```python
-from app.core.state_manager import get_state_manager
+from apps.agents.services.state_manager import get_state_manager
 
 state_manager = await get_state_manager()
 await state_manager.save_state(session_id, state)
@@ -166,7 +166,7 @@ await state_manager.save_state(session_id, state)
 ### Загрузка состояния
 
 ```python
-from app.core.state_manager import get_state_manager
+from apps.agents.services.state_manager import get_state_manager
 
 state_manager = await get_state_manager()
 saved_state = await state_manager.load_state(session_id)
@@ -193,7 +193,7 @@ saved_state = await state_manager.load_state(session_id)
 
 <bad_example>
 async def calculator_node(state: State) -> State:
-    calculator = await factory.get_agent("app.agents.calculator.agent.CalculatorAgent")
+    calculator = await factory.get_agent("apps.agents.calculator.agent.CalculatorAgent")
     result = await calculator.ainvoke({
         "messages": [HumanMessage(content=original_question)],
         "session_id": state.get("session_id")  # НЕТ! Нода не должна знать про session_id
@@ -203,7 +203,7 @@ async def calculator_node(state: State) -> State:
 
 <good_example>
 async def calculator_node(state: State) -> State:
-    calculator = await factory.get_agent("app.agents.calculator.agent.CalculatorAgent")
+    calculator = await factory.get_agent("apps.agents.calculator.agent.CalculatorAgent")
     result = await calculator.ainvoke({
         "messages": [HumanMessage(content=original_question)]
         # session_id автоматически возьмется из context.session_id
@@ -272,8 +272,8 @@ async def chat(message: str, session_id: str = Query(...)):
 
 ```python
 async def weather_node(state: State) -> State:
-    factory = get_container().agent_factory
-    weather = await factory.get_agent("app.agents.weather.agent.WeatherAgent")
+    factory = get_agents_container().agent_factory
+    weather = await factory.get_agent("apps.agents.weather.agent.WeatherAgent")
     
     result = await weather.ainvoke({
         "messages": state.get("messages", [])
@@ -290,11 +290,11 @@ async def weather_node(state: State) -> State:
 # В родительском агенте
 class MainAgent(ReActAgent):
     tools = [
-        "agent:app.agents.weather.agent.TravelInfoAgent"  # Субагент
+        "agent:apps.agents.weather.agent.TravelInfoAgent"  # Субагент
     ]
 
 # При вызове субагента автоматически создается sub_session_id:
-# "parent_session:sub:app.agents.weather.agent.TravelInfoAgent:abc123"
+# "parent_session:sub:apps.agents.weather.agent.TravelInfoAgent:abc123"
 ```
 
 ### Пример 4: Восстановление после interrupt

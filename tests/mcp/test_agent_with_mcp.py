@@ -1,5 +1,5 @@
 """
-from app.core.container import get_container
+from apps.agents.container import get_agents_container
 End-to-end тест: AgentFactory + MCP тулы + мок LLM.
 
 Проверяем что агент может использовать MCP тулы через мокированный LLM.
@@ -24,12 +24,12 @@ async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_com
     3. Мокаем LLM чтобы он вызвал MCP тул
     4. Проверяем что тул выполнился успешно
     """
-    from app.core.mcp_sync import sync_mcp_server_tools
-    from app.core.agent_factory import AgentFactory
-    from app.models import AgentConfig
-    from app.db.repositories.agent_repository import AgentRepository
-    from app.db.repositories.storage import Storage
-    from app.tools.misc.standard import ask_user
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
+    from apps.agents.services.agent_factory import AgentFactory
+    from apps.agents.models import AgentConfig
+    from core.db.agent_repository import AgentRepository
+    from core.db.storage import Storage
+    from apps.agents.tools.misc.standard import ask_user
     
     storage = Storage()
     agent_repo = AgentRepository(storage)
@@ -85,7 +85,7 @@ async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_com
         for t in saved_config.tools:
             print(f"      • {t.tool_id} (code_mode: {t.code_mode})")
         
-        agent_factory = get_container().agent_factory
+        agent_factory = get_agents_container().agent_factory
         
         # Включаем DEBUG логирование для отладки
         import logging
@@ -194,17 +194,17 @@ async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_com
 
 
 @pytest.mark.asyncio
-async def test_agent_calls_mcp_tool_directly(test_company):
+async def test_agent_calls_mcp_tool_directly(test_company, storage):
     """
     Прямой тест вызова MCP тула через ToolFactory.
     
     Без агента - просто вызываем MCP тул напрямую.
     """
-    from app.models.mcp_models import MCPServerConfig, MCPTransportType
-    from app.db.repositories.mcp_repository import MCPServerRepository
-    from app.core.mcp_sync import sync_mcp_server_tools
-    from app.core.tool_factory import ToolFactory
-    from app.db.repositories.storage import Storage
+    from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
+    from apps.agents.db.repositories.mcp_repository import MCPServerRepository
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
+    from apps.agents.services.tool_factory import ToolFactory
+    from core.db.storage import Storage
     import os
     
     storage = Storage()
@@ -275,11 +275,11 @@ async def test_weather_agent_with_mcp_real_execution(setup_mcp_servers, test_com
     - Мок LLM вызывает MCP тул
     - Результат возвращается пользователю
     """
-    from app.core.mcp_sync import sync_mcp_server_tools
-    from app.core.agent_factory import AgentFactory
-    from app.models import AgentConfig
-    from app.db.repositories.agent_repository import AgentRepository
-    from app.db.repositories.storage import Storage
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
+    from apps.agents.services.agent_factory import AgentFactory
+    from apps.agents.models import AgentConfig
+    from core.db.agent_repository import AgentRepository
+    from core.db.storage import Storage
     from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
     
     storage = Storage()
@@ -304,7 +304,7 @@ async def test_weather_agent_with_mcp_real_execution(setup_mcp_servers, test_com
         
         # 3. Загружаем через фабрику
         print("\n3️⃣ Загрузка агента через AgentFactory...")
-        agent_factory = get_container().agent_factory
+        agent_factory = get_agents_container().agent_factory
         agent = await agent_factory.get_agent("weather_mcp_test")
         print(f"   ✅ Агент загружен с {len(agent.tools)} тулами")
         
@@ -421,13 +421,13 @@ async def test_agent_with_multiple_mcp_tools(test_company):
     1. resolve-library-id
     2. get-library-docs
     """
-    from app.models.mcp_models import MCPServerConfig, MCPTransportType
-    from app.db.repositories.mcp_repository import MCPServerRepository
-    from app.core.mcp_sync import sync_mcp_server_tools
-    from app.core.agent_factory import AgentFactory
-    from app.models import AgentConfig
-    from app.db.repositories.agent_repository import AgentRepository
-    from app.db.repositories.storage import Storage
+    from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
+    from apps.agents.db.repositories.mcp_repository import MCPServerRepository
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
+    from apps.agents.services.agent_factory import AgentFactory
+    from apps.agents.models import AgentConfig
+    from core.db.agent_repository import AgentRepository
+    from core.db.storage import Storage
     from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
     import os
     
@@ -463,7 +463,7 @@ async def test_agent_with_multiple_mcp_tools(test_company):
         )
         await agent_repo.set(agent_config)
         
-        agent_factory = get_container().agent_factory
+        agent_factory = get_agents_container().agent_factory
         agent = await agent_factory.get_agent("multi_mcp_test")
         
         print(f"✅ Агент создан с {len(agent.tools)} тулами")

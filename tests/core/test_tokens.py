@@ -6,8 +6,8 @@ import pytest_asyncio
 from datetime import datetime, timezone, timedelta
 from unittest.mock import patch, MagicMock
 
-from app.core.tokens import TokenService, TokenData, get_token_service
-from app.core.config import get_settings
+from core.utils.tokens import TokenService, TokenData, get_token_service
+from core.config import get_settings
 
 
 class TestTokenService:

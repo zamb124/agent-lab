@@ -6,11 +6,11 @@
 import asyncio
 import logging
 import pytest
-from app.core.tool_decorator import tool
-from app.core.variables import get_state, set_state_in_context
-from app.models.core_models import AgentConfig, AgentType
-from app.core.context import get_context, set_context
-from app.models.context_models import Context
+from apps.agents.services.tool_decorator import tool
+from core.variables import get_state, set_state_in_context
+from apps.agents.models.core_models import AgentConfig, AgentType
+from core.context import get_context, set_context
+from core.models.context_models import Context
 
 logger = logging.getLogger(__name__)
 

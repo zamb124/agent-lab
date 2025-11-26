@@ -9,8 +9,8 @@
 """
 import pytest
 from langchain_core.messages import HumanMessage
-from app.agents.base import AgentInterrupt
-from app.core.state_manager import get_state_manager
+from apps.agents.agents.base import AgentInterrupt
+from apps.agents.services.state_manager import get_state_manager
 
 
 @pytest.mark.asyncio
@@ -33,10 +33,10 @@ async def test_react_agent_interrupt_resumption_in_subagent(
     """
     
     # Загружаем агентов
-    weather_agent = await agent_factory.get_agent("app.agents.weather.agent.WeatherAgent")
+    weather_agent = await agent_factory.get_agent("apps.agents.agents.weather.agent.WeatherAgent")
     assert weather_agent is not None, "WeatherAgent не найден в БД"
     
-    travel_agent = await agent_factory.get_agent("app.agents.weather.agent.TravelInfoAgent")
+    travel_agent = await agent_factory.get_agent("apps.agents.agents.weather.agent.TravelInfoAgent")
     assert travel_agent is not None, "TravelInfoAgent не найден в БД"
     
     # Устанавливаем context_window для mock модели
@@ -191,7 +191,7 @@ async def test_react_agent_interrupt_resumption_in_subagent(
         
         # Проверяем что состояние сохранено
         # sub_session_id формируется в as_tool с UUID, так что нужно получить его из parent_state
-        parent_state = await state_manager.load_state(session_id)
+        parent_state = await state_manager.get_or_create_session(session_id)
         assert parent_state is not None, "Состояние родительского агента не сохранено"
         assert "interrupt_context" in parent_state, "interrupt_context отсутствует в состоянии родителя"
         
@@ -204,19 +204,19 @@ async def test_react_agent_interrupt_resumption_in_subagent(
         print(f"✅ Найден sub_session_id из parent_state: {sub_session_id}")
         
         # Проверяем состояние субагента
-        sub_state = await state_manager.load_state(sub_session_id)
+        sub_state = await state_manager.get_or_create_session(sub_session_id)
         assert sub_state is not None, "Состояние субагента не сохранено"
         assert "interrupt_context" in sub_state, "interrupt_context отсутствует в состоянии субагента"
         
         sub_interrupt_ctx = sub_state["interrupt_context"]
         assert sub_interrupt_ctx["type"] == "sub_agent", f"Неправильный тип: {sub_interrupt_ctx['type']}"
-        assert sub_interrupt_ctx["agent_id"] == "app.agents.weather.agent.TravelInfoAgent"
+        assert sub_interrupt_ctx["agent_id"] == "apps.agents.agents.weather.agent.TravelInfoAgent"
         
         print(f"✅ Состояние субагента сохранено: {sub_session_id}")
         print(f"   Interrupt context: {sub_interrupt_ctx}")
         
         # Проверяем состояние родительского агента
-        parent_state = await state_manager.load_state(session_id)
+        parent_state = await state_manager.get_or_create_session(session_id)
         assert parent_state is not None, "Состояние родительского агента не сохранено"
         assert "interrupt_context" in parent_state, "interrupt_context отсутствует в состоянии родителя"
         
@@ -284,7 +284,7 @@ async def test_react_agent_interrupt_resumption_in_subagent(
         
         # Очищаем interrupt_context из parent_state (как это делается после завершения субагента)
         parent_state.pop("interrupt_context", None)
-        await state_manager.save_state(session_id, parent_state)
+        await state_manager.save_session(parent_state)
         
         # Вызываем субагента второй раз через родительский агент - должна быть создана новая сессия
         print(f"🔄 Второй вызов TravelInfoAgent через WeatherAgent (после завершения первого)")
@@ -301,7 +301,7 @@ async def test_react_agent_interrupt_resumption_in_subagent(
             second_result_text = await travel_tool.ainvoke({"request": "путешествие"})
             print(f"✅ Второй вызов успешно завершился")
         except AgentInterrupt:
-            second_result = await state_manager.load_state(session_id)
+            second_result = await state_manager.get_or_create_session(session_id)
             second_interrupt_ctx = second_result.get("interrupt_context", {}) if second_result else {}
             if second_interrupt_ctx.get("type") == "tool_call":
                 second_sub_session_id = second_interrupt_ctx.get("sub_session_id")

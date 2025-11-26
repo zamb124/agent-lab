@@ -6,8 +6,8 @@ import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 import httpx
 
-from app.core.mcp_client import MCPHttpClient, format_mcp_result
-from app.models.mcp_models import MCPTransportType
+from apps.agents.services.mcp_client import MCPHttpClient, format_mcp_result
+from apps.agents.models.mcp_models import MCPTransportType
 
 
 @pytest.fixture

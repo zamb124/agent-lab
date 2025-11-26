@@ -1,0 +1,156 @@
+---
+alwaysApply: true
+---
+
+# Архитектура моделей в монорепозитории
+
+## Разделение: Shared vs Service-specific
+
+### Shared модели (в core/)
+
+**core/models/identity_models.py**:
+- User, Company, AuthSession
+- AuthProvider, ProviderUserInfo
+- AuthRequest, AuthResult
+- UserStatus
+
+**core/models/i18n_models.py**:
+- Language
+
+**core/models/context_models.py**:
+- Context
+
+**core/files/models.py**:
+- FileRecord, AudioRecord
+- FileStatus, CloudVoiceTokenConfig
+
+### Service-specific модели (в apps/agents/models/)
+
+**apps/agents/models/core_models.py**:
+- AgentConfig, FlowConfig
+- ToolReference
+- AgentType, NodeType, CodeMode
+- GraphDefinition, GraphNode, GraphEdge
+- LLMConfig
+- SubAgentMemoryPolicy
+
+**apps/agents/models/task_models.py**:
+- TaskConfig, TaskStatus
+
+**apps/agents/models/session_models.py**:
+- SessionConfig, SessionStatus
+
+**apps/agents/models/billing_models.py**:
+- UsageRecord, UsageType
+
+**apps/agents/models/mcp_models.py**:
+- MCPServerConfig, MCPTransportType
+
+## Правило: НЕТ дубликатов
+
+<bad_example>
+# apps/agents/models/context_models.py - УДАЛЕНО!
+# apps/agents/models/i18n_models.py - УДАЛЕНО!
+# apps/agents/models/identity_models.py - УДАЛЕНО!
+# apps/agents/models/file_models.py - УДАЛЕНО!
+
+# Эти модели теперь ТОЛЬКО в core!
+</bad_example>
+
+## Импорты моделей
+
+### В apps/agents/models/__init__.py:
+
+```python
+# Реэкспорт shared моделей из core
+from core.models import User, Company, Context, Language, AuthProvider, AuthSession
+from core.files.models import FileRecord, AudioRecord, FileStatus
+
+# Специфичные модели сервиса
+from apps.agents.models.core_models import (
+    AgentConfig,
+    FlowConfig,
+    ToolReference,
+    # ...
+)
+
+__all__ = [
+    # Shared из core
+    "User", "Company", "Context", "FileRecord",
+    # Специфичные
+    "AgentConfig", "FlowConfig",
+]
+```
+
+### В коде:
+
+<good_example>
+# Можно импортировать из apps.agents.models (реэкспорт)
+from apps.agents.models import User, Company, AgentConfig, FileRecord
+
+# Или напрямую из core
+from core.models import User, Company
+from core.files.models import FileRecord
+from apps.agents.models import AgentConfig
+</good_example>
+
+## Кастомный Field
+
+**КРИТИЧНО**: Используй `from core.fields import Field` вместо `from pydantic import Field`
+
+```python
+from core.fields import Field
+
+class User(BaseModel):
+    user_id: str = Field(
+        title="ID",
+        readonly=True,        # → json_schema_extra
+        placeholder="user_123"  # → json_schema_extra
+    )
+```
+
+Кастомные поля автоматически переносятся в json_schema_extra:
+- readonly
+- placeholder
+- groups
+- widget_attrs
+- exclude_from_form
+- editable_in_table
+- hidden
+
+## Хранение моделей через репозитории
+
+**Каждая модель имеет свой репозиторий:**
+
+<good_example>
+# User → UserRepository (core/db/repositories/)
+# Company → CompanyRepository (core/db/repositories/)
+# AgentConfig → AgentRepository (apps/agents/db/repositories/)
+# FlowConfig → FlowRepository (apps/agents/db/repositories/)
+# TaskConfig → TaskRepository (apps/agents/db/repositories/)
+# SessionConfig → SessionRepository (apps/agents/db/repositories/)
+# ToolReference → ToolRepository (apps/agents/db/repositories/)
+# MCPServerConfig → MCPServerRepository (apps/agents/db/repositories/)
+</good_example>
+
+**НИКОГДА не работай с моделями через Storage напрямую:**
+
+<bad_example>
+# НЕТ!
+storage = container.storage
+data = await storage.get("agent:my_agent")
+agent = AgentConfig.model_validate_json(data)
+
+# ДА!
+agent_repo = container.agent_repository
+agent = await agent_repo.get("my_agent")
+</bad_example>
+
+## КРИТИЧНО
+
+1. **НЕТ дубликатов** между core и apps
+2. **Shared модели** (User, Company, FileRecord) → core → shared БД
+3. **Бизнес-модели** (AgentConfig, FlowConfig, TaskConfig) → apps/agents → service БД
+4. Используй **core.fields.Field** везде (Pydantic v2 совместимый)
+5. Реэкспортируй shared модели в apps/{service}/models/__init__.py
+6. **ВСЕ модели** через репозитории, НЕ через Storage

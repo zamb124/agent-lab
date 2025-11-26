@@ -6,10 +6,10 @@ import pytest
 from unittest.mock import Mock, patch, AsyncMock
 from fastapi import Request
 
-from app.models.context_models import Context
-from app.models.i18n_models import Language
-from app.identity.models import User, Company, AuthProvider, UserStatus
-from app.middleware.auth import AuthMiddleware
+from core.models.context_models import Context
+from core.models.i18n_models import Language
+from core.models import User, Company, AuthProvider, UserStatus
+from core.middleware.auth import AuthMiddleware
 
 
 class TestContextLanguageIntegration:
@@ -273,7 +273,7 @@ class TestAuthMiddlewareContextCreation:
         }.get(key, default)
         request.headers.get.return_value = ""
 
-        with patch('app.middleware.auth.get_token_service') as mock_token_service:
+        with patch('core.middleware.auth.get_token_service') as mock_token_service:
             # Мокаем валидацию токена
             mock_token = Mock()
             mock_token.user_id = "test_user"
@@ -337,7 +337,7 @@ class TestAuthMiddlewareContextCreation:
         }.get(key, default)
         request.cookies.keys.return_value = ["auth_token"]
 
-        with patch('app.middleware.auth.get_token_service') as mock_token_service:
+        with patch('core.middleware.auth.get_token_service') as mock_token_service:
             # Мокаем валидацию токена
             mock_token = Mock()
             mock_token.user_id = "frontend_user"

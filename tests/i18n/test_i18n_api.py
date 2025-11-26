@@ -5,10 +5,10 @@
 from unittest.mock import Mock, patch, AsyncMock
 from fastapi.testclient import TestClient
 
-from app.frontend.api.i18n import router
-from app.models.i18n_models import Language, TranslationStats, TranslationFile
-from app.models.context_models import Context
-from app.identity.models import User, Company, AuthProvider, UserStatus
+from apps.frontend.api.i18n import router
+from core.models.i18n_models import Language, TranslationStats, TranslationFile
+from core.models.context_models import Context
+from core.models import User, Company, AuthProvider, UserStatus
 
 
 # Создаем тестовое приложение
@@ -22,7 +22,7 @@ client = TestClient(test_app)
 class TestTranslationsEndpoint:
     """Тесты для endpoint получения переводов"""
     
-    @patch('app.frontend.api.i18n.get_translation_manager')
+    @patch('apps.frontend.api.i18n.get_translation_manager')
     def test_get_translations_success(self, mock_get_manager):
         """Проверяем успешное получение переводов"""
         # Мокаем менеджер переводов
@@ -52,7 +52,7 @@ class TestTranslationsEndpoint:
         assert response.status_code == 500
         assert "Ошибка получения переводов" in response.json()["detail"]
     
-    @patch('app.frontend.api.i18n.get_translation_manager')
+    @patch('apps.frontend.api.i18n.get_translation_manager')
     def test_get_translations_empty(self, mock_get_manager):
         """Проверяем получение пустых переводов"""
         mock_manager = Mock()
@@ -64,7 +64,7 @@ class TestTranslationsEndpoint:
         assert response.status_code == 200
         assert response.json() == {}
     
-    @patch('app.frontend.api.i18n.get_translation_manager')
+    @patch('apps.frontend.api.i18n.get_translation_manager')
     def test_get_translations_manager_exception(self, mock_get_manager):
         """Проверяем обработку исключений в менеджере"""
         mock_get_manager.side_effect = Exception("Manager error")
@@ -78,7 +78,7 @@ class TestTranslationsEndpoint:
 class TestUserLanguageEndpoint:
     """Тесты для endpoint установки языка пользователя"""
     
-    @patch('app.frontend.api.i18n.get_context')
+    @patch('apps.frontend.api.i18n.get_context')
     def test_set_user_language_success(self, mock_get_context):
         """Проверяем успешную установку языка"""
         # Мокаем контекст с пользователем
@@ -118,7 +118,7 @@ class TestUserLanguageEndpoint:
         assert response.status_code == 400
         assert "Неподдерживаемый язык" in response.json()["detail"]
     
-    @patch('app.frontend.api.i18n.get_context')
+    @patch('apps.frontend.api.i18n.get_context')
     def test_set_user_language_no_user(self, mock_get_context):
         """Проверяем обработку запроса без авторизации"""
         mock_get_context.return_value = None
@@ -128,7 +128,7 @@ class TestUserLanguageEndpoint:
         assert response.status_code == 401
         assert "Пользователь не авторизован" in response.json()["detail"]
     
-    @patch('app.frontend.api.i18n.get_context')
+    @patch('apps.frontend.api.i18n.get_context')
     def test_set_user_language_empty_data(self, mock_get_context):
         """Проверяем обработку пустых данных"""
         mock_user = User(
@@ -159,7 +159,7 @@ class TestUserLanguageEndpoint:
 class TestStatsEndpoint:
     """Тесты для endpoint статистики переводов"""
     
-    @patch('app.frontend.api.i18n.get_translation_manager')
+    @patch('apps.frontend.api.i18n.get_translation_manager')
     def test_get_stats_success(self, mock_get_manager):
         """Проверяем успешное получение статистики"""
         # Подготавливаем тестовую статистику
@@ -201,7 +201,7 @@ class TestStatsEndpoint:
         assert en_stats["total_keys"] == 100
         assert en_stats["translated_keys"] == 75
     
-    @patch('app.frontend.api.i18n.get_translation_manager')
+    @patch('apps.frontend.api.i18n.get_translation_manager')
     def test_get_stats_manager_exception(self, mock_get_manager):
         """Проверяем обработку исключений при получении статистики"""
         mock_get_manager.side_effect = Exception("Stats error")
@@ -215,8 +215,8 @@ class TestStatsEndpoint:
 class TestRefreshEndpoint:
     """Тесты для endpoint обновления переводов"""
     
-    @patch('app.frontend.api.i18n.get_translation_manager')
-    @patch('app.frontend.api.i18n.get_context')
+    @patch('apps.frontend.api.i18n.get_translation_manager')
+    @patch('apps.frontend.api.i18n.get_context')
     def test_refresh_translations_success(self, mock_get_context, mock_get_manager):
         """Проверяем успешное обновление переводов"""
         # Мокаем контекст администратора
@@ -258,7 +258,7 @@ class TestRefreshEndpoint:
         assert data["status"] == "success"
         assert "обновлены" in data["message"]
     
-    @patch('app.frontend.api.i18n.get_context')
+    @patch('apps.frontend.api.i18n.get_context')
     def test_refresh_translations_no_auth(self, mock_get_context):
         """Проверяем отказ в доступе без авторизации"""
         mock_get_context.return_value = None
@@ -268,7 +268,7 @@ class TestRefreshEndpoint:
         assert response.status_code == 401
         assert "Пользователь не авторизован" in response.json()["detail"]
     
-    @patch('app.frontend.api.i18n.get_context')
+    @patch('apps.frontend.api.i18n.get_context')
     def test_refresh_translations_no_admin_rights(self, mock_get_context):
         """Проверяем отказ в доступе для обычного пользователя"""
         # Мокаем контекст обычного пользователя
@@ -307,7 +307,7 @@ class TestRefreshEndpoint:
 class TestSupportedLanguagesEndpoint:
     """Тесты для endpoint списка поддерживаемых языков"""
     
-    @patch('app.frontend.api.i18n.get_translation_manager')
+    @patch('apps.frontend.api.i18n.get_translation_manager')
     def test_get_supported_languages_success(self, mock_get_manager):
         """Проверяем получение списка поддерживаемых языков"""
         mock_manager = Mock()
@@ -325,7 +325,7 @@ class TestSupportedLanguagesEndpoint:
         assert data["en"] == "English"
         assert len(data) == 2
     
-    @patch('app.frontend.api.i18n.get_translation_manager')
+    @patch('apps.frontend.api.i18n.get_translation_manager')
     def test_get_supported_languages_fallback(self, mock_get_manager):
         """Проверяем fallback при отсутствии переводов названий языков"""
         mock_manager = Mock()
@@ -345,7 +345,7 @@ class TestSupportedLanguagesEndpoint:
 class TestCurrentLanguageEndpoint:
     """Тесты для endpoint получения текущего языка"""
     
-    @patch('app.frontend.api.i18n.get_context')
+    @patch('apps.frontend.api.i18n.get_context')
     def test_get_current_language_from_context(self, mock_get_context):
         """Проверяем получение языка из контекста"""
         mock_user = User(
@@ -375,7 +375,7 @@ class TestCurrentLanguageEndpoint:
         assert data["language"] == "en"
         assert data["name"] == "EN"
     
-    @patch('app.frontend.api.i18n.get_context')
+    @patch('apps.frontend.api.i18n.get_context')
     def test_get_current_language_no_context(self, mock_get_context):
         """Проверяем fallback при отсутствии контекста"""
         mock_get_context.return_value = None
@@ -391,7 +391,7 @@ class TestCurrentLanguageEndpoint:
 class TestTranslateEndpoint:
     """Тесты для endpoint перевода конкретного ключа"""
     
-    @patch('app.frontend.api.i18n.get_translation_manager')
+    @patch('apps.frontend.api.i18n.get_translation_manager')
     def test_translate_key_success(self, mock_get_manager):
         """Проверяем успешный перевод ключа"""
         mock_manager = Mock()
@@ -412,7 +412,7 @@ class TestTranslateEndpoint:
         # Проверяем что менеджер был вызван с правильными параметрами
         mock_manager.t.assert_called_once_with("dashboard.title", Language.EN)
     
-    @patch('app.frontend.api.i18n.get_translation_manager')
+    @patch('apps.frontend.api.i18n.get_translation_manager')
     def test_translate_key_with_params(self, mock_get_manager):
         """Проверяем перевод с параметрами"""
         mock_manager = Mock()
@@ -451,7 +451,7 @@ class TestTranslateEndpoint:
         assert response.status_code == 400
         assert "Неподдерживаемый язык" in response.json()["detail"]
     
-    @patch('app.frontend.api.i18n.get_translation_manager')
+    @patch('apps.frontend.api.i18n.get_translation_manager')
     def test_translate_key_auto_language(self, mock_get_manager):
         """Проверяем автоматическое определение языка"""
         mock_manager = Mock()
@@ -470,7 +470,7 @@ class TestTranslateEndpoint:
         # Проверяем что вызвано без языка (автоопределение)
         mock_manager.t.assert_called_once_with("test.key", None)
     
-    @patch('app.frontend.api.i18n.get_translation_manager')
+    @patch('apps.frontend.api.i18n.get_translation_manager')
     def test_translate_key_manager_exception(self, mock_get_manager):
         """Проверяем обработку исключений в менеджере"""
         mock_get_manager.side_effect = Exception("Translation error")

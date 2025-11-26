@@ -6,7 +6,7 @@
 """
 
 import pytest
-from app.models import (
+from apps.agents.models import (
     AgentConfig,
     AgentType,
     GraphDefinition,
@@ -21,7 +21,7 @@ from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_stategraph_from_db_with_conditional(migrated_db, storage, agent_factory, unique_id, agent_repo):
+async def test_stategraph_from_db_with_conditional(migrated_db,  agent_factory, unique_id, agent_repo):
     """
     Создаем StateGraph агента в БД с:
     - 5 нодами (router, process_a, process_b, merge, finish)

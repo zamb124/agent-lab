@@ -2,7 +2,7 @@
 Тест для демонстрационного StateGraph агента со всеми типами нод.
 """
 import pytest
-from app.models import NodeType
+from apps.agents.models import NodeType
 
 
 @pytest.mark.asyncio
@@ -10,14 +10,14 @@ async def test_stategraph_agent_migration(agent_repo, test_context):
     """Тест миграции агента со всеми типами нод"""
     
     # Загружаем конфиг напрямую из модуля
-    import app.agents.test_stategraph_agent as test_agent_module
+    import apps.agents.agents.test_stategraph_agent as test_agent_module
     agent_config = test_agent_module.test_stategraph_agent_config
     
     # Сохраняем в БД
     await agent_repo.set(agent_config)
     
     # Проверяем что агент создан
-    agent = await agent_repo.get('app.agents.test_stategraph_agent.test_stategraph_agent_config')
+    agent = await agent_repo.get('apps.agents.agents.test_stategraph_agent.test_stategraph_agent_config')
     
     assert agent is not None, "Агент должен быть сохранён в БД"
     assert agent.name == "Test StateGraph Agent"
@@ -54,7 +54,7 @@ async def test_stategraph_agent_migration(agent_repo, test_context):
     assert len(edges) == 12, f"Должно быть 12 рёбер (добавили EXPRESSION), найдено {len(edges)}"
     
     # Проверяем что тип определяется автоматически
-    from app.models import AgentType
+    from apps.agents.models import AgentType
     assert agent.type == AgentType.STATEGRAPH, f"Агент с graph_definition должен автоматически стать STATEGRAPH, получили {agent.type}"
     
     print(f"\n✅ Агент успешно протестирован:")
@@ -68,18 +68,18 @@ async def test_stategraph_flow_migration(flow_repo, test_context):
     """Тест миграции flow для StateGraph агента"""
     
     # Загружаем flow конфиг
-    import app.flows.test_stategraph_flow as test_flow_module
+    import apps.agents.flows.test_stategraph_flow as test_flow_module
     flow_config = test_flow_module.test_stategraph_flow_config
     
     # Сохраняем в БД
     await flow_repo.set(flow_config)
     
     # Проверяем что flow создан
-    flow = await flow_repo.get('app.flows.test_stategraph_flow.test_stategraph_flow_config')
+    flow = await flow_repo.get('apps.agents.flows.test_stategraph_flow.test_stategraph_flow_config')
     
     assert flow is not None, "Flow должен быть сохранён в БД"
     assert flow.name == "Test StateGraph Flow"
-    assert flow.entry_point_agent == "app.agents.test_stategraph_agent.test_stategraph_agent_config"
+    assert flow.entry_point_agent == "apps.agents.agents.test_stategraph_agent.test_stategraph_agent_config"
     
     print(f"\n✅ Flow успешно протестирован: {flow.name}")
 
@@ -89,12 +89,12 @@ async def test_stategraph_agent_execution(agent_factory, agent_repo, test_contex
     """Тест выполнения StateGraph агента"""
     
     # Сохраняем агент в БД
-    import app.agents.test_stategraph_agent as test_agent_module
+    import apps.agents.agents.test_stategraph_agent as test_agent_module
     agent_config = test_agent_module.test_stategraph_agent_config
     await agent_repo.set(agent_config)
     
     # Создаём агента через фабрику
-    agent = await agent_factory.get_agent('app.agents.test_stategraph_agent.test_stategraph_agent_config')
+    agent = await agent_factory.get_agent('apps.agents.agents.test_stategraph_agent.test_stategraph_agent_config')
     
     assert agent is not None, "Агент должен быть создан через фабрику"
     
@@ -125,11 +125,11 @@ async def test_stategraph_agent_execution(agent_factory, agent_repo, test_contex
 async def test_all_node_types_present(agent_repo, test_context):
     """Тест что все типы нод действительно используются"""
     
-    import app.agents.test_stategraph_agent as test_agent_module
+    import apps.agents.agents.test_stategraph_agent as test_agent_module
     agent_config = test_agent_module.test_stategraph_agent_config
     await agent_repo.set(agent_config)
     
-    agent = await agent_repo.get('app.agents.test_stategraph_agent.test_stategraph_agent_config')
+    agent = await agent_repo.get('apps.agents.agents.test_stategraph_agent.test_stategraph_agent_config')
     nodes = agent.graph_definition.nodes
     
     # Группируем ноды по типам
@@ -164,12 +164,12 @@ async def test_message_node_adds_messages(agent_factory, agent_repo, test_contex
     """Тест что MESSAGE_NODE добавляет сообщения в state"""
     
     # Сохраняем агент в БД
-    import app.agents.test_stategraph_agent as test_agent_module
+    import apps.agents.agents.test_stategraph_agent as test_agent_module
     agent_config = test_agent_module.test_stategraph_agent_config
     await agent_repo.set(agent_config)
     
     # Создаём агента через фабрику
-    agent = await agent_factory.get_agent('app.agents.test_stategraph_agent.test_stategraph_agent_config')
+    agent = await agent_factory.get_agent('apps.agents.agents.test_stategraph_agent.test_stategraph_agent_config')
     
     # Выполняем граф
     result = await agent.ainvoke(
@@ -211,12 +211,12 @@ async def test_condition_types_work(agent_factory, agent_repo, test_context, sys
     """Тест что оба типа условий (ROUTER и EXPRESSION) работают"""
     
     # Сохраняем агент в БД
-    import app.agents.test_stategraph_agent as test_agent_module
+    import apps.agents.agents.test_stategraph_agent as test_agent_module
     agent_config = test_agent_module.test_stategraph_agent_config
     await agent_repo.set(agent_config)
     
     # Проверяем что в графе есть оба типа условий
-    from app.models import ConditionType
+    from apps.agents.models import ConditionType
     
     edges = agent_config.graph_definition.edges
     router_edges = [e for e in edges if e.condition_type == ConditionType.ROUTER]
@@ -236,7 +236,7 @@ async def test_condition_types_work(agent_factory, agent_repo, test_context, sys
         print(f"      {edge.source} -> {edge.target} (condition: {condition_preview}...)")
     
     # Создаём и выполняем граф
-    agent = await agent_factory.get_agent('app.agents.test_stategraph_agent.test_stategraph_agent_config')
+    agent = await agent_factory.get_agent('apps.agents.agents.test_stategraph_agent.test_stategraph_agent_config')
     
     result = await agent.ainvoke(
         {

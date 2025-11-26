@@ -3,11 +3,11 @@ import pytest
 
 from langchain_core.messages import HumanMessage
 
-from app.core.llm_factory import get_llm, setup_mock_responses
-from app.core.context import get_context
-from app.core.variables import VariableResolver
-from app.flows.flow import Flow
-from app.models import AgentConfig, FlowConfig, LLMConfig, AgentType, ToolReference, CodeMode
+from core.clients.llm import get_llm, setup_mock_responses
+from core.context import get_context
+from core.variables import VariableResolver
+from apps.agents.flows.flow import Flow
+from apps.agents.models import AgentConfig, FlowConfig, LLMConfig, AgentType, ToolReference, CodeMode
 
 
 @pytest.mark.asyncio
@@ -17,8 +17,8 @@ async def test_dynamic_system_prompt_updates_and_shared_state(migrated_db, syste
         tool_id="set_location",
         code_mode=CodeMode.INLINE_CODE,
         inline_code="""
-from app.core.tool_decorator import tool
-from app.core.variables import get_state
+from apps.agents.services.tool_decorator import tool
+from core.variables import get_state
 
 @tool(state_aware=True)
 def set_location(city: str, country: str) -> str:
@@ -50,8 +50,8 @@ def set_location(city: str, country: str) -> str:
         tool_id="set_location",
         code_mode=CodeMode.INLINE_CODE,
         inline_code="""
-from app.core.tool_decorator import tool
-from app.core.variables import get_state
+from apps.agents.services.tool_decorator import tool
+from core.variables import get_state
 
 @tool(state_aware=True)
 def set_location(city: str, country: str) -> str:

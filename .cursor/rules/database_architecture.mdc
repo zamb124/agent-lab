@@ -1,0 +1,252 @@
+---
+description: "Архитектура БД и репозиториев - ОСНОВНОЙ REFERENCE"
+alwaysApply: true
+---
+# Архитектура БД и репозиториев
+
+## Главный принцип
+
+**ВСЕ данные ТОЛЬКО через репозитории. Storage - приватный класс.**
+
+## Структура
+
+```
+core/db/
+├── storage.py              # Storage (приватный, только для репозиториев)
+├── base_repository.py      # BaseRepository (композиция с Storage)
+├── models.py               # SQLAlchemy таблицы
+└── repositories/           # Core репозитории (shared БД)
+    ├── user_repository.py
+    ├── company_repository.py
+    ├── auth_session_repository.py
+    ├── subdomain_repository.py
+    ├── variable_repository.py
+    ├── usage_repository.py
+    └── __init__.py
+
+apps/agents/db/repositories/  # Agents репозитории (service БД)
+├── agent_repository.py
+├── flow_repository.py
+├── tool_repository.py
+├── task_repository.py
+├── session_repository.py
+├── mcp_repository.py
+└── __init__.py
+```
+
+## BaseRepository - незыблемая логика
+
+```python
+class BaseRepository(ABC, Generic[T]):
+    is_global: bool = False  # Атрибут класса
+    
+    def __init__(self, storage: Storage, model_class: Type[T]):
+        self._storage = storage  # Приватная композиция
+        self.model_class = model_class
+    
+    def _build_final_key(self, key: str) -> str:
+        # Незыблемая логика без ветвлений
+        if self.is_global:
+            return key
+        
+        context = get_context()
+        company_id = context.active_company.company_id
+        return f"company:{company_id}:{key}"
+    
+    @abstractmethod
+    def _get_key(self, entity_id: str) -> str:
+        """Базовый ключ БЕЗ префикса компании"""
+        pass
+    
+    @abstractmethod
+    def _get_prefix(self) -> str:
+        """Префикс для поиска"""
+        pass
+    
+    @abstractmethod
+    def _get_table_name(self) -> str:
+        """Имя таблицы БД"""
+        pass
+    
+    @abstractmethod
+    def _extract_entity_id(self, entity: T) -> str:
+        """Извлечение ID из сущности"""
+        pass
+```
+
+## Все репозитории
+
+### Core репозитории (shared БД):
+
+| Репозиторий | is_global | Таблица | Префикс ключа |
+|-------------|-----------|---------|---------------|
+| UserRepository | True | users | user: |
+| CompanyRepository | True | storage | company: |
+| AuthSessionRepository | True | users | auth_session: |
+| SubdomainRepository | True | storage | subdomain: |
+| VariableRepository | False | variables | company:X:var: |
+| UsageRepository | False | storage | company:X:usage: |
+| FileRepository | False | storage | company:X:file: |
+
+### Agents репозитории (service БД):
+
+| Репозиторий | is_global | Таблица | Префикс ключа |
+|-------------|-----------|---------|---------------|
+| AgentRepository | False | storage | company:X:agent: |
+| FlowRepository | False | storage | company:X:flow: |
+| ToolRepository | False | storage | company:X:tool: |
+| TaskRepository | False | tasks | company:X:task: |
+| SessionRepository | False | storage | company:X:session: |
+| MCPServerRepository | False | storage | company:X:mcp_server: |
+
+## Использование репозиториев
+
+<good_example>
+from apps.agents.container import get_agents_container
+
+container = get_agents_container()
+
+# Получить сущность
+agent = await container.agent_repository.get("agent_id")
+user = await container.user_repository.get("user_id")
+
+# Сохранить
+await container.agent_repository.set(agent_config)
+await container.user_repository.set(user)
+
+# Удалить
+await container.agent_repository.delete("agent_id")
+
+# Список всех
+agents = await container.agent_repository.list_all(limit=100)
+
+# Получить несколько
+agents_dict = await container.agent_repository.get_many(["id1", "id2"])
+</good_example>
+
+## Service БД vs Shared БД
+
+**Service БД** (`container.storage`):
+- Данные специфичные для сервиса agents
+- agent, flow, tool, task, session, mcp_server
+- var, usage, file
+
+**Shared БД** (`container.shared_storage`):
+- Общие данные между сервисами
+- user, company
+- auth_session, subdomain
+
+<good_example>
+container = AgentsContainer(
+    service_db_url="postgresql://localhost/agents_db",
+    shared_db_url="postgresql://localhost/shared_db"
+)
+
+# Маршрутизация:
+agent_repo = container.agent_repository      # → service БД
+user_repo = container.user_repository        # → shared БД
+task_repo = container.task_repository        # → service БД
+company_repo = container.company_repository  # → shared БД
+</good_example>
+
+## Изоляция данных
+
+**Автоматическая через `is_global`:**
+
+```python
+# AgentRepository (is_global=False)
+await agent_repo.set(agent)
+# Хранится: company:acme:agent:my_agent
+
+# UserRepository (is_global=True)
+await user_repo.set(user)
+# Хранится: user:user_123
+```
+
+**НЕТ ручного добавления префикса:**
+
+<bad_example>
+# НЕТ! Не добавляй префикс вручную
+key = f"company:{company_id}:agent:{agent_id}"
+await storage.set(key, data)
+
+# ДА! Репозиторий сам добавит префикс
+await agent_repo.set(agent)
+</bad_example>
+
+## Storage - ТОЛЬКО для репозиториев
+
+**Storage теперь приватный класс:**
+
+<good_example>
+# Внутри BaseRepository
+self._storage._get_with_session_and_table(key, table)
+self._storage._set_with_table(key, value, table)
+</good_example>
+
+<bad_example>
+# НЕ используй Storage напрямую
+storage = container.storage
+await storage.get("agent:my_agent")  # НЕТ!
+
+# Используй репозиторий
+agent_repo = container.agent_repository
+await agent_repo.get("my_agent")  # ДА!
+</bad_example>
+
+## Создание нового репозитория
+
+**Шаги:**
+
+1. Создай класс репозитория
+2. Определи `is_global` (True или False)
+3. Реализуй все абстрактные методы
+4. Добавь в контейнер
+5. Добавь dependency (опционально)
+6. Обнови документацию
+
+<good_example>
+# 1. Создать репозиторий
+class MyRepository(BaseRepository[MyModel]):
+    is_global = False
+    
+    def __init__(self, storage: Storage):
+        super().__init__(storage=storage, model_class=MyModel)
+    
+    def _get_key(self, entity_id: str) -> str:
+        return f"my:{entity_id}"
+    
+    def _get_prefix(self) -> str:
+        return "my:"
+    
+    def _get_table_name(self) -> str:
+        return "storage"
+    
+    def _extract_entity_id(self, entity: MyModel) -> str:
+        return entity.id
+
+# 2. Добавить в контейнер
+class AgentsContainer(BaseContainer):
+    def __getattr__(self, name):
+        if name == 'my_repository':
+            if self._my_repository is None:
+                self._my_repository = MyRepository(storage=self.storage)
+            return self._my_repository
+        return super().__getattr__(name)
+
+# 3. Добавить dependency
+async def get_my_repository() -> MyRepository:
+    return get_agents_container().my_repository
+
+MyRepositoryDep = Annotated[MyRepository, Depends(get_my_repository)]
+</good_example>
+
+## 🚨 КРИТИЧНЫЕ ПРАВИЛА
+
+1. **ВСЕГДА** через репозитории, НИКОГДА напрямую Storage
+2. **НИКОГДА** не добавляй префикс `company:` вручную
+3. **ВСЕГДА** определяй `is_global` в классе
+4. **НИКОГДА** не используй параметр `force_global` (удален)
+5. **ВСЕГДА** получай репозитории из контейнера
+
+**Нарушение приведет к ошибкам изоляции и дублированию данных!**

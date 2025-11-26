@@ -6,10 +6,10 @@ alwaysApply: true
 
 ## Обязательное использование утилит
 
-**ВСЕГДА** используй `get_httpx_client` из `app.core.http_utils` для создания HTTP клиентов. **НИКОГДА** не создавай `httpx.AsyncClient` напрямую!
+**ВСЕГДА** используй `get_httpx_client` из `core.http_utils` для создания HTTP клиентов. **НИКОГДА** не создавай `httpx.AsyncClient` напрямую!
 
 <good_example>
-from app.core.http_utils import get_httpx_client
+from core.http import get_httpx_client
 
 async def fetch_data(url: str):
     async with get_httpx_client(timeout=30.0, use_proxy_from_config=False) as client:
@@ -33,7 +33,7 @@ async def fetch_data(url: str):
 Для OAuth провайдеров **ВСЕГДА** используй `use_proxy_from_config=False`, чтобы гарантировать прямой доступ к API провайдера:
 
 <good_example>
-from app.core.http_utils import get_httpx_client
+from core.http import get_httpx_client
 
 async def exchange_code_for_token(self, code: str, redirect_uri: str):
     data = self._build_token_data(code, redirect_uri)
@@ -58,7 +58,7 @@ async def exchange_code_for_token(self, code: str, redirect_uri: str):
 Для внутренних API и MCP серверов можно использовать прокси из конфигурации:
 
 <good_example>
-from app.core.http_utils import get_httpx_client
+from core.http import get_httpx_client
 
 async def call_internal_api(url: str):
     async with get_httpx_client(timeout=30.0, use_proxy_from_config=True) as client:
@@ -114,7 +114,7 @@ response = await client.get(url)
 Используй стандартную обработку ошибок httpx:
 
 <good_example>
-from app.core.http_utils import get_httpx_client
+from core.http import get_httpx_client
 import httpx
 
 async def fetch_data(url: str):
@@ -133,7 +133,7 @@ async def fetch_data(url: str):
 ### OAuth провайдер (Google/Yandex/GitHub)
 
 <good_example>
-from app.core.http_utils import get_httpx_client
+from core.http import get_httpx_client
 
 class GoogleProvider(BaseAuthProvider):
     async def exchange_code_for_token(self, code: str, redirect_uri: str):
@@ -158,7 +158,7 @@ class GoogleProvider(BaseAuthProvider):
 ### Внутренний API с прокси
 
 <good_example>
-from app.core.http_utils import get_httpx_client
+from core.http import get_httpx_client
 
 async def call_external_api(url: str):
     async with get_httpx_client(timeout=30.0, use_proxy_from_config=True) as client:
@@ -170,7 +170,7 @@ async def call_external_api(url: str):
 ## Важные напоминания
 
 1. **НИКОГДА** не создавай `httpx.AsyncClient` напрямую
-2. **ВСЕГДА** используй `get_httpx_client` из `app.core.http_utils`
+2. **ВСЕГДА** используй `get_httpx_client` из `core.http`
 3. **ВСЕГДА** используй `use_proxy_from_config=False` для OAuth провайдеров
 4. **ВСЕГДА** используй `async with` для автоматического закрытия клиента
 5. **ВСЕГДА** указывай `timeout` явно (обычно 30.0 секунд)

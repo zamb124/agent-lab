@@ -12,17 +12,17 @@
 import pytest
 from langchain_core.messages import HumanMessage
 
-from app.models import FlowConfig
+from apps.agents.models import FlowConfig
 
 
 @pytest.mark.asyncio
-async def test_01_weather_flow_has_store_config(migrated_db, storage, test_context, flow_repo):
+async def test_01_weather_flow_has_store_config(migrated_db,  test_context, flow_repo):
     """
     Тест 1: WeatherFlow имеет конфигурацию store.
     
     ВАЖНО: Store теперь задается в FlowConfig, а НЕ в агенте!
     """
-    from app.flows.weather_flow import weather_flow_config
+    from apps.agents.flows.weather_flow import weather_flow_config
     
     # Проверяем что у FlowConfig есть store (НЕ у агента!)
     assert hasattr(weather_flow_config, 'store')
@@ -34,13 +34,13 @@ async def test_01_weather_flow_has_store_config(migrated_db, storage, test_conte
 
 
 @pytest.mark.asyncio
-async def test_01b_travel_info_agent_uses_store_in_prompt(migrated_db, storage, test_context):
+async def test_01b_travel_info_agent_uses_store_in_prompt(migrated_db,  test_context):
     """
     Тест 1b: TravelInfoAgent использует store переменные в промпте.
     
     Проверяем что в промпте есть обращения к store.
     """
-    from app.agents.weather.agent import TravelInfoAgent
+    from apps.agents.agents.weather.agent import TravelInfoAgent
     
     # Проверяем промпт
     assert TravelInfoAgent.prompt is not None
@@ -55,7 +55,7 @@ async def test_01b_travel_info_agent_uses_store_in_prompt(migrated_db, storage, 
 
 
 @pytest.mark.asyncio
-async def test_02_weather_agent_prompt_has_variables(migrated_db, storage, test_context):
+async def test_02_weather_agent_prompt_has_variables(migrated_db,  test_context):
     """
     Тест 2: WeatherAgent промпт содержит переменные разных типов.
     
@@ -65,7 +65,7 @@ async def test_02_weather_agent_prompt_has_variables(migrated_db, storage, test_
     - Store variables
     - Унифицированный синтаксис
     """
-    from app.agents.weather.agent import WeatherAgent
+    from apps.agents.agents.weather.agent import WeatherAgent
     
     prompt = WeatherAgent.prompt
     
@@ -93,13 +93,13 @@ async def test_02_weather_agent_prompt_has_variables(migrated_db, storage, test_
 
 
 @pytest.mark.asyncio
-async def test_03_weather_flow_has_store_config(migrated_db, storage, test_context):
+async def test_03_weather_flow_has_store_config(migrated_db,  test_context):
     """
     Тест 3: WeatherFlow имеет конфигурацию store.
     
     Проверяем что у flow есть поле store с начальными значениями.
     """
-    from app.flows.weather_flow import weather_flow_config
+    from apps.agents.flows.weather_flow import weather_flow_config
     
     # Проверяем что у flow_config есть store
     assert hasattr(weather_flow_config, 'store')
@@ -120,13 +120,13 @@ async def test_03_weather_flow_has_store_config(migrated_db, storage, test_conte
 
 
 @pytest.mark.asyncio
-async def test_04_weather_flow_has_variables_config(migrated_db, storage, test_context):
+async def test_04_weather_flow_has_variables_config(migrated_db,  test_context):
     """
     Тест 4: WeatherFlow имеет конфигурацию variables.
     
     Проверяем что у flow есть поле variables с настройками.
     """
-    from app.flows.weather_flow import weather_flow_config
+    from apps.agents.flows.weather_flow import weather_flow_config
     
     # Проверяем что у flow_config есть variables
     assert hasattr(weather_flow_config, 'variables')
@@ -152,7 +152,7 @@ async def test_04_weather_flow_has_variables_config(migrated_db, storage, test_c
 
 
 @pytest.mark.asyncio
-async def test_05_all_variable_types_in_prompt(migrated_db, storage, test_context):
+async def test_05_all_variable_types_in_prompt(migrated_db,  test_context):
     """
     Тест 5: Все типы переменных работают в одном промпте.
     
@@ -162,8 +162,8 @@ async def test_05_all_variable_types_in_prompt(migrated_db, storage, test_contex
     - Store variables ({store.last_city}, {#messages.count})
     - Опциональный синтаксис ({?var|default})
     """
-    from app.core.variables import VariableResolver
-    from app.core.context import get_context
+    from core.variables import VariableResolver
+    from core.context import get_context
     
     # Устанавливаем flow variables в глобальный контекст
     context = get_context()
@@ -223,7 +223,7 @@ async def test_06_optional_syntax_consistency(test_context):
     - Flow переменных
     - Вложенных переменных
     """
-    from app.core.variables import VariableResolver
+    from core.variables import VariableResolver
     
     context = test_context
     context.flow_variables = {

@@ -16,9 +16,9 @@
 import pytest
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-from app.agents.base import AgentInterrupt
-from app.core.state_manager import get_state_manager
-from app.models import AgentConfig, AgentType, LLMConfig
+from apps.agents.agents.base import AgentInterrupt
+from apps.agents.services.state_manager import get_state_manager
+from apps.agents.models import AgentConfig, AgentType, LLMConfig
 
 
 @pytest.mark.asyncio
@@ -33,12 +33,12 @@ async def test_nested_agent_interrupts_three_levels(
     sub_agent_id = f"test_sub_agent_{unique_id('agent')}"
     entry_agent_id = f"test_entry_agent_{unique_id('agent')}"
     
-    from app.models import ToolReference, CodeMode
+    from apps.agents.models import ToolReference, CodeMode
     
     ask_user_tool = ToolReference(
         tool_id="ask_user",
         code_mode=CodeMode.CODE_REFERENCE,
-        function_path="app.tools.misc.standard.ask_user",
+        function_path="apps.agents.tools.misc.standard.ask_user",
         description="Запрашивает информацию у пользователя"
     )
     
@@ -166,15 +166,15 @@ async def test_nested_agent_interrupts_three_levels(
         except AgentInterrupt as interrupt:
             assert interrupt.value == "Какой город?", f"Неправильный вопрос: {interrupt.value}"
             
-            saved_state = await state_manager.load_state(session_id)
+            saved_state = await state_manager.get_or_create_session(session_id)
             entry_interrupt = saved_state["interrupt_context"]
             assert entry_interrupt["type"] == "tool_call"
             
-            sub_state = await state_manager.load_state(entry_interrupt["sub_session_id"])
+            sub_state = await state_manager.get_or_create_session(entry_interrupt["sub_session_id"])
             sub_interrupt = sub_state["interrupt_context"]
             assert sub_interrupt["type"] == "tool_call"
             
-            subsub_state = await state_manager.load_state(sub_interrupt["sub_session_id"])
+            subsub_state = await state_manager.get_or_create_session(sub_interrupt["sub_session_id"])
             subsub_interrupt = subsub_state["interrupt_context"]
             assert subsub_interrupt["interrupt_message"] == "Какой город?"
             
@@ -190,11 +190,11 @@ async def test_nested_agent_interrupts_three_levels(
             except AgentInterrupt as interrupt:
                 assert interrupt.value == "Какая погода нужна?", f"Неправильный вопрос: {interrupt.value}"
                 
-                saved_state = await state_manager.load_state(session_id)
+                saved_state = await state_manager.get_or_create_session(session_id)
                 entry_interrupt = saved_state["interrupt_context"]
                 assert entry_interrupt["type"] == "tool_call"
                 
-                sub_state = await state_manager.load_state(entry_interrupt["sub_session_id"])
+                sub_state = await state_manager.get_or_create_session(entry_interrupt["sub_session_id"])
                 sub_interrupt = sub_state["interrupt_context"]
                 assert sub_interrupt["interrupt_message"] == "Какая погода нужна?"
                 
@@ -210,7 +210,7 @@ async def test_nested_agent_interrupts_three_levels(
                 except AgentInterrupt as interrupt:
                     assert interrupt.value == "Показать результат?", f"Неправильный вопрос: {interrupt.value}"
                     
-                    saved_state = await state_manager.load_state(session_id)
+                    saved_state = await state_manager.get_or_create_session(session_id)
                     entry_interrupt = saved_state["interrupt_context"]
                     assert entry_interrupt["interrupt_message"] == "Показать результат?"
                     

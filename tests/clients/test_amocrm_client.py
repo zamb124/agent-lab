@@ -7,12 +7,12 @@ import pytest
 pytestmark = pytest.mark.skip(reason="AmoCRM тесты требуют отдельной настройки")
 import httpx
 
-from app.clients.amo_crm_integration import (
+from apps.agents.clients.amo_crm_integration import (
     AmoCRMClient,
     get_amocrm_client,
     register_subdomain,
 )
-from app.clients.amo_crm_integration.client import (
+from apps.agents.clients.amo_crm_integration.client import (
     _client_cache,
     _subdomain_to_token,
 )

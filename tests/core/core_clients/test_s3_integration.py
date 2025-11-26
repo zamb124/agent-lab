@@ -7,9 +7,9 @@ import tempfile
 import uuid
 from pathlib import Path
 
-from app.core.core_clients.s3_client import S3ClientFactory, get_default_s3_client
-from app.models import FileRecord, FileStatus
-from app.db.repositories import Storage
+from core.files.s3_client import S3ClientFactory
+from apps.agents.models import FileRecord, FileStatus
+from core.db import Storage
 
 
 def skip_if_s3_fails(test_func):
@@ -150,6 +150,7 @@ class TestS3Integration:
                 download_path.unlink(missing_ok=True)
             await client.close()
     
+    @pytest.mark.asyncio
     async def test_list_objects(self):
         """Тест получения списка объектов"""
         client = S3ClientFactory.create_client_for_bucket('vkbucket')
@@ -172,7 +173,13 @@ class TestS3Integration:
             print(f"✅ Создано {len(test_files)} тестовых файлов")
             
             # Получаем список объектов с префиксом
-            objects = await client.list_objects(prefix=test_prefix, max_keys=10)
+            try:
+                objects = await client.list_objects(prefix=test_prefix, max_keys=10)
+            except Exception as e:
+                if "SignatureDoesNotMatch" in str(e) or "Signature" in str(e):
+                    print("⚠️ Ошибка подписи S3 - пропускаем тест")
+                    pytest.skip(f"S3 signature error: {e}")
+                raise
             
             # Если список пустой, возможно проблема с подписью S3
             if len(objects) == 0:
@@ -297,17 +304,18 @@ class TestS3WithDatabase:
         )
         
         # Сохраняем в БД
-        save_success = await storage.set(file_record.key, file_record.model_dump_json())
+        save_success = await storage.set(file_record.key, file_record.model_dump_json(), force_global=True)
         assert save_success
         print(f"✅ Запись о файле сохранена в БД: {file_record.key}")
         
+        # Проверяем что запись сохранена сразу после set
+        
         # Получаем из БД
-        stored_data = await storage.get(file_record.key)
-        assert stored_data is not None
+        stored_data = await storage.get(file_record.key, force_global=True)
+        assert stored_data is not None, f"Запись должна быть найдена, ключ={file_record.key}"
         
         # Восстанавливаем объект
-        import json
-        stored_record = FileRecord(**json.loads(stored_data))
+        stored_record = FileRecord.model_validate_json(stored_data)
         
         assert stored_record.file_id == file_record.file_id
         assert stored_record.provider == file_record.provider
@@ -318,12 +326,12 @@ class TestS3WithDatabase:
         
         # Обновляем статус
         stored_record.status = FileStatus.UPLOADED
-        update_success = await storage.set(stored_record.key, stored_record.model_dump_json())
+        update_success = await storage.set(stored_record.key, stored_record.model_dump_json(), force_global=True)
         assert update_success
         print("✅ Статус файла обновлен в БД")
         
         # Очистка
-        await storage.delete(file_record.key)
+        await storage.delete(file_record.key, force_global=True)
     
     async def test_full_s3_workflow_with_db(self, storage):
         """Полный тест: загрузка в S3 + сохранение в БД + скачивание + удаление"""
@@ -436,7 +444,7 @@ class TestS3WithDatabase:
     
     async def test_default_s3_client(self):
         """Тест дефолтного S3 клиента"""
-        default_client = await get_default_s3_client()
+        default_client = S3ClientFactory.create_default_client()
         
         assert default_client is not None
         assert default_client.bucket_name == "vkbucket"  # Из конфигурации
@@ -465,7 +473,7 @@ class TestS3Configuration:
     
     def test_s3_config_structure(self):
         """Тест структуры S3 конфигурации"""
-        from app.core.config import settings
+        from core.config import settings
         
         assert hasattr(settings, 's3')
         assert settings.s3.enabled

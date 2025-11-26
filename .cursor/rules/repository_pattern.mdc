@@ -1,0 +1,190 @@
+---
+description: "Repository Pattern - чистая архитектура"
+alwaysApply: true
+---
+# Repository Pattern - Чистая архитектура
+
+## Принципы
+
+1. **Композиция, не наследование** - BaseRepository НЕ наследуется от Storage
+2. **is_global определяет изоляцию** - без if/else ветвлений
+3. **Каждый репозиторий знает свою таблицу** - через `_get_table_name()`
+4. **Storage приватный** - используется только внутри репозиториев
+
+## Архитектура BaseRepository
+
+```python
+class BaseRepository(ABC, Generic[T]):
+    is_global: bool = False  # Атрибут класса
+    
+    def __init__(self, storage: Storage, model_class: Type[T]):
+        self._storage = storage  # Приватная композиция
+        self.model_class = model_class
+    
+    def _build_final_key(self, key: str) -> str:
+        if self.is_global:
+            return key
+        
+        context = get_context()
+        company_id = context.active_company.company_id
+        return f"company:{company_id}:{key}"
+```
+
+## Создание репозитория
+
+**Обязательные элементы:**
+
+```python
+class MyRepository(BaseRepository[MyModel]):
+    # 1. Атрибут класса is_global
+    is_global = False  # или True
+    
+    def __init__(self, storage: Storage):
+        super().__init__(storage=storage, model_class=MyModel)
+    
+    # 2. Формирование ключа (БЕЗ префикса компании!)
+    def _get_key(self, entity_id: str) -> str:
+        return f"my:{entity_id}"
+    
+    # 3. Префикс для поиска
+    def _get_prefix(self) -> str:
+        return "my:"
+    
+    # 4. Таблица БД
+    def _get_table_name(self) -> str:
+        return "storage"  # или "users", "tasks", "variables"
+    
+    # 5. Извлечение ID из сущности
+    def _extract_entity_id(self, entity: MyModel) -> str:
+        return entity.id
+```
+
+## is_global определяет поведение
+
+**is_global=True (глобальные сущности):**
+- User, Company, AuthSession, Subdomain
+- Ключ: `user:{user_id}` (без префикса компании)
+- Таблица: обычно `users` или `storage`
+
+**is_global=False (изолированные сущности):**
+- Agent, Flow, Tool, Task, Session, Variable, Usage, File, MCPServer
+- Ключ: `company:{company_id}:agent:{agent_id}` (ВСЕГДА с префиксом)
+- Таблица: `storage`, `tasks`, `variables`
+
+<good_example>
+# UserRepository - глобальный
+class UserRepository(BaseRepository[User]):
+    is_global = True
+    
+    def _get_table_name(self) -> str:
+        return "users"
+
+# AgentRepository - изолированный
+class AgentRepository(BaseRepository[AgentConfig]):
+    is_global = False
+    
+    def _get_table_name(self) -> str:
+        return "storage"
+</good_example>
+
+## API репозиториев
+
+**Единообразный интерфейс:**
+
+```python
+# Получить
+entity = await repo.get(entity_id)
+
+# Сохранить
+await repo.set(entity)
+
+# Удалить
+await repo.delete(entity_id)
+
+# Список всех
+entities = await repo.list_all(limit=100)
+
+# Получить несколько
+entities_dict = await repo.get_many([id1, id2, id3])
+```
+
+## Репозитории в контейнере
+
+<good_example>
+# apps/agents/container.py
+class AgentsContainer(BaseContainer):
+    def __getattr__(self, name):
+        if name == 'agent_repository':
+            if self._agent_repository is None:
+                from apps.agents.db.repositories import AgentRepository
+                self._agent_repository = AgentRepository(storage=self.storage)
+            return self._agent_repository
+        
+        if name == 'user_repository':
+            if self._user_repository is None:
+                from core.db.repositories import UserRepository
+                self._user_repository = UserRepository(storage=self.shared_storage)
+            return self._user_repository
+        
+        return super().__getattr__(name)
+```
+
+## Service БД vs Shared БД
+
+**Service БД** (`self.storage`):
+- agent, flow, tool, mcp_server
+- task, session
+- var, usage, file
+
+**Shared БД** (`self.shared_storage`):
+- user, company
+- auth_session, subdomain
+
+<good_example>
+container = AgentsContainer(
+    service_db_url="postgresql://localhost/agents_db",
+    shared_db_url="postgresql://localhost/shared_db"
+)
+
+# Автоматическая маршрутизация:
+agent_repo = container.agent_repository  # → service БД
+user_repo = container.user_repository    # → shared БД
+</good_example>
+
+## Storage теперь приватный
+
+**Storage используется ТОЛЬКО внутри репозиториев:**
+
+<good_example>
+# Внутри BaseRepository
+class BaseRepository:
+    def __init__(self, storage: Storage, model_class: Type[T]):
+        self._storage = storage  # Приватный!
+    
+    async def get(self, entity_id: str) -> Optional[T]:
+        final_key = self._build_final_key(self._get_key(entity_id))
+        data = await self._storage._get_with_session_and_table(
+            final_key, self._get_table_name()
+        )
+        ...
+</good_example>
+
+<bad_example>
+# НЕ используй Storage напрямую в коде
+storage = get_agents_container().storage
+data = await storage.get("agent:my_agent")  # НЕТ!
+
+# Используй репозиторий
+agent_repo = get_agents_container().agent_repository
+agent = await agent_repo.get("my_agent")  # ДА!
+</bad_example>
+
+## 🚨 КРИТИЧНЫЕ ПРАВИЛА
+
+1. **is_global** - атрибут класса, не параметр
+2. **НЕТ** ручного добавления префикса `company:` - репозиторий сам добавит
+3. **НЕТ** использования Storage напрямую - только репозитории
+4. **ВСЕ** репозитории через контейнер
+5. **НЕТ** параметра `force_global` - используй `is_global`
+
+**Нарушение приведет к ошибкам изоляции данных!**

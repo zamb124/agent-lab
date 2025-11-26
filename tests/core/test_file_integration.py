@@ -3,8 +3,8 @@
 """
 import pytest
 
-from app.core.file_processor import FileProcessor
-from app.interfaces.telegram_interface import TelegramInterface
+from core.files.processors import FileProcessor
+from apps.agents.interfaces.telegram_interface import TelegramInterface
 
 
 @pytest.mark.asyncio
@@ -14,7 +14,7 @@ class TestFileIntegration:
     @pytest.mark.skip(reason="Нестабилен при массовом запуске")
     async def test_file_processor_basic(self):
         """Базовый тест файлового процессора"""
-        processor = FileProcessor()
+        processor = FileProcessor(storage=storage)
         
         test_data = b"Test file content for integration"
         

@@ -15,7 +15,7 @@ alwaysApply: false
 - `interrupt_context` - контекст прерывания для восстановления
 
 <good_example>
-from app.core.state import State
+from core.state import State
 
 def my_node(state: State) -> State:
     state["store"]["user_data"] = "some_value"
@@ -30,7 +30,7 @@ def my_node(state: State) -> State:
 - При ответе выполнение продолжается с того же места
 
 <good_example>
-from app.tools.misc.standard import ask_user
+from apps.agents.tools.misc.standard import ask_user
 
 # В агенте
 tools = [ask_user]
@@ -48,7 +48,7 @@ ask_user("Какой ваш склад?")
 Классический агент с промптом и инструментами:
 
 <good_example>
-from app.agents.react_agent import ReActAgent
+from apps.agents.agents.react_agent import ReActAgent
 
 class MyAgent(ReActAgent):
     name = "my_agent"
@@ -63,8 +63,8 @@ class MyAgent(ReActAgent):
 Граф состояний для сложной логики:
 
 <good_example>
-from app.agents.stategraph_agent import StateGraphAgent
-from app.models.core_models import GraphDefinition, GraphNode, GraphEdge, NodeType
+from apps.agents.agents.stategraph_agent import StateGraphAgent
+from apps.agents.models.core_models import GraphDefinition, GraphNode, GraphEdge, NodeType
 
 class MyAgent(StateGraphAgent):
     name = "my_graph_agent"
@@ -96,7 +96,7 @@ class MyAgent(StateGraphAgent):
 <good_example>
 async def get_runner(self) -> BaseAgentRunner:
     """Создает раннер для выполнения агента"""
-    from app.core.agent_runner import ReactAgentRunner
+    from core.agent_runner import ReactAgentRunner
     
     llm = get_llm()
     tools = await self.get_tools()
@@ -136,12 +136,12 @@ class SupervisorAgent(ReActAgent):
 
 <good_example>
 # Агент сохраняет
-from app.tools.session.session_tools import session_set
+from apps.agents.tools.session.session_tools import session_set
 
 session_set("warehouse_id", "12345")
 
 # Другой агент читает
-from app.tools.session.session_tools import session_get
+from apps.agents.tools.session.session_tools import session_get
 
 warehouse_id = session_get("warehouse_id")
 </good_example>
@@ -155,7 +155,7 @@ warehouse_id = session_get("warehouse_id")
 - Поддерживает политики памяти для субагентов
 
 <good_example>
-from app.core.state_manager import get_state_manager
+from core.state_manager import get_state_manager
 
 state_manager = await get_state_manager()
 
@@ -173,9 +173,9 @@ saved_state = await state_manager.load_state(session_id)
 Все агенты выполняются через `ainvoke()`:
 
 <good_example>
-from app.core.container import get_container
+from core.container import get_container
 
-agent_factory = get_container().agent_factory
+agent_factory = get_agents_container().agent_factory
 agent = await agent_factory.get_agent("my_agent")
 
 result = await agent.ainvoke({

@@ -4,17 +4,19 @@
 """
 
 import pytest
-from app.models.billing_models import UsageRecord, UsageType
+from core.models.billing_models import UsageRecord, UsageType
 
 
 class TestBillingService:
     """Тесты для BillingService"""
     
     @pytest.mark.asyncio
-    async def test_can_use_resource_basic_plan(self, billing_service, save_test_company, test_user, test_company):
+    async def test_can_use_resource_basic_plan(self, billing_service, save_test_company, test_user, test_company, company_repo):
         """Тест проверки доступа к ресурсу на базовом плане"""
-        test_company.tariff_plan = "basic"
+        from core.models.billing_models import TariffPlan
+        test_company.tariff_plan = TariffPlan.BASIC
         test_company.balance = 1000.0
+        await company_repo.set(test_company)
         
         can_use, reason = await billing_service.can_use_resource(
             test_user, test_company, "tool:weather_api"
@@ -27,10 +29,12 @@ class TestBillingService:
         assert can_use, f"Должен быть доступ к gpt-4 на basic плане: {reason}"
         
     @pytest.mark.asyncio
-    async def test_can_use_resource_free_plan(self, billing_service, save_test_company, test_user, test_company):
+    async def test_can_use_resource_free_plan(self, billing_service, save_test_company, test_user, test_company, company_repo):
         """Тест проверки доступа с балансом и без"""
-        test_company.tariff_plan = "free"
+        from core.models.billing_models import TariffPlan
+        test_company.tariff_plan = TariffPlan.FREE
         test_company.balance = 1000.0
+        await company_repo.set(test_company)
         
         can_use, reason = await billing_service.can_use_resource(
             test_user, test_company, "llm:gpt-4"
@@ -77,9 +81,13 @@ class TestBillingService:
         assert isinstance(reason, str)
     
     @pytest.mark.asyncio
-    async def test_record_usage(self, billing_service, save_test_company, test_user, test_company, storage):
+    async def test_record_usage(self, billing_service, save_test_company, test_user, test_company, company_repo, usage_repo):
         """Тест записи использования"""
-        from app.identity.models import Company
+        from core.models import Company
+        from core.models.billing_models import TariffPlan
+        
+        test_company.tariff_plan = TariffPlan.ENTERPRISE
+        await company_repo.set(test_company)
         
         initial_spent = test_company.current_month_spent
         
@@ -93,20 +101,15 @@ class TestBillingService:
             metadata={"test": "data"}
         )
         
-        updated_company_data = await storage.get(f"company:{test_company.company_id}", force_global=True)
-        updated_company = Company.model_validate_json(updated_company_data)
+        updated_company = await company_repo.get(test_company.company_id)
+        assert updated_company is not None
         assert updated_company.current_month_spent == initial_spent + 0.5
         
-        search_prefix = f"usage:{test_company.company_id}:tool:weather_api:"
-        usage_keys = await storage.list_by_prefix(search_prefix, force_global=True)
-        usage_records = []
-        for key in usage_keys:
-            data = await storage.get(key, force_global=True)
-            if data:
-                usage_records.append(UsageRecord.model_validate_json(data))
+        all_usage = await usage_repo.list_all(limit=10000)
+        weather_usage = [u for u in all_usage if u.resource_name == "tool:weather_api"]
         
-        assert len(usage_records) > 0, f"Записи использования не найдены по префиксу {search_prefix}"
-        found_record = usage_records[0]
+        assert len(weather_usage) > 0, f"Записи использования не найдены"
+        found_record = weather_usage[0]
         
         assert found_record.cost == 0.5
         assert found_record.usage_type == UsageType.TOOL_CALL
@@ -114,20 +117,31 @@ class TestBillingService:
     
     
     @pytest.mark.asyncio
-    async def test_get_company_usage_stats(self, billing_service, test_user, storage, unique_id):
+    async def test_get_company_usage_stats(self, billing_service, test_user, company_repo, usage_repo, unique_id):
         """Тест получения полной статистики компании"""
-        from app.identity.models import Company
+        from core.models import Company
+        from core.models.billing_models import TariffPlan
         
         stats_company = Company(
             company_id=unique_id("stats_company"),
             subdomain=unique_id("stats"),
             name="Stats Test Company",
-            tariff_plan="enterprise",
+            tariff_plan=TariffPlan.ENTERPRISE,
             balance=100000.0,
             monthly_budget=50000.0,
             current_month_spent=0.0,
             status="active"
         )
+        
+        await company_repo.set(stats_company)
+
+        from core.context import set_context, Context
+        context = Context(user=test_user, platform="test", active_company=stats_company)
+        set_context(context)
+        
+        from datetime import datetime, timezone
+        
+        current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         
         usage_records = [
             UsageRecord(
@@ -137,7 +151,8 @@ class TestBillingService:
                 usage_type=UsageType.LLM_REQUEST,
                 resource_name="llm:gpt-4",
                 cost=2.0,
-                quantity=1000
+                quantity=1000,
+                timestamp=current_month
             ),
             UsageRecord(
                 usage_id=unique_id("stats"),
@@ -146,7 +161,8 @@ class TestBillingService:
                 usage_type=UsageType.TOOL_CALL,
                 resource_name="tool:weather_api",
                 cost=0.1,
-                quantity=1
+                quantity=1,
+                timestamp=current_month
             ),
             UsageRecord(
                 usage_id=unique_id("stats"),
@@ -155,17 +171,28 @@ class TestBillingService:
                 usage_type=UsageType.TOOL_CALL,
                 resource_name="tool:weather_api",
                 cost=0.1,
-                quantity=1
+                quantity=1,
+                timestamp=current_month
             )
         ]
         
+        # Используем тот же storage что и billing_service для гарантии консистентности
         for usage in usage_records:
             usage_key = f"usage:{stats_company.company_id}:{usage.resource_name}:{usage.usage_id}"
-            await storage.set(usage_key, usage.model_dump_json(), force_global=True)
+            await usage_repo.set(usage)
+        
+        # Небольшая задержка для гарантии коммита транзакций
+        import asyncio
+        await asyncio.sleep(0.2)
+        
+        # Проверяем что записи сохранены
+        usage_prefix = f"usage:{stats_company.company_id}:"
+        all_usage_list = await usage_repo.list_all(limit=10000); all_usage = {f"usage:{u.resource_name}:{u.usage_id}": u.model_dump_json() for u in all_usage_list}
+        assert len(all_usage) == len(usage_records), f"Должно быть {len(usage_records)} записей, найдено {len(all_usage)}"
         
         stats = await billing_service.get_company_usage_stats(stats_company.company_id)
         
-        assert stats["total_cost"] == 2.2, f"Общая стоимость должна быть 2.2, получено: {stats['total_cost']}"
+        assert stats["total_cost"] == 2.2, f"Общая стоимость должна быть 2.2, получено: {stats['total_cost']}, stats={stats}"
         assert stats["total_calls"] == 1002, f"Общее количество вызовов должно быть 1002, получено: {stats['total_calls']}"
         assert "llm:gpt-4" in stats["by_resource"]
         assert "tool:weather_api" in stats["by_resource"]
@@ -175,12 +202,14 @@ class TestBillingService:
 
 
 @pytest.mark.asyncio
-async def test_billing_service_integration(billing_service, save_test_company, test_user, test_company):
+async def test_billing_service_integration(billing_service, save_test_company, test_user, test_company, company_repo):
     """Интеграционный тест всего BillingService"""
-    test_company.tariff_plan = "premium"
+    from core.models.billing_models import TariffPlan
+    test_company.tariff_plan = TariffPlan.PREMIUM
     test_company.balance = 10000.0
     test_company.monthly_budget = 5000.0
     test_company.current_month_spent = 100.0
+    await company_repo.set(test_company)
     
     can_use, reason = await billing_service.can_use_resource(test_user, test_company, "llm:gpt-4")
     assert can_use, f"Должен быть доступ к GPT-4 на premium: {reason}"

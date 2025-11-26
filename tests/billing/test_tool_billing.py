@@ -4,8 +4,8 @@
 """
 
 import pytest
-from app.core.tool_decorator import tool
-from app.models.core_models import ToolReference, CodeMode
+from apps.agents.services.tool_decorator import tool
+from apps.agents.models.core_models import ToolReference, CodeMode
 
 
 @tool(cost=0.5, billing_name="test_expensive_tool")
@@ -86,7 +86,7 @@ class TestToolFactory:
     
     @pytest.mark.skip(reason="Устаревший тест - проверяет старую логику с _billing_ref")
     @pytest.mark.asyncio
-    async def test_tool_execution_with_billing(self, tool_factory, test_context, test_user, test_company, storage):
+    async def test_tool_execution_with_billing(self, tool_factory, test_context, test_user, test_company):
         """Тест выполнения инструмента с биллингом"""
         
         # Создаем ToolReference
@@ -138,7 +138,8 @@ class TestToolFactory:
     @pytest.mark.asyncio
     async def test_tool_access_denied(self, tool_factory, test_context, test_company):
         """Тест запрета доступа к инструменту"""
-        test_company.tariff_plan = "free"
+        from core.models.billing_models import TariffPlan
+        test_company.tariff_plan = TariffPlan.FREE
         
         tool_ref = ToolReference(
             tool_id="tests.billing.test_tool_billing.expensive_test_tool",
@@ -158,11 +159,12 @@ class TestToolFactory:
     
     @pytest.mark.skip(reason="Устаревший тест - проверяет старую логику с free_for_plans")
     @pytest.mark.asyncio
-    async def test_tool_premium_free_access(self, tool_factory, test_context, test_user, test_company, storage):
+    async def test_tool_premium_free_access(self, tool_factory, test_context, test_user, test_company):
         """Тест бесплатного доступа к платному инструменту для премиум плана"""
         
         # Переключаем на premium план
-        test_company.tariff_plan = "premium"
+        from core.models.billing_models import TariffPlan
+        test_company.tariff_plan = TariffPlan.PREMIUM
         
         # Создаем инструмент бесплатный для premium
         tool_ref = ToolReference(

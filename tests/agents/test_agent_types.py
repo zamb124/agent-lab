@@ -4,10 +4,10 @@
 """
 
 import pytest
-from app.agents.react_agent import ReActAgent
-from app.agents.stategraph_agent import StateGraphAgent
-from app.models import AgentConfig, AgentType
-from app.core.container import get_container
+from apps.agents.agents.react_agent import ReActAgent
+from apps.agents.agents.stategraph_agent import StateGraphAgent
+from apps.agents.models import AgentConfig, AgentType
+from apps.agents.container import get_agents_container
 
 
 @pytest.mark.asyncio
@@ -26,7 +26,7 @@ async def test_react_agent_requires_prompt():
 
 
 @pytest.mark.asyncio
-async def test_react_agent_compiles_with_prompt():
+async def test_react_agent_compiles_with_prompt(migrated_db):
     """ReAct агент успешно создает раннер при наличии prompt"""
     config = AgentConfig(
         agent_id="test.react.with_prompt",
@@ -58,7 +58,7 @@ async def test_stategraph_agent_requires_definition():
 
 
 @pytest.mark.asyncio
-async def test_stategraph_agent_compiles_with_definition():
+async def test_stategraph_agent_compiles_with_definition(migrated_db):
     """StateGraph агент успешно создает раннер при наличии graph_definition"""
     config = AgentConfig(
         agent_id="test.stategraph.with_definition",
@@ -83,7 +83,7 @@ async def test_stategraph_agent_compiles_with_definition():
 
 
 @pytest.mark.asyncio
-async def test_agent_factory_creates_react_agent():
+async def test_agent_factory_creates_react_agent(migrated_db):
     """AgentFactory создает ReActAgent для типа REACT"""
     config = AgentConfig(
         agent_id="test.factory.react",
@@ -93,7 +93,7 @@ async def test_agent_factory_creates_react_agent():
         tools=[]
     )
     
-    factory = get_container().agent_factory
+    factory = get_agents_container().agent_factory
     agent = await factory._create_agent_instance(config)
     
     assert isinstance(agent, ReActAgent)
@@ -101,7 +101,7 @@ async def test_agent_factory_creates_react_agent():
 
 
 @pytest.mark.asyncio
-async def test_agent_factory_creates_stategraph_agent():
+async def test_agent_factory_creates_stategraph_agent(migrated_db):
     """AgentFactory создает StateGraphAgent для типа STATEGRAPH"""
     config = AgentConfig(
         agent_id="test.factory.stategraph",
@@ -120,7 +120,7 @@ async def test_agent_factory_creates_stategraph_agent():
         }
     )
     
-    factory = get_container().agent_factory
+    factory = get_agents_container().agent_factory
     agent = await factory._create_agent_instance(config)
     
     assert isinstance(agent, StateGraphAgent)
@@ -128,7 +128,7 @@ async def test_agent_factory_creates_stategraph_agent():
 
 
 @pytest.mark.asyncio
-async def test_react_agent_with_llm_config():
+async def test_react_agent_with_llm_config(migrated_db):
     """ReAct агент использует llm_config из конфигурации"""
     config = AgentConfig(
         agent_id="test.react.llm_config",
@@ -150,7 +150,7 @@ async def test_react_agent_with_llm_config():
 
 
 @pytest.mark.asyncio
-async def test_react_agent_dynamic_prompt():
+async def test_react_agent_dynamic_prompt(migrated_db):
     """ReAct агент создает динамический промпт с переменными"""
     config = AgentConfig(
         agent_id="test.react.dynamic_prompt",

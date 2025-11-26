@@ -44,24 +44,24 @@ from typing import Optional
 from langchain_core.tools import tool
 from fastapi import APIRouter
 
-from app.core.container import get_container
-from app.models.core_models import AgentConfig
+from core.container import get_container
+from apps.agents.models.core_models import AgentConfig
 
 # Доступ к сущностям через контейнер
-storage = get_container().storage
-agent_repo = get_container().agent_repository
+storage = get_agents_container().storage
+agent_repo = get_agents_container().agent_repository
 </good_example>
 
 <bad_example>
 def my_function():
-    from app.db.repositories import Storage  # НЕТ!
-    from app.core.agent_factory import AgentFactory  # НЕТ!
+    from core.db.repositories import Storage  # НЕТ!
+    from core.agent_factory import AgentFactory  # НЕТ!
     storage = Storage()  # НЕТ!
     factory = AgentFactory()  # НЕТ!
 
     # Правильно: через контейнер
-    storage = get_container().storage
-    factory = get_container().agent_factory
+    storage = get_agents_container().storage
+    factory = get_agents_container().agent_factory
 </bad_example>
 
 ## Переменные и константы

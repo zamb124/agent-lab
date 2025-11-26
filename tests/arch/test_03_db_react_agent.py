@@ -5,7 +5,7 @@
 только через БД API без написания кода.
 """
 import pytest
-from app.models import ToolReference, CodeMode
+from apps.agents.models import ToolReference, CodeMode
 from langchain_core.messages import HumanMessage
 
 @pytest.mark.asyncio
@@ -37,7 +37,7 @@ async def test_mock_llm_direct(mock_llm, agent_repo):
     print("✅ MockLLM работает корректно!")
 
 @pytest.mark.asyncio
-async def test_create_db_react_agent(migrated_db, storage, test_helpers, agent_repo):
+async def test_create_db_react_agent(migrated_db,  test_helpers, agent_repo):
     """Создание ReAct агента полностью в БД"""
     
     # Создаем tools
@@ -76,7 +76,6 @@ def subtract_tool(a: int, b: int) -> str:
     
     # Создаем агента
     await test_helpers.create_simple_agent(
-        storage=storage,
         agent_id="db_math_agent",
         name="DB Math Agent",
         prompt="Ты математический помощник. Помогаешь решать задачи используя add_tool, multiply_tool, subtract_tool.",
@@ -91,7 +90,6 @@ def subtract_tool(a: int, b: int) -> str:
     
     # Создаем flow
     await test_helpers.create_simple_flow(
-        storage=storage,
         flow_id="db_math_flow",
         name="DB Math Flow",
         entry_point_agent="db_math_agent"
@@ -102,11 +100,11 @@ def subtract_tool(a: int, b: int) -> str:
     return True
 
 @pytest.mark.asyncio
-async def test_execute_db_react_agent(migrated_db, storage, agent_factory, flow_factory, mock_llm, test_helpers, unique_id, agent_repo):
+async def test_execute_db_react_agent(migrated_db,  agent_factory, flow_factory, mock_llm, test_helpers, unique_id, agent_repo):
     """Создание и выполнение ReAct агента из БД"""
     
     # Создаем агента
-    await test_create_db_react_agent(migrated_db, storage, test_helpers, agent_repo)
+    await test_create_db_react_agent(migrated_db,  test_helpers, agent_repo)
     
     # Настраиваем mock LLM
     mock_llm.configure(
@@ -151,11 +149,11 @@ async def test_execute_db_react_agent(migrated_db, storage, agent_factory, flow_
     print(f"✅ Flow выполнение ReAct агента: {final_message[:100]}...")
 
 @pytest.mark.asyncio
-async def test_react_agent_tools(migrated_db, storage, agent_factory, mock_llm, test_helpers, unique_id, agent_repo):
+async def test_react_agent_tools(migrated_db,  agent_factory, mock_llm, test_helpers, unique_id, agent_repo):
     """Создание и тест что ReAct агент правильно использует инструменты"""
     
     # Создаем агента
-    await test_create_db_react_agent(migrated_db, storage, test_helpers, agent_repo)
+    await test_create_db_react_agent(migrated_db,  test_helpers, agent_repo)
     
     # Настраиваем mock LLM
     mock_llm.configure(

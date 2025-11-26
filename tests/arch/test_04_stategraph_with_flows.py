@@ -5,14 +5,14 @@
 вызывают другие флоу, и все это работает из БД.
 """
 import pytest
-from app.models import (
+from apps.agents.models import (
     AgentConfig, AgentType, CodeMode, LLMConfig,
     GraphDefinition, GraphNode, GraphEdge, NodeType, ConditionType
 )
 from langchain_core.messages import HumanMessage
 
 @pytest.mark.asyncio
-async def test_create_stategraph_with_flow_nodes(migrated_db, storage, test_helpers, agent_repo):
+async def test_create_stategraph_with_flow_nodes(migrated_db,  test_helpers, agent_repo):
     """Создание StateGraph агента с нодами-флоу"""
         
         # 1. СОЗДАЕМ СУПЕР-АГЕНТА С ФЛОУ НОДАМИ
@@ -48,8 +48,9 @@ def super_router_condition(state):
     math_flow_code = '''
 async def math_flow_node(state):
     """Нода которая вызывает математический флоу"""
-    from app.core.flow_factory import FlowFactory
-    factory = get_container().flow_factory
+    from apps.agents.services.flow_factory import FlowFactory
+    from apps.agents.container import get_agents_container
+    factory = get_agents_container().flow_factory
     smart_flow = await factory.get_flow("smart_flow")  # Используем существующий smart_flow
     
     result = await smart_flow.ainvoke(
@@ -66,8 +67,9 @@ async def math_flow_node(state):
     weather_flow_code = '''
 async def weather_flow_node(state):
     """Нода которая вызывает погодный флоу"""
-    from app.core.flow_factory import FlowFactory
-    factory = get_container().flow_factory
+    from apps.agents.services.flow_factory import FlowFactory
+    from apps.agents.container import get_agents_container
+    factory = get_agents_container().flow_factory
     weather_flow = await factory.get_flow("weather_flow")  # Используем существующий weather_flow
     
     result = await weather_flow.ainvoke(
@@ -169,7 +171,6 @@ async def finalizer_node(state):
     
     # Создаем flow
     await test_helpers.create_simple_flow(
-        storage=storage,
         flow_id="super_flow",
         name="Super Flow",
         entry_point_agent="super_flow_agent"
@@ -179,11 +180,11 @@ async def finalizer_node(state):
     return True
 
 @pytest.mark.asyncio
-async def test_execute_super_flow_math(migrated_db, storage, flow_factory, test_helpers, unique_id, agent_repo):
+async def test_execute_super_flow_math(migrated_db,  flow_factory, test_helpers, unique_id, agent_repo):
     """Создание и выполнение супер флоу с математическим запросом"""
     
     # Создаем агента
-    await test_create_stategraph_with_flow_nodes(migrated_db, storage, test_helpers, agent_repo)
+    await test_create_stategraph_with_flow_nodes(migrated_db,  test_helpers, agent_repo)
     
     super_flow = await flow_factory.get_flow("super_flow")
     
@@ -202,11 +203,11 @@ async def test_execute_super_flow_math(migrated_db, storage, flow_factory, test_
     print(f"✅ Супер флоу математический тест: {final_message}")
 
 @pytest.mark.asyncio
-async def test_execute_super_flow_weather(migrated_db, storage, flow_factory, test_helpers, unique_id, agent_repo):
+async def test_execute_super_flow_weather(migrated_db,  flow_factory, test_helpers, unique_id, agent_repo):
     """Создание и выполнение супер флоу с погодным запросом"""
     
     # Создаем агента
-    await test_create_stategraph_with_flow_nodes(migrated_db, storage, test_helpers, agent_repo)
+    await test_create_stategraph_with_flow_nodes(migrated_db,  test_helpers, agent_repo)
     
     super_flow = await flow_factory.get_flow("super_flow")
     

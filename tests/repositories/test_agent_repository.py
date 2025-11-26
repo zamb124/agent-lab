@@ -3,8 +3,8 @@
 """
 
 import pytest
-from app.db.repositories import AgentRepository
-from app.models import AgentConfig, AgentType
+from apps.agents.db.repositories import AgentRepository
+from apps.agents.models import AgentConfig, AgentType
 
 
 @pytest.mark.asyncio

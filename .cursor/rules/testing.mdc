@@ -16,7 +16,7 @@ alwaysApply: false
 
 <good_example>
 import pytest
-from app.core.state_manager import get_state_manager
+from core.state_manager import get_state_manager
 
 @pytest.mark.asyncio
 async def test_agent_execution():

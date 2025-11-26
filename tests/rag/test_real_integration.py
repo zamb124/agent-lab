@@ -19,9 +19,9 @@ import pytest
 import asyncio
 from pathlib import Path
 
-from app.core.config import get_settings
-from app.core.rag.factory import get_rag_provider
-from app.core.core_clients.s3_client import get_default_s3_client
+from core.config import get_settings
+from core.rag.factory import get_rag_provider
+from core.files.s3_client import get_default_s3_client
 
 
 def is_full_integration_ready():
@@ -61,7 +61,7 @@ class TestRealRAGIntegration:
     
     @pytest.mark.asyncio
     @pytest.mark.skip(reason="Нестабилен при массовом запуске")
-    async def test_full_workflow_with_pdf_via_tools(self):
+    async def test_full_workflow_with_pdf_via_tools(self, storage):
         """
         Полный workflow через RAG tools (как в агенте):
         1. Загружаем PDF в S3 через file_tools
@@ -70,13 +70,13 @@ class TestRealRAGIntegration:
         4. Вызываем search_knowledge_base (tool)
         5. Вызываем list_documents_in_knowledge_base (tool)
         """
-        from app.tools.misc.rag_tools import (
+        from apps.agents.tools.misc.rag_tools import (
             upload_document_to_knowledge_base,
             search_knowledge_base,
             list_documents_in_knowledge_base
         )
-        from app.db.repositories import Storage
-        from app.models.rag_models import AgentRAGConfig
+        from core.db import Storage
+        from core.rag.models import AgentRAGConfig
         from unittest.mock import MagicMock, AsyncMock
         import json
         
@@ -157,8 +157,8 @@ class TestRealRAGIntegration:
             print("\n📤 Вызываем upload_document_to_knowledge_base tool...")
             print(f"   Реальный namespace ID: {namespace.namespace_id}")
             
-            with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-                with patch("app.tools.misc.rag_tools.get_or_create_namespace", new=AsyncMock(side_effect=mock_get_or_create_ns)):
+            with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+                with patch("apps.agents.tools.misc.rag_tools.get_or_create_namespace", new=AsyncMock(side_effect=mock_get_or_create_ns)):
                     upload_result = await upload_document_to_knowledge_base.ainvoke(
                         {
                             "file_id": file_id,
@@ -174,8 +174,8 @@ class TestRealRAGIntegration:
             assert "welcome_to_sber.pdf" in upload_result or "Welcome" in upload_result
             
             print("\n📋 Вызываем list_documents_in_knowledge_base tool...")
-            with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-                with patch("app.tools.misc.rag_tools.get_or_create_namespace", new=AsyncMock(side_effect=mock_get_or_create_ns)):
+            with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+                with patch("apps.agents.tools.misc.rag_tools.get_or_create_namespace", new=AsyncMock(side_effect=mock_get_or_create_ns)):
                     list_result = await list_documents_in_knowledge_base.ainvoke({}, config={})
             
             print("✅ Список документов:")
@@ -187,8 +187,8 @@ class TestRealRAGIntegration:
             await asyncio.sleep(30)
             
             print("\n🔍 Вызываем search_knowledge_base tool...")
-            with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-                with patch("app.tools.misc.rag_tools.get_or_create_namespace", new=AsyncMock(side_effect=mock_get_or_create_ns)):
+            with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+                with patch("apps.agents.tools.misc.rag_tools.get_or_create_namespace", new=AsyncMock(side_effect=mock_get_or_create_ns)):
                     search_result = await search_knowledge_base.ainvoke(
                         {"query": "What is Sber?"},
                         config={}

@@ -9,8 +9,8 @@ import uuid
 import httpx
 from unittest.mock import patch, AsyncMock, MagicMock
 
-from app.db.repositories import Storage
-from app.models import FileRecord, FileStatus
+from core.db import Storage
+from apps.agents.models import FileRecord, FileStatus
 
 
 @pytest.mark.asyncio
@@ -240,9 +240,9 @@ class TestTelegramFileIntegration:
         
         print("✅ Интеграционный тест Telegram + фото завершен")
     
-    async def test_file_message_format_for_agent(self):
+    async def test_file_message_format_for_agent(self, storage):
         """Тест форматирования сообщения с файлом для агента"""
-        from app.core.file_processor import FileProcessor
+        from core.files.processors import FileProcessor
         
         # Создаем тестовую запись о файле
         file_record = FileRecord(
@@ -260,7 +260,7 @@ class TestTelegramFileIntegration:
         )
         
         # Форматируем сообщение для агента
-        processor = FileProcessor()
+        processor = FileProcessor(storage=storage)
         formatted_message = processor.format_file_message(file_record)
         
         print("✅ Сообщение для агента:")
@@ -286,7 +286,7 @@ class TestTelegramFileIntegration:
         
         await processor.close()
     
-    async def test_combined_text_and_file_message(self):
+    async def test_combined_text_and_file_message(self, storage):
         """Тест сообщения с текстом и файлом"""
         
         # Имитируем что пользователь отправил текст + файл
@@ -305,8 +305,8 @@ class TestTelegramFileIntegration:
             status=FileStatus.UPLOADED
         )
         
-        from app.core.file_processor import FileProcessor
-        processor = FileProcessor()
+        from core.files.processors import FileProcessor
+        processor = FileProcessor(storage=storage)
         file_message = processor.format_file_message(file_record)
         
         # Комбинируем текст и файл (как это делает Telegram интерфейс)
@@ -418,7 +418,7 @@ class TestTelegramFileIntegration:
             mock_client.return_value.__aenter__.return_value.post = mock_request_handler
             
             # Тестируем прямой вызов telegram_interface
-            from app.interfaces.telegram_interface import TelegramInterface
+            from apps.agents.interfaces.telegram_interface import TelegramInterface
             
             # Создаем интерфейс с тестовым токеном
             interface = TelegramInterface("test_token", {"username": "agents_lab_bot"})

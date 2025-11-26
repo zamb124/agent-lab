@@ -44,7 +44,7 @@ async def test_smart_flow_executes_different_nodes(migrated_db, agent_factory, m
     )
     
     # Получаем SmartFlowAgent
-    agent = await agent_factory.get_agent("app.flows.smart_flow.SmartFlowAgent")
+    agent = await agent_factory.get_agent("apps.agents.flows.smart_flow.SmartFlowAgent")
     
     print("\n" + "="*70)
     print("ТЕСТ 1: Математический запрос (должен идти через calculator)")
@@ -138,7 +138,7 @@ async def test_smart_flow_executes_different_nodes(migrated_db, agent_factory, m
 async def test_smart_flow_router_condition(agent_repo):
     """Тест: проверка логики роутера SmartFlow"""
     
-    from app.flows.smart_flow import router_node, router_condition
+    from apps.agents.flows.smart_flow import router_node, router_condition
     
     print("\n" + "="*70)
     print("ТЕСТ ЛОГИКИ РОУТЕРА")
@@ -215,12 +215,12 @@ async def test_smart_flow_router_condition(agent_repo):
 
 
 @pytest.mark.asyncio
-async def test_smart_flow_graph_structure(migrated_db, storage, migrator, agent_repo):
+async def test_smart_flow_graph_structure(migrated_db,  migrator, agent_repo):
     
     await migrator.run_full_migration()
     
     # Получаем конфигурацию агента
-    agent_config = await agent_repo.get("app.flows.smart_flow.SmartFlowAgent")
+    agent_config = await agent_repo.get("apps.agents.flows.smart_flow.SmartFlowAgent")
     
     assert agent_config is not None, "SmartFlowAgent не найден в БД"
     assert agent_config.graph_definition is not None, "У SmartFlowAgent нет graph_definition"

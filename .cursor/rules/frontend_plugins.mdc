@@ -48,7 +48,7 @@ touch app/frontend/modules/my_plugin/{__init__.py,plugin.py,router.py}
 **ОБЯЗАТЕЛЬНО** наследуйся от `Plugin` и реализуй `get_router()`:
 
 <good_example>
-from app.frontend.core.plugin_system import Plugin
+from apps.frontend.core.plugin_system import Plugin
 
 
 class MyPlugin(Plugin):
@@ -98,7 +98,7 @@ class MyPlugin(Plugin):
 <good_example>
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
-from app.frontend.core.template_loader import get_templates
+from apps.frontend.core.template_loader import get_templates
 
 router = APIRouter(prefix="/frontend/my_plugin", tags=["my_plugin"])
 templates = get_templates()
@@ -659,7 +659,7 @@ await app.pluginManager.reload('my_plugin');
 
 **plugin.py:**
 ```python
-from app.frontend.core.plugin_system import Plugin
+from apps.frontend.core.plugin_system import Plugin
 
 class MyPlugin(Plugin):
     name = "my_plugin"

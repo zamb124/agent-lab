@@ -6,12 +6,12 @@
 2. Добавление tool из БД к агенту в коде через ссылку
 """
 import pytest
-from app.models import AgentConfig, AgentType, CodeMode, FlowConfig, ToolReference, LLMConfig
+from apps.agents.models import AgentConfig, AgentType, CodeMode, FlowConfig, ToolReference, LLMConfig
 from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_migrate_and_add_inline_tool(migrated_db, storage, flow_factory, mock_llm, unique_id, test_helpers):
+async def test_migrate_and_add_inline_tool(migrated_db, storage, tool_repo, flow_factory, mock_llm, unique_id, test_helpers):
     """
     Тест 1: Создаем агента в БД и добавляем inline tool "покажи сахару"
     """
@@ -37,7 +37,6 @@ def show_sugar(request):
     
     # 2. Создаем DB-only агента с sugar tool
     await test_helpers.create_simple_agent(
-        storage=storage,
         agent_id="db_sugar_agent",
         name="DB Sugar Agent",
         prompt="Ты помощник который показывает сахар. Используй show_sugar tool когда пользователь просит показать сахар.",
@@ -55,7 +54,6 @@ def show_sugar(request):
     
     # 4. Создаем flow для тестирования
     await test_helpers.create_simple_flow(
-        storage=storage,
         flow_id="db_sugar_flow",
         name="DB Sugar Flow",
         entry_point_agent="db_sugar_agent"
@@ -85,7 +83,7 @@ def show_sugar(request):
 
 
 @pytest.mark.asyncio
-async def test_code_agent_with_db_tool(migrated_db, storage, flow_factory, mock_llm, unique_id, test_helpers):
+async def test_code_agent_with_db_tool(migrated_db,  flow_factory, mock_llm, unique_id, test_helpers):
     """
     Тест 2: Агент в коде использует tool из БД через ссылку
     """
@@ -114,11 +112,13 @@ def main(spell: str) -> str:
         description="Магический инструмент из БД"
     )
     
-    await storage.set(f"tool:{magic_tool.tool_id}", magic_tool.model_dump_json())
+    from apps.agents.container import get_agents_container
+    tool_repo = get_agents_container().tool_repository
+    
+    await tool_repo.set(magic_tool)
     print("✅ Magic tool сохранен в БД")
     
     await test_helpers.create_simple_agent(
-        storage=storage,
         agent_id="magic_test_agent",
         name="Magic Test Agent",
         prompt="Ты волшебник. Используй main для выполнения заклинаний.",
@@ -127,7 +127,6 @@ def main(spell: str) -> str:
     print("✅ Magic agent создан в БД со ссылкой на DB tool")
     
     await test_helpers.create_simple_flow(
-        storage=storage,
         flow_id="magic_test_flow",
         name="Magic Test Flow",
         entry_point_agent="magic_test_agent"
@@ -149,7 +148,7 @@ def main(spell: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_code_reference_tool(migrated_db, storage, flow_factory, mock_llm, unique_id, test_helpers):
+async def test_code_reference_tool(migrated_db,  flow_factory, mock_llm, unique_id, test_helpers):
     """
     Тест 3: Tool из кода (CODE_REFERENCE режим)
     """
@@ -164,14 +163,13 @@ async def test_code_reference_tool(migrated_db, storage, flow_factory, mock_llm,
     )
     
     calc_tool = ToolReference(
-        tool_id="app.tools.calc.calc_tools.calculate",
+        tool_id="apps.agents.tools.calc.calc_tools.calculate",
         code_mode=CodeMode.CODE_REFERENCE,
-        function_path="app.tools.calc.calc_tools.calculate",
+        function_path="apps.agents.tools.calc.calc_tools.calculate",
         description="Калькулятор из кода"
     )
     
     await test_helpers.create_simple_agent(
-        storage=storage,
         agent_id="calc_test_agent",
         name="Calculator Test Agent",
         prompt="Ты калькулятор. Используй calculate для вычислений.",
@@ -180,7 +178,6 @@ async def test_code_reference_tool(migrated_db, storage, flow_factory, mock_llm,
     print("✅ Calculator agent создан с CODE_REFERENCE tool")
     
     await test_helpers.create_simple_flow(
-        storage=storage,
         flow_id="calc_test_flow",
         name="Calculator Test Flow",
         entry_point_agent="calc_test_agent"
@@ -201,7 +198,7 @@ async def test_code_reference_tool(migrated_db, storage, flow_factory, mock_llm,
 
 
 @pytest.mark.asyncio
-async def test_db_agent_with_code_tool(migrated_db, storage, flow_factory, mock_llm, unique_id, test_helpers):
+async def test_db_agent_with_code_tool(migrated_db,  flow_factory, mock_llm, unique_id, test_helpers):
     """
     Тест 4: Агент в БД использует tool из кода (мигрированный в БД)
     """
@@ -216,14 +213,13 @@ async def test_db_agent_with_code_tool(migrated_db, storage, flow_factory, mock_
     )
     
     code_tool = ToolReference(
-        tool_id="app.tools.calc.calc_tools.calculate",
+        tool_id="apps.agents.tools.calc.calc_tools.calculate",
         code_mode=CodeMode.CODE_REFERENCE,
-        function_path="app.tools.calc.calc_tools.calculate",
+        function_path="apps.agents.tools.calc.calc_tools.calculate",
         description="Калькулятор из кода"
     )
     
     await test_helpers.create_simple_agent(
-        storage=storage,
         agent_id="db_agent_with_code_tool",
         name="DB Agent with Code Tool",
         prompt="Ты математик. Используй calculate для вычислений. Будь точным.",
@@ -232,7 +228,6 @@ async def test_db_agent_with_code_tool(migrated_db, storage, flow_factory, mock_
     print("✅ DB агент создан со ссылкой на code tool")
     
     await test_helpers.create_simple_flow(
-        storage=storage,
         flow_id="db_agent_code_tool_flow",
         name="DB Agent Code Tool Flow",
         entry_point_agent="db_agent_with_code_tool"

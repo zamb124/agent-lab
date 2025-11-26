@@ -6,19 +6,19 @@ import uuid
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.tools.misc.rag_tools import (
+from apps.agents.tools.misc.rag_tools import (
     search_knowledge_base,
     upload_document_to_knowledge_base,
     upload_text_to_knowledge_base,
     list_documents_in_knowledge_base
 )
-from app.models.rag_models import RAGSearchResult, RAGDocument
+from core.rag.models import RAGSearchResult, RAGDocument
 
 
 @pytest.fixture
 def mock_context():
     """Фикстура для мока контекста"""
-    from app.models.rag_models import AgentRAGConfig
+    from core.rag.models import AgentRAGConfig
     
     context = MagicMock()
     context.session_id = "session_123"
@@ -112,8 +112,8 @@ class TestSearchKnowledgeBase:
         """Тест когда RAG отключен"""
         mock_context.flow_config.rag_config = None
         
-        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+        with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("apps.agents.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
                 result = await search_knowledge_base.ainvoke(
                     {"query": "test query"},
                     config={}
@@ -126,9 +126,9 @@ class TestSearchKnowledgeBase:
         """Тест успешного поиска"""
         mock_get_ns = AsyncMock(return_value="mock_ns_id")
         
-        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
-                with patch("app.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
+        with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("apps.agents.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+                with patch("apps.agents.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
                     result = await search_knowledge_base.ainvoke(
                         {"query": "test query"},
                         config={}
@@ -153,9 +153,9 @@ class TestSearchKnowledgeBase:
             "mock_ns_id": []
         })
         
-        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
-                with patch("app.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
+        with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("apps.agents.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+                with patch("apps.agents.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
                     result = await search_knowledge_base.ainvoke(
                         {"query": "non existent"},
                         config={}
@@ -166,7 +166,7 @@ class TestSearchKnowledgeBase:
     @pytest.mark.asyncio
     async def test_search_no_scopes_configured(self, mock_context, mock_rag_provider):
         """Тест когда не настроены скоупы"""
-        from app.models.rag_models import AgentRAGConfig
+        from core.rag.models import AgentRAGConfig
         
         mock_context.flow_config.rag_config = AgentRAGConfig(
             enabled=True,
@@ -174,8 +174,8 @@ class TestSearchKnowledgeBase:
             search_scopes=[]
         )
         
-        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+        with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("apps.agents.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
                 result = await search_knowledge_base.ainvoke(
                     {"query": "test"},
                     config={}
@@ -192,8 +192,8 @@ class TestUploadDocumentToKnowledgeBase:
         """Тест когда RAG отключен"""
         mock_context.flow_config.rag_config = None
         
-        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+        with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("apps.agents.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
                 result = await upload_document_to_knowledge_base.ainvoke(
                     {"file_id": "file_123"},
                     config={}
@@ -202,13 +202,13 @@ class TestUploadDocumentToKnowledgeBase:
         assert result == "RAG не настроен для этого flow"
     
     @pytest.mark.asyncio
-    async def test_upload_file_not_found(self, mock_context):
+    async def test_upload_file_not_found(self, mock_context, storage):
         """Тест когда файл не найден"""
         mock_storage = AsyncMock()
         mock_storage.get = AsyncMock(return_value=None)
         
-        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-            with patch("app.db.repositories.Storage", return_value=mock_storage):
+        with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("core.db.storage.Storage", return_value=mock_storage):
                 result = await upload_document_to_knowledge_base.ainvoke(
                     {"file_id": "nonexistent"},
                     config={}
@@ -219,7 +219,7 @@ class TestUploadDocumentToKnowledgeBase:
     @pytest.mark.asyncio
     async def test_upload_success(self, mock_context, mock_rag_provider):
         """Тест успешной загрузки"""
-        from app.models.file_models import FileRecord
+        from core.files.models import FileRecord
         
         mock_get_ns = AsyncMock(return_value="mock_ns_id")
         
@@ -236,10 +236,10 @@ class TestUploadDocumentToKnowledgeBase:
         mock_file_processor = AsyncMock()
         mock_file_processor.get_file_record = AsyncMock(return_value=mock_file_record)
         
-        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.misc.rag_tools.get_default_file_processor", return_value=mock_file_processor):
-                with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
-                    with patch("app.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
+        with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("apps.agents.tools.misc.rag_tools.get_default_file_processor", return_value=mock_file_processor):
+                with patch("apps.agents.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+                    with patch("apps.agents.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
                         result = await upload_document_to_knowledge_base.ainvoke(
                             {"file_id": "file_123", "description": "Test doc"},
                             config={}
@@ -257,8 +257,8 @@ class TestUploadDocumentToKnowledgeBase:
     @pytest.mark.asyncio
     async def test_upload_to_company_scope(self, mock_context, mock_rag_provider):
         """Тест загрузки в скоуп компании"""
-        from app.models.rag_models import AgentRAGConfig
-        from app.models.file_models import FileRecord
+        from core.rag.models import AgentRAGConfig
+        from core.files.models import FileRecord
         
         mock_get_ns = AsyncMock(return_value="mock_ns_id")
         mock_context.flow_config.flow_id = "test_flow"
@@ -281,10 +281,10 @@ class TestUploadDocumentToKnowledgeBase:
         mock_file_processor = AsyncMock()
         mock_file_processor.get_file_record = AsyncMock(return_value=mock_file_record)
         
-        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.misc.rag_tools.get_default_file_processor", return_value=mock_file_processor):
-                with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
-                    with patch("app.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
+        with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("apps.agents.tools.misc.rag_tools.get_default_file_processor", return_value=mock_file_processor):
+                with patch("apps.agents.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+                    with patch("apps.agents.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
                         result = await upload_document_to_knowledge_base.ainvoke(
                             {"file_id": "file_123"},
                             config={}
@@ -303,8 +303,8 @@ class TestListDocumentsInKnowledgeBase:
         """Тест когда RAG отключен"""
         mock_context.flow_config.rag_config = None
         
-        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+        with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("apps.agents.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
                 result = await list_documents_in_knowledge_base.ainvoke({}, config={})
         
         assert result == "RAG не настроен для этого flow"
@@ -315,9 +315,9 @@ class TestListDocumentsInKnowledgeBase:
         mock_get_ns = AsyncMock(return_value="mock_ns_id")
         mock_rag_provider.list_documents = AsyncMock(return_value=[])
         
-        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
-                with patch("app.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
+        with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("apps.agents.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+                with patch("apps.agents.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
                     result = await list_documents_in_knowledge_base.ainvoke({}, config={})
         
         assert "пока нет документов" in result.lower()
@@ -327,9 +327,9 @@ class TestListDocumentsInKnowledgeBase:
         """Тест успешного получения списка"""
         mock_get_ns = AsyncMock(return_value="mock_ns_id")
         
-        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
-                with patch("app.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
+        with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("apps.agents.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+                with patch("apps.agents.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
                     result = await list_documents_in_knowledge_base.ainvoke({}, config={})
         
         assert "Документы в базе знаний (2)" in result
@@ -349,8 +349,8 @@ class TestUploadTextToKnowledgeBase:
         """Тест когда RAG отключен"""
         mock_context.flow_config.rag_config = None
 
-        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+        with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("apps.agents.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
                 result = await upload_text_to_knowledge_base.ainvoke(
                     {"text": "test text"},
                     config={}
@@ -363,9 +363,9 @@ class TestUploadTextToKnowledgeBase:
         """Тест успешной загрузки текста"""
         mock_get_ns = AsyncMock(return_value="mock_ns_id")
 
-        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
-                with patch("app.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
+        with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("apps.agents.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+                with patch("apps.agents.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
                     result = await upload_text_to_knowledge_base.ainvoke(
                         {"text": "test text content", "document_name": "test_doc.txt", "description": "Test doc"},
                         config={}
@@ -387,9 +387,9 @@ class TestUploadTextToKnowledgeBase:
         """Тест автоматической генерации имени документа"""
         mock_get_ns = AsyncMock(return_value="mock_ns_id")
 
-        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
-                with patch("app.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
+        with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("apps.agents.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+                with patch("apps.agents.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
                     result = await upload_text_to_knowledge_base.ainvoke(
                         {"text": "test text content"},
                         config={}
@@ -406,7 +406,7 @@ class TestUploadTextToKnowledgeBase:
     @pytest.mark.asyncio
     async def test_upload_text_to_company_scope(self, mock_context, mock_rag_provider):
         """Тест загрузки текста в скоуп компании"""
-        from app.models.rag_models import AgentRAGConfig
+        from core.rag.models import AgentRAGConfig
 
         mock_get_ns = AsyncMock(return_value="mock_ns_id")
         mock_context.flow_config.flow_id = "test_flow"
@@ -416,9 +416,9 @@ class TestUploadTextToKnowledgeBase:
             search_scopes=["company"]
         )
 
-        with patch("app.tools.misc.rag_tools.get_context", return_value=mock_context):
-            with patch("app.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
-                with patch("app.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
+        with patch("apps.agents.tools.misc.rag_tools.get_context", return_value=mock_context):
+            with patch("apps.agents.tools.misc.rag_tools.get_default_rag_provider", return_value=mock_rag_provider):
+                with patch("apps.agents.tools.misc.rag_tools.get_or_create_namespace", new=mock_get_ns):
                     result = await upload_text_to_knowledge_base.ainvoke(
                         {"text": "test text content"},
                         config={}
@@ -435,7 +435,7 @@ class TestAgentsetProviderTextUpload:
     @pytest.mark.asyncio
     async def test_upload_text_via_s3_flow(self):
         """Тест загрузки текста через S3 flow"""
-        from app.core.rag.providers.agentset_provider import AgentsetRAGProvider
+        from core.rag.providers.agentset_provider import AgentsetRAGProvider
         from unittest.mock import AsyncMock, patch, MagicMock
 
         provider = AgentsetRAGProvider({"api_key": "test", "base_url": "https://test.com"})
@@ -450,8 +450,9 @@ class TestAgentsetProviderTextUpload:
         mock_s3_result.name = "test_doc.txt"
         mock_s3_result.status = "processing"
 
-        with patch('app.core.rag.providers.agentset_provider.get_default_s3_client', return_value=mock_s3_client), \
+        with patch('core.rag.providers.agentset_provider.S3ClientFactory') as mock_s3_factory, \
              patch.object(provider, 'upload_document_from_s3', return_value=mock_s3_result) as mock_upload_s3:
+            mock_s3_factory.create_default_client.return_value = mock_s3_client
 
             result = await provider.upload_document_from_text(
                 namespace_id="test_ns",
@@ -496,7 +497,7 @@ class TestAgentsetProviderTextUpload:
     @pytest.mark.asyncio
     async def test_upload_text_auto_filename_generation(self):
         """Тест автоматической генерации названия файла из текста"""
-        from app.core.rag.providers.agentset_provider import AgentsetRAGProvider
+        from core.rag.providers.agentset_provider import AgentsetRAGProvider
         from unittest.mock import AsyncMock, patch, MagicMock
 
         provider = AgentsetRAGProvider({"api_key": "test", "base_url": "https://test.com"})
@@ -511,8 +512,9 @@ class TestAgentsetProviderTextUpload:
         mock_s3_result.name = "auto_generated_name"
         mock_s3_result.status = "processing"
 
-        with patch('app.core.rag.providers.agentset_provider.get_default_s3_client', return_value=mock_s3_client), \
+        with patch('core.rag.providers.agentset_provider.S3ClientFactory') as mock_s3_factory, \
              patch.object(provider, 'upload_document_from_s3', return_value=mock_s3_result) as mock_upload_s3:
+            mock_s3_factory.create_default_client.return_value = mock_s3_client
 
             # Загружаем текст без указания названия документа
             result = await provider.upload_document_from_text(
@@ -539,7 +541,7 @@ class TestKnowledgeBaseAPI:
     @pytest.mark.asyncio
     async def test_upload_text_success(self, httpx_client, flow_repo, test_company):
         """Тест успешной загрузки текста через API"""
-        from app.models import FlowConfig
+        from apps.agents.models import FlowConfig
 
         flow_id = f"test_flow_{uuid.uuid4().hex[:8]}"
         flow_config = FlowConfig(
@@ -585,7 +587,7 @@ class TestKnowledgeBaseAPI:
     @pytest.mark.asyncio
     async def test_upload_text_empty_text(self, httpx_client, flow_repo, test_company):
         """Тест загрузки пустого текста"""
-        from app.models import FlowConfig
+        from apps.agents.models import FlowConfig
 
         flow_id = f"test_flow_{uuid.uuid4().hex[:8]}"
         flow_config = FlowConfig(
@@ -613,7 +615,7 @@ class TestKnowledgeBaseAPI:
     @pytest.mark.asyncio
     async def test_upload_text_auto_name_generation(self, httpx_client, flow_repo, test_company):
         """Тест автоматической генерации имени документа"""
-        from app.models import FlowConfig
+        from apps.agents.models import FlowConfig
 
         flow_id = f"test_flow_{uuid.uuid4().hex[:8]}"
         flow_config = FlowConfig(
@@ -642,7 +644,7 @@ class TestKnowledgeBaseAPI:
     @pytest.mark.asyncio
     async def test_get_flow_documents(self, httpx_client, flow_repo, test_company):
         """Тест получения списка документов flow"""
-        from app.models import FlowConfig
+        from apps.agents.models import FlowConfig
 
         flow_id = f"test_flow_{uuid.uuid4().hex[:8]}"
         flow_config = FlowConfig(

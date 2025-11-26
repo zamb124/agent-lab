@@ -5,8 +5,8 @@
 import pytest
 from langchain_core.messages import HumanMessage
 
-from app.models import AgentConfig, AgentType, LLMConfig, FlowConfig
-from app.tools.task.delayed_task_tools import DELAYED_TASK_TOOLS
+from apps.agents.models import AgentConfig, AgentType, LLMConfig, FlowConfig
+from apps.agents.tools.task.delayed_task_tools import DELAYED_TASK_TOOLS
 
 
 @pytest.mark.asyncio
@@ -15,7 +15,7 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
     Чистый тест: агент создает задачу → агент показывает список → задача там есть.
     Проверяет что изменения state персистятся между вызовами.
     """
-    from app.core.context import get_context, set_context
+    from core.context import get_context, set_context
 
     # Создаем агента
     agent_config = AgentConfig(
@@ -43,6 +43,29 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
     current_context.flow_config = flow_config
     set_context(current_context)
 
+    # Настраиваем mock_llm ДО создания агента
+    from core.clients.llm import get_llm, get_global_mock_llm
+    
+    # Создаем мок если его еще нет
+    _ = get_llm("mock-gpt-4")
+    
+    # Получаем и настраиваем мок
+    global_mock = get_global_mock_llm("mock-gpt-4")
+    if global_mock:
+        global_mock.reset_call_counts()
+        global_mock.configure(
+            tool_responses={
+                "создай": {
+                    "tool": "create_delayed_task",
+                    "args": {
+                        "message": "Тестовая задача",
+                        "delay_seconds": 3600
+                    }
+                }
+            },
+            default_response="Готово"
+        )
+
     # Загружаем агента
     agent = await agent_factory.get_agent("state_test_agent")
 
@@ -53,18 +76,6 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
     print("\n" + "="*60)
     print("ШАГ 1: Создание задачи")
     print("="*60)
-
-    mock_llm.configure(
-        tool_responses={
-            "создай": {
-                "tool": "create_delayed_task",
-                "args": {
-                    "message": "Тестовая задача",
-                    "delay_seconds": 3600
-                }
-            }
-        }
-    )
 
     result1 = await agent.ainvoke({
         "messages": [HumanMessage(content="Создай задачу")]
@@ -83,15 +94,17 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
     print("="*60)
 
     # Настраиваем MockLLM для второго вызова
-    mock_llm.reset_call_counts()  # Сбрасываем счетчики
-    mock_llm.configure(
-        tool_responses={
-            "покажи": {
-                "tool": "list_delayed_tasks",
-                "args": {}
-            }
-        }
-    )
+    if global_mock:
+        global_mock.reset_call_counts()  # Сбрасываем счетчики
+        global_mock.configure(
+            tool_responses={
+                "покажи": {
+                    "tool": "list_delayed_tasks",
+                    "args": {}
+                }
+            },
+            default_response="Готово"
+        )
 
     result2 = await agent.ainvoke({
         "messages": [HumanMessage(content="покажи")]

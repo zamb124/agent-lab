@@ -8,7 +8,7 @@
 И все это работает вместе.
 """
 import pytest
-from app.models import (
+from apps.agents.models import (
     AgentConfig, AgentType, CodeMode, FlowConfig, LLMConfig,
     GraphDefinition, GraphNode, GraphEdge, NodeType, ConditionType
 )
@@ -16,7 +16,7 @@ from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_create_hybrid_stategraph(migrated_db, storage, agent_repo, flow_repo):
+async def test_create_hybrid_stategraph(migrated_db,  agent_repo, flow_repo):
     """Создание гибридного StateGraph агента"""
     
     # Inline код для входной ноды
@@ -114,14 +114,14 @@ async def finalizer_function(state):
                 id="complex_math",
                 type=NodeType.AGENT_NODE,
                 code_mode=CodeMode.CODE_REFERENCE,
-                function_class="app.agents.calculator.agent.CalculatorAgent"
+                function_class="apps.agents.agents.calculator.agent.CalculatorAgent"
             ),
             # 4. Weather нода - ССЫЛКА НА ФУНКЦИЮ
             GraphNode(
                 id="weather_or_general",
                 type=NodeType.FUNCTION_NODE,
                 code_mode=CodeMode.CODE_REFERENCE,
-                function_path="app.flows.smart_flow.weather_node"
+                function_path="apps.agents.flows.smart_flow.weather_node"
             ),
             # 5. Finalizer нода - INLINE КОД
             GraphNode(
@@ -191,11 +191,11 @@ async def finalizer_function(state):
 
 
 @pytest.mark.asyncio
-async def test_execute_hybrid_simple_math(migrated_db, storage, flow_factory, mock_llm, unique_id, agent_repo, flow_repo):
+async def test_execute_hybrid_simple_math(migrated_db,  flow_factory, mock_llm, unique_id, agent_repo, flow_repo):
     """Создание и выполнение гибридного агента - простая математика (inline код)"""
     
     # Создаем агента
-    await test_create_hybrid_stategraph(migrated_db, storage, agent_repo, flow_repo)
+    await test_create_hybrid_stategraph(migrated_db,  agent_repo, flow_repo)
     
     # Настраиваем mock LLM
     mock_llm.configure(
@@ -223,11 +223,11 @@ async def test_execute_hybrid_simple_math(migrated_db, storage, flow_factory, mo
 
 
 @pytest.mark.asyncio
-async def test_execute_hybrid_complex_math(migrated_db, storage, flow_factory, mock_llm, unique_id, agent_repo, flow_repo):
+async def test_execute_hybrid_complex_math(migrated_db,  flow_factory, mock_llm, unique_id, agent_repo, flow_repo):
     """Создание и выполнение гибридного агента - сложная математика (ссылка на агента)"""
     
     # Создаем агента
-    await test_create_hybrid_stategraph(migrated_db, storage, agent_repo, flow_repo)
+    await test_create_hybrid_stategraph(migrated_db,  agent_repo, flow_repo)
     
     # Настраиваем mock LLM
     mock_llm.configure(
@@ -255,11 +255,11 @@ async def test_execute_hybrid_complex_math(migrated_db, storage, flow_factory, m
 
 
 @pytest.mark.asyncio
-async def test_execute_hybrid_weather(migrated_db, storage, flow_factory, mock_llm, unique_id, agent_repo, flow_repo):
+async def test_execute_hybrid_weather(migrated_db,  flow_factory, mock_llm, unique_id, agent_repo, flow_repo):
     """Создание и выполнение гибридного агента - погода (ссылка на функцию)"""
     
     # Создаем агента
-    await test_create_hybrid_stategraph(migrated_db, storage, agent_repo, flow_repo)
+    await test_create_hybrid_stategraph(migrated_db,  agent_repo, flow_repo)
     
     # Настраиваем mock LLM
     mock_llm.configure(

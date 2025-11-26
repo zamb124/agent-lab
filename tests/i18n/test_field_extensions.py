@@ -4,7 +4,7 @@
 
 from pydantic import BaseModel
 
-from app.frontend.field_extensions import Field
+from apps.frontend.field_extensions import Field
 
 
 class TestFrontendFieldInfoI18n:

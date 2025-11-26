@@ -17,7 +17,7 @@ from langchain_core.messages import HumanMessage
 @pytest.mark.asyncio
 @pytest.mark.integration
 @pytest.mark.slow
-async def test_research_flow_migration(migrated_db, storage, flow_repo, agent_repo, migrator, test_company):
+async def test_research_flow_migration(migrated_db,  flow_repo, agent_repo, migrator, test_company):
     """
     Тест 1: Проверка миграции Research Flow и всех зависимых агентов.
     
@@ -31,15 +31,15 @@ async def test_research_flow_migration(migrated_db, storage, flow_repo, agent_re
     # Миграция research flow с зависимостями
     await migrator.migrate_for_company(
         company=test_company,
-        flows=["app.flows.research_flow.research_flow_config"],
+        flows=["apps.agents.flows.research_flow.research_flow_config"],
         with_dependencies=True
     )
     
     # 1. Проверяем что flow мигрировался
-    research_flow = await flow_repo.get("app.flows.research_flow.research_flow_config")
+    research_flow = await flow_repo.get("apps.agents.flows.research_flow.research_flow_config")
     assert research_flow is not None, "Research Flow не мигрировался"
     assert research_flow.name == "Research Flow"
-    assert research_flow.entry_point_agent == "app.agents.research.coordinator.ResearchCoordinatorAgent"
+    assert research_flow.entry_point_agent == "apps.agents.agents.research.coordinator.ResearchCoordinatorAgent"
     
     # Проверяем variables и store
     assert "bot_name" in research_flow.variables
@@ -50,7 +50,7 @@ async def test_research_flow_migration(migrated_db, storage, flow_repo, agent_re
     print("✅ Research Flow мигрировался корректно")
     
     # 2. Проверяем ResearchCoordinator (StateGraph)
-    coordinator = await agent_repo.get("app.agents.research.coordinator.ResearchCoordinatorAgent")
+    coordinator = await agent_repo.get("apps.agents.agents.research.coordinator.ResearchCoordinatorAgent")
     assert coordinator is not None, "ResearchCoordinator не мигрировался"
     assert coordinator.name == "research_coordinator"
     assert coordinator.graph_definition is not None, "Graph definition отсутствует"
@@ -69,12 +69,12 @@ async def test_research_flow_migration(migrated_db, storage, flow_repo, agent_re
     
     # 3. Проверяем все субагенты
     sub_agents = [
-        ("query_analyzer", "app.agents.research.query_analyzer.QueryAnalyzerAgent"),
-        ("search_agent", "app.agents.research.search_agent.SearchAgent"),
-        ("source_processor", "app.agents.research.source_processor.SourceProcessorAgent"),
-        ("fact_extractor", "app.agents.research.fact_extractor.FactExtractorAgent"),
-        ("synthesizer", "app.agents.research.synthesizer.SynthesizerAgent"),
-        ("quality_checker", "app.agents.research.quality_checker.QualityCheckerAgent"),
+        ("query_analyzer", "apps.agents.agents.research.query_analyzer.QueryAnalyzerAgent"),
+        ("search_agent", "apps.agents.agents.research.search_agent.SearchAgent"),
+        ("source_processor", "apps.agents.agents.research.source_processor.SourceProcessorAgent"),
+        ("fact_extractor", "apps.agents.agents.research.fact_extractor.FactExtractorAgent"),
+        ("synthesizer", "apps.agents.agents.research.synthesizer.SynthesizerAgent"),
+        ("quality_checker", "apps.agents.agents.research.quality_checker.QualityCheckerAgent"),
     ]
     
     for agent_name, agent_id in sub_agents:
@@ -101,7 +101,7 @@ async def test_research_flow_graph_compilation(migrated_db, flow_factory, agent_
     """
     
     # Получаем flow через factory
-    research_flow = await flow_factory.get_flow("app.flows.research_flow.research_flow_config")
+    research_flow = await flow_factory.get_flow("apps.agents.flows.research_flow.research_flow_config")
     assert research_flow is not None, "Flow не создался через factory"
     assert research_flow.entry_agent is not None, "Entry agent не инициализировался"
     
@@ -109,7 +109,7 @@ async def test_research_flow_graph_compilation(migrated_db, flow_factory, agent_
     print(f"   Entry agent: {research_flow.config.entry_point_agent}")
     
     # Получаем coordinator через factory
-    coordinator = await agent_factory.get_agent("app.agents.research.coordinator.ResearchCoordinatorAgent")
+    coordinator = await agent_factory.get_agent("apps.agents.agents.research.coordinator.ResearchCoordinatorAgent")
     assert coordinator is not None, "Coordinator не создался"
     
     # Компилируем граф (это проверит что все субагенты доступны)
@@ -122,12 +122,12 @@ async def test_research_flow_graph_compilation(migrated_db, flow_factory, agent_
     
     # Проверяем что можем получить каждого субагента
     sub_agents = [
-        ("query_analyzer", "app.agents.research.query_analyzer.QueryAnalyzerAgent"),
-        ("search_agent", "app.agents.research.search_agent.SearchAgent"),
-        ("source_processor", "app.agents.research.source_processor.SourceProcessorAgent"),
-        ("fact_extractor", "app.agents.research.fact_extractor.FactExtractorAgent"),
-        ("synthesizer", "app.agents.research.synthesizer.SynthesizerAgent"),
-        ("quality_checker", "app.agents.research.quality_checker.QualityCheckerAgent"),
+        ("query_analyzer", "apps.agents.agents.research.query_analyzer.QueryAnalyzerAgent"),
+        ("search_agent", "apps.agents.agents.research.search_agent.SearchAgent"),
+        ("source_processor", "apps.agents.agents.research.source_processor.SourceProcessorAgent"),
+        ("fact_extractor", "apps.agents.agents.research.fact_extractor.FactExtractorAgent"),
+        ("synthesizer", "apps.agents.agents.research.synthesizer.SynthesizerAgent"),
+        ("quality_checker", "apps.agents.agents.research.quality_checker.QualityCheckerAgent"),
     ]
     
     for agent_name, agent_id in sub_agents:
@@ -165,7 +165,7 @@ async def test_research_flow_end_to_end_REAL(migrated_db, flow_factory, agent_fa
     """
     
     # Получаем flow
-    research_flow = await flow_factory.get_flow("app.flows.research_flow.research_flow_config")
+    research_flow = await flow_factory.get_flow("apps.agents.flows.research_flow.research_flow_config")
     assert research_flow is not None, "Research Flow недоступен"
     
     # Реальный запрос для исследования
@@ -294,14 +294,14 @@ async def test_research_flow_end_to_end_REAL(migrated_db, flow_factory, agent_fa
     print("8️⃣ ПРОВЕРКА ПЕРСИСТЕНТНОСТИ:")
     
     # Создаем новый flow instance с тем же thread_id
-    research_flow_2 = await flow_factory.get_flow("app.flows.research_flow.research_flow_config")
+    research_flow_2 = await flow_factory.get_flow("apps.agents.flows.research_flow.research_flow_config")
     
     # Получаем state из state_manager
-    from app.core.state_manager import get_state_manager
+    from apps.agents.services.state_manager import get_state_manager
     state_manager = await get_state_manager()
     
     # Для получения state используем state_manager
-    state = await state_manager.load_state(thread_id)
+    state = await state_manager.get_or_create_session(thread_id)
     assert state is not None, "State не сохранился в state_manager"
     assert state.get("messages") is not None, "State messages пусты"
     
@@ -336,7 +336,7 @@ async def test_research_flow_with_interrupts(migrated_db, flow_factory, unique_i
     - Resume работает корректно
     """
     
-    research_flow = await flow_factory.get_flow("app.flows.research_flow.research_flow_config")
+    research_flow = await flow_factory.get_flow("apps.agents.flows.research_flow.research_flow_config")
     thread_id = unique_id("research_interrupt")
     
     # Даем неоднозначный запрос
@@ -387,7 +387,7 @@ async def test_research_flow_reusable_agents(migrated_db, agent_factory, unique_
     print(f"{'='*60}\n")
     
     # Проверяем что можем использовать QueryAnalyzer отдельно
-    query_analyzer = await agent_factory.get_agent("app.agents.research.query_analyzer.QueryAnalyzerAgent")
+    query_analyzer = await agent_factory.get_agent("apps.agents.agents.research.query_analyzer.QueryAnalyzerAgent")
     
     result = await query_analyzer.ainvoke(
         {"messages": [HumanMessage(content="Что такое RAG в машинном обучении?")]},
@@ -401,7 +401,7 @@ async def test_research_flow_reusable_agents(migrated_db, agent_factory, unique_
     print(f"   Подвопросы: {result['store']['sub_queries'][:100]}...")
     
     # Проверяем что можем использовать SearchAgent отдельно
-    search_agent = await agent_factory.get_agent("app.agents.research.search_agent.SearchAgent")
+    search_agent = await agent_factory.get_agent("apps.agents.agents.research.search_agent.SearchAgent")
     
     # Подготавливаем store с подвопросами
     search_input = {
@@ -440,7 +440,7 @@ async def test_research_flow_quality_loop(migrated_db, flow_factory, unique_id):
     - Есть защита от бесконечных циклов (max_iterations)
     """
     
-    research_flow = await flow_factory.get_flow("app.flows.research_flow.research_flow_config")
+    research_flow = await flow_factory.get_flow("apps.agents.flows.research_flow.research_flow_config")
     thread_id = unique_id("research_loop")
     
     # Даем сложный запрос который может потребовать нескольких итераций

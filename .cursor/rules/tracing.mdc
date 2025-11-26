@@ -24,7 +24,7 @@ tracer = trace.get_tracer(__name__)
 
 <good_example>
 from opentelemetry import trace
-from app.models.trace_models import SpanType
+from apps.agents.models.trace_models import SpanType
 import json
 
 tracer = trace.get_tracer(__name__)
@@ -203,7 +203,7 @@ async def ainvoke(self, input_data: dict, config: dict = None):
 Оборачивай основную функцию:
 
 <good_example>
-from app.core.tool_decorator import tool
+from core.tool_decorator import tool
 
 @tool
 async def my_tool(query: str) -> str:
@@ -258,7 +258,7 @@ FastAPI автоматически создает spans для HTTP запрос
 import functools
 from typing import Optional
 from opentelemetry import trace
-from app.models.trace_models import SpanType
+from apps.agents.models.trace_models import SpanType
 import json
 
 def traced(
@@ -463,7 +463,7 @@ class MyAgent:
 ### Комбинирование декораторов
 
 <good_example>
-from app.core.tool_decorator import tool
+from core.tool_decorator import tool
 
 # Сначала traced, потом tool
 @tool(cost=0.1)

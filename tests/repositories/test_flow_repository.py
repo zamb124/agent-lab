@@ -3,8 +3,8 @@
 """
 
 import pytest
-from app.db.repositories import FlowRepository
-from app.models import FlowConfig
+from apps.agents.db.repositories import FlowRepository
+from apps.agents.models import FlowConfig
 
 
 @pytest.mark.asyncio

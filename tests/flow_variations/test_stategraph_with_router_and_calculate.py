@@ -9,7 +9,7 @@
 - потом нода реактивного агента из п1
 """
 import pytest
-from app.models import (
+from apps.agents.models import (
     AgentConfig, AgentType, GraphDefinition, GraphNode, GraphEdge,
     NodeType, ConditionType, CodeMode, ToolReference, LLMConfig
 )
@@ -18,7 +18,7 @@ from langchain_core.messages import HumanMessage
 
 @pytest.mark.asyncio
 async def test_create_final_react_agent(
-    migrated_db, storage, agent_repo, test_helpers
+    migrated_db,  agent_repo, test_helpers
 ):
     """Создание финального ReAct агента отдельно"""
 
@@ -30,7 +30,7 @@ async def test_create_final_react_agent(
 def final_calculate(x: int, y: int) -> str:
     """Финальное вычисление для завершения"""
     # В реальном сценарии tool может читать данные из state через context
-    from app.core.context import get_context
+    from core.context import get_context
     context = get_context()
     if context and hasattr(context, 'state') and 'store' in context.state:
         store = context.state['store']
@@ -44,7 +44,6 @@ def final_calculate(x: int, y: int) -> str:
 
     # Создаем финальный агент
     await test_helpers.create_simple_agent(
-        storage=storage,
         agent_id="final_react_agent",
         name="Final React Agent",
         prompt="Ты финальный агент. Тебе передали state с данными. В store['final_data'] есть числа x и y. Выполни вычисление x + y используя final_calculate tool с параметрами из store.",
@@ -60,7 +59,7 @@ def final_calculate(x: int, y: int) -> str:
 
 @pytest.mark.asyncio
 async def test_stategraph_router_calculate_agent_in_db(
-    migrated_db, storage, agent_factory, agent_repo, test_helpers
+    migrated_db,  agent_factory, agent_repo, test_helpers
 ):
     """Создание StateGraph агента с роутером и calculate в БД"""
 
@@ -241,16 +240,16 @@ async def message_node(state):
 
 @pytest.mark.asyncio
 async def test_execute_stategraph_router_calculate_function_path(
-    migrated_db, storage, agent_factory, agent_repo, test_helpers, unique_id
+    migrated_db,  agent_factory, agent_repo, test_helpers, unique_id
 ):
     """Тестирование пути через function_node"""
 
     # Сначала создаем финального агента
-    await test_create_final_react_agent(migrated_db, storage, agent_repo, test_helpers)
+    await test_create_final_react_agent(migrated_db,  agent_repo, test_helpers)
 
     # Создаем StateGraph агента
     await test_stategraph_router_calculate_agent_in_db(
-        migrated_db, storage, agent_factory, agent_repo, test_helpers
+        migrated_db,  agent_factory, agent_repo, test_helpers
     )
 
     # Загружаем агента
@@ -280,19 +279,19 @@ async def test_execute_stategraph_router_calculate_function_path(
 
 @pytest.mark.asyncio
 async def test_execute_stategraph_router_calculate_math_path(
-    migrated_db, storage, agent_factory, agent_repo, test_helpers, unique_id
+    migrated_db,  agent_factory, agent_repo, test_helpers, unique_id
 ):
     """Тестирование пути через calculate_node"""
 
     # Сначала создаем финального агента
-    await test_create_final_react_agent(migrated_db, storage, agent_repo, test_helpers)
+    await test_create_final_react_agent(migrated_db,  agent_repo, test_helpers)
 
     # Создаем StateGraph агента (если не создан)
     try:
         await agent_repo.get("stategraph_router_calculate")
     except:
         await test_stategraph_router_calculate_agent_in_db(
-            migrated_db, storage, agent_factory, agent_repo, test_helpers
+            migrated_db,  agent_factory, agent_repo, test_helpers
         )
 
     # Загружаем агента
@@ -321,12 +320,12 @@ async def test_execute_stategraph_router_calculate_math_path(
 
 @pytest.mark.asyncio
 async def test_complete_stategraph_flow_with_final_agent(
-    migrated_db, storage, agent_factory, agent_repo, test_helpers, unique_id, mock_llm
+    migrated_db,  agent_factory, agent_repo, test_helpers, unique_id, mock_llm
 ):
     """Тестирование полного StateGraph flow: router -> function_node -> message_node -> final_agent"""
 
     # Сначала создаем финального агента
-    await test_create_final_react_agent(migrated_db, storage, agent_repo, test_helpers)
+    await test_create_final_react_agent(migrated_db,  agent_repo, test_helpers)
 
     # Удаляем старый StateGraph агент если существует
     try:
@@ -336,7 +335,7 @@ async def test_complete_stategraph_flow_with_final_agent(
 
     # Создаем StateGraph агента заново
     await test_stategraph_router_calculate_agent_in_db(
-        migrated_db, storage, agent_factory, agent_repo, test_helpers
+        migrated_db,  agent_factory, agent_repo, test_helpers
     )
 
     # Настраиваем mock LLM для финального агента

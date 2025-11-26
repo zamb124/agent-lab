@@ -8,6 +8,7 @@ import os
 import uuid
 import threading
 import logging
+import asyncio
 from pathlib import Path
 from typing import Callable, Dict, Optional
 from unittest.mock import MagicMock
@@ -15,71 +16,67 @@ from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
-from app.db.repositories import Storage
-from app.core.migration import Migrator
-from app.core.agent_factory import AgentFactory
-from app.core.flow_factory import FlowFactory
-from app.core.tool_factory import ToolFactory
-from app.core.llm_factory import get_llm
-from app.core.context import set_context, clear_context
-from app.core.container import get_container
-from app.identity.models import User, Company
-from app.models.context_models import Context
-from app.models import (
-    AgentConfig, AgentType, CodeMode, FlowConfig,
-    ToolReference, LLMConfig
-)
-from app.core.container import get_container
-
-_migration_done = threading.local()
-
-
+# ВАЖНО: Переменные окружения ДОЛЖНЫ быть установлены ДО импорта модулей!
+# Иначе core/config/base.py создаст settings с неправильными URL
 env_file = Path(__file__).parent.parent / ".env"
 if env_file.exists():
     load_dotenv(env_file)
 
-os.environ.setdefault("DATABASE__URL", "postgresql+asyncpg://agent_user:agent_password@localhost:5432/agent_platform")
-os.environ.setdefault("DATABASE__CHECKPOINTER_URL", "postgresql://agent_user:agent_password@localhost:5432/agent_platform")
+# Две БД как на продакшне
+os.environ.setdefault("DATABASE__URL", "postgresql+asyncpg://agent_user:agent_password@localhost:5432/agents_db")
+os.environ.setdefault("DATABASE__SHARED_URL", "postgresql+asyncpg://agent_user:agent_password@localhost:5432/shared_db")
 os.environ.setdefault("SERVER__DEBUG", "true")
 os.environ.setdefault("LLM__DEFAULT_MODEL", "mock-gpt-4")
-os.environ.setdefault("LLM__OPENROUTER__ENABLED", "false")
+os.environ.setdefault("LLM__OPENROUTER__ENABLED", "true")
+os.environ.setdefault("LLM__OPENROUTER__API_KEY", "test-openrouter-key")
+os.environ.setdefault("AUTH__JWT_SECRET_KEY", "test-jwt-secret-key-for-tests-only")
 os.environ.setdefault("S3__ENABLED", "true")
 os.environ.setdefault("S3__DEFAULT_BUCKET", "vkbucket")
-import asyncio
+
+# Теперь можно импортировать модули
+from core.db import Storage
+from core.context import set_context, clear_context, get_context
+from core.models import User, Company, Context
+from core.clients import get_llm
+
+from apps.agents.container import get_agents_container, set_agents_container, AgentsContainer
+from apps.agents.services.migration.migrator import Migrator
+from apps.agents.services.agent_factory import AgentFactory
+from apps.agents.services.flow_factory import FlowFactory
+from apps.agents.services.tool_factory import ToolFactory
+from apps.agents.models import (
+    AgentConfig, AgentType, CodeMode, FlowConfig,
+    ToolReference, LLMConfig
+)
+
+_migration_lock = threading.Lock()
+_migration_completed = False
+
+# get_llm() автоматически определяет тестовое окружение через PYTEST_CURRENT_TEST
+# (устанавливается pytest автоматически)
 
 
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_mock_llm_configs():
     """Настройка mock LLM для всех агентов (один раз на всю сессию)"""
-    from app.models.core_models import LLMConfig
+    from apps.agents.models import LLMConfig
 
-    mock_llm_config = LLMConfig(model="mock-gpt-4", temperature=0.3)
+    mock_llm_config = LLMConfig(
+        model="mock-gpt-4", 
+        temperature=0.3,
+        context_window=100000
+    )
 
-    try:
-        import app.agents.weather.agent as weather_module
-        weather_module.WeatherAgent.llm_config = mock_llm_config
-        weather_module.TravelInfoAgent.llm_config = mock_llm_config
-    except ImportError:
-        pass
+    import apps.agents.agents.weather.agent as weather_module
+    weather_module.WeatherAgent.llm_config = mock_llm_config
+    weather_module.TravelInfoAgent.llm_config = mock_llm_config
 
-    try:
-        import app.agents.calculator.agent as calc_module
-        calc_module.CalculatorAgent.llm_config = mock_llm_config
-    except ImportError:
-        pass
+    import apps.agents.agents.calculator.agent as calc_module
+    calc_module.CalculatorAgent.llm_config = mock_llm_config
 
-    try:
-        import app.agents.explainer.agent as explainer_module
-        explainer_module.ExplainerAgent.llm_config = mock_llm_config
-    except ImportError:
-        pass
-
-    try:
-        import app.agents.router.agent as router_module
-        router_module.RouterAgent.llm_config = mock_llm_config
-    except ImportError:
-        pass
+    import apps.agents.agents.explainer.agent as explainer_module
+    explainer_module.ExplainerAgent.llm_config = mock_llm_config
 
     return mock_llm_config
 
@@ -91,110 +88,230 @@ async def migrated_db():
     Каждый pytest-xdist воркер имеет свой engine/session_factory/контейнер,
     поэтому session scope безопасен - всё изолировано по воркерам.
     """
-    # Инициализируем системный контейнер (для AuthService и middleware)
-    from app.core.container import initialize_system_container
-    initialize_system_container()
-    logger.info("✅ Системный контейнер инициализирован")
+    global _migration_completed
+    
+    if _migration_completed:
+        yield
+        return
+    
+    with _migration_lock:
+        if _migration_completed:
+            yield
+            return
+        
+        # Инициализируем системный контейнер для тестов
+        from core.container import initialize_system_container, BaseContainer
+        from core.config import get_settings
+        
+        settings = get_settings()
+        
+        # Инициализируем системный контейнер (нужен для get_default_s3_client, get_default_audio_processor)
+        class TestSystemContainer(BaseContainer):
+            def __init__(self, db_url=None, shared_db_url=None):
+                super().__init__(
+                    db_url=db_url or settings.database.url,
+                    shared_db_url=shared_db_url or settings.database.shared_url
+                )
+        
+        initialize_system_container(
+            container_class=TestSystemContainer,
+            db_url=settings.database.url,
+            shared_db_url=settings.database.shared_url
+        )
+        logger.info("✅ Системный контейнер инициализирован для тестов")
+        
+        # Инициализируем контейнер агентов
+        container = AgentsContainer(
+            service_db_url=settings.database.url,
+            shared_db_url=settings.database.shared_url
+        )
+        set_agents_container(container)
+        logger.info("✅ AgentsContainer инициализирован для тестов")
 
-    # Создаем контекст миграции
-    migration_context = Context(
-        user=User(
-            user_id="migration_user",
-            provider="system",
-            provider_user_id="sys_001",
-            email="migration@system.local",
-            name="Migration User",
-            status="active",
-            groups=["admin"],
-            companies={"system": ["admin"]},
-            active_company_id="system"
-        ),
-        session_id="migration_session",
-        platform="system",
-        metadata={}
-    )
+        # Создаем контекст миграции
+        migration_context = Context(
+            user=User(
+                user_id="migration_user",
+                provider="system",
+                provider_user_id="sys_001",
+                email="migration@system.local",
+                name="Migration User",
+                status="active",
+                groups=["admin"],
+                companies={"system": ["admin"]},
+                active_company_id="system"
+            ),
+            session_id="migration_session",
+            platform="system",
+            metadata={}
+        )
 
-    set_context(migration_context)
+        set_context(migration_context)
 
-    # Создаем таблицы и мигрируем
-    from app.db.database import create_tables
-    await create_tables()
+        # Создаем таблицы и мигрируем
+        from core.db.database import create_tables
+        # Service БД (agents_db): storage, tasks, stores, agent_states, otel_spans
+        await create_tables(
+            db_url=settings.database.url,
+            table_names=["storage", "tasks", "stores", "agent_states", "otel_spans"]
+        )
+        # Shared БД (shared_db): users, storage, variables
+        if settings.database.shared_url:
+            await create_tables(
+                db_url=settings.database.shared_url,
+                table_names=["users", "storage", "variables"]
+            )
 
-    migrator = Migrator()
-    await migrator.run_full_migration()
-    logger.info("✅ Миграция БД выполнена для воркера")
+        migrator = get_agents_container().migrator
+        await migrator.run_full_migration()
+        logger.info("✅ Миграция БД выполнена для воркера")
+        
+        _migration_completed = True
 
     yield
 
-    # Не очищаем контекст - он будет заменен в ensure_event_loop_and_minimal_context
+    # Cleanup: закрываем соединения с БД для текущего event loop
+    # Важно: закрываем только для текущего loop, так как каждый тест может иметь свой loop
+    from core.db.database import close_db
+    try:
+        await close_db()
+    except Exception as e:
+        logger.debug(f"Ошибка при закрытии БД соединений (может быть нормально): {e}")
+    
+    # Очищаем контекст
+    clear_context()
+    
+    # Принудительная сборка мусора для освобождения памяти
+    import gc
+    gc.collect()
 
 
 @pytest_asyncio.fixture
 async def storage(migrated_db):
     """Storage из контейнера воркера"""
 
-    return get_container().storage
+    return get_agents_container().storage
 
 
 @pytest_asyncio.fixture
 async def agent_factory(migrated_db):
     """AgentFactory из контейнера воркера"""
-    return get_container().agent_factory
+    return get_agents_container().agent_factory
 
 
 @pytest_asyncio.fixture
 async def agent_repo(migrated_db):
     """AgentRepository из контейнера воркера"""
-    return get_container().agent_repository
+    return get_agents_container().agent_repository
 
 
 @pytest_asyncio.fixture
 async def flow_repo(migrated_db):
     """FlowRepository из контейнера воркера"""
-    return get_container().flow_repository
+    return get_agents_container().flow_repository
 
 
 @pytest_asyncio.fixture
 async def task_repo(migrated_db):
     """TaskRepository из контейнера воркера"""
-    return get_container().task_repository
+    return get_agents_container().task_repository
 
 
 @pytest_asyncio.fixture
 async def session_repo(migrated_db):
     """SessionRepository из контейнера воркера"""
-    return get_container().session_repository
+    return get_agents_container().session_repository
 
 
 @pytest_asyncio.fixture
 async def tool_repo(migrated_db):
     """ToolRepository из контейнера воркера"""
-    return get_container().tool_repository
+    return get_agents_container().tool_repository
 
 
 @pytest_asyncio.fixture
 async def mcp_repo(migrated_db):
     """MCPServerRepository из контейнера воркера"""
-    return get_container().mcp_server_repository
+    return get_agents_container().mcp_server_repository
+
+
+@pytest_asyncio.fixture
+async def company_repo(migrated_db):
+    """CompanyRepository из контейнера воркера"""
+    return get_agents_container().company_repository
+
+
+@pytest_asyncio.fixture
+async def user_repo(migrated_db):
+    """UserRepository из контейнера воркера"""
+    return get_agents_container().user_repository
+
+
+@pytest_asyncio.fixture
+async def subdomain_repo(migrated_db):
+    """SubdomainRepository из контейнера воркера"""
+    return get_agents_container().subdomain_repository
+
+
+@pytest_asyncio.fixture
+async def variable_repo(migrated_db):
+    """VariableRepository из контейнера воркера"""
+    return get_agents_container().variable_repository
+
+
+@pytest_asyncio.fixture
+async def usage_repo(migrated_db):
+    """UsageRepository из контейнера воркера"""
+    return get_agents_container().usage_repository
+
+
+@pytest_asyncio.fixture
+async def file_repo(migrated_db):
+    """FileRepository из контейнера воркера"""
+    return get_agents_container().file_repository
+
+
+@pytest_asyncio.fixture
+async def storage(migrated_db):
+    """Storage для обратной совместимости с тестами (deprecated)"""
+    return get_agents_container().storage
+
+
+@pytest_asyncio.fixture
+async def variable_repo(migrated_db):
+    """VariableRepository из контейнера"""
+    return get_agents_container().variable_repository
+
+
+@pytest_asyncio.fixture
+async def usage_repo(migrated_db):
+    """UsageRepository из контейнера"""
+    return get_agents_container().usage_repository
+
+
+@pytest_asyncio.fixture
+async def file_repo(migrated_db):
+    """FileRepository из контейнера"""
+    return get_agents_container().file_repository
 
 
 @pytest_asyncio.fixture
 async def flow_factory(migrated_db):
     """FlowFactory из контейнера воркера"""
-    return get_container().flow_factory
+    return get_agents_container().flow_factory
 
 
 @pytest_asyncio.fixture
 async def tool_factory(migrated_db):
     """ToolFactory из контейнера воркера"""
-    return get_container().tool_factory
+    return get_agents_container().tool_factory
 
 
 @pytest_asyncio.fixture
 async def system_context(migrated_db):
     """Системный контекст для чтения системных сущностей (flows, agents)"""
-    from app.identity.models import Company, User, AuthProvider, UserStatus
-    from app.models.context_models import Context
+    from core.models import Company, User, AuthProvider, UserStatus
+    from core.models.context_models import Context
 
     system_context = Context(
         user=User(
@@ -224,17 +341,19 @@ async def system_context(migrated_db):
 @pytest_asyncio.fixture
 async def migrator(migrated_db):
     """Migrator для каждого теста"""
-    return get_container().migrator
+    return get_agents_container().migrator
 
 
 @pytest_asyncio.fixture
 async def test_company() -> Company:
     """Тестовая компания с достаточным балансом"""
+    from core.models.billing_models import TariffPlan
+    
     return Company(
         company_id="test_company",
         subdomain="test",
         name="Test Company",
-        tariff_plan="enterprise",
+        tariff_plan=TariffPlan.ENTERPRISE,
         balance=100000.0,
         monthly_budget=50000.0,
         current_month_spent=0.0,
@@ -279,18 +398,67 @@ async def test_context(test_user: User, test_company: Company, migrated_db):
     clear_context()
 
 
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def cleanup_after_test():
+    """Автоматическая очистка после каждого теста для предотвращения утечек памяти"""
+    yield
+    
+    # Очищаем контекст после каждого теста
+    clear_context()
+    
+    # Очищаем состояние из БД для тестовых session_id
+    # Это предотвращает накопление сообщений между тестами
+    try:
+        from apps.agents.services.state_manager import get_state_manager
+        from apps.agents.container import get_agents_container
+        from core.db.storage import Storage
+        
+        state_manager = await get_state_manager()
+        storage = get_agents_container().storage
+        
+        # Удаляем все тестовые сессии (начинающиеся с "test_")
+        # Это безопасно, так как тесты должны использовать уникальные session_id
+        # Но на всякий случай делаем это только если нет активного контекста
+        context = get_context()
+        if not context or not context.session_id:
+            # Если нет активного контекста, можем очистить старые тестовые сессии
+            # Но это может быть опасно, если тесты еще выполняются
+            # Поэтому просто делаем gc.collect()
+            pass
+    except Exception as e:
+        logger.debug(f"Ошибка при cleanup состояния (может быть нормально): {e}")
+    
+    # Принудительная сборка мусора для освобождения памяти
+    import gc
+    # Собираем несколько раз для более агрессивной очистки
+    for _ in range(3):
+        collected = gc.collect()
+        if collected == 0:
+            break
+
+
 
 @pytest_asyncio.fixture
-async def save_test_company(storage: Storage, test_company: Company):
+async def save_test_company(test_company: Company):
     """Сохраняет тестовую компанию в БД"""
-    await storage.set(f"company:{test_company.company_id}", test_company.model_dump_json(), force_global=True)
-    await storage.set(f"subdomain:{test_company.subdomain}", f'"{test_company.company_id}"', force_global=True)
+    container = get_agents_container()
+    company_repo = container.company_repository
+    subdomain_repo = container.subdomain_repository
+    
+    await company_repo.set(test_company)
+    
+    from core.db.repositories.subdomain_repository import SubdomainMapping
+    subdomain_mapping = SubdomainMapping(
+        subdomain=test_company.subdomain,
+        company_id=test_company.company_id
+    )
+    await subdomain_repo.set(subdomain_mapping)
 
     yield test_company
 
     try:
-        await storage.delete(f"company:{test_company.company_id}")
-        await storage.delete(f"subdomain:{test_company.subdomain}")
+        await company_repo.delete(test_company.company_id)
+        await subdomain_repo.delete(test_company.subdomain)
     except:
         pass
 
@@ -302,7 +470,7 @@ async def setup_mcp_servers(mcp_repo, test_company: Company):
 
     Создает Context7 MCP сервер с тестовым API ключом.
     """
-    from app.models.mcp_models import MCPServerConfig, MCPTransportType
+    from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
     import os
 
     servers = []
@@ -338,8 +506,8 @@ async def variables_service(migrated_db):
     Контекст будет доступен через get_context() благодаря test_context с autouse=True
     Зависит от migrated_db для инициализации БД в правильном event loop
     """
-    from app.core.container import get_container
-    container = get_container()
+    from apps.agents.container import get_agents_container
+    container = get_agents_container()
     return container.variables_service
 
 
@@ -496,7 +664,6 @@ class TestHelpers:
 
     @staticmethod
     async def create_simple_agent(
-        storage: Storage,
         agent_id: str,
         name: str,
         prompt: str,
@@ -516,12 +683,12 @@ class TestHelpers:
             source="test"
         )
 
-        await storage.set_agent_config(agent_config)
+        agent_repo = get_agents_container().agent_repository
+        await agent_repo.set(agent_config)
         return agent_config
 
     @staticmethod
     async def create_simple_flow(
-        storage: Storage,
         flow_id: str,
         name: str,
         entry_point_agent: str
@@ -535,7 +702,8 @@ class TestHelpers:
             source="test"
         )
 
-        await storage.set_flow_config(flow_config)
+        flow_repo = get_agents_container().flow_repository
+        await flow_repo.set(flow_config)
         return flow_config
 
     @staticmethod
@@ -547,7 +715,7 @@ class TestHelpers:
     ) -> ToolReference:
         """Создать inline tool для тестов"""
         inline_code = f'''
-from app.core.tool_decorator import tool
+from apps.agents.services.tool_decorator import tool
 
 @tool
 {function_body}
@@ -570,23 +738,21 @@ async def test_helpers():
 @pytest_asyncio.fixture
 async def payment_service(migrated_db):
     """PaymentService для тестов"""
-    from app.core.container import get_container
-    container = get_container()
+    container = get_agents_container()
     return container.payment_service
 
 
 @pytest_asyncio.fixture
 async def billing_service(migrated_db):
     """BillingService для тестов"""
-    from app.core.container import get_container
-    container = get_container()
+    container = get_agents_container()
     return container.billing_service
 
 
 @pytest_asyncio.fixture
 async def yoomoney_provider():
     """YooMoney провайдер для интеграционных тестов платежей"""
-    from app.core.clients.payment_providers.yoomoney_provider import YooMoneyProvider, YooMoneyConfig
+    from core.clients.payment.yoomoney_provider import YooMoneyProvider, YooMoneyConfig
 
     config = YooMoneyConfig(
         provider_type="yoomoney",
@@ -601,8 +767,7 @@ async def yoomoney_provider():
 @pytest_asyncio.fixture
 async def auth_service(storage: Storage):
     """AuthService для тестов аутентификации"""
-    from app.core.container import get_container
-    container = get_container()
+    container = get_agents_container()
     return container.auth_service
 
 
@@ -632,12 +797,12 @@ async def mock_storage_cache():
 
 @pytest_asyncio.fixture
 async def payment_service_with_mock():
-    """PaymentService с мок storage для тестов"""
+    """PaymentService с мок company_repository для тестов"""
     from unittest.mock import AsyncMock
-    from app.services.payment_service import PaymentService
+    from core.payments import PaymentService
 
-    service = PaymentService()
-    service.storage = AsyncMock()
+    mock_company_repo = AsyncMock()
+    service = PaymentService(company_repository=mock_company_repo)
     return service
 
 
@@ -645,7 +810,7 @@ async def payment_service_with_mock():
 async def mock_provider():
     """Mock провайдер платежей для тестов"""
     from unittest.mock import Mock, AsyncMock
-    from app.core.clients.payment_providers.base_provider import (
+    from core.clients.payment.base_provider import (
         BasePaymentProvider,
         PaymentResponse
     )

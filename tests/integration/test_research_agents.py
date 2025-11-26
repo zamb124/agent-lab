@@ -26,7 +26,7 @@ async def test_query_analyzer_agent(migrated_db, agent_factory, unique_id):
     print(f"1️⃣ ТЕСТ QUERY ANALYZER")
     print(f"{'='*60}\n")
     
-    analyzer = await agent_factory.get_agent("app.agents.research.query_analyzer.QueryAnalyzerAgent")
+    analyzer = await agent_factory.get_agent("apps.agents.agents.research.query_analyzer.QueryAnalyzerAgent")
     
     query = "Что такое RAG в машинном обучении?"
     
@@ -81,7 +81,7 @@ async def test_search_agent(migrated_db, agent_factory, unique_id):
     print(f"2️⃣ ТЕСТ SEARCH AGENT")
     print(f"{'='*60}\n")
     
-    search_agent = await agent_factory.get_agent("app.agents.research.search_agent.SearchAgent")
+    search_agent = await agent_factory.get_agent("apps.agents.agents.research.search_agent.SearchAgent")
     
     # Подготавливаем входные данные
     search_input = {
@@ -145,7 +145,7 @@ async def test_source_processor_agent(migrated_db, agent_factory, unique_id):
     print(f"3️⃣ ТЕСТ SOURCE PROCESSOR")
     print(f"{'='*60}\n")
     
-    processor = await agent_factory.get_agent("app.agents.research.source_processor.SourceProcessorAgent")
+    processor = await agent_factory.get_agent("apps.agents.agents.research.source_processor.SourceProcessorAgent")
     
     # Подготавливаем входные данные
     processor_input = {
@@ -218,7 +218,7 @@ async def test_fact_extractor_agent(migrated_db, agent_factory, unique_id):
     print(f"4️⃣ ТЕСТ FACT EXTRACTOR")
     print(f"{'='*60}\n")
     
-    extractor = await agent_factory.get_agent("app.agents.research.fact_extractor.FactExtractorAgent")
+    extractor = await agent_factory.get_agent("apps.agents.agents.research.fact_extractor.FactExtractorAgent")
     
     # Подготавливаем входные данные
     extractor_input = {
@@ -288,7 +288,7 @@ async def test_synthesizer_agent(migrated_db, agent_factory, unique_id):
     print(f"5️⃣ ТЕСТ SYNTHESIZER")
     print(f"{'='*60}\n")
     
-    synthesizer = await agent_factory.get_agent("app.agents.research.synthesizer.SynthesizerAgent")
+    synthesizer = await agent_factory.get_agent("apps.agents.agents.research.synthesizer.SynthesizerAgent")
     
     # Подготавливаем входные данные
     synthesizer_input = {
@@ -355,7 +355,7 @@ async def test_quality_checker_agent(migrated_db, agent_factory, unique_id):
     print(f"6️⃣ ТЕСТ QUALITY CHECKER")
     print(f"{'='*60}\n")
     
-    checker = await agent_factory.get_agent("app.agents.research.quality_checker.QualityCheckerAgent")
+    checker = await agent_factory.get_agent("apps.agents.agents.research.quality_checker.QualityCheckerAgent")
     
     # Подготавливаем входные данные
     checker_input = {
@@ -452,7 +452,7 @@ async def test_research_agents_sequential(migrated_db, agent_factory, unique_id)
     
     # Этап 1: QueryAnalyzer
     print("1️⃣ QueryAnalyzer...")
-    analyzer = await agent_factory.get_agent("app.agents.research.query_analyzer.QueryAnalyzerAgent")
+    analyzer = await agent_factory.get_agent("apps.agents.agents.research.query_analyzer.QueryAnalyzerAgent")
     
     result1 = await analyzer.ainvoke(
         {"messages": [HumanMessage(content=query)]},
@@ -464,7 +464,7 @@ async def test_research_agents_sequential(migrated_db, agent_factory, unique_id)
     
     # Этап 2: SearchAgent (передаем store из предыдущего этапа)
     print("\n2️⃣ SearchAgent...")
-    search_agent = await agent_factory.get_agent("app.agents.research.search_agent.SearchAgent")
+    search_agent = await agent_factory.get_agent("apps.agents.agents.research.search_agent.SearchAgent")
     
     result2 = await search_agent.ainvoke(
         {
@@ -480,7 +480,7 @@ async def test_research_agents_sequential(migrated_db, agent_factory, unique_id)
     
     # Этап 3: SourceProcessor (передаем store из поиска)
     print("\n3️⃣ SourceProcessor...")
-    processor = await agent_factory.get_agent("app.agents.research.source_processor.SourceProcessorAgent")
+    processor = await agent_factory.get_agent("apps.agents.agents.research.source_processor.SourceProcessorAgent")
     
     result3 = await processor.ainvoke(
         {
@@ -526,13 +526,13 @@ async def test_all_research_agents_available(migrated_db, agent_factory):
     print(f"{'='*60}\n")
     
     agents = [
-        ("QueryAnalyzer", "app.agents.research.query_analyzer.QueryAnalyzerAgent"),
-        ("SearchAgent", "app.agents.research.search_agent.SearchAgent"),
-        ("SourceProcessor", "app.agents.research.source_processor.SourceProcessorAgent"),
-        ("FactExtractor", "app.agents.research.fact_extractor.FactExtractorAgent"),
-        ("Synthesizer", "app.agents.research.synthesizer.SynthesizerAgent"),
-        ("QualityChecker", "app.agents.research.quality_checker.QualityCheckerAgent"),
-        ("Coordinator", "app.agents.research.coordinator.ResearchCoordinatorAgent"),
+        ("QueryAnalyzer", "apps.agents.agents.research.query_analyzer.QueryAnalyzerAgent"),
+        ("SearchAgent", "apps.agents.agents.research.search_agent.SearchAgent"),
+        ("SourceProcessor", "apps.agents.agents.research.source_processor.SourceProcessorAgent"),
+        ("FactExtractor", "apps.agents.agents.research.fact_extractor.FactExtractorAgent"),
+        ("Synthesizer", "apps.agents.agents.research.synthesizer.SynthesizerAgent"),
+        ("QualityChecker", "apps.agents.agents.research.quality_checker.QualityCheckerAgent"),
+        ("Coordinator", "apps.agents.agents.research.coordinator.ResearchCoordinatorAgent"),
     ]
     
     for name, agent_id in agents:

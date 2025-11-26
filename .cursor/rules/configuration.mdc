@@ -36,7 +36,7 @@ DATABASE.URL=...           # Точка вместо подчеркивания
 ### Чтение настроек
 
 <good_example>
-from app.core.config import settings
+from core.config import settings
 
 # Читаем настройки
 db_url = settings.database.url
@@ -79,7 +79,7 @@ class Settings(BaseSettings):
 3. Используй в коде:
 
 <good_example>
-from app.core.config import settings
+from core.config import settings
 
 if settings.my_service.enabled:
     client = MyClient(
@@ -165,7 +165,7 @@ cp conf.local.json.example conf.local.json
 Перед использованием проверь что значение корректное:
 
 <good_example>
-from app.core.config import settings
+from core.config import settings
 
 def init_database():
     if not settings.database.url:
@@ -207,7 +207,7 @@ DATABASE__URL=postgresql+asyncpg://...
 Логируй конфигурацию при старте (без секретов):
 
 <good_example>
-from app.core.config import settings
+from core.config import settings
 
 logger.info(f"Database host: {settings.database.url.split('@')[1].split('/')[0]}")
 logger.info(f"LLM provider: {settings.llm.default_provider}")

@@ -7,10 +7,10 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 
-from app.api.v1.auth import router as auth_router
-from app.core.tokens import get_token_service
-from app.identity.models import AuthProvider, AuthRequest
-from app.identity.auth_service import AuthService
+from apps.agents.api.v1.auth import router as auth_router
+from core.utils.tokens import get_token_service
+from core.models import AuthProvider, AuthRequest
+from core.identity.auth_service import AuthService
 
 
 class TestTokenAuthIntegration:

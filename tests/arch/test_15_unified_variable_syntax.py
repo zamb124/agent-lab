@@ -11,8 +11,8 @@ import pytest
 import pytest_asyncio
 from langchain_core.messages import HumanMessage
 
-from app.core.variables import VariableResolver
-from app.models import (
+from core.variables import VariableResolver
+from apps.agents.models import (
     AgentConfig,
     AgentType,
     LLMConfig,
@@ -22,7 +22,7 @@ from app.models import (
 @pytest_asyncio.fixture
 async def test_context_with_vars(migrated_db, test_context):
     """Расширяет test_context переменными для этих тестов"""
-    from app.core.context import get_context, set_context
+    from core.context import get_context, set_context
     
     # Переустанавливаем контекст после миграции
     set_context(test_context)
@@ -100,7 +100,7 @@ async def test_02_optional_syntax_for_nested_variables(test_context_with_vars, a
 
 
 @pytest.mark.asyncio
-async def test_03_unified_syntax_in_agent_prompt(migrated_db, storage, agent_factory, unique_id, test_context_with_vars, agent_repo):
+async def test_03_unified_syntax_in_agent_prompt(migrated_db,  agent_factory, unique_id, test_context_with_vars, agent_repo):
     """
     Тест 3: Унифицированный синтаксис в промпте агента.
     
@@ -140,6 +140,23 @@ STATE ПЕРЕМЕННЫЕ:
     )
     
     await agent_repo.set(agent_config)
+    
+    # Настраиваем mock_llm ДО создания агента
+    from core.clients.llm import get_llm, get_global_mock_llm
+    
+    # Создаем мок если его еще нет
+    _ = get_llm("mock-gpt-4")
+    
+    # Получаем и настраиваем мок
+    global_mock = get_global_mock_llm("mock-gpt-4")
+    if global_mock:
+        global_mock.reset_call_counts()
+        global_mock.configure(
+            responses={
+                "Проверь синтаксис": "Синтаксис проверен успешно"
+            },
+            default_response="Готово"
+        )
     
     # Получаем агента
     agent = await agent_factory.get_agent("test_unified_syntax_agent")

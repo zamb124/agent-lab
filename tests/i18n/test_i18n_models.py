@@ -4,7 +4,7 @@
 
 import pytest
 from datetime import datetime
-from app.models.i18n_models import (
+from core.models.i18n_models import (
     Language, TranslationKey, Translation, TranslationSet, 
     TranslationFile, TranslationStats, I18nConfig
 )

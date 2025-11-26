@@ -5,12 +5,12 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 
-from app.core.mcp_sync import sync_mcp_server_tools
-from app.models.mcp_models import MCPServerConfig, MCPTransportType
-from app.models import ToolReference
-from app.models.core_models import CodeMode
-from app.db.repositories.mcp_repository import MCPServerRepository
-from app.db.repositories.tool_repository import ToolRepository
+from apps.agents.services.mcp_sync import sync_mcp_server_tools
+from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
+from apps.agents.models import ToolReference
+from apps.agents.models.core_models import CodeMode
+from apps.agents.db.repositories.mcp_repository import MCPServerRepository
+from apps.agents.db.repositories.tool_repository import ToolRepository
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def sample_server_config():
 
 
 @pytest.mark.asyncio
-async def test_sync_mcp_server_tools(storage, sample_server_config):
+async def test_sync_mcp_server_tools(sample_server_config, storage):
     """Тест синхронизации тулов MCP сервера"""
     # Подготовка
     mcp_repo = MCPServerRepository(storage)
@@ -62,7 +62,7 @@ async def test_sync_mcp_server_tools(storage, sample_server_config):
     mock_client = AsyncMock()
     mock_client.list_tools = AsyncMock(return_value=mock_tools_data)
     
-    with patch('app.core.mcp_sync.get_mcp_client', return_value=mock_client):
+    with patch('apps.agents.services.mcp_sync.get_mcp_client', return_value=mock_client):
         # Выполняем синхронизацию
         tools = await sync_mcp_server_tools("test_server", "test_company")
         
@@ -90,14 +90,14 @@ async def test_sync_mcp_server_tools(storage, sample_server_config):
         assert saved_tool.code_mode == CodeMode.MCP_TOOL
         
         # Проверяем что кэш обновлен
-        updated_server = await mcp_repo.get("test_server", "test_company")
+        updated_server = await mcp_repo.get("test_server")
         assert len(updated_server.cached_tools) == 2
         assert "mcp:test_server:search_docs" in updated_server.cached_tools
         assert updated_server.last_sync_at is not None
 
 
 @pytest.mark.asyncio
-async def test_sync_inactive_server_fails(storage, sample_server_config):
+async def test_sync_inactive_server_fails(sample_server_config, storage):
     """Тест что синхронизация неактивного сервера падает"""
     # Делаем сервер неактивным
     sample_server_config.is_active = False
@@ -118,7 +118,7 @@ async def test_sync_nonexistent_server_fails(storage):
 
 
 @pytest.mark.asyncio
-async def test_sync_skips_tools_without_name(storage, sample_server_config):
+async def test_sync_skips_tools_without_name(sample_server_config, storage):
     """Тест что тулы без имени пропускаются"""
     mcp_repo = MCPServerRepository(storage)
     await mcp_repo.set(sample_server_config)
@@ -142,7 +142,7 @@ async def test_sync_skips_tools_without_name(storage, sample_server_config):
     mock_client = AsyncMock()
     mock_client.list_tools = AsyncMock(return_value=mock_tools_data)
     
-    with patch('app.core.mcp_sync.get_mcp_client', return_value=mock_client):
+    with patch('apps.agents.services.mcp_sync.get_mcp_client', return_value=mock_client):
         tools = await sync_mcp_server_tools("test_server", "test_company")
         
         # Только 1 валидный тул

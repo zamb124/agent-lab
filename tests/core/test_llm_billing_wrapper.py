@@ -9,14 +9,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.tools import tool
 
-from app.core.llm_billing_wrapper import ChatOpenAIWithBilling
-from app.core.context import set_context
-from app.models.context_models import Context
-from app.identity.models import User, Company
+from apps.agents.services.llm_billing_wrapper import ChatOpenAIWithBilling
+from core.context import set_context
+from core.models.context_models import Context
+from core.models import User, Company
 
 
 @tool
-async def test_calculator(expression: str) -> str:
+async def calculator_tool(expression: str) -> str:
     """Вычисляет математическое выражение
 
     Args:
@@ -43,17 +43,20 @@ async def get_weather(city: str, units: str = "celsius") -> str:
 
 
 @pytest_asyncio.fixture
-async def llm_with_billing():
+async def llm_with_billing(migrated_db, billing_service):
     """Создает LLM с биллингом для тестов
-
-    Зависит от глобальной фикстуры test_context (autouse=True) из conftest.py
+    
+    Зависит от migrated_db для инициализации контейнера
     """
-    return ChatOpenAIWithBilling(
+    llm = ChatOpenAIWithBilling(
         api_key="test-key",
         model="anthropic/claude-sonnet-4.5",
         temperature=0.2,
         max_tokens=8192
     )
+    llm._billing_service = billing_service
+    
+    return llm
 
 
 class TestToolsInPayload:
@@ -62,7 +65,7 @@ class TestToolsInPayload:
     @pytest.mark.asyncio
     async def test_bind_tools_saves_tools(self, llm_with_billing):
         """Проверяет что bind_tools сохраняет tools в LLM"""
-        tools = [test_calculator, get_weather]
+        tools = [calculator_tool, get_weather]
 
         result = llm_with_billing.bind_tools(tools)
 
@@ -73,7 +76,7 @@ class TestToolsInPayload:
     @pytest.mark.asyncio
     async def test_convert_tools_to_openrouter_format(self, llm_with_billing):
         """Проверяет конвертацию LangChain tools в формат OpenRouter"""
-        tools = [test_calculator, get_weather]
+        tools = [calculator_tool, get_weather]
 
         openrouter_tools = llm_with_billing._convert_tools_to_openrouter_format(tools)
 
@@ -82,7 +85,7 @@ class TestToolsInPayload:
         # Проверяем первый tool
         calc_tool = openrouter_tools[0]
         assert calc_tool["type"] == "function"
-        assert calc_tool["function"]["name"] == "test_calculator"
+        assert calc_tool["function"]["name"] == "calculator_tool"
         assert "Вычисляет математическое выражение" in calc_tool["function"]["description"]
         assert "expression" in calc_tool["function"]["parameters"]["properties"]
         assert "expression" in calc_tool["function"]["parameters"]["required"]
@@ -97,8 +100,8 @@ class TestToolsInPayload:
         assert "city" in weather_tool["function"]["parameters"]["required"]
 
     @pytest.mark.asyncio
-    @patch("httpx.AsyncClient.post")
-    async def test_tools_in_request_payload(self, mock_post, llm_with_billing, test_context):
+    @patch("httpx.AsyncClient")
+    async def test_tools_in_request_payload(self, mock_client_class, llm_with_billing, test_context):
         """Проверяет что tools попадают в payload запроса к OpenRouter"""
         captured_payload = {}
 
@@ -124,10 +127,15 @@ class TestToolsInPayload:
             }
             return mock_response
 
-        mock_post.side_effect = capture_post
+        # Настраиваем мок для контекстного менеджера
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=capture_post)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client_class.return_value = mock_client
 
         # Привязываем tools
-        tools = [test_calculator]
+        tools = [calculator_tool]
         llm_with_tools = llm_with_billing.bind_tools(tools)
 
         # Делаем запрос
@@ -140,7 +148,7 @@ class TestToolsInPayload:
 
         tool = captured_payload["tools"][0]
         assert tool["type"] == "function"
-        assert tool["function"]["name"] == "test_calculator"
+        assert tool["function"]["name"] == "calculator_tool"
         assert "parameters" in tool["function"]
         assert "expression" in tool["function"]["parameters"]["properties"]
 
@@ -148,7 +156,7 @@ class TestToolsInPayload:
     async def test_multiple_tools_in_payload(self, llm_with_billing):
         """Проверяет передачу нескольких tools в payload"""
         # Привязываем несколько tools
-        tools = [test_calculator, get_weather]
+        tools = [calculator_tool, get_weather]
         llm_with_tools = llm_with_billing.bind_tools(tools)
 
         # Конвертируем в OpenRouter формат
@@ -158,7 +166,7 @@ class TestToolsInPayload:
         assert len(openrouter_tools) == 2
 
         tool_names = [t["function"]["name"] for t in openrouter_tools]
-        assert "test_calculator" in tool_names
+        assert "calculator_tool" in tool_names
         assert "get_weather" in tool_names
 
         # Проверяем структуру каждого tool
@@ -186,7 +194,7 @@ class TestToolCallsInResponse:
                         "id": "call_abc123",
                         "type": "function",
                         "function": {
-                            "name": "test_calculator",
+                            "name": "calculator_tool",
                             "arguments": '{"expression": "2+2"}'
                         }
                     }]
@@ -216,7 +224,7 @@ class TestToolCallsInResponse:
         assert len(tool_calls) == 1
 
         tool_call = tool_calls[0]
-        assert tool_call["name"] == "test_calculator"
+        assert tool_call["name"] == "calculator_tool"
         assert tool_call["args"] == {"expression": "2+2"}
         assert tool_call["id"] == "call_abc123"
         assert tool_call["type"] == "tool_call"
@@ -235,7 +243,7 @@ class TestToolCallsInResponse:
                             "id": "call_1",
                             "type": "function",
                             "function": {
-                                "name": "test_calculator",
+                                "name": "calculator_tool",
                                 "arguments": '{"expression": "2+2"}'
                             }
                         },
@@ -274,7 +282,7 @@ class TestToolCallsInResponse:
         assert len(tool_calls) == 2
 
         calc_call = tool_calls[0]
-        assert calc_call["name"] == "test_calculator"
+        assert calc_call["name"] == "calculator_tool"
         assert calc_call["args"]["expression"] == "2+2"
         assert calc_call["id"] == "call_1"
 

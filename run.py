@@ -4,17 +4,18 @@
 """
 
 import uvicorn
-from app.core.config import settings
+from apps.agents.config import get_agents_settings
 
 if __name__ == "__main__":
+    settings = get_agents_settings()
     print("🚀 Запуск Agents Lab...")
     print(f"📍 Адрес: http://{settings.server.host}:{settings.server.port}")
     print(f"🔧 Debug режим: {settings.server.debug}")
 
     uvicorn.run(
-        "app.main:app",
+        "apps.agents.main:app",
         host=settings.server.host,
         port=settings.server.port,
         reload=settings.server.debug,
-        log_level="info",  # Всегда используем INFO уровень, детальные настройки в main.py
+        log_level="info",
     )

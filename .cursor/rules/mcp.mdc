@@ -31,7 +31,7 @@ User → Agent → ToolFactory → MCPHttpClient → MCP Server
 Конфигурация MCP сервера для компании:
 
 <good_example>
-from app.models.mcp_models import MCPServerConfig, MCPTransportType
+from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
 
 server = MCPServerConfig(
     server_id="context7",
@@ -50,7 +50,7 @@ server = MCPServerConfig(
 Новый тип тула для внешних MCP инструментов:
 
 <good_example>
-from app.models.core_models import CodeMode
+from apps.agents.models.core_models import CodeMode
 
 # Три типа тулов:
 CodeMode.CODE_REFERENCE  # Python функция в коде
@@ -65,10 +65,10 @@ CodeMode.MCP_TOOL        # Внешний MCP инструмент (HTTP/SSE)
 CRUD для MCP серверов с мультитенантностью:
 
 <good_example>
-from app.db.repositories.mcp_repository import MCPServerRepository
-from app.core.container import get_container
+from core.db.repositories.mcp_repository import MCPServerRepository
+from core.container import get_container
 
-mcp_repo = get_container().mcp_server_repository
+mcp_repo = get_agents_container().mcp_server_repository
 
 # Получить (автоматически для текущей компании)
 server = await mcp_repo.get("context7")
@@ -93,7 +93,7 @@ data = await storage.get("mcp_server:company:server_id")  # Используй �
 Синхронизирует тулы MCP сервера с БД:
 
 <good_example>
-from app.core.mcp_sync import sync_mcp_server_tools
+from core.mcp_sync import sync_mcp_server_tools
 
 # Синхронизировать для текущей компании
 tools = await sync_mcp_server_tools("context7")
@@ -114,7 +114,7 @@ tools = await sync_mcp_server_tools("context7", company_id="company_123")
 # app/main.py
 async def lifespan(app: FastAPI):
     # ...
-    from app.core.mcp_sync import sync_all_companies_mcp_servers
+    from core.mcp_sync import sync_all_companies_mcp_servers
     await sync_all_companies_mcp_servers()
 </good_example>
 
@@ -125,7 +125,7 @@ async def lifespan(app: FastAPI):
 MCP тулы добавляются как обычные tools:
 
 <good_example>
-from app.agents.react_agent import ReActAgent
+from apps.agents.agents.react_agent import ReActAgent
 
 class MyAgent(ReActAgent):
     name = "doc_helper"
@@ -152,7 +152,7 @@ class MyAgent(ReActAgent):
 MCP тулы используются в TOOL_NODE:
 
 <good_example>
-from app.models.core_models import GraphDefinition, GraphNode, NodeType
+from apps.agents.models.core_models import GraphDefinition, GraphNode, NodeType
 
 graph_definition = GraphDefinition(
     nodes=[
@@ -181,7 +181,7 @@ graph_definition = GraphDefinition(
 JSON-RPC 2.0 клиент для MCP серверов:
 
 <good_example>
-from app.core.mcp_client import get_mcp_client
+from core.mcp_client import get_mcp_client
 
 # Получить клиент для MCP сервера
 client = await get_mcp_client("context7")
@@ -472,7 +472,7 @@ server = await mcp_repo.get("context7")  # Где company_id?
 
 <good_example>
 # Используй контекст
-from app.core.context import get_context
+from core.context import get_context
 
 context = get_context()
 server = await mcp_repo.get("context7", context.active_company.id)

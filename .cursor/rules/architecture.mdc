@@ -17,15 +17,15 @@ alwaysApply: true
 
 <good_example>
 # Создание агента через фабрику из БД
-agent_factory = get_container().agent_factory
+agent_factory = get_agents_container().agent_factory
 agent = await agent_factory.get_agent(agent_id)
 
 # Работа с конфигурацией через репозиторий
-agent_repo = get_container().agent_repository
+agent_repo = get_agents_container().agent_repository
 config = await agent_repo.get(agent_id)
 
 # В FastAPI роутах используй DI через dependencies
-from app.frontend.dependencies import AgentRepositoryDep
+from apps.frontend.dependencies import AgentRepositoryDep
 
 @router.get("/{agent_id}")
 async def get_agent(agent_id: str, agent_repo: AgentRepositoryDep):
@@ -38,8 +38,8 @@ async def get_agent(agent_id: str, agent_repo: AgentRepositoryDep):
 agent = MyAgent(prompt="...", tools=[...])
 
 # Не используй прямые импорты сущностей контейнера
-from app.core.agent_factory import AgentFactory  # НЕТ!
-from app.db.repositories import Storage  # НЕТ!
+from core.agent_factory import AgentFactory  # НЕТ!
+from core.db.repositories import Storage  # НЕТ!
 
 # Не создавай объекты напрямую
 storage = Storage()  # НЕТ!
@@ -62,14 +62,14 @@ async def my_tool(query: str) -> str:
 
 ## Контекст выполнения
 
-Используй глобальный контекст (`app/core/context.py`) для доступа к:
+Используй глобальный контекст (`core/context/context.py`) для доступа к:
 - Текущему пользователю (`get_context().user`)
 - Активной компании (`get_context().active_company`)
 - Переменным flow (`get_context().flow_variables`)
 - Текущему state (`get_context().state`)
 
 <good_example>
-from app.core.context import get_context
+from core.context import get_context
 
 def get_current_user():
     context = get_context()
@@ -86,7 +86,7 @@ def get_current_user():
 ## Единообразие
 
 Агенты из кода и созданные через UI работают идентично:
-- Миграция (`app/core/migrator.py`) сканирует код и создает записи в БД
+- Миграция (`apps/agents/services/migration/migrator.py`) сканирует код и создает записи в БД
 - После миграции агенты работают из БД
 - Нет различий между "кодовыми" и "UI" агентами
 
@@ -102,10 +102,10 @@ def get_current_user():
 
 ### Единый LLM провайдер
 
-Используй OpenRouter через `app/core/llm_factory.py`:
+Используй OpenRouter через `core/clients/llm/factory.py`:
 
 <good_example>
-from app.core.llm_factory import get_llm
+from core.clients.llm import get_llm
 
 # Дефолтная модель
 llm = get_llm()
@@ -148,7 +148,7 @@ class CreativeAgent(BaseAgent):
 Используй `NanoBananaClient` для генерации изображений:
 
 <good_example>
-from app.core.core_clients.nano_banana_client import get_default_nano_banana_client
+from core.core_clients.nano_banana_client import get_default_nano_banana_client
 
 client = await get_default_nano_banana_client()
 

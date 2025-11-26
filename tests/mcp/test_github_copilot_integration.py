@@ -1,13 +1,13 @@
 """
-from app.core.container import get_container
+from apps.agents.container import get_agents_container
 Интеграционные тесты с GitHub Copilot MCP сервером.
 
 GitHub Copilot MCP - сервер для работы с AI-ассистентом GitHub.
 """
 
 import pytest
-from app.core.mcp_client import MCPHttpClient
-from app.models.mcp_models import MCPTransportType
+from apps.agents.services.mcp_client import MCPHttpClient
+from apps.agents.models.mcp_models import MCPTransportType
 import os
 
 
@@ -65,14 +65,14 @@ async def test_github_copilot_list_tools():
 
 
 @pytest.mark.asyncio
-async def test_github_copilot_sync_to_db(mcp_repo, test_company):
+async def test_github_copilot_sync_to_db(mcp_repo, test_company, storage):
     """
     Полный тест синхронизации GitHub Copilot тулов в БД.
     """
-    from app.core.mcp_sync import sync_mcp_server_tools
-    from app.db.repositories.tool_repository import ToolRepository
-    from app.db.repositories.storage import Storage
-    from app.models.mcp_models import MCPServerConfig, MCPTransportType
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
+    from core.db.tool_repository import ToolRepository
+    from core.db.storage import Storage
+    from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
     import os
     
     storage = Storage()
@@ -131,17 +131,17 @@ async def test_github_copilot_sync_to_db(mcp_repo, test_company):
 
 
 @pytest.mark.asyncio
-async def test_github_copilot_in_agent(mcp_repo, test_company):
+async def test_github_copilot_in_agent(mcp_repo, test_company, storage):
     """
     Тест использования GitHub Copilot MCP тулов в реальном агенте.
     """
-    from app.core.mcp_sync import sync_mcp_server_tools
-    from app.core.agent_factory import AgentFactory
-    from app.models import AgentConfig
-    from app.db.repositories.agent_repository import AgentRepository
-    from app.db.repositories.storage import Storage
-    from app.models.mcp_models import MCPServerConfig, MCPTransportType
-    from app.tools.misc.standard import ask_user
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
+    from apps.agents.services.agent_factory import AgentFactory
+    from apps.agents.models import AgentConfig
+    from core.db.agent_repository import AgentRepository
+    from core.db.storage import Storage
+    from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
+    from apps.agents.tools.misc.standard import ask_user
     import os
     
     storage = Storage()
@@ -194,7 +194,7 @@ async def test_github_copilot_in_agent(mcp_repo, test_company):
         print(f"✅ Агент создан с {len(tools)} MCP тулами")
         
         print("\n🏭 Шаг 3: Загружаем агента через AgentFactory")
-        agent_factory = get_container().agent_factory
+        agent_factory = get_agents_container().agent_factory
         agent = await agent_factory.get_agent("test_github_copilot_agent")
         
         print(f"✅ Агент загружен")
@@ -217,14 +217,14 @@ async def test_github_copilot_in_agent(mcp_repo, test_company):
 
 
 @pytest.mark.asyncio
-async def test_github_copilot_full_workflow(test_company):
+async def test_github_copilot_full_workflow(test_company, storage):
     """
     Полный workflow: создание сервера, синхронизация, проверка кэша.
     """
-    from app.models.mcp_models import MCPServerConfig, MCPTransportType
-    from app.db.repositories.mcp_repository import MCPServerRepository
-    from app.db.repositories.storage import Storage
-    from app.core.mcp_sync import sync_mcp_server_tools
+    from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
+    from apps.agents.db.repositories.mcp_repository import MCPServerRepository
+    from core.db.storage import Storage
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
     import os
     
     storage = Storage()
@@ -297,13 +297,13 @@ async def test_github_copilot_with_mock_llm(test_company):
     
     Проверяем полную интеграцию с мокированным LLM.
     """
-    from app.core.mcp_sync import sync_mcp_server_tools
-    from app.core.agent_factory import AgentFactory
-    from app.models import AgentConfig
-    from app.db.repositories.agent_repository import AgentRepository
-    from app.db.repositories.storage import Storage
-    from app.db.repositories.mcp_repository import MCPServerRepository
-    from app.models.mcp_models import MCPServerConfig, MCPTransportType
+    from apps.agents.services.mcp_sync import sync_mcp_server_tools
+    from apps.agents.services.agent_factory import AgentFactory
+    from apps.agents.models import AgentConfig
+    from core.db.agent_repository import AgentRepository
+    from core.db.storage import Storage
+    from apps.agents.db.repositories.mcp_repository import MCPServerRepository
+    from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
     from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
     from unittest.mock import MagicMock, AsyncMock
     import uuid
@@ -365,7 +365,7 @@ async def test_github_copilot_with_mock_llm(test_company):
         print("3️⃣ Загрузка агента через AgentFactory")
         print("="*70)
         
-        agent_factory = get_container().agent_factory
+        agent_factory = get_agents_container().agent_factory
         agent = await agent_factory.get_agent("copilot_test_agent")
         
         loaded_tools = await agent.get_tools()

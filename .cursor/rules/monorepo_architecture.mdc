@@ -1,0 +1,298 @@
+---
+alwaysApply: true
+---
+
+# Архитектура монорепозитория Agent Lab
+
+## Общая структура
+
+```
+agent-lab/
+├── core/                          # Общая инфраструктура (НЕ зависит от apps/)
+│   ├── config/                    # Конфигурация (BaseSettings, loader)
+│   ├── db/                        # БД (Storage, BaseRepository, models)
+│   ├── models/                    # Shared модели (User, Company, Context, Language)
+│   ├── identity/                  # Авторизация (AuthService, OAuth провайдеры)
+│   ├── files/                     # Файлы (S3Client, FileRecord, AudioRecord)
+│   ├── clients/                   # Клиенты (LLM, NanoBanana, CloudVoice, Payment)
+│   ├── context/                   # Глобальный контекст
+│   ├── logging/                   # Логирование
+│   ├── http/                      # HTTP клиент с прокси
+│   ├── container/                 # BaseContainer
+│   ├── variables/                 # VariablesService
+│   ├── utils/                     # TokenService, generate_slug
+│   ├── fields.py                  # Кастомный Field (Pydantic v2)
+│   └── middleware/i18n/           # Базовые компоненты
+│
+├── apps/
+│   ├── agents/                    # Сервис агентов (порт 8001)
+│   │   ├── main.py                # FastAPI app
+│   │   ├── container.py           # AgentsContainer(BaseContainer)
+│   │   ├── config.py              # AgentsSettings(BaseSettings)
+│   │   ├── config.json            # Переопределение конфигурации
+│   │   ├── models/                # Специфичные модели (AgentConfig, FlowConfig)
+│   │   ├── db/repositories/       # Репозитории (agent, flow, tool, task, session, mcp)
+│   │   ├── services/              # Фабрики и сервисы
+│   │   ├── agents/                # Определения агентов
+│   │   ├── tools/                 # Инструменты
+│   │   ├── flows/                 # Flow конфигурации
+│   │   ├── api/v1/                # REST API
+│   │   ├── workers/               # Background workers
+│   │   ├── interfaces/            # Platform interfaces
+│   │   ├── clients/               # External clients (AmoCRM, etc)
+│   │   └── middleware/            # Middleware
+│   │
+│   └── frontend/                  # Сервис фронтенда (порт 8002, TODO)
+│
+└── config.json                    # Базовая конфигурация
+```
+
+## Правило 1: core НЕ зависит от apps
+
+**КРИТИЧНО**: core/ - это чистая инфраструктура, которая НЕ импортирует ничего из apps/*
+
+<good_example>
+# В core/db/storage.py
+from core.config import get_settings
+from core.context import get_context
+from core.db.models import Storage as StorageModel
+</good_example>
+
+<bad_example>
+# В core/db/storage.py - ЗАПРЕЩЕНО!
+from apps.agents.models import AgentConfig  # НЕТ!
+from apps.agents.container import get_agents_container  # НЕТ!
+</bad_example>
+
+## Правило 2: Каждый сервис расширяет BaseSettings
+
+Каждый сервис имеет свой `config.py` с классом-наследником `BaseSettings`:
+
+<good_example>
+# apps/agents/config.py
+from core.config import BaseSettings
+from pydantic import Field
+
+class AgentsSettings(BaseSettings):
+    """Расширяет BaseSettings добавляя поля для agents"""
+    
+    max_agents: int = Field(default=100, description="Макс агентов")
+    enable_migration_on_startup: bool = Field(default=True)
+
+def get_agents_settings() -> AgentsSettings:
+    from core.config import get_settings
+    return get_settings()
+</good_example>
+
+## Правило 3: Каждый сервис имеет свой Container
+
+<good_example>
+# apps/agents/container.py
+from core.container import BaseContainer
+
+class AgentsContainer(BaseContainer):
+    """Расширяет BaseContainer добавляя специфичные сервисы"""
+    
+    def __init__(self, service_db_url, shared_db_url):
+        super().__init__(db_url=service_db_url)  # service БД
+        self.shared_db_url = shared_db_url       # shared БД
+        self._shared_storage = None
+        self._agent_repository = None
+    
+    def __getattr__(self, name):
+        if name == 'shared_storage':
+            if self._shared_storage is None:
+                from core.db.storage import Storage
+                from core.context import get_context
+                self._shared_storage = Storage(db_url=self.shared_db_url, get_context_func=get_context)
+            return self._shared_storage
+        
+        if name == 'agent_repository':
+            if self._agent_repository is None:
+                from apps.agents.db.repositories import AgentRepository
+                self._agent_repository = AgentRepository(storage=self.storage)
+            return self._agent_repository
+        
+        return super().__getattr__(name)
+
+# Глобальный контейнер
+_agents_container = None
+
+def get_agents_container() -> AgentsContainer:
+    global _agents_container
+    if _agents_container is None:
+        raise RuntimeError("AgentsContainer не инициализирован!")
+    return _agents_container
+
+# Алиас для обратной совместимости
+get_container = get_agents_container
+</good_example>
+
+## Правило 4: Service БД + Shared БД
+
+**КРИТИЧНО**: Каждый сервис имеет две БД:
+- **Service БД** - для специфичных данных (agents, flows, tools, tasks, sessions, variables, usage, files)
+- **Shared БД** - для общих данных (users, companies, auth_session, subdomain)
+
+<good_example>
+# apps/agents/config.json
+{
+  "database": {
+    "url": "postgresql+asyncpg://...agents_db",      // service БД
+    "shared_url": "postgresql+asyncpg://...shared_db" // shared БД
+  }
+}
+
+# apps/agents/container.py
+container = AgentsContainer(
+    service_db_url=settings.database.url,
+    shared_db_url=settings.database.shared_url
+)
+
+# Маршрутизация репозиториев:
+# agent_repository → service БД (agents_db)
+# task_repository → service БД (agents_db)
+# session_repository → service БД (agents_db)
+# user_repository → shared БД (shared_db)
+# company_repository → shared БД (shared_db)
+</good_example>
+
+## Правило 5: Модели - shared vs специфичные
+
+**Shared модели** (в core/models/ и core/files/models.py):
+- User, Company, AuthSession (identity)
+- Context, Language (базовые)
+- FileRecord, AudioRecord (файлы в shared БД)
+
+**Специфичные модели** (в apps/agents/models/):
+- AgentConfig, FlowConfig (конфигурация агентов)
+- TaskConfig, SessionConfig (задачи и сессии)
+- ToolReference (инструменты)
+- Billing, Payment модели (бизнес-логика)
+
+<bad_example>
+# НЕТ дубликатов!
+# apps/agents/models/user.py - ЗАПРЕЩЕНО, User в core!
+# apps/agents/models/file_models.py - ЗАПРЕЩЕНО, FileRecord в core!
+</bad_example>
+
+## Правило 6: Импорты
+
+### В core/:
+```python
+from core.config import get_settings
+from core.db.storage import Storage
+from core.models import User, Company, Context
+from core.identity import AuthService
+```
+
+### В apps/agents/:
+```python
+# Базовые компоненты из core
+from core.config import get_settings
+from core.db.storage import Storage
+from core.models import User, Company, Context
+from core.files.models import FileRecord, AudioRecord
+
+# Специфичные для сервиса
+from apps.agents.config import get_agents_settings
+from apps.agents.container import get_agents_container
+from apps.agents.models import AgentConfig, FlowConfig
+from apps.agents.db.repositories import AgentRepository
+from apps.agents.services.agent_factory import AgentFactory
+```
+
+### Что НЕ импортировать:
+```python
+# ЗАПРЕЩЕНО везде:
+from app.* # Старая структура не существует!
+
+# ЗАПРЕЩЕНО в core:
+from apps.agents.*  # core не зависит от apps
+```
+
+## Правило 7: Каскадная конфигурация
+
+```
+Приоритет (от низшего к высшему):
+1. Дефолты в коде
+2. config.json (корень проекта)
+3. apps/{service}/config.json
+4. ENV переменные
+```
+
+<good_example>
+# apps/agents/main.py
+from pathlib import Path
+from core.config.loader import load_merged_config
+from apps.agents.config import AgentsSettings
+
+merged_config = load_merged_config(
+    base_config_path=Path("config.json"),
+    service_config_path=Path(__file__).parent / "config.json"
+)
+
+settings = AgentsSettings(**merged_config)
+</good_example>
+
+## Правило 8: Кастомный Field (Pydantic v2)
+
+<good_example>
+from core.fields import Field
+
+class User(BaseModel):
+    user_id: str = Field(
+        title="ID пользователя",
+        description="Уникальный ID",
+        readonly=True,  # Автоматически в json_schema_extra
+    )
+    name: str = Field(
+        title="Имя",
+        placeholder="Иван Иванов",  # Автоматически в json_schema_extra
+    )
+</good_example>
+
+## Правило 9: НЕТ локальных импортов
+
+<bad_example>
+def my_function():
+    from apps.agents.models import AgentConfig  # НЕТ!
+    from core.db.storage import Storage  # НЕТ!
+</bad_example>
+
+<good_example>
+from apps.agents.models import AgentConfig
+from core.db.storage import Storage
+
+def my_function():
+    config = AgentConfig(...)
+</good_example>
+
+## Правило 10: НЕТ try-except фолбэков
+
+<bad_example>
+try:
+    result = await api.fetch()
+except Exception:
+    return None  # Скрывает проблему!
+</bad_example>
+
+<good_example>
+if not api_key:
+    raise ValueError("API key не настроен")
+
+result = await api.fetch()  # Если упадет - исключение прокинется
+</good_example>
+
+## Критичные напоминания
+
+1. **core/** НЕ зависит от **apps/**
+2. Каждый сервис имеет **config.py** (расширяет BaseSettings)
+3. Каждый сервис имеет **container.py** (расширяет BaseContainer)
+4. **Service БД** + **Shared БД** для каждого сервиса
+5. **НЕТ дубликатов моделей** - User, Company, FileRecord в core
+6. **НЕТ локальных импортов**
+7. **НЕТ try-except фолбэков**
+8. Используй **get_agents_container()**, НЕ get_agents_container()
+9. Хардкодные строки: `"apps.agents.agents.*"` вместо `"app.agents.*"`
+10. Field переносит UI поля в json_schema_extra (Pydantic v2)

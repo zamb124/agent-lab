@@ -1,342 +1,225 @@
 ---
-description: "Правила работы с Repository Pattern и Dependency Injection"
+description: "Правила работы с Repository Pattern"
 alwaysApply: true
 ---
-# Repository Pattern и Dependency Injection
+# Repository Pattern - Чистая архитектура
 
-## Контейнер (`app/core/container.py`)
+## BaseRepository
 
-**ВСЕ** сущности системы доступны через контейнер. **НИКОГДА** не импортируй и не создавай сущности контейнера напрямую!
+**Композиция, не наследование. Незыблемая логика без ветвлений.**
 
-### Доступ к сущностям
+```python
+class BaseRepository(ABC, Generic[T]):
+    is_global: bool = False  # Атрибут класса
+    
+    def __init__(self, storage: Storage, model_class: Type[T]):
+        self._storage = storage  # Приватная композиция
+        self.model_class = model_class
+    
+    def _build_final_key(self, key: str) -> str:
+        if self.is_global:
+            return key
+        
+        context = get_context()
+        company_id = context.active_company.company_id
+        return f"company:{company_id}:{key}"
+```
+
+## Создание репозитория
+
+**Обязательные методы для реализации:**
+
+```python
+class MyRepository(BaseRepository[MyModel]):
+    is_global = False  # или True для глобальных сущностей
+    
+    def __init__(self, storage: Storage):
+        super().__init__(storage=storage, model_class=MyModel)
+    
+    def _get_key(self, entity_id: str) -> str:
+        return f"my_entity:{entity_id}"
+    
+    def _get_prefix(self) -> str:
+        return "my_entity:"
+    
+    def _get_table_name(self) -> str:
+        return "storage"  # или "users", "tasks", "variables"
+    
+    def _extract_entity_id(self, entity: MyModel) -> str:
+        return entity.id
+```
+
+## Доступ к репозиториям через контейнер
 
 <good_example>
-from app.core.container import get_container
+from apps.agents.container import get_agents_container
 
-# Правильно: через контейнер
-storage = get_container().storage
-agent_repo = get_container().agent_repository
-flow_factory = get_container().flow_factory
-auth_service = get_container().auth_service
+container = get_agents_container()
+
+# Core репозитории
+user_repo = container.user_repository
+company_repo = container.company_repository
+variable_repo = container.variable_repository
+
+# Agents репозитории
+agent_repo = container.agent_repository
+flow_repo = container.flow_repository
+task_repo = container.task_repository
 </good_example>
 
 <bad_example>
-# НЕПРАВИЛЬНО: прямые импорты
-from app.db.repositories import Storage
-from app.core.agent_factory import AgentFactory
-from app.identity.auth_service import AuthService
+# ЗАПРЕЩЕНО: прямые импорты
+from apps.agents.db.repositories import AgentRepository
+from core.db.repositories import UserRepository
 
-# НЕПРАВИЛЬНО: прямое создание
-storage = Storage()
-factory = AgentFactory()
+# ЗАПРЕЩЕНО: создание напрямую
+agent_repo = AgentRepository(storage)
 </bad_example>
 
-## Repository Pattern
+## API репозиториев
 
-Используй паттерн Repository для работы с данными:
-- **Storage** - низкоуровневый key-value доступ (`get`, `set`, `delete`, `list_by_prefix`)
-- **Repository** - высокоуровневый CRUD для конкретных моделей
-- **Factory** - создание сложных объектов со всеми зависимостями
+**Все репозитории имеют единообразный интерфейс:**
 
-### Архитектура
+```python
+# Получить по ID
+entity = await repo.get(entity_id)
 
+# Сохранить
+await repo.set(entity)
+
+# Удалить
+await repo.delete(entity_id)
+
+# Список всех
+entities = await repo.list_all(limit=100)
+
+# Получить несколько
+entities_dict = await repo.get_many([id1, id2, id3])
 ```
-Storage (key-value)
-   ↓
-Repository (CRUD для модели)
-   ↓
-Factory (создание объектов)
-```
 
-## Доступные сущности контейнера
+## is_global определяет изоляцию
 
-### Репозитории
-- `agent_repository` - AgentRepository для работы с AgentConfig
-- `flow_repository` - FlowRepository для работы с FlowConfig
-- `task_repository` - TaskRepository для работы с TaskConfig
-- `session_repository` - SessionRepository для работы с SessionConfig
-- `tool_repository` - ToolRepository для работы с ToolReference
+**is_global=True (глобальные сущности):**
+- User, Company, AuthSession, Subdomain
+- Ключ: `user:{user_id}`, `company:{company_id}`
+- НЕ изолированы по компаниям
 
-### Фабрики
-- `agent_factory` - AgentFactory для создания агентов
-- `flow_factory` - FlowFactory для создания flows
-- `tool_factory` - ToolFactory для создания tools
-
-### Сервисы
-- `auth_service` - AuthService для аутентификации
-- `billing_service` - BillingService для биллинга
-- `payment_service` - PaymentService для платежей
-- `variables_service` - VariablesService для переменных
-
-### Другие
-- `storage` - Storage для низкоуровневого доступа к БД
-- `interface_factory` - InterfaceFactory для создания интерфейсов платформ
-- `graph_builder` - GraphBuilder для построения графов состояний
-- `s3_factory` - S3ClientFactory для работы с S3
-
-## Dependency Injection
-
-### В FastAPI роутах используй dependencies из app.frontend.dependencies
-
-**ВАЖНО**: Параметры с `Depends` должны идти **ПЕРЕД** параметрами с `Query`!
+**is_global=False (изолированные сущности):**
+- Agent, Flow, Tool, Task, Session, Variable, Usage, File
+- Ключ: `company:{company_id}:agent:{agent_id}`
+- ВСЕГДА изолированы по компаниям
 
 <good_example>
-from app.frontend.dependencies import (
-    AgentRepositoryDep,
-    FlowRepositoryDep,
-    StorageDep,
-    AuthServiceDep
-)
+# UserRepository (is_global=True)
+class UserRepository(BaseRepository[User]):
+    is_global = True
+    
+    def _get_table_name(self) -> str:
+        return "users"
+
+# AgentRepository (is_global=False)
+class AgentRepository(BaseRepository[AgentConfig]):
+    is_global = False
+    
+    def _get_table_name(self) -> str:
+        return "storage"
+</good_example>
+
+## Использование в сервисах
+
+<good_example>
+class AgentFactory:
+    def __init__(self, agent_repository):
+        self.agent_repository = agent_repository
+    
+    async def get_agent(self, agent_id: str):
+        config = await self.agent_repository.get(agent_id)
+        if not config:
+            raise ValueError(f"Агент {agent_id} не найден")
+        return await self._create_agent_instance(config)
+</good_example>
+
+## Использование в API endpoints
+
+<good_example>
+from apps.agents.dependencies import AgentRepositoryDep
 
 @router.get("/{agent_id}")
-async def get_agent(
-    agent_id: str,
-    agent_repo: AgentRepositoryDep  # Depends параметры первыми
-) -> AgentConfig:
+async def get_agent(agent_id: str, agent_repo: AgentRepositoryDep):
     agent = await agent_repo.get(agent_id)
     if not agent:
         raise HTTPException(status_code=404)
     return agent
-
-@router.get("/search")
-async def search_agents(
-    storage: StorageDep,  # Depends первым
-    query: str = Query(...),  # Query параметры после
-    limit: int = Query(10, ge=1, le=100)
-):
-    keys = await storage.list_by_prefix(f"agent:{query}")
-    return keys[:limit]
 </good_example>
 
-<bad_example>
-# НЕПРАВИЛЬНЫЙ ПОРЯДОК ПАРАМЕТРОВ
-@router.get("/search")
-async def search_agents(
-    query: str = Query(...),  # Query ПЕРЕД Depends - НЕПРАВИЛЬНО!
-    storage: StorageDep,
-    limit: int = Query(10)
-):
-    pass
+## Специфичные методы репозиториев
 
-# НЕ используй контейнер напрямую в роутах
-@router.get("/{agent_id}")
-async def get_agent(agent_id: str):
-    repo = get_container().agent_repository  # НЕТ!
-    agent = await repo.get(agent_id)
-    return agent
-</bad_example>
-
-### Доступные dependencies
-
-#### Репозитории
-- `AgentRepositoryDep` - для работы с AgentConfig
-- `FlowRepositoryDep` - для работы с FlowConfig
-- `TaskRepositoryDep` - для работы с TaskConfig
-- `SessionRepositoryDep` - для работы с SessionConfig
-- `ToolRepositoryDep` - для работы с ToolReference
-
-#### Сервисы
-- `StorageDep` - низкоуровневый доступ к БД
-- `AuthServiceDep` - аутентификация пользователей
-- `VariablesServiceDep` - работа с переменными
-- `InterfaceFactoryDep` - создание интерфейсов платформ
-
-### В сервисах и фабриках получай зависимости из контейнера
+Репозитории могут добавлять свои методы:
 
 <good_example>
-from app.core.container import get_container
-
-class AgentFactory:
-    def __init__(self):
-        # Репозиторий как атрибут (композиция)
-        self.repository = get_container().agent_repository
-
-    async def get_agent(self, agent_id: str) -> BaseAgent:
-        # Используем атрибут
-        config = await self.repository.get(agent_id)
-        return await self._create_agent_instance(config)
-
-class MyService:
-    def __init__(self):
-        self.storage = get_container().storage
-        self.auth_service = get_container().auth_service
-</good_example>
-
-<bad_example>
-class AgentFactory:
-    async def get_agent(self, agent_id: str):
-        # НЕ создавай репозиторий при каждом вызове метода
-        repo = get_container().agent_repository
-        config = await repo.get(agent_id)
+class TaskRepository(BaseRepository[TaskConfig]):
+    async def list_pending(self, limit: int = 10) -> List[TaskConfig]:
+        """Специфичный метод для TaskRepository"""
         ...
 
-# НЕ импортируй сущности контейнера
-from app.db.repositories import AgentRepository  # НЕТ!
-from app.identity.auth_service import AuthService  # НЕТ!
-</bad_example>
-
-## Методы репозиториев
-
-Все репозитории наследуются от `BaseRepository` и **обязаны** реализовать:
-
-### Обязательные методы (единообразный API как в Storage):
-- `get(entity_id)` - получить по ID
-- `set(entity)` - сохранить
-- `delete(entity_id)` - удалить
-
-### Дополнительные методы:
-- `list_all(limit)` - список всех (опционально)
-- Специфичные методы для каждого репозитория
-
-<good_example>
-# AgentRepository
-agent_repo = get_container().agent_repository
-
-# Получить (единообразно с Storage)
-agent = await agent_repo.get("agent_id")
-
-# Сохранить (единообразно с Storage)
-await agent_repo.set(agent_config)
-
-# Удалить (единообразно с Storage)
-await agent_repo.delete("agent_id")
-
-# Список всех
-agents = await agent_repo.list_all(limit=100)
-
-# Аналогично для других репозиториев
-flow_repo = get_container().flow_repository
-task_repo = get_container().task_repository
+class FlowRepository(BaseRepository[FlowConfig]):
+    async def find_public(self, limit: int = 100) -> List[FlowConfig]:
+        """Специфичный метод для FlowRepository"""
+        all_flows = await self.list_all(limit=limit)
+        return [f for f in all_flows if f.is_public]
 </good_example>
 
-## Factory + Repository (композиция)
+## Добавление нового репозитория
 
-Factory использует Repository для получения конфигурации, затем создает живой объект:
-
-<good_example>
-class AgentFactory:
-    def __init__(self):
-        self.repository = get_container().agent_repository
-
-    async def get_agent(self, agent_id: str) -> BaseAgent:
-        # Repository получает конфиг
-        config = await self.repository.get(agent_id)
-        if not config:
-            raise ValueError(f"Агент {agent_id} не найден")
-
-        # Factory создает живой объект
-        agent = await self._create_agent_instance(config)
-        await self._load_tools_from_db(agent, config)
-        return agent
-</good_example>
-
-## Пример комплексного использования
+1. Создай класс репозитория:
 
 ```python
-from app.frontend.dependencies import (
-    AgentRepositoryDep,
-    FlowRepositoryDep,
-    StorageDep,
-    AuthServiceDep
-)
-
-@router.post("/complex")
-async def complex_operation(
-    storage: StorageDep,  # Всегда первым!
-    agent_repo: AgentRepositoryDep,
-    flow_repo: FlowRepositoryDep,
-    auth_service: AuthServiceDep,
-    query: str = Query(None)  # Query параметры после Depends
-):
-    # Все сущности доступны через DI
-    agent = await agent_repo.get("agent_id")
-    flow = await flow_repo.get("flow_id")
-    user = await auth_service.get_current_user()
-    data = await storage.get(f"custom:{query}")
-    ...
+class MyRepository(BaseRepository[MyModel]):
+    is_global = False
+    
+    def __init__(self, storage: Storage):
+        super().__init__(storage=storage, model_class=MyModel)
+    
+    def _get_key(self, entity_id: str) -> str:
+        return f"my:{entity_id}"
+    
+    def _get_prefix(self) -> str:
+        return "my:"
+    
+    def _get_table_name(self) -> str:
+        return "storage"
+    
+    def _extract_entity_id(self, entity: MyModel) -> str:
+        return entity.id
 ```
 
-## Создание новой сущности контейнера
-
-Если нужна новая сущность в контейнере:
-
-1. Создай класс сущности (репозиторий, сервис, фабрика)
-2. Добавь в `Container` (`app/core/container.py`) как атрибут
-3. Если нужно для FastAPI - добавь dependency в `app/frontend/dependencies.py`
-4. Обнови документацию в этих правилах
-
-### Пример добавления нового сервиса:
+2. Добавь в контейнер:
 
 ```python
-# 1. Создать сервис
-class MyNewService:
-    def __init__(self):
-        self.storage = get_container().storage
-
-# 2. Добавить в Container
-class Container:
-    def __init__(self):
-        # ... существующие
-        self.my_new_service: Optional["MyNewService"] = None
-
-def initialize_context_services(container: Container):
-    # ... существующие
-    container.my_new_service = MyNewService()
-
-# 3. Добавить dependency (если нужно для FastAPI)
-async def get_my_new_service() -> "MyNewService":
-    container = get_container()
-    return container.my_new_service
-
-MyNewServiceDep = Annotated["MyNewService", Depends(get_my_new_service)]
+class AgentsContainer(BaseContainer):
+    def __getattr__(self, name):
+        if name == 'my_repository':
+            if self._my_repository is None:
+                self._my_repository = MyRepository(storage=self.storage)
+            return self._my_repository
+        return super().__getattr__(name)
 ```
 
-## Когда использовать Storage напрямую
+3. Добавь dependency (опционально):
 
-Используй Storage напрямую только для:
-- Специфичных ключей (например, `var:*`, `token:*`)
-- Операций `list_by_prefix` для поиска ключей
-- Временных данных без модели
-- Низкоуровневых операций, не требующих бизнес-логики
+```python
+async def get_my_repository() -> MyRepository:
+    return get_agents_container().my_repository
 
-<good_example>
-# Получение переменных (нет репозитория для Variables)
-storage = get_container().storage
-var_keys = await storage.list_by_prefix("var:")
+MyRepositoryDep = Annotated[MyRepository, Depends(get_my_repository)]
+```
 
-# Поиск по префиксу
-agent_keys = await storage.list_by_prefix("agent:")
+## 🚨 КРИТИЧНЫЕ НАПОМИНАНИЯ
 
-# Для моделей ВСЕГДА используй репозиторий
-agent_repo = get_container().agent_repository
-agent = await agent_repo.get(agent_id)
-</good_example>
+1. **НИКОГДА** не используй Storage напрямую - только репозитории
+2. **НИКОГДА** не добавляй `company:` префикс вручную
+3. **ВСЕГДА** определяй `is_global` в классе репозитория
+4. **ВСЕГДА** реализуй все абстрактные методы BaseRepository
+5. **ВСЕГДА** используй репозитории из контейнера
 
-<bad_example>
-# НЕ используй Storage для работы с моделями
-storage = get_container().storage
-agent_config = await storage.get("agent:my_agent")  # НЕТ! Используй agent_repo
-
-# НЕ создавай Storage напрямую
-from app.db.repositories import Storage  # НЕТ!
-storage = Storage()  # НЕТ!
-</bad_example>
-
-## Преимущества Repository Pattern
-
-✅ **Единообразие** - все репозитории имеют одинаковый интерфейс
-✅ **Тестируемость** - легко мокировать репозитории
-✅ **Разделение ответственности** - Storage не знает о моделях
-✅ **Type Safety** - строгая типизация через Generic[T]
-✅ **DI-friendly** - легко инжектировать в endpoints
-✅ **Fail Fast** - ошибка при импорте, если метод не реализован
-
-## 🚨 ВАЖНЫЕ НАПОМИНАНИЯ
-
-1. **НИКОГДА** не импортируй сущности контейнера напрямую
-2. **НИКОГДА** не создавай объекты контейнера вручную
-3. **ВСЕГДА** используй `get_container()` для доступа к сущностям
-4. **ВСЕГДА** добавляй Depends параметры **ПЕРЕД** Query параметрами в FastAPI
-5. **ВСЕГДА** используй репозитории для работы с моделями, Storage - только для низкоуровневых операций
-
-**Нарушение этих правил приведет к ошибкам импорта и нестабильной работе системы!**
+**Нарушение приведет к ошибкам изоляции данных!**

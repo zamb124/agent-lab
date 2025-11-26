@@ -3,28 +3,60 @@
 Проверка всех API endpoints в app/api/v1/whatsapp.py.
 """
 import pytest
+import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
+import asyncio
 
-from app.api.v1.whatsapp import router
-from app.models import FlowConfig
+from apps.agents.api.v1.whatsapp import router
+from apps.agents.models import FlowConfig
+from apps.agents.dependencies import get_flow_repository, get_variables_service
+from apps.agents.interfaces.whatsapp_interface import WhatsAppInterface
 
 pytestmark = pytest.mark.xdist_group(name="whatsapp_sequential")
 
 
-@pytest.fixture
-def app():
+# Временная функция get_storage для совместимости с тестами
+async def get_storage():
+    from apps.agents.container import get_agents_container
+    return get_agents_container().storage
+
+
+@pytest_asyncio.fixture
+async def app(migrated_db):
     """FastAPI приложение для тестов"""
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")
-    return app
+    yield app
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
 def client(app):
     """Test client для API"""
+    # TestClient работает синхронно, но app может быть async fixture
+    # Используем asyncio.run для создания app если нужно
     return TestClient(app)
+
+
+def setup_storage_override(app, return_value):
+    """Настраивает мок Storage и VariablesService для dependency override"""
+    mock_storage = AsyncMock()
+    mock_storage.get = AsyncMock(return_value=return_value)
+    
+    async def mock_get_storage():
+        return mock_storage
+    
+    mock_vars = AsyncMock()
+    mock_vars.resolve = AsyncMock(return_value="test_verify_456")
+    
+    async def mock_get_variables_service():
+        return mock_vars
+    
+    app.dependency_overrides[get_storage] = mock_get_storage
+    app.dependency_overrides[get_variables_service] = mock_get_variables_service
+    return mock_storage
 
 
 @pytest.fixture
@@ -49,82 +81,102 @@ def mock_flow_config():
 class TestWebhookVerification:
     """Тесты верификации webhook (GET запрос)"""
     
-    def test_webhook_verify_success(self, client, mock_flow_config):
+    def test_webhook_verify_success(self, app, mock_flow_config, storage):
         """Тест успешной верификации webhook"""
+        mock_storage = AsyncMock()
+        mock_storage.get = AsyncMock(return_value=mock_flow_config.model_dump_json())
         
-        with patch('app.db.repositories.Storage.get', return_value=mock_flow_config.model_dump_json()):
-            with patch('app.services.variables_service.get_variables_service') as mock_vars:
-                mock_vars_instance = AsyncMock()
-                mock_vars_instance.resolve.return_value = "test_verify_456"
-                mock_vars.return_value = mock_vars_instance
-                
-                response = client.get(
-                    "/api/v1/webhook/whatsapp/company:test:flow:test_whatsapp_flow",
-                    params={
-                        "hub.mode": "subscribe",
-                        "hub.verify_token": "test_verify_456",
-                        "hub.challenge": "12345"
-                    }
-                )
+        async def mock_get_storage():
+            return mock_storage
+        
+        mock_vars = AsyncMock()
+        mock_vars.resolve = AsyncMock(return_value="test_verify_456")
+        
+        async def mock_get_variables_service():
+            return mock_vars
+        
+        app.dependency_overrides[get_storage] = mock_get_storage
+        app.dependency_overrides[get_variables_service] = mock_get_variables_service
+        
+        client = TestClient(app)
+        response = client.get(
+            "/api/v1/webhook/whatsapp/company:test:flow:test_whatsapp_flow",
+            params={
+                "hub.mode": "subscribe",
+                "hub.verify_token": "test_verify_456",
+                "hub.challenge": "12345"
+            }
+        )
         
         assert response.status_code == 200
         assert response.text == "12345"
         print("✅ Webhook верификация успешна")
     
-    def test_webhook_verify_wrong_token(self, client, mock_flow_config):
+    def test_webhook_verify_wrong_token(self, app, mock_flow_config, storage):
         """Тест верификации с неверным токеном"""
+        mock_storage = AsyncMock()
+        mock_storage.get = AsyncMock(return_value=mock_flow_config.model_dump_json())
         
-        with patch('app.db.repositories.Storage.get', return_value=mock_flow_config.model_dump_json()):
-            with patch('app.services.variables_service.get_variables_service') as mock_vars:
-                mock_vars_instance = AsyncMock()
-                mock_vars_instance.resolve.return_value = "test_verify_456"
-                mock_vars.return_value = mock_vars_instance
-                
-                response = client.get(
-                    "/api/v1/webhook/whatsapp/company:test:flow:test_whatsapp_flow",
-                    params={
-                        "hub.mode": "subscribe",
-                        "hub.verify_token": "WRONG_TOKEN",
-                        "hub.challenge": "12345"
-                    }
-                )
+        async def mock_get_storage():
+            return mock_storage
+        
+        mock_vars = AsyncMock()
+        mock_vars.resolve = AsyncMock(return_value="test_verify_456")
+        
+        async def mock_get_variables_service():
+            return mock_vars
+        
+        app.dependency_overrides[get_storage] = mock_get_storage
+        app.dependency_overrides[get_variables_service] = mock_get_variables_service
+        
+        client = TestClient(app)
+        response = client.get(
+            "/api/v1/webhook/whatsapp/company:test:flow:test_whatsapp_flow",
+            params={
+                "hub.mode": "subscribe",
+                "hub.verify_token": "WRONG_TOKEN",
+                "hub.challenge": "12345"
+            }
+        )
         
         assert response.status_code == 403
         print("✅ Верификация отклонена при неверном токене")
     
-    def test_webhook_verify_wrong_mode(self, client, mock_flow_config):
+    def test_webhook_verify_wrong_mode(self, app, mock_flow_config):
         """Тест верификации с неверным режимом"""
+        setup_storage_override(app, mock_flow_config.model_dump_json())
+        client = TestClient(app)
         
-        with patch('app.db.repositories.Storage.get', return_value=mock_flow_config.model_dump_json()):
-            response = client.get(
-                "/api/v1/webhook/whatsapp/company:test:flow:test_whatsapp_flow",
-                params={
-                    "hub.mode": "unsubscribe",  # Неверный режим!
-                    "hub.verify_token": "test_verify_456",
-                    "hub.challenge": "12345"
-                }
-            )
+        response = client.get(
+            "/api/v1/webhook/whatsapp/company:test:flow:test_whatsapp_flow",
+            params={
+                "hub.mode": "unsubscribe",  # Неверный режим!
+                "hub.verify_token": "test_verify_456",
+                "hub.challenge": "12345"
+            }
+        )
         
         assert response.status_code == 403
         print("✅ Верификация отклонена при неверном режиме")
     
-    def test_webhook_verify_flow_not_found(self, client):
+    def test_webhook_verify_flow_not_found(self, app):
         """Тест верификации для несуществующего flow"""
+        setup_storage_override(app, None)
+        client = TestClient(app)
         
-        with patch('app.db.repositories.Storage.get', return_value=None):
-            response = client.get(
-                "/api/v1/webhook/whatsapp/company:test:flow:nonexistent_flow",
-                params={
-                    "hub.mode": "subscribe",
-                    "hub.verify_token": "test",
-                    "hub.challenge": "12345"
-                }
-            )
+        response = client.get(
+            "/api/v1/webhook/whatsapp/company:test:flow:nonexistent_flow",
+            params={
+                "hub.mode": "subscribe",
+                "hub.verify_token": "test",
+                "hub.challenge": "12345"
+            }
+        )
         
         assert response.status_code == 404
         print("✅ 404 для несуществующего flow")
     
-    def test_webhook_verify_no_whatsapp_platform(self, client):
+    def test_webhook_verify_no_whatsapp_platform(self, app):
         """Тест верификации для flow без WhatsApp платформы"""
         flow_without_wa = FlowConfig(
             flow_id="no_wa_flow",
@@ -133,15 +185,17 @@ class TestWebhookVerification:
             platforms={"api": {}}  # Нет whatsapp!
         )
         
-        with patch('app.db.repositories.Storage.get', return_value=flow_without_wa.model_dump_json()):
-            response = client.get(
-                "/api/v1/webhook/whatsapp/company:test:flow:no_wa_flow",
-                params={
-                    "hub.mode": "subscribe",
-                    "hub.verify_token": "test",
-                    "hub.challenge": "12345"
-                }
-            )
+        setup_storage_override(app, flow_without_wa.model_dump_json())
+        client = TestClient(app)
+        
+        response = client.get(
+            "/api/v1/webhook/whatsapp/company:test:flow:no_wa_flow",
+            params={
+                "hub.mode": "subscribe",
+                "hub.verify_token": "test",
+                "hub.challenge": "12345"
+            }
+        )
         
         assert response.status_code == 400
         print("✅ 400 для flow без WhatsApp платформы")
@@ -150,7 +204,7 @@ class TestWebhookVerification:
 class TestWebhookHandler:
     """Тесты обработки webhook (POST запрос)"""
     
-    def test_webhook_handle_text_message(self, client, mock_flow_config):
+    def test_webhook_handle_text_message(self, app, mock_flow_config):
         """Тест обработки текстового сообщения через webhook"""
         webhook_payload = {
             "object": "whatsapp_business_account",
@@ -179,25 +233,44 @@ class TestWebhookHandler:
             }]
         }
         
-        mock_interface = AsyncMock()
         mock_message = MagicMock()
         mock_message.user_id = "whatsapp:9111111111111"
-        mock_interface.handle_message.return_value = mock_message
-        mock_interface.create_task.return_value = "task_abc123"
         
-        with patch('app.db.repositories.Storage.get', return_value=mock_flow_config.model_dump_json()):
-            with patch('app.interfaces.whatsapp_interface.WhatsAppInterface.get_access_token_for_flow', return_value="test_token"):
-                with patch('app.interfaces.whatsapp_interface.WhatsAppInterface', return_value=mock_interface):
-                    response = client.post(
-                        "/api/v1/webhook/whatsapp/company:test:flow:test_whatsapp_flow",
-                        json=webhook_payload
-                    )
+        mock_interface = AsyncMock()
+        mock_interface.handle_message = AsyncMock(return_value=mock_message)
+        mock_interface.create_task = AsyncMock(return_value="task_abc123")
+        
+        setup_storage_override(app, mock_flow_config.model_dump_json())
+        client = TestClient(app)
+        async def mock_get_token(flow_id, platform_config):
+            return "test_token"
+        
+        # Создаем мок-класс, который имеет и статический метод, и может быть инстанцирован
+        class MockWhatsAppInterfaceClass:
+            @staticmethod
+            async def get_access_token_for_flow(flow_id, platform_config):
+                return await mock_get_token(flow_id, platform_config)
+            
+            def __init__(self, *args, **kwargs):
+                pass
+            
+            async def handle_message(self, *args, **kwargs):
+                return await mock_interface.handle_message(*args, **kwargs)
+            
+            async def create_task(self, *args, **kwargs):
+                return await mock_interface.create_task(*args, **kwargs)
+        
+        with patch('apps.agents.api.v1.whatsapp.WhatsAppInterface', new=MockWhatsAppInterfaceClass):
+            response = client.post(
+                "/api/v1/webhook/whatsapp/company:test:flow:test_whatsapp_flow",
+                json=webhook_payload
+            )
         
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
         print("✅ Webhook обработан успешно")
     
-    def test_webhook_handle_status_only(self, client, mock_flow_config):
+    def test_webhook_handle_status_only(self, app, mock_flow_config):
         """Тест webhook только со статусом (без сообщения)"""
         webhook_payload = {
             "object": "whatsapp_business_account",
@@ -218,26 +291,45 @@ class TestWebhookHandler:
         }
         
         mock_interface = AsyncMock()
-        mock_interface.handle_message.return_value = None  # Статус не создает Message
+        mock_interface.handle_message = AsyncMock(return_value=None)  # Статус не создает Message
         
-        with patch('app.db.repositories.Storage.get', return_value=mock_flow_config.model_dump_json()):
-            with patch('app.interfaces.whatsapp_interface.WhatsAppInterface.get_access_token_for_flow', return_value="test_token"):
-                with patch('app.interfaces.whatsapp_interface.WhatsAppInterface', return_value=mock_interface):
-                    response = client.post(
-                        "/api/v1/webhook/whatsapp/company:test:flow:test_whatsapp_flow",
-                        json=webhook_payload
-                    )
+        setup_storage_override(app, mock_flow_config.model_dump_json())
+        client = TestClient(app)
+        async def mock_get_token(flow_id, platform_config):
+            return "test_token"
+        
+        # Создаем мок-класс, который имеет и статический метод, и может быть инстанцирован
+        class MockWhatsAppInterfaceClass:
+            @staticmethod
+            async def get_access_token_for_flow(flow_id, platform_config):
+                return await mock_get_token(flow_id, platform_config)
+            
+            def __init__(self, *args, **kwargs):
+                pass
+            
+            async def handle_message(self, *args, **kwargs):
+                return await mock_interface.handle_message(*args, **kwargs)
+            
+            async def create_task(self, *args, **kwargs):
+                return await mock_interface.create_task(*args, **kwargs)
+        
+        with patch('apps.agents.api.v1.whatsapp.WhatsAppInterface', new=MockWhatsAppInterfaceClass):
+            response = client.post(
+                "/api/v1/webhook/whatsapp/company:test:flow:test_whatsapp_flow",
+                json=webhook_payload
+            )
         
         assert response.status_code == 200
         print("✅ Webhook со статусом обработан (задача не создается)")
     
-    def test_webhook_flow_not_found(self, client):
+    def test_webhook_flow_not_found(self, app):
         """Тест webhook для несуществующего flow"""
-        with patch('app.db.repositories.Storage.get', return_value=None):
-            response = client.post(
-                "/api/v1/webhook/whatsapp/company:test:flow:nonexistent",
-                json={"object": "whatsapp_business_account", "entry": []}
-            )
+        setup_storage_override(app, None)
+        client = TestClient(app)
+        response = client.post(
+            "/api/v1/webhook/whatsapp/company:test:flow:nonexistent",
+            json={"object": "whatsapp_business_account", "entry": []}
+        )
         
         assert response.status_code == 404
         print("✅ 404 для несуществующего flow в webhook POST")
@@ -246,7 +338,7 @@ class TestWebhookHandler:
 class TestAdminRegisterFlow:
     """Тесты admin endpoint для регистрации"""
     
-    def test_register_flow_success(self, client, mock_flow_config):
+    def test_register_flow_success(self, app, mock_flow_config):
         """Тест успешной регистрации flow"""
         
         mock_register_result = {
@@ -257,9 +349,21 @@ class TestAdminRegisterFlow:
             "flow_key": "company:test:flow:test_whatsapp_flow"
         }
         
-        with patch('app.db.repositories.Storage.get', return_value=mock_flow_config.model_dump_json()):
-            with patch('app.interfaces.whatsapp_interface.WhatsAppInterface.register', return_value=mock_register_result):
-                response = client.post("/api/v1/admin/whatsapp/register/test_whatsapp_flow")
+        setup_storage_override(app, mock_flow_config.model_dump_json())
+        
+        # Настраиваем мок FlowRepository
+        mock_flow_repo = AsyncMock()
+        mock_flow_repo.get = AsyncMock(return_value=mock_flow_config)
+        
+        async def mock_get_flow_repository():
+            return mock_flow_repo
+        
+        app.dependency_overrides[get_flow_repository] = mock_get_flow_repository
+        
+        client = TestClient(app)
+        with patch('apps.agents.interfaces.whatsapp_interface.WhatsAppInterface.register', new_callable=AsyncMock) as mock_register:
+            mock_register.return_value = mock_register_result
+            response = client.post("/api/v1/admin/whatsapp/register/test_whatsapp_flow")
         
         assert response.status_code == 200
         data = response.json()
@@ -267,16 +371,26 @@ class TestAdminRegisterFlow:
         assert data["flow_id"] == "test_whatsapp_flow"
         print("✅ Регистрация flow успешна через API")
     
-    def test_register_flow_not_found(self, client):
+    def test_register_flow_not_found(self, app):
         """Тест регистрации несуществующего flow"""
+        setup_storage_override(app, None)
         
-        with patch('app.db.repositories.Storage.get', return_value=None):
-            response = client.post("/api/v1/admin/whatsapp/register/nonexistent_flow")
+        # Настраиваем мок FlowRepository для случая когда flow не найден
+        mock_flow_repo = AsyncMock()
+        mock_flow_repo.get = AsyncMock(return_value=None)
+        
+        async def mock_get_flow_repository():
+            return mock_flow_repo
+        
+        app.dependency_overrides[get_flow_repository] = mock_get_flow_repository
+        
+        client = TestClient(app)
+        response = client.post("/api/v1/admin/whatsapp/register/nonexistent_flow")
         
         assert response.status_code == 404
         print("✅ 404 при регистрации несуществующего flow")
     
-    def test_register_flow_no_whatsapp_platform(self, client):
+    def test_register_flow_no_whatsapp_platform(self, app):
         """Тест регистрации flow без WhatsApp платформы"""
         flow_no_wa = FlowConfig(
             flow_id="no_wa",
@@ -285,8 +399,19 @@ class TestAdminRegisterFlow:
             platforms={"telegram": {"token": "123"}}
         )
         
-        with patch('app.db.repositories.Storage.get', return_value=flow_no_wa.model_dump_json()):
-            response = client.post("/api/v1/admin/whatsapp/register/no_wa")
+        setup_storage_override(app, flow_no_wa.model_dump_json())
+        
+        # Настраиваем мок FlowRepository
+        mock_flow_repo = AsyncMock()
+        mock_flow_repo.get = AsyncMock(return_value=flow_no_wa)
+        
+        async def mock_get_flow_repository():
+            return mock_flow_repo
+        
+        app.dependency_overrides[get_flow_repository] = mock_get_flow_repository
+        
+        client = TestClient(app)
+        response = client.post("/api/v1/admin/whatsapp/register/no_wa")
         
         assert response.status_code == 400
         assert "does not have WhatsApp" in response.json()["detail"]
@@ -296,7 +421,7 @@ class TestAdminRegisterFlow:
 class TestAdminSendTemplate:
     """Тесты отправки template сообщений"""
     
-    def test_send_template_success(self, client, mock_flow_config):
+    def test_send_template_success(self, app, mock_flow_config):
         """Тест успешной отправки template"""
         
         mock_api_response = AsyncMock()
@@ -305,9 +430,20 @@ class TestAdminSendTemplate:
             "messages": [{"id": "wamid.template123"}]
         })
         
-        with patch('app.db.repositories.Storage.get', return_value=mock_flow_config.model_dump_json()):
-            with patch('app.interfaces.whatsapp_interface.WhatsAppInterface.get_access_token_for_flow', return_value="test_token"):
-                with patch('httpx.AsyncClient') as mock_client:
+        setup_storage_override(app, mock_flow_config.model_dump_json())
+        
+        # Настраиваем мок FlowRepository
+        mock_flow_repo = AsyncMock()
+        mock_flow_repo.get = AsyncMock(return_value=mock_flow_config)
+        
+        async def mock_get_flow_repository():
+            return mock_flow_repo
+        
+        app.dependency_overrides[get_flow_repository] = mock_get_flow_repository
+        
+        client = TestClient(app)
+        with patch('apps.agents.api.v1.whatsapp.WhatsAppInterface.get_access_token_for_flow', return_value="test_token"):
+            with patch('httpx.AsyncClient') as mock_client:
                     mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_api_response)
                     
                     response = client.post(
@@ -326,16 +462,27 @@ class TestAdminSendTemplate:
         assert "message_id" in data
         print("✅ Template отправлен успешно")
     
-    def test_send_template_api_error(self, client, mock_flow_config):
+    def test_send_template_api_error(self, app, mock_flow_config):
         """Тест ошибки WhatsApp API при отправке template"""
         
         mock_api_response = AsyncMock()
         mock_api_response.status_code = 400
         mock_api_response.text = "Template not approved"
         
-        with patch('app.db.repositories.Storage.get', return_value=mock_flow_config.model_dump_json()):
-            with patch('app.interfaces.whatsapp_interface.WhatsAppInterface.get_access_token_for_flow', return_value="test_token"):
-                with patch('httpx.AsyncClient') as mock_client:
+        setup_storage_override(app, mock_flow_config.model_dump_json())
+        
+        # Настраиваем мок FlowRepository
+        mock_flow_repo = AsyncMock()
+        mock_flow_repo.get = AsyncMock(return_value=mock_flow_config)
+        
+        async def mock_get_flow_repository():
+            return mock_flow_repo
+        
+        app.dependency_overrides[get_flow_repository] = mock_get_flow_repository
+        
+        client = TestClient(app)
+        with patch('apps.agents.api.v1.whatsapp.WhatsAppInterface.get_access_token_for_flow', return_value="test_token"):
+            with patch('httpx.AsyncClient') as mock_client:
                     mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_api_response)
                     
                     response = client.post(
@@ -354,7 +501,7 @@ class TestAdminSendTemplate:
 class TestAdminPhoneInfo:
     """Тесты получения информации о номере"""
     
-    def test_get_phone_info_success(self, client, mock_flow_config):
+    def test_get_phone_info_success(self, app, mock_flow_config):
         """Тест успешного получения информации о номере"""
         
         mock_phone_data = {
@@ -368,9 +515,20 @@ class TestAdminPhoneInfo:
         mock_api_response.status_code = 200
         mock_api_response.json = MagicMock(return_value=mock_phone_data)
         
-        with patch('app.db.repositories.Storage.get', return_value=mock_flow_config.model_dump_json()):
-            with patch('app.interfaces.whatsapp_interface.WhatsAppInterface.get_access_token_for_flow', return_value="test_token"):
-                with patch('httpx.AsyncClient') as mock_client:
+        setup_storage_override(app, mock_flow_config.model_dump_json())
+        
+        # Настраиваем мок FlowRepository
+        mock_flow_repo = AsyncMock()
+        mock_flow_repo.get = AsyncMock(return_value=mock_flow_config)
+        
+        async def mock_get_flow_repository():
+            return mock_flow_repo
+        
+        app.dependency_overrides[get_flow_repository] = mock_get_flow_repository
+        
+        client = TestClient(app)
+        with patch('apps.agents.api.v1.whatsapp.WhatsAppInterface.get_access_token_for_flow', return_value="test_token"):
+            with patch('httpx.AsyncClient') as mock_client:
                     mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_api_response)
                     
                     response = client.get("/api/v1/admin/whatsapp/phone_info/test_whatsapp_flow")
@@ -381,16 +539,27 @@ class TestAdminPhoneInfo:
         assert data["phone_data"]["display_phone_number"] == "+1234567890"
         print("✅ Информация о номере получена")
     
-    def test_get_phone_info_api_error(self, client, mock_flow_config):
+    def test_get_phone_info_api_error(self, app, mock_flow_config):
         """Тест ошибки API при получении информации"""
         
         mock_api_response = AsyncMock()
         mock_api_response.status_code = 401
         mock_api_response.text = "Invalid access token"
         
-        with patch('app.db.repositories.Storage.get', return_value=mock_flow_config.model_dump_json()):
-            with patch('app.interfaces.whatsapp_interface.WhatsAppInterface.get_access_token_for_flow', return_value="invalid_token"):
-                with patch('httpx.AsyncClient') as mock_client:
+        setup_storage_override(app, mock_flow_config.model_dump_json())
+        
+        # Настраиваем мок FlowRepository
+        mock_flow_repo = AsyncMock()
+        mock_flow_repo.get = AsyncMock(return_value=mock_flow_config)
+        
+        async def mock_get_flow_repository():
+            return mock_flow_repo
+        
+        app.dependency_overrides[get_flow_repository] = mock_get_flow_repository
+        
+        client = TestClient(app)
+        with patch('apps.agents.api.v1.whatsapp.WhatsAppInterface.get_access_token_for_flow', return_value="invalid_token"):
+            with patch('httpx.AsyncClient') as mock_client:
                     mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_api_response)
                     
                     response = client.get("/api/v1/admin/whatsapp/phone_info/test_whatsapp_flow")
@@ -402,7 +571,7 @@ class TestAdminPhoneInfo:
 class TestWebhookFullFlow:
     """Интеграционные тесты полного flow webhook"""
     
-    def test_full_webhook_flow_with_task_creation(self, client, mock_flow_config):
+    def test_full_webhook_flow_with_task_creation(self, app, mock_flow_config):
         """Тест полного флоу: webhook → interface → task creation"""
         
         webhook_payload = {
@@ -427,15 +596,37 @@ class TestWebhookFullFlow:
         }
         
         # Мокаем только минимум необходимого
-        with patch('app.db.repositories.Storage.get', return_value=mock_flow_config.model_dump_json()):
-            with patch('app.interfaces.whatsapp_interface.WhatsAppInterface.get_access_token_for_flow', return_value="test_token"):
-                # Мокаем методы интерфейса которые обращаются к БД
-                with patch('app.interfaces.base.BaseInterface.get_or_create_session', return_value="whatsapp:9999999999999:test_flow:full"):
-                    with patch('app.interfaces.base.BaseInterface.create_task', return_value="task_full_123"):
-                        response = client.post(
-                            "/api/v1/webhook/whatsapp/company:test:flow:test_whatsapp_flow",
-                            json=webhook_payload
-                        )
+        mock_interface = AsyncMock()
+        mock_message = MagicMock()
+        mock_message.user_id = "whatsapp:9999999999999"
+        mock_interface.handle_message = AsyncMock(return_value=mock_message)
+        mock_interface.create_task = AsyncMock(return_value="task_full_123")
+        
+        setup_storage_override(app, mock_flow_config.model_dump_json())
+        client = TestClient(app)
+        async def mock_get_token(flow_id, platform_config):
+            return "test_token"
+        
+        # Создаем мок-класс, который имеет и статический метод, и может быть инстанцирован
+        class MockWhatsAppInterfaceClass:
+            @staticmethod
+            async def get_access_token_for_flow(flow_id, platform_config):
+                return await mock_get_token(flow_id, platform_config)
+            
+            def __init__(self, *args, **kwargs):
+                pass
+            
+            async def handle_message(self, *args, **kwargs):
+                return await mock_interface.handle_message(*args, **kwargs)
+            
+            async def create_task(self, *args, **kwargs):
+                return await mock_interface.create_task(*args, **kwargs)
+        
+        with patch('apps.agents.api.v1.whatsapp.WhatsAppInterface', new=MockWhatsAppInterfaceClass):
+            response = client.post(
+                "/api/v1/webhook/whatsapp/company:test:flow:test_whatsapp_flow",
+                json=webhook_payload
+            )
         
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
@@ -447,19 +638,38 @@ class TestWebhookEdgeCases:
     """Тесты граничных случаев"""
     
     @pytest.mark.skip(reason="TestClient не совместим с async моками в этом edge case")
-    def test_webhook_empty_entry(self, client, mock_flow_config):
+    def test_webhook_empty_entry(self, app, mock_flow_config):
         """Тест webhook с пустым entry"""
         webhook_payload = {
             "object": "whatsapp_business_account",
             "entry": []  # Пустой!
         }
         
-        with patch('app.db.repositories.Storage.get', return_value=mock_flow_config.model_dump_json()):
-            with patch('app.interfaces.whatsapp_interface.WhatsAppInterface.get_access_token_for_flow', return_value="test_token"):
-                response = client.post(
-                    "/api/v1/webhook/whatsapp/company:test:flow:test_whatsapp_flow",
-                    json=webhook_payload
-                )
+        mock_interface = AsyncMock()
+        mock_interface.handle_message = AsyncMock(return_value=None)
+        
+        setup_storage_override(app, mock_flow_config.model_dump_json())
+        client = TestClient(app)
+        # Создаем мок-класс, который имеет и статический метод, и может быть инстанцирован
+        class MockWhatsAppInterfaceClass:
+            @staticmethod
+            async def get_access_token_for_flow(flow_id, platform_config):
+                return "test_token"
+            
+            def __init__(self, *args, **kwargs):
+                pass
+            
+            async def handle_message(self, *args, **kwargs):
+                return await mock_interface.handle_message(*args, **kwargs)
+            
+            async def create_task(self, *args, **kwargs):
+                return await mock_interface.create_task(*args, **kwargs)
+        
+        with patch('apps.agents.api.v1.whatsapp.WhatsAppInterface', new=MockWhatsAppInterfaceClass):
+            response = client.post(
+                "/api/v1/webhook/whatsapp/company:test:flow:test_whatsapp_flow",
+                json=webhook_payload
+            )
         
         assert response.status_code == 200
         print("✅ Пустой entry обработан без ошибок")

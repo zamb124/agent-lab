@@ -6,8 +6,8 @@ import pytest
 import hashlib
 from urllib.parse import parse_qs, urlparse
 
-from app.core.clients.payment_providers.yoomoney_provider import YooMoneyConfig
-from app.core.clients.payment_providers.base_provider import PaymentRequest
+from core.clients.payment.yoomoney_provider import YooMoneyConfig
+from core.clients.payment.base_provider import PaymentRequest
 
 
 @pytest.fixture

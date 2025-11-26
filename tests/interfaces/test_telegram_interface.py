@@ -4,7 +4,7 @@
 """
 import pytest
 import pytest_asyncio
-from app.interfaces.telegram_interface import TelegramInterface
+from apps.agents.interfaces.telegram_interface import TelegramInterface
 
 
 class TestTelegramMessageSplitting:

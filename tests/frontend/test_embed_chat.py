@@ -6,8 +6,8 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 
-from app.frontend.modules.chat.router import router
-from app.core.tokens import get_token_service
+from apps.frontend.modules.chat.router import router
+from core.utils.tokens import get_token_service
 
 
 class TestEmbedChatEndpoint:

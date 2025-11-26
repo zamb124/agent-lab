@@ -11,8 +11,8 @@ Source: https://github.com/cloudflare/mcp-server-cloudflare
 """
 
 import pytest
-from app.core.mcp_client import MCPHttpClient
-from app.models.mcp_models import MCPTransportType
+from apps.agents.services.mcp_client import MCPHttpClient
+from apps.agents.models.mcp_models import MCPTransportType
 
 
 pytestmark = pytest.mark.integration

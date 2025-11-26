@@ -6,10 +6,10 @@ import pytest
 import logging
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
-from app.core.context_window_manager import ContextWindowManager
-from app.core.context import set_context
-from app.models.context_models import Context
-from app.models.core_models import AgentConfig, LLMConfig, ToolReference
+from apps.agents.services.context_window_manager import ContextWindowManager
+from core.context import set_context
+from core.models import Context
+from apps.agents.models import AgentConfig, LLMConfig, ToolReference
 
 logger = logging.getLogger(__name__)
 pytestmark = pytest.mark.asyncio

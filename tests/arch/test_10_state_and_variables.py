@@ -12,8 +12,8 @@ import pytest
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 
-from app.core.variables import VariableResolver, get_state
-from app.models import (
+from core.variables import VariableResolver, get_state
+from apps.agents.models import (
     AgentConfig,
     AgentType,
     GraphDefinition,
@@ -27,7 +27,7 @@ from app.models import (
 
 
 @pytest.mark.asyncio
-async def test_01_stategraph_has_correct_state(migrated_db, storage, agent_factory, unique_id, test_context, agent_repo):
+async def test_01_stategraph_has_correct_state(migrated_db,  agent_factory, unique_id, test_context, agent_repo):
     """
     Тест 1: StateGraph агент имеет правильный State.
     Проверяем что StateGraph агент использует наш State с полями messages, store и т.д.
@@ -97,13 +97,13 @@ async def start_node(state):
 
 
 @pytest.mark.asyncio
-async def test_02_react_agent_with_variables(storage, agent_factory, migrated_db, test_context, agent_repo):
+async def test_02_react_agent_with_variables(agent_factory, migrated_db, test_context, agent_repo):
     """
     Тест 2: ReAct агент собирается с промптом и переменными.
     Проверяем что переменные подставляются в промпт правильно.
     """
-    from app.core.variables import VariableResolver
-    from app.core.context import get_context, set_context
+    from core.variables import VariableResolver
+    from core.context import get_context, set_context
     
     # Переустанавливаем контекст (migrated_db мог перезаписать его)
     set_context(test_context)
@@ -174,7 +174,7 @@ async def test_02_react_agent_with_variables(storage, agent_factory, migrated_db
 
 
 @pytest.mark.asyncio
-async def test_03_state_persistence_between_calls(migrated_db, storage, agent_factory, unique_id, test_context, agent_repo):
+async def test_03_state_persistence_between_calls(migrated_db,  agent_factory, unique_id, test_context, agent_repo):
     """
     Тест 3: Персистентность State между вызовами.
     Проверяем что данные в store сохраняются между вызовами агента.
@@ -263,7 +263,7 @@ async def counter_node(state):
 
 
 @pytest.mark.asyncio
-async def test_04_state_access_from_tool(migrated_db, storage, agent_factory, unique_id, test_context, agent_repo):
+async def test_04_state_access_from_tool(migrated_db,  agent_factory, unique_id, test_context, agent_repo):
     """
     Тест 4: Доступ к State из тула.
     Проверяем что тул может читать и писать в state через get_state().
@@ -297,7 +297,7 @@ async def test_04_state_access_from_tool(migrated_db, storage, agent_factory, un
         code_mode=CodeMode.INLINE_CODE,
         inline_code="""
 from langchain_core.tools import tool
-from app.core.variables import get_state
+from core.variables import get_state
 
 @tool
 def test_tool_with_state_access(data: str) -> str:
@@ -334,13 +334,13 @@ def test_tool_with_state_access(data: str) -> str:
                         inline_code="""
 async def tool_node(state):
     '''Нода вызывает тул с доступом к state'''
-    from app.core.variables import get_state, set_state_in_context
+    from core.variables import get_state, set_state_in_context
     
     # Устанавливаем state в контекст
     set_state_in_context(state)
     
     # Вызываем тул (симулируем)
-    from app.core.variables import get_state as get_state_from_tool
+    from core.variables import get_state as get_state_from_tool
     
     tool_state = get_state_from_tool()
     
@@ -415,7 +415,7 @@ async def tool_node(state):
 
 
 @pytest.mark.asyncio
-async def test_05_session_tools_integration(migrated_db, storage, agent_factory, unique_id, test_context, agent_repo):
+async def test_05_session_tools_integration(migrated_db,  agent_factory, unique_id, test_context, agent_repo):
     """
     Тест 5: Интеграция с сессионными тулами.
     Проверяем что session_set и session_get работают правильно.
@@ -436,7 +436,7 @@ async def test_05_session_tools_integration(migrated_db, storage, agent_factory,
                         inline_code="""
 async def session_node(state):
     '''Работает с сессионными данными'''
-    from app.core.variables import set_state_in_context
+    from core.variables import set_state_in_context
     
     # Устанавливаем state в контекст для тулов
     set_state_in_context(state)
@@ -496,7 +496,7 @@ async def test_06_variable_priority(test_context, agent_repo):
     """
     
     # Устанавливаем переменную в контексте
-    from app.core.context import get_context
+    from core.context import get_context
     ctx = get_context()
     if ctx.flow_variables is None:
         ctx.flow_variables = {}

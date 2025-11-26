@@ -3,8 +3,8 @@
 """
 
 import pytest
-from app.identity.models import Company
-from app.models.billing_models import TariffPlan
+from core.models import Company
+from core.models.billing_models import TariffPlan
 
 
 @pytest.mark.asyncio

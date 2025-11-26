@@ -4,8 +4,8 @@
 """
 
 import pytest
-from app.services.variables_service import get_variables_service
-from app.core.context import set_context
+# get_variables_service доступен через фикстуру variables_service
+from core.context import set_context
 
 
 @pytest.mark.asyncio
@@ -40,10 +40,10 @@ async def test_variables_service_secret(variables_service, flow_repo):
 
 
 @pytest.mark.asyncio
-async def test_variables_per_company_isolation(storage, unique_id, flow_repo):
+async def test_variables_per_company_isolation(unique_id, flow_repo, company_repo):
     """Тест изоляции переменных между компаниями"""
-    from app.identity.models import Company, User, AuthProvider, UserStatus
-    from app.models.context_models import Context
+    from core.models import Company, User, AuthProvider, UserStatus
+    from core.models.context_models import Context
 
     company1_id = unique_id("company")
     company2_id = unique_id("company")
@@ -61,8 +61,8 @@ async def test_variables_per_company_isolation(storage, unique_id, flow_repo):
         status="active"
     )
 
-    await storage.set(f"company:{company1_id}", company1.model_dump_json(), force_global=True)
-    await storage.set(f"company:{company2_id}", company2.model_dump_json(), force_global=True)
+    await company_repo.set(company1)
+    await company_repo.set(company2)
 
     user1 = User(
         user_id=unique_id("user"),
@@ -102,8 +102,9 @@ async def test_variables_per_company_isolation(storage, unique_id, flow_repo):
         user_companies=[company2]
     )
 
-    from app.services.variables_service import VariablesService
-    variables_service = VariablesService()
+    from core.variables import VariablesService
+    from apps.agents.container import get_agents_container
+    variables_service = get_agents_container().variables_service
 
     set_context(context1)
     await variables_service.set_var("shared_key", "value_from_company1", is_secret=False)
@@ -226,26 +227,24 @@ async def test_variables_list(variables_service, flow_repo):
 
 
 @pytest.mark.asyncio
-async def test_variables_storage_keys(variables_service, storage, test_company, flow_repo):
+async def test_variables_storage_keys(variables_service, variable_repo, test_company, flow_repo):
     """Тест правильности формата ключей в Storage"""
-    import json
-
     await variables_service.set_var("test_key", "test_value", is_secret=False)
 
-    storage_key = f"var:test_key"
-    data = await storage.get(storage_key)
+    variable = await variable_repo.get("test_key")
 
-    assert data is not None
-    var_data = json.loads(data)
-    assert var_data["value"] == "test_value"
-    assert var_data["secret"] is False
+    assert variable is not None
+    assert variable.value == "test_value"
+    assert variable.secret is False
 
 
 @pytest.mark.asyncio
 async def test_variables_singleton(flow_repo):
     """Тест глобального экземпляра VariablesService"""
-    service1 = get_variables_service()
-    service2 = get_variables_service()
+    from apps.agents.container import get_agents_container
+    container = get_agents_container()
+    service1 = container.variables_service
+    service2 = container.variables_service
 
     assert service1 is service2
 
@@ -308,9 +307,9 @@ async def test_variables_complex_resolve(variables_service, flow_repo):
 
 
 @pytest.mark.asyncio
-async def test_flow_variables_resolution(variables_service, storage, flow_repo):
+async def test_flow_variables_resolution(variables_service,  flow_repo):
     """Тест резолюции переменных в FlowConfig.variables"""
-    from app.models import FlowConfig
+    from apps.agents.models import FlowConfig
 
     # Сохраняем company переменные
     await variables_service.set_var("company_bot_name", "Company Bot", is_secret=False)
@@ -320,7 +319,7 @@ async def test_flow_variables_resolution(variables_service, storage, flow_repo):
     flow_config = FlowConfig(
         flow_id="test_variables_flow",
         name="Test Variables Flow",
-        entry_point_agent="app.agents.weather.agent.WeatherAgent",
+        entry_point_agent="apps.agents.agents.weather.agent.WeatherAgent",
         variables={
             "bot_name": "@var:company_bot_name",  # Ссылка
             "api_key": "@var:api_key",            # Ссылка
@@ -341,9 +340,9 @@ async def test_flow_variables_resolution(variables_service, storage, flow_repo):
 
 
 @pytest.mark.asyncio
-async def test_platform_config_resolution(variables_service, storage, flow_repo):
+async def test_platform_config_resolution(variables_service,  flow_repo):
     """Тест резолюции @var:key в platform config"""
-    from app.models import FlowConfig
+    from apps.agents.models import FlowConfig
 
     await variables_service.set_var("telegram_bot_token", "123:ABC...", is_secret=True)
     await variables_service.set_var("bot_username", "my_test_bot", is_secret=False)
@@ -351,7 +350,7 @@ async def test_platform_config_resolution(variables_service, storage, flow_repo)
     flow_config = FlowConfig(
         flow_id="test_platform_flow",
         name="Test Platform Flow",
-        entry_point_agent="app.agents.weather.agent.WeatherAgent",
+        entry_point_agent="apps.agents.agents.weather.agent.WeatherAgent",
         platforms={
             "telegram": {
                 "username": "@var:bot_username",
@@ -373,9 +372,9 @@ async def test_platform_config_resolution(variables_service, storage, flow_repo)
 
 
 @pytest.mark.asyncio
-async def test_nested_flow_variables(variables_service, storage, flow_repo):
+async def test_nested_flow_variables(variables_service,  flow_repo):
     """Тест вложенных структур в flow variables"""
-    from app.models import FlowConfig
+    from apps.agents.models import FlowConfig
 
     await variables_service.set_var("db_host", "localhost", is_secret=False)
     await variables_service.set_var("db_password", "secret123", is_secret=True)
@@ -383,7 +382,7 @@ async def test_nested_flow_variables(variables_service, storage, flow_repo):
     flow_config = FlowConfig(
         flow_id="test_nested_flow",
         name="Test Nested Flow",
-        entry_point_agent="app.agents.weather.agent.WeatherAgent",
+        entry_point_agent="apps.agents.agents.weather.agent.WeatherAgent",
         variables={
             "database": {
                 "host": "@var:db_host",
@@ -413,12 +412,12 @@ async def test_nested_flow_variables(variables_service, storage, flow_repo):
 
 
 @pytest.mark.asyncio
-async def test_flow_variables_in_runtime(variables_service, storage, flow_repo):
+async def test_flow_variables_in_runtime(variables_service,  flow_repo):
     """Полный тест: создание company variable → добавление во flow → доступ из тула"""
-    from app.models import FlowConfig
-    from app.core.variables import VariableResolver
-    from app.core.context import get_context
-    from app.tools.session.session_tools import get_variable
+    from apps.agents.models import FlowConfig
+    from core.variables import VariableResolver
+    from core.context import get_context
+    from apps.agents.tools.session.session_tools import get_variable
 
     await variables_service.set_var(
         key="test_bot_token",
@@ -431,7 +430,7 @@ async def test_flow_variables_in_runtime(variables_service, storage, flow_repo):
     flow_config = FlowConfig(
         flow_id="test_flow_runtime",
         name="Test Flow Runtime",
-        entry_point_agent="app.agents.weather.agent.WeatherAgent",
+        entry_point_agent="apps.agents.agents.weather.agent.WeatherAgent",
         variables={
             "bot_token": "@var:test_bot_token",
             "bot_name": "Test Bot",
@@ -465,11 +464,11 @@ async def test_flow_variables_in_runtime(variables_service, storage, flow_repo):
 
 
 @pytest.mark.asyncio
-async def test_variables_in_prompts(variables_service, storage, flow_repo):
+async def test_variables_in_prompts(variables_service,  flow_repo):
     """Тест подстановки переменных в промпты с поддержкой вложенных структур"""
-    from app.models import FlowConfig
-    from app.core.variables import VariableResolver
-    from app.core.context import get_context
+    from apps.agents.models import FlowConfig
+    from core.variables import VariableResolver
+    from core.context import get_context
 
     await variables_service.set_var("api_endpoint", "https://api.example.com", is_secret=False)
     await variables_service.set_var("api_key", "sk-test-123", is_secret=True)
@@ -477,7 +476,7 @@ async def test_variables_in_prompts(variables_service, storage, flow_repo):
     flow_config = FlowConfig(
         flow_id="test_flow_prompts",
         name="Test Flow Prompts",
-        entry_point_agent="app.agents.weather.agent.WeatherAgent",
+        entry_point_agent="apps.agents.agents.weather.agent.WeatherAgent",
         variables={
             "bot_name": "Assistant",
             "api": {

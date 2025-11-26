@@ -12,7 +12,7 @@
 Это ЭТАЛОН для всех будущих тестов!
 """
 import pytest
-from app.models import AgentConfig, AgentType, CodeMode, ToolReference
+from apps.agents.models import AgentConfig, AgentType, CodeMode, ToolReference
 from langchain_core.messages import HumanMessage
 
 
@@ -64,7 +64,6 @@ def calculate_area(radius: float) -> str:
     print("\n🤖 Шаг 2: Создаем MathAgent (subagent)")
     
     await test_helpers.create_simple_agent(
-        storage=storage,
         agent_id="ref_math_agent",
         name="Reference Math Agent",
         prompt="Ты математик-специалист. Используй calculate_area tool для вычисления площади круга.",
@@ -77,7 +76,6 @@ def calculate_area(radius: float) -> str:
     print("\n👔 Шаг 3: Создаем SupervisorAgent")
     
     await test_helpers.create_simple_agent(
-        storage=storage,
         agent_id="ref_supervisor",
         name="Reference Supervisor",
         prompt="Ты координатор запросов. Для математических вычислений используй ref_math_agent.",
@@ -97,7 +95,6 @@ def calculate_area(radius: float) -> str:
     print("\n🔄 Шаг 4: Создаем Flow")
     
     await test_helpers.create_simple_flow(
-        storage=storage,
         flow_id="ref_flow",
         name="Reference Flow",
         entry_point_agent="ref_supervisor"
@@ -197,7 +194,6 @@ def greet(name: str) -> str:
     print("🤖 Создаем SimpleAgent")
     
     simple_agent = await test_helpers.create_simple_agent(
-        storage=storage,
         agent_id="ref_simple_agent",
         name="Simple Reference Agent",
         prompt="Ты вежливый помощник. Используй greet tool для приветствия.",
@@ -215,7 +211,6 @@ def greet(name: str) -> str:
     print("🔄 Создаем Flow")
     
     await test_helpers.create_simple_flow(
-        storage=storage,
         flow_id="ref_simple_flow",
         name="Simple Reference Flow",
         entry_point_agent="ref_simple_agent"

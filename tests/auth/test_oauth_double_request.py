@@ -6,7 +6,7 @@
 import pytest
 from unittest.mock import AsyncMock
 from datetime import datetime, timezone
-from app.identity.models import AuthProvider, AuthRequest, ProviderUserInfo, User, AuthSession
+from core.models import AuthProvider, AuthRequest, ProviderUserInfo, User, AuthSession
 
 
 @pytest.mark.asyncio
@@ -25,9 +25,9 @@ async def test_double_oauth_request_with_cache(auth_service, mock_storage_cache,
     
     auth_service._providers = {AuthProvider.YANDEX: mock_provider}
     
-    auth_service.storage.get = mock_storage_cache['get']
-    auth_service.storage.set = mock_storage_cache['set']
-    auth_service.storage.delete = mock_storage_cache['delete']
+    auth_service._storage.get = mock_storage_cache['get']
+    auth_service._storage.set = mock_storage_cache['set']
+    auth_service._storage.delete = mock_storage_cache['delete']
     
     test_session = AuthSession(
         session_id="session_123",
@@ -99,7 +99,7 @@ async def test_expired_code_with_cache(auth_service, mock_storage_cache, test_us
     
     mock_storage_cache['cache']["oauth_code:yandex:expired_code_123"] = f'{{"user_id": "{test_user.user_id}", "session_id": "session_123"}}'
     
-    auth_service.storage.get = mock_storage_cache['get']
+    auth_service._storage.get = mock_storage_cache['get']
     auth_service._get_auth_state = AsyncMock(return_value={
         "provider": "yandex",
         "redirect_uri": "http://localhost/callback"
@@ -132,7 +132,7 @@ async def test_expired_code_without_cache(auth_service, mock_storage_cache):
     
     auth_service._providers = {AuthProvider.YANDEX: mock_provider}
     
-    auth_service.storage.get = mock_storage_cache['get']
+    auth_service._storage.get = mock_storage_cache['get']
     auth_service._get_auth_state = AsyncMock(return_value={
         "provider": "yandex",
         "redirect_uri": "http://localhost/callback"

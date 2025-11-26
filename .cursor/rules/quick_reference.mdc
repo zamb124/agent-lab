@@ -1,0 +1,150 @@
+---
+description: "Быстрая шпаргалка по архитектуре БД"
+alwaysApply: true
+---
+# Quick Reference - Архитектура БД
+
+## Главные правила
+
+1. ✅ **ВСЕ через репозитории** - Storage приватный
+2. ✅ **is_global определяет изоляцию** - без if/else
+3. ✅ **НЕТ ручных префиксов** - репозиторий сам добавит `company:`
+4. ✅ **Через контейнер** - никаких прямых импортов
+5. ✅ **Чистая логика** - никаких фолбеков
+
+## Быстрый старт
+
+```python
+from apps.agents.container import get_agents_container
+
+container = get_agents_container()
+
+# Получить сущность
+agent = await container.agent_repository.get("agent_id")
+user = await container.user_repository.get("user_id")
+
+# Сохранить
+await container.agent_repository.set(agent)
+await container.user_repository.set(user)
+
+# Удалить
+await container.agent_repository.delete("agent_id")
+
+# Список всех
+agents = await container.agent_repository.list_all(limit=100)
+```
+
+## Все репозитории
+
+### Core (shared БД):
+- `user_repository` (User, is_global=True)
+- `company_repository` (Company, is_global=True)
+- `auth_session_repository` (AuthSession, is_global=True)
+- `subdomain_repository` (SubdomainMapping, is_global=True)
+- `variable_repository` (Variable, is_global=False)
+- `usage_repository` (UsageRecord, is_global=False)
+- `file_repository` (FileRecord, is_global=False)
+
+### Agents (service БД):
+- `agent_repository` (AgentConfig, is_global=False)
+- `flow_repository` (FlowConfig, is_global=False)
+- `tool_repository` (ToolReference, is_global=False)
+- `task_repository` (TaskConfig, is_global=False)
+- `session_repository` (SessionConfig, is_global=False)
+- `mcp_server_repository` (MCPServerConfig, is_global=False)
+
+## is_global объяснение
+
+```python
+# is_global=True → ключ БЕЗ префикса компании
+user_repo.set(user)  # → user:user_123
+
+# is_global=False → ключ ВСЕГДА с префиксом
+agent_repo.set(agent)  # → company:acme:agent:my_agent
+```
+
+## API репозиториев
+
+**Все репозитории:**
+- `get(entity_id)` - получить по ID
+- `set(entity)` - сохранить
+- `delete(entity_id)` - удалить
+- `list_all(limit)` - список всех
+- `get_many([ids])` - получить несколько
+
+## В API endpoints
+
+```python
+from apps.agents.dependencies import AgentRepositoryDep
+
+@router.get("/{agent_id}")
+async def get_agent(agent_id: str, agent_repo: AgentRepositoryDep):
+    agent = await agent_repo.get(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404)
+    return agent
+```
+
+## ❌ ЧТО ЗАПРЕЩЕНО
+
+```python
+# НЕТ прямого использования Storage
+storage = container.storage
+await storage.get("agent:agent_id")  # НЕТ!
+
+# НЕТ ручных префиксов
+key = f"company:{company_id}:agent:{agent_id}"  # НЕТ!
+
+# НЕТ force_global (параметр удален)
+await storage.get(key, force_global=True)  # НЕТ!
+
+# НЕТ прямых импортов
+from core.db.repositories import UserRepository  # НЕТ!
+user_repo = UserRepository(storage)  # НЕТ!
+```
+
+## ✅ ЧТО ПРАВИЛЬНО
+
+```python
+# Через контейнер
+container = get_agents_container()
+agent_repo = container.agent_repository
+
+# Через репозиторий
+agent = await agent_repo.get("agent_id")
+await agent_repo.set(agent)
+
+# Префикс добавится автоматически
+# Сохранится: company:acme:agent:my_agent
+```
+
+## В тестах
+
+```python
+async def test_example(
+    migrated_db,
+    agent_repo,        # Фикстура
+    user_repo,         # Фикстура
+    company_repo,      # Фикстура
+    test_helpers,      # Вспомогательные функции
+):
+    # Создание тестовых данных (обновлено - БЕЗ storage)
+    agent = await test_helpers.create_simple_agent(
+        agent_id="test",
+        name="Test",
+        prompt="..."
+    )
+    
+    # Проверки
+    loaded = await agent_repo.get("test")
+    assert loaded.name == "Test"
+```
+
+## 🚨 ЗАПОМНИ
+
+- Storage теперь ПРИВАТНЫЙ
+- ВСЕ через репозитории
+- is_global=False → ВСЕГДА `company:{company_id}:`
+- НЕТ `force_global`
+- НЕТ StorageDep
+- ВСЕ из контейнера

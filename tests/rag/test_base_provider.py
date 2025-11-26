@@ -5,9 +5,9 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from app.core.rag.base_provider import BaseRAGProvider
-from app.core.rag.factory import get_rag_provider, RAG_PROVIDERS
-from app.models.rag_models import RAGDocument, RAGSearchResult, RAGNamespace
+from core.rag.base_provider import BaseRAGProvider
+from core.rag.factory import get_rag_provider, RAG_PROVIDERS
+from core.rag.models import RAGDocument, RAGSearchResult, RAGNamespace
 
 
 class MockRAGProvider(BaseRAGProvider):
@@ -164,7 +164,7 @@ class TestRAGFactory:
         assert "agentset" in RAG_PROVIDERS
         assert RAG_PROVIDERS["agentset"].__name__ == "AgentsetRAGProvider"
     
-    @patch("app.core.rag.factory.get_settings")
+    @patch("core.rag.factory.get_settings")
     def test_get_rag_provider_disabled(self, mock_get_settings):
         """Тест когда RAG отключен"""
         mock_settings = MagicMock()
@@ -174,7 +174,7 @@ class TestRAGFactory:
         with pytest.raises(ValueError, match="RAG не включен"):
             get_rag_provider()
     
-    @patch("app.core.rag.factory.get_settings")
+    @patch("core.rag.factory.get_settings")
     def test_get_rag_provider_unknown_provider(self, mock_get_settings):
         """Тест с неизвестным провайдером"""
         mock_settings = MagicMock()
@@ -185,7 +185,7 @@ class TestRAGFactory:
         with pytest.raises(ValueError, match="Неизвестный RAG провайдер"):
             get_rag_provider()
     
-    @patch("app.core.rag.factory.get_settings")
+    @patch("core.rag.factory.get_settings")
     def test_get_rag_provider_no_config(self, mock_get_settings):
         """Тест когда нет конфигурации провайдера"""
         mock_settings = MagicMock()
@@ -197,7 +197,7 @@ class TestRAGFactory:
         with pytest.raises(ValueError, match="Не найдена конфигурация"):
             get_rag_provider()
     
-    @patch("app.core.rag.factory.get_settings")
+    @patch("core.rag.factory.get_settings")
     def test_get_rag_provider_provider_disabled(self, mock_get_settings):
         """Тест когда провайдер отключен"""
         mock_settings = MagicMock()

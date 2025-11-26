@@ -9,10 +9,10 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-from app.core.translation_manager import TranslationManager, get_translation_manager, t
-from app.models.i18n_models import Language, I18nConfig
-from app.models.context_models import Context
-from app.identity.models import User, AuthProvider, UserStatus
+from core.i18n import TranslationManager, get_translation_manager, t
+from core.models.i18n_models import Language, I18nConfig
+from core.models.context_models import Context
+from core.models import User, AuthProvider, UserStatus
 
 
 class TestFullI18nWorkflow:
@@ -152,7 +152,7 @@ const title = app.i18n.t('page.title');
             }
             
             # Преобразуем в TranslationKey объекты
-            from app.models.i18n_models import TranslationKey
+            from core.models.i18n_models import TranslationKey
             manager._discovered_keys = {
                 key: TranslationKey(**data) for key, data in initial_keys.items()
             }
@@ -219,7 +219,7 @@ const title = app.i18n.t('page.title');
         )
         
         # 3. Тестируем перевод с контекстом
-        with patch('app.core.translation_manager.get_context', return_value=test_context):
+        with patch('core.i18n.service.get_context', return_value=test_context):
             result = t("dashboard.title")
             assert result == "Dashboard"
             
@@ -227,7 +227,7 @@ const title = app.i18n.t('page.title');
             assert result == "Welcome, John!"
         
         # 4. Тестируем fallback на русский для отсутствующего ключа
-        with patch('app.core.translation_manager.get_context', return_value=test_context):
+        with patch('core.i18n.service.get_context', return_value=test_context):
             manager._translations_cache[Language.RU]["ru.only.key"] = "Только на русском"
             result = t("ru.only.key")
             assert result == "Только на русском"
@@ -284,7 +284,7 @@ class TestTranslationFileOperations:
             await manager._ensure_directories()
             
             # Добавляем тестовый ключ
-            from app.models.i18n_models import TranslationKey
+            from core.models.i18n_models import TranslationKey
             manager._discovered_keys = {
                 "new.key": TranslationKey(
                     key="new.key",
@@ -479,7 +479,7 @@ class TestI18nSystemIntegration:
     def test_integration_with_existing_field_system(self):
         """Проверяем интеграцию с существующей системой полей"""
         from pydantic import BaseModel
-        from app.frontend.field_extensions import Field
+        from apps.frontend.field_extensions import Field
         
         class IntegratedModel(BaseModel):
             # Поле с существующими frontend параметрами + i18n
@@ -521,7 +521,7 @@ class TestI18nSystemIntegration:
         assert email_field["i18n_title"] == "field.title.email_адрес"
         assert "placeholder" in email_field
     
-    @patch('app.core.translation_manager.get_context')
+    @patch('core.i18n.service.get_context')
     def test_template_and_api_consistency(self, mock_get_context):
         """Проверяем консистентность между template функциями и API"""
         # Подготавливаем контекст

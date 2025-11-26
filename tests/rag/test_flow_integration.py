@@ -4,9 +4,9 @@
 
 import pytest
 
-from app.flows.knowledge_bot_flow import knowledge_bot_flow
-from app.agents.knowledge_bot.agent import KnowledgeBotAgent
-from app.models.rag_models import AgentRAGConfig
+from apps.agents.flows.knowledge_bot_flow import knowledge_bot_flow
+from apps.agents.agents.knowledge_bot.agent import KnowledgeBotAgent
+from core.rag.models import AgentRAGConfig
 
 
 class TestFlowRAGConfig:
@@ -41,7 +41,7 @@ class TestAgentRAGTools:
     
     def test_agent_has_rag_tools(self):
         """Тест что агент имеет RAG инструменты"""
-        from app.tools.misc.rag_tools import (
+        from apps.agents.tools.misc.rag_tools import (
             search_knowledge_base,
             upload_document_to_knowledge_base,
             list_documents_in_knowledge_base
@@ -67,7 +67,7 @@ class TestRAGConfigParsing:
     
     def test_parse_from_dict(self):
         """Тест парсинга из словаря"""
-        from app.models import FlowConfig
+        from apps.agents.models import FlowConfig
         
         flow = FlowConfig(
             name="Test",
@@ -85,7 +85,7 @@ class TestRAGConfigParsing:
     
     def test_parse_from_json_string_storage(self):
         """Тест парсинга из JSON строки (как из БД)"""
-        from app.models import FlowConfig
+        from apps.agents.models import FlowConfig
         import json
         
         flow_data = {
@@ -107,7 +107,7 @@ class TestRAGConfigParsing:
     
     def test_default_rag_config(self):
         """Тест что RAG включен по умолчанию"""
-        from app.models import FlowConfig
+        from apps.agents.models import FlowConfig
 
         flow = FlowConfig(
             name="Test",

@@ -5,8 +5,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.interfaces.whatsapp_interface import WhatsAppInterface
-from app.interfaces.base import Message
+from apps.agents.interfaces.whatsapp_interface import WhatsAppInterface
+from apps.agents.interfaces.base import Message
 
 
 @pytest.mark.asyncio
@@ -432,7 +432,7 @@ class TestWhatsAppFullIntegration:
         mock_api_response.status_code = 200
         mock_api_response.json = MagicMock(return_value={"messages": [{"id": "wamid.audio_out"}]})
         
-        with patch('app.core.audio_processor.get_default_audio_processor', return_value=mock_audio_processor):
+        with patch('core.files.processors.get_default_audio_processor', return_value=mock_audio_processor):
             with patch.object(interface, '_upload_media', return_value="uploaded_audio_999"):
                 with patch('httpx.AsyncClient') as mock_client:
                     mock_client.return_value.__aenter__.return_value.post = AsyncMock(return_value=mock_api_response)

@@ -6,9 +6,11 @@
 
 import os
 import multiprocessing
-from app.core.config import settings
+from apps.agents.config import get_agents_settings
 
 if __name__ == "__main__":
+    settings = get_agents_settings()
+    
     # Определяем количество воркеров на основе CPU cores
     if settings.server.workers == 4:  # Если не переопределено в конфиге
         cpu_count = multiprocessing.cpu_count()
@@ -36,7 +38,7 @@ if __name__ == "__main__":
         "--log-level", "info",
         "--access-logfile", "-",
         "--error-logfile", "-",
-        "app.main:app"
+        "apps.agents.main:app"
     ]
 
     # Запускаем gunicorn

@@ -5,9 +5,9 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.interfaces.telegram_interface import TelegramInterface
-from app.interfaces.whatsapp_interface import WhatsAppInterface
-from app.interfaces.web_interface import WebInterface
+from apps.agents.interfaces.telegram_interface import TelegramInterface
+from apps.agents.interfaces.whatsapp_interface import WhatsAppInterface
+from apps.agents.interfaces.web_interface import WebInterface
 
 
 class TestTelegramAccessControl:

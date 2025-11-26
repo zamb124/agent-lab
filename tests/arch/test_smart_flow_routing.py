@@ -11,11 +11,11 @@ from langchain_core.messages import HumanMessage
 
 
 @pytest.mark.asyncio
-async def test_smart_flow_migration(migrated_db, storage, agent_factory, agent_repo, system_context):
+async def test_smart_flow_migration(migrated_db,  agent_factory, agent_repo, system_context):
     """Тест: SmartFlow правильно мигрирует в БД"""
     
     # Проверяем что SmartFlowAgent есть в БД
-    agent_id = "app.flows.smart_flow.SmartFlowAgent"
+    agent_id = "apps.agents.flows.smart_flow.SmartFlowAgent"
     agent_config = await agent_repo.get(agent_id)
     
     assert agent_config is not None, f"SmartFlowAgent не найден в БД"
@@ -60,7 +60,7 @@ async def test_smart_flow_calculator_routing(migrated_db, flow_factory, system_c
     )
     
     # Получаем flow
-    smart_flow_key = "app.flows.smart_flow.smart_flow_config"
+    smart_flow_key = "apps.agents.flows.smart_flow.smart_flow_config"
     
     try:
         smart_flow = await flow_factory.get_flow(smart_flow_key)
@@ -97,7 +97,7 @@ async def test_smart_flow_weather_routing(migrated_db, flow_factory, system_cont
     )
     
     # Получаем flow
-    smart_flow_key = "app.flows.smart_flow.smart_flow_config"
+    smart_flow_key = "apps.agents.flows.smart_flow.smart_flow_config"
     smart_flow = await flow_factory.get_flow(smart_flow_key)
     
     # Тестируем погодный запрос
@@ -130,7 +130,7 @@ async def test_smart_flow_different_paths(migrated_db, flow_factory, system_cont
     )
     
     # Получаем flow
-    smart_flow_key = "app.flows.smart_flow.smart_flow_config"
+    smart_flow_key = "apps.agents.flows.smart_flow.smart_flow_config"
     smart_flow = await flow_factory.get_flow(smart_flow_key)
     
     # Тест 1: Математика

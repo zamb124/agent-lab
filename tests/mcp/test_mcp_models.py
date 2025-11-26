@@ -4,8 +4,8 @@
 
 import pytest
 from datetime import datetime, timezone
-from app.models.mcp_models import MCPServerConfig, MCPTransportType
-from app.models.core_models import CodeMode
+from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
+from apps.agents.models.core_models import CodeMode
 
 
 def test_mcp_server_config_creation():

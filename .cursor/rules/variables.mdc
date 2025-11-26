@@ -111,7 +111,7 @@ AgentConfig(
 ### Изменение в тулах
 
 <good_example>
-from app.core.variables import get_state
+from core.variables import get_state
 
 @tool
 def save_warehouse(warehouse_id: str, warehouse_name: str) -> str:
@@ -134,7 +134,7 @@ def save_warehouse(warehouse_id: str) -> str:
 ### Изменение через session_tools
 
 <good_example>
-from app.tools.session_tools import session_set, session_get
+from apps.agents.tools.session_tools import session_set, session_get
 
 class MyAgent(BaseAgent):
     prompt = """
@@ -334,16 +334,41 @@ variables={
 }
 </good_example>
 
+## Хранение переменных
+
+Переменные хранятся через **VariableRepository** (изолированы по компаниям):
+
+<good_example>
+from apps.agents.container import get_agents_container
+
+# Через VariablesService (рекомендуется)
+variables_service = get_agents_container().variables_service
+await variables_service.set_var("api_key", "value", is_secret=True)
+value = await variables_service.get_var("api_key")
+
+# Через VariableRepository напрямую (редко нужно)
+variable_repo = get_agents_container().variable_repository
+from core.db.repositories import Variable
+variable = Variable(key="api_key", value="value", secret=True)
+await variable_repo.set(variable)
+</good_example>
+
+**Формат хранения:**
+- Ключ: `company:{company_id}:var:{key}`
+- Значение: `VariableData(value, secret, groups, description)`
+- Таблица: `variables`
+- Изоляция: `is_global=False` (по компаниям)
+
 ## Работа с VariablesService через контейнер
 
 VariablesService доступен через контейнер для программной работы с переменными:
 
 <good_example>
-from app.core.container import get_container
-from app.frontend.dependencies import VariablesServiceDep
+from core.container import get_container
+from apps.frontend.dependencies import VariablesServiceDep
 
 # В коде (сервисы, фабрики)
-container = get_container()
+container = get_agents_container()
 variables_service = container.variables_service
 
 # Установка переменной
@@ -372,13 +397,13 @@ async def list_variables(variables_service: VariablesServiceDep):
 
 <bad_example>
 # ❌ НЕ импортируй VariablesService напрямую
-from app.services.variables_service import VariablesService
+from apps.agents.services.business.variables_service import VariablesService
 
 # ❌ НЕ создавай экземпляр вручную
 variables_service = VariablesService()
 
 # ✅ Используй через контейнер
-container = get_container()
+container = get_agents_container()
 variables_service = container.variables_service
 </bad_example>
 

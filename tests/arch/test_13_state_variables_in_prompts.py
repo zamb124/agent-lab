@@ -10,7 +10,7 @@
 import pytest
 from langchain_core.messages import HumanMessage
 
-from app.models import (
+from apps.agents.models import (
     AgentConfig,
     AgentType,
     LLMConfig,
@@ -20,12 +20,11 @@ from app.models import (
 
 
 @pytest.mark.asyncio
-async def test_01_store_variables_in_prompt(migrated_db, storage, agent_factory, test_helpers, unique_id, agent_repo):
+async def test_01_store_variables_in_prompt(migrated_db,  agent_factory, test_helpers, unique_id, agent_repo):
     """Тест 1: Переменные из store в промпте агента"""
     agent_id = unique_id("agent")
     
     await test_helpers.create_simple_agent(
-        storage=storage,
         agent_id=agent_id,
         name="Test Store Variables Agent",
         prompt="""
@@ -70,13 +69,12 @@ async def test_01_store_variables_in_prompt(migrated_db, storage, agent_factory,
 
 
 @pytest.mark.asyncio
-async def test_02_store_variables_in_subagent_prompt(migrated_db, storage, agent_factory, test_helpers, unique_id, agent_repo):
+async def test_02_store_variables_in_subagent_prompt(migrated_db,  agent_factory, test_helpers, unique_id, agent_repo):
     """Тест 2: Переменные из store в промпте субагента"""
     subagent_id = unique_id("agent")
     main_agent_id = unique_id("agent")
     
     await test_helpers.create_simple_agent(
-        storage=storage,
         agent_id=subagent_id,
         name="Test Subagent With Store",
         prompt="""
@@ -93,7 +91,6 @@ async def test_02_store_variables_in_subagent_prompt(migrated_db, storage, agent
     )
     
     await test_helpers.create_simple_agent(
-        storage=storage,
         agent_id=main_agent_id,
         name="Test Main Agent",
         prompt="""
@@ -136,7 +133,7 @@ async def test_02_store_variables_in_subagent_prompt(migrated_db, storage, agent
 
 
 @pytest.mark.asyncio
-async def test_03_store_variables_update_changes_prompt(migrated_db, storage, agent_factory, test_helpers, unique_id, agent_repo):
+async def test_03_store_variables_update_changes_prompt(migrated_db,  agent_factory, test_helpers, unique_id, agent_repo):
     """
     Тест 3: Изменение store переменных меняет промпт.
     Проверяем что при изменении store.warehouse_name промпт обновляется.
@@ -145,7 +142,6 @@ async def test_03_store_variables_update_changes_prompt(migrated_db, storage, ag
     agent_id = unique_id("agent")
     
     await test_helpers.create_simple_agent(
-        storage=storage,
         agent_id=agent_id,
         name="Test Dynamic Prompt Agent",
         prompt="""
@@ -230,7 +226,7 @@ ID СКЛАДА: {?store.warehouse_id|НЕТ}
 
 
 @pytest.mark.asyncio
-async def test_04_optional_and_default_values(migrated_db, storage, agent_factory, test_helpers, unique_id, agent_repo):
+async def test_04_optional_and_default_values(migrated_db,  agent_factory, test_helpers, unique_id, agent_repo):
     """
     Тест 4: Опциональные переменные и значения по умолчанию.
     Проверяем {?var} и {?var|default} синтаксис.
@@ -297,7 +293,7 @@ async def test_04_optional_and_default_values(migrated_db, storage, agent_factor
 
 
 @pytest.mark.asyncio
-async def test_05_special_functions(migrated_db, storage, agent_factory, test_helpers, unique_id, agent_repo):
+async def test_05_special_functions(migrated_db,  agent_factory, test_helpers, unique_id, agent_repo):
     """
     Тест 5: Специальные функции {#messages.count}, {#store.keys}.
     Проверяем что специальные функции работают.
@@ -369,7 +365,7 @@ async def test_05_special_functions(migrated_db, storage, agent_factory, test_he
 
 
 @pytest.mark.asyncio
-async def test_06_nested_store_access(migrated_db, storage, agent_factory, test_helpers, unique_id, agent_repo):
+async def test_06_nested_store_access(migrated_db,  agent_factory, test_helpers, unique_id, agent_repo):
     """
     Тест 6: Доступ к вложенным данным в store.
     Проверяем {store.settings.timeout} синтаксис.

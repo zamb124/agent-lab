@@ -5,10 +5,10 @@
 from unittest.mock import Mock, patch
 from jinja2 import Environment
 
-from app.frontend.core.template_loader import TemplateLoader
-from app.models.i18n_models import Language
-from app.models.context_models import Context
-from app.identity.models import User, AuthProvider, UserStatus
+from apps.frontend.core.template_loader import TemplateLoader
+from core.models.i18n_models import Language
+from core.models.context_models import Context
+from core.models import User, AuthProvider, UserStatus
 
 
 class TestTemplateI18nFunctions:
@@ -19,7 +19,7 @@ class TestTemplateI18nFunctions:
         # Сбрасываем singleton TemplateLoader
         TemplateLoader._instance = None
     
-    @patch('app.frontend.core.template_loader.get_translation_manager')
+    @patch('apps.frontend.core.template_loader.get_translation_manager')
     def test_t_function_in_template(self, mock_get_manager):
         """Проверяем функцию t() в шаблонах"""
         # Мокаем менеджер переводов
@@ -43,7 +43,7 @@ class TestTemplateI18nFunctions:
         assert result == "Dashboard"
         mock_manager.t.assert_called_once_with("dashboard.title")
     
-    @patch('app.frontend.core.template_loader.get_translation_manager')
+    @patch('apps.frontend.core.template_loader.get_translation_manager')
     def test_t_function_with_params_in_template(self, mock_get_manager):
         """Проверяем функцию t() с параметрами в шаблонах"""
         mock_manager = Mock()
@@ -59,7 +59,7 @@ class TestTemplateI18nFunctions:
         assert result == "Welcome, John!"
         mock_manager.t.assert_called_once_with("welcome.message", user_name="John")
     
-    @patch('app.frontend.core.template_loader.get_translation_manager')
+    @patch('apps.frontend.core.template_loader.get_translation_manager')
     def test_t_function_exception_handling(self, mock_get_manager):
         """Проверяем обработку исключений в функции t()"""
         mock_get_manager.side_effect = Exception("Manager error")
@@ -72,7 +72,7 @@ class TestTemplateI18nFunctions:
         result = t_function("test.key")
         assert result == "test.key"
     
-    @patch('app.frontend.core.template_loader.get_translation_manager')
+    @patch('apps.frontend.core.template_loader.get_translation_manager')
     def test_t_field_function_with_i18n_key(self, mock_get_manager):
         """Проверяем функцию t_field() с i18n ключом"""
         mock_manager = Mock()
@@ -113,7 +113,7 @@ class TestTemplateI18nFunctions:
         result = t_field_function(field_info, "description")
         assert result == "Описание поля"
     
-    @patch('app.frontend.core.template_loader.get_translation_manager')
+    @patch('apps.frontend.core.template_loader.get_translation_manager')
     def test_t_field_function_translation_not_found(self, mock_get_manager):
         """Проверяем t_field() когда перевод равен ключу (не найден)"""
         mock_manager = Mock()
@@ -167,7 +167,7 @@ class TestGetCurrentLanguageFunction:
         """Подготовка к каждому тесту"""
         TemplateLoader._instance = None
     
-    @patch('app.frontend.core.template_loader.get_context')
+    @patch('apps.frontend.core.template_loader.get_context')
     def test_get_current_language_from_context(self, mock_get_context):
         """Проверяем получение языка из контекста"""
         mock_user = User(
@@ -197,7 +197,7 @@ class TestGetCurrentLanguageFunction:
         result = get_current_language()
         assert result == "en"
     
-    @patch('app.frontend.core.template_loader.get_context')
+    @patch('apps.frontend.core.template_loader.get_context')
     def test_get_current_language_no_context(self, mock_get_context):
         """Проверяем fallback при отсутствии контекста"""
         mock_get_context.return_value = None
@@ -209,7 +209,7 @@ class TestGetCurrentLanguageFunction:
         result = get_current_language()
         assert result == "ru"  # Fallback
     
-    @patch('app.frontend.core.template_loader.get_context')
+    @patch('apps.frontend.core.template_loader.get_context')
     def test_get_current_language_context_without_language(self, mock_get_context):
         """Проверяем fallback при контексте без атрибута language"""
         # Создаем контекст без language атрибута (старая версия)
@@ -224,7 +224,7 @@ class TestGetCurrentLanguageFunction:
         result = get_current_language()
         assert result == "ru"  # Fallback
     
-    @patch('app.frontend.core.template_loader.get_context')
+    @patch('apps.frontend.core.template_loader.get_context')
     def test_get_current_language_exception_handling(self, mock_get_context):
         """Проверяем обработку исключений в get_current_language()"""
         mock_get_context.side_effect = Exception("Context error")
@@ -245,8 +245,8 @@ class TestTemplateI18nIntegration:
         """Подготовка к каждому тесту"""
         TemplateLoader._instance = None
     
-    @patch('app.frontend.core.template_loader.get_translation_manager')
-    @patch('app.frontend.core.template_loader.get_context')
+    @patch('apps.frontend.core.template_loader.get_translation_manager')
+    @patch('apps.frontend.core.template_loader.get_context')
     def test_full_template_rendering_with_i18n(self, mock_get_context, mock_get_manager):
         """Проверяем полный рендеринг шаблона с переводами"""
         # Подготавливаем контекст

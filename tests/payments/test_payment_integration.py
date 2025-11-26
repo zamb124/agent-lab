@@ -6,8 +6,9 @@
 import pytest
 import hashlib
 
-from app.models.payment_models import PaymentStatus, PaymentProviderType
-from app.identity.models import Company
+from core.models.payment_models import PaymentStatus, PaymentProviderType
+from core.models import Company
+from core.models.billing_models import TariffPlan
 
 
 @pytest.mark.asyncio
@@ -28,7 +29,9 @@ async def test_full_payment_flow_with_db(
     4. Пополнение баланса компании в БД
     """
     test_company.balance = 5000.0
-    test_company.tariff_plan = "premium"
+    from core.models.billing_models import TariffPlan
+    test_company.tariff_plan = TariffPlan.PREMIUM
+    await payment_service._storage.set(f"company:{test_company.company_id}", test_company.model_dump_json(), force_global=True)
     
     result = await payment_service.create_payment(
         company=test_company,
@@ -44,9 +47,10 @@ async def test_full_payment_flow_with_db(
     assert "yoomoney.ru" in payment_url
     assert result["amount"] == 1500.0
     
+    # Проверяем что транзакция сохранена сразу после create_payment
     saved_transaction = await payment_service.get_transaction(transaction_id)
     
-    assert saved_transaction is not None, "Транзакция должна быть сохранена в БД"
+    assert saved_transaction is not None, f"Транзакция должна быть сохранена в БД, transaction_id={transaction_id}"
     assert saved_transaction.transaction_id == transaction_id
     assert saved_transaction.company_id == test_company.company_id
     assert saved_transaction.user_id == test_user.user_id
@@ -79,7 +83,7 @@ async def test_full_payment_flow_with_db(
     verification_result = await yoomoney_provider.verify_webhook(webhook_data)
     assert verification_result.is_valid, "Webhook должен быть валидным"
     
-    initial_company_data = await storage.get(f"company:{test_company.company_id}", force_global=True)
+    initial_company_data = await payment_service._storage.get(f"company:{test_company.company_id}", force_global=True)
     initial_company = Company.model_validate_json(initial_company_data)
     initial_balance = initial_company.balance
     
@@ -95,13 +99,13 @@ async def test_full_payment_flow_with_db(
     assert updated_transaction.external_payment_id == unique_op_id, "External ID должен быть записан"
     assert updated_transaction.completed_at is not None, "Время завершения должно быть заполнено"
     
-    updated_company_data = await storage.get(f"company:{test_company.company_id}", force_global=True)
+    updated_company_data = await payment_service._storage.get(f"company:{test_company.company_id}", force_global=True)
     updated_company = Company.model_validate_json(updated_company_data)
     
     expected_balance = initial_balance + 1500.0
     assert updated_company.balance == expected_balance, f"Баланс должен быть {expected_balance}, но получили {updated_company.balance}"
     
-    notification_keys = await storage.list_by_prefix("payment_notification:", force_global=True)
+    notification_keys = await payment_service._storage.list_by_prefix("payment_notification:", force_global=True)
     assert len(notification_keys) >= 1, "Уведомление должно быть сохранено"
 
 
@@ -120,6 +124,14 @@ async def test_duplicate_webhook_protection(
     Проверяет что один платеж не обрабатывается дважды.
     """
     test_company.balance = 5000.0
+    from core.models.billing_models import TariffPlan
+    test_company.tariff_plan = TariffPlan.PREMIUM
+    # Используем тот же storage что и payment_service для гарантии консистентности
+    await payment_service._storage.set(f"company:{test_company.company_id}", test_company.model_dump_json(), force_global=True)
+    
+    # Небольшая задержка для гарантии коммита транзакции
+    import asyncio
+    await asyncio.sleep(0.2)
     
     result = await payment_service.create_payment(
         company=test_company,
@@ -154,7 +166,8 @@ async def test_duplicate_webhook_protection(
     
     verification_result = await yoomoney_provider.verify_webhook(webhook_data)
     
-    initial_company_data = await storage.get(f"company:{test_company.company_id}", force_global=True)
+    initial_company_data = await payment_service._storage.get(f"company:{test_company.company_id}", force_global=True)
+    assert initial_company_data is not None, f"Компания должна быть сохранена, ключ=company:{test_company.company_id}"
     initial_company = Company.model_validate_json(initial_company_data)
     initial_balance = initial_company.balance
     
@@ -164,7 +177,7 @@ async def test_duplicate_webhook_protection(
         raw_data=webhook_data
     )
     
-    after_first_data = await storage.get(f"company:{test_company.company_id}", force_global=True)
+    after_first_data = await payment_service._storage.get(f"company:{test_company.company_id}", force_global=True)
     after_first_company = Company.model_validate_json(after_first_data)
     assert after_first_company.balance == initial_balance + 1000.0
     
@@ -174,7 +187,7 @@ async def test_duplicate_webhook_protection(
         raw_data=webhook_data
     )
     
-    after_second_data = await storage.get(f"company:{test_company.company_id}", force_global=True)
+    after_second_data = await payment_service._storage.get(f"company:{test_company.company_id}", force_global=True)
     after_second_company = Company.model_validate_json(after_second_data)
     assert after_second_company.balance == after_first_company.balance, "Баланс не должен увеличиваться повторно"
 
@@ -196,8 +209,9 @@ async def test_company_transactions_persistence(
     test_company_id = unique_id("test_txn_company")
     test_company.company_id = test_company_id
     test_company.balance = 5000.0
-    
-    await storage.set(f"company:{test_company_id}", test_company.model_dump_json(), force_global=True)
+    from core.models.billing_models import TariffPlan
+    test_company.tariff_plan = TariffPlan.PREMIUM
+    await payment_service._storage.set(f"company:{test_company_id}", test_company.model_dump_json(), force_global=True)
     
     created_transactions = []
     
@@ -209,9 +223,6 @@ async def test_company_transactions_persistence(
             provider=yoomoney_provider
         )
         created_transactions.append(result["transaction_id"])
-    
-    import asyncio
-    await asyncio.sleep(0.1)
     
     for transaction_id in created_transactions:
         saved_transaction = await payment_service.get_transaction(transaction_id)
@@ -254,14 +265,14 @@ async def test_webhook_updates_transaction_in_db(
         company_id=unique_id("webhook_test_company"),
         subdomain=unique_id("webhook_test"),
         name="Webhook Test Company",
-        tariff_plan="premium",
+        tariff_plan=TariffPlan.PREMIUM,
         balance=5000.0,
         monthly_budget=50000.0,
         current_month_spent=0.0,
         status="active"
     )
     
-    await storage.set(
+    await payment_service._storage.set(
         f"company:{webhook_test_company.company_id}",
         webhook_test_company.model_dump_json(),
         force_global=True
@@ -321,7 +332,7 @@ async def test_webhook_updates_transaction_in_db(
     assert updated_transaction.external_payment_id == unique_op_id, "External ID должен записаться"
     assert updated_transaction.completed_at is not None, "Время завершения должно заполниться"
     
-    updated_company_data = await storage.get(f"company:{webhook_test_company.company_id}", force_global=True)
+    updated_company_data = await payment_service._storage.get(f"company:{webhook_test_company.company_id}", force_global=True)
     updated_company = Company.model_validate_json(updated_company_data)
     
     assert updated_company.balance == 7500.0, "Баланс должен стать 5000 + 2500 = 7500"
@@ -341,7 +352,9 @@ async def test_invalid_webhook_does_not_affect_db(
     Тест что невалидный webhook НЕ влияет на БД.
     """
     test_company.balance = 5000.0
-    
+    from core.models.billing_models import TariffPlan
+    test_company.tariff_plan = TariffPlan.PREMIUM
+    await payment_service._storage.set(f"company:{test_company.company_id}", test_company.model_dump_json(), force_global=True)
     
     result = await payment_service.create_payment(
         company=test_company,
@@ -355,7 +368,7 @@ async def test_invalid_webhook_does_not_affect_db(
     initial_transaction = await payment_service.get_transaction(transaction_id)
     assert initial_transaction is not None
     
-    initial_company_data = await storage.get(f"company:{test_company.company_id}", force_global=True)
+    initial_company_data = await payment_service._storage.get(f"company:{test_company.company_id}", force_global=True)
     initial_company = Company.model_validate_json(initial_company_data)
     
     unique_invalid_op = unique_id("invalid_test_op")
@@ -381,7 +394,7 @@ async def test_invalid_webhook_does_not_affect_db(
     assert unchanged_transaction.external_payment_id == initial_transaction.external_payment_id
     assert unchanged_transaction.completed_at == initial_transaction.completed_at
     
-    unchanged_company_data = await storage.get(f"company:{test_company.company_id}", force_global=True)
+    unchanged_company_data = await payment_service._storage.get(f"company:{test_company.company_id}", force_global=True)
     unchanged_company = Company.model_validate_json(unchanged_company_data)
     
     assert unchanged_company.balance == initial_company.balance, "Баланс не должен измениться от невалидного webhook"
@@ -400,7 +413,9 @@ async def test_transaction_retrieval_from_db(
     Тест получения транзакции из БД через сервис.
     """
     test_company.balance = 5000.0
-    
+    from core.models.billing_models import TariffPlan
+    test_company.tariff_plan = TariffPlan.PREMIUM
+    await payment_service._storage.set(f"company:{test_company.company_id}", test_company.model_dump_json(), force_global=True)
     
     result = await payment_service.create_payment(
         company=test_company,
