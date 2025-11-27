@@ -1,14 +1,23 @@
 """
 Container - Dependency Injection контейнер.
 
-Базовая реализация контейнера, которую расширяют сервисы.
-Сервисы используют свои контейнеры (get_agents_container, get_frontend_container).
+Сервисы наследуют BaseContainer и добавляют свои сервисы через @lazy.
 Контейнер доступен через request.app.state.container.
+
+Пример:
+    from core.container import BaseContainer, lazy
+    
+    class MyContainer(BaseContainer):
+        @lazy
+        def my_service(self):
+            from my_module import MyService
+            return MyService(repository=self.my_repository)
 """
 
-from core.container.base import BaseContainer
+from core.container.base import BaseContainer, lazy
 
 __all__ = [
     "BaseContainer",
+    "lazy",
 ]
 

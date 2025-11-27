@@ -38,7 +38,7 @@ from core.context import set_context, clear_context, get_context
 from core.models import User, Company, Context
 from core.clients import get_llm
 
-from apps.agents.container import get_agents_container, set_agents_container, AgentsContainer
+from apps.agents.container import get_agents_container
 from apps.agents.models import (
     AgentConfig, AgentType, CodeMode, FlowConfig,
     ToolReference, LLMConfig
@@ -100,11 +100,7 @@ async def migrated_db():
         
         settings = get_settings()
         
-        container = AgentsContainer(
-            service_db_url=settings.database.url,
-            shared_db_url=settings.database.shared_url
-        )
-        set_agents_container(container)
+        container = get_agents_container()
         logger.info("✅ AgentsContainer инициализирован для тестов")
         
         # Инициализируем файловые процессоры

@@ -15,7 +15,7 @@ from core.logging import setup_logging
 from core.db import create_tables
 from core.files import initialize_default_processors
 from apps.agents.config import AgentsSettings
-from apps.agents.container import AgentsContainer, set_agents_container
+from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +67,8 @@ def create_app() -> FastAPI:
     
     setup_logging("agents", settings.logging)
     
-    container = AgentsContainer(
-        service_db_url=settings.database.url,
-        shared_db_url=settings.database.shared_url
-    )
-    set_agents_container(container)
+    # Контейнер создается автоматически при первом вызове
+    container = get_agents_container()
     
     initialize_default_processors(
         file_repository=container.file_repository,

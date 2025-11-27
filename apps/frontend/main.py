@@ -20,8 +20,7 @@ from core.db import create_tables
 from core.middleware.auth import AuthMiddleware
 from core.middleware.profiling import ProfilingMiddleware
 from core.files import initialize_default_processors
-from apps.frontend.container import FrontendContainer, set_frontend_container
-from apps.agents.container import AgentsContainer, set_agents_container
+from apps.frontend.container import get_frontend_container
 from apps.frontend.core.htmx_helpers import HTMXHeaderMiddleware
 
 logger = logging.getLogger(__name__)
@@ -76,24 +75,13 @@ def create_app() -> FastAPI:
     
     setup_logging("frontend", settings.logging)
     
-    container = FrontendContainer(
-        service_db_url=settings.database.url,
-        shared_db_url=settings.database.shared_url
-    )
-    set_frontend_container(container)
+    # Контейнер создается автоматически при первом вызове
+    container = get_frontend_container()
     
     initialize_default_processors(
         file_repository=container.file_repository,
         storage=container.storage
     )
-    
-    if settings.database.agents_db_url:
-        agents_container = AgentsContainer(
-            service_db_url=settings.database.agents_db_url,
-            shared_db_url=settings.database.shared_url
-        )
-        set_agents_container(agents_container)
-        logger.info(f"AgentsContainer инициализирован для frontend")
     
     app = FastAPI(
         title="Frontend Service",
