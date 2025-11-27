@@ -63,9 +63,11 @@ async def start_auth(provider_name: str, auth_service: AuthServiceDep, redirect_
         )
 
     if redirect_uri is None:
-        redirect_uri = f"https://{settings.server.domain}/auth/callback/{provider_name}"
+        # OAuth callback на публичный домен (провайдеры требуют зарегистрированный URL)
+        public_domain = settings.server.get_public_domain()
+        redirect_uri = f"https://{public_domain}/auth/callback/{provider_name}"
     
-    logger.info(f"start_auth: env={settings.server.env}, redirect_uri={redirect_uri}")
+    logger.info(f"start_auth: redirect_uri={redirect_uri}")
 
     try:
         auth_url = await auth_service.start_auth(provider, redirect_uri)
@@ -113,9 +115,10 @@ async def auth_callback(
         )
 
     if redirect_uri is None:
-        redirect_uri = f"https://{settings.server.domain}/auth/callback/{provider_name}"
+        public_domain = settings.server.get_public_domain()
+        redirect_uri = f"https://{public_domain}/auth/callback/{provider_name}"
 
-    logger.info(f"auth_callback: env={settings.server.env}, redirect_uri={redirect_uri}")
+    logger.info(f"auth_callback: redirect_uri={redirect_uri}")
 
     auth_request = AuthRequest(
         provider=provider, code=code, state=state, redirect_uri=redirect_uri
@@ -131,14 +134,14 @@ async def auth_callback(
 
     response = RedirectResponse(url="/frontend/select-company")
     is_production = settings.server.env == "production"
-    domain = None if settings.server.env == "local" else f".{settings.server.domain}"
+    cookie_domain = f".{settings.server.domain}" if is_production else None
 
-    logger.info(f"Устанавливаем cookies: session_id={result.session.session_id}, auth_token={result.token[:8]}..., domain={domain}, secure={is_production}")
+    logger.info(f"Устанавливаем cookies: session_id={result.session.session_id}, auth_token={result.token[:8]}..., domain={cookie_domain}, secure={is_production}")
 
     response.set_cookie(
         key="session_id",
         value=result.session.session_id,
-        domain=domain,
+        domain=cookie_domain,
         httponly=True,
         secure=is_production,
         samesite="lax",
@@ -146,7 +149,7 @@ async def auth_callback(
     response.set_cookie(
         key="auth_token",
         value=result.token,
-        domain=domain,
+        domain=cookie_domain,
         httponly=False,
         secure=is_production,
         samesite="lax",

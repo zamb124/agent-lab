@@ -97,5 +97,22 @@ def set_settings(new_settings: BaseSettings) -> None:
     logger.info(f"Settings обновлены: env={new_settings.server.env}, port={new_settings.server.port}")
 
 
-settings = get_settings()
+class _SettingsProxy:
+    """
+    Proxy для доступа к актуальным настройкам.
+    Всегда делегирует к текущему _settings_instance через get_settings().
+    Позволяет импортировать settings на уровне модуля и получать актуальные значения.
+    """
+    
+    def __getattr__(self, name):
+        return getattr(get_settings(), name)
+    
+    def __repr__(self):
+        return repr(get_settings())
+    
+    def __str__(self):
+        return str(get_settings())
+
+
+settings = _SettingsProxy()
 

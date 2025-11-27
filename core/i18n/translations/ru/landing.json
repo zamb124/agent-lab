@@ -96,7 +96,9 @@
     "member3_name": "Владимир",
     "member3_role": "AI Инженер",
     "member4_name": "Алексей",
-    "member4_role": "ML Solution Engineer"
+    "member4_role": "ML Solution Engineer",
+    "member5_name": "Наталья",
+    "member5_role": "UX/UI Дизайнер"
   },
   "cta": {
     "title": "Автоматизируйте ваш бизнес<br>с NeuroFlow",

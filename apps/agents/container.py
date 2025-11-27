@@ -135,5 +135,11 @@ def get_agents_container() -> AgentsContainer:
     return _agents_container
 
 
+def reset_agents_container():
+    """Сбрасывает контейнер (для тестов)"""
+    global _agents_container
+    _agents_container = None
+
+
 # Алиас
 get_container = get_agents_container

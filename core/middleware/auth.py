@@ -13,8 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import RedirectResponse, JSONResponse
 from core.context import set_context, clear_context
 from core.models.context_models import Context
-from core.config import get_settings
-settings = get_settings()
+from core.config import settings
 from core.models.identity_models import User, AuthProvider, UserStatus, Company
 from core.models.i18n_models import Language
 from core.utils.tokens import get_token_service
@@ -159,10 +158,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return response
 
         except CompanyCreationRequired:
-            # Всегда редиректим на выбор компании на основном домене
-            # Страница сама разберется - если компаний нет, перенаправит на создание
-            base_url = f"https://{settings.server.domain}" if settings.server.env != "local" else f"http://{settings.server.domain}:{settings.server.port}"
-            return RedirectResponse(url=f"{base_url}/frontend/select-company", status_code=307)
+            # Редиректим на выбор компании (относительный URL сохраняет текущий хост)
+            return RedirectResponse(url="/frontend/select-company", status_code=307)
         except HTTPException as e:
             # Для HTML запросов редиректим на авторизацию
             accept_header = request.headers.get("accept", "")
@@ -195,10 +192,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
         elif "/webhook/whatsapp/" in path:
             logger.info("📱 WhatsApp контекст")
             return await self._create_whatsapp_context(request, requested_company)
-        elif path == "/api/v1/admin/create-my-company":
+        elif path == "/api/v1/admin/create-my-company" or path == "/frontend/api/admin/create-my-company":
             logger.info("🏢 API создания компании - требует авторизации")
             return await self._create_frontend_context(request, requested_company, allow_no_company=True, has_subdomain=has_subdomain)
-        elif "/api/v1/admin/" in path or "/api/v1/history/" in path:
+        elif "/api/v1/admin/" in path or "/api/v1/history/" in path or "/frontend/api/admin/" in path:
             # Frontend endpoints - используют токен из куки
             logger.info("🖥️ Frontend API контекст (токен из куки)")
             return await self._create_frontend_context(request, requested_company, has_subdomain=has_subdomain)

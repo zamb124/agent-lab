@@ -10,8 +10,6 @@ from apps.frontend.core.template_loader import get_templates
 from apps.frontend.core.utils import render_with_dashboard
 from apps.frontend.dependencies import FlowRepositoryDep
 
-from apps.frontend.container import get_frontend_container
-
 router = APIRouter(prefix="/frontend/store", tags=["store-pages"])
 templates = get_templates()
 logger = logging.getLogger(__name__)
@@ -31,7 +29,14 @@ async def store_page(request: Request):
 @router.get("/list", response_class=HTMLResponse)
 async def store_list(request: Request, flow_repo: FlowRepositoryDep):
     """Список публичных flows из кода (оптимизировано)"""
-    migrator = get_frontend_container().migrator
+    agents_container = request.app.state.agents_container
+    if not agents_container:
+        return templates.TemplateResponse("components/store/store_list.html", {
+            "request": request,
+            "flows": [],
+            "error": "AgentsContainer не инициализирован"
+        })
+    migrator = agents_container.migrator
     
     flows_with_ids = await migrator.get_public_flows()
     
@@ -76,8 +81,14 @@ async def flow_details(request: Request, flow_id: str):
     """Детальная информация о flow из кода (для модалки)"""
     logger.info(f"Flow details requested for: {flow_id}")
 
-    migrator = get_frontend_container().migrator
-
+    agents_container = request.app.state.agents_container
+    if not agents_container:
+        return templates.TemplateResponse(
+            "error.html",
+            {"request": request, "error": "AgentsContainer не инициализирован"}
+        )
+    
+    migrator = agents_container.migrator
     flows_with_ids = await migrator.get_public_flows()
     logger.info(f"Found {len(flows_with_ids)} public flows")
 
@@ -95,7 +106,6 @@ async def flow_details(request: Request, flow_id: str):
             {"request": request, "error": "Flow не найден"}
         )
     
-    agents_container = get_frontend_container().get_agents_container()
     flow_repo = agents_container.flow_repository
     installed = await flow_repo.get(flow_id) is not None
     
@@ -127,9 +137,13 @@ async def flow_details(request: Request, flow_id: str):
 
 
 @router.get("/flow-image/{flow_id:path}")
-async def get_flow_image(flow_id: str):
+async def get_flow_image(request: Request, flow_id: str):
     """Отдает картинку flow из проекта"""
-    migrator = get_frontend_container().migrator
+    agents_container = request.app.state.agents_container
+    if not agents_container:
+        raise HTTPException(status_code=500, detail="AgentsContainer не инициализирован")
+    
+    migrator = agents_container.migrator
     flows_with_ids = await migrator.get_public_flows()
     
     flow_config = None

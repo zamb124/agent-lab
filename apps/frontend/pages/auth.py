@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from apps.frontend.core.template_loader import get_templates
 from core.models import AuthProvider
 
-from core.config import settings
+from core.config import get_settings
 from core.context import get_context
 from apps.frontend.container import get_frontend_container
 
@@ -34,14 +34,13 @@ async def select_company_page(request: Request):
     if not user or not user.companies:
         return RedirectResponse(url="/frontend/create-company")
 
+    settings = get_settings()
     storage = get_frontend_container().storage
     user_companies = []
 
+    protocol = "http" if settings.server.env == "local" else "https"
     for company_id, roles in user.companies.items():
-        if settings.server.env == "local":
-            company_url = f"http://{company_id}.localhost:{settings.server.port}/frontend/dashboard"
-        else:
-            company_url = f"https://{company_id}.{settings.server.domain}/frontend/dashboard"
+        company_url = f"{protocol}://{company_id}.{settings.server.domain}/frontend/dashboard"
 
         company_data = await storage.get(f"company:{company_id}", force_global=True)
         company_name = company_id
@@ -67,6 +66,7 @@ async def select_company_page(request: Request):
 @router.get("/create-company", response_class=HTMLResponse)
 async def create_company_page(request: Request):
     """Страница создания компании"""
+    settings = get_settings()
     return templates.TemplateResponse("create_company.html", {
         "request": request,
         "domain": settings.server.domain

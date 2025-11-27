@@ -99,7 +99,12 @@ class ServerConfig(BaseModel):
     port: int = 8001
     debug: bool = False
     domain: str = "agents-lab.ru"
+    public_domain: Optional[str] = None  # Публичный домен для OAuth (если отличается от domain)
     workers: int = 4
+    
+    def get_public_domain(self) -> str:
+        """Возвращает публичный домен для OAuth callback"""
+        return self.public_domain or self.domain
     worker_class: str = "uvicorn.workers.UvicornWorker"
     worker_connections: int = 1000
     max_requests: int = 1000

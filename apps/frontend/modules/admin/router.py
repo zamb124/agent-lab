@@ -166,9 +166,11 @@ async def reset_company_billing(request: Request, company_id: str):
     if not is_system_admin(request):
         raise HTTPException(status_code=403, detail="Доступ запрещен")
     
-    from core.billing import BillingService
+    agents_container = request.app.state.agents_container
+    if not agents_container:
+        raise HTTPException(status_code=500, detail="AgentsContainer не инициализирован")
     
-    billing_service = BillingService()
+    billing_service = agents_container.billing_service
     await billing_service.reset_monthly_billing(company_id)
     
     return {

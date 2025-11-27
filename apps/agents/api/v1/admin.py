@@ -541,15 +541,14 @@ async def create_my_company(request: Request):
     await user_repo.set(user)
     logger.info(f"DEBUG: Обновлен глобальный пользователь - добавлена компания {company_id}")
     
-    # Редиректим на dashboard
-    # Для локальной разработки редиректим на localhost без поддомена
+    # Редиректим на dashboard поддомена компании
     settings = get_settings()
     if settings.server.env == "local":
-        return RedirectResponse(url="/frontend/dashboard", status_code=302)
+        # Для local добавляем порт frontend сервиса
+        company_url = f"http://{subdomain}.localhost:8002/frontend/dashboard"
     else:
-        # Для продакшена используем поддомен
-        company_url = f"http://{subdomain}.{settings.server.domain}/frontend/dashboard"
-        return RedirectResponse(url=company_url, status_code=302)
+        company_url = f"https://{subdomain}.{settings.server.domain}/frontend/dashboard"
+    return RedirectResponse(url=company_url, status_code=302)
 
 
 @router.post("/remigrate/{entity_type}/{entity_id:path}")

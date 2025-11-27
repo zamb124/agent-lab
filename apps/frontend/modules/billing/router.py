@@ -7,8 +7,6 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from apps.frontend.core.template_loader import get_templates
 from apps.frontend.core.plugin_loader import get_plugins_for_template
 from core.context import get_context
-from core.billing import BillingService
-from core.payments import PaymentService
 from core.models.billing_models import TariffPlan, TARIFF_PRICES
 
 router = APIRouter(prefix="/frontend/billing", tags=["billing-pages"])
@@ -32,8 +30,15 @@ async def billing_index(request: Request):
             }
         )
     
-    billing_service = BillingService()
-    payment_service = PaymentService()
+    agents_container = request.app.state.agents_container
+    if not agents_container:
+        return templates.TemplateResponse(
+            "billing.html",
+            {"request": request, "error": "AgentsContainer не инициализирован"}
+        )
+    
+    billing_service = agents_container.billing_service
+    payment_service = agents_container.payment_service
     
     stats = await billing_service.get_company_usage_stats(company.company_id)
     
@@ -81,7 +86,11 @@ async def billing_stats(request: Request):
             content={"error": "No active company"}
         )
     
-    billing_service = BillingService()
+    agents_container = request.app.state.agents_container
+    if not agents_container:
+        return JSONResponse(status_code=500, content={"error": "AgentsContainer не инициализирован"})
+    
+    billing_service = agents_container.billing_service
     stats = await billing_service.get_company_usage_stats(company.company_id)
     
     return {

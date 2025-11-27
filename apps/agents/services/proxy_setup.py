@@ -5,8 +5,7 @@
 
 import os
 import logging
-from core.config import get_settings
-settings = get_settings()
+from core.config import settings
 logger = logging.getLogger(__name__)
 
 _proxy_configured = False

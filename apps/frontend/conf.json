@@ -2,7 +2,8 @@
   "server": {
     "port": 8002,
     "env": "local",
-    "domain": "localhost"
+    "domain": "localhost",
+    "public_domain": "agents-lab.ru"
   },
   "database": {
     "url": "postgresql+asyncpg://agent_user:agent_password@localhost:5432/shared_db",

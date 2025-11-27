@@ -283,7 +283,8 @@ class AuthService:
     async def _add_user_provider(self, user_id: str, provider: AuthProvider, user_info: ProviderUserInfo):
         """Добавляет провайдера в список провайдеров пользователя"""
         providers_key = f"user_providers:{user_id}"
-        providers_data = await self._storage.get(providers_key)
+        # user_providers глобальные - пользователь может быть в нескольких компаниях
+        providers_data = await self._storage.get(providers_key, force_global=True)
 
         if providers_data:
             providers = json.loads(providers_data)
@@ -297,7 +298,7 @@ class AuthService:
             "metadata": user_info.raw_data
         }
 
-        await self._storage.set(providers_key, json.dumps(providers))
+        await self._storage.set(providers_key, json.dumps(providers), force_global=True)
 
     async def _update_provider_data(self, user_id: str, provider: AuthProvider, user_info: ProviderUserInfo):
         """Обновляет данные провайдера"""

@@ -283,7 +283,7 @@
                     });
 
                     if (response.ok || response.type === 'opaqueredirect' || response.status === 0) {
-                        window.location.href = '/frontend/dashboard';
+                        window.location.href = '/frontend/select-company';
                     } else if (response.status >= 400) {
                         const errorData = await response.json().catch(() => ({}));
                         const errorText = errorData.detail || 'Ошибка при создании компании';

@@ -9,8 +9,7 @@ import traceback
 from typing import Dict, List
 import httpx
 
-from core.config import get_settings
-settings = get_settings()
+from core.config import settings
 from apps.agents.models import FlowConfig
 from apps.agents.container import get_agents_container
 from core.context import set_context

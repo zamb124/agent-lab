@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
     
     logger.info("Загрузка плагинов...")
     from apps.frontend.core.plugin_loader import discover_and_load_plugins
-    discover_and_load_plugins(app)
+    await discover_and_load_plugins(app)
     
     logger.info("Frontend Service запущен")
     
@@ -96,6 +96,8 @@ def create_app() -> FastAPI:
     
     app.state.container = container
     app.state.settings = settings
+    # AgentsContainer для доступа к agents сервисам (migrator, billing_service и т.д.)
+    app.state.agents_container = container.get_agents_container()
     
     app.add_middleware(
         ProxyHeadersMiddleware,
