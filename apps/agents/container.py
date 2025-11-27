@@ -251,4 +251,3 @@ def initialize_agents_container(
 
 
 get_container = get_agents_container
-initialize_system_container = initialize_agents_container

@@ -8,6 +8,8 @@
 - Каждый сервис имеет свой изолированный контейнер
 
 ВАЖНО: BaseContainer НЕ зависит от app/* модулей!
+ВАЖНО: Сервисы используют свои контейнеры (get_agents_container, get_frontend_container),
+       а не глобальный системный контейнер. Контейнер доступен через request.app.state.container.
 """
 
 import asyncio
@@ -31,43 +33,6 @@ if TYPE_CHECKING:
     from core.files.file_repository import FileRepository
 
 logger = logging.getLogger(__name__)
-
-_system_container: Optional["BaseContainer"] = None
-
-
-def get_system_container() -> "BaseContainer":
-    """Получает глобальный системный контейнер"""
-    global _system_container
-    if _system_container is None:
-        raise RuntimeError(
-            "Системный контейнер не инициализирован! "
-            "Вызовите initialize_system_container() при старте приложения."
-        )
-    return _system_container
-
-
-def set_system_container(container: "BaseContainer") -> None:
-    """Устанавливает глобальный системный контейнер"""
-    global _system_container
-    _system_container = container
-
-
-def initialize_system_container(container_class=None, db_url: Optional[str] = None, shared_db_url: Optional[str] = None) -> "BaseContainer":
-    """
-    Инициализирует системный контейнер.
-    
-    Args:
-        container_class: Класс контейнера (по умолчанию BaseContainer)
-        db_url: URL БД (опционально, по умолчанию из settings)
-        shared_db_url: URL shared БД (опционально, по умолчанию из settings.database.shared_url)
-    """
-    global _system_container
-    if _system_container is None:
-        if container_class is None:
-            container_class = BaseContainer
-        _system_container = container_class(db_url=db_url, shared_db_url=shared_db_url)
-        logger.info(f"Системный контейнер инициализирован: {container_class.__name__}")
-    return _system_container
 
 
 class BaseContainer:

@@ -120,16 +120,30 @@ from apps.agents.db.repositories.agent_repository import AgentRepository  # НЕ
 
 # НЕТ прямого создания!
 repo = AgentRepository()  # НЕТ!
-
-# НЕТ импорта из core в apps
-from core.container import get_container  # НЕТ! Используй get_agents_container()
 </bad_example>
+
+## Доступ к контейнеру в middleware
+
+В `core/middleware/` контейнер доступен через `request.app.state.container`:
+
+```python
+# core/middleware/auth.py
+class AuthMiddleware(BaseHTTPMiddleware):
+    def _get_container(self, request: Request):
+        return request.app.state.container
+    
+    async def dispatch(self, request: Request, call_next):
+        container = self._get_container(request)
+        user_repo = container.user_repository
+        ...
+```
 
 ## КРИТИЧНО
 
 1. **core.container.BaseContainer** - только базовые сервисы
 2. **apps.{service}.container.{Service}Container** - наследует BaseContainer
-3. Используй **get_agents_container()** в apps/agents, НЕ get_container() из core
-4. **Ленивая инициализация** через __getattr__
-5. **Service БД + Shared БД** в контейнере
-6. **НЕТ прямых импортов** сущностей контейнера
+3. Используй **get_agents_container()** в apps/agents, **get_frontend_container()** в apps/frontend
+4. В **middleware** используй `request.app.state.container`
+5. **Ленивая инициализация** через __getattr__
+6. **Service БД + Shared БД** в контейнере
+7. **НЕТ прямых импортов** сущностей контейнера

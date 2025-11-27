@@ -2,30 +2,35 @@
 API эндпоинты для авторизации.
 
 Общий роутер для авторизации, может использоваться в любом сервисе.
+Контейнер получается через request.app.state.container.
 """
 
 import logging
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import RedirectResponse
 
 from core.config import get_settings
-from core.container import get_system_container
 from core.models import AuthProvider, AuthRequest
+from core.identity import AuthService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-def get_auth_service():
-    """Получает AuthService из системного контейнера"""
-    return get_system_container().auth_service
+def get_auth_service(request: Request) -> AuthService:
+    """Получает AuthService из контейнера приложения"""
+    return request.app.state.container.auth_service
+
+
+AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 
 
 @router.get("/providers")
-async def get_auth_providers():
+async def get_auth_providers(auth_service: AuthServiceDep):
     """Возвращает список доступных провайдеров авторизации"""
-    providers = get_auth_service().get_available_providers()
+    providers = auth_service.get_available_providers()
 
     return {
         "providers": [
@@ -40,7 +45,7 @@ async def get_auth_providers():
 
 
 @router.get("/login/{provider_name}")
-async def start_auth(provider_name: str, redirect_uri: str = None):
+async def start_auth(provider_name: str, auth_service: AuthServiceDep, redirect_uri: str = None):
     """
     Начинает процесс авторизации с выбранным провайдером.
 
@@ -63,7 +68,7 @@ async def start_auth(provider_name: str, redirect_uri: str = None):
     logger.info(f"start_auth: env={settings.server.env}, redirect_uri={redirect_uri}")
 
     try:
-        auth_url = await get_auth_service().start_auth(provider, redirect_uri)
+        auth_url = await auth_service.start_auth(provider, redirect_uri)
         return RedirectResponse(url=auth_url)
     except Exception as e:
         logger.error(f"Ошибка начала авторизации {provider_name}: {e}", exc_info=True)
@@ -75,6 +80,7 @@ async def auth_callback(
     provider_name: str,
     code: str,
     state: str,
+    auth_service: AuthServiceDep,
     error: str = None,
     redirect_uri: str = None,
 ):
@@ -115,7 +121,7 @@ async def auth_callback(
         provider=provider, code=code, state=state, redirect_uri=redirect_uri
     )
 
-    result = await get_auth_service().complete_auth(auth_request)
+    result = await auth_service.complete_auth(auth_request)
     
     logger.info(f"Результат авторизации: success={result.success}, error={result.error_message}")
 
@@ -151,7 +157,7 @@ async def auth_callback(
 
 
 @router.post("/logout")
-async def logout(session_id: str):
+async def logout(session_id: str, auth_service: AuthServiceDep):
     """
     Завершает сессию пользователя.
 
@@ -161,7 +167,7 @@ async def logout(session_id: str):
     if not session_id:
         raise HTTPException(status_code=400, detail="Не указан session_id")
 
-    success = await get_auth_service().logout(session_id)
+    success = await auth_service.logout(session_id)
 
     if success:
         return {"success": True, "message": "Сессия завершена"}
@@ -170,13 +176,12 @@ async def logout(session_id: str):
 
 
 @router.get("/status")
-async def auth_status():
+async def auth_status(auth_service: AuthServiceDep):
     """Возвращает статус системы авторизации"""
     return {
-        "auth_enabled": get_auth_service().storage is not None,
+        "auth_enabled": auth_service.storage is not None,
         "available_providers": [
-            p.value for p in get_auth_service().get_available_providers()
+            p.value for p in auth_service.get_available_providers()
         ],
-        "total_providers": len(get_auth_service()._providers),
+        "total_providers": len(auth_service._providers),
     }
-

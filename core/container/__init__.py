@@ -2,14 +2,13 @@
 Container - Dependency Injection контейнер.
 
 Базовая реализация контейнера, которую расширяют сервисы.
+Сервисы используют свои контейнеры (get_agents_container, get_frontend_container).
+Контейнер доступен через request.app.state.container.
 """
 
-from core.container.base import BaseContainer, get_system_container, set_system_container, initialize_system_container
+from core.container.base import BaseContainer
 
 __all__ = [
     "BaseContainer",
-    "get_system_container",
-    "set_system_container",
-    "initialize_system_container",
 ]
 

@@ -94,34 +94,25 @@ async def migrated_db():
             yield
             return
         
-        # Инициализируем системный контейнер для тестов
-        from core.container import initialize_system_container, BaseContainer
+        # Инициализируем контейнер агентов для тестов
         from core.config import get_settings
+        from core.files import initialize_default_processors
         
         settings = get_settings()
         
-        # Инициализируем системный контейнер (нужен для get_default_s3_client, get_default_audio_processor)
-        class TestSystemContainer(BaseContainer):
-            def __init__(self, db_url=None, shared_db_url=None):
-                super().__init__(
-                    db_url=db_url or settings.database.url,
-                    shared_db_url=shared_db_url or settings.database.shared_url
-                )
-        
-        initialize_system_container(
-            container_class=TestSystemContainer,
-            db_url=settings.database.url,
-            shared_db_url=settings.database.shared_url
-        )
-        logger.info("✅ Системный контейнер инициализирован для тестов")
-        
-        # Инициализируем контейнер агентов
         container = AgentsContainer(
             service_db_url=settings.database.url,
             shared_db_url=settings.database.shared_url
         )
         set_agents_container(container)
         logger.info("✅ AgentsContainer инициализирован для тестов")
+        
+        # Инициализируем файловые процессоры
+        initialize_default_processors(
+            file_repository=container.file_repository,
+            storage=container.storage
+        )
+        logger.info("✅ Файловые процессоры инициализированы для тестов")
 
         # Создаем контекст миграции
         migration_context = Context(

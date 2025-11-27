@@ -7,7 +7,6 @@ import json
 import logging
 import asyncio
 from core.context import get_context, set_context, clear_context
-from core.container import get_system_container
 from core.models.context_models import Context
 from apps.frontend.container import get_frontend_container
 from apps.frontend.core.websocket_manager import websocket_manager
@@ -152,7 +151,8 @@ async def websocket_chat(websocket: WebSocket):
                 await websocket.close(code=4001, reason="Invalid embed token")
                 return
             
-            company_repo = get_system_container().company_repository
+            frontend_container = get_frontend_container()
+            company_repo = frontend_container.company_repository
             active_company = await company_repo.get(token_data.company_id)
             if not active_company:
                 logger.error(f"Компания {token_data.company_id} не найдена")
@@ -160,7 +160,6 @@ async def websocket_chat(websocket: WebSocket):
                 return
             
             # Получаем пользователя через приватный метод _get_user
-            frontend_container = get_frontend_container()
             auth_service = frontend_container.auth_service
             # Используем _get_user напрямую, так как это внутренний метод AuthService
             user = await auth_service._get_user(token_data.user_id)
@@ -191,7 +190,8 @@ async def websocket_chat(websocket: WebSocket):
             return
 
         # Получаем активную компанию пользователя
-        storage = get_system_container().storage
+        frontend_container = get_frontend_container()
+        company_repo = frontend_container.company_repository
 
         if is_embed_chat:
             # Для embed чата используем компанию из токена (уже получена выше)
@@ -203,14 +203,12 @@ async def websocket_chat(websocket: WebSocket):
                 await websocket.close(code=4003, reason="User has no active company")
                 return
 
-            company_repo = get_system_container().company_repository
             active_company = await company_repo.get(user.active_company_id)
             if not active_company:
                 logger.error(f"Компания {user.active_company_id} не найдена")
                 await websocket.close(code=4003, reason=f"Company {user.active_company_id} not found")
                 return
 
-        company_repo = get_system_container().company_repository
         user_companies = []
         for company_id in user.companies.keys():
             company = await company_repo.get(company_id)

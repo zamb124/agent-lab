@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager
 from core.config.loader import load_merged_config
 from core.logging import setup_logging
 from core.db import create_tables
-from core.container import set_system_container
+from core.files import initialize_default_processors
 from apps.agents.config import AgentsSettings
 from apps.agents.container import AgentsContainer, set_agents_container
 
@@ -72,7 +72,11 @@ def create_app() -> FastAPI:
         shared_db_url=settings.database.shared_url
     )
     set_agents_container(container)
-    set_system_container(container)
+    
+    initialize_default_processors(
+        file_repository=container.file_repository,
+        storage=container.storage
+    )
     
     app = FastAPI(
         title="Agents Service",

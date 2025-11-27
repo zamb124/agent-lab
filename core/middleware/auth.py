@@ -1,5 +1,7 @@
 """
-Middleware для создания глобального контекста запроса
+Middleware для создания глобального контекста запроса.
+
+Репозитории получаются через request.app.state.container.
 """
 
 import logging
@@ -14,7 +16,6 @@ from core.models.context_models import Context
 from core.config import get_settings
 settings = get_settings()
 from core.models.identity_models import User, AuthProvider, UserStatus, Company
-from core.container import get_system_container
 from core.models.i18n_models import Language
 from core.utils.tokens import get_token_service
 logger = logging.getLogger(__name__)
@@ -31,20 +32,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
 
-    @property
-    def user_repository(self):
-        """Получить UserRepository из системного контейнера"""
-        return get_system_container().user_repository
-    
-    @property
-    def company_repository(self):
-        """Получить CompanyRepository из системного контейнера"""
-        return get_system_container().company_repository
-    
-    @property
-    def subdomain_repository(self):
-        """Получить SubdomainRepository из системного контейнера"""
-        return get_system_container().subdomain_repository
+    def _get_container(self, request: Request):
+        """Получить контейнер из request.app.state"""
+        return request.app.state.container
 
     async def _setup_webhook_context(self, request: Request, platform: str) -> None:
         """Устанавливает контекст для webhook запросов (Telegram/WhatsApp)"""
@@ -56,7 +46,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         company_id = parts[1]
 
-        requested_company = await self.company_repository.get(company_id)
+        container = self._get_container(request)
+        requested_company = await container.company_repository.get(company_id)
         if not requested_company:
             raise HTTPException(status_code=404, detail=f"Company {company_id} not found")
 
@@ -99,6 +90,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Для скачивания файлов - создаем минимальный контекст с компанией из поддомена
         if request.url.path.startswith("/api/v1/files/download/"):
             try:
+                container = self._get_container(request)
+                subdomain_repo = container.subdomain_repository
+                company_repo = container.company_repository
+                
                 # Определяем компанию по Host - для файлов всегда требуется поддомен
                 host = request.headers.get("host", "")
                 domain = settings.server.domain
@@ -108,9 +103,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 if settings.server.env == "local":
                     if ".localhost" in host:
                         subdomain = host.split(".")[0]
-                        company_id = await self.subdomain_repository.get_company_id(subdomain)
+                        company_id = await subdomain_repo.get_company_id(subdomain)
                         if company_id:
-                            requested_company = await self.company_repository.get(company_id)
+                            requested_company = await company_repo.get(company_id)
                             if requested_company:
                                 logger.info(f"📂 Файл: найдена компания {company_id} по поддомену {subdomain}")
 
@@ -120,9 +115,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 else:
                     if host.endswith(f".{domain}") and not host.startswith(domain):
                         subdomain = host.split(".")[0]
-                        company_id = await self.subdomain_repository.get_company_id(subdomain)
+                        company_id = await subdomain_repo.get_company_id(subdomain)
                         if company_id:
-                            requested_company = await self.company_repository.get(company_id)
+                            requested_company = await company_repo.get(company_id)
 
                     if not requested_company:
                         raise HTTPException(status_code=400, detail="Для скачивания файла требуется указать поддомен компании")
@@ -279,6 +274,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def _get_company_from_host(self, request: Request) -> Company:
         """Определяет компанию по Host заголовку"""
+        container = self._get_container(request)
+        subdomain_repo = container.subdomain_repository
+        company_repo = container.company_repository
+        
         host = request.headers.get("host", "")
         domain = settings.server.domain
 
@@ -289,9 +288,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # Для localhost: ssd.localhost:8001 -> subdomain = ssd
             subdomain = host.split(".")[0]
             logger.info(f"Local режим: subdomain={subdomain}")
-            company_id = await self.subdomain_repository.get_company_id(subdomain)
+            company_id = await subdomain_repo.get_company_id(subdomain)
             if company_id:
-                company = await self.company_repository.get(company_id)
+                company = await company_repo.get(company_id)
                 if company:
                     logger.info(f"Найдена компания по поддомену: {company_id}")
                     return company
@@ -300,10 +299,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
         elif host.endswith(f".{domain}") and not host.startswith(domain):
             subdomain = host.split(".")[0]
             logger.info(f"Продакшен режим: subdomain={subdomain}")
-            company_id = await self.subdomain_repository.get_company_id(subdomain)
+            company_id = await subdomain_repo.get_company_id(subdomain)
             logger.info(f"company_id из subdomain: {company_id}")
             if company_id:
-                company = await self.company_repository.get(company_id)
+                company = await company_repo.get(company_id)
                 if company:
                     logger.info(f"Найдена компания по поддомену: {company_id}")
                     return company
@@ -314,7 +313,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Если это основной домен (без поддомена) - возвращаем системную компанию
         logger.info("🔍 Основной домен без поддомена, возвращаем системную компанию")
-        return await self._get_system_company()
+        return await self._get_system_company(request)
 
     def _detect_user_language(self, request: Request) -> Language:
         """Определяет предпочитаемый язык пользователя"""
@@ -350,9 +349,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
         logger.debug(f"🌐 Используем язык по умолчанию: {Language.RU.value}")
         return Language.RU
 
-    async def _get_system_company(self) -> Company:
+    async def _get_system_company(self, request: Request) -> Company:
         """Возвращает системную компанию"""
-        company = await self.company_repository.get("system")
+        container = self._get_container(request)
+        company = await container.company_repository.get("system")
         if company:
             return company
 
@@ -466,6 +466,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def _create_api_context(self, request: Request, requested_company: Company) -> Context:
         """Создает контекст для API запросов"""
+        container = self._get_container(request)
+        company_repo = container.company_repository
+        user_repo = container.user_repository
 
         # Получаем токен из куки auth_token или заголовка Authorization
         token = request.cookies.get("auth_token")
@@ -490,13 +493,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Получаем пользователя по user_id из токена
         user = None
         if token_data.user_id:
-            user = await self._get_user_by_id(token_data.user_id)
+            user = await self._get_user_by_id(request, token_data.user_id)
 
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
 
         # Получаем все компании пользователя
-        user_companies = await self._get_user_companies(user)
+        user_companies = await self._get_user_companies(request, user)
 
         # Проверяем доступ к запрашиваемой компании (если указана в токене)
         if token_data.company_id and token_data.company_id != requested_company.company_id:
@@ -508,7 +511,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # используем его активную компанию или первую доступную
             active_company = None
             if user.active_company_id and user.active_company_id in user.companies:
-                active_company = await self.company_repository.get(user.active_company_id)
+                active_company = await company_repo.get(user.active_company_id)
 
             if not active_company and user_companies:
                 active_company = user_companies[0]
@@ -521,7 +524,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # Обновляем активную компанию у пользователя если нужно
             if user.active_company_id != requested_company.company_id:
                 user.active_company_id = requested_company.company_id
-                await self._update_user_active_company(user)
+                await user_repo.set(user)
 
         # Определяем язык пользователя
         language = self._detect_user_language(request)
@@ -598,6 +601,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def _create_frontend_context(self, request: Request, requested_company: Company, allow_no_company: bool = False, has_subdomain: bool = False) -> Context:
         """Создает контекст для frontend запросов на основе JWT токена"""
+        container = self._get_container(request)
+        user_repo = container.user_repository
+        company_repo = container.company_repository
+        
         # Получаем JWT токен из куки auth_token
         token = request.cookies.get("auth_token")
 
@@ -614,12 +621,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
             raise HTTPException(status_code=401, detail="Invalid token")
 
         # Получаем пользователя по user_id из токена
-        user = await self._get_user_by_id(token_data.user_id)
+        user = await self._get_user_by_id(request, token_data.user_id)
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
 
         # Получаем все компании пользователя
-        user_companies = await self._get_user_companies(user)
+        user_companies = await self._get_user_companies(request, user)
 
 
         # Определяем язык пользователя
@@ -657,7 +664,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not allow_no_company and user.active_company_id != requested_company.company_id:
             logger.info(f"🔄 Смена активной компании: {user.active_company_id} → {requested_company.company_id}")
             user.active_company_id = requested_company.company_id
-            await self._update_user_active_company(user)
+            await user_repo.set(user)
             logger.info(f"✅ Активная компания обновлена для пользователя {user.user_id}")
 
         # Для страниц с allow_no_company используем активную компанию пользователя или None
@@ -666,7 +673,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             active_company = requested_company
         elif user.active_company_id and user.active_company_id in user.companies:
             # Пытаемся загрузить активную компанию пользователя
-            active_company = await self.company_repository.get(user.active_company_id)
+            active_company = await company_repo.get(user.active_company_id)
 
         return Context(
             user=user,
@@ -678,25 +685,23 @@ class AuthMiddleware(BaseHTTPMiddleware):
             metadata={"authenticated": True, "allow_no_company": allow_no_company, "jwt_token": True},
         )
 
-    async def _get_user_companies(self, user: User) -> List[Company]:
+    async def _get_user_companies(self, request: Request, user: User) -> List[Company]:
         """Получает все компании пользователя"""
+        container = self._get_container(request)
+        company_repo = container.company_repository
         companies = []
         for company_id in user.companies.keys():
-            company = await self.company_repository.get(company_id)
+            company = await company_repo.get(company_id)
             if company:
                 companies.append(company)
         return companies
 
-    async def _get_user_by_session(self, session_id: str) -> Optional[User]:
-        """Получает пользователя по session_id"""
-        from core.identity.auth_service import get_auth_service
-        auth_service = get_auth_service()
-        return await auth_service.get_user_by_session(session_id)
+    async def _get_user_by_id(self, request: Request, user_id: str) -> Optional[User]:
+        """Получает пользователя по ID"""
+        container = self._get_container(request)
+        return await container.user_repository.get(user_id)
 
-    async def _get_user_by_id(self, user_id: str) -> Optional[User]:
-        """Получает пользователя по user_id"""
-        return await self.user_repository.get(user_id)
-
-    async def _update_user_active_company(self, user: User):
-        """Обновляет активную компанию пользователя в БД"""
-        await self.user_repository.set(user)
+    async def _update_user_active_company(self, request: Request, user: User):
+        """Обновляет активную компанию пользователя"""
+        container = self._get_container(request)
+        await container.user_repository.set(user)

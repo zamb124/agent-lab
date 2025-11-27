@@ -14,6 +14,7 @@ from core.files.models import (
 from core.files.processors import (
     FileProcessor,
     AudioProcessor,
+    initialize_default_processors,
     get_default_file_processor,
     get_default_audio_processor,
     close_default_file_processor,
@@ -33,6 +34,7 @@ __all__ = [
     "AudioMetadata",
     "FileProcessor",
     "AudioProcessor",
+    "initialize_default_processors",
     "get_default_file_processor",
     "get_default_audio_processor",
     "close_default_file_processor",

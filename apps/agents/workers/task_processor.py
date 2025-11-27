@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from apps.agents.config import get_agents_settings
 settings = get_agents_settings()
 from core.logging import setup_logging, get_logger
-from apps.agents.container import get_agents_container, initialize_system_container
+from apps.agents.container import get_agents_container, initialize_agents_container
 from apps.agents.models import TaskStatus, SessionStatus
 from core.context import set_context, clear_context, get_context
 from core.db.database import create_tables, get_session_factory
@@ -34,9 +34,9 @@ class TaskProcessor:
 
     @property
     def container(self):
-        """Ленивая инициализация системного контейнера"""
+        """Ленивая инициализация контейнера агентов"""
         if self._container is None:
-            self._container = initialize_system_container(
+            self._container = initialize_agents_container(
                 db_url=settings.database.url,
                 shared_db_url=settings.database.shared_url
             )

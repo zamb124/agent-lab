@@ -158,12 +158,48 @@ task_repo = container.task_repository        # → service БД
 company_repo = container.company_repository  # → shared БД
 </good_example>
 
+## В Middleware (core)
+
+Код в `core/middleware/` получает контейнер через `request.app.state.container`:
+
+<good_example>
+# core/middleware/auth.py
+class AuthMiddleware(BaseHTTPMiddleware):
+    def _get_container(self, request: Request):
+        return request.app.state.container
+    
+    async def dispatch(self, request: Request, call_next):
+        container = self._get_container(request)
+        user_repo = container.user_repository
+        company_repo = container.company_repository
+        ...
+</good_example>
+
+## Файловые процессоры
+
+Инициализация при старте приложения:
+
+<good_example>
+# apps/agents/main.py или apps/frontend/main.py
+from core.files import initialize_default_processors
+
+container = AgentsContainer(...)
+set_agents_container(container)
+
+initialize_default_processors(
+    file_repository=container.file_repository,
+    storage=container.storage  # Для CloudVoice
+)
+</good_example>
+
 ## КРИТИЧНЫЕ НАПОМИНАНИЯ
 
-🚨 **ВСЕГДА** используй `get_agents_container()` для доступа к сущностям
+🚨 **ВСЕГДА** используй `get_agents_container()` / `get_frontend_container()` для доступа к сущностям
+🚨 **В middleware** используй `request.app.state.container`
 🚨 **НИКОГДА** не импортируй сущности контейнера напрямую
 🚨 **НИКОГДА** не создавай объекты контейнера вручную
 🚨 **ВСЕГДА** ставь `Depends` параметры ПЕРЕД `Query` в FastAPI
 🚨 **ВСЕГДА** используй репозитории, Storage только для временных данных
+🚨 **ВСЕГДА** вызывай `initialize_default_processors()` при старте приложения
 
 **Нарушение этих правил приведет к нестабильной работе системы!**

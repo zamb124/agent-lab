@@ -19,7 +19,7 @@ from core.logging import setup_logging
 from core.db import create_tables
 from core.middleware.auth import AuthMiddleware
 from core.middleware.profiling import ProfilingMiddleware
-from core.container import set_system_container
+from core.files import initialize_default_processors
 from apps.frontend.container import FrontendContainer, set_frontend_container
 from apps.agents.container import AgentsContainer, set_agents_container
 from apps.frontend.core.htmx_helpers import HTMXHeaderMiddleware
@@ -81,7 +81,11 @@ def create_app() -> FastAPI:
         shared_db_url=settings.database.shared_url
     )
     set_frontend_container(container)
-    set_system_container(container)
+    
+    initialize_default_processors(
+        file_repository=container.file_repository,
+        storage=container.storage
+    )
     
     if settings.database.agents_db_url:
         agents_container = AgentsContainer(

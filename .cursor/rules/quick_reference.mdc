@@ -140,6 +140,30 @@ async def test_example(
     assert loaded.name == "Test"
 ```
 
+## В middleware
+
+```python
+# core/middleware/auth.py
+container = request.app.state.container
+user_repo = container.user_repository
+```
+
+## Файловые процессоры
+
+```python
+# При старте приложения
+from core.files import initialize_default_processors
+
+initialize_default_processors(
+    file_repository=container.file_repository,
+    storage=container.storage
+)
+
+# Использование
+from core.files import get_default_file_processor
+file_processor = await get_default_file_processor()
+```
+
 ## 🚨 ЗАПОМНИ
 
 - Storage теперь ПРИВАТНЫЙ
@@ -148,3 +172,5 @@ async def test_example(
 - НЕТ `force_global`
 - НЕТ StorageDep
 - ВСЕ из контейнера
+- В middleware → `request.app.state.container`
+- FileProcessor использует `file_repository`, не `storage`

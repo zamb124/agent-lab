@@ -1,8 +1,6 @@
 """
 Процессоры для обработки файлов и аудио.
-Сохраняют файлы в S3 и создают записи в БД.
-
-АДАПТИРОВАНО: убраны зависимости от app/*, используется только core/*
+Сохраняют файлы в S3 и создают записи в БД через FileRepository.
 """
 
 import re
@@ -18,7 +16,7 @@ from core.files.models import FileMetadata, AudioMetadata, FileStatus
 from core.clients.cloud_voice import CloudVoiceClientFactory
 
 if TYPE_CHECKING:
-    from core.db.storage import Storage
+    from core.files.file_repository import FileRepository
 
 logger = logging.getLogger(__name__)
 
@@ -26,16 +24,16 @@ logger = logging.getLogger(__name__)
 class FileProcessor:
     """
     Процессор для обработки файлов.
-    Загружает файлы в S3 и сохраняет метаданные в БД.
+    Загружает файлы в S3 и сохраняет метаданные через FileRepository.
     """
 
-    def __init__(self, storage: "Storage", bucket_name: Optional[str] = None):
+    def __init__(self, file_repository: "FileRepository", bucket_name: Optional[str] = None):
         """
         Args:
-            storage: Storage для работы с БД
+            file_repository: FileRepository для работы с записями о файлах
             bucket_name: Имя S3 бакета (если не указан, используется дефолтный)
         """
-        self.storage = storage
+        self.file_repository = file_repository
         self.bucket_name = bucket_name
         self._s3_client: Optional[S3Client] = None
 
@@ -118,10 +116,7 @@ class FileProcessor:
             tags=tags or [],
         )
 
-        await self.storage.set(
-            file_record.key,
-            file_record.model_dump_json()
-        )
+        await self.file_repository.set(file_record)
 
         logger.info(f"Файл обработан: {file_id} ({original_name}, {len(data)} байт)")
         return file_record
@@ -136,13 +131,7 @@ class FileProcessor:
         Returns:
             Запись о файле или None
         """
-        file_key = f"file:{file_id}"
-        data = await self.storage.get(file_key)
-        
-        if not data:
-            return None
-        
-        return FileMetadata.model_validate_json(data)
+        return await self.file_repository.get(file_id)
 
     async def delete_file(self, file_id: str) -> bool:
         """
@@ -163,7 +152,7 @@ class FileProcessor:
         await s3_client.delete_file(file_record.s3_key)
         await s3_client.close()
 
-        await self.storage.delete(file_record.key)
+        await self.file_repository.delete(file_id)
 
         logger.info(f"Файл удален: {file_id}")
         return True
@@ -239,20 +228,23 @@ class FileProcessor:
 class AudioProcessor:
     """
     Процессор для обработки аудиофайлов.
-    Загружает аудио в S3, сохраняет метаданные и распознает речь.
+    Загружает аудио в S3, сохраняет метаданные через FileRepository и распознает речь.
     """
 
     def __init__(
         self,
-        storage: "Storage",
+        file_repository: "FileRepository",
+        storage=None,
         bucket_name: Optional[str] = None,
     ):
         """
         Args:
-            storage: Storage для работы с БД
+            file_repository: FileRepository для работы с записями о файлах
+            storage: Storage для CloudVoice (кэширование токенов)
             bucket_name: Имя S3 бакета
         """
-        self.storage = storage
+        self.file_repository = file_repository
+        self._storage = storage
         self.bucket_name = bucket_name
         self._s3_client: Optional[S3Client] = None
         self._voice_client = None
@@ -270,7 +262,9 @@ class AudioProcessor:
     async def _get_voice_client(self):
         """Получает Cloud Voice клиент"""
         if self._voice_client is None:
-            self._voice_client = CloudVoiceClientFactory.create_client(self.storage)
+            if self._storage is None:
+                raise RuntimeError("Storage не установлен для CloudVoice")
+            self._voice_client = CloudVoiceClientFactory.create_client(self._storage)
         return self._voice_client
 
     @staticmethod
@@ -397,10 +391,7 @@ class AudioProcessor:
             transcription=transcription,
         )
 
-        await self.storage.set(
-            audio_record.key,
-            audio_record.model_dump_json()
-        )
+        await self.file_repository.set(audio_record)
 
         logger.info(f"Аудио обработано: {file_id}")
         return audio_record
@@ -415,30 +406,43 @@ class AudioProcessor:
         Returns:
             Запись об аудиофайле или None
         """
-        file_key = f"file:{audio_id}"
-        data = await self.storage.get(file_key)
-        
-        if not data:
-            return None
-        
-        return AudioMetadata.model_validate_json(data)
+        return await self.file_repository.get(audio_id)
 
 
 _default_file_processor: Optional[FileProcessor] = None
 _default_audio_processor: Optional[AudioProcessor] = None
+_default_file_repository = None
+_default_storage = None
+
+
+def initialize_default_processors(file_repository, storage=None) -> None:
+    """
+    Инициализирует дефолтные процессоры с заданным file_repository.
+    Вызывается при старте приложения в lifespan.
+    
+    Args:
+        file_repository: FileRepository из контейнера приложения
+        storage: Storage для CloudVoice (опционально)
+    """
+    global _default_file_repository, _default_storage
+    _default_file_repository = file_repository
+    _default_storage = storage
 
 
 async def get_default_file_processor() -> FileProcessor:
     """
     Получает дефолтный файловый процессор.
-    Использует storage из системного контейнера.
+    Требует предварительного вызова initialize_default_processors().
     """
     global _default_file_processor
     
     if _default_file_processor is None:
-        from core.container import get_system_container
-        storage = get_system_container().storage
-        _default_file_processor = FileProcessor(storage=storage)
+        if _default_file_repository is None:
+            raise RuntimeError(
+                "Процессоры не инициализированы. "
+                "Вызовите initialize_default_processors(file_repository) при старте приложения."
+            )
+        _default_file_processor = FileProcessor(file_repository=_default_file_repository)
     
     return _default_file_processor
 
@@ -446,14 +450,20 @@ async def get_default_file_processor() -> FileProcessor:
 async def get_default_audio_processor() -> AudioProcessor:
     """
     Получает дефолтный аудио процессор.
-    Использует storage из системного контейнера.
+    Требует предварительного вызова initialize_default_processors().
     """
     global _default_audio_processor
     
     if _default_audio_processor is None:
-        from core.container import get_system_container
-        storage = get_system_container().storage
-        _default_audio_processor = AudioProcessor(storage=storage)
+        if _default_file_repository is None:
+            raise RuntimeError(
+                "Процессоры не инициализированы. "
+                "Вызовите initialize_default_processors(file_repository) при старте приложения."
+            )
+        _default_audio_processor = AudioProcessor(
+            file_repository=_default_file_repository,
+            storage=_default_storage
+        )
     
     return _default_audio_processor
 
