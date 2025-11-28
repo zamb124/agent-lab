@@ -11,7 +11,7 @@ from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(prefix="/admin", tags=["variables"])
 
 
 class VariableRequest(BaseModel):
@@ -29,7 +29,7 @@ class VariableResponse(BaseModel):
     key: str
 
 
-@router.post("/admin/variables")
+@router.post("/variables")
 async def set_variable(request: VariableRequest):
     """
     Устанавливает переменную компании.
@@ -54,36 +54,34 @@ async def set_variable(request: VariableRequest):
     )
 
 
-@router.get("/admin/variables")
+@router.get("/variables")
 async def list_variables() -> Dict[str, Any]:
     """Получает все переменные компании"""
     variables_service = get_agents_container().variables_service
     return await variables_service.list_vars()
 
 
-@router.get("/admin/variables/{key}")
+@router.get("/variables/{key}")
 async def get_variable(key: str) -> Dict[str, Any]:
     """Получает переменную компании со всеми данными"""
     variables_service = get_agents_container().variables_service
-    storage_key = f"var:{key}"
-    import json
-    data = await variables_service.storage.get(storage_key)
+    variable_repo = variables_service.variable_repository
     
-    if not data:
+    variable = await variable_repo.get(key)
+    
+    if not variable:
         raise HTTPException(status_code=404, detail=f"Variable {key} not found")
-    
-    var_data = json.loads(data)
     
     return {
         "key": key,
-        "value": var_data.get("value", ""),
-        "secret": var_data.get("secret", False),
-        "groups": var_data.get("groups", []),
-        "description": var_data.get("description", "")
+        "value": variable.value if not variable.secret else "***",
+        "secret": variable.secret,
+        "groups": variable.groups,
+        "description": variable.description
     }
 
 
-@router.delete("/admin/variables/{key}")
+@router.delete("/variables/{key}")
 async def delete_variable(key: str):
     """Удаляет переменную компании"""
     variables_service = get_agents_container().variables_service

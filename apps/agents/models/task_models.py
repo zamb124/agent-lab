@@ -93,7 +93,7 @@ class TaskConfig(BaseModel):
         """Преобразует dict в Context если нужно"""
         if v is None or not isinstance(v, dict):
             return v
-        from .context_models import Context
+        from core.models.context_models import Context
         return Context(**v)
 
     @property

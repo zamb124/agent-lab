@@ -215,7 +215,7 @@ export default class VariablesModule {
         this.editingKey = key;
         
         try {
-            const response = await fetch(`/frontend/api/admin/variables/${key}`, {
+            const response = await fetch(`/agents/api/v1/admin/variables/${key}`, {
                 headers: {'Authorization': `Bearer ${this.app.authToken}`}
             });
             if (response.ok) {
@@ -273,7 +273,7 @@ export default class VariablesModule {
         }
         
         try {
-            const response = await fetch('/frontend/api/admin/variables', {
+            const response = await fetch('/agents/api/v1/admin/variables', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -305,7 +305,7 @@ export default class VariablesModule {
         }
         
         try {
-            const response = await fetch(`/frontend/api/admin/variables/${key}`, {
+            const response = await fetch(`/agents/api/v1/admin/variables/${key}`, {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${this.app.authToken}`
@@ -373,7 +373,7 @@ export default class VariablesModule {
         
         if (input.type === 'password') {
             try {
-                const response = await fetch(`/frontend/api/admin/variables/${key}`, {
+                const response = await fetch(`/agents/api/v1/admin/variables/${key}`, {
                     headers: {
                         'Authorization': `Bearer ${this.app.authToken}`
                     }

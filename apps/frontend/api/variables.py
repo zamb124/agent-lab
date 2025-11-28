@@ -180,7 +180,7 @@ async def get_flow_variables(flow_id: str) -> VariablesResponse:
     logger.info(f"🔍 Flow variables для {flow_id}: {flow_config.variables if hasattr(flow_config, 'variables') else 'НЕТ'}")
     if hasattr(flow_config, 'variables') and flow_config.variables:
         # Резолвим @var:key для показа значений
-        variables_service = get_variables_service()
+        variables_service = await get_variables_service()
         resolved_flow_vars = await variables_service.resolve(flow_config.variables, auto_create=True)
         logger.info(f"✅ Резолвнутые flow variables: {resolved_flow_vars}")
         

@@ -4,7 +4,7 @@ Dependency Injection для сервиса агентов
 Общие зависимости для API роутеров
 """
 
-from typing import Annotated, TYPE_CHECKING
+from typing import Annotated, TYPE_CHECKING, Dict, Callable, Any
 from fastapi import Depends
 
 from apps.agents.db.repositories import AgentRepository, FlowRepository, TaskRepository, SessionRepository, ToolRepository
@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     from core.identity.auth_service import AuthService
     from apps.agents.interfaces.factory import InterfaceFactory
     from core.db.storage import Storage
+
+_repository_dependencies: Dict[str, Callable] = {}
 
 
 async def get_storage() -> "Storage":
@@ -90,6 +92,42 @@ async def get_request_context() -> Context:
             ...
     """
     return get_context()
+
+
+def generate_repository_dependency(repository_name: str, repository_class: type) -> Callable:
+    """
+    Генерирует dependency функцию для репозитория.
+    
+    Args:
+        repository_name: Имя репозитория (например, "agent_repository")
+        repository_class: Класс репозитория
+        
+    Returns:
+        Dependency функция
+    """
+    async def get_repository():
+        container = get_agents_container()
+        return getattr(container, repository_name)
+    
+    get_repository.__name__ = f"get_{repository_name}"
+    _repository_dependencies[repository_name] = get_repository
+    
+    return get_repository
+
+
+def get_repository_dependency(repository_name: str) -> Callable:
+    """
+    Получает dependency функцию для репозитория.
+    
+    Args:
+        repository_name: Имя репозитория
+        
+    Returns:
+        Dependency функция
+    """
+    if repository_name not in _repository_dependencies:
+        raise ValueError(f"Dependency для {repository_name} не найдена")
+    return _repository_dependencies[repository_name]
 
 
 ContextDep = Annotated[Context, Depends(get_request_context)]

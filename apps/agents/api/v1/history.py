@@ -13,7 +13,7 @@ from apps.agents.container import get_agents_container
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/api/v1/history",
+    prefix="/history",
     tags=["История и аналитика"],
     responses={
         404: {"description": "Сессия не найдена"},

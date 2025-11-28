@@ -12,6 +12,27 @@ from core.container import BaseContainer, lazy
 logger = logging.getLogger(__name__)
 
 
+def _repository_to_prefix(repository) -> str:
+    """
+    Преобразует префикс репозитория в префикс пути.
+    
+    Использует префикс из самого репозитория.
+    """
+    prefix = repository._get_prefix()
+    return f"/{prefix.rstrip(':')}"
+
+
+def _repository_to_tags(repository) -> list[str]:
+    """
+    Преобразует префикс репозитория в теги для OpenAPI.
+    
+    Использует префикс из самого репозитория.
+    """
+    prefix = repository._get_prefix()
+    tag = prefix.rstrip(':')
+    return [tag]
+
+
 class AgentsContainer(BaseContainer):
     """
     Контейнер для сервиса агентов.
@@ -26,32 +47,110 @@ class AgentsContainer(BaseContainer):
     @lazy
     def agent_repository(self):
         from apps.agents.db.repositories.agent_repository import AgentRepository
-        return AgentRepository(storage=self.storage)
+        from apps.agents.dependencies import generate_repository_dependency
+        
+        repository = AgentRepository(storage=self.storage)
+        dependency = generate_repository_dependency("agent_repository", AgentRepository)
+        
+        self._register_crud_router(
+            repository_name="agent_repository",
+            repository=repository,
+            prefix=_repository_to_prefix(repository),
+            tags=_repository_to_tags(repository),
+            repository_dependency=dependency
+        )
+        
+        return repository
     
     @lazy
     def flow_repository(self):
         from apps.agents.db.repositories.flow_repository import FlowRepository
-        return FlowRepository(storage=self.storage)
+        from apps.agents.dependencies import generate_repository_dependency
+        
+        repository = FlowRepository(storage=self.storage)
+        dependency = generate_repository_dependency("flow_repository", FlowRepository)
+        
+        self._register_crud_router(
+            repository_name="flow_repository",
+            repository=repository,
+            prefix=_repository_to_prefix(repository),
+            tags=_repository_to_tags(repository),
+            repository_dependency=dependency
+        )
+        
+        return repository
     
     @lazy
     def tool_repository(self):
         from apps.agents.db.repositories.tool_repository import ToolRepository
-        return ToolRepository(storage=self.storage)
+        from apps.agents.dependencies import generate_repository_dependency
+        
+        repository = ToolRepository(storage=self.storage)
+        dependency = generate_repository_dependency("tool_repository", ToolRepository)
+        
+        self._register_crud_router(
+            repository_name="tool_repository",
+            repository=repository,
+            prefix=_repository_to_prefix(repository),
+            tags=_repository_to_tags(repository),
+            repository_dependency=dependency
+        )
+        
+        return repository
     
     @lazy
     def task_repository(self):
         from apps.agents.db.repositories.task_repository import TaskRepository
-        return TaskRepository(storage=self.storage)
+        from apps.agents.dependencies import generate_repository_dependency
+        
+        repository = TaskRepository(storage=self.storage)
+        dependency = generate_repository_dependency("task_repository", TaskRepository)
+        
+        self._register_crud_router(
+            repository_name="task_repository",
+            repository=repository,
+            prefix=_repository_to_prefix(repository),
+            tags=_repository_to_tags(repository),
+            repository_dependency=dependency
+        )
+        
+        return repository
     
     @lazy
     def session_repository(self):
         from apps.agents.db.repositories.session_repository import SessionRepository
-        return SessionRepository(storage=self.storage)
+        from apps.agents.dependencies import generate_repository_dependency
+        
+        repository = SessionRepository(storage=self.storage)
+        dependency = generate_repository_dependency("session_repository", SessionRepository)
+        
+        self._register_crud_router(
+            repository_name="session_repository",
+            repository=repository,
+            prefix=_repository_to_prefix(repository),
+            tags=_repository_to_tags(repository),
+            repository_dependency=dependency
+        )
+        
+        return repository
     
     @lazy
     def mcp_server_repository(self):
         from apps.agents.db.repositories.mcp_repository import MCPServerRepository
-        return MCPServerRepository(storage=self.storage)
+        from apps.agents.dependencies import generate_repository_dependency
+        
+        repository = MCPServerRepository(storage=self.storage)
+        dependency = generate_repository_dependency("mcp_server_repository", MCPServerRepository)
+        
+        self._register_crud_router(
+            repository_name="mcp_server_repository",
+            repository=repository,
+            prefix=_repository_to_prefix(repository),
+            tags=_repository_to_tags(repository),
+            repository_dependency=dependency
+        )
+        
+        return repository
     
     # === Фабрики ===
     

@@ -87,6 +87,19 @@ def create_app() -> FastAPI:
     
     logger.info("Подключение роутеров...")
     
+    # Инициализируем репозитории для регистрации CRUD роутеров
+    repository_names = [
+        "agent_repository", "flow_repository", "tool_repository",
+        "task_repository", "session_repository", "mcp_server_repository"
+    ]
+    for repo_name in repository_names:
+        _ = getattr(container, repo_name)
+    
+    crud_routers = container.get_crud_routers()
+    logger.info(f"Найдено {len(crud_routers)} CRUD роутеров для автоматического подключения")
+    for router in crud_routers:
+        app.include_router(router, prefix="/agents/api/v1")
+    
     from apps.agents.api.v1.agents import router as agents_router
     from apps.agents.api.v1.tools import router as tools_router
     from apps.agents.api.v1.flows import router as flows_router
@@ -100,6 +113,7 @@ def create_app() -> FastAPI:
     from apps.agents.api.v1.webhooks import router as webhooks_router
     from apps.agents.api.v1.leads import router as leads_router
     from apps.agents.api.v1.knowledge_base import router as kb_router
+    from apps.agents.api.v1.variables import router as variables_router
     
     app.include_router(agents_router, prefix="/agents/api/v1", tags=["agents"])
     app.include_router(tools_router, prefix="/agents/api/v1", tags=["tools"])
@@ -114,6 +128,7 @@ def create_app() -> FastAPI:
     app.include_router(webhooks_router, prefix="/agents/api/v1", tags=["webhooks"])
     app.include_router(leads_router, prefix="/agents/api/v1", tags=["leads"])
     app.include_router(kb_router, prefix="/agents/api/v1", tags=["knowledge-base"])
+    app.include_router(variables_router, prefix="/agents/api/v1", tags=["variables"])
     
     logger.info("Agents Service создан")
     

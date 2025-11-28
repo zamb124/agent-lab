@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/profiling", tags=["profiling"])
+router = APIRouter(prefix="/profiling", tags=["profiling"])
 
 
 class ProfilingRequest(BaseModel):

@@ -5,7 +5,7 @@ API для работы с задачами
 from fastapi import APIRouter
 
 router = APIRouter(
-    prefix="/api/v1/tasks",
+    prefix="/tasks",
     tags=["tasks"]
 )
 

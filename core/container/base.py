@@ -18,7 +18,8 @@
 
 import functools
 import logging
-from typing import Optional, Any, Callable
+from typing import Optional, Any, Callable, Dict, List
+from fastapi import APIRouter
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,8 @@ class BaseContainer:
             settings = get_settings()
             shared_db_url = settings.database.shared_url
         self.shared_db_url = shared_db_url
+        
+        self._crud_routers: Dict[str, APIRouter] = {}
     
     # === Storage ===
     
@@ -166,3 +169,46 @@ class BaseContainer:
         """S3ClientFactory для работы с S3"""
         from core.files.s3_client import S3ClientFactory
         return S3ClientFactory
+    
+    # === CRUD роутеры ===
+    
+    def _register_crud_router(
+        self,
+        repository_name: str,
+        repository: Any,
+        prefix: str,
+        tags: List[str],
+        repository_dependency: Callable
+    ):
+        """
+        Регистрирует CRUD роутер для репозитория.
+        
+        Args:
+            repository_name: Имя репозитория (например, "agent_repository")
+            repository: Экземпляр репозитория
+            prefix: Префикс пути (например, "/agents")
+            tags: Теги для OpenAPI
+            repository_dependency: Dependency функция для получения репозитория
+        """
+        from core.api.crud_router import CRUDRouterGenerator
+        
+        generator = CRUDRouterGenerator(
+            repository=repository,
+            prefix=prefix,
+            tags=tags,
+            repository_dependency=repository_dependency
+        )
+        
+        router = generator.generate_router()
+        self._crud_routers[repository_name] = router
+        
+        logger.debug(f"CRUD роутер зарегистрирован: {repository_name} -> {prefix}")
+    
+    def get_crud_routers(self) -> List[APIRouter]:
+        """
+        Возвращает список всех зарегистрированных CRUD роутеров.
+        
+        Returns:
+            Список APIRouter
+        """
+        return list(self._crud_routers.values())

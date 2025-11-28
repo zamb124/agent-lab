@@ -24,7 +24,7 @@ export class PlatformManager {
         modal.dataset.editPlatform = '';
         
         try {
-            const response = await fetch('/frontend/api/admin/variables', {
+            const response = await fetch('/agents/api/v1/admin/variables', {
                 headers: {
                     'Authorization': `Bearer ${this.app.authToken}`
                 }
@@ -286,7 +286,7 @@ export class PlatformManager {
     
     async loadVariablesForWhatsApp() {
         try {
-            const response = await fetch('/frontend/api/admin/variables', {
+            const response = await fetch('/agents/api/v1/admin/variables', {
                 headers: {
                     'Authorization': `Bearer ${this.app.authToken}`
                 }
