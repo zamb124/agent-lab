@@ -4,9 +4,9 @@
       "title": "ID checkpoint",
       "description": "Уникальный идентификатор checkpoint"
     },
-    "thread_id": {
-      "title": "Thread ID",
-      "description": "ID треда (session_id)"
+    "session_id": {
+      "title": "Session ID",
+      "description": "ID сессии"
     },
     "checkpoint_ns": {
       "title": "Namespace",

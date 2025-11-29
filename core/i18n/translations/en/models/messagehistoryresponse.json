@@ -4,10 +4,6 @@
       "title": "Session ID",
       "description": "Identifier session"
     },
-    "thread_id": {
-      "title": "Thread ID",
-      "description": "Thread ID for LangGraph"
-    },
     "flow_id": {
       "title": "Flow ID",
       "description": "Identifier flow"

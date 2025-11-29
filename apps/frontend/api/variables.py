@@ -4,17 +4,97 @@ API для работы с переменными.
 
 import logging
 from fastapi import APIRouter, HTTPException
-from typing import List, Any
+from typing import List, Any, Dict
 from pydantic import BaseModel
 
 
 from core.variables import VariableResolver
 from core.context import get_context
 from apps.agents.dependencies import get_variables_service
-from apps.frontend.container import get_frontend_container
+from apps.agents.container import get_agents_container
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/variables", tags=["variables"])
+
+
+class VariableRequest(BaseModel):
+    """Запрос на установку переменной"""
+    key: str
+    value: str
+    secret: bool = False
+    groups: list[str] = []
+    description: str = ""
+
+
+@router.get("/admin/variables")
+async def list_variables() -> Dict[str, Any]:
+    """Получить все переменные компании"""
+    variables_service = get_agents_container().variables_service
+    return await variables_service.list_vars()
+
+
+@router.post("/admin/variables")
+async def set_variable(request: VariableRequest):
+    """Установить переменную компании"""
+    variables_service = get_agents_container().variables_service
+    
+    await variables_service.set_var(
+        key=request.key,
+        value=request.value,
+        is_secret=request.secret,
+        groups=request.groups,
+        description=request.description
+    )
+    
+    return {"success": True, "key": request.key}
+
+
+@router.get("/admin/variables/{key}")
+async def get_variable(key: str) -> Dict[str, Any]:
+    """Получить переменную компании"""
+    variables_service = get_agents_container().variables_service
+    variable_repo = variables_service.variable_repository
+    
+    variable = await variable_repo.get(key)
+    
+    if not variable:
+        raise HTTPException(status_code=404, detail=f"Variable {key} not found")
+    
+    return {
+        "key": key,
+        "value": variable.value if not variable.secret else "***",
+        "secret": variable.secret,
+        "groups": variable.groups,
+        "description": variable.description
+    }
+
+
+@router.put("/admin/variables/{key}")
+async def update_variable(key: str, request: VariableRequest):
+    """Обновить переменную компании"""
+    variables_service = get_agents_container().variables_service
+    
+    await variables_service.set_var(
+        key=key,
+        value=request.value,
+        is_secret=request.secret,
+        groups=request.groups,
+        description=request.description
+    )
+    
+    return {"success": True, "key": key}
+
+
+@router.delete("/admin/variables/{key}")
+async def delete_variable(key: str):
+    """Удалить переменную компании"""
+    variables_service = get_agents_container().variables_service
+    success = await variables_service.delete_var(key)
+    
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Variable {key} not found")
+    
+    return {"success": True, "key": key}
 
 
 class Variable(BaseModel):
@@ -55,7 +135,7 @@ async def get_flow_variables(flow_id: str) -> VariablesResponse:
         agent_config = None
     else:
         # Получаем flow config
-        agents_container = get_frontend_container().get_agents_container()
+        agents_container = get_agents_container()
         flow_repo = agents_container.flow_repository
         agent_repo = agents_container.agent_repository
         

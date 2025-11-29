@@ -71,7 +71,7 @@ async def test_smart_flow_calculator_routing(migrated_db, flow_factory, system_c
     # Тестируем математический запрос
     result = await smart_flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 5 + 7")]},
-        config={"configurable": {"thread_id": "test_smart_calc"}}
+        config={"configurable": {"session_id": "test_smart_calc"}}
     )
     
     assert "messages" in result
@@ -103,7 +103,7 @@ async def test_smart_flow_weather_routing(migrated_db, flow_factory, system_cont
     # Тестируем погодный запрос
     result = await smart_flow.ainvoke(
         {"messages": [HumanMessage(content="Какая погода в Москве?")]},
-        config={"configurable": {"thread_id": "test_smart_weather"}}
+        config={"configurable": {"session_id": "test_smart_weather"}}
     )
     
     assert "messages" in result
@@ -136,13 +136,13 @@ async def test_smart_flow_different_paths(migrated_db, flow_factory, system_cont
     # Тест 1: Математика
     result1 = await smart_flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 10 + 10")]},
-        config={"configurable": {"thread_id": "test_diff_1"}}
+        config={"configurable": {"session_id": "test_diff_1"}}
     )
     
     # Тест 2: Погода
     result2 = await smart_flow.ainvoke(
         {"messages": [HumanMessage(content="Какая погода?")]},
-        config={"configurable": {"thread_id": "test_diff_2"}}
+        config={"configurable": {"session_id": "test_diff_2"}}
     )
     
     # Проверяем что оба запроса обработаны

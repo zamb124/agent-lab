@@ -237,19 +237,17 @@ class TestAuthService:
             }
         )
         
-        # Создаем AuthService с тестовой конфигурацией
-        # Мокаем settings
+        from apps.agents.container import get_agents_container
+        container = get_agents_container()
+        auth_service = container.auth_service
+        
         with patch('core.identity.auth_service.get_settings') as mock_get_settings:
             mock_settings = MagicMock()
             mock_settings.auth = test_auth_config
             mock_get_settings.return_value = mock_settings
             
-            # Переинициализируем AuthService с новой конфигурацией
-            from apps.agents.container import get_agents_container
-            container = get_agents_container()
-            auth_service = container.auth_service
+            auth_service.reinitialize_providers()
             
-            # Проверяем инициализацию
             providers = auth_service.get_available_providers()
             assert AuthProvider.YANDEX in providers
             
@@ -389,6 +387,9 @@ class TestAuthService:
         container = get_agents_container()
         auth_service = container.auth_service
         
+        code_key = f"oauth_code:{AuthProvider.YANDEX.value}:test_code"
+        await auth_service._storage.delete(code_key)
+        
         auth_service._get_auth_state = AsyncMock(return_value=None)
         
         auth_request = AuthRequest(
@@ -409,9 +410,6 @@ class TestAuthService:
         """Тест получения пользователя по сессии"""
         container = get_agents_container()
         auth_service = container.auth_service
-        
-        # Мокаем Storage
-        _storage = AsyncMock()
         
         # Мокаем данные сессии
         test_session = AuthSession(

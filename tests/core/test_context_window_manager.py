@@ -53,7 +53,7 @@ class TestContextWindowManager:
             AIMessage(content="Здравствуйте"),
         ]
         
-        run_config = {"configurable": {"thread_id": "test"}}
+        run_config = {"configurable": {"session_id": "test"}}
         
         result, was_summarized = await manager.check_and_summarize_if_needed(
             messages=messages,
@@ -82,7 +82,7 @@ class TestContextWindowManager:
         for i in range(50):
             messages.append(HumanMessage(content=f"Сообщение {i} " * 20))
         
-        run_config = {"configurable": {"thread_id": "test"}}
+        run_config = {"configurable": {"session_id": "test"}}
         
         result, was_summarized = await manager.check_and_summarize_if_needed(
             messages=messages,
@@ -116,11 +116,11 @@ class TestContextWindowManager:
         with pytest.raises(ValueError, match="не найден"):
             manager._get_context_window("unknown/model", {})
     
-    async def test_error_on_missing_thread_id(self):
-        """Исключение при попытке обновить checkpoint без thread_id"""
+    async def test_error_on_missing_session_id(self):
+        """Исключение при попытке обновить checkpoint без session_id"""
         manager = ContextWindowManager()
         
-        with pytest.raises(ValueError, match="thread_id обязателен"):
+        with pytest.raises(ValueError, match="session_id обязателен"):
             await manager._update_checkpoint_messages(
                 {"configurable": {}},
                 [HumanMessage(content="test")]

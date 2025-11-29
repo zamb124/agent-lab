@@ -79,9 +79,6 @@ class TestEndToEndRAGWorkflow:
         
         mock_get_ns = AsyncMock(return_value="mock_ns_id")
         
-        mock_storage = AsyncMock()
-        mock_storage.get = AsyncMock(return_value='{"s3_key": "test.pdf", "original_name": "test.pdf"}')
-        
         mock_rag_provider = AsyncMock()
         mock_rag_provider.upload_document_from_s3 = AsyncMock(return_value=RAGDocument(
             document_id="doc_123",

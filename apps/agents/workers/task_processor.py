@@ -14,7 +14,7 @@ from core.context import set_context, clear_context, get_context
 from core.db.database import create_tables, get_session_factory
 from apps.agents.interfaces.base import Message
 from apps.agents.exceptions import TariffError, BillingError
-from apps.agents.agents.base import AgentInterrupt
+from apps.agents.exceptions import AgentInterrupt
 from langchain_core.messages import HumanMessage, AIMessage
 from apps.agents.services.state_manager import get_state_manager
 from apps.agents.services.tracing.decorators import trace_span
@@ -185,7 +185,7 @@ class TaskProcessor:
 
         flow_config = await self._get_flow_config(task.flow_id)
         entry_agent = await self.agent_factory.get_agent(flow_config.entry_point_agent)
-        config = {"configurable": {"thread_id": task.session_id}}
+        config = {"configurable": {"session_id": task.session_id}}
         user_message = self._extract_user_message(task)
         
         await self._setup_flow_variables(flow_config)
@@ -426,7 +426,7 @@ class TaskProcessor:
 
     async def _mark_delayed_task_as_executed(self, task_id: str, config):
         """Помечает отложенную задачу как executed в сессионной памяти"""
-        session_id = config.get("configurable", {}).get("thread_id") if config else None
+        session_id = config.get("configurable", {}).get("session_id") if config else None
         if not session_id:
             return
         

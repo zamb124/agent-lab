@@ -379,11 +379,11 @@ async def test_github_copilot_with_mock_llm(test_company, mcp_repo, agent_repo, 
         
         compiled_graph = await agent.compile_graph()
         
-        thread_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
         
         result = await compiled_graph.ainvoke(
             {"messages": [HumanMessage(content="Помоги с кодом")]},
-            config={"configurable": {"thread_id": thread_id}}
+            config={"configurable": {"session_id": thread_id}}
         )
         
         print("✅ Агент выполнен")

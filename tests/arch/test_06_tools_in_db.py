@@ -64,7 +64,7 @@ def show_sugar(request):
 
     result = await sugar_flow.ainvoke(
         {"messages": [HumanMessage(content="покажи сахару")]},
-        config={"configurable": {"thread_id": unique_id("sugar")}}
+        config={"configurable": {"session_id": unique_id("sugar")}}
     )
     
     assert "messages" in result
@@ -133,7 +133,7 @@ def main(spell: str) -> str:
     
     result = await magic_flow.ainvoke(
         {"messages": [HumanMessage(content="произнеси заклинание 'хокус покус'")]},
-        config={"configurable": {"thread_id": unique_id("magic")}}
+        config={"configurable": {"session_id": unique_id("magic")}}
     )
     
     assert "messages" in result
@@ -184,7 +184,7 @@ async def test_code_reference_tool(migrated_db,  flow_factory, mock_llm, unique_
     
     result = await calc_flow.ainvoke(
         {"messages": [HumanMessage(content="вычисли 15 + 27")]},
-        config={"configurable": {"thread_id": unique_id("calc")}}
+        config={"configurable": {"session_id": unique_id("calc")}}
     )
     
     assert "messages" in result
@@ -234,7 +234,7 @@ async def test_db_agent_with_code_tool(migrated_db,  flow_factory, mock_llm, uni
     
     result = await math_flow.ainvoke(
         {"messages": [HumanMessage(content="вычисли 25 * 3 + 7")]},
-        config={"configurable": {"thread_id": unique_id("db_code")}}
+        config={"configurable": {"session_id": unique_id("db_code")}}
     )
     
     assert "messages" in result

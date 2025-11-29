@@ -9,42 +9,76 @@ alwaysApply: true
 
 ## AgentsContainer
 
-Используется для всех операций с агентами, flows, tools.
+Используется для всех операций с агентами, flows, tools. Используй декоратор `@lazy` для ленивой инициализации зависимостей.
 
 <good_example>
 from apps.agents.container import get_agents_container
+from core.container import BaseContainer, lazy
 
+class AgentsContainer(BaseContainer):
+    """Расширяет BaseContainer добавляя специфичные сервисы"""
+    
+    def __init__(self, service_db_url, shared_db_url):
+        super().__init__(db_url=service_db_url)  # service БД
+        self.shared_db_url = shared_db_url       # shared БД
+
+    # === Репозитории (service БД) ===
+    
+    @lazy
+    def agent_repository(self):
+        from apps.agents.db.repositories.agent_repository import AgentRepository
+        # Инициализация при первом обращении
+        return AgentRepository(storage=self.storage)
+
+    @lazy
+    def flow_repository(self):
+        from apps.agents.db.repositories.flow_repository import FlowRepository
+        return FlowRepository(storage=self.storage)
+
+    # === Core репозитории (shared БД) ===
+
+    @lazy
+    def user_repository(self):
+        from core.db.repositories import UserRepository
+        return UserRepository(storage=self.shared_storage)
+    
+    @lazy
+    def shared_storage(self):
+        from core.db.storage import Storage
+        from core.context import get_context
+        # Создается только один раз
+        return Storage(db_url=self.shared_db_url, get_context_func=get_context)
+
+# Глобальный контейнер
+_agents_container = None
+
+def get_agents_container() -> AgentsContainer:
+    global _agents_container
+    if _agents_container is None:
+        raise RuntimeError("AgentsContainer не инициализирован!")
+    return _agents_container
+</good_example>
+
+## Использование контейнера
+
+<good_example>
 container = get_agents_container()
 
 # Core репозитории (shared БД)
 user_repo = container.user_repository
 company_repo = container.company_repository
-auth_session_repo = container.auth_session_repository
-subdomain_repo = container.subdomain_repository
-variable_repo = container.variable_repository
-usage_repo = container.usage_repository
-file_repo = container.file_repository
 
 # Agents репозитории (service БД)
 agent_repo = container.agent_repository
 flow_repo = container.flow_repository
-tool_repo = container.tool_repository
-task_repo = container.task_repository
-session_repo = container.session_repository
-mcp_server_repo = container.mcp_server_repository
 
 # Фабрики
 agent_factory = container.agent_factory
 flow_factory = container.flow_factory
-tool_factory = container.tool_factory
 
 # Сервисы
 auth_service = container.auth_service
 billing_service = container.billing_service
-payment_service = container.payment_service
-variables_service = container.variables_service
-graph_builder = container.graph_builder
-interface_factory = container.interface_factory
 </good_example>
 
 ## СТРОГО ЗАПРЕЩЕНО!
@@ -59,15 +93,6 @@ from core.identity.auth_service import AuthService
 agent_repo = AgentRepository(storage)
 auth_service = AuthService(...)
 </bad_example>
-
-<good_example>
-# ✅ ПРАВИЛЬНО: через контейнер
-from apps.agents.container import get_agents_container
-
-container = get_agents_container()
-agent_repo = container.agent_repository
-auth_service = container.auth_service
-</good_example>
 
 ## Dependency Injection в FastAPI
 
@@ -198,6 +223,7 @@ initialize_default_processors(
 🚨 **В middleware** используй `request.app.state.container`
 🚨 **НИКОГДА** не импортируй сущности контейнера напрямую
 🚨 **НИКОГДА** не создавай объекты контейнера вручную
+🚨 **ВСЕГДА** используй декоратор `@lazy` для определения зависимостей в контейнере
 🚨 **ВСЕГДА** ставь `Depends` параметры ПЕРЕД `Query` в FastAPI
 🚨 **ВСЕГДА** используй репозитории, Storage только для временных данных
 🚨 **ВСЕГДА** вызывай `initialize_default_processors()` при старте приложения

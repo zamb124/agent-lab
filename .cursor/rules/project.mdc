@@ -8,6 +8,55 @@ alwaysApply: true
 
 Всегда отвечай на русском языке.
 
+## Стиль кода и комментариев
+
+### ❌ Нет эмодзи
+Запрещено использовать эмодзи в комментариях к коду и сообщениях коммитов.
+Исключение: UI, логи или контент, где эмодзи являются частью данных.
+
+<bad_example>
+# 🚀 Запускаем сервер
+# 🐛 Исправлено
+</bad_example>
+
+<good_example>
+# Запуск сервера
+# Исправлено поведение при ошибке
+</good_example>
+
+### ❌ Нет мета-комментариев
+Не пиши комментарии о том, *что* ты сделал (рефакторинг, удаление, обновление).
+Комментарии должны объяснять *почему* код написан именно так (бизнес-логика, неочевидные моменты).
+
+<bad_example>
+# Отрефакторил функцию
+# Удалил старый код
+# Обновил логику обработки
+</bad_example>
+
+<good_example>
+# Используем set() для O(1) проверки наличия элемента
+# Важно: этот метод должен быть синхронным из-за ограничений библиотеки X
+</good_example>
+
+### Именование переменных
+Строго запрещены префиксы `new_`, `old_`, `temp_` и подобные бессмысленные имена.
+Используй осмысленные имена, отражающие суть данных.
+
+<bad_example>
+new_config = {...}
+temp_data = "..."
+old_value = 123
+data = get_data()
+</bad_example>
+
+<good_example>
+updated_config = {...}
+user_cache = "..."
+previous_count = 123
+user_profile = get_user_profile()
+</good_example>
+
 ## Управление зависимостями
 
 Используй UV для управления зависимостями:
@@ -25,11 +74,6 @@ uv run python run.py
 # Запустить тесты
 uv run pytest
 </good_example>
-
-<bad_example>
-pip install httpx
-python run.py
-</bad_example>
 
 ## Структура импортов
 
@@ -52,42 +96,28 @@ storage = get_agents_container().storage
 agent_repo = get_agents_container().agent_repository
 </good_example>
 
+## Обработка ошибок и Фолбэки
+
+### ❌ ЗАПРЕТ на фолбэки
+Не делай фолбэки "на всякий случай". Если операция не может быть выполнена корректно — бросай исключение.
+Фолбэки (возврат None, пустых списков, игнорирование ошибок) делают систему непредсказуемой и скрывают баги.
+
 <bad_example>
-def my_function():
-    from core.db.repositories import Storage  # НЕТ!
-    from core.agent_factory import AgentFactory  # НЕТ!
-    storage = Storage()  # НЕТ!
-    factory = AgentFactory()  # НЕТ!
-
-    # Правильно: через контейнер
-    storage = get_agents_container().storage
-    factory = get_agents_container().agent_factory
+try:
+    await migrator.migrate()
+except Exception:
+    logger.warning("Миграция не удалась, продолжаем")
+    # Система в неизвестном состоянии!
 </bad_example>
-
-## Переменные и константы
-
-Не создавай переменные с префиксами `new_`, `old_`, `temp_`:
-- Используй осмысленные имена
-- Избегай магических чисел
 
 <good_example>
-max_retries = 3
-timeout_seconds = 30
-user_warehouse_id = "12345"
+# Миграция обязательна. Если упадет — приложение не должно стартовать.
+await migrator.migrate()
 </good_example>
 
-<bad_example>
-new_config = {...}
-temp_data = "..."
-old_value = 123
-</bad_example>
-
-## Обработка ошибок
-
-Не используй излишние try-except блоки:
-- Добавляй проверки перед операциями
-- Пробрасывай исключения с контекстом
-- Логируй с `exc_info=True` если нужен лог
+### Обработка исключений
+Не используй излишние `try-except` блоки. Добавляй проверки условий.
+Если ловишь исключение, пробрасывай его с контекстом через `raise ... from e`.
 
 <good_example>
 if not user_id:
@@ -101,45 +131,12 @@ except httpx.HTTPStatusError as e:
     ) from e
 </good_example>
 
-<bad_example>
-try:
-    result = await external_api.fetch()
-except Exception as e:
-    logger.error(f"Ошибка: {e}")
-    return None  # Фолбэк скрывает проблему
-</bad_example>
-
-## Фолбэки
-
-НЕ делай фолбэки на все подряд:
-- Если что-то не работает - бросай исключение
-- Система должна быть прозрачной и надежной
-- Фолбэки делают сервис непредсказуемым
-
-<good_example>
-# Миграция обязательна
-await migrator.migrate()
-# Если упала - приложение не стартует
-</good_example>
-
-<bad_example>
-try:
-    await migrator.migrate()
-except Exception:
-    logger.warning("Миграция не удалась, продолжаем")
-    # Теперь непонятно в каком состоянии система
-</bad_example>
-
 ## Порт по умолчанию
 
 Сервер должен запускаться на порту 8001:
 - В `run.py` используй порт 8001
 - В документации указывай 8001
 - В примерах curl используй 8001
-
-<good_example>
-uvicorn.run("app.main:app", host="0.0.0.0", port=8001)
-</good_example>
 
 ## Не генерируй лишнее
 
@@ -152,5 +149,5 @@ uvicorn.run("app.main:app", host="0.0.0.0", port=8001)
 ## Context7 для документации
 
 Используй Context7 для получения актуальной документации библиотек:
-- FastAPI, SQLAlchemy и другие библиотеки
-- Всегда проверяй актуальность подхода через документацию
+- FastAPI, SQLAlchemy, LangChain и другие библиотеки
+- Всегда проверяй актуальность подхода через документацию, прежде чем использовать устаревшие паттерны.

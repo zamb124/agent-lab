@@ -68,11 +68,19 @@ class TestCreateCompanyEndpoint:
         """Тест успешного создания компании"""
         token, user = auth_token_for_new_user
         
+        test_slug = "test-company-slug"
+        existing_company = await company_repo.get(test_slug)
+        if existing_company:
+            await company_repo.delete(test_slug)
+        existing_mapping = await subdomain_repo.get(test_slug)
+        if existing_mapping:
+            await subdomain_repo.delete(test_slug)
+        
         response = await async_client.post(
             "/frontend/api/admin/create-my-company",
             data={
                 "name": "Test Company",
-                "slug": "test-company-slug"
+                "slug": test_slug
             },
             cookies={"auth_token": token},
             follow_redirects=False
@@ -80,16 +88,16 @@ class TestCreateCompanyEndpoint:
         
         assert response.status_code in [302, 307], f"Expected redirect, got {response.status_code}: {response.text}"
         
-        company = await company_repo.get("test-company-slug")
+        company = await company_repo.get(test_slug)
         assert company is not None
         assert company.name == "Test Company"
         
-        subdomain_company_id = await subdomain_repo.get_company_id("test-company-slug")
-        assert subdomain_company_id == "test-company-slug"
+        subdomain_company_id = await subdomain_repo.get_company_id(test_slug)
+        assert subdomain_company_id == test_slug
         
         updated_user = await user_repo.get(user.user_id)
-        assert "test-company-slug" in updated_user.companies
-        assert updated_user.active_company_id == "test-company-slug"
+        assert test_slug in updated_user.companies
+        assert updated_user.active_company_id == test_slug
 
     @pytest.mark.asyncio
     async def test_create_company_without_auth(self, async_client):

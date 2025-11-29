@@ -5,7 +5,7 @@
 Здесь только специфичные для агентов модели.
 """
 
-from core.models import User, Company, Context, Language, AuthProvider, AuthSession
+from core.models import User, Company, Context, Language, AuthProvider, AuthSession, VariableDefinition, VariableDefinitionInput
 from core.files.models import FileRecord, AudioRecord, FileStatus, CloudVoiceTokenConfig
 
 from apps.agents.models.core_models import (
@@ -36,6 +36,8 @@ __all__ = [
     "Language",
     "AuthProvider",
     "AuthSession",
+    "VariableDefinition",
+    "VariableDefinitionInput",
     "AgentConfig",
     "FlowConfig",
     "FlowAuthor",

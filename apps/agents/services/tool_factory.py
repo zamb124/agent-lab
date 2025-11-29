@@ -7,11 +7,14 @@ import importlib
 import inspect
 import functools
 import asyncio
+import re
+import typing
 from typing import List, Any, Dict
 from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field
-import typing
+from pydantic import BaseModel, Field, create_model
+
 from apps.agents.models import ToolReference, CodeMode
+from core.models.context_models import Context
 from apps.agents.container import get_agents_container
 from core.context import get_context
 from core.variables import get_state
@@ -21,13 +24,14 @@ from apps.agents.tools.session.session_tools import (
 )
 from apps.agents.tools.misc.standard import ask_user
 from apps.agents.services.tool_decorator import tool
-from apps.agents.agents.base import AgentInterrupt
+from apps.agents.exceptions import AgentInterrupt
+from core.billing import BillingService
+from core.models.billing_models import UsageType
+from apps.agents.services.mcp_client import get_mcp_client, format_mcp_result
 
 def interrupt(message: str):
     """Функция для прерывания выполнения с запросом ввода от пользователя"""
     raise AgentInterrupt(message)
-from core.billing import BillingService
-from core.models.billing_models import UsageType
 
 logger = logging.getLogger(__name__)
 
@@ -140,8 +144,7 @@ class ToolFactory:
             raise ValueError(f"Неизвестный тип тула: code_mode={ref.code_mode}, tool_id={ref.tool_id}")
 
         if tool is None:
-            logger.warning(f"⚠️ Tool {tool_id} returned None - не создан")
-            return None
+            raise ValueError(f"Tool {tool_id} не создан (вернул None)")
 
         # Оборачиваем в биллинг если есть стоимость или лимиты
         if ref.cost > 0 or ref.tariff_limits or ref.free_for_plans:
@@ -159,7 +162,7 @@ class ToolFactory:
         
         # Создаем namespace для выполнения кода с необходимыми импортами
         # Используем тот же namespace, что и для документации
-        namespace = self.get_tool_namespace()
+        namespace = await self.get_tool_namespace()
         
         # Проверяем есть ли уже @tool декоратор в коде
         has_tool_decorator = '@tool' in ref.inline_code
@@ -188,8 +191,6 @@ from apps.agents.services.tool_decorator import tool
         tool_function = namespace.get('main')
         if not tool_function:
             # Ищем первую функцию через регулярные выражения
-            import re
-            
             # Паттерн для поиска def или async def функций
             function_pattern = r'^(async\s+)?def\s+(\w+)\s*\('
             
@@ -218,8 +219,6 @@ from apps.agents.services.tool_decorator import tool
         tool_name = ref.tool_id.replace(".", "_")
         
         # Создаем простую схему без типизации
-        from pydantic import create_model, Field
-        
         # Простая схема только с request параметром
         SimpleSchema = create_model(
             f"{tool_name}Input",
@@ -235,7 +234,7 @@ from apps.agents.services.tool_decorator import tool
             infer_schema=False  # Отключаем автоматическое инферирование схемы
         )
 
-    def get_tool_namespace(self) -> Dict[str, Any]:
+    async def get_tool_namespace(self) -> Dict[str, Any]:
         """
         Возвращает namespace доступный для inline тулов.
         Используется для автокомплита и документации.
@@ -255,7 +254,6 @@ from apps.agents.services.tool_decorator import tool
         
         # Добавляем импорты для типов, которые могут использоваться в inline коде
         try:
-            from apps.agents.models.context_models import Context
             namespace['Context'] = Context
         except ImportError:
             pass
@@ -288,8 +286,7 @@ from apps.agents.services.tool_decorator import tool
         try:
             # Специальная обработка для MCP tools
             if function_path.startswith("mcp:"):
-                # MCP tools обрабатываются отдельно, возвращаем None для пропуска
-                return None
+                raise ValueError(f"MCP tools должны обрабатываться через _create_mcp_tool, а не _create_function_tool: {function_path}")
 
             # Для INLINE_CODE точка не обязательна (может быть просто именем функции)
             if ref.code_mode == CodeMode.INLINE_CODE:
@@ -302,9 +299,7 @@ from apps.agents.services.tool_decorator import tool
                     # Ищем в глобальном пространстве имен
                     tool_obj = globals().get(function_path)
                     if tool_obj is None:
-                        # Для inline code функция может создаваться динамически
-                        # Возвращаем None, чтобы инструмент создался другим способом
-                        return None
+                        raise ValueError(f"Функция {function_path} не найдена для INLINE_CODE")
             else:
                 # Для CODE_REFERENCE точка обязательна
                 if "." not in function_path:
@@ -320,6 +315,11 @@ from apps.agents.services.tool_decorator import tool
                 return tool_obj(**ref.params)
             else:
                 # Это функция, возвращаем как есть
+                # Функции с декоратором @tool уже обернуты в StructuredTool
+                if hasattr(tool_obj, '_is_platform_tool') or isinstance(tool_obj, StructuredTool):
+                    logger.debug(f"✅ Функция {function_path} уже обернута в StructuredTool через @tool")
+                else:
+                    logger.warning(f"⚠️ Функция {function_path} не обернута в StructuredTool, может быть проблема")
                 return tool_obj
 
         except Exception as e:
@@ -353,7 +353,10 @@ from apps.agents.services.tool_decorator import tool
                     memory_policy = context.agent_config.default_memory_policy
                 # Иначе останется None, и as_tool() использует ISOLATED по умолчанию
 
-            return agent.as_tool(memory_policy=memory_policy)
+            return agent.as_tool(
+                description=ref.description,
+                memory_policy=memory_policy
+            )
 
         except Exception as e:
             logger.error(f"Ошибка создания агента-инструмента {ref.tool_id}: {e}")
@@ -397,8 +400,6 @@ from apps.agents.services.tool_decorator import tool
         единообразия с остальными тулами платформы.
         """
         logger.info(f"🎯 Создание MCP tool: {ref.tool_id}")
-        from core.mcp_client import get_mcp_client, format_mcp_result
-        from apps.agents.services.tool_decorator import tool
 
         # Проверяем CodeMode для безопасности
         if ref.code_mode != CodeMode.MCP_TOOL:
@@ -423,8 +424,7 @@ from apps.agents.services.tool_decorator import tool
             mcp_client = await get_mcp_client(server_id, company_id)
             logger.info(f"🌐 MCP клиент получен для сервера {server_id}")
         except Exception as e:
-            logger.error(f"❌ Не удалось получить MCP клиент: {e}")
-            return None
+            raise ValueError(f"Не удалось получить MCP клиент для сервера {server_id}: {e}") from e
         
         # Получаем схему из params
         input_schema = ref.params.get("input_schema", {})
@@ -478,13 +478,10 @@ from apps.agents.services.tool_decorator import tool
             return mcp_tool
 
         except Exception as e:
-            logger.error(f"❌ Ошибка создания MCP tool {ref.tool_id}: {e}")
-            return None
+            raise ValueError(f"Ошибка создания MCP tool {ref.tool_id}: {e}") from e
     
     def _json_schema_to_pydantic(self, schema: Dict[str, Any], model_name: str):
         """Конвертирует JSON Schema в Pydantic модель для args_schema"""
-        from pydantic import create_model, Field as PydanticField
-        
         properties = schema.get("properties", {})
         required = schema.get("required", [])
         
@@ -502,7 +499,7 @@ from apps.agents.services.tool_decorator import tool
             
             fields[field_name] = (
                 field_type,
-                PydanticField(default=default, description=field_description)
+                Field(default=default, description=field_description)
             )
         
         return create_model(f"{model_name}Input", **fields)

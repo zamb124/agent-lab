@@ -68,11 +68,11 @@ async def virtual_try_on(
 
         model_data = await storage.get(model_image_file_id)
         if not model_data:
-            return f"❌ Файл модели {model_image_file_id} не найден"
+            raise ValueError(f"Файл модели {model_image_file_id} не найден")
 
         product_data = await storage.get(product_image_file_id)
         if not product_data:
-            return f"❌ Файл продукта {product_image_file_id} не найден"
+            raise ValueError(f"Файл продукта {product_image_file_id} не найден")
 
         # Парсим FileRecord из JSON
         if isinstance(model_data, str):
@@ -88,15 +88,15 @@ async def virtual_try_on(
         # Скачиваем файлы из S3
         s3_client = S3ClientFactory.create_default_client()
         if not s3_client:
-            return "❌ S3 клиент недоступен"
+            raise RuntimeError("S3 клиент недоступен")
 
         model_bytes = await s3_client.download_bytes(model_record.s3_key)
         if model_bytes is None:
-            return "❌ Не удалось скачать файл модели из S3"
+            raise RuntimeError(f"Не удалось скачать файл модели из S3: {model_record.s3_key}")
 
         product_bytes = await s3_client.download_bytes(product_record.s3_key)
         if product_bytes is None:
-            return "❌ Не удалось скачать файл продукта из S3"
+            raise RuntimeError(f"Не удалось скачать файл продукта из S3: {product_record.s3_key}")
 
         # Подготавливаем список моделей для примерки
         model_images_list = [model_bytes]  # Начинаем с оригинала
@@ -242,19 +242,8 @@ async def virtual_try_on(
             return results_text
 
     except Exception as e:
-        logger.error(f"Ошибка виртуальной примерки: {e}")
-
-        # Возвращаем понятное сообщение об ошибке вместо raise
-        if "ReadTimeout" in str(e) or "timeout" in str(e).lower():
-            return "❌ Превышено время ожидания ответа от FASHN API. Попробуйте еще раз через несколько минут."
-        elif "cannot identify image file" in str(e):
-            return "❌ Не удалось обработать изображение товара. Проверьте ссылку на товар."
-        elif "Content-Type" in str(e):
-            return "❌ Ссылка не содержит изображение. Убедитесь, что ссылка корректна."
-        elif "Файл модели" in str(e) or "Файл продукта" in str(e):
-            return f"❌ Ошибка доступа к файлам: {str(e)}"
-        else:
-            return f"❌ Ошибка виртуальной примерки: {str(e)}"
+        logger.error(f"Ошибка виртуальной примерки: {e}", exc_info=True)
+        raise ValueError(f"Ошибка виртуальной примерки: {str(e)}") from e
 
 
 @tool
@@ -289,8 +278,8 @@ async def upload_image_for_try_on(image_bytes: bytes, filename: str) -> str:
         return f"✅ Изображение загружено успешно. ID файла: {file_id}"
 
     except Exception as e:
-        logger.error(f"Ошибка загрузки изображения: {e}")
-        return f"❌ Ошибка загрузки изображения: {str(e)}"
+        logger.error(f"Ошибка загрузки изображения: {e}", exc_info=True)
+        raise ValueError(f"Ошибка загрузки изображения: {str(e)}") from e
 
 
 # Список доступных инструментов для экспорта

@@ -84,6 +84,11 @@ class AuthService:
             else:
                 logger.info(f"Провайдер {provider_name.value} отключен")
 
+    def reinitialize_providers(self):
+        """Переинициализирует провайдеры на основе текущей конфигурации"""
+        self._providers.clear()
+        self._initialize_providers()
+
     def get_available_providers(self) -> list[AuthProvider]:
         """Возвращает список доступных провайдеров"""
         return list(self._providers.keys())

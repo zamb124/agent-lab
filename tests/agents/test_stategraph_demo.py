@@ -104,7 +104,7 @@ async def test_stategraph_agent_execution(agent_factory, agent_repo, test_contex
             "messages": ["Тестовое сообщение для проверки всех нод"],
             "store": {}
         },
-        config={"configurable": {"thread_id": "test_thread"}}
+        config={"configurable": {"session_id": "test_thread"}}
     )
     
     assert result is not None, "Результат выполнения не должен быть None"
@@ -177,7 +177,7 @@ async def test_message_node_adds_messages(agent_factory, agent_repo, test_contex
             "messages": ["Тест MESSAGE_NODE"],
             "store": {}
         },
-        config={"configurable": {"thread_id": "test_message_thread"}}
+        config={"configurable": {"session_id": "test_message_thread"}}
     )
     
     assert "messages" in result, "В результате должны быть messages"
@@ -243,7 +243,7 @@ async def test_condition_types_work(agent_factory, agent_repo, test_context, sys
             "messages": ["Тест условий"],
             "store": {}
         },
-        config={"configurable": {"thread_id": "test_conditions_thread"}}
+        config={"configurable": {"session_id": "test_conditions_thread"}}
     )
     
     # Проверяем что граф выполнился успешно

@@ -14,7 +14,7 @@ pytestmark = pytest.mark.timeout(30)
 async def test_weather_flow_execution(migrated_db, flow_factory, system_context, unique_id, mock_llm):
     """Тест выполнения weather_flow из БД"""
     
-    from apps.agents.agents.base import AgentInterrupt
+    from apps.agents.exceptions import AgentInterrupt
     
     # Настраиваем mock_llm ДО создания flow
     from core.clients.llm import get_llm, get_global_mock_llm
@@ -50,7 +50,7 @@ async def test_weather_flow_execution(migrated_db, flow_factory, system_context,
     try:
         result = await weather_flow.ainvoke(
             {"messages": [HumanMessage(content="Какая погода в Москве?")]},
-            config={"configurable": {"thread_id": unique_id("test_weather")}}
+            config={"configurable": {"session_id": unique_id("test_weather")}}
         )
         
         assert "messages" in result
@@ -100,14 +100,14 @@ async def test_smart_flow_math_execution(migrated_db, flow_factory, system_conte
     
     smart_flow = await flow_factory.get_flow("apps.agents.flows.smart_flow.smart_flow_config")
     
-    thread_id = unique_id("test_math")
-    print(f"🔍 ТЕСТ: запускаем smart_flow с thread_id={thread_id}")
+    session_id = unique_id("test_math")
+    print(f"🔍 ТЕСТ: запускаем smart_flow с session_id={session_id}")
     print(f"🔍 ТЕСТ: MockLLM настроен: tool_responses={list(global_mock._tool_responses.keys()) if global_mock else 'None'}")
     print(f"🔍 ТЕСТ: MockLLM настроен: responses keys={list(global_mock._responses.keys()) if global_mock else 'None'}")
     
     result = await smart_flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 7*8")]},
-        config={"configurable": {"thread_id": thread_id}}
+        config={"configurable": {"session_id": session_id}}
     )
     
     print("🔍 ТЕСТ: smart_flow завершен, получен результат")
@@ -161,7 +161,7 @@ async def test_smart_flow_weather_execution(migrated_db, flow_factory, system_co
     
     result = await smart_flow.ainvoke(
         {"messages": [HumanMessage(content="Какая погода в Питере?")]},
-        config={"configurable": {"thread_id": unique_id("test_smart_weather")}}
+        config={"configurable": {"session_id": unique_id("test_smart_weather")}}
     )
     
     assert "messages" in result
@@ -228,7 +228,7 @@ async def test_flow_isolation(migrated_db, flow_factory, system_context, mock_ll
     tasks = [
         smart_flow.ainvoke(
             {"messages": [HumanMessage(content="Посчитай 2+2")]},
-            config={"configurable": {"thread_id": f"isolation_test_{i}"}}
+            config={"configurable": {"session_id": f"isolation_test_{i}"}}
         )
         for i in range(3)
     ]

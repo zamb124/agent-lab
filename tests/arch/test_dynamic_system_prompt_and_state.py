@@ -101,8 +101,8 @@ def set_location(city: str, country: str) -> str:
     flow = Flow(flow_config)
     await flow.initialize()
 
-    thread_id = "thread_coord_sub"
-    config = {"configurable": {"thread_id": thread_id}}
+    session_id = "thread_coord_sub"
+    config = {"configurable": {"thread_id": session_id}}
 
     # Шаг 1: пользователь просит изменить локацию — координатор передаст управление субагенту
     result = await flow.ainvoke({

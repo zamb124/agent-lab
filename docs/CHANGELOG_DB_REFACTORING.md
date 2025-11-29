@@ -269,3 +269,4 @@ await test_helpers.create_simple_agent(...)  # БЕЗ storage
 - **Правил актуализировано**: 10
 - **Breaking changes**: Да (архитектурный рефакторинг)
 
+

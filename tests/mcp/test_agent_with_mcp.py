@@ -7,6 +7,7 @@ End-to-end тест: AgentFactory + MCP тулы + мок LLM.
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from langchain_core.messages import AIMessage, ToolCall
+from tests.conftest import skip_if_no_external_access
 
 
 pytestmark = pytest.mark.integration
@@ -32,7 +33,10 @@ async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_com
         print("📝 Шаг 1: Синхронизация Context7 MCP тулов")
         print("="*70)
         
-        mcp_tools = await sync_mcp_server_tools("context7", test_company.company_id)
+        try:
+            mcp_tools = await sync_mcp_server_tools("context7", test_company.company_id)
+        except Exception as e:
+            skip_if_no_external_access(e)
         print(f"✅ Синхронизировано {len(mcp_tools)} MCP тулов:")
         for tool in mcp_tools:
             print(f"   - {tool.tool_id}")
@@ -131,11 +135,11 @@ async def test_weather_agent_with_context7_mcp_tools(setup_mcp_servers, test_com
         from langchain_core.messages import HumanMessage
         import uuid
         
-        thread_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
         
         result = await compiled_graph.ainvoke(
             {"messages": [HumanMessage(content="Найди документацию FastAPI")]},
-            config={"configurable": {"thread_id": thread_id}}
+            config={"configurable": {"session_id": thread_id}}
         )
         
         print("✅ Агент выполнен")
@@ -299,11 +303,11 @@ async def test_weather_agent_with_mcp_real_execution(setup_mcp_servers, test_com
         compiled_graph = await agent.compile_graph()
         
         import uuid
-        thread_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
         
         result = await compiled_graph.ainvoke(
             {"messages": [HumanMessage(content="Найди документацию FastAPI")]},
-            config={"configurable": {"thread_id": thread_id}}
+            config={"configurable": {"session_id": thread_id}}
         )
         
         print("   ✅ Агент выполнен")
@@ -441,11 +445,11 @@ async def test_agent_with_multiple_mcp_tools(test_company, mcp_repo, agent_repo,
         compiled_graph = await agent.compile_graph()
         
         import uuid
-        thread_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
         
         result = await compiled_graph.ainvoke(
             {"messages": [HumanMessage(content="Найди и покажи документацию LangChain")]},
-            config={"configurable": {"thread_id": thread_id}}
+            config={"configurable": {"session_id": thread_id}}
         )
         
         messages = result.get("messages", [])

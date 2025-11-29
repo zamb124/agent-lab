@@ -93,7 +93,10 @@ async def test_public_server_list_tools(server_name, server_info):
         print(f"🔐 Авторизация: {'Требуется' if server_info.get('requires_auth') else 'Не требуется'}")
         
         # Получаем список тулов
-        tools = await client.list_tools()
+        try:
+            tools = await client.list_tools()
+        except Exception as e:
+            pytest.skip(f"Сервер {server_name} недоступен: {e}")
         
         print(f"\n✅ Получено {len(tools)} тулов")
         assert isinstance(tools, list)

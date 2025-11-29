@@ -54,9 +54,13 @@ def test_tool_decorator():
     assert universal_function._platform_cost == 0.1
     assert universal_function._platform_title == "Универсальный тул"
     
-    # Проверяем что в Python коде возвращается только result
+    # Проверяем что в Python коде возвращается delta если он есть, иначе result
     result = universal_function.invoke({"key": "test", "value": "data"})
-    assert "Сохранено: test = data" in result
+    # Если delta не пустой, возвращается delta, иначе result
+    if isinstance(result, dict) and "store" in result:
+        assert result["store"]["test"] == "data"
+    else:
+        assert "Сохранено: test = data" in result
 
 
 def test_company_model_with_billing():

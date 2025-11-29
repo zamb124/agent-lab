@@ -88,7 +88,7 @@ async def test_agent_node_with_params_agent_id(migrated_db,  flow_factory, mock_
     
     result = await flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 5 + 7")]},
-        config={"configurable": {"thread_id": "test_params"}}
+        config={"configurable": {"session_id": "test_params"}}
     )
     
     assert "messages" in result
@@ -169,7 +169,7 @@ async def test_agent_node_with_function_class(migrated_db,  flow_factory, mock_l
     
     result = await flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 5 + 7")]},
-        config={"configurable": {"thread_id": "test_class"}}
+        config={"configurable": {"session_id": "test_class"}}
     )
     
     assert "messages" in result
@@ -252,7 +252,7 @@ async def test_agent_node_with_id_fallback(migrated_db,  flow_factory, mock_llm,
     
     result = await flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 5 + 7")]},
-        config={"configurable": {"thread_id": "test_fallback"}}
+        config={"configurable": {"session_id": "test_fallback"}}
     )
     
     assert "messages" in result

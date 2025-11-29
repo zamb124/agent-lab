@@ -125,7 +125,7 @@ def calculate_area(radius: float) -> str:
     
     result = await ref_flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай площадь круга радиусом 5")]},
-        config={"configurable": {"thread_id": unique_id("ref_test")}}
+        config={"configurable": {"session_id": unique_id("ref_test")}}
     )
     
     # ШАГ 7: Проверяем результат
@@ -240,7 +240,7 @@ def greet(name: str) -> str:
     
     result = await simple_flow.ainvoke(
         {"messages": [HumanMessage(content="Привет, меня зовут Виктор")]},
-        config={"configurable": {"thread_id": unique_id("simple")}}
+        config={"configurable": {"session_id": unique_id("simple")}}
     )
     
     # 6. Проверяем

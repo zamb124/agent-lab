@@ -1,0 +1,196 @@
+---
+description: "Правила работы с автоматическими CRUD роутерами"
+alwaysApply: true
+---
+
+# Автоматические CRUD роутеры
+
+## Главный принцип
+
+**ВСЕГДА используй автоматические CRUD роутеры вместо создания новых API endpoints для стандартных операций.**
+
+Каждый репозиторий автоматически получает полный набор CRUD операций через `CRUDRouterGenerator`.
+
+## Автоматические роутеры
+
+При создании репозитория в контейнере автоматически генерируется CRUD роутер со следующими endpoints:
+
+- `GET /{prefix}` - список всех сущностей (с пагинацией через `limit` и `offset`)
+- `GET /{prefix}/{entity_id}` - получить сущность по ID
+- `POST /{prefix}` - создать или обновить сущность
+- `DELETE /{prefix}/{entity_id}` - удалить сущность
+- `POST /{prefix}/many` - получить несколько сущностей по списку ID
+
+**Префикс пути** автоматически берется из `repository._get_prefix()` (убирается `:` в конце).
+
+## Доступные CRUD роутеры
+
+Все репозитории в `AgentsContainer` автоматически получают CRUD роутеры:
+
+- `/agents/api/v1/agent` - AgentRepository
+- `/agents/api/v1/flow` - FlowRepository
+- `/agents/api/v1/tool` - ToolRepository
+- `/agents/api/v1/task` - TaskRepository
+- `/agents/api/v1/session` - SessionRepository
+- `/agents/api/v1/mcp_server` - MCPServerRepository
+
+## ❌ НЕ создавай новые CRUD endpoints
+
+<bad_example>
+# apps/frontend/api/agents.py
+@router.get("/")
+async def list_agents(agent_repo: AgentRepositoryDep) -> List[AgentConfig]:
+    """Получить список всех агентов"""
+    all_agents = await agent_repo.list_all(limit=1000)
+    return all_agents
+
+@router.get("/{agent_id}")
+async def get_agent(agent_id: str, agent_repo: AgentRepositoryDep) -> AgentConfig:
+    """Получить агента по ID"""
+    agent = await agent_repo.get(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return agent
+
+@router.post("/")
+async def create_agent(request_data: Dict[str, Any], agent_repo: AgentRepositoryDep) -> AgentConfig:
+    """Создать нового агента"""
+    agent_config = AgentConfig(...)
+    await agent_repo.set(agent_config)
+    return agent_config
+</bad_example>
+
+**Проблема**: Эти endpoints дублируют автоматические CRUD роутеры!
+
+## ✅ Используй автоматические CRUD роутеры
+
+<good_example>
+# В frontend просто используй автоматические роутеры
+# GET /agents/api/v1/agent - список агентов
+# GET /agents/api/v1/agent/{agent_id} - получить агента
+# POST /agents/api/v1/agent - создать/обновить агента
+# DELETE /agents/api/v1/agent/{agent_id} - удалить агента
+# POST /agents/api/v1/agent/many - получить несколько агентов
+
+# Если нужна кастомная логика - создавай только специфичные endpoints
+@router.get("/agents/custom-filter")
+async def get_agents_by_custom_filter(...):
+    """Кастомная фильтрация, которой нет в CRUD"""
+    ...
+</good_example>
+
+## Когда создавать кастомные endpoints
+
+Создавай кастомные endpoints **ТОЛЬКО** если:
+
+1. **Специфичная бизнес-логика** - например, сложная фильтрация, агрегация, вычисления
+2. **Кастомные операции** - не входящие в стандартный CRUD (например, `activate`, `publish`, `sync`)
+3. **Специфичные форматы ответа** - когда нужен другой формат данных для фронтенда
+4. **Интеграции** - когда нужны специфичные endpoints для внешних систем
+
+<good_example>
+# Кастомный endpoint для специфичной логики
+@router.post("/agents/{agent_id}/publish")
+async def publish_agent(agent_id: str, agent_repo: AgentRepositoryDep):
+    """Опубликовать агента (специфичная бизнес-логика)"""
+    agent = await agent_repo.get(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404)
+    
+    # Специфичная логика публикации
+    agent.is_public = True
+    await agent_repo.set(agent)
+    return {"status": "published"}
+
+# Кастомный endpoint для фильтрации
+@router.get("/agents/public")
+async def get_public_agents(agent_repo: AgentRepositoryDep):
+    """Получить только публичных агентов (кастомная фильтрация)"""
+    all_agents = await agent_repo.list_all(limit=1000)
+    return [a for a in all_agents if getattr(a, 'is_public', False)]
+</good_example>
+
+## Миграция существующих API
+
+При рефакторинге существующих API:
+
+1. **Удали** стандартные CRUD endpoints (GET, POST, PUT, DELETE для списка/одного элемента)
+2. **Оставь** только кастомные endpoints со специфичной логикой
+3. **Обнови** фронтенд, чтобы использовать автоматические CRUD роутеры
+
+<good_example>
+# БЫЛО (apps/frontend/api/agents.py):
+@router.get("/")
+async def list_agents(...):  # УДАЛИТЬ - есть в CRUD
+    ...
+
+@router.get("/{agent_id}")
+async def get_agent(...):  # УДАЛИТЬ - есть в CRUD
+    ...
+
+@router.post("/")
+async def create_agent(...):  # УДАЛИТЬ - есть в CRUD
+    ...
+
+# СТАЛО:
+# Удалены стандартные CRUD endpoints
+# Оставлены только кастомные:
+@router.post("/agents/{agent_id}/publish")
+async def publish_agent(...):  # ОСТАВИТЬ - специфичная логика
+    ...
+</good_example>
+
+## Префиксы роутеров
+
+Автоматические CRUD роутеры подключаются с префиксом `/agents/api/v1`:
+
+- Полный путь: `/agents/api/v1/{prefix}`
+- Пример: `/agents/api/v1/agent`, `/agents/api/v1/flow`
+
+**Важно**: Префикс `{prefix}` берется из `repository._get_prefix()` (без `:` в конце).
+
+## Пагинация
+
+Автоматический endpoint `GET /{prefix}` поддерживает пагинацию:
+
+- `limit` - максимальное количество результатов (по умолчанию 100, максимум 1000)
+- `offset` - смещение для пагинации (по умолчанию 0)
+
+Пример:
+```
+GET /agents/api/v1/agent?limit=10&offset=20
+```
+
+## Получение нескольких сущностей
+
+Используй `POST /{prefix}/many` для получения нескольких сущностей:
+
+```json
+POST /agents/api/v1/agent/many
+["agent_id_1", "agent_id_2", "agent_id_3"]
+```
+
+## Валидация данных
+
+Автоматические CRUD роутеры используют Pydantic модели для валидации:
+
+- При `POST /{prefix}` данные валидируются через `repository.model_class.model_validate()`
+- При ошибке валидации возвращается `400 Bad Request` с описанием ошибки
+
+## Обработка ошибок
+
+Автоматические роутеры обрабатывают стандартные ошибки:
+
+- `404 Not Found` - сущность не найдена
+- `400 Bad Request` - невалидные данные
+- `500 Internal Server Error` - ошибка сохранения
+
+## КРИТИЧНЫЕ НАПОМИНАНИЯ
+
+🚨 **ВСЕГДА** используй автоматические CRUD роутеры для стандартных операций
+🚨 **НИКОГДА** не дублируй стандартные CRUD endpoints вручную
+🚨 **СОЗДАВАЙ** кастомные endpoints только для специфичной бизнес-логики
+🚨 **ПРЕФИКС** пути берется из `repository._get_prefix()` автоматически
+🚨 **ПАГИНАЦИЯ** доступна через `limit` и `offset` параметры
+
+**Нарушение этих правил приведет к дублированию кода и усложнению поддержки!**

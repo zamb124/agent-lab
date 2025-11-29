@@ -16,7 +16,7 @@
 import pytest
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-from apps.agents.agents.base import AgentInterrupt
+from apps.agents.exceptions import AgentInterrupt
 from apps.agents.services.state_manager import get_state_manager
 from apps.agents.models import AgentConfig, AgentType, LLMConfig
 
@@ -162,7 +162,7 @@ async def test_nested_agent_interrupts_three_levels(
         }
         
         try:
-            await entry_agent.ainvoke(initial_state, config={"configurable": {"thread_id": session_id}})
+            await entry_agent.ainvoke(initial_state, config={"configurable": {"session_id": session_id}})
         except AgentInterrupt as interrupt:
             assert interrupt.value == "Какой город?", f"Неправильный вопрос: {interrupt.value}"
             
@@ -186,7 +186,7 @@ async def test_nested_agent_interrupts_three_levels(
             saved_state["messages"].append(HumanMessage(content="Москва"))
             
             try:
-                await entry_agent.ainvoke(saved_state, config={"configurable": {"thread_id": session_id}})
+                await entry_agent.ainvoke(saved_state, config={"configurable": {"session_id": session_id}})
             except AgentInterrupt as interrupt:
                 assert interrupt.value == "Какая погода нужна?", f"Неправильный вопрос: {interrupt.value}"
                 
@@ -206,7 +206,7 @@ async def test_nested_agent_interrupts_three_levels(
                 saved_state["messages"].append(HumanMessage(content="Температура"))
                 
                 try:
-                    await entry_agent.ainvoke(saved_state, config={"configurable": {"thread_id": session_id}})
+                    await entry_agent.ainvoke(saved_state, config={"configurable": {"session_id": session_id}})
                 except AgentInterrupt as interrupt:
                     assert interrupt.value == "Показать результат?", f"Неправильный вопрос: {interrupt.value}"
                     
@@ -221,7 +221,7 @@ async def test_nested_agent_interrupts_three_levels(
                     
                     saved_state["messages"].append(HumanMessage(content="Да"))
                     
-                    result = await entry_agent.ainvoke(saved_state, config={"configurable": {"thread_id": session_id}})
+                    result = await entry_agent.ainvoke(saved_state, config={"configurable": {"session_id": session_id}})
                     
                     assert "messages" in result
                     assert "__interrupt__" not in result

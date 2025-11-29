@@ -172,26 +172,27 @@ class VariablesService:
         
         Returns:
             Резолвнутое значение
+            
+        Raises:
+            ValueError: Если auto_create=False и переменная не найдена
         """
-        if isinstance(value, str):
-            if value.startswith("@var:"):
-                var_key = value[5:]
-                resolved = await self.get_var(var_key, create_if_missing=auto_create)
-                if resolved is None:
-                    # Если auto_create=False и переменная не найдена - возвращаем исходное значение
-                    # Переменные создадутся через install_hook с default_value
-                    return value
-                return resolved
+        if not isinstance(value, str):
+            if isinstance(value, dict):
+                return {k: await self.resolve(v, auto_create) for k, v in value.items()}
+            if isinstance(value, list):
+                return [await self.resolve(item, auto_create) for item in value]
             return value
         
-        elif isinstance(value, dict):
-            return {k: await self.resolve(v, auto_create) for k, v in value.items()}
-        
-        elif isinstance(value, list):
-            return [await self.resolve(item, auto_create) for item in value]
-        
-        else:
+        if not value.startswith("@var:"):
             return value
+        
+        var_key = value[5:]
+        resolved = await self.get_var(var_key, create_if_missing=auto_create)
+        
+        if resolved is None:
+            raise ValueError(f"Variable {var_key} not found")
+        
+        return resolved
     
     def extract_variable_keys(self, value: Any) -> Set[str]:
         """

@@ -311,7 +311,7 @@ async def check_condition(state):
             GraphEdge(
                 source="check_condition",
                 target="final",
-                condition="state.get('store', {}).get('condition_passed', False)",
+                condition="'store' in state and 'condition_passed' in state['store'] and state['store']['condition_passed']",
                 condition_type=ConditionType.EXPRESSION
             ),
             

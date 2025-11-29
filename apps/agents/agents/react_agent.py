@@ -36,6 +36,10 @@ class ReActAgent(BaseAgent):
         
         llm = self._get_llm()
         tools = await self.get_tools()
+        logger.info(f"🔧 ReactAgent.get_runner: загружено {len(tools)} tools для агента {self.config.agent_id}")
+        if tools:
+            tool_names = [getattr(t, 'name', str(t)) for t in tools]
+            logger.info(f"🔧 ReactAgent.get_runner: tools={tool_names}")
         prompt = self.config.prompt
         
         return ReactAgentRunner(

@@ -188,6 +188,8 @@ def get_state() -> Optional[Dict[str, Any]]:
         State агента или None если не доступен
     """
     context = get_context()
+    if context is None:
+        return None
     return context.state
 
 

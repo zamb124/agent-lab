@@ -131,12 +131,25 @@ async def migrated_db():
         set_context(migration_context)
 
         # Создаем таблицы и мигрируем
-        from core.db.database import create_tables
+        from core.db.database import create_tables, get_session_factory
+        from core.db.models import Stores, AgentStates  # Явный импорт для регистрации в Base.metadata
+        from sqlalchemy import text
         # Service БД (agents_db): storage, tasks, stores, agent_states, otel_spans
         await create_tables(
             db_url=settings.database.url,
             table_names=["storage", "tasks", "stores", "agent_states", "otel_spans"]
         )
+        # Проверяем, что таблицы действительно созданы
+        session_factory = await get_session_factory(settings.database.url)
+        async with session_factory() as session:
+            result = await session.execute(
+                text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('stores', 'agent_states')")
+            )
+            created_tables = [row[0] for row in result]
+            if 'stores' not in created_tables or 'agent_states' not in created_tables:
+                logger.error(f"⚠️  Таблицы не созданы! Ожидались: stores, agent_states. Созданы: {created_tables}")
+                raise RuntimeError(f"Таблицы stores и agent_states не созданы в БД {settings.database.url}")
+            logger.info(f"✅ Таблицы проверены: {created_tables}")
         # Shared БД (shared_db): users, storage, variables
         if settings.database.shared_url:
             await create_tables(
@@ -709,46 +722,6 @@ async def auth_service(storage: Storage):
 
 
 @pytest_asyncio.fixture
-async def mock_storage_cache():
-    """Mock storage с in-memory кешем для тестов"""
-    cache = {}
-
-    async def mock_get(key, force_global=False):
-        return cache.get(key)
-
-    async def mock_set(key, value, ttl=None, force_global=False):
-        cache[key] = value
-        return True
-
-    async def mock_delete(key, force_global=False):
-        cache.pop(key, None)
-        return True
-
-    return {
-        'cache': cache,
-        'get': mock_get,
-        'set': mock_set,
-        'delete': mock_delete
-    }
-
-
-@pytest_asyncio.fixture
-async def payment_service_with_mock():
-    """PaymentService с мок company_repository для тестов"""
-    from unittest.mock import AsyncMock
-    from core.payments import PaymentService
-
-    mock_company_repo = AsyncMock()
-    mock_storage = AsyncMock()
-    mock_company_repo._storage = mock_storage
-    
-    service = PaymentService(company_repository=mock_company_repo)
-    service._storage = mock_storage
-    
-    return service
-
-
-@pytest_asyncio.fixture
 async def mock_provider():
     """Mock провайдер платежей для тестов"""
     from unittest.mock import Mock, AsyncMock
@@ -765,3 +738,17 @@ async def mock_provider():
         metadata={"provider": "yoomoney"}
     ))
     return provider
+
+
+def skip_if_no_external_access(e: Exception):
+    """Пропускает тест, если нет доступа к внешнему серверу"""
+    import httpx
+    error_str = str(e).lower()
+    if (
+        "event loop is closed" in str(e) or
+        "connect" in error_str or
+        "timeout" in error_str or
+        isinstance(e, (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError, RuntimeError))
+    ):
+        pytest.skip(f"Нет доступа к внешнему серверу: {e}")
+    raise

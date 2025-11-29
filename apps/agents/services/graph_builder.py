@@ -87,6 +87,7 @@ class GraphBuilder:
                 if isinstance(result, dict):
                     original_messages = state.get("messages", [])
                     result_messages = result.get("messages", [])
+                    result_store = result.get("store")
                     
                     state.clear()
                     state.update(result)
@@ -98,16 +99,15 @@ class GraphBuilder:
                     elif result_messages:
                         state["messages"] = result_messages
                     
-                    if not state.get("store") and original_store:
+                    if result_store and isinstance(result_store, dict) and len(result_store) > 0:
+                        state["store"] = result_store
+                    elif original_store:
                         state["store"] = original_store
 
                 return state
             except Exception as e:
                 logger.error(f"Ошибка в ноде агента {node.id}: {e}", exc_info=True)
-                if "store" not in state:
-                    state["store"] = {}
-                state["store"]["error"] = str(e)
-                return state
+                raise RuntimeError(f"Ошибка выполнения агента в ноде {node.id}: {str(e)}") from e
 
         return agent_node
 
@@ -221,7 +221,7 @@ class GraphBuilder:
                 # Вложенный ключ вида "store.calc_result"
                 parts = output_key.split(".", 1)
                 if parts[0] not in state:
-                    state[parts[0]] = {}
+                    raise ValueError(f"В state должен быть '{parts[0]}', но его нет. State keys: {list(state.keys())}")
                 state[parts[0]][parts[1]] = result
             else:
                 state[output_key] = result
@@ -259,6 +259,8 @@ class GraphBuilder:
 
         async def function_node(state: State) -> State:
             """Функция ноды функции"""
+            from apps.agents.exceptions import AgentInterrupt
+            
             try:
                 # Передаем состояние в функцию
                 if inspect.iscoroutinefunction(func):
@@ -274,12 +276,12 @@ class GraphBuilder:
                     state[output_key] = result
 
                 return state
+            except AgentInterrupt as interrupt:
+                # Пробрасываем AgentInterrupt дальше для обработки в agent_runner
+                raise interrupt
             except Exception as e:
                 logger.error(f"Ошибка в ноде функции {node.id}: {e}", exc_info=True)
-                if "store" not in state:
-                    state["store"] = {}
-                state["store"]["error"] = str(e)
-                return state
+                raise RuntimeError(f"Ошибка выполнения функции в ноде {node.id}: {str(e)}") from e
 
         return function_node
 
@@ -345,21 +347,23 @@ class GraphBuilder:
                 return state
             except Exception as e:
                 logger.error(f"Ошибка в ROUTER_NODE {node.id}: {e}", exc_info=True)
-                if "store" not in state:
-                    state["store"] = {}
-                state["store"]["error"] = str(e)
-                return state
+                raise RuntimeError(f"Ошибка выполнения роутера в ноде {node.id}: {str(e)}") from e
 
         return router_node
 
     async def _execute_inline_code(self, node):
         """Выполняет inline код и возвращает функцию"""
         try:
+            # Получаем namespace с доступными функциями (ask_user, session_set и т.д.)
+            from apps.agents.services.tool_factory import ToolFactory
+            tool_factory = ToolFactory()
+            namespace = await tool_factory.get_tool_namespace()
+            
             # Создаем локальное пространство имен
             local_namespace = {}
 
-            # Выполняем код
-            exec(node.inline_code, globals(), local_namespace)
+            # Выполняем код с доступом к namespace
+            exec(node.inline_code, namespace, local_namespace)
 
             # Ищем функцию с именем как ID ноды или с суффиксом _function
             possible_names = [
@@ -410,10 +414,7 @@ class GraphBuilder:
                 return state
             except Exception as e:
                 logger.error(f"Ошибка в MESSAGE_NODE {node.id}: {e}", exc_info=True)
-                if "store" not in state:
-                    state["store"] = {}
-                state["store"]["error"] = str(e)
-                return state
+                raise RuntimeError(f"Ошибка выполнения сообщения в ноде {node.id}: {str(e)}") from e
 
         return message_node
 
@@ -449,11 +450,7 @@ class GraphBuilder:
                 return state
             except Exception as e:
                 logger.error(f"Ошибка в FLOW_NODE {node.id} (flow {flow_id}): {e}", exc_info=True)
-                if "store" not in state:
-                    state["store"] = {}
-                state["store"]["error"] = str(e)
-                state["store"]["failed_flow"] = flow_id
-                return state
+                raise RuntimeError(f"Ошибка выполнения flow {flow_id} в ноде {node.id}: {str(e)}") from e
 
         return flow_node
 
@@ -463,13 +460,14 @@ class GraphBuilder:
         def condition_func(state: State) -> str:
             """Функция условия"""
             try:
-                # Простая оценка условия (в продакшене нужна более безопасная реализация)
-                if eval(condition, {"state": state}):
+                from simpleeval import simple_eval
+                result = simple_eval(condition, names={"state": state})
+                if bool(result):
                     return "continue"
                 else:
                     return "end"
             except Exception as e:
                 logger.error(f"Ошибка в условии {condition}: {e}", exc_info=True)
-                return "end"
+                raise ValueError(f"Ошибка выполнения условия '{condition}': {str(e)}") from e
 
         return condition_func

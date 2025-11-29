@@ -166,6 +166,11 @@ async def create_tables(db_url: Optional[str] = None, table_names: Optional[List
         db_url: URL БД (если не указан, берется из settings.database.url)
         table_names: Список имен таблиц для создания (если None, создаются все)
     """
+    # Явный импорт всех моделей для регистрации в Base.metadata
+    from core.db.models import (
+        Storage, Users, Variables, Tasks, Stores, AgentStates, OtelSpans
+    )
+    
     await wait_for_db(db_url=db_url)
 
     if table_names is None:
@@ -195,6 +200,24 @@ async def create_tables(db_url: Optional[str] = None, table_names: Optional[List
                     lambda sync_conn: Base.metadata.create_all(sync_conn, tables=tables_to_create, checkfirst=True)
                 )
             logger.info("create_all завершен")
+            
+            # Проверяем, что таблицы действительно созданы
+            if table_names:
+                check_result = await conn.execute(
+                    text("""
+                        SELECT table_name 
+                        FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_name = ANY(:table_names)
+                    """),
+                    {"table_names": table_names}
+                )
+                created_tables = [row[0] for row in check_result]
+                missing_tables = set(table_names) - set(created_tables)
+                if missing_tables:
+                    logger.warning(f"⚠️  Таблицы не созданы: {missing_tables}")
+                else:
+                    logger.info(f"✅ Все таблицы созданы: {created_tables}")
     
     logger.info("Таблицы проверены/созданы")
 

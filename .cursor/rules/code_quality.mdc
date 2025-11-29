@@ -1,0 +1,361 @@
+---
+description: "Правила качества кода и лаконичности"
+alwaysApply: true
+---
+
+# Правила качества кода и лаконичности
+
+## КРИТИЧНО: Минимум try-except
+
+**Используй try-except ТОЛЬКО когда это критически необходимо:**
+- Обработка внешних API/сетевых запросов
+- Операции с файловой системой
+- Парсинг данных из внешних источников
+- Обработка специфичных исключений библиотек
+
+**НЕ используй try-except для:**
+- Валидации входных данных (используй проверки)
+- Бизнес-логики (используй условия)
+- Обработки ошибок конфигурации (бросай исключение)
+
+<bad_example>
+def get_user(user_id: str):
+    try:
+        user = await user_repo.get(user_id)
+        return user
+    except Exception:
+        return None  # НЕТ! Скрывает проблему
+</bad_example>
+
+<good_example>
+def get_user(user_id: str):
+    if not user_id:
+        raise ValueError("user_id не может быть пустым")
+    
+    user = await user_repo.get(user_id)
+    if not user:
+        raise ValueError(f"Пользователь {user_id} не найден")
+    
+    return user
+</good_example>
+
+<good_example>
+# Критически нужен try-except для внешнего API
+async def fetch_external_data(url: str):
+    if not url.startswith("https://"):
+        raise ValueError(f"Небезопасный URL: {url}")
+    
+    try:
+        async with get_httpx_client(timeout=30.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.json()
+    except httpx.HTTPStatusError as e:
+        raise ValueError(
+            f"Ошибка получения данных ({url}): {e.response.status_code}"
+        ) from e
+</good_example>
+
+## КРИТИЧНО: Никаких фолбеков
+
+**Логика должна быть однозначной и прозрачной.**
+Если операция не может быть выполнена — бросай исключение. Фолбэки делают систему непредсказуемой.
+
+<bad_example>
+def process_data(data: dict):
+    try:
+        result = complex_operation(data)
+        return result
+    except Exception:
+        return {}  # НЕТ! Фолбэк скрывает проблему
+    
+    try:
+        value = data.get("key", "default")  # НЕТ! Неявный фолбэк
+    except:
+        pass  # НЕТ! Игнорирование ошибок
+</bad_example>
+
+<good_example>
+def process_data(data: dict):
+    if not data:
+        raise ValueError("data не может быть пустым")
+    
+    if "key" not in data:
+        raise ValueError("Обязательное поле 'key' отсутствует в data")
+    
+    result = complex_operation(data)
+    return result
+</good_example>
+
+<bad_example>
+async def get_agent(agent_id: str):
+    try:
+        agent = await agent_repo.get(agent_id)
+        return agent if agent else None  # НЕТ! Фолбэк
+    except Exception:
+        return None  # НЕТ! Двойной фолбэк
+</bad_example>
+
+<good_example>
+async def get_agent(agent_id: str):
+    if not agent_id:
+        raise ValueError("agent_id не может быть пустым")
+    
+    agent = await agent_repo.get(agent_id)
+    if not agent:
+        raise ValueError(f"Агент {agent_id} не найден")
+    
+    return agent
+</good_example>
+
+## КРИТИЧНО: Однозначные типы
+
+**ВСЕ сущности должны иметь однозначный тип.**
+Если сущность может быть разных типов — это проблема архитектуры, которую нужно исправлять, а не обходить проверками типов.
+
+<bad_example>
+def process_value(value):
+    if isinstance(value, dict):
+        return process_dict(value)
+    elif isinstance(value, list):
+        return process_list(value)
+    elif isinstance(value, str):
+        return process_string(value)
+    else:
+        return None
+</bad_example>
+
+<good_example>
+# Правильно: разные функции для разных типов
+def process_dict(data: dict) -> ProcessedDict:
+    return ProcessedDict(data)
+
+def process_list(items: list[str]) -> ProcessedList:
+    return ProcessedList(items)
+
+def process_string(text: str) -> ProcessedString:
+    return ProcessedString(text)
+
+# Если нужна общая обработка - используй Union типы явно
+from typing import Union
+
+def process_entity(entity: Union[DictEntity, ListEntity, StringEntity]) -> ProcessedEntity:
+    # Каждый тип обрабатывается через свой метод
+    return entity.process()
+</good_example>
+
+<bad_example>
+def validate_config(config, path=""):
+    if not isinstance(config, dict):
+        raise ValueError(f"Ожидается dict в {path}")
+    
+    for key, value in config.items():
+        current_path = f"{path}.{key}" if path else key
+        
+        if isinstance(value, dict):
+            validate_config(value, current_path)
+        elif isinstance(value, list):
+            for i, item in enumerate(value):
+                validate_config(item, f"{current_path}[{i}]")
+</bad_example>
+
+<good_example>
+# Правильно: конфигурация имеет четкую структуру
+class ConfigNode(BaseModel):
+    key: str
+    value: ConfigValue  # Однозначный тип
+
+class ConfigValue(BaseModel):
+    # Используй Union для явных вариантов
+    content: Union[str, int, float, bool, ConfigDict, ConfigList]
+
+class ConfigDict(BaseModel):
+    nodes: list[ConfigNode]
+
+class ConfigList(BaseModel):
+    items: list[ConfigValue]
+
+def validate_config(config: ConfigDict) -> None:
+    for node in config.nodes:
+        validate_node(node)
+
+def validate_node(node: ConfigNode) -> None:
+    validate_value(node.value)
+</good_example>
+
+## Рекурсия вместо множества if'ов
+
+**Используй рекурсию для обработки вложенных структур с четкой иерархией.**
+
+<bad_example>
+def process_node(node):
+    if node.type == "root":
+        if node.children:
+            for child in node.children:
+                if child.type == "leaf":
+                    return process_leaf(child)
+                elif child.type == "branch":
+                    if child.children:
+                        for grandchild in child.children:
+                            if grandchild.type == "leaf":
+                                return process_leaf(grandchild)
+                            # ... еще больше вложенности
+</bad_example>
+
+<good_example>
+# Правильно: каждый тип узла обрабатывается через свой метод
+class Node(ABC):
+    @abstractmethod
+    def process(self) -> ProcessedNode:
+        pass
+
+class LeafNode(Node):
+    def process(self) -> ProcessedNode:
+        return process_leaf(self)
+
+class BranchNode(Node):
+    def process(self) -> ProcessedNode:
+        processed_children = [child.process() for child in self.children]
+        return process_branch(self, processed_children)
+
+def process_node(node: Node) -> ProcessedNode:
+    return node.process()
+</good_example>
+
+<bad_example>
+def find_in_tree(root, target_id):
+    if root.id == target_id:
+        return root
+    
+    if root.children:
+        for child in root.children:
+            if child.id == target_id:
+                return child
+            if child.children:
+                for grandchild in child.children:
+                    if grandchild.id == target_id:
+                        return grandchild
+                    # ... бесконечная вложенность
+</bad_example>
+
+<good_example>
+def find_in_tree(node: TreeNode, target_id: str) -> TreeNode | None:
+    if node.id == target_id:
+        return node
+    
+    for child in node.children:
+        result = find_in_tree(child, target_id)
+        if result:
+            return result
+    
+    return None
+</good_example>
+
+## Лаконичность и правильное написание кода
+
+### Принцип DRY (Don't Repeat Yourself)
+
+<bad_example>
+def process_user(user_id):
+    user = await user_repo.get(user_id)
+    if not user:
+        raise ValueError("Пользователь не найден")
+    return user
+
+def process_agent(agent_id):
+    agent = await agent_repo.get(agent_id)
+    if not agent:
+        raise ValueError("Агент не найден")
+    return agent
+
+def process_flow(flow_id):
+    flow = await flow_repo.get(flow_id)
+    if not flow:
+        raise ValueError("Flow не найден")
+    return flow
+</bad_example>
+
+<good_example>
+async def get_entity(repo, entity_id: str, entity_name: str):
+    if not entity_id:
+        raise ValueError(f"{entity_name}_id не может быть пустым")
+    
+    entity = await repo.get(entity_id)
+    if not entity:
+        raise ValueError(f"{entity_name} {entity_id} не найден")
+    
+    return entity
+
+def process_user(user_id):
+    return await get_entity(user_repo, user_id, "Пользователь")
+
+def process_agent(agent_id):
+    return await get_entity(agent_repo, agent_id, "Агент")
+</good_example>
+
+### Использование встроенных функций Python
+
+<bad_example>
+def find_user_by_email(users, email):
+    for user in users:
+        if user.email == email:
+            return user
+    return None
+</bad_example>
+
+<good_example>
+def find_user_by_email(users: list[User], email: str) -> User | None:
+    return next((user for user in users if user.email == email), None)
+</good_example>
+
+### Использование comprehensions
+
+<bad_example>
+result = []
+for item in items:
+    if item.is_valid():
+        processed = process_item(item)
+        result.append(processed)
+</bad_example>
+
+<good_example>
+result = [process_item(item) for item in items if item.is_valid()]
+</good_example>
+
+### Использование match/case вместо множества if-elif
+
+<bad_example>
+def handle_status(status):
+    if status == "pending":
+        return "Ожидает"
+    elif status == "processing":
+        return "Обрабатывается"
+    elif status == "completed":
+        return "Завершено"
+    elif status == "failed":
+        return "Ошибка"
+    else:
+        return "Неизвестно"
+</bad_example>
+
+<good_example>
+def handle_status(status: TaskStatus) -> str:
+    match status:
+        case TaskStatus.PENDING:
+            return "Ожидает"
+        case TaskStatus.PROCESSING:
+            return "Обрабатывается"
+        case TaskStatus.COMPLETED:
+            return "Завершено"
+        case TaskStatus.FAILED:
+            return "Ошибка"
+</good_example>
+
+## Итоговые принципы
+
+1. **Проверки вместо try-except** - валидируй входные данные явно
+2. **Исключения вместо фолбеков** - если что-то не так, бросай исключение
+3. **Однозначные типы** - если сущность может быть разных типов, исправляй архитектуру, не делай isinstance проверки
+4. **Рекурсия вместо вложенных if'ов** - используй рекурсию для иерархий с четкой структурой
+5. **Лаконичность** - используй встроенные функции Python, comprehensions, match/case
+6. **Однозначность** - код должен иметь один путь выполнения для каждого случая

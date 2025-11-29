@@ -59,11 +59,11 @@ async def test_flow_history_from_smart_flow(migrated_db,  flow_factory, system_c
     if explainer_agent and explainer_agent.config and explainer_agent.config.llm_config:
         explainer_agent.config.llm_config.context_window = 8192
     
-    thread_id = unique_id("history")
-    config = {"configurable": {"thread_id": thread_id}}
+    session_id = unique_id("history")
+    config = {"configurable": {"session_id": session_id}}
     
     session = SessionConfig(
-        session_id=thread_id,
+        session_id=session_id,
         platform="web",
         user_id="test_user",
         flow_id=flow_id,
@@ -89,13 +89,13 @@ async def test_flow_history_from_smart_flow(migrated_db,  flow_factory, system_c
     
     from apps.agents.services.state_manager import get_state_manager
     state_manager = await get_state_manager()
-    saved_state = await state_manager.get_or_create_session(thread_id)
-    assert saved_state is not None, f"State должен быть сохранен для session_id={thread_id}"
+    saved_state = await state_manager.get_or_create_session(session_id)
+    assert saved_state is not None, f"State должен быть сохранен для session_id={session_id}"
     assert len(saved_state.get("messages", [])) > 0, f"State должен содержать сообщения: {len(saved_state.get('messages', []))}"
     
     print("\n🔄 Получаем историю через FlowFactory...")
     history = await flow_factory.get_flow_history(
-        session_id=thread_id,
+        session_id=session_id,
         limit=100,
         include_checkpoints=False
     )
@@ -110,7 +110,7 @@ async def test_flow_history_from_smart_flow(migrated_db,  flow_factory, system_c
     
     assert history.total_messages > 0, f"История должна содержать сообщения, получено: {history.total_messages}, messages в result: {len(messages)}"
     assert history.total_checkpoints > 0, "История должна содержать checkpoints"
-    assert history.session_id == thread_id
+    assert history.session_id == session_id
     assert history.flow_id == flow_id
     
     print("\n📋 Сообщения в истории:")
@@ -165,11 +165,11 @@ async def test_flow_history_with_checkpoints(migrated_db,  flow_factory, system_
     flow_id = "apps.agents.flows.weather_flow.weather_flow_config"
     flow = await flow_factory.get_flow(flow_id)
     
-    thread_id = unique_id("checkpoints")
-    config = {"configurable": {"thread_id": thread_id}}
+    session_id = unique_id("checkpoints")
+    config = {"configurable": {"session_id": session_id}}
     
     session = SessionConfig(
-        session_id=thread_id,
+        session_id=session_id,
         platform="web",
         user_id="test_user",
         flow_id=flow_id,
@@ -187,7 +187,7 @@ async def test_flow_history_with_checkpoints(migrated_db,  flow_factory, system_
     
     print("\n🔄 Получаем историю с checkpoints...")
     history = await flow_factory.get_flow_history(
-        session_id=thread_id,
+        session_id=session_id,
         limit=100,
         include_checkpoints=True
     )
@@ -221,16 +221,16 @@ async def test_flow_sessions_list(migrated_db,  flow_factory, system_context, un
     flow_id = "apps.agents.flows.smart_flow.smart_flow_config"
     flow = await flow_factory.get_flow(flow_id)
     
-    thread_id_1 = unique_id("session_1")
-    thread_id_2 = unique_id("session_2")
+    session_id_1 = unique_id("session_1")
+    session_id_2 = unique_id("session_2")
     
-    config_1 = {"configurable": {"thread_id": thread_id_1}}
-    config_2 = {"configurable": {"thread_id": thread_id_2}}
+    config_1 = {"configurable": {"session_id": session_id_1}}
+    config_2 = {"configurable": {"session_id": session_id_2}}
     
     print("🔄 Создаем 2 сессии...")
     
     session_1 = SessionConfig(
-        session_id=thread_id_1,
+        session_id=session_id_1,
         platform="web",
         user_id="test_user_1",
         flow_id=flow_id,
@@ -241,7 +241,7 @@ async def test_flow_sessions_list(migrated_db,  flow_factory, system_context, un
     await session_repo.set(session_1)
     
     session_2 = SessionConfig(
-        session_id=thread_id_2,
+        session_id=session_id_2,
         platform="telegram",
         user_id="test_user_2",
         flow_id=flow_id,
@@ -283,7 +283,7 @@ async def test_flow_sessions_list(migrated_db,  flow_factory, system_context, un
     
     print(f"✅ Сессий для {flow_id}: {sessions_filtered.total}")
     
-    test_sessions = [s for s in sessions_filtered.sessions if s.session_id in [thread_id_1, thread_id_2]]
+    test_sessions = [s for s in sessions_filtered.sessions if s.session_id in [session_id_1, session_id_2]]
     print(f"  - Наших тестовых сессий: {len(test_sessions)}")
     
     assert len(test_sessions) >= 2, "Должны найтись обе тестовые сессии"
@@ -297,7 +297,7 @@ async def test_flow_sessions_list(migrated_db,  flow_factory, system_context, un
     
     print(f"✅ Web сессий: {sessions_web.total}")
     
-    web_test_session = [s for s in sessions_web.sessions if s.session_id == thread_id_1]
+    web_test_session = [s for s in sessions_web.sessions if s.session_id == session_id_1]
     assert len(web_test_session) == 1, "Должна найтись web сессия"
     
     print("\n📋 Детали сессий:")
@@ -322,11 +322,11 @@ async def test_flow_history_tool_calls(migrated_db,  flow_factory, system_contex
     flow_id = "apps.agents.flows.smart_flow.smart_flow_config"
     flow = await flow_factory.get_flow(flow_id)
     
-    thread_id = unique_id("tools")
-    config = {"configurable": {"thread_id": thread_id}}
+    session_id = unique_id("tools")
+    config = {"configurable": {"session_id": session_id}}
     
     session = SessionConfig(
-        session_id=thread_id,
+        session_id=session_id,
         platform="web",
         user_id="test_user",
         flow_id=flow_id,
@@ -344,7 +344,7 @@ async def test_flow_history_tool_calls(migrated_db,  flow_factory, system_contex
     
     print("\n🔄 Получаем историю...")
     history = await flow_factory.get_flow_history(
-        session_id=thread_id,
+        session_id=session_id,
         limit=100,
         include_checkpoints=False
     )

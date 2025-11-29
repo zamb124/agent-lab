@@ -4,12 +4,11 @@
 
 import pytest
 from langchain_core.messages import HumanMessage
-from apps.agents.flows.smart_flow import SmartFlowAgent
 from apps.agents.models import FlowConfig, LLMConfig, AgentConfig
 
 
 @pytest.mark.asyncio
-async def test_source_node_in_history(migrated_db,  flow_factory, unique_id, agent_repo, flow_repo):
+async def test_source_node_in_history(migrated_db,  flow_factory, unique_id, agent_repo, flow_repo, agent_factory):
     """Тест проверяет, что source_node корректно записывается в историю сообщений"""
     
     weather_agent_config = AgentConfig(
@@ -42,6 +41,15 @@ async def test_source_node_in_history(migrated_db,  flow_factory, unique_id, age
     )
     await agent_repo.set(explainer_agent_config)
     
+    smart_flow_agent_config = AgentConfig(
+        agent_id="apps.agents.flows.smart_flow.SmartFlowAgent",
+        name="Smart Flow Agent",
+        description="StateGraph агент с роутингом",
+        function_class="apps.agents.flows.smart_flow.SmartFlowAgent",
+        llm_config=LLMConfig(model="mock-gpt-4"),
+    )
+    await agent_repo.set(smart_flow_agent_config)
+    
     flow_config = FlowConfig(
         flow_id="test_source_tracking_flow",
         name="Test Source Node Tracking",
@@ -51,7 +59,7 @@ async def test_source_node_in_history(migrated_db,  flow_factory, unique_id, age
     )
     await flow_repo.set(flow_config)
     
-    flow = SmartFlowAgent()
+    flow = await agent_factory.get_agent("apps.agents.flows.smart_flow.SmartFlowAgent")
     
     session_id = unique_id("source_tracking")
     
@@ -60,7 +68,7 @@ async def test_source_node_in_history(migrated_db,  flow_factory, unique_id, age
             "messages": [HumanMessage(content="Какая погода в Москве?")],
             "user_id": "test_user",
         },
-        config={"configurable": {"thread_id": session_id}},
+        config={"configurable": {"session_id": session_id}},
     )
     
     print(f"✅ Flow выполнен, session_id: {session_id}")
@@ -110,7 +118,7 @@ async def test_source_node_in_history(migrated_db,  flow_factory, unique_id, age
 
 
 @pytest.mark.asyncio
-async def test_checkpoint_metadata_structure(migrated_db,  flow_factory, unique_id, agent_repo, flow_repo):
+async def test_checkpoint_metadata_structure(migrated_db,  flow_factory, unique_id, agent_repo, flow_repo, agent_factory):
     """Тест для проверки структуры metadata в checkpoint"""
     
     calc_agent_config = AgentConfig(
@@ -143,6 +151,15 @@ async def test_checkpoint_metadata_structure(migrated_db,  flow_factory, unique_
     )
     await agent_repo.set(explainer_agent_config)
     
+    smart_flow_agent_config = AgentConfig(
+        agent_id="apps.agents.flows.smart_flow.SmartFlowAgent",
+        name="Smart Flow Agent",
+        description="StateGraph агент с роутингом",
+        function_class="apps.agents.flows.smart_flow.SmartFlowAgent",
+        llm_config=LLMConfig(model="mock-gpt-4"),
+    )
+    await agent_repo.set(smart_flow_agent_config)
+    
     flow_config = FlowConfig(
         flow_id="test_metadata_flow",
         name="Test Metadata Flow",
@@ -152,7 +169,7 @@ async def test_checkpoint_metadata_structure(migrated_db,  flow_factory, unique_
     )
     await flow_repo.set(flow_config)
     
-    flow = SmartFlowAgent()
+    flow = await agent_factory.get_agent("apps.agents.flows.smart_flow.SmartFlowAgent")
     
     session_id = unique_id("metadata")
     
@@ -161,7 +178,7 @@ async def test_checkpoint_metadata_structure(migrated_db,  flow_factory, unique_
             "messages": [HumanMessage(content="Сколько будет 5 + 3?")],
             "user_id": "test_user",
         },
-        config={"configurable": {"thread_id": session_id}},
+        config={"configurable": {"session_id": session_id}},
     )
     
     history = await flow_factory.get_flow_history(

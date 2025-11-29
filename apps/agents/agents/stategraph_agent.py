@@ -29,7 +29,7 @@ class StateGraphAgent(BaseAgent):
         Переопредели этот метод в подклассе для определения структуры графа.
         
         Returns:
-            Словарь с определением графа (nodes, edges, entry_point)
+            Словарь с определением графа (nodes, edges, entry_point) или GraphDefinition объект
             
         Raises:
             NotImplementedError: Если метод не переопределен и нет graph_definition в config
@@ -61,10 +61,8 @@ class StateGraphAgent(BaseAgent):
         llm = get_llm(**llm_kwargs) if llm_kwargs else get_llm()
         
         tools = await self.get_tools()
-        if isinstance(graph_def, GraphDefinition):
-            graph_definition = graph_def
-        else:
-            graph_definition = GraphDefinition(**graph_def)
+        
+        graph_definition = GraphDefinition.model_validate(graph_def)
         prompt = self.config.prompt if self.config else None
         
         runner = StateGraphRunner(

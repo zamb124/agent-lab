@@ -8,7 +8,7 @@ import logging
 import asyncio
 from core.context import get_context, set_context, clear_context
 from core.models.context_models import Context
-from apps.frontend.container import get_frontend_container
+from apps.agents.container import get_agents_container
 from apps.frontend.core.websocket_manager import websocket_manager
 
 logger = logging.getLogger(__name__)
@@ -321,10 +321,7 @@ async def process_user_message(
         "files": files_data,  # Добавляем файлы в данные сообщения
     }
 
-    frontend_container = get_frontend_container()
-    agents_container = frontend_container.get_agents_container()
-    if not agents_container:
-        raise RuntimeError("AgentsContainer не инициализирован")
+    agents_container = get_agents_container()
     
     from apps.agents.interfaces.web_interface import get_web_interface
     web_interface = get_web_interface()

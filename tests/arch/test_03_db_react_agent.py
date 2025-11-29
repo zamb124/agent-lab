@@ -122,7 +122,7 @@ async def test_execute_db_react_agent(migrated_db,  agent_factory, flow_factory,
     # Прямое тестирование агента
     result = await db_agent.ainvoke(
         {"messages": [HumanMessage(content="Сколько будет 15 + 23?")]},
-        config={"configurable": {"thread_id": unique_id("test_react_direct")}}
+        config={"configurable": {"session_id": unique_id("test_react_direct")}}
     )
     
     assert "messages" in result
@@ -137,7 +137,7 @@ async def test_execute_db_react_agent(migrated_db,  agent_factory, flow_factory,
     
     result = await math_flow.ainvoke(
         {"messages": [HumanMessage(content="Умножь 12 на 7")]},
-        config={"configurable": {"thread_id": unique_id("test_react_flow")}}
+        config={"configurable": {"session_id": unique_id("test_react_flow")}}
     )
     
     assert "messages" in result
@@ -167,7 +167,7 @@ async def test_react_agent_tools(migrated_db,  agent_factory, mock_llm, test_hel
     # Сложная математическая задача
     result = await db_agent.ainvoke(
         {"messages": [HumanMessage(content="Вычисли (10 + 5) * 3 - 8")]},
-        config={"configurable": {"thread_id": unique_id("test_react_complex")}}
+        config={"configurable": {"session_id": unique_id("test_react_complex")}}
     )
     
     final_message = result["messages"][-1].content

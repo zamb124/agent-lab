@@ -12,7 +12,7 @@ from urllib.parse import urlparse, unquote
 
 from ..base_provider import BaseRAGProvider
 from core.rag.models import RAGDocument, RAGSearchResult, RAGNamespace
-from core.http import get_proxy_url
+from core.http import get_httpx_client
 from core.files.s3_client import S3ClientFactory
 from core.utils.slug import generate_slug
 
@@ -36,19 +36,14 @@ class AgentsetRAGProvider(BaseRAGProvider):
         self.embedding_model = config.get("embedding_model", "text-embedding-3-small")
         self.embedding_api_key = config.get("embedding_api_key")
         
-        proxy_url = get_proxy_url()
-        
-        if proxy_url:
-            logger.info(f"🌐 Используем прокси для Agentset RAG: {proxy_url}")
-        
-        self._client = httpx.AsyncClient(
+        self._client = get_httpx_client(
+            timeout=self.timeout,
+            use_proxy_from_config=True,
             base_url=self.base_url,
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
-            },
-            timeout=self.timeout,
-            proxy=proxy_url
+            }
         )
         
         logger.info(f"Agentset RAG провайдер инициализирован: {self.base_url}")
@@ -399,8 +394,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
         await s3_client.upload_bytes(
             data=text_bytes,
             key=s3_key,
-            content_type="text/plain",
-            acl="private"  # Текст остается приватным в S3
+            content_type="text/plain"
         )
 
         # Обновляем метаданные с информацией о файле для правильного извлечения названия

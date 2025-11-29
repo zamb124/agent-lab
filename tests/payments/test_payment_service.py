@@ -11,15 +11,18 @@ from core.models import Company
 from core.clients.payment.base_provider import (
     WebhookVerificationResult
 )
+from core.payments import PaymentService
 
 
 
 
 @pytest.mark.asyncio
-async def test_create_payment(payment_service_with_mock, test_company, test_user, mock_provider):
+async def test_create_payment(company_repo, test_company, test_user, mock_provider):
     """Тест создания платежа"""
     
-    result = await payment_service_with_mock.create_payment(
+    payment_service = PaymentService(company_repository=company_repo)
+    
+    result = await payment_service.create_payment(
         company=test_company,
         user=test_user,
         amount=1000.0,
@@ -31,75 +34,70 @@ async def test_create_payment(payment_service_with_mock, test_company, test_user
     assert result["amount"] == 1000.0
     assert "txn_" in result["transaction_id"]
     
-    payment_service_with_mock._storage.set.assert_called_once()
-    
     mock_provider.create_payment.assert_called_once()
     call_args = mock_provider.create_payment.call_args[0][0]
     assert call_args.amount == 1000.0
     assert call_args.company_id == "test_company"
     assert call_args.user_id == "test_user"
+    
+    saved_transaction = await payment_service.get_transaction(result["transaction_id"])
+    assert saved_transaction is not None
+    assert saved_transaction.amount == 1000.0
+    assert saved_transaction.status == PaymentStatus.PENDING
 
 
 @pytest.mark.asyncio
-async def test_process_webhook_success(payment_service_with_mock):
+async def test_process_webhook_success(company_repo, save_test_company, test_company, storage):
     """Тест обработки успешного webhook"""
+    import uuid
+    
+    unique_id = uuid.uuid4().hex[:8]
+    transaction_id = f"{test_company.company_id}:txn_{unique_id}"
+    external_payment_id = f"yoomoney_op_{unique_id}"
+    
+    payment_service = PaymentService(company_repository=company_repo)
     
     test_transaction = Transaction(
-        transaction_id="txn_test123",
-        company_id="test_company",
+        transaction_id=transaction_id,
+        company_id=test_company.company_id,
         user_id="test_user",
         amount=1000.0,
         status=PaymentStatus.PENDING,
         payment_provider=PaymentProviderType.YOOMONEY
     )
     
-    payment_service_with_mock._storage.list_by_prefix = AsyncMock(side_effect=lambda prefix, **kwargs: {
-        "payment:": ["payment:test_company:yoomoney:txn_test123"],
-        "payment_notification:": []
-    }.get(prefix, []))
+    await payment_service._save_transaction(test_transaction)
     
-    payment_service_with_mock._storage.get = AsyncMock(side_effect=lambda key, **kwargs: {
-        "payment:test_company:yoomoney:txn_test123": test_transaction.model_dump_json(),
-        "company:test_company": Company(
-            company_id="test_company",
-            subdomain="test", 
-            name="Test Company",
-            balance=5000.0
-        ).model_dump_json()
-    }.get(key))
-    
-    payment_service_with_mock._storage.set = AsyncMock()
-    
-    # Мокаем company_repository
-    mock_company = Company(
-        company_id="test_company",
-        subdomain="test", 
-        name="Test Company",
-        balance=5000.0
-    )
-    payment_service_with_mock.company_repository.get = AsyncMock(return_value=mock_company)
-    payment_service_with_mock.company_repository.set = AsyncMock()
+    company_before = await company_repo.get(test_company.company_id)
+    initial_balance = company_before.balance
     
     verification_result = WebhookVerificationResult(
         is_valid=True,
-        transaction_id="txn_test123",
+        transaction_id=transaction_id,
         amount=1000.0,
-        external_payment_id="yoomoney_op_123",
+        external_payment_id=external_payment_id,
         status="success"
     )
     
-    await payment_service_with_mock.process_webhook(
+    await payment_service.process_webhook(
         verification_result=verification_result,
         provider_name="yoomoney_main",
         raw_data={"test": "webhook_data"}
     )
     
-    assert payment_service_with_mock._storage.set.call_count >= 2
+    updated_company = await company_repo.get(test_company.company_id)
+    assert updated_company.balance == initial_balance + 1000.0
+    
+    updated_transaction = await payment_service.get_transaction(transaction_id)
+    assert updated_transaction.status == PaymentStatus.SUCCESS
+    assert updated_transaction.external_payment_id == external_payment_id
 
 
 @pytest.mark.asyncio
-async def test_process_webhook_duplicate(payment_service_with_mock):
+async def test_process_webhook_duplicate(company_repo, save_test_company, test_company):
     """Тест обработки дубликата webhook"""
+    
+    payment_service = PaymentService(company_repository=company_repo)
     
     existing_notification = PaymentNotification(
         notification_id="existing",
@@ -108,130 +106,132 @@ async def test_process_webhook_duplicate(payment_service_with_mock):
         processed=True
     )
     
-    payment_service_with_mock._storage.list_by_prefix = AsyncMock(return_value=["payment_notification:existing"])
-    payment_service_with_mock._storage.get = AsyncMock(return_value=existing_notification.model_dump_json())
-    payment_service_with_mock._storage.set = AsyncMock()
+    await payment_service._save_notification(existing_notification)
     
     verification_result = WebhookVerificationResult(
         is_valid=True,
-        transaction_id="txn_test123",
+        transaction_id=f"{test_company.company_id}:txn_test123",
         amount=1000.0,
         external_payment_id="yoomoney_op_123",
         status="success"
     )
     
-    await payment_service_with_mock.process_webhook(
+    company_before = await company_repo.get(test_company.company_id)
+    initial_balance = company_before.balance
+    
+    await payment_service.process_webhook(
         verification_result=verification_result,
         provider_name="yoomoney_main", 
         raw_data={}
     )
+    
+    company_after = await company_repo.get(test_company.company_id)
+    if company_after:
+        assert company_after.balance == initial_balance
 
 
 @pytest.mark.asyncio
-async def test_get_transaction(payment_service_with_mock):
+async def test_get_transaction(company_repo, test_company):
     """Тест получения транзакции"""
     
+    payment_service = PaymentService(company_repository=company_repo)
+    
+    transaction_id = f"{test_company.company_id}:txn_test123"
     test_transaction = Transaction(
-        transaction_id="txn_test123",
-        company_id="test_company",
+        transaction_id=transaction_id,
+        company_id=test_company.company_id,
         user_id="test_user",
         amount=1000.0,
         status=PaymentStatus.SUCCESS,
         payment_provider=PaymentProviderType.YOOMONEY
     )
     
-    payment_service_with_mock._storage.list_by_prefix = AsyncMock(return_value=[
-        "payment:test_company:yoomoney:txn_test123"
-    ])
-    payment_service_with_mock._storage.get = AsyncMock(return_value=test_transaction.model_dump_json())
+    await payment_service._save_transaction(test_transaction)
     
-    result = await payment_service_with_mock.get_transaction("txn_test123")
+    result = await payment_service.get_transaction(transaction_id)
     
     assert result is not None
-    assert result.transaction_id == "txn_test123"
-    assert result.company_id == "test_company" 
+    assert result.transaction_id == transaction_id
+    assert result.company_id == test_company.company_id
     assert result.amount == 1000.0
     assert result.status == PaymentStatus.SUCCESS
 
 
 @pytest.mark.asyncio
-async def test_get_transaction_not_found(payment_service_with_mock):
+async def test_get_transaction_not_found(company_repo):
     """Тест получения несуществующей транзакции"""
     
-    payment_service_with_mock._storage.get = AsyncMock(return_value=None)
+    payment_service = PaymentService(company_repository=company_repo)
     
-    result = await payment_service_with_mock.get_transaction("nonexistent")
+    result = await payment_service.get_transaction("nonexistent:txn_123")
     
     assert result is None
 
 
 @pytest.mark.asyncio
-async def test_get_company_transactions(payment_service_with_mock):
+async def test_get_company_transactions(company_repo, test_company):
     """Тест получения транзакций компании"""
+    import uuid
     
-    # Создаем тестовые транзакции
-    transactions = [
-        Transaction(
-            transaction_id=f"txn_{i}",
-            company_id="test_company" if i < 3 else "other_company",
+    unique_company_id = f"test_company_{uuid.uuid4().hex[:8]}"
+    unique_company = Company(
+        company_id=unique_company_id,
+        subdomain="test",
+        name="Test Company",
+        balance=100000.0,
+        status="active"
+    )
+    await company_repo.set(unique_company)
+    
+    payment_service = PaymentService(company_repository=company_repo)
+    
+    transactions = []
+    for i in range(1, 4):
+        transaction_id = f"{unique_company_id}:txn_{i}"
+        transaction = Transaction(
+            transaction_id=transaction_id,
+            company_id=unique_company_id,
             user_id="test_user",
             amount=1000.0 * i,
             status=PaymentStatus.SUCCESS,
             payment_provider=PaymentProviderType.YOOMONEY,
             created_at=datetime.now(timezone.utc)
         )
-        for i in range(1, 6)
-    ]
+        await payment_service._save_transaction(transaction)
+        transactions.append(transaction)
     
-    payment_service_with_mock._storage.list_by_prefix = AsyncMock(
-        return_value=[
-            "payment:test_company:yoomoney:txn_1",
-            "payment:test_company:yoomoney:txn_2"
-        ]
-    )
-    
-    def mock_get(key, **kwargs):
-        for t in transactions:
-            if t.transaction_id in key and t.company_id == "test_company":
-                return t.model_dump_json()
-        return None
-    
-    payment_service_with_mock._storage.get = AsyncMock(side_effect=mock_get)
-    
-    result = await payment_service_with_mock.get_company_transactions(
-        company_id="test_company",
+    result = await payment_service.get_company_transactions(
+        company_id=unique_company_id,
         limit=10,
         offset=0
     )
     
-    assert len(result) == 2, "Должно быть 2 транзакции для test_company (индексы 1 и 2, 3-й для other_company)"
+    assert len(result) == 3
     for t in result:
-        assert t.company_id == "test_company"
+        assert t.company_id == unique_company_id
     
     for i in range(len(result) - 1):
         assert result[i].created_at >= result[i + 1].created_at
 
 
 @pytest.mark.asyncio
-async def test_update_company_balance(payment_service_with_mock, test_company):
+async def test_update_company_balance(company_repo, save_test_company, test_company):
     """Тест пополнения баланса компании"""
+    payment_service = PaymentService(company_repository=company_repo)
+    
     initial_balance = test_company.balance
     
-    payment_service_with_mock.company_repository.get = AsyncMock(return_value=test_company)
-    payment_service_with_mock.company_repository.set = AsyncMock()
+    await payment_service._update_company_balance(test_company.company_id, 1000.0)
     
-    await payment_service_with_mock._update_company_balance("test_company", 1000.0)
-    
-    payment_service_with_mock.company_repository.set.assert_called_once()
-    call_args = payment_service_with_mock.company_repository.set.call_args
-    
-    saved_company = call_args[0][0]
-    assert saved_company.balance == initial_balance + 1000.0
+    updated_company = await company_repo.get(test_company.company_id)
+    assert updated_company.balance == initial_balance + 1000.0
 
 
 @pytest.mark.asyncio
-async def test_is_notification_duplicate(payment_service_with_mock):
+async def test_is_notification_duplicate(company_repo):
     """Тест проверки дубликатов уведомлений"""
+    
+    payment_service = PaymentService(company_repository=company_repo)
     
     existing_notification = PaymentNotification(
         notification_id="existing",
@@ -240,11 +240,10 @@ async def test_is_notification_duplicate(payment_service_with_mock):
         processed=True
     )
     
-    payment_service_with_mock._storage.list_by_prefix = AsyncMock(return_value=["payment_notification:existing"])
-    payment_service_with_mock._storage.get = AsyncMock(return_value=existing_notification.model_dump_json())
+    await payment_service._save_notification(existing_notification)
     
-    is_duplicate = await payment_service_with_mock._is_notification_duplicate("duplicate_id")
-    assert is_duplicate is True, "Должен определить дубликат"
+    is_duplicate = await payment_service._is_notification_duplicate("duplicate_id")
+    assert is_duplicate is True
     
-    is_duplicate = await payment_service_with_mock._is_notification_duplicate("new_id")
-    assert is_duplicate is False, "Новый ID не должен быть дубликатом"
+    is_duplicate = await payment_service._is_notification_duplicate("new_id")
+    assert is_duplicate is False

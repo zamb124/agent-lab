@@ -261,7 +261,7 @@ async def test_execute_stategraph_router_calculate_function_path(
     # Тест пути через function_node (без "плюс" или "+")
     result = await compiled_graph.ainvoke(
         {"messages": [HumanMessage(content="Обработай этот текст")]},
-        config={"configurable": {"thread_id": unique_id("function_path")}}
+        config={"configurable": {"session_id": unique_id("function_path")}}
     )
 
     messages = result["messages"]
@@ -301,7 +301,7 @@ async def test_execute_stategraph_router_calculate_math_path(
     # Тест пути через calculate_node (с "плюс")
     result = await compiled_graph.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 10 плюс 5")]},
-        config={"configurable": {"thread_id": unique_id("calculate_path")}}
+        config={"configurable": {"session_id": unique_id("calculate_path")}}
     )
 
     messages = result["messages"]
@@ -356,7 +356,7 @@ async def test_complete_stategraph_flow_with_final_agent(
     # Выполняем весь StateGraph агент от начала до конца
     result = await stategraph_agent.ainvoke(
         {"messages": [HumanMessage(content="Выполни полный расчет")]},
-        config={"configurable": {"thread_id": unique_id("complete_flow")}}
+        config={"configurable": {"session_id": unique_id("complete_flow")}}
     )
 
     messages = result["messages"]

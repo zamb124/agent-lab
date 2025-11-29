@@ -42,7 +42,8 @@ async def test_store_proxy_same_object(migrated_db, agent_factory, agent_repo, m
     sub_agent_tool = ToolReference(
         tool_id=f"agent:{sub_agent_id}",
         code_mode=CodeMode.CODE_REFERENCE,
-        memory_policy=SubAgentMemoryPolicy.SNAPSHOT
+        memory_policy=SubAgentMemoryPolicy.SNAPSHOT,
+        description="Субагент"
     )
     
     parent_agent_config = AgentConfig(

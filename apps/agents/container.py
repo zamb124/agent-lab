@@ -152,6 +152,18 @@ class AgentsContainer(BaseContainer):
         
         return repository
     
+    @lazy
+    def store_repository(self):
+        """StoreRepository для работы с stores"""
+        from apps.agents.db.repositories.store_repository import StoreRepository
+        return StoreRepository(storage=self.storage)
+    
+    @lazy
+    def agent_state_repository(self):
+        """AgentStateRepository для работы с agent_states"""
+        from apps.agents.db.repositories.agent_state_repository import AgentStateRepository
+        return AgentStateRepository(storage=self.storage)
+    
     # === Фабрики ===
     
     @lazy

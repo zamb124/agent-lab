@@ -1,9 +1,5 @@
 ---
-description: "Правила тестирования"
-globs:
-  - "tests/**"
-  - "**/test_*.py"
-alwaysApply: false
+alwaysApply: true
 ---
 # Правила тестирования
 
@@ -112,6 +108,92 @@ async def test_agent_creation(storage):
 # 185 из 187 тестов прошли - ЭТО НЕ УСПЕХ
 # Нужно исправить 2 падающих теста
 </bad_example>
+
+## Запрет на моки внутренних компонентов
+
+**КРИТИЧНО**: ЗАПРЕЩЕНО создавать моки для внутренних компонентов системы.
+
+### ❌ ЗАПРЕЩЕНО мокать:
+
+- **Storage** - используй реальную БД через фикстуру `storage`
+- **Репозитории** - используй реальные репозитории через фикстуры (`agent_repo`, `flow_repo`, `user_repo`, etc)
+- **StateManager** - используй реальный StateManager через `get_state_manager()`
+- **Внутренние сервисы** - PaymentService, VariablesService, AuthService и другие должны работать с реальными зависимостями
+- **Контейнеры** - используй реальные контейнеры через `get_agents_container()`, `get_frontend_container()`
+
+<bad_example>
+# НЕ ТАК - мокаем Storage
+from unittest.mock import AsyncMock, patch
+
+mock_storage = AsyncMock()
+mock_storage.get = AsyncMock(return_value=None)
+
+with patch("core.db.storage.Storage", return_value=mock_storage):
+    result = await some_function()
+</bad_example>
+
+<bad_example>
+# НЕ ТАК - мокаем репозиторий
+mock_company_repo = AsyncMock()
+mock_company_repo.get = AsyncMock(return_value=test_company)
+
+service = PaymentService(company_repository=mock_company_repo)
+</bad_example>
+
+<good_example>
+# ТАК - используем реальные компоненты
+@pytest.mark.asyncio
+async def test_payment_service(storage, company_repo, test_company):
+    # Используем реальные фикстуры
+    service = PaymentService(company_repository=company_repo)
+    # Тест с реальной БД
+    result = await service.create_payment(...)
+</good_example>
+
+### ✅ РАЗРЕШЕНО мокать:
+
+- **Внешние HTTP клиенты** - `httpx.AsyncClient` для внешних API
+- **Внешние API провайдеры** - Telegram API, WhatsApp API, платежные провайдеры (YooMoney, Stripe)
+- **MockLLM** - для тестирования агентов используй `mock_llm` фикстуру
+
+<good_example>
+# ТАК - мокаем внешний HTTP клиент
+from unittest.mock import patch, AsyncMock
+
+with patch('httpx.AsyncClient') as mock_client:
+    mock_response = AsyncMock()
+    mock_response.status_code = 200
+    mock_response.json = AsyncMock(return_value={"ok": True})
+    
+    mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_response)
+    
+    result = await call_external_api()
+</good_example>
+
+<good_example>
+# ТАК - используем MockLLM для агентов
+@pytest.mark.asyncio
+async def test_agent_execution(migrated_db, agent_factory, mock_llm):
+    # mock_llm - это специальная фикстура для тестирования агентов
+    mock_llm.configure(
+        responses={
+            "привет": "Здравствуйте! Чем могу помочь?"
+        }
+    )
+    
+    agent = await agent_factory.get_agent("my_agent")
+    result = await agent.ainvoke({"messages": [HumanMessage(content="привет")]})
+</good_example>
+
+<good_example>
+# ТАК - мокаем внешний платежный провайдер
+from unittest.mock import Mock, AsyncMock
+
+mock_provider = Mock(spec=BasePaymentProvider)
+mock_provider.create_payment = AsyncMock(return_value=PaymentResponse(...))
+
+service = PaymentService(provider=mock_provider)
+</good_example>
 
 ## Не генерируй тесты без запроса
 

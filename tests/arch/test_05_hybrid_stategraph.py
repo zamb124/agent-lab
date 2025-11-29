@@ -209,7 +209,7 @@ async def test_execute_hybrid_simple_math(migrated_db,  flow_factory, mock_llm, 
     
     result = await hybrid_flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 5 + 7")]},
-        config={"configurable": {"thread_id": unique_id("hybrid_simple")}}
+        config={"configurable": {"session_id": unique_id("hybrid_simple")}}
     )
     
     assert "messages" in result
@@ -241,7 +241,7 @@ async def test_execute_hybrid_complex_math(migrated_db,  flow_factory, mock_llm,
     
     result = await hybrid_flow.ainvoke(
         {"messages": [HumanMessage(content="Вычисли сложное выражение (15 + 25) * 2 - 10")]},
-        config={"configurable": {"thread_id": unique_id("hybrid_complex")}}
+        config={"configurable": {"session_id": unique_id("hybrid_complex")}}
     )
     
     assert "messages" in result
@@ -273,7 +273,7 @@ async def test_execute_hybrid_weather(migrated_db,  flow_factory, mock_llm, uniq
     
     result = await hybrid_flow.ainvoke(
         {"messages": [HumanMessage(content="Какая погода в Новосибирске?")]},
-        config={"configurable": {"thread_id": unique_id("hybrid_weather")}}
+        config={"configurable": {"session_id": unique_id("hybrid_weather")}}
     )
     
     assert "messages" in result

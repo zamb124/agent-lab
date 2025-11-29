@@ -6,7 +6,7 @@ alwaysApply: true
 
 ## Обязательное использование утилит
 
-**ВСЕГДА** используй `get_httpx_client` из `core.http_utils` для создания HTTP клиентов. **НИКОГДА** не создавай `httpx.AsyncClient` напрямую!
+**ВСЕГДА** используй `get_httpx_client` из `core.http` для создания HTTP клиентов. **НИКОГДА** не создавай `httpx.AsyncClient` напрямую!
 
 <good_example>
 from core.http import get_httpx_client

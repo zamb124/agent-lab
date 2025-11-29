@@ -2,9 +2,9 @@
 Стандартные инструменты для всех агентов.
 """
 
-from apps.agents.agents.base import AgentInterrupt
+from apps.agents.exceptions import AgentInterrupt
 from core.variables import get_state
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage
 
 from apps.agents.services.tool_decorator import tool
 
@@ -29,21 +29,16 @@ def ask_user(question: str) -> str:
         Ответ пользователя в формате "QUESTION: вопрос\nANSWER: ответ"
     """
     state = get_state()
-    if state and state.get("messages"):
-        messages = state.get("messages", [])
-        # Ищем HumanMessage после последнего AIMessage с tool_call для ask_user
-        for i in range(len(messages) - 1, -1, -1):
-            msg = messages[i]
-            if isinstance(msg, AIMessage) and msg.tool_calls:
-                for tool_call in msg.tool_calls:
-                    if tool_call.get("name") == "ask_user":
-                        # Ищем HumanMessage после этого AIMessage
-                        for j in range(i + 1, len(messages)):
-                            if isinstance(messages[j], HumanMessage):
-                                if "interrupt_context" in state:
-                                    state.pop("interrupt_context", None)
-                                return f"QUESTION: {question}\nANSWER: {messages[j].content}"
-                        break
+    
+    if not state or not state.get("interrupt_context"):
+        raise AgentInterrupt(question)
+    
+    state.pop("interrupt_context", None)
+    messages = state.get("messages", [])
+    
+    for message in reversed(messages):
+        if isinstance(message, HumanMessage):
+            return f"QUESTION: {question}\nANSWER: {message.content}"
     
     raise AgentInterrupt(question)
 

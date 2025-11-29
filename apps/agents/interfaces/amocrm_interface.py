@@ -233,7 +233,7 @@ class AmoCRMInterface(BaseInterface):
         Добавляет историю чата в state_manager через session_id.
 
         Args:
-            session_id: ID сессии (используется как thread_id для checkpointer)
+            session_id: ID сессии
             chat_history: История сообщений из AmoCRM
             chat_id: ID чата для логирования
         """

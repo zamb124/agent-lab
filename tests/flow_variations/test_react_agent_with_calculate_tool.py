@@ -75,7 +75,7 @@ async def test_execute_react_agent_with_calculate_tool(
     # Тестируем выполнение
     result = await agent.ainvoke(
         {"messages": [HumanMessage(content="Сколько будет 15 + 23?")]},
-        config={"configurable": {"thread_id": unique_id("calculate_test")}}
+        config={"configurable": {"session_id": unique_id("calculate_test")}}
     )
 
     # Проверяем результат
@@ -98,7 +98,7 @@ async def test_execute_react_agent_with_calculate_tool(
 
     result2 = await agent.ainvoke(
         {"messages": [HumanMessage(content="Посчитай сумму 12 и 8")]},
-        config={"configurable": {"thread_id": unique_id("calculate_test2")}}
+        config={"configurable": {"session_id": unique_id("calculate_test2")}}
     )
 
     final_message2 = result2["messages"][-1].content

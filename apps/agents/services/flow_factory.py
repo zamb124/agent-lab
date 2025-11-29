@@ -109,7 +109,7 @@ class FlowFactory:
             if include_checkpoints and messages:
                 checkpoint_info = CheckpointInfo(
                     checkpoint_id="checkpoint_1",
-                    thread_id=session_id,
+                    session_id=session_id,
                     checkpoint_ns="",
                     step=len(messages),
                     source_node=None,
@@ -155,7 +155,6 @@ class FlowFactory:
         
         return MessageHistoryResponse(
             session_id=session_id,
-            thread_id=session_id,
             flow_id=flow_id,
             flow_name=flow_name,
             messages=all_messages,

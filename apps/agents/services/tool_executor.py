@@ -13,7 +13,7 @@ from apps.agents.container import get_agents_container
 from apps.agents.services.state import State
 from apps.agents.services.tracing.decorators import trace_span
 from apps.agents.models.trace_models import SpanType
-from apps.agents.agents.base import AgentInterrupt
+from apps.agents.exceptions import AgentInterrupt
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,6 @@ class ToolExecutor:
                         name=tool_name
                     )
                 )
-                logger.info(f"Инструмент '{tool_name}' выполнен успешно")
             except AgentInterrupt as interrupt:
                 if hasattr(tool, '_is_agent_tool') and tool._is_agent_tool:
                     raise interrupt
@@ -116,7 +115,8 @@ class ToolExecutor:
             if isinstance(tool, StructuredTool) and tool.name == tool_name:
                 return tool
         
-        logger.warning(f"Инструмент '{tool_name}' не найден среди {len(tools)} доступных")
+        available_names = [getattr(t, 'name', str(t)) for t in tools]
+        logger.warning(f"Инструмент '{tool_name}' не найден среди {len(tools)} доступных: {available_names}")
         return None
 
     async def _execute_tool(
@@ -144,16 +144,13 @@ class ToolExecutor:
         if state is not None:
             from core.variables import set_state_in_context
             
-            if hasattr(tool, '_is_platform_tool') and tool._is_platform_tool:
-                set_state_in_context(state)
-                logger.debug(f"State установлен в контекст для тула '{tool.name}' (state_aware)")
+            set_state_in_context(state)
             
             if hasattr(tool, 'args_schema') and tool.args_schema:
                 schema_fields = tool.args_schema.model_fields if hasattr(tool.args_schema, 'model_fields') else {}
                 
                 if 'tool_call_id' in schema_fields and 'tool_call_id' not in tool_args:
                     tool_args['tool_call_id'] = tool_call_id
-                    logger.debug(f"Добавляем tool_call_id в аргументы тула '{tool.name}'")
 
         if hasattr(tool, "ainvoke"):
             result = await tool.ainvoke(tool_args)

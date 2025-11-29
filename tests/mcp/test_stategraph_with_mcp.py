@@ -103,7 +103,7 @@ async def test_stategraph_agent_with_mcp_and_regular_tools(setup_mcp_servers, te
         print("✅ Граф скомпилирован")
         
         import uuid
-        thread_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
         
         result = await compiled_graph.ainvoke(
             {
@@ -113,7 +113,7 @@ async def test_stategraph_agent_with_mcp_and_regular_tools(setup_mcp_servers, te
                     "mcp_input": "fastapi",
                 }
             },
-            config={"configurable": {"thread_id": thread_id}}
+            config={"configurable": {"session_id": thread_id}}
         )
         
         print("✅ Граф выполнен")
@@ -220,7 +220,7 @@ async def test_stategraph_with_only_mcp_tools(setup_mcp_servers, test_company, a
         print("\n🚀 Выполняем граф с 2 MCP нодами...")
         
         import uuid
-        thread_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
         
         result = await compiled_graph.ainvoke(
             {
@@ -231,7 +231,7 @@ async def test_stategraph_with_only_mcp_tools(setup_mcp_servers, test_company, a
                     "topic": "agents"
                 }
             },
-            config={"configurable": {"thread_id": thread_id}}
+            config={"configurable": {"session_id": thread_id}}
         )
         
         print("✅ Граф с 2 MCP нодами выполнен")
@@ -339,7 +339,7 @@ async def test_stategraph_mixed_tools_complex_graph(setup_mcp_servers, test_comp
         print("\n🚀 Выполняем сложный граф...")
         
         import uuid
-        thread_id = str(uuid.uuid4())
+        session_id = str(uuid.uuid4())
         
         result = await compiled_graph.ainvoke(
             {
@@ -351,7 +351,7 @@ async def test_stategraph_mixed_tools_complex_graph(setup_mcp_servers, test_comp
                     "topic": "hooks"
                 }
             },
-            config={"configurable": {"thread_id": thread_id}}
+            config={"configurable": {"session_id": thread_id}}
         )
         
         print("✅ Граф выполнен")

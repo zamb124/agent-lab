@@ -53,7 +53,7 @@ async def calculate_tool(a: int, b: int, operation: str = "add") -> str:
     )
 
     agent = await agent_factory.get_agent("calc_react_agent")
-    thread_id = unique_id("calc_test")
+    session_id = unique_id("calc_test")
 
     mock_llm.configure(
         tool_responses={
@@ -63,7 +63,7 @@ async def calculate_tool(a: int, b: int, operation: str = "add") -> str:
         default_response="Выполняю вычисление с помощью калькулятора"
     )
 
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {"configurable": {"session_id": session_id}}
 
     result1 = await agent.ainvoke(
         {"messages": [HumanMessage(content="Сколько будет 10 + 5?")]},
@@ -81,10 +81,10 @@ async def calculate_tool(a: int, b: int, operation: str = "add") -> str:
 
     inspector = StateInspector()
 
-    history = await inspector.get_checkpoint_history(thread_id)
+    history = await inspector.get_checkpoint_history(session_id)
     assert len(history) > 0, "Должна быть история чекпоинтеров"
 
-    connections = await inspector.get_checkpoint_connections(thread_id)
+    connections = await inspector.get_checkpoint_connections(session_id)
     assert "connections" in connections
     assert "summary" in connections
     assert connections["summary"]["total_checkpoints"] > 0
@@ -99,7 +99,7 @@ async def calculate_tool(a: int, b: int, operation: str = "add") -> str:
 
     assert tool_calls_found > 0, "Должны быть найдены вызовы инструментов"
 
-    timeline = await inspector.get_timeline(thread_id)
+    timeline = await inspector.get_timeline(session_id)
     assert "timeline" in timeline
     assert "summary" in timeline
     assert len(timeline["timeline"]) > 0
@@ -199,7 +199,7 @@ async def result_node(state):
     await agent_repo.set(agent_config)
 
     agent = await agent_factory.get_agent("test_stategraph_inspector")
-    thread_id = unique_id("stategraph_test")
+    session_id = unique_id("stategraph_test")
 
     mock_llm.configure(
         tool_responses={
@@ -208,7 +208,7 @@ async def result_node(state):
         default_response="Выполняю вычисление"
     )
 
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {"configurable": {"session_id": session_id}}
 
     result = await agent.ainvoke(
         {
@@ -224,10 +224,10 @@ async def result_node(state):
 
     inspector = StateInspector()
 
-    history = await inspector.get_checkpoint_history(thread_id)
+    history = await inspector.get_checkpoint_history(session_id)
     assert len(history) > 0
 
-    connections = await inspector.get_checkpoint_connections(thread_id)
+    connections = await inspector.get_checkpoint_connections(session_id)
     assert "connections" in connections
     assert connections["summary"]["total_checkpoints"] > 0
 
@@ -240,7 +240,7 @@ async def result_node(state):
 
     assert store_variables_found, "Должны быть найдены переменные store"
 
-    timeline = await inspector.get_timeline(thread_id, include_values=False)
+    timeline = await inspector.get_timeline(session_id, include_values=False)
     assert "timeline" in timeline
     assert len(timeline["timeline"]) > 0
 

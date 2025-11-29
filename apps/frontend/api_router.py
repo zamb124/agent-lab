@@ -14,11 +14,13 @@ import apps.frontend.api.i18n as frontend_i18n
 import apps.frontend.api.code as frontend_code
 import apps.frontend.api.websocket_status as websocket_status_api
 import apps.frontend.api.checkpoints as frontend_checkpoints
+import apps.frontend.api.history as frontend_history
 
 # Создание главного frontend API роутера
 router = APIRouter(tags=["frontend-api"])
 
 # Включение суброутеров (без дополнительных префиксов, так как общий префикс "/frontend/api" добавляется в main.py)
+router.include_router(frontend_history.router, tags=["frontend-history"], include_in_schema=False)
 router.include_router(frontend_models.router, tags=["frontend-models"], include_in_schema=False)
 router.include_router(frontend_flows.router, tags=["frontend-flows"], include_in_schema=False)
 router.include_router(frontend_agents.router, tags=["frontend-agents"], include_in_schema=False)

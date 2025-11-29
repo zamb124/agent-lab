@@ -70,13 +70,13 @@ async def test_stategraph_tool(test_user, test_company):
     logger.info(f"📋 Результат: {result}")
     logger.info(f"📋 Обновленный state: {mock_state}")
 
-    # Проверяем, что state изменился
+    # Проверяем что state изменился через side effect
     assert "test_data" in mock_state, "test_data должен быть в state"
     assert len(mock_state["test_data"]) > 0, "test_data должен содержать данные"
     assert mock_state["test_data"][0] == "Привет StateGraph!", "Данные должны совпадать"
 
-    # Проверяем, что результат - это delta для StateGraph
-    assert isinstance(result, dict), "Результат должен быть словарем (delta)"
-    assert "test_data" in result, "Delta должен содержать test_data"
+    # Tool возвращает результат функции (строку)
+    assert isinstance(result, str), "Tool возвращает строковый результат"
+    assert result == "Обработано: Привет StateGraph!", "Результат должен совпадать"
 
-    logger.info("✅ State успешно обновлен в StateGraph!")
+    logger.info("State успешно обновлен в StateGraph!")

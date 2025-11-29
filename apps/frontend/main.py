@@ -39,13 +39,6 @@ async def lifespan(app: FastAPI):
     container = app.state.container
     settings = app.state.settings
     
-    logger.info("Создание таблиц в shared БД...")
-    if container.shared_db_url:
-        await create_tables(
-            db_url=container.shared_db_url,
-            table_names=["users", "tasks", "storage"]
-        )
-    
     logger.info("Загрузка плагинов...")
     from apps.frontend.core.plugin_loader import discover_and_load_plugins
     await discover_and_load_plugins(app)
@@ -97,7 +90,8 @@ def create_app() -> FastAPI:
     app.state.container = container
     app.state.settings = settings
     # AgentsContainer для доступа к agents сервисам (migrator, billing_service и т.д.)
-    app.state.agents_container = container.get_agents_container()
+    from apps.agents.container import get_agents_container
+    app.state.agents_container = get_agents_container()
     
     app.add_middleware(
         ProxyHeadersMiddleware,

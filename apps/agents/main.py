@@ -10,6 +10,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 
+from fastapi.middleware.cors import CORSMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
 from core.config.loader import load_merged_config
 from core.logging import setup_logging
 from core.db import create_tables
@@ -84,6 +87,23 @@ def create_app() -> FastAPI:
     
     app.state.container = container
     app.state.settings = settings
+    
+    # Настройка CORS
+    # По умолчанию запрещаем все cross-origin запросы, так как сервис агентов 
+    # должен вызываться только через Frontend Service (BFF) или другие внутренние сервисы.
+    # Внешние API клиенты (не браузеры) не используют CORS.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[],  # Запрещаем прямой доступ из браузера
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    app.add_middleware(
+        ProxyHeadersMiddleware,
+        trusted_hosts=["*"]
+    )
     
     logger.info("Подключение роутеров...")
     

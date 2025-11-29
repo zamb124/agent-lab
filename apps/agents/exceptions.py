@@ -3,6 +3,14 @@
 """
 
 
+class AgentInterrupt(Exception):
+    """Исключение для запроса ввода от пользователя"""
+    def __init__(self, message: str):
+        self.message = message
+        self.value = message
+        super().__init__(message)
+
+
 class BillingError(Exception):
     """Ошибка биллинга (лимиты, бюджет)"""
     pass
@@ -13,5 +21,5 @@ class TariffError(Exception):
     pass
 
 
-__all__ = ['BillingError', 'TariffError']
+__all__ = ['AgentInterrupt', 'BillingError', 'TariffError']
 

@@ -25,15 +25,6 @@ class FrontendContainer(BaseContainer):
     def canvas_service(self):
         from apps.frontend.services.canvas_service import CanvasService
         return CanvasService()
-    
-    def get_agents_container(self):
-        """Получить AgentsContainer для доступа к агентам"""
-        try:
-            from apps.agents.container import get_agents_container
-            return get_agents_container()
-        except RuntimeError:
-            logger.warning("AgentsContainer не инициализирован")
-            return None
 
 
 # === Глобальный контейнер ===

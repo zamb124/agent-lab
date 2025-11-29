@@ -779,7 +779,7 @@ class ChatManager {
             }
             
             const encodedSessionId = encodeURIComponent(fullSessionId);
-            const response = await fetch(`/agents/api/v1/history/sessions/${encodedSessionId}/messages?limit=100`);
+            const response = await fetch(`/frontend/api/history/sessions/${encodedSessionId}/messages?limit=100`);
             
             if (!response.ok) {
                 throw new Error(`Ошибка загрузки истории: ${response.status}`);

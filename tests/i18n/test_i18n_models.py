@@ -279,9 +279,9 @@ class TestI18nConfig:
         assert config.fallback_language == Language.RU
         assert config.auto_generate_missing is True
         assert config.auto_generate_on_startup is True
-        assert "app/models" in config.scan_directories
-        assert "app/frontend" in config.scan_directories
-        assert config.translations_directory == "app/i18n"
+        assert "apps/agents/models" in config.scan_directories
+        assert "apps/frontend" in config.scan_directories
+        assert config.translations_directory == "core/i18n"
     
     def test_custom_config(self):
         """Проверяем кастомную конфигурацию"""

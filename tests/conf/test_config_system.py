@@ -402,6 +402,8 @@ class TestAuthFlow:
         auth_service = container.auth_service
         from core.models import AuthProvider
         
+        auth_service.reinitialize_providers()
+        
         providers = auth_service.get_available_providers()
         assert isinstance(providers, list), f"providers должен быть списком, получен {type(providers)}"
         
@@ -422,28 +424,47 @@ class TestAuthFlow:
         from apps.agents.container import get_agents_container
         from core.models import AuthProvider
         import uuid
+        from unittest.mock import AsyncMock
         
         container = get_agents_container()
         auth_service = container.auth_service
+        auth_service.reinitialize_providers()
+        
+        if hasattr(auth_service, '_get_auth_state') and isinstance(auth_service._get_auth_state, AsyncMock):
+            delattr(auth_service, '_get_auth_state')
+        if hasattr(auth_service, '_cleanup_auth_state') and isinstance(auth_service._cleanup_auth_state, AsyncMock):
+            delattr(auth_service, '_cleanup_auth_state')
+        if hasattr(auth_service, '_get_user') and isinstance(auth_service._get_user, AsyncMock):
+            delattr(auth_service, '_get_user')
+        if hasattr(auth_service, '_get_session') and isinstance(auth_service._get_session, AsyncMock):
+            delattr(auth_service, '_get_session')
         
         test_redirect_uri = "http://test.com/callback"
-        test_state = f"test-state-auth-{uuid.uuid4().hex[:8]}"
+        test_state = f"test-state-auth-{uuid.uuid4().hex}"
         
-        await auth_service._save_auth_state(
-            test_state, 
-            AuthProvider.YANDEX, 
-            test_redirect_uri
-        )
+        state_key = f"auth_state:{test_state}"
         
-        state_data = await auth_service._get_auth_state(test_state)
-        assert state_data is not None, "State должен быть сохранен"
-        assert state_data["provider"] == "yandex", f"Provider должен быть yandex, получен {state_data.get('provider')}"
-        assert state_data["redirect_uri"] == test_redirect_uri, f"redirect_uri должен быть {test_redirect_uri}, получен {state_data.get('redirect_uri')}"
-        
-        await auth_service._cleanup_auth_state(test_state)
-        
-        state_data = await auth_service._get_auth_state(test_state)
-        assert state_data is None, "State должен быть удален после cleanup"
+        try:
+            await auth_service._storage.delete(state_key)
+            
+            await auth_service._save_auth_state(
+                test_state, 
+                AuthProvider.YANDEX, 
+                test_redirect_uri
+            )
+            
+            state_data = await auth_service._get_auth_state(test_state)
+            assert state_data is not None, "State должен быть сохранен"
+            assert state_data["provider"] == "yandex", f"Provider должен быть yandex, получен {state_data.get('provider')}"
+            assert state_data["redirect_uri"] == test_redirect_uri, f"redirect_uri должен быть {test_redirect_uri}, получен {state_data.get('redirect_uri')}"
+            
+            await auth_service._cleanup_auth_state(test_state)
+            
+            state_data = await auth_service._get_auth_state(test_state)
+            assert state_data is None, "State должен быть удален после cleanup"
+        finally:
+            await auth_service._cleanup_auth_state(test_state)
+            await auth_service._storage.delete(state_key)
 
 
 class TestConfigStructure:

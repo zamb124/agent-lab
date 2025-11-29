@@ -13,26 +13,25 @@ def calculate(expression: str) -> str:
     Args:
         expression: Математическое выражение (например, "2+2", "10*5")
     """
+    from simpleeval import simple_eval
+    
     try:
-        # Простая безопасная оценка только основных операций
         allowed_chars = set("0123456789+-*/.() ")
         if not all(c in allowed_chars for c in expression):
-            return f"Ошибка: недопустимые символы в выражении '{expression}'"
+            raise ValueError(f"Недопустимые символы в выражении '{expression}'")
 
-        # Заменяем операторы на безопасные
-        expression = expression.replace(" ", "")
+        expression_clean = expression.replace(" ", "")
 
-        # Простая проверка на деление на ноль
-        if "/0" in expression:
-            return "Ошибка: деление на ноль"
+        if "/0" in expression_clean:
+            raise ZeroDivisionError("Деление на ноль")
 
-        result = eval(expression)
+        result = simple_eval(expression_clean)
         return f"Результат: {expression} = {result}"
 
-    except ZeroDivisionError:
-        return "Ошибка: деление на ноль"
+    except ZeroDivisionError as e:
+        raise ValueError(f"Ошибка: {str(e)}") from e
     except Exception as e:
-        return f"Ошибка вычисления: {str(e)}"
+        raise ValueError(f"Ошибка вычисления: {str(e)}") from e
 
 
 @tool(is_public=True, group="Математика", title="Справка по математике")

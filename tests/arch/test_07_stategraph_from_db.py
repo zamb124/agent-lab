@@ -195,7 +195,7 @@ async def finish_function(state):
     
     result_a = await compiled_graph.ainvoke(
         {"messages": [HumanMessage(content="Привет, хочу путь a")]},
-        config={"configurable": {"thread_id": unique_id("path_a")}}
+        config={"configurable": {"session_id": unique_id("path_a")}}
     )
     
     messages_a = result_a["messages"]
@@ -215,7 +215,7 @@ async def finish_function(state):
     
     result_b = await compiled_graph.ainvoke(
         {"messages": [HumanMessage(content="Привет, хочу другой путь")]},
-        config={"configurable": {"thread_id": unique_id("path_b")}}
+        config={"configurable": {"session_id": unique_id("path_b")}}
     )
     
     messages_b = result_b["messages"]

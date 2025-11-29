@@ -11,7 +11,7 @@
 """
 import pytest
 from langchain_core.messages import HumanMessage
-from apps.agents.agents.base import AgentInterrupt
+from apps.agents.exceptions import AgentInterrupt
 from apps.agents.services.state_manager import get_state_manager
 from apps.agents.models import (
     AgentConfig,
@@ -150,7 +150,7 @@ async def final_node(state):
     }
     
     try:
-        result = await agent.ainvoke(initial_state, config={"configurable": {"thread_id": session_id}})
+        result = await agent.ainvoke(initial_state, config={"configurable": {"session_id": session_id}})
         # Если нет interrupt - проверяем что все ноды выполнились
         if "__interrupt__" not in result:
             print("⚠️  Interrupt не произошел, возможно user_name уже был в store")
@@ -188,7 +188,7 @@ async def final_node(state):
         
         # Продолжаем выполнение агента (УПРАВЛЕНИЕ ВОЗВРАЩАЕТСЯ В check_node!)
         print("🔄 Продолжаем выполнение StateGraph агента с ответом пользователя")
-        result = await agent.ainvoke(saved_state, config={"configurable": {"thread_id": session_id}})
+        result = await agent.ainvoke(saved_state, config={"configurable": {"session_id": session_id}})
         
         assert "store" in result, "Результат не содержит store"
         assert "user_name" in result["store"], "user_name не сохранен в store"

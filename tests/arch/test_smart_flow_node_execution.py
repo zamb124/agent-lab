@@ -53,7 +53,7 @@ async def test_smart_flow_executes_different_nodes(migrated_db, agent_factory, m
     # Тест 1: Математический запрос
     result1 = await agent.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 2+2")]},
-        config={"configurable": {"thread_id": "test_math_path"}}
+        config={"configurable": {"session_id": "test_math_path"}}
     )
     
     # Собираем все сообщения
@@ -90,7 +90,7 @@ async def test_smart_flow_executes_different_nodes(migrated_db, agent_factory, m
     # Тест 2: Погодный запрос
     result2 = await agent.ainvoke(
         {"messages": [HumanMessage(content="Какая погода в Москве?")]},
-        config={"configurable": {"thread_id": "test_weather_path"}}
+        config={"configurable": {"session_id": "test_weather_path"}}
     )
     
     # Собираем все сообщения

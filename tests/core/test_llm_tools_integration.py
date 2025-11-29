@@ -89,7 +89,7 @@ class TestRealOpenRouterToolsIntegration:
         try:
             result = await weather_agent.ainvoke(
                 {"messages": [HumanMessage(content="Используй get_weather для проверки погоды в Москве")]},
-                config={"configurable": {"thread_id": "test_real_integration"}}
+                config={"configurable": {"session_id": "test_real_integration"}}
             )
 
             # Восстанавливаем уровень логирования

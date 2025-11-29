@@ -117,17 +117,17 @@ async def test_duplicate_webhook_protection(
     test_user,
     yoomoney_provider,
     payment_service,
+    company_repo,
     unique_id
 ):
     """
     Тест защиты от дубликатов webhook.
     Проверяет что один платеж не обрабатывается дважды.
     """
-    test_company.balance = 5000.0
     from core.models.billing_models import TariffPlan
+    test_company.balance = 5000.0
     test_company.tariff_plan = TariffPlan.PREMIUM
-    # Используем тот же storage что и payment_service для гарантии консистентности
-    await payment_service._storage.set(f"company:{test_company.company_id}", test_company.model_dump_json(), force_global=True)
+    await company_repo.set(test_company)
     
     # Небольшая задержка для гарантии коммита транзакции
     import asyncio
@@ -166,9 +166,8 @@ async def test_duplicate_webhook_protection(
     
     verification_result = await yoomoney_provider.verify_webhook(webhook_data)
     
-    initial_company_data = await payment_service._storage.get(f"company:{test_company.company_id}", force_global=True)
-    assert initial_company_data is not None, f"Компания должна быть сохранена, ключ=company:{test_company.company_id}"
-    initial_company = Company.model_validate_json(initial_company_data)
+    initial_company = await company_repo.get(test_company.company_id)
+    assert initial_company is not None, f"Компания должна быть сохранена"
     initial_balance = initial_company.balance
     
     await payment_service.process_webhook(
@@ -177,8 +176,7 @@ async def test_duplicate_webhook_protection(
         raw_data=webhook_data
     )
     
-    after_first_data = await payment_service._storage.get(f"company:{test_company.company_id}", force_global=True)
-    after_first_company = Company.model_validate_json(after_first_data)
+    after_first_company = await company_repo.get(test_company.company_id)
     assert after_first_company.balance == initial_balance + 1000.0
     
     await payment_service.process_webhook(
@@ -187,8 +185,7 @@ async def test_duplicate_webhook_protection(
         raw_data=webhook_data
     )
     
-    after_second_data = await payment_service._storage.get(f"company:{test_company.company_id}", force_global=True)
-    after_second_company = Company.model_validate_json(after_second_data)
+    after_second_company = await company_repo.get(test_company.company_id)
     assert after_second_company.balance == after_first_company.balance, "Баланс не должен увеличиваться повторно"
 
 

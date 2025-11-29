@@ -7,11 +7,10 @@ import json
 import logging
 import uuid
 from typing import Any, Dict, Optional, List
-from sqlalchemy import text
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage, ToolMessage
 from apps.agents.services.state import State
-from core.db.database import get_session_factory
 from apps.agents.models.core_models import SubAgentMemoryPolicy
+from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 
@@ -49,37 +48,20 @@ class StoreProxy(dict):
         if not self._dirty:
             return
         
-        store_data_json = json.dumps(dict(self), default=str, ensure_ascii=False)
-        session_factory = await get_session_factory()
-        
-        async with session_factory() as session:
-            async with session.begin():
-                await session.execute(
-                    text("""
-                        INSERT INTO stores (store_id, store_data, updated_at)
-                        VALUES (:store_id, CAST(:store_data AS JSONB), CURRENT_TIMESTAMP)
-                        ON CONFLICT (store_id)
-                        DO UPDATE SET store_data = CAST(:store_data AS JSONB), updated_at = CURRENT_TIMESTAMP
-                    """),
-                    {"store_id": self.store_id, "store_data": store_data_json}
-                )
+        store_repo = get_agents_container().store_repository
+        await store_repo.set(self.store_id, dict(self))
         
         self._dirty = False
     
     async def refresh(self) -> None:
         await self.ensure_saved()
         
-        session_factory = await get_session_factory()
-        async with session_factory() as session:
-            result = await session.execute(
-                text("SELECT store_data FROM stores WHERE store_id = :store_id"),
-                {"store_id": self.store_id}
-            )
-            row = result.first()
+        store_repo = get_agents_container().store_repository
+        store_data = await store_repo.get(self.store_id)
         
         self.clear()
-        if row and row[0]:
-            self.update(row[0])
+        if store_data:
+            self.update(store_data)
         self._dirty = False
     
     async def ensure_saved(self) -> None:
@@ -195,27 +177,21 @@ def _dicts_to_messages(msg_dicts: List[Dict[str, Any]]) -> List[BaseMessage]:
     logger = logging.getLogger(__name__)
     
     if not msg_dicts:
-        logger.info("🟢 StateManager._dicts_to_messages: пустой список сообщений")
         return []
-    
-    logger.info(f"🟢 StateManager._dicts_to_messages: конвертируем {len(msg_dicts)} сообщений")
     
     # Защита от слишком большого количества сообщений (может быть признаком проблемы)
     if len(msg_dicts) > 1000:
-        logger.error(f"🔴 StateManager: ПРЕДУПРЕЖДЕНИЕ! Слишком много сообщений: {len(msg_dicts)}. Возможна проблема с сохранением состояния.")
+        logger.error(f"StateManager: слишком много сообщений: {len(msg_dicts)}. Возможна проблема с сохранением состояния.")
         msg_dicts = msg_dicts[-100:]  # Берем только последние 100
     
     result = []
     for i, msg_dict in enumerate(msg_dicts):
-        if i % 50 == 0:  # Логируем каждое 50-е сообщение, чтобы не засорять логи
-            logger.info(f"🟢 StateManager: обрабатываем сообщение {i+1}/{len(msg_dicts)}")
-        
         msg_type = msg_dict.get("type", "HumanMessage")
         content = msg_dict.get("content", "")
         
         # Защита от слишком большого content (может быть циклическая ссылка)
         if isinstance(content, str) and len(content) > 100000:
-            logger.warning(f"🟢 StateManager: сообщение {i+1} имеет очень большой content ({len(content)} символов), обрезаем")
+            logger.warning(f"StateManager: сообщение {i+1} имеет очень большой content ({len(content)} символов), обрезаем")
             content = content[:1000] + "... [обрезано]"
         
         try:
@@ -239,11 +215,10 @@ def _dicts_to_messages(msg_dicts: List[Dict[str, Any]]) -> List[BaseMessage]:
             
             result.append(msg)
         except Exception as e:
-            logger.error(f"🔴 StateManager: ОШИБКА при создании сообщения {i+1} (type={msg_type}): {e}", exc_info=True)
+            logger.error(f"StateManager: ошибка при создании сообщения {i+1} (type={msg_type}): {e}", exc_info=True)
             # Пропускаем проблемное сообщение вместо падения
             continue
     
-    logger.info(f"🟢 StateManager._dicts_to_messages: успешно конвертировано {len(result)} из {len(msg_dicts)} сообщений")
     return result
 
 
@@ -254,7 +229,22 @@ class StateManager:
     """
 
     def __init__(self):
-        pass
+        self._store_repository = None
+        self._agent_state_repository = None
+    
+    def _get_store_repository(self):
+        """Получает StoreRepository из контейнера"""
+        if self._store_repository is None:
+            container = get_agents_container()
+            self._store_repository = container.store_repository
+        return self._store_repository
+    
+    def _get_agent_state_repository(self):
+        """Получает AgentStateRepository из контейнера"""
+        if self._agent_state_repository is None:
+            container = get_agents_container()
+            self._agent_state_repository = container.agent_state_repository
+        return self._agent_state_repository
 
     def _extract_parent_session_id(self, session_id: str) -> str:
         """Извлекает parent_session_id из sub_session_id"""
@@ -323,43 +313,14 @@ class StateManager:
     
     async def load_store(self, store_id: str) -> Dict[str, Any]:
         """Загружает store из БД"""
-        session_factory = await get_session_factory()
-        async with session_factory() as session:
-            result = await session.execute(
-                text("SELECT store_data FROM stores WHERE store_id = :store_id"),
-                {"store_id": store_id}
-            )
-            row = result.first()
-        
-        return row[0] if row and row[0] else {}
+        store_repo = self._get_store_repository()
+        store_data = await store_repo.get(store_id)
+        return store_data if store_data else {}
     
     async def _load_state_data(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Загружает данные состояния из БД"""
-        session_factory = await get_session_factory()
-        async with session_factory() as session:
-            result = await session.execute(
-                text("""
-                    SELECT a.state_data, a.store_id
-                    FROM agent_states a
-                    WHERE a.session_id = :session_id
-                """),
-                {"session_id": session_id}
-            )
-            row = result.first()
-        
-        if not row:
-            return None
-        
-        state_data_raw, store_id = row[0], row[1]
-        
-        if isinstance(state_data_raw, str):
-            state_data = json.loads(state_data_raw)
-        elif isinstance(state_data_raw, dict):
-            state_data = state_data_raw
-        else:
-            state_data = dict(state_data_raw) if hasattr(state_data_raw, '__dict__') else {}
-        
-        state_data["_store_id"] = store_id or session_id
+        agent_state_repo = self._get_agent_state_repository()
+        state_data = await agent_state_repo.get(session_id)
         return state_data
     
     async def _save_state_data(self, session_id: str, state: State, store_id: str) -> None:
@@ -389,27 +350,8 @@ class StateManager:
             else:
                 state_data["interrupt_context"] = str(interrupt_ctx)
         
-        state_data_json = json.dumps(state_data, default=str, ensure_ascii=False)
-        
-        session_factory = await get_session_factory()
-        async with session_factory() as session:
-            async with session.begin():
-                await session.execute(
-                    text("""
-                        INSERT INTO agent_states (session_id, store_id, state_data, updated_at)
-                        VALUES (:session_id, :store_id, CAST(:state_data AS JSONB), CURRENT_TIMESTAMP)
-                        ON CONFLICT (session_id)
-                        DO UPDATE SET
-                            store_id = :store_id,
-                            state_data = CAST(:state_data AS JSONB),
-                            updated_at = CURRENT_TIMESTAMP
-                    """),
-                    {
-                        "session_id": session_id,
-                        "store_id": store_id,
-                        "state_data": state_data_json
-                    }
-                )
+        agent_state_repo = self._get_agent_state_repository()
+        await agent_state_repo.set(session_id, state_data, store_id)
     
     async def get_or_create_session(
         self,
@@ -518,13 +460,8 @@ class StateManager:
     
     async def delete_session(self, session_id: str) -> None:
         """Удаляет сессию из БД"""
-        session_factory = await get_session_factory()
-        async with session_factory() as session:
-            async with session.begin():
-                await session.execute(
-                    text("DELETE FROM agent_states WHERE session_id = :session_id"),
-                    {"session_id": session_id}
-                )
+        agent_state_repo = self._get_agent_state_repository()
+        await agent_state_repo.delete(session_id)
 
 
 # Глобальный экземпляр

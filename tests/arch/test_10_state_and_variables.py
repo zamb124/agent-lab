@@ -84,7 +84,7 @@ async def start_node(state):
         "user_id": "test_user_123",
     }
     
-    config = {"configurable": {"thread_id": unique_id("test_thread_1")}}
+    config = {"configurable": {"session_id": unique_id("test_thread_1")}}
     result = await agent.ainvoke(input_data, config=config)
     
     # Проверяем результат
@@ -218,11 +218,11 @@ async def counter_node(state):
     # Получаем агента
     agent = await agent_factory.get_agent("test_persistence_agent")
     
-    # Первый вызов - используем уникальный thread_id
-    thread_id = unique_id("test_thread_persistence")
-    config = {"configurable": {"thread_id": thread_id}}
+    # Первый вызов - используем уникальный session_id
+    session_id = unique_id("test_thread_persistence")
+    config = {"configurable": {"session_id": session_id}}
     
-    # НЕ передаем session_id в input_data, чтобы использовался thread_id из config
+    # НЕ передаем session_id в input_data, чтобы использовался session_id из config
     input_data_1 = {
         "messages": [HumanMessage(content="Первое сообщение")],
         "store": {},
@@ -378,10 +378,10 @@ async def tool_node(state):
     agent = await agent_factory.get_agent("test_agent_with_tool")
     
     # Первый вызов
-    thread_id = unique_id("test_thread_tool")
-    config = {"configurable": {"thread_id": thread_id}}
+    session_id = unique_id("test_thread_tool")
+    config = {"configurable": {"session_id": session_id}}
     
-    # НЕ передаем session_id в input_data, чтобы использовался thread_id из config
+    # НЕ передаем session_id в input_data, чтобы использовался session_id из config
     input_data_1 = {
         "messages": [HumanMessage(content="Вызов тула")],
         "store": {},
@@ -466,8 +466,8 @@ async def session_node(state):
     agent = await agent_factory.get_agent("test_session_tools_agent")
     
     # Вызываем агента
-    thread_id = unique_id("test_thread_session")
-    config = {"configurable": {"thread_id": thread_id}}
+    session_id = unique_id("test_thread_session")
+    config = {"configurable": {"session_id": session_id}}
     
     input_data = {
         "messages": [HumanMessage(content="Сохрани склад")],

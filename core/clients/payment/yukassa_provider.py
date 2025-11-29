@@ -71,3 +71,4 @@ class YuKassaProvider(BasePaymentProvider):
 
 
 
+

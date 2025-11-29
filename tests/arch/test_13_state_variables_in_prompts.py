@@ -42,8 +42,8 @@ async def test_01_store_variables_in_prompt(migrated_db,  agent_factory, test_he
     
     agent = await agent_factory.get_agent(agent_id)
     
-    thread_id = unique_id("thread")
-    config = {"configurable": {"thread_id": thread_id}}
+    session_id = unique_id("thread")
+    config = {"configurable": {"session_id": session_id}}
     
     input_data = {
         "messages": [HumanMessage(content="Какой у меня склад?")],
@@ -106,8 +106,8 @@ async def test_02_store_variables_in_subagent_prompt(migrated_db,  agent_factory
     main_agent = await agent_factory.get_agent(main_agent_id)
     
     # Вызываем с данными в store
-    thread_id = unique_id("thread")
-    config = {"configurable": {"thread_id": thread_id}}
+    session_id = unique_id("thread")
+    config = {"configurable": {"session_id": session_id}}
     
     input_data = {
         "messages": [HumanMessage(content="Проверь склад")],
@@ -158,8 +158,8 @@ ID СКЛАДА: {?store.warehouse_id|НЕТ}
     
     agent = await agent_factory.get_agent(agent_id)
     
-    thread_id = unique_id("thread")
-    config = {"configurable": {"thread_id": thread_id}}
+    session_id = unique_id("thread")
+    config = {"configurable": {"session_id": session_id}}
     
     # ВЫЗОВ 1: БЕЗ данных в store
     input_data_1 = {
@@ -264,8 +264,8 @@ async def test_04_optional_and_default_values(migrated_db,  agent_factory, test_
     
     agent = await agent_factory.get_agent("test_optional_vars_agent")
     
-    thread_id = unique_id("thread")
-    config = {"configurable": {"thread_id": thread_id}}
+    session_id = unique_id("thread")
+    config = {"configurable": {"session_id": session_id}}
     
     # Вызываем с ЧАСТИЧНЫМИ данными в store
     input_data = {
@@ -326,8 +326,8 @@ async def test_05_special_functions(migrated_db,  agent_factory, test_helpers, u
     
     agent = await agent_factory.get_agent("test_special_funcs_agent")
     
-    thread_id = unique_id("thread")
-    config = {"configurable": {"thread_id": thread_id}}
+    session_id = unique_id("thread")
+    config = {"configurable": {"session_id": session_id}}
     
     # Первый вызов
     input_data_1 = {
@@ -401,8 +401,8 @@ async def test_06_nested_store_access(migrated_db,  agent_factory, test_helpers,
     
     agent = await agent_factory.get_agent("test_nested_store_agent")
     
-    thread_id = unique_id("thread")
-    config = {"configurable": {"thread_id": thread_id}}
+    session_id = unique_id("thread")
+    config = {"configurable": {"session_id": session_id}}
     
     # Вызываем с вложенными данными
     input_data = {

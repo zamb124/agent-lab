@@ -8,6 +8,8 @@ from apps.agents.db.repositories.tool_repository import ToolRepository
 from apps.agents.db.repositories.task_repository import TaskRepository
 from apps.agents.db.repositories.session_repository import SessionRepository
 from apps.agents.db.repositories.mcp_repository import MCPServerRepository
+from apps.agents.db.repositories.store_repository import StoreRepository
+from apps.agents.db.repositories.agent_state_repository import AgentStateRepository
 
 __all__ = [
     "AgentRepository",
@@ -16,4 +18,6 @@ __all__ = [
     "TaskRepository",
     "SessionRepository",
     "MCPServerRepository",
+    "StoreRepository",
+    "AgentStateRepository",
 ]

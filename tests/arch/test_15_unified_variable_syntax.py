@@ -161,8 +161,8 @@ STATE ПЕРЕМЕННЫЕ:
     # Получаем агента
     agent = await agent_factory.get_agent("test_unified_syntax_agent")
     
-    thread_id = unique_id("test_thread")
-    config = {"configurable": {"thread_id": thread_id}}
+    session_id = unique_id("test_thread")
+    config = {"configurable": {"thread_id": session_id}}
     
     # Вызываем с частичными данными в store
     input_data = {

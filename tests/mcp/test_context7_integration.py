@@ -8,6 +8,7 @@ import pytest
 from apps.agents.services.mcp_client import MCPHttpClient
 from apps.agents.models.mcp_models import MCPTransportType
 import os
+from tests.conftest import skip_if_no_external_access
 
 
 pytestmark = pytest.mark.integration
@@ -139,6 +140,9 @@ async def test_context7_call_resolve_library():
         ])
         assert "langchain" in content_text.lower() or "library" in content_text.lower()
     
+    except Exception as e:
+        skip_if_no_external_access(e)
+    
     finally:
         await client.close()
 
@@ -181,6 +185,9 @@ async def test_context7_call_get_library_docs():
                     print(f"   {text[:300]}...")
                     break
     
+    except Exception as e:
+        skip_if_no_external_access(e)
+    
     finally:
         await client.close()
 
@@ -192,10 +199,15 @@ async def test_context7_full_workflow_with_toolfactory(setup_mcp_servers, test_c
     """
     from apps.agents.services.mcp_sync import sync_mcp_server_tools
     
+    tools = []
     try:
         print("\n📝 Шаг 1: Синхронизация Context7 тулов")
         tools = await sync_mcp_server_tools("context7", test_company.company_id)
         print(f"✅ Синхронизировано {len(tools)} тулов")
+    except Exception as e:
+        skip_if_no_external_access(e)
+    
+    try:
         
         resolve_tool_ref = next((t for t in tools if "resolve" in t.tool_id), None)
         assert resolve_tool_ref is not None
@@ -304,11 +316,17 @@ async def test_context7_in_agent(setup_mcp_servers, test_company, agent_repo, to
     """
     from apps.agents.services.mcp_sync import sync_mcp_server_tools
     from apps.agents.models import AgentConfig
+    import httpx
     
+    tools = []
     try:
         print("\n📝 Шаг 1: Синхронизируем Context7 тулы")
         tools = await sync_mcp_server_tools("context7", test_company.company_id)
         print(f"✅ Синхронизировано {len(tools)} тулов")
+    except Exception as e:
+        skip_if_no_external_access(e)
+    
+    try:
         
         print("\n🤖 Шаг 2: Создаем тестового агента с MCP тулами")
         

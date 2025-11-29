@@ -260,7 +260,9 @@ class TestTelegramFileIntegration:
         )
         
         # Форматируем сообщение для агента
-        processor = FileProcessor(storage=storage)
+        from apps.agents.container import get_agents_container
+        file_repository = get_agents_container().file_repository
+        processor = FileProcessor(file_repository=file_repository)
         formatted_message = processor.format_file_message(file_record)
         
         print("✅ Сообщение для агента:")
@@ -306,7 +308,9 @@ class TestTelegramFileIntegration:
         )
         
         from core.files.processors import FileProcessor
-        processor = FileProcessor(storage=storage)
+        from apps.agents.container import get_agents_container
+        file_repository = get_agents_container().file_repository
+        processor = FileProcessor(file_repository=file_repository)
         file_message = processor.format_file_message(file_record)
         
         # Комбинируем текст и файл (как это делает Telegram интерфейс)

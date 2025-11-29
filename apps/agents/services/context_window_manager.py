@@ -35,7 +35,7 @@ class ContextWindowManager:
         Args:
             messages: Текущий список сообщений
             llm_config: Конфигурация LLM агента (из AgentConfig.llm_config)
-            config: RunnableConfig для LangGraph (с thread_id и т.д.)
+            config: RunnableConfig для LangGraph (с session_id и т.д.)
             
         Returns:
             (messages, was_summarized) - обновленные сообщения и флаг суммаризации
@@ -306,7 +306,7 @@ class ContextWindowManager:
             logger.debug("Нет интерфейса для уведомления о суммаризации")
             return
         
-        session_id = config.get("configurable", {}).get("thread_id")
+        session_id = config.get("configurable", {}).get("session_id")
         if not session_id:
             logger.debug("Нет session_id для уведомления о суммаризации")
             return
@@ -349,17 +349,17 @@ class ContextWindowManager:
         Обновляет checkpoint в БД с новыми суммаризированными сообщениями.
         
         Args:
-            config: RunnableConfig с thread_id
+            config: RunnableConfig с session_id
             new_messages: Суммаризированные сообщения
         """
-        thread_id = config.get("configurable", {}).get("thread_id")
-        if not thread_id:
-            raise ValueError("thread_id обязателен для обновления checkpoint")
+        session_id = config.get("configurable", {}).get("session_id")
+        if not session_id:
+            raise ValueError("session_id обязателен для обновления checkpoint")
         
         state_manager = await get_state_manager()
         
         # Загружаем текущий state
-        state = await state_manager.get_or_create_session(thread_id)
+        state = await state_manager.get_or_create_session(session_id)
         
         # Обновляем messages в state
         old_count = len(state.get("messages", []))
@@ -369,7 +369,7 @@ class ContextWindowManager:
         await state_manager.save_session(state)
         
         logger.info(
-            f"✅ Checkpoint обновлен для thread_id={thread_id}: "
+            f"✅ Checkpoint обновлен для session_id={session_id}: "
             f"{old_count} → {len(new_messages)} сообщений"
         )
 

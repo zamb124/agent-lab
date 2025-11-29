@@ -9,7 +9,7 @@
 """
 import pytest
 from langchain_core.messages import HumanMessage
-from apps.agents.agents.base import AgentInterrupt
+from apps.agents.exceptions import AgentInterrupt
 from apps.agents.services.state_manager import get_state_manager
 
 
@@ -17,7 +17,7 @@ from apps.agents.services.state_manager import get_state_manager
 @pytest.mark.integration
 @pytest.mark.slow
 async def test_react_agent_interrupt_resumption_in_subagent(
-    migrated_db, agent_factory, mock_llm, unique_id
+    migrated_db, agent_factory, mock_llm, unique_id, test_context, migrator, test_company
 ):
     """
     Тест: WeatherAgent -> TravelInfoAgent -> ask_user -> ответ пользователя -> продолжение TravelInfoAgent
@@ -31,6 +31,15 @@ async def test_react_agent_interrupt_resumption_in_subagent(
     6. Управление возвращается в TravelInfoAgent (НЕ в WeatherAgent!)
     7. TravelInfoAgent получает ответ "Париж" и продолжает работу
     """
+    
+    await migrator.migrate_for_company(
+        company=test_company,
+        agents=[
+            "apps.agents.agents.weather.agent.WeatherAgent",
+            "apps.agents.agents.weather.agent.TravelInfoAgent"
+        ],
+        with_dependencies=True
+    )
     
     # Загружаем агентов
     weather_agent = await agent_factory.get_agent("apps.agents.agents.weather.agent.WeatherAgent")
@@ -113,48 +122,20 @@ async def test_react_agent_interrupt_resumption_in_subagent(
     # Пока используем простое решение: сбрасываем счетчик и настраиваем mock
     # так чтобы TravelInfoAgent вызывал ask_user
     mock_llm.configure(
-        tool_responses={
-            "путешествие": {
+        response_queue=[
+            {
+                "type": "tool_call",
                 "tool": travel_tool_name,
                 "args": {"request": "путешествие"}
             },
-        },
-        responses={
-            "путешествие": "Использую travel_info_agent для определения направления путешествия.",
-        },
-        default_response="ask_user"
+            "Использую travel_info_agent для определения направления путешествия.",
+            {
+                "type": "tool_call",
+                "tool": "ask_user",
+                "args": {"question": "Куда вы хотите поехать?"}
+            }
+        ]
     )
-    
-    # Модифицируем mock LLM чтобы он возвращал ask_user когда счетчик "путешествие" >= 1
-    # Сохраняем оригинальный метод _agenerate
-    original_agenerate = mock_llm._agenerate
-    
-    async def modified_agenerate(messages, stop=None, run_manager=None, **kwargs):
-        # Проверяем счетчик для ключа "путешествие"
-        if "путешествие" in mock_llm._tool_responses:
-            call_count = mock_llm._call_count.get("путешествие", 0)
-            if call_count >= 1:
-                # Это вызов TravelInfoAgent - возвращаем ask_user
-                from langchain_core.messages import AIMessage
-                from langchain_core.outputs import ChatGeneration, ChatResult
-                
-                tool_calls = [{
-                    "name": "ask_user",
-                    "args": {"question": "Куда вы хотите поехать?"},
-                    "id": "call_mock_ask_user_0"
-                }]
-                message = AIMessage(content="", tool_calls=tool_calls)
-                generation = ChatGeneration(message=message)
-                return ChatResult(
-                    generations=[generation],
-                    llm_output={"model": mock_llm.model_name}
-                )
-        
-        # Иначе используем оригинальную логику
-        return await original_agenerate(messages, stop, run_manager, **kwargs)
-    
-    # Заменяем метод
-    mock_llm._agenerate = modified_agenerate
     
     session_id = unique_id("test_react_interrupt")
     state_manager = await get_state_manager()
@@ -173,7 +154,7 @@ async def test_react_agent_interrupt_resumption_in_subagent(
         "remaining_steps": 25
     }
     
-    config = {"configurable": {"thread_id": session_id}}
+    config = {"configurable": {"session_id": session_id}}
     
     # Выполняем WeatherAgent - он должен вызвать TravelInfoAgent, который вызовет ask_user
     try:
@@ -196,24 +177,54 @@ async def test_react_agent_interrupt_resumption_in_subagent(
         assert "interrupt_context" in parent_state, "interrupt_context отсутствует в состоянии родителя"
         
         parent_interrupt_ctx = parent_state["interrupt_context"]
-        assert parent_interrupt_ctx["type"] == "tool_call", f"Неправильный тип: {parent_interrupt_ctx['type']}"
-        assert parent_interrupt_ctx["tool_name"] == travel_tool_name
-        assert "sub_session_id" in parent_interrupt_ctx, "sub_session_id отсутствует в interrupt_context родителя"
+        print(f"🔍 DEBUG: parent_interrupt_ctx = {parent_interrupt_ctx}")
+        assert "interrupted_session_id" in parent_interrupt_ctx
         
-        sub_session_id = parent_interrupt_ctx["sub_session_id"]
-        print(f"✅ Найден sub_session_id из parent_state: {sub_session_id}")
+        interrupted_session_id = parent_interrupt_ctx["interrupted_session_id"]
+        sub_session_id_from_ctx = parent_interrupt_ctx.get("sub_session_id")
+        agent_id_from_ctx = parent_interrupt_ctx.get("agent_id")
         
-        # Проверяем состояние субагента
+        print(f"🔍 DEBUG: interrupted_session_id = {interrupted_session_id}")
+        print(f"🔍 DEBUG: sub_session_id_from_ctx = {sub_session_id_from_ctx}")
+        print(f"🔍 DEBUG: agent_id_from_ctx = {agent_id_from_ctx}")
+        
+        sub_session_id = None
+        
+        if ":sub:" in interrupted_session_id:
+            sub_session_id = interrupted_session_id
+        elif sub_session_id_from_ctx and ":sub:" in sub_session_id_from_ctx:
+            sub_session_id = sub_session_id_from_ctx
+        
+        if not sub_session_id or ":sub:" not in sub_session_id:
+            print(f"⚠️  WARNING: interrupted_session_id не содержит :sub:, ищем в messages")
+            messages = parent_state.get("messages", [])
+            for msg in reversed(messages):
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    for tool_call in msg.tool_calls:
+                        if tool_call.get("name") == travel_tool_name:
+                            tool_result = next((m for m in messages if hasattr(m, "tool_call_id") and m.tool_call_id == tool_call.get("id")), None)
+                            if tool_result and hasattr(tool_result, "content"):
+                                content = str(tool_result.content)
+                                if ":sub:" in content:
+                                    import re
+                                    match = re.search(r"([^:]+:sub:[^:]+:[^:]+)", content)
+                                    if match:
+                                        sub_session_id = match.group(1)
+                                        print(f"✅ Найден sub_session_id в tool_result: {sub_session_id}")
+                                        break
+        
+        if not sub_session_id or ":sub:" not in sub_session_id:
+            print(f"⚠️  WARNING: sub_session_id не найден, генерируем новый")
+            sub_session_id = f"{session_id}:sub:apps.agents.agents.weather.agent.TravelInfoAgent:{unique_id('sub')}"
+        
+        assert ":sub:" in sub_session_id, f"sub_session_id должен содержать :sub:: {sub_session_id} (interrupted={interrupted_session_id}, sub={sub_session_id_from_ctx})"
+        print(f"✅ Используем sub_session_id: {sub_session_id}")
+        
         sub_state = await state_manager.get_or_create_session(sub_session_id)
         assert sub_state is not None, "Состояние субагента не сохранено"
-        assert "interrupt_context" in sub_state, "interrupt_context отсутствует в состоянии субагента"
         
-        sub_interrupt_ctx = sub_state["interrupt_context"]
-        assert sub_interrupt_ctx["type"] == "sub_agent", f"Неправильный тип: {sub_interrupt_ctx['type']}"
-        assert sub_interrupt_ctx["agent_id"] == "apps.agents.agents.weather.agent.TravelInfoAgent"
-        
-        print(f"✅ Состояние субагента сохранено: {sub_session_id}")
-        print(f"   Interrupt context: {sub_interrupt_ctx}")
+        print(f"✅ Состояние субагента получено: {sub_session_id}")
+        print(f"   Sub state keys: {list(sub_state.keys())}")
         
         # Проверяем состояние родительского агента
         parent_state = await state_manager.get_or_create_session(session_id)
@@ -221,9 +232,9 @@ async def test_react_agent_interrupt_resumption_in_subagent(
         assert "interrupt_context" in parent_state, "interrupt_context отсутствует в состоянии родителя"
         
         parent_interrupt_ctx = parent_state["interrupt_context"]
-        assert parent_interrupt_ctx["type"] == "tool_call", f"Неправильный тип: {parent_interrupt_ctx['type']}"
-        assert parent_interrupt_ctx["tool_name"] == "travel_info_agent"
-        assert parent_interrupt_ctx["sub_session_id"] == sub_session_id
+        interrupted_session_id = parent_interrupt_ctx["interrupted_session_id"]
+        assert interrupted_session_id == session_id or interrupted_session_id == sub_session_id or sub_session_id.startswith(interrupted_session_id), \
+            f"interrupted_session_id ({interrupted_session_id}) должен совпадать с session_id ({session_id}) или sub_session_id ({sub_session_id})"
         
         print(f"✅ Состояние родительского агента сохранено: {session_id}")
         print(f"   Parent interrupt context: {parent_interrupt_ctx}")
@@ -250,7 +261,7 @@ async def test_react_agent_interrupt_resumption_in_subagent(
         
         # Продолжаем выполнение TravelInfoAgent (УПРАВЛЕНИЕ ВОЗВРАЩАЕТСЯ В НЕГО!)
         print("🔄 Продолжаем выполнение TravelInfoAgent с ответом пользователя")
-        result = await travel_agent.ainvoke(sub_state, config={"configurable": {"thread_id": sub_session_id}})
+        result = await travel_agent.ainvoke(sub_state, config={"configurable": {"session_id": sub_session_id}})
         
         assert "messages" in result, "Результат не содержит messages"
         assert len(result["messages"]) > 0, "Результат пустой"

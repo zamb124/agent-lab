@@ -313,29 +313,12 @@ def tool(
                                 injected_state[key] = value
                             logger.info(f"✅ [{tool_name}] injected_state обновлен: {list(current_state.keys())}")
 
-                        # Для StateGraph агентов заполняем delta из current_state
-                        if agent_type_str == "stategraph" and current_state:
-                            wrapped_result.delta = current_state
-                            logger.info(f"🔄 [{tool_name}] StateGraph delta заполнен: {list(current_state.keys())}")
-
-                        # Записываем output_data в span
-                        output_data = {
-                            "result": str(wrapped_result.result)[:500],
-                            "has_delta": bool(wrapped_result.delta),
-                            "agent_type": agent_type_str or "none"
-                        }
-                        span.set_attribute("output_data", json.dumps(output_data))
-
-                        # Возвращаем результат в зависимости от контекста
-                        if agent_type_str == "stategraph":
-                            return wrapped_result.delta if wrapped_result.delta else wrapped_result.result
-                        elif injected_state is not None:
-                            if isinstance(wrapped_result.result, str):
-                                return wrapped_result.result
-                            else:
-                                return str(wrapped_result.result)
-                        else:
-                            return wrapped_result.result
+                        # Если тул явно установил delta (например, session_set) - используем его
+                        # Иначе возвращаем только результат
+                        if wrapped_result.delta:
+                            return wrapped_result.delta
+                        
+                        return wrapped_result.result
 
                     except Exception as e:
                         # Записываем исключение в span

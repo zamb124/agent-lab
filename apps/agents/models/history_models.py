@@ -92,9 +92,9 @@ class CheckpointInfo(BaseModel):
         title="ID checkpoint",
         description="Уникальный идентификатор checkpoint"
     )
-    thread_id: str = Field(
-        title="Thread ID",
-        description="ID треда (session_id)"
+    session_id: str = Field(
+        title="Session ID",
+        description="ID сессии"
     )
     checkpoint_ns: str = Field(
         default="",
@@ -134,10 +134,6 @@ class MessageHistoryResponse(BaseModel):
     session_id: str = Field(
         title="ID сессии",
         description="Идентификатор сессии"
-    )
-    thread_id: str = Field(
-        title="Thread ID",
-        description="ID треда для LangGraph"
     )
     flow_id: Optional[str] = Field(
         default=None,

@@ -345,6 +345,61 @@ async def get_flow(flow_id: str, flow_repo: FlowRepositoryDep):
 
 ---
 
+## API endpoints - Использование автоматических CRUD роутеров
+
+**ВСЕГДА используй автоматические CRUD роутеры вместо создания новых API endpoints для стандартных операций.**
+
+Смотри подробные правила: `.cursor/rules/crud_api.mdc`
+
+<good_example>
+{# Используй автоматические CRUD роутеры #}
+<div hx-get="/agents/api/v1/agent?limit=10" hx-trigger="load">
+    {{ c.skeleton(type='card', count=6) }}
+</div>
+
+{# Создание через автоматический CRUD #}
+<form hx-post="/agents/api/v1/agent"
+      hx-target="#agents-list"
+      hx-swap="afterbegin"
+      hx-ext="json-enc">
+    {{ c.input('name', label='Название', required=true) }}
+    {{ c.button('Создать', variant='primary', type='submit') }}
+</form>
+
+{# Удаление через автоматический CRUD #}
+{{ c.button('Удалить',
+    variant='danger',
+    icon='trash',
+    hx_delete='/agents/api/v1/agent/' + agent.agent_id,
+    hx_target='closest .agent-card',
+    hx_swap='outerHTML',
+    hx_confirm='Удалить агента?'
+) }}
+</good_example>
+
+<bad_example>
+{# ❌ НЕ создавай кастомные CRUD endpoints #}
+@router.get("/agents")
+async def list_agents(...):  # Дублирует автоматический CRUD
+    ...
+
+@router.post("/agents")
+async def create_agent(...):  # Дублирует автоматический CRUD
+    ...
+</bad_example>
+
+**Доступные автоматические CRUD роутеры:**
+- `/agents/api/v1/agent` - AgentRepository
+- `/agents/api/v1/flow` - FlowRepository
+- `/agents/api/v1/tool` - ToolRepository
+- `/agents/api/v1/task` - TaskRepository
+- `/agents/api/v1/session` - SessionRepository
+- `/agents/api/v1/mcp_server` - MCPServerRepository
+
+**Создавай кастомные endpoints ТОЛЬКО для специфичной бизнес-логики** (публикация, синхронизация, кастомная фильтрация).
+
+---
+
 ## HTMX - Приоритетный подход
 
 **HTMX в приоритете для загрузки шаблонов и обновления UI!**

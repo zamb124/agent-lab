@@ -51,11 +51,11 @@ async def math_flow_node(state):
     from apps.agents.services.flow_factory import FlowFactory
     from apps.agents.container import get_agents_container
     factory = get_agents_container().flow_factory
-    smart_flow = await factory.get_flow("smart_flow")  # Используем существующий smart_flow
+    smart_flow = await factory.get_flow("apps.agents.flows.smart_flow.smart_flow_config")  # Используем существующий smart_flow
     
     result = await smart_flow.ainvoke(
         {"messages": [{"role": "user", "content": state["original_question"]}]},
-        config={"configurable": {"thread_id": f"math_subflow_{hash(state['original_question'])}"}}
+        config={"configurable": {"session_id": f"math_subflow_{hash(state['original_question'])}"}}
     )
     
     state["messages"] = result["messages"]
@@ -70,11 +70,11 @@ async def weather_flow_node(state):
     from apps.agents.services.flow_factory import FlowFactory
     from apps.agents.container import get_agents_container
     factory = get_agents_container().flow_factory
-    weather_flow = await factory.get_flow("weather_flow")  # Используем существующий weather_flow
+    weather_flow = await factory.get_flow("apps.agents.flows.weather_flow.weather_flow_config")  # Используем существующий weather_flow
     
     result = await weather_flow.ainvoke(
         {"messages": state["messages"]},
-        config={"configurable": {"thread_id": f"weather_subflow_{hash(state['original_question'])}"}}
+        config={"configurable": {"session_id": f"weather_subflow_{hash(state['original_question'])}"}}
     )
     
     state["messages"] = result["messages"]
@@ -190,7 +190,7 @@ async def test_execute_super_flow_math(migrated_db,  flow_factory, test_helpers,
     
     result = await super_flow.ainvoke(
         {"messages": [HumanMessage(content="Посчитай 25 * 4")]},
-        config={"configurable": {"thread_id": unique_id("test_super_math")}}
+        config={"configurable": {"session_id": unique_id("test_super_math")}}
     )
     
     assert "messages" in result
@@ -213,7 +213,7 @@ async def test_execute_super_flow_weather(migrated_db,  flow_factory, test_helpe
     
     result = await super_flow.ainvoke(
         {"messages": [HumanMessage(content="Какая погода в Екатеринбурге?")]},
-        config={"configurable": {"thread_id": unique_id("test_super_weather")}}
+        config={"configurable": {"session_id": unique_id("test_super_weather")}}
     )
     
     assert "messages" in result

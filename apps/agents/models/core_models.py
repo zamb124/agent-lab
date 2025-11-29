@@ -22,6 +22,7 @@ from core.context import get_context
 from apps.agents.container import get_agents_container
 
 from core.rag.models import AgentRAGConfig
+from core.models.variable_models import VariableDefinition, VariableDefinitionInput
 from .types import HistorySource, PythonCode
 
 if TYPE_CHECKING:
@@ -825,14 +826,14 @@ class AgentConfig(BuilderEntity):
                     full_path = f"{agent_class.__module__}.{agent_class.__name__}"
                     references.append(ToolReference(tool_id=full_path))
                 elif hasattr(tool, "name") and (hasattr(tool, "func") or hasattr(tool, "coroutine")):
-                    if tool.func and hasattr(tool.func, "__module__"):
+                    if hasattr(tool, "func") and tool.func and hasattr(tool.func, "__module__"):
                         full_path = f"{tool.func.__module__}.{tool.func.__name__}"
                         references.append(ToolReference(tool_id=full_path))
-                    elif hasattr(tool, "coroutine") and tool.coroutine:
+                    elif hasattr(tool, "coroutine") and tool.coroutine and hasattr(tool.coroutine, "__module__"):
                         full_path = f"{tool.coroutine.__module__}.{tool.coroutine.__name__}"
                         references.append(ToolReference(tool_id=full_path))
                     else:
-                        raise ValueError(f"Неизвестный тип инструмента: {type(tool)}")
+                        raise ValueError(f"Неизвестный тип инструмента: {type(tool)}, name={getattr(tool, 'name', 'N/A')}, func={getattr(tool, 'func', None)}, coroutine={getattr(tool, 'coroutine', None)}")
             else:
                 raise ValueError(f"Неизвестный тип инструмента: {type(tool)}")
         
@@ -895,6 +896,8 @@ class AgentConfig(BuilderEntity):
                         await cls.migrate(tool_id, migrator, with_tools=True)
                     else:
                         await ToolReference.migrate(tool_id, migrator)
+                else:
+                    raise ValueError(f"Неизвестный формат tool_id для миграции: {tool_id}")
         
         # Мигрируем субагенты из graph_definition (для StateGraph агентов)
         if with_tools and agent_config.graph_definition:
@@ -995,38 +998,6 @@ class FlowAuthor(BaseModel):
         title="Twitter",
         description="Twitter профиль"
     )
-
-
-class VariableDefinition(BaseModel):
-    """Определение переменной с описанием для установки flow"""
-
-    key: str = Field(
-        title="Ключ переменной",
-        description="Имя переменной в формате @var:key"
-    )
-    description: str = Field(
-        title="Описание",
-        description="Описание переменной для пользователя"
-    )
-    default_value: Optional[str] = Field(
-        default=None,
-        title="Значение по умолчанию",
-        description="Предлагаемое значение по умолчанию"
-    )
-    is_secret: bool = Field(
-        default=False,
-        title="Секретная переменная",
-        description="Переменная содержит чувствительные данные"
-    )
-    required: bool = Field(
-        default=True,
-        title="Обязательная",
-        description="Требуется ли заполнить переменную при установке"
-    )
-
-
-# Type alias для гибкого определения переменных
-VariableDefinitionInput = Union[VariableDefinition, Dict[str, Any]]
 
 
 class FlowConfig(BuilderEntity):
@@ -1381,27 +1352,18 @@ class FlowConfig(BuilderEntity):
         
         await migrator.persister.save_flow(flow_config)
         
-        variables_service = get_agents_container().variables_service
-        
-        # НЕ создаем пустые переменные - они создаются через install_hook с default_value
-        if flow_config.variables:
-            await variables_service.resolve(flow_config.variables, auto_create=False)
-        
-        if flow_config.platforms:
-            await variables_service.resolve(flow_config.platforms, auto_create=False)
-        
-        if flow_config.store:
-            await variables_service.resolve(flow_config.store, auto_create=False)
-        
-        flow_tag = flow_config.name
-        data_sources = [
-            flow_config.variables,
-            flow_config.platforms,
-            flow_config.store
-        ]
-        tagged_count = await variables_service.tag_variables_for_entity(flow_tag, data_sources)
-        if tagged_count > 0:
-            logger.info(f"✅ Добавлено тегов для flow '{flow_tag}': {tagged_count}")
+        if with_dependencies:
+            variables_service = get_agents_container().variables_service
+            
+            flow_tag = flow_config.name
+            data_sources = [
+                flow_config.variables,
+                flow_config.platforms,
+                flow_config.store
+            ]
+            tagged_count = await variables_service.tag_variables_for_entity(flow_tag, data_sources)
+            if tagged_count > 0:
+                logger.info(f"✅ Добавлено тегов для flow '{flow_tag}': {tagged_count}")
         
         if with_dependencies and flow_config.entry_point_agent:
             await AgentConfig.migrate(

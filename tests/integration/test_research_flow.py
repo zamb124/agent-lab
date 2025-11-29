@@ -171,20 +171,20 @@ async def test_research_flow_end_to_end_REAL(migrated_db, flow_factory, agent_fa
     # Реальный запрос для исследования
     query = "Что такое LangGraph и его основные возможности?"
     
-    thread_id = unique_id("research_e2e")
+    session_id = unique_id("research_e2e")
     
     print(f"\n{'='*60}")
     print("🚀 ЗАПУСК END-TO-END ТЕСТА")
     print(f"{'='*60}")
     print(f"📝 Запрос: {query}")
-    print(f"🔑 Thread ID: {thread_id}")
+    print(f"🔑 Session ID: {session_id}")
     print("⚠️  Используются РЕАЛЬНЫЕ API (Tavily + LLM)")
     print(f"{'='*60}\n")
     
     # Выполняем flow
     result = await research_flow.ainvoke(
         {"messages": [HumanMessage(content=query)]},
-        config={"configurable": {"thread_id": thread_id}}
+        config={"configurable": {"session_id": session_id}}
     )
     
     print(f"\n{'='*60}")
@@ -301,7 +301,7 @@ async def test_research_flow_end_to_end_REAL(migrated_db, flow_factory, agent_fa
     state_manager = await get_state_manager()
     
     # Для получения state используем state_manager
-    state = await state_manager.get_or_create_session(thread_id)
+    state = await state_manager.get_or_create_session(session_id)
     assert state is not None, "State не сохранился в state_manager"
     assert state.get("messages") is not None, "State messages пусты"
     
@@ -337,7 +337,7 @@ async def test_research_flow_with_interrupts(migrated_db, flow_factory, unique_i
     """
     
     research_flow = await flow_factory.get_flow("apps.agents.flows.research_flow.research_flow_config")
-    thread_id = unique_id("research_interrupt")
+    session_id = unique_id("research_interrupt")
     
     # Даем неоднозначный запрос
     query = "исследуй это"
@@ -350,7 +350,7 @@ async def test_research_flow_with_interrupts(migrated_db, flow_factory, unique_i
     
     result = await research_flow.ainvoke(
         {"messages": [HumanMessage(content=query)]},
-        config={"configurable": {"thread_id": thread_id}}
+        config={"configurable": {"session_id": thread_id}}
     )
     
     # Проверяем что был interrupt или агент сам уточнил тему
@@ -360,7 +360,7 @@ async def test_research_flow_with_interrupts(migrated_db, flow_factory, unique_i
         # Продолжаем с уточнением
         result = await research_flow.ainvoke(
             {"messages": [HumanMessage(content="LangGraph framework")]},
-            config={"configurable": {"thread_id": thread_id}}
+            config={"configurable": {"session_id": thread_id}}
         )
     
     # В любом случае должен быть результат
@@ -391,7 +391,7 @@ async def test_research_flow_reusable_agents(migrated_db, agent_factory, unique_
     
     result = await query_analyzer.ainvoke(
         {"messages": [HumanMessage(content="Что такое RAG в машинном обучении?")]},
-        config={"configurable": {"thread_id": unique_id("analyzer_standalone")}}
+        config={"configurable": {"session_id": unique_id("analyzer_standalone")}}
     )
     
     assert "store" in result
@@ -414,7 +414,7 @@ async def test_research_flow_reusable_agents(migrated_db, agent_factory, unique_
     
     result = await search_agent.ainvoke(
         search_input,
-        config={"configurable": {"thread_id": unique_id("search_standalone")}}
+        config={"configurable": {"session_id": unique_id("search_standalone")}}
     )
     
     assert "search_results" in result["store"], "SearchAgent не работает отдельно"
@@ -441,7 +441,7 @@ async def test_research_flow_quality_loop(migrated_db, flow_factory, unique_id):
     """
     
     research_flow = await flow_factory.get_flow("apps.agents.flows.research_flow.research_flow_config")
-    thread_id = unique_id("research_loop")
+    session_id = unique_id("research_loop")
     
     # Даем сложный запрос который может потребовать нескольких итераций
     query = "Сравни подробно все подходы к retrieval в RAG системах"
@@ -454,7 +454,7 @@ async def test_research_flow_quality_loop(migrated_db, flow_factory, unique_id):
     
     result = await research_flow.ainvoke(
         {"messages": [HumanMessage(content=query)]},
-        config={"configurable": {"thread_id": thread_id}}
+        config={"configurable": {"session_id": thread_id}}
     )
     
     store = result["store"]

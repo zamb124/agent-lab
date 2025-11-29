@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from apps.frontend.container import get_frontend_container
+from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class MCPServerUpdate(BaseModel):
 @router.get("/servers")
 async def list_servers():
     """Получить список всех MCP серверов"""
-    agents_container = get_frontend_container().get_agents_container()
+    agents_container = get_agents_container()
     mcp_repo = agents_container.mcp_server_repository
     
     servers = await mcp_repo.list_all()
@@ -49,7 +49,7 @@ async def list_servers():
 @router.get("/servers/{server_id}")
 async def get_server(server_id: str):
     """Получить MCP сервер по ID"""
-    agents_container = get_frontend_container().get_agents_container()
+    agents_container = get_agents_container()
     mcp_repo = agents_container.mcp_server_repository
     
     server = await mcp_repo.get(server_id)
@@ -65,7 +65,7 @@ async def create_server(data: MCPServerCreate):
     from apps.agents.models import MCPServerConfig
     from core.utils import generate_slug
     
-    agents_container = get_frontend_container().get_agents_container()
+    agents_container = get_agents_container()
     mcp_repo = agents_container.mcp_server_repository
     
     server_id = generate_slug(data.name, prefix="mcp")
@@ -91,7 +91,7 @@ async def create_server(data: MCPServerCreate):
 @router.put("/servers/{server_id}")
 async def update_server(server_id: str, data: MCPServerUpdate):
     """Обновить MCP сервер"""
-    agents_container = get_frontend_container().get_agents_container()
+    agents_container = get_agents_container()
     mcp_repo = agents_container.mcp_server_repository
     
     server = await mcp_repo.get(server_id)
@@ -110,7 +110,7 @@ async def update_server(server_id: str, data: MCPServerUpdate):
 @router.delete("/servers/{server_id}")
 async def delete_server(server_id: str):
     """Удалить MCP сервер"""
-    agents_container = get_frontend_container().get_agents_container()
+    agents_container = get_agents_container()
     mcp_repo = agents_container.mcp_server_repository
     
     server = await mcp_repo.get(server_id)
@@ -127,7 +127,7 @@ async def sync_server(server_id: str):
     """Синхронизировать инструменты MCP сервера"""
     from apps.agents.services.mcp_sync import sync_mcp_server
     
-    agents_container = get_frontend_container().get_agents_container()
+    agents_container = get_agents_container()
     mcp_repo = agents_container.mcp_server_repository
     
     server = await mcp_repo.get(server_id)
@@ -144,7 +144,7 @@ async def test_server(server_id: str):
     """Тестовое подключение к MCP серверу"""
     from apps.agents.services.mcp_client import MCPClient
     
-    agents_container = get_frontend_container().get_agents_container()
+    agents_container = get_agents_container()
     mcp_repo = agents_container.mcp_server_repository
     
     server = await mcp_repo.get(server_id)

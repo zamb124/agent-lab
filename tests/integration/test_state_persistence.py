@@ -69,8 +69,8 @@ async def test_tools_persist_state_between_calls(migrated_db, agent_factory, age
     # Загружаем агента
     agent = await agent_factory.get_agent("state_test_agent")
 
-    thread_id = unique_id("state_persist_test")
-    config = {"configurable": {"thread_id": thread_id}}
+    session_id = unique_id("state_persist_test")
+    config = {"configurable": {"thread_id": session_id}}
 
     # ШАГ 1: Агент создает задачу
     print("\n" + "="*60)
