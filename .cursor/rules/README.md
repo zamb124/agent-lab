@@ -39,6 +39,7 @@
 - **variables.mdc** - Переменные и Session Store
 - **tracing.mdc** - OpenTelemetry Tracing
 - **monorepo_architecture.mdc** - Архитектура монорепозитория
+- **taskiq.mdc** - TaskIQ задачи и очереди
 
 ## Ключевые принципы
 
@@ -77,6 +78,7 @@
 - `http_client.mdc` ← `core/http/`
 - `frontend.mdc` ← `apps/frontend/`
 - `testing.mdc` ← `tests/`
+- `taskiq.mdc` ← `core/tasks/` + `apps/*/tasks/`
 
 ## Формат правил
 
