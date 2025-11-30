@@ -56,6 +56,7 @@ dependencies = [
     "simpleeval>=1.0.3",
     "taskiq>=0.12.0",
     "taskiq-pg>=0.2.0",
+    "pytest-playwright-asyncio>=0.7.2",
 ]
 
 [build-system]
@@ -82,7 +83,6 @@ dev = [
     "pillow>=11.3.0",
     "playwright>=1.55.0",
     "pymupdf>=1.26.5",
-    "pytest-playwright>=0.7.1",
     "ruff>=0.13.0",
     "coverage>=7.4.0",
     "pytest-cov>=4.1.0",
