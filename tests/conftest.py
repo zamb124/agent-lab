@@ -582,6 +582,7 @@ async def frontend_client(frontend_app, test_context, test_user, test_company):
         client.test_user = test_user
         client.test_company = test_company
         client.test_context = test_context
+        client.auth_token = token
         yield client
     
     # Очистка
