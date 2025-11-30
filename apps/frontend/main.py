@@ -100,7 +100,6 @@ def _create_app() -> FastAPI:
         routers=[
             frontend_api_router,
             frontend_websockets_router,
-            frontend_models.router,
             mcp_api_router,
             admin_router,
         ],
@@ -109,6 +108,7 @@ def _create_app() -> FastAPI:
             auth_router,
             websocket_notifications_router,
             debug_router,  # Debug endpoints для E2E тестов
+            frontend_models.router,  # /frontend/models/... для HTMX
         ],
         api_version=None,  # Frontend не использует версионирование API
         extra_middlewares=[

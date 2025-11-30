@@ -6,7 +6,7 @@ import { getCookie, setCookie } from '/static/js/utils/cookies.js';
 
 class ThemeManager {
     constructor() {
-        this.currentTheme = 'light';
+        this.currentTheme = 'dark';
         this.init();
     }
     
@@ -16,7 +16,7 @@ class ThemeManager {
     }
     
     loadTheme() {
-        const savedTheme = localStorage.getItem('theme') || getCookie('theme') || 'light';
+        const savedTheme = localStorage.getItem('theme') || getCookie('theme') || 'dark';
         this.setTheme(savedTheme);
     }
     

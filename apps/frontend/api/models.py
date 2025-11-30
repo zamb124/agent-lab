@@ -19,7 +19,7 @@ from apps.frontend.container import get_frontend_container
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/models", tags=["frontend"])
+router = APIRouter(prefix="/frontend/models", tags=["frontend"])
 templates = get_templates()
 
 

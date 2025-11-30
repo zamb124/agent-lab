@@ -37,7 +37,7 @@
                 token: config.token,
                 flowId: config.flowId,
                 position: config.position || 'bottom-right',
-                theme: config.theme || 'light',
+                theme: config.theme || 'dark',
                 sessionId: config.sessionId || null,
                 userId: config.userId || null,
                 buttonText: config.buttonText || '',

@@ -23,7 +23,6 @@ class AgentRepository(BaseRepository[AgentConfig]):
     is_global = False
     owner_service = "agents"
     api_prefix = "agent"
-    model_class = AgentConfig
     
     @classmethod
     def get_service_url(cls) -> str:

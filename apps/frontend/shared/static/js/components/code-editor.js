@@ -58,8 +58,8 @@ class CodeEditor {
             return 'dark';
         }
         
-        console.log('🎨 Тема по умолчанию: light');
-        return 'light';
+        console.log('🎨 Тема по умолчанию: dark');
+        return 'dark';
     }
     
     init() {
