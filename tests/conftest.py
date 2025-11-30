@@ -96,6 +96,88 @@ def setup_mock_llm_configs():
     return mock_llm_config
 
 
+def _create_e2e_browser_test_user_sync():
+    """Создает тестового пользователя для browser e2e тестов через прямой SQL"""
+    import subprocess
+    import json
+    from datetime import datetime, timezone, timedelta
+    
+    E2E_USER_ID = "e2e_browser_test_user"
+    E2E_COMPANY_ID = "e2e_browser_test_company"
+    E2E_SUBDOMAIN = "e2ebrowser"
+    E2E_SESSION_ID = "e2e_browser_test_session"
+    
+    now = datetime.now(timezone.utc).isoformat()
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+    
+    user_data = json.dumps({
+        "user_id": E2E_USER_ID,
+        "provider": "test",
+        "provider_user_id": "e2e_browser_test",
+        "name": "E2E Browser Test User",
+        "status": "active",
+        "groups": ["admin"],
+        "companies": {E2E_COMPANY_ID: ["admin"]},
+        "active_company_id": E2E_COMPANY_ID
+    })
+    
+    company_data = json.dumps({
+        "company_id": E2E_COMPANY_ID,
+        "subdomain": E2E_SUBDOMAIN,
+        "name": "E2E Browser Test Company",
+        "tariff_plan": "enterprise",
+        "balance": 100000.0,
+        "monthly_budget": 50000.0,
+        "current_month_spent": 0.0,
+        "status": "active"
+    })
+    
+    subdomain_data = json.dumps({
+        "subdomain": E2E_SUBDOMAIN,
+        "company_id": E2E_COMPANY_ID
+    })
+    
+    # AuthSession для WebSocket авторизации
+    auth_session_data = json.dumps({
+        "session_id": E2E_SESSION_ID,
+        "user_id": E2E_USER_ID,
+        "provider": "yandex",
+        "created_at": now,
+        "expires_at": expires_at,
+        "last_activity": now,
+        "metadata": {"company_id": E2E_COMPANY_ID}
+    })
+    
+    sql = f"""
+    INSERT INTO users (key, value) VALUES ('user:{E2E_USER_ID}', '{user_data}')
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+    
+    INSERT INTO storage (key, value) VALUES ('company:{E2E_COMPANY_ID}', '{company_data}')
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+    
+    INSERT INTO storage (key, value) VALUES ('subdomain:{E2E_SUBDOMAIN}', '{subdomain_data}')
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+    
+    INSERT INTO users (key, value) VALUES ('auth_session:{E2E_SESSION_ID}', '{auth_session_data}')
+    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+    """
+    
+    try:
+        result = subprocess.run(
+            ["psql", "-h", "localhost", "-U", "agent_user", "-d", "shared_db", "-c", sql],
+            env={**os.environ, "PGPASSWORD": "agent_password"},
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            logger.info(f"✅ E2E browser test user created: {E2E_USER_ID}")
+        else:
+            logger.warning(f"⚠️ Failed to create E2E user: {result.stderr}")
+    except Exception as e:
+        logger.warning(f"⚠️ Could not create E2E user via psql: {e}")
+
+
 @pytest_asyncio.fixture(scope="session")
 async def migrated_db():
     """Миграция БД один раз для всей сессии воркера
@@ -180,6 +262,9 @@ async def migrated_db():
         migrator = get_agents_container().migrator
         await migrator.run_full_migration()
         logger.info("✅ Миграция БД выполнена для воркера")
+        
+        # Создаем тестового пользователя для browser e2e тестов (синхронно через psql)
+        _create_e2e_browser_test_user_sync()
         
         _migration_completed = True
 
@@ -949,3 +1034,142 @@ def skip_if_no_external_access(e: Exception = None, message: str = None):
         pytest.skip(f"Ошибка авторизации внешнего сервиса: {e}")
     
     raise
+
+
+# === Фикстуры для E2E тестов с процессами ===
+
+import subprocess
+import sys
+import socket
+import time
+import multiprocessing
+
+
+def _get_free_port() -> int:
+    """Получить свободный порт"""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
+
+
+def _wait_for_server(host: str, port: int, timeout: float = 30.0) -> bool:
+    """Ждать пока сервер станет доступен"""
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            with socket.create_connection((host, port), timeout=1):
+                return True
+        except OSError:
+            time.sleep(0.3)
+    return False
+
+
+def _get_localhost_env() -> dict:
+    """Переменные окружения для localhost - используем conf.local.json"""
+    return os.environ.copy()
+
+
+def _run_agents_server(host: str, port: int):
+    """Запуск agents сервера (для multiprocessing)"""
+    import uvicorn
+    from apps.agents.main import app
+    uvicorn.run(app, host=host, port=port, log_level="warning")
+
+
+def _run_frontend_server(host: str, port: int):
+    """Запуск frontend сервера (для multiprocessing)"""
+    import uvicorn
+    from apps.frontend.main import app
+    uvicorn.run(app, host=host, port=port, log_level="warning")
+
+
+@pytest.fixture(scope="module")
+def taskiq_worker_process(migrated_db):
+    """
+    Запускает TaskIQ воркер в отдельном subprocess.
+    Module scope - один воркер на модуль тестов.
+    """
+    project_root = Path(__file__).parent.parent
+    env = _get_localhost_env()
+    
+    # Запускаем воркер без перехвата stdout/stderr для отладки
+    process = subprocess.Popen(
+        [sys.executable, "-m", "taskiq", "worker", "core.tasks.worker:broker", "--workers", "1"],
+        cwd=str(project_root),
+        env=env
+    )
+    
+    # Даем воркеру время на инициализацию
+    time.sleep(5)
+    
+    if process.poll() is not None:
+        raise RuntimeError(f"TaskIQ воркер не запустился (exit code: {process.returncode})")
+    
+    logger.info(f"✅ TaskIQ воркер запущен (PID: {process.pid})")
+    
+    yield process
+    
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except:
+        process.kill()
+    logger.info("✅ TaskIQ воркер остановлен")
+
+
+@pytest.fixture(scope="module")
+def agents_server_process(migrated_db):
+    """
+    Запускает agents сервер в отдельном процессе.
+    Module scope - один сервер на модуль тестов.
+    """
+    port = _get_free_port()
+    host = "127.0.0.1"
+    
+    server_process = multiprocessing.Process(
+        target=_run_agents_server,
+        args=(host, port),
+        daemon=True
+    )
+    server_process.start()
+    
+    if not _wait_for_server(host, port, timeout=30):
+        server_process.terminate()
+        raise RuntimeError(f"Agents сервер не запустился на {host}:{port}")
+    
+    logger.info(f"✅ Agents сервер запущен на http://{host}:{port}")
+    
+    yield {"host": host, "port": port, "url": f"http://{host}:{port}"}
+    
+    server_process.terminate()
+    server_process.join(timeout=5)
+    logger.info("✅ Agents сервер остановлен")
+
+
+@pytest.fixture(scope="module")
+def frontend_server_process(migrated_db):
+    """
+    Запускает frontend сервер в отдельном процессе.
+    Module scope - один сервер на модуль тестов.
+    """
+    port = _get_free_port()
+    host = "127.0.0.1"
+    
+    server_process = multiprocessing.Process(
+        target=_run_frontend_server,
+        args=(host, port),
+        daemon=True
+    )
+    server_process.start()
+    
+    if not _wait_for_server(host, port, timeout=30):
+        server_process.terminate()
+        raise RuntimeError(f"Frontend сервер не запустился на {host}:{port}")
+    
+    logger.info(f"✅ Frontend сервер запущен на http://{host}:{port}")
+    
+    yield {"host": host, "port": port, "url": f"http://{host}:{port}"}
+    
+    server_process.terminate()
+    server_process.join(timeout=5)
+    logger.info("✅ Frontend сервер остановлен")

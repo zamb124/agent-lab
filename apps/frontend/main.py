@@ -176,6 +176,23 @@ def create_app() -> FastAPI:
     
     logger.info("Frontend Service создан")
     
+    # Debug endpoint для тестов
+    @app.get("/debug/check-user/{user_id}")
+    async def debug_check_user(user_id: str):
+        """Debug: проверить существование пользователя"""
+        from apps.frontend.container import get_frontend_container
+        from core.config import get_settings
+        
+        settings = get_settings()
+        container = get_frontend_container()
+        user = await container.user_repository.get(user_id)
+        
+        return {
+            "user_id": user_id,
+            "exists": user is not None,
+            "shared_db_url": settings.database.shared_url,
+        }
+    
     return app
 
 

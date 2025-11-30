@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 
 from fastapi.middleware.cors import CORSMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+from core.middleware.auth import AuthMiddleware
 
 from core.config.loader import load_merged_config
 from core.logging import setup_logging
@@ -43,6 +44,11 @@ async def lifespan(app: FastAPI):
             table_names=["users", "tasks", "storage", "variables"]
         )
     
+    # Подключаемся к TaskIQ broker для отправки задач в очередь
+    from core.tasks.broker import broker
+    await broker.startup()
+    logger.info("TaskIQ broker подключен")
+    
     logger.info("Запуск миграции системной компании...")
     migrator = container.migrator
     await migrator.run_full_migration()
@@ -53,6 +59,7 @@ async def lifespan(app: FastAPI):
     yield
     
     logger.info("Остановка Agents Service...")
+    await broker.shutdown()
 
 
 def create_app() -> FastAPI:
@@ -104,6 +111,8 @@ def create_app() -> FastAPI:
         ProxyHeadersMiddleware,
         trusted_hosts=["*"]
     )
+    
+    app.add_middleware(AuthMiddleware)
     
     logger.info("Подключение роутеров...")
     

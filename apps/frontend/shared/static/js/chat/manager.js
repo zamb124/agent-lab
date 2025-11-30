@@ -1473,6 +1473,16 @@ class ChatManager {
         }
 
         switch (message.type) {
+            case 'SESSION_ASSIGNED':
+                // Сервер назначил полный session_id - обновляем локальный
+                console.log(`🔄 Session ID обновлен сервером: ${message.old_session_id} → ${message.new_session_id}`);
+                if (this.currentAgent && message.agent_id === this.currentAgent) {
+                    this.currentSession = message.new_session_id;
+                    this.agentSessions[this.currentAgent] = message.new_session_id;
+                    this.saveAgentSessions();
+                    console.log(`✅ Локальная сессия обновлена на: ${this.currentSession}`);
+                }
+                break;
             case 'USER_MESSAGE':
                 this.addUserMessage(message.content, message.timestamp, message.message_id);
                 break;

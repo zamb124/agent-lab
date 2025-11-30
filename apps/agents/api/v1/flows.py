@@ -14,10 +14,12 @@ from apps.agents.interfaces.api_interface import get_api_interface
 from apps.agents.models import TaskStatus
 from apps.agents.dependencies import FlowRepositoryDep
 from apps.agents.container import get_agents_container
+from core.tasks.broker import result_backend
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
+    prefix="/flows",
     tags=["Боты и сообщения"],
     responses={
         404: {"description": "Бот или задача не найдены"},
@@ -133,7 +135,7 @@ async def send_message_to_flow(flow_id: str, request: FlowMessageRequest, flow_r
 
     # ПРОВЕРЯЕМ: есть ли прерванная задача для этой сессии
     task_repo = get_agents_container().task_repository
-    interrupted_task = await task_repo.find_interrupted_task(message.session_id, flow_id)
+    interrupted_task = await task_repo.find_interrupted(message.session_id, flow_id)
 
     if interrupted_task:
         # ПРОДОЛЖАЕМ прерванную задачу вместо создания новой
@@ -183,7 +185,6 @@ async def get_task_result(flow_id: str, task_id: str):
     
     **Статусы задачи:**
     - `pending` - ожидает обработки
-    - `processing` - обрабатывается ботом
     - `completed` - выполнена, результат в поле result
     - `waiting_for_input` - бот ожидает ответа пользователя (вопрос в result.question)
     - `failed` - ошибка, детали в error_message
@@ -202,53 +203,38 @@ async def get_task_result(flow_id: str, task_id: str):
     Returns:
         Статус задачи и результат (если completed)
     """
-    try:
-        storage = get_agents_container().storage
-
-        # Получаем задачу
-        task_data = await storage.get(f"task:{task_id}")
-        if not task_data:
-            raise HTTPException(status_code=404, detail="Задача не найдена")
-
-        task_info = json.loads(task_data)
-
-        # Логируем что читаем из БД
-        logger.info(
-            f"🔍 API читает задачу {task_id}: статус={task_info.get('status')}, output_data={bool(task_info.get('output_data'))}"
-        )
-        if task_info.get("output_data"):
-            output = task_info["output_data"]
-            logger.info(
-                f"🔍 Output data: статус={output.get('status')}, вопрос_длина={len(output.get('question', ''))}"
-            )
-
-        # Проверяем что задача относится к правильному флоу
-        if task_info.get("flow_id") != flow_id:
-            raise HTTPException(
-                status_code=404, detail="Задача не найдена для этого флоу"
-            )
-
-        # Формируем ответ
-        response = TaskResponse(
+    # Получаем результат из TaskIQ result backend
+    task_result = await result_backend.get_result(task_id)
+    
+    if task_result is None:
+        # Задача еще не завершена или не найдена
+        return TaskResponse(
             task_id=task_id,
-            status=task_info.get("status", "unknown"),
-            session_id=task_info.get("session_id", ""),
-            created_at=task_info.get("created_at"),
-            completed_at=task_info.get("completed_at"),
-            error_message=task_info.get("error_message"),
+            status="pending",
+            session_id="",
         )
-
-        # Добавляем результат если задача завершена или ждет ввода
-        if task_info.get("output_data"):
-            response.result = task_info["output_data"]
-
-        return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Ошибка получения задачи {task_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    
+    logger.info(f"🔍 API читает результат задачи {task_id}: is_err={task_result.is_err}")
+    
+    if task_result.is_err:
+        return TaskResponse(
+            task_id=task_id,
+            status="failed",
+            session_id="",
+            error_message=str(task_result.error) if task_result.error else "Unknown error",
+        )
+    
+    # Успешный результат
+    result_data = task_result.return_value or {}
+    status = result_data.get("status", "completed")
+    session_id = result_data.get("session_id", "")
+    
+    return TaskResponse(
+        task_id=task_id,
+        status=status,
+        session_id=session_id,
+        result=result_data,
+    )
 
 
 @router.get("/{flow_id}/session/{session_id}/history", summary="История диалога")

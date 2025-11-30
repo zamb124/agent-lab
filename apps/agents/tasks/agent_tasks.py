@@ -16,7 +16,7 @@ from core.models.context_models import Context
 from core.models import User, Company
 
 from apps.agents.container import get_agents_container
-from apps.agents.models import TaskStatus, SessionStatus
+from apps.agents.models import SessionStatus
 from apps.agents.exceptions import TariffError, BillingError, AgentInterrupt
 from apps.agents.services.state_manager import get_state_manager
 from apps.agents.services.tracing.callback_factory import get_callbacks_for_agent
@@ -308,6 +308,8 @@ async def _update_session_stats(session_id: str, user_message: str, container):
         session_config.first_message = preview
     
     await session_repo.set(session_config)
+
+
 
 
 async def _send_message_direct(

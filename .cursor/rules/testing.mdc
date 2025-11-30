@@ -47,7 +47,8 @@ tests/
     ├── api/             # API тесты
     ├── i18n/            # Интернационализация
     ├── modules/         # Тесты модулей
-    └── e2e/             # Playwright E2E тесты
+    ├── pages/           # Тесты страниц (httpx)
+    └── browser/         # Playwright browser тесты
         ├── conftest.py          # Запуск сервера в процессе
         ├── test_public_pages.py # Landing, privacy, terms
         ├── test_auth_pages.py   # Авторизация
@@ -280,14 +281,14 @@ asyncio.run(...)  # НЕТ в тестах!
 - Генерируй тесты только по явному запросу пользователя
 - Не создавай demo файлы для демонстрации
 
-## Playwright E2E тесты для Frontend
+## Playwright Browser тесты для Frontend
 
-E2E тесты frontend находятся в `tests/frontend/e2e/` и используют Playwright.
+Browser тесты frontend находятся в `tests/frontend/browser/` и используют async Playwright API.
 
 ### Структура
 
 ```
-tests/frontend/e2e/
+tests/frontend/browser/
 ├── conftest.py              # Запускает сервер в отдельном процессе
 ├── test_public_pages.py     # Публичные страницы (landing, privacy, terms)
 ├── test_auth_pages.py       # Страницы авторизации
@@ -299,108 +300,102 @@ tests/frontend/e2e/
 ### Запуск
 
 ```bash
-# Все e2e тесты (headless)
-uv run pytest tests/frontend/e2e/ -v
+# Все browser тесты (headless)
+uv run pytest tests/frontend/browser/ -v
 
 # С открытым браузером
-HEADED=true uv run pytest tests/frontend/e2e/ -v
+HEADED=true uv run pytest tests/frontend/browser/ -v
 
 # С замедлением для отладки
-HEADED=true SLOW_MO=500 uv run pytest tests/frontend/e2e/ -v
+HEADED=true SLOW_MO=500 uv run pytest tests/frontend/browser/ -v
 
 # Конкретный файл
-uv run pytest tests/frontend/e2e/test_public_pages.py -v
+uv run pytest tests/frontend/browser/test_public_pages.py -v
 ```
 
 ### Особенности
 
-1. **Сервер запускается автоматически** в отдельном процессе (multiprocessing)
-2. **Изоляция от async фикстур** - переопределяем `migrated_db`, `frontend_app` и другие async фикстуры чтобы избежать конфликта event loop между pytest-asyncio и Playwright sync API
-3. **Маркер `@pytest.mark.playwright`** для всех e2e тестов
+1. **Async Playwright API** - используем `playwright.async_api` для совместимости с pytest-asyncio
+2. **Сервер запускается автоматически** в отдельном процессе (multiprocessing)
+3. **Совместимость с xdist** - тесты работают вместе с остальными при `-n N`
+4. **Авторизация через cookies** - JWT токен автоматически добавляется в browser context
 
 ### Фикстуры
 
 - `live_server` - запускает uvicorn в отдельном процессе, возвращает `{"host", "port", "url"}`
 - `server_url` - базовый URL сервера (из `live_server`)
 - `url_builder` - фабрика URL с поддержкой поддоменов
-- `page` - страница Playwright (из pytest-playwright)
+- `page` - async страница Playwright (из pytest-playwright-asyncio)
+- `e2e_auth_token` - JWT токен для авторизации
 
 <good_example>
-@pytest.mark.playwright
+@pytest.mark.asyncio(loop_scope="session")
 class TestLandingPage:
-    def test_landing_page_loads(self, page: Page, server_url: str):
-        page.goto(server_url)
-        page.wait_for_load_state("domcontentloaded")
+    async def test_landing_page_loads(self, page: Page, server_url: str):
+        await page.goto(server_url)
+        await page.wait_for_load_state("domcontentloaded")
         
-        assert page.title(), "Страница должна иметь title"
+        title = await page.title()
+        assert title, "Страница должна иметь title"
         
-    def test_landing_has_navigation(self, page: Page, server_url: str):
-        page.goto(server_url)
+    async def test_landing_has_navigation(self, page: Page, server_url: str):
+        await page.goto(server_url)
         
         nav = page.locator("nav, header, .navbar")
-        expect(nav.first).to_be_visible(timeout=10000)
+        count = await nav.count()
+        if count > 0:
+            await expect(nav.first).to_be_visible(timeout=10000)
 </good_example>
 
 ### Проверки
 
 ```python
-from playwright.sync_api import Page, expect
+from playwright.async_api import Page, expect
 
 # Проверка видимости элемента
-expect(page.locator(".my-element")).to_be_visible(timeout=10000)
+await expect(page.locator(".my-element")).to_be_visible(timeout=10000)
 
 # Проверка текста
-expect(page.locator("h1")).to_have_text("Welcome")
-
-# Проверка URL
-expect(page).to_have_url("http://localhost:8002/dashboard")
+await expect(page.locator("h1")).to_have_text("Welcome")
 
 # Проверка контента страницы
-assert len(page.content()) > 500, "Страница должна иметь контент"
+content = await page.content()
+assert len(content) > 500, "Страница должна иметь контент"
 
 # HTTP запросы через Playwright
-response = page.request.get(f"{server_url}/health")
+response = await page.request.get(f"{server_url}/health")
 assert response.ok
-data = response.json()
 ```
 
 ### Responsive тестирование
 
 ```python
-def test_mobile_viewport(self, page: Page, server_url: str):
-    page.set_viewport_size({"width": 375, "height": 812})
-    page.goto(server_url)
-    assert page.title()
-
-def test_tablet_viewport(self, page: Page, server_url: str):
-    page.set_viewport_size({"width": 768, "height": 1024})
-    page.goto(server_url)
-    assert page.title()
+async def test_mobile_viewport(self, page: Page, server_url: str):
+    await page.set_viewport_size({"width": 375, "height": 812})
+    response = await page.goto(server_url)
+    assert response.status in [200, 302, 303]
 ```
 
-### Установка Playwright
+### Установка
 
 ```bash
+# Установка pytest-playwright-asyncio
+uv add pytest-playwright-asyncio
+
 # Установка браузеров
 uv run playwright install chromium
 ```
 
-### ВАЖНО: Изоляция от async тестов
+### ВАЖНО: Пути Frontend
 
-E2E тесты переопределяют async фикстуры из основного conftest.py:
+Все роуты frontend используют префикс `/frontend/`:
 
 ```python
-# tests/frontend/e2e/conftest.py
+# Правильно
+await page.goto(f"{server_url}/frontend/bots")
+await page.goto(f"{server_url}/frontend/dashboard")
+await page.goto(f"{server_url}/frontend/auth")
 
-@pytest.fixture(scope="session")
-def migrated_db():
-    """Заглушка - e2e тесты используют свой сервер"""
-    return None
-
-@pytest.fixture(scope="session") 
-def frontend_app():
-    """Заглушка - e2e тесты используют live_server"""
-    return None
+# Неправильно
+await page.goto(f"{server_url}/bots")  # 404!
 ```
-
-Это необходимо потому что Playwright sync API конфликтует с pytest-asyncio event loop.

@@ -16,18 +16,18 @@ class TestDashboardPages:
         response = await page.goto(f"{server_url}/frontend/")
         await page.wait_for_load_state("domcontentloaded")
         
-        assert response.status in [200, 302, 303], f"Сервер должен ответить, получен {response.status}"
+        assert response.status == 200, f"Ожидался 200, получен {response.status}"
 
     async def test_dashboard_responds(self, page: Page, server_url: str):
         """Dashboard страница отвечает"""
         response = await page.goto(f"{server_url}/frontend/dashboard")
         await page.wait_for_load_state("domcontentloaded")
         
-        assert response.status in [200, 302, 303], f"Сервер должен ответить, получен {response.status}"
+        assert response.status == 200, f"Ожидался 200, получен {response.status}"
 
     async def test_fashn_page_responds(self, page: Page, server_url: str):
         """Fashn страница отвечает"""
         response = await page.goto(f"{server_url}/frontend/fashn")
         await page.wait_for_load_state("domcontentloaded")
         
-        assert response.status in [200, 302, 303], f"Сервер должен ответить, получен {response.status}"
+        assert response.status == 200, f"Ожидался 200, получен {response.status}"

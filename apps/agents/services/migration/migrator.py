@@ -52,6 +52,8 @@ class Migrator:
         system_company = await company_repo.get("system")
         if system_company:
             logger.info("Системная компания уже существует")
+            # Проверяем и создаем системного пользователя если нет
+            await self._ensure_system_user(container, system_company)
             return
 
         system_company = Company(
@@ -67,7 +69,32 @@ class Migrator:
         subdomain_mapping = SubdomainMapping(subdomain="system", company_id="system")
         await subdomain_repo.set(subdomain_mapping)
 
+        await self._ensure_system_user(container, system_company)
+
         logger.info("Создана системная компания: system")
+
+    async def _ensure_system_user(self, container, company: Company):
+        """Создает системного пользователя если не существует"""
+        user_repo = container.user_repository
+        
+        existing_user = await user_repo.get("system_migrator")
+        if existing_user:
+            logger.info("Системный пользователь уже существует")
+            return
+        
+        system_user = User(
+            user_id="system_migrator",
+            provider=AuthProvider.YANDEX,
+            provider_user_id="system_migrator",
+            email="system@agents-lab.ru",
+            name="System Migrator",
+            status=UserStatus.ACTIVE,
+            groups=["system", "admin"],
+            companies={company.company_id: ["admin"]},
+            active_company_id=company.company_id
+        )
+        await user_repo.set(system_user)
+        logger.info("Создан системный пользователь: system_migrator")
 
     async def _migrate_all_tools(self):
         """

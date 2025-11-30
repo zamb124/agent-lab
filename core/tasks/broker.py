@@ -1,11 +1,12 @@
 """
 TaskIQ брокер для всей системы.
 
-Использует PostgreSQL (Shared DB) как backend для хранения задач.
+Использует PostgreSQL (Shared DB) как backend для хранения задач и результатов.
 Broker создается при импорте, но соединение устанавливается только при startup().
 """
 
-from taskiq_pg import AsyncpgBroker
+from taskiq_pg import AsyncpgBroker, AsyncpgResultBackend
+from taskiq.serializers import JSONSerializer
 
 
 def _get_dsn() -> str:
@@ -19,5 +20,11 @@ def _get_dsn() -> str:
     return dsn
 
 
-# Broker создается при импорте, но DSN резолвится только при startup()
-broker = AsyncpgBroker(dsn=_get_dsn)
+# Result backend для хранения результатов задач
+result_backend = AsyncpgResultBackend(
+    dsn=_get_dsn,
+    serializer=JSONSerializer(),
+)
+
+# Broker с result backend
+broker = AsyncpgBroker(dsn=_get_dsn).with_result_backend(result_backend)

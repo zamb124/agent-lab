@@ -49,18 +49,25 @@ class WebInterface(BaseInterface):
         """Формирует session_id для web платформы.
         
         Логика:
-        1. Если provided_session_id в формате "web:{user}:{flow}:{uuid}" 
+        1. Если provided_session_id уже в формате "web:{user}:{flow}:{uuid}" 
            и user совпадает - используем его
-        2. Иначе создаем новый session_id
+        2. Если provided_session_id - просто UUID (от JavaScript клиента),
+           добавляем префикс web:user:flow: к нему
+        3. Если ничего не передано - создаем новый UUID
         """
-        # Проверяем валидный web session_id от того же пользователя
+        # Уже полный формат web:user:flow:uuid
         if provided_session_id and provided_session_id.startswith("web:"):
             parts = provided_session_id.split(":")
             # Формат: web:user_id:flow_id:uuid (минимум 4 части)
             if len(parts) >= 4 and parts[1] == user_id:
                 return provided_session_id
         
-        # Создаем новый session_id
+        # Клиент передал UUID - добавляем префикс, сохраняя UUID клиента
+        if provided_session_id:
+            # Используем UUID от клиента, формируем полный session_id
+            return f"web:{user_id}:{flow_id}:{provided_session_id}"
+        
+        # Ничего не передано - создаем новый UUID
         return f"web:{user_id}:{flow_id}:{uuid.uuid4().hex[:8]}"
 
     @trace_span(
