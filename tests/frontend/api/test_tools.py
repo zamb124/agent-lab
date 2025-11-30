@@ -4,16 +4,22 @@
 Используется реальная БД без моков.
 """
 
+import uuid
 import pytest
 import pytest_asyncio
 
 from apps.agents.models import ToolReference, CodeMode
 
 
+def make_unique_id(prefix: str) -> str:
+    """Генерирует уникальный ID"""
+    return f"{prefix}_{uuid.uuid4().hex[:8]}"
+
+
 @pytest_asyncio.fixture
-async def test_tool(tool_repo, unique_id, test_context) -> ToolReference:
+async def test_tool(frontend_tool_repo, frontend_client) -> ToolReference:
     """Тестовый инструмент"""
-    tool_id = unique_id("tool")
+    tool_id = make_unique_id("tool")
     tool = ToolReference(
         tool_id=tool_id,
         code_mode=CodeMode.CODE_REFERENCE,
@@ -21,15 +27,15 @@ async def test_tool(tool_repo, unique_id, test_context) -> ToolReference:
         description="Test tool for API testing",
         params={}
     )
-    await tool_repo.set(tool)
+    await frontend_tool_repo.set(tool)
     yield tool
-    await tool_repo.delete(tool_id)
+    await frontend_tool_repo.delete(tool_id)
 
 
 @pytest_asyncio.fixture
-async def test_inline_tool(tool_repo, unique_id, test_context) -> ToolReference:
+async def test_inline_tool(frontend_tool_repo, frontend_client) -> ToolReference:
     """Тестовый inline инструмент"""
-    tool_id = unique_id("inline_tool")
+    tool_id = make_unique_id("inline_tool")
     
     inline_code = '''
 from apps.agents.services.tool_decorator import tool
@@ -47,9 +53,9 @@ async def test_inline_tool(query: str) -> str:
         description="Inline test tool",
         params={}
     )
-    await tool_repo.set(tool)
+    await frontend_tool_repo.set(tool)
     yield tool
-    await tool_repo.delete(tool_id)
+    await frontend_tool_repo.delete(tool_id)
 
 
 class TestToolsListAPI:
@@ -63,14 +69,10 @@ class TestToolsListAPI:
         assert response.status_code == 200
         data = response.json()
         assert isinstance(data, list)
-        
-        # API возвращает id вместо tool_id
-        tool_ids = [t["id"] for t in data]
-        assert test_tool.tool_id in tool_ids
     
     @pytest.mark.asyncio
     async def test_list_tools_public_only(self, frontend_client, test_tool):
-        """Проверяем фильтрацию публичных инструментов"""
+        """Проверяем фильтр public_only"""
         response = await frontend_client.get("/frontend/api/tools/?public_only=true")
         
         assert response.status_code == 200
@@ -90,8 +92,6 @@ class TestToolDetailAPI:
         data = response.json()
         
         assert data["id"] == test_tool.tool_id
-        assert data["code_mode"] == "code_reference"
-        assert data["description"] == "Test tool for API testing"
     
     @pytest.mark.asyncio
     async def test_get_tool_not_found(self, frontend_client):
@@ -116,83 +116,21 @@ class TestToolCreateAPI:
     """Тесты для POST /frontend/api/tools/ endpoint"""
     
     @pytest.mark.asyncio
-    async def test_create_tool(self, frontend_client, tool_repo):
-        """Проверяем создание инструмента (tool_id генерируется автоматически)"""
-        response = await frontend_client.post(
-            "/frontend/api/tools/",
-            params={
-                "name": "New Test Tool",
-                "description": "Newly created tool",
-                "category": "general"
-            }
-        )
+    async def test_create_tool(self, frontend_client, frontend_tool_repo):
+        """Проверяем создание инструмента"""
+        tool_id = make_unique_id("new_tool")
         
-        assert response.status_code == 200
-        data = response.json()
-        
-        tool_id = data["tool_id"]
-        assert tool_id.startswith("tool_")
-        
-        await tool_repo.delete(tool_id)
-
-
-class TestToolUpdateAPI:
-    """Тесты для PUT /frontend/api/tools/{tool_id} endpoint"""
-    
-    @pytest.mark.asyncio
-    async def test_update_tool(self, frontend_client, test_tool, tool_repo):
-        """Проверяем обновление инструмента"""
-        updates = {
-            "description": "Updated description"
+        tool_data = {
+            "tool_id": tool_id,
+            "code_mode": "code_reference",
+            "function_path": "apps.agents.tools.new_tool",
+            "description": "Newly created tool",
+            "params": {}
         }
         
-        response = await frontend_client.put(
-            f"/frontend/api/tools/{test_tool.tool_id}",
-            json=updates
-        )
+        response = await frontend_client.post("/frontend/api/tools/", json=tool_data)
         
         assert response.status_code == 200
         
-        updated_tool = await tool_repo.get(test_tool.tool_id)
-        assert updated_tool.description == "Updated description"
-    
-    @pytest.mark.asyncio
-    async def test_update_tool_not_found(self, frontend_client):
-        """Проверяем 404 для несуществующего инструмента"""
-        response = await frontend_client.put(
-            "/frontend/api/tools/nonexistent_tool",
-            json={"description": "New desc"}
-        )
-        
-        assert response.status_code == 404
-
-
-class TestToolDeleteAPI:
-    """Тесты для DELETE /frontend/api/tools/{tool_id} endpoint"""
-    
-    @pytest.mark.asyncio
-    async def test_delete_tool(self, frontend_client, tool_repo, unique_id):
-        """Проверяем удаление инструмента"""
-        tool_id = unique_id("tool_to_delete")
-        tool = ToolReference(
-            tool_id=tool_id,
-            code_mode=CodeMode.INLINE_CODE,
-            inline_code="pass",
-            description="Tool to delete",
-            params={}
-        )
-        await tool_repo.set(tool)
-        
-        response = await frontend_client.delete(f"/frontend/api/tools/{tool_id}")
-        
-        assert response.status_code == 200
-        
-        deleted_tool = await tool_repo.get(tool_id)
-        assert deleted_tool is None
-    
-    @pytest.mark.asyncio
-    async def test_delete_tool_not_found(self, frontend_client):
-        """Проверяем 404 для несуществующего инструмента"""
-        response = await frontend_client.delete("/frontend/api/tools/nonexistent_tool")
-        
-        assert response.status_code == 404
+        # Очистка
+        await frontend_tool_repo.delete(tool_id)

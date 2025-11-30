@@ -3,6 +3,7 @@
 Простые адаптеры для преобразования сообщений.
 """
 
+import json
 import logging
 import uuid
 from abc import ABC, abstractmethod
@@ -171,22 +172,32 @@ class BaseInterface(ABC):
         logger.info(f"⏳ Отправлено сообщение о занятости для сессии {session_id}")
 
     def _get_session_storage_key(self, session_id: str, flow_id: str = None) -> str:
-        """Формирует ключ для хранения сессии в Storage"""
-        # Если session_id уже в правильном формате platform:user:flow:id - используем как есть
+        """Формирует ключ для хранения сессии в Storage
+        
+        Требует либо полный session_id (platform:user:flow:id), либо context + flow_id.
+        """
+        # Если session_id уже в правильном формате platform:user:flow:id
         if ":" in session_id and session_id.count(":") >= 2:
             return f"session:{session_id}"
 
-        # Иначе это простой UUID - формируем правильный формат для ЛЮБОЙ платформы
+        # Простой UUID - требуется context и flow_id
         context = get_context()
-        if context and flow_id:
-            # Формат: platform:user_id:flow_id:unique_id (для ВСЕХ платформ одинаково)
+        if not context:
+            raise ValueError(
+                f"Невозможно сформировать ключ сессии: нет контекста. "
+                f"session_id={session_id}, flow_id={flow_id}"
+            )
+        if not flow_id:
+            raise ValueError(
+                f"Невозможно сформировать ключ сессии: не указан flow_id. "
+                f"session_id={session_id}"
+            )
+        
+        # Формат: platform:user_id:flow_id:unique_id
             full_session_id = (
                 f"{self.platform_name}:{context.user.user_id}:{flow_id}:{session_id}"
             )
             return f"session:{full_session_id}"
-
-        # Fallback если нет контекста или flow_id
-        return f"session:{session_id}"
 
     async def setup_commands(self) -> bool:
         """
@@ -229,161 +240,102 @@ class BaseInterface(ABC):
             "registered": False
         }
 
-    async def create_task(self, message: Message, flow_id: str) -> str:
+    async def create_task(
+        self, 
+        message: Message, 
+        flow_id: str,
+        wait_timeout: Optional[float] = None,
+    ) -> str | Dict[str, Any]:
         """
-        Создает задачу в БД для TaskProcessor.
-        Возвращает task_id.
+        Создает задачу через TaskIQ.
+        
+        Args:
+            message: Сообщение для обработки
+            flow_id: ID flow
+            wait_timeout: Если указан - ждем результат (для синхронных API)
+            
+        Returns:
+            task_id если wait_timeout=None, иначе результат выполнения
         """
-
-        logger.info(f"🔄 create_task вызван для session_id={message.session_id}")
-
-        storage = get_agents_container().storage
-
-        # Получаем правильный ключ сессии с учетом flow_id
-        session_key = self._get_session_storage_key(message.session_id, flow_id)
-        logger.info(f"🔍 Ищем сессию по ключу: {session_key}")
-        session_data = await storage.get(session_key)
-        logger.info(f"🔍 Данные сессии найдены: {bool(session_data)}")
-
-        if session_data:
-            # Проверяем что это действительно SessionConfig
-            import json
-            data = json.loads(session_data)
-            if not isinstance(data, dict) or not all(field in data for field in ['session_id', 'platform', 'user_id']):
-                logger.warning(f"Данные в {session_key} не являются SessionConfig")
-                session_data = None
-
-        if session_data:
-            session_config = SessionConfig.model_validate_json(session_data)
-            logger.info(f"🔍 Текущий статус сессии: {session_config.status}")
-
-            if session_config.status == SessionStatus.PROCESSING:
-                # Ищем pending задачу для этой сессии
-                pending_task = await storage.find_pending_task(message.session_id, flow_id)
-
-                if pending_task:
-                    # Приклеиваем сообщение к существующей pending задаче
-                    logger.info(f"🔄 Найдена pending задача {pending_task.task_id}, приклеиваем сообщение")
-
-                    old_message = pending_task.input_data.get("message", "")
-                    new_message = f"{old_message} | {message.content}"
-                    pending_task.input_data["message"] = new_message
-                    pending_task.input_data["message_count"] = pending_task.input_data.get("message_count", 1) + 1
-
-                    await self.task_repository.set(pending_task)
-                    logger.info(f"✅ Приклеили сообщение к задаче {pending_task.task_id}")
-                    return pending_task.task_id
-                else:
-                    # Нет pending задачи - создаем новую
-                    logger.info(f"🆕 Нет pending задачи, создаем новую для {message.session_id}")
-            elif session_config.status == SessionStatus.WAITING_INPUT:
-                # Сессия ждет ответ на interrupt - это нормально, продолжаем
-                logger.info(
-                    f"🔄 Сессия {message.session_id} в статусе WAITING_INPUT - принимаем ответ"
-                )
-
-            # Обновляем только last_activity, статус не меняем если уже PROCESSING
-            if session_config.status != SessionStatus.PROCESSING:
-                session_config.status = SessionStatus.PROCESSING
-                logger.info(f"🔄 Сессия {message.session_id} переведена в статус PROCESSING")
-            session_config.last_activity = datetime.now(timezone.utc)
-            session_dict = session_config.model_dump(mode='json')
-            await storage.set(session_key, json.dumps(session_dict, default=str))
-        else:
-            # Создаем новую сессию в БД
-            logger.info(f"🆕 Создаем новую сессию в БД: {message.session_id}")
-            session_config = SessionConfig(
-                session_id=message.session_id,
-                platform=message.platform,
-                user_id=message.user_id,
-                flow_id=flow_id,
-                status=SessionStatus.PROCESSING,
-                metadata=message.metadata or {},
-                created_at=datetime.now(timezone.utc),
-                last_activity=datetime.now(timezone.utc),
-            )
-            import json
-            session_dict = session_config.model_dump(mode='json')
-            await storage.set(session_key, json.dumps(session_dict, default=str))
-            logger.info(f"✅ Новая сессия {message.session_id} создана в БД")
-
-        task_id = f"task_{uuid.uuid4().hex[:8]}"
-
-        # Получаем контекст из глобального состояния
         context = get_context()
         if not context:
             raise ValueError("Нет глобального контекста - проверьте AuthMiddleware")
-
-        # Логируем компанию при создании задачи
-        company_id = context.active_company.company_id if context.active_company else 'НЕТ'
-        logger.info(f"🔍 Создаем задачу в контексте: company={company_id}, user={context.user.user_id if context.user else 'НЕТ'}")
-
-        # Обогащаем контекст session_id если его нет
-        context.session_id = message.session_id or context.session_id
-
-        # Загружаем и добавляем flow_config в контекст
-        flow_config = await self.flow_repository.get(flow_id)
-        if flow_config:
-            context.flow_config = flow_config
-            logger.debug(f"Flow config добавлен в контекст: {flow_id}")
-
-        # Добавляем импортированные сообщения в context.state.messages если есть
-        if context.state is None:
-            context.state = {}
-
-        # Получаем импортированные сообщения из context сообщения
-        imported_messages = []
-        if message.context and "imported_messages" in message.context:
-            imported_messages = message.context["imported_messages"]
-
-            # Инициализируем messages если нет
-            if "messages" not in context.state:
-                context.state["messages"] = []
-
-            # Мержим сообщения по external_id чтобы избежать дублирования
-            existing_messages = context.state["messages"]
-            existing_external_ids = {msg.get("external_id") for msg in existing_messages if msg.get("external_id")}
-
-            # Добавляем только новые сообщения
-            new_messages = []
-            for msg in imported_messages:
-                if msg.get("external_id") not in existing_external_ids:
-                    new_messages.append(msg)
-                    existing_external_ids.add(msg.get("external_id"))
-
-            # Добавляем новые сообщения в начало истории
-            context.state["messages"] = new_messages + existing_messages
-            logger.info(f"📚 Добавлено {len(new_messages)} новых сообщений из {len(imported_messages)} импортированных в context.state.messages")
-
-        task_config = TaskConfig(
-            task_id=task_id,
+        
+        user_id = context.user.user_id if context.user else message.user_id
+        company_id = context.active_company.company_id if context.active_company else ""
+        
+        user_data = {
+            "name": context.user.name if context.user else "User",
+            "groups": context.user.groups if context.user else ["user"],
+        } if context.user else None
+        
+        company_data = {
+            "name": context.active_company.name if context.active_company else "Company",
+            "subdomain": context.active_company.subdomain if context.active_company else company_id,
+        } if context.active_company else None
+        
+        await self._update_session_for_task(message, flow_id)
+        
+        from apps.agents.tasks.agent_tasks import process_agent_task
+        
+        task = await process_agent_task.kiq(
             flow_id=flow_id,
-            context=context,
-            status=TaskStatus.PENDING,
-            input_data={"message": message.content, "metadata": message.metadata or {}},
-            created_at=datetime.now(timezone.utc),
+            session_id=message.session_id,
+            message=message.content,
+            platform=self.platform_name,
+            user_id=user_id,
+            company_id=company_id,
+            metadata=message.metadata or {},
+            user_data=user_data,
+            company_data=company_data,
         )
+        
+        logger.info(f"Создана TaskIQ задача {task.task_id} для flow {flow_id}, session {message.session_id}")
+        
+        if wait_timeout is None:
+            return task.task_id
+        
+        # Ждем результат
+        result = await task.wait_result(timeout=wait_timeout)
+        
+        if result.is_err:
+            logger.error(f"Ошибка задачи {task.task_id}: {result.error}")
+            raise RuntimeError(f"Ошибка выполнения: {result.error}")
+        
+        return result.return_value
+    
+    async def _update_session_for_task(self, message: Message, flow_id: str):
+        """Обновляет или создает сессию для задачи"""
+        import json
 
-        task_key = f"task:{task_id}"
-        logger.info(f"📋 Создаем задачу {task_id} для flow {flow_id}")
-        logger.info(f"  - Исходный ключ: {task_key}")
-        logger.info(f"  - Статус: {task_config.status}")
-        logger.info(f"  - Компания в контексте: {company_id}")
+        storage = get_agents_container().storage
+        session_key = self._get_session_storage_key(message.session_id, flow_id)
+        session_data = await storage.get(session_key)
 
-        logger.info(f"🔵 ПЕРЕД storage.set: key={task_key}")
-        await storage.set(task_key, task_config.model_dump_json(), force_global=True)
-        logger.info(f"🟢 ПОСЛЕ storage.set: key={task_key}")
-
-        # Проверяем что задача реально сохранилась
-        saved_task = await storage.get(task_key, force_global=True)
-        if saved_task:
-            logger.info(f"✅ Задача {task_id} сохранена и проверена в БД")
-        else:
-            logger.error(f"❌ Задача {task_id} НЕ найдена после сохранения!")
-
-        logger.info(f"📋 Создана задача {task_id} для flow {flow_id}")
-
-        return task_id
+        if session_data:
+            try:
+                data = json.loads(session_data)
+                if isinstance(data, dict) and all(f in data for f in ['session_id', 'platform', 'user_id']):
+                    session_config = SessionConfig.model_validate(data)
+                    session_config.status = SessionStatus.PROCESSING
+                    session_config.last_activity = datetime.now(timezone.utc)
+                    await storage.set(session_key, json.dumps(session_config.model_dump(mode='json'), default=str))
+                    return
+            except (json.JSONDecodeError, ValueError):
+                pass
+        
+        # Создаем новую сессию
+        session_config = SessionConfig(
+            session_id=message.session_id,
+            platform=message.platform,
+            user_id=message.user_id,
+            flow_id=flow_id,
+            status=SessionStatus.PROCESSING,
+            metadata=message.metadata or {},
+            created_at=datetime.now(timezone.utc),
+            last_activity=datetime.now(timezone.utc),
+        )
+        await storage.set(session_key, json.dumps(session_config.model_dump(mode='json'), default=str))
 
     async def get_or_create_session(
         self, user_id: str, flow_id: str, metadata: Dict[str, Any] = None

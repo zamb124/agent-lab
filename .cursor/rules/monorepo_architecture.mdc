@@ -20,6 +20,7 @@ agent-lab/
 │   ├── logging/                   # Логирование
 │   ├── http/                      # HTTP клиент с прокси
 │   ├── container/                 # BaseContainer
+│   ├── tasks/                     # TaskIQ брокер и воркер (Shared DB)
 │   ├── variables/                 # VariablesService
 │   ├── utils/                     # TokenService, generate_slug
 │   ├── fields.py                  # Кастомный Field (Pydantic v2)
@@ -38,7 +39,7 @@ agent-lab/
 │   │   ├── tools/                 # Инструменты
 │   │   ├── flows/                 # Flow конфигурации
 │   │   ├── api/v1/                # REST API
-│   │   ├── workers/               # Background workers
+│   │   ├── tasks/                 # TaskIQ задачи (agent_tasks, message_tasks)
 │   │   ├── interfaces/            # Platform interfaces
 │   │   ├── clients/               # External clients (AmoCRM, etc)
 │   │   └── middleware/            # Middleware

@@ -9,7 +9,6 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 
-from apps.frontend.container import get_frontend_container
 
 logger = logging.getLogger(__name__)
 
@@ -240,8 +239,9 @@ async def get_library_documentation() -> LibraryDocumentationResponse:
     libraries = []
 
     # Получаем реальный namespace из ToolFactory
-    tool_factory = get_frontend_container().tool_factory
-    namespace = tool_factory.get_tool_namespace()
+    from apps.agents.container import get_agents_container
+    tool_factory = get_agents_container().tool_factory
+    namespace = await tool_factory.get_tool_namespace()
 
     # Анализируем каждый объект в namespace
     for name, obj in namespace.items():

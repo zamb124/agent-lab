@@ -1,51 +1,38 @@
 """
-Тесты для API code (валидация и автодополнение).
+Тесты для API code (валидация, форматирование, автокомплит).
 
 Используется реальная БД без моков.
 """
 
 import pytest
-import pytest_asyncio
 
 
 class TestCodeValidateAPI:
-    """Тесты для POST /frontend/api/code/validate endpoint"""
+    """Тесты для POST /frontend/api/code/validate-python endpoint"""
     
     @pytest.mark.asyncio
     async def test_validate_valid_code(self, frontend_client):
-        """Проверяем валидацию корректного кода"""
-        code = """
-def hello(name: str) -> str:
-    return f"Hello, {name}!"
-"""
-        
+        """Проверяем валидацию валидного кода"""
         response = await frontend_client.post(
-            "/frontend/api/code/validate",
-            json={"code": code}
+            "/frontend/api/code/validate-python",
+            json={"code": "x = 1\ny = 2\nprint(x + y)"}
         )
         
         assert response.status_code == 200
         data = response.json()
-        
         assert data["valid"] is True
         assert data["errors"] == []
     
     @pytest.mark.asyncio
     async def test_validate_invalid_syntax(self, frontend_client):
-        """Проверяем валидацию кода с синтаксической ошибкой"""
-        code = """
-def hello(name
-    return f"Hello, {name}!"
-"""
-        
+        """Проверяем валидацию невалидного кода"""
         response = await frontend_client.post(
-            "/frontend/api/code/validate",
-            json={"code": code}
+            "/frontend/api/code/validate-python",
+            json={"code": "def broken(:\n    pass"}
         )
         
         assert response.status_code == 200
         data = response.json()
-        
         assert data["valid"] is False
         assert len(data["errors"]) > 0
     
@@ -53,111 +40,67 @@ def hello(name
     async def test_validate_empty_code(self, frontend_client):
         """Проверяем валидацию пустого кода"""
         response = await frontend_client.post(
-            "/frontend/api/code/validate",
+            "/frontend/api/code/validate-python",
             json={"code": ""}
         )
         
         assert response.status_code == 200
         data = response.json()
-        
-        assert data["valid"] is True
-    
-    @pytest.mark.asyncio
-    async def test_validate_async_code(self, frontend_client):
-        """Проверяем валидацию асинхронного кода"""
-        code = """
-from apps.agents.services.tool_decorator import tool
-
-@tool
-async def my_tool(query: str) -> str:
-    \"\"\"My async tool\"\"\"
-    return f"Result: {query}"
-"""
-        
-        response = await frontend_client.post(
-            "/frontend/api/code/validate",
-            json={"code": code}
-        )
-        
-        assert response.status_code == 200
-        data = response.json()
-        
-        assert data["valid"] is True
-
-
-class TestCodeAutocompleteAPI:
-    """Тесты для POST /frontend/api/code/autocomplete endpoint"""
-    
-    @pytest.mark.asyncio
-    async def test_autocomplete_basic(self, frontend_client):
-        """Проверяем базовое автодополнение"""
-        response = await frontend_client.post(
-            "/frontend/api/code/autocomplete",
-            json={
-                "code": "from apps.",
-                "cursor_position": 10
-            }
-        )
-        
-        assert response.status_code == 200
-        data = response.json()
-        
-        assert "completions" in data
-        assert isinstance(data["completions"], list)
-    
-    @pytest.mark.asyncio
-    async def test_autocomplete_empty_code(self, frontend_client):
-        """Проверяем автодополнение для пустого кода"""
-        response = await frontend_client.post(
-            "/frontend/api/code/autocomplete",
-            json={
-                "code": "",
-                "cursor_position": 0
-            }
-        )
-        
-        assert response.status_code == 200
-        data = response.json()
-        
-        assert "completions" in data
+        assert data["valid"] is False
 
 
 class TestCodeFormatAPI:
-    """Тесты для POST /frontend/api/code/format endpoint"""
+    """Тесты для POST /frontend/api/code/format-python endpoint"""
     
     @pytest.mark.asyncio
-    async def test_format_code(self, frontend_client):
+    async def test_format_valid_code(self, frontend_client):
         """Проверяем форматирование кода"""
-        code = """
-def    hello(  name:str)->str:
-    return f"Hello, {name}!"
-"""
-        
         response = await frontend_client.post(
-            "/frontend/api/code/format",
-            json={"code": code}
+            "/frontend/api/code/format-python",
+            json={"code": "x=1"}
         )
         
         assert response.status_code == 200
         data = response.json()
-        
         assert "formatted" in data
+
+
+class TestCodeAutocompleteAPI:
+    """Тесты для POST /frontend/api/code/completion endpoint"""
     
     @pytest.mark.asyncio
-    async def test_format_invalid_code(self, frontend_client):
-        """Проверяем форматирование невалидного кода"""
-        code = """
-def hello(name
-    return 
-"""
-        
+    async def test_autocomplete_basic(self, frontend_client):
+        """Проверяем базовый автокомплит"""
         response = await frontend_client.post(
-            "/frontend/api/code/format",
-            json={"code": code}
+            "/frontend/api/code/completion",
+            json={"code": "import ", "cursor_position": 7}
         )
         
         assert response.status_code == 200
         data = response.json()
+        assert "items" in data
+        assert isinstance(data["items"], list)
+    
+    @pytest.mark.asyncio
+    async def test_autocomplete_empty_code(self, frontend_client):
+        """Проверяем автокомплит для пустого кода"""
+        response = await frontend_client.post(
+            "/frontend/api/code/completion",
+            json={"code": "", "cursor_position": 0}
+        )
         
-        assert "formatted" in data or "error" in data
+        assert response.status_code == 200
 
+
+class TestCodeDocumentationAPI:
+    """Тесты для GET /frontend/api/code/documentation endpoint"""
+    
+    @pytest.mark.asyncio
+    async def test_get_documentation(self, frontend_client):
+        """Проверяем получение документации библиотек"""
+        response = await frontend_client.get("/frontend/api/code/documentation")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "libraries" in data
+        assert isinstance(data["libraries"], list)

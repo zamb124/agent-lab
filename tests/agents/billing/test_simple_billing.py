@@ -21,9 +21,12 @@ def test_billing_models_import():
     assert TARIFF_PRICES[TariffPlan.ENTERPRISE]["llm"]["*"] == 1.1
 
 
-def test_tool_decorator():
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_tool_decorator():
     """Тест платформенного декоратора @tool"""
-    import asyncio
     from apps.agents.services.tool_decorator import tool
     
     @tool(cost=0.5, billing_name="test_tool")
@@ -36,9 +39,7 @@ def test_tool_decorator():
     assert test_function._platform_billing_name == "test_tool"
     assert test_function._is_platform_tool
     
-    result = asyncio.get_event_loop().run_until_complete(
-        test_function.ainvoke({"text": "hello"})
-    )
+    result = await test_function.ainvoke({"text": "hello"})
     assert "Result: hello" in result
     
     @tool(cost=0.1, billing_name="universal_tool", title="Универсальный тул")
@@ -49,9 +50,7 @@ def test_tool_decorator():
     assert universal_function._platform_cost == 0.1
     assert universal_function._platform_title == "Универсальный тул"
     
-    result = asyncio.get_event_loop().run_until_complete(
-        universal_function.ainvoke({"key": "test", "value": "data"})
-    )
+    result = await universal_function.ainvoke({"key": "test", "value": "data"})
     assert "Сохранено: test = data" in result
 
 

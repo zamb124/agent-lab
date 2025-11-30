@@ -28,32 +28,6 @@ async def list_flows(
     return await flow_repo.list_all(limit=limit)
 
 
-@router.get("/{flow_id:path}", response_model=FlowConfig)
-async def get_flow(flow_id: str, flow_repo: FlowRepositoryDep) -> FlowConfig:
-    """Получить flow по ID"""
-    if flow_id in ("canvas", "variables", "install", "uninstall") or "/" in flow_id:
-        raise HTTPException(status_code=400, detail="Invalid flow_id")
-    
-    flow = await flow_repo.get(flow_id)
-    if not flow:
-        raise HTTPException(status_code=404, detail="Flow not found")
-    return flow
-
-
-@router.delete("/{flow_id:path}")
-async def delete_flow(flow_id: str, flow_repo: FlowRepositoryDep) -> Dict[str, str]:
-    """Удалить flow"""
-    if "/" in flow_id:
-        raise HTTPException(status_code=400, detail="Invalid flow_id")
-    
-    flow = await flow_repo.get(flow_id)
-    if not flow:
-        raise HTTPException(status_code=404, detail="Flow not found")
-    
-    await flow_repo.delete(flow_id)
-    return {"message": "Flow deleted successfully"}
-
-
 @router.post("/", response_model=FlowConfig)
 async def create_flow(
     flow_data: Dict[str, Any],
@@ -99,6 +73,8 @@ async def create_flow(
     return flow_config
 
 
+# Специфичные роуты ДОЛЖНЫ быть перед общим /{flow_id:path}
+
 @router.get("/{flow_id:path}/variables")
 async def get_flow_variables(
     flow_id: str,
@@ -141,17 +117,12 @@ async def get_flow_canvas(flow_id: str, flow_repo: FlowRepositoryDep) -> Dict[st
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
     
-    # Получаем данные канваса из FlowConfig
     if flow.canvas_data:
-        print(f"Найдены сохраненные данные канваса для флоу {flow_id}")
-        print(f"Количество нод: {len(flow.canvas_data.get('nodes', []))}")
         return {
             "flow_id": flow_id,
             **flow.canvas_data
         }
     
-    # Если нет сохраненного канваса, возвращаем пустой
-    print(f"Нет сохраненных данных канваса для флоу {flow_id}")
     return {
         "flow_id": flow_id,
         "nodes": [],
@@ -174,6 +145,106 @@ async def update_flow_canvas(
         raise HTTPException(status_code=404, detail=str(e))
 
 
+class InstallFlowRequest(BaseModel):
+    variables: Optional[Dict[str, str]] = None
+
+
+@router.post("/{flow_id:path}/install")
+async def install_flow(
+    flow_id: str,
+    flow_repo: FlowRepositoryDep,
+    variables_service: VariablesServiceDep,
+    request: Optional[InstallFlowRequest] = None,
+):
+    """
+    Установить flow из Store.
+    Запускает install() и after_install_hook если они определены в flow.
+    """
+    migrator = get_agents_container().migrator
+
+    flows_with_ids = await migrator.get_public_flows()
+
+    flow_config = None
+    for full_flow_id, flow in flows_with_ids:
+        if full_flow_id == flow_id:
+            flow_config = flow
+            break
+
+    if not flow_config:
+        raise HTTPException(status_code=404, detail="Flow не найден в коде")
+
+    if request and request.variables:
+        for key, value in request.variables.items():
+            if value is None or value == "":
+                logger.info(f"Пропускаем пустую переменную {key} для flow {flow_id}")
+                continue
+
+            var_def = None
+            if hasattr(flow_config, 'variables_definitions') and flow_config.variables_definitions:
+                for vd in flow_config.variables_definitions:
+                    if vd.key == key:
+                        var_def = vd
+                        break
+
+            is_secret = var_def.is_secret if var_def else False
+            description = var_def.description if var_def else f"Переменная {key}"
+
+            await variables_service.set_var(
+                key=key,
+                value=value,
+                is_secret=is_secret,
+                description=description
+            )
+            logger.info(f"Создана переменная {key} для flow {flow_id}")
+
+    flow_factory = get_agents_container().flow_factory
+    result = await flow_factory.install_flow(flow_id)
+
+    logger.info(f"Flow {flow_id} успешно установлен")
+
+    return {
+        "message": f"Flow '{flow_config.name}' успешно установлен",
+        "flow_id": result["flow_id"],
+        "additional_url": result.get("additional_url")
+    }
+
+
+@router.post("/{flow_id:path}/uninstall")
+async def uninstall_flow(flow_id: str, flow_repo: FlowRepositoryDep, agent_repo: AgentRepositoryDep):
+    """
+    Удалить установленный flow.
+    """
+    flow = await flow_repo.get(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow не найден")
+    
+    await flow_repo.delete(flow_id)
+    
+    if flow.entry_point_agent:
+        await agent_repo.delete(flow.entry_point_agent)
+    
+    logger.info(f"Flow {flow_id} успешно удалён")
+    
+    return {
+        "message": f"Flow '{flow.name}' успешно удалён",
+        "flow_id": flow_id
+    }
+
+
+# Общие роуты /{flow_id:path} ПОСЛЕ специфичных
+
+@router.get("/{flow_id:path}")
+async def get_flow(
+    flow_id: str,
+    flow_repo: FlowRepositoryDep
+) -> FlowConfig:
+    """Получить flow по ID"""
+    flow = await flow_repo.get(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return flow
+
+
 @router.put("/{flow_id:path}", response_model=FlowConfig)
 async def update_flow(
     flow_id: str,
@@ -186,30 +257,16 @@ async def update_flow(
     if not flow:
         raise HTTPException(status_code=404, detail="Flow not found")
     
-    # Создаем обновленные данные с валидацией через модель
-    # Исключаем frozen поля из model_dump
     flow_dict = flow.model_dump(exclude={'flow_id'})
 
-    # Обновляем только разрешенные поля
     allowed_fields = {"name", "description", "entry_point_agent", "platforms", "timeout", "max_retries", "canvas_data", "variables", "store", "enable_reasoning", "rag_config"}
     for field, value in updates.items():
         if field in allowed_fields:
             flow_dict[field] = value
-            if field == "canvas_data":
-                logger.info(f"💾 Обновляем canvas_data для flow {flow_id}: {type(value)}, keys: {list(value.keys()) if isinstance(value, dict) else 'not dict'}")
 
-    # Валидируем через модель - валидаторы автоматически преобразуют типы
-    # Устанавливаем flow_id явно, так как он frozen
     flow_dict['flow_id'] = flow_id
     validated_flow = FlowConfig(**flow_dict)
     
-    # Проверяем что canvas_data сохранился
-    if "canvas_data" in updates:
-        logger.info(f"✅ После валидации canvas_data: {validated_flow.canvas_data is not None}, type: {type(validated_flow.canvas_data)}")
-        if validated_flow.canvas_data:
-            logger.info(f"   Ключи в canvas_data: {list(validated_flow.canvas_data.keys())}")
-    
-    # Если обновили platforms - проверяем уникальность username
     if "platforms" in updates:
         for platform_name, platform_config in updates["platforms"].items():
             username = platform_config.get("username")
@@ -230,17 +287,15 @@ async def update_flow(
     
     await flow_repo.set(validated_flow)
     
-    # Если обновили platforms - регистрируем их
     if "platforms" in updates:
         for platform_name, platform_config in updates["platforms"].items():
             username = platform_config.get("username")
             if not username:
                 continue
             
-            # Проверяем что есть token для платформ требующих его
             if platform_name == "telegram":
                 if not platform_config.get("token"):
-                    logger.warning(f"⚠️ Канал telegram для {validated_flow.flow_id} не имеет token, пропускаем регистрацию")
+                    logger.warning(f"Канал telegram для {validated_flow.flow_id} не имеет token, пропускаем регистрацию")
                     continue
             
             try:
@@ -249,114 +304,18 @@ async def update_flow(
                     username=username,
                     flow_id=validated_flow.flow_id
                 )
-                logger.info(f"📋 Регистрация {platform_name} для {validated_flow.flow_id}: {registration_result}")
+                logger.info(f"Регистрация {platform_name} для {validated_flow.flow_id}: {registration_result}")
             except ValueError as e:
-                logger.error(f"❌ Ошибка регистрации {platform_name}: {e}")
+                logger.error(f"Ошибка регистрации {platform_name}: {e}")
                 raise HTTPException(
                     status_code=400,
                     detail=f"Ошибка регистрации {platform_name}: {str(e)}"
                 )
             except Exception as e:
-                logger.error(f"❌ Неожиданная ошибка регистрации {platform_name}: {e}")
+                logger.error(f"Неожиданная ошибка регистрации {platform_name}: {e}")
                 raise HTTPException(
                     status_code=400,
                     detail=f"Не удалось зарегистрировать {platform_name}: {str(e)}"
                 )
     
     return validated_flow
-
-
-
-class InstallFlowRequest(BaseModel):
-    variables: Optional[Dict[str, str]] = None  # key -> value
-
-@router.post("/{flow_id:path}/install")
-async def install_flow(
-    flow_id: str,
-    flow_repo: FlowRepositoryDep,
-    variables_service: VariablesServiceDep,
-    request: Optional[InstallFlowRequest] = None,
-):
-    """
-    Установить flow из Store.
-    Запускает install() и after_install_hook если они определены в flow.
-
-    Принимает переменные для создания в компании.
-    """
-    migrator = get_agents_container().migrator
-
-    flows_with_ids = await migrator.get_public_flows()
-
-    flow_config = None
-    for full_flow_id, flow in flows_with_ids:
-        if full_flow_id == flow_id:
-            flow_config = flow
-            break
-
-    if not flow_config:
-        raise HTTPException(status_code=404, detail="Flow не найден в коде")
-
-    # Создаем переменные если они переданы
-    if request and request.variables:
-        for key, value in request.variables.items():
-            # Пропускаем пустые значения
-            if value is None or value == "":
-                logger.info(f"⚠️ Пропускаем пустую переменную {key} для flow {flow_id}")
-                continue
-
-            # Определяем настройки переменной из variables_definitions
-            var_def = None
-            if hasattr(flow_config, 'variables_definitions') and flow_config.variables_definitions:
-                for vd in flow_config.variables_definitions:
-                    if vd.key == key:
-                        var_def = vd
-                        break
-
-            is_secret = var_def.is_secret if var_def else False
-            description = var_def.description if var_def else f"Переменная {key}"
-
-            await variables_service.set_var(
-                key=key,
-                value=value,
-                is_secret=is_secret,
-                description=description
-            )
-            logger.info(f"✅ Создана переменная {key} для flow {flow_id}")
-
-    flow_factory = get_agents_container().flow_factory
-    result = await flow_factory.install_flow(flow_id)
-
-    logger.info(f"✅ Flow {flow_id} успешно установлен")
-    logger.info(f"📋 Result from install_flow: {result}")
-
-    response_data = {
-        "message": f"Flow '{flow_config.name}' успешно установлен",
-        "flow_id": result["flow_id"],
-        "additional_url": result.get("additional_url")
-    }
-    logger.info(f"📤 Returning response: {response_data}")
-
-    return response_data
-
-
-@router.post("/{flow_id:path}/uninstall")
-async def uninstall_flow(flow_id: str, flow_repo: FlowRepositoryDep, agent_repo: AgentRepositoryDep):
-    """
-    Удалить установленный flow.
-    Запускает uninstall() хук если он определен в flow.
-    """
-    flow = await flow_repo.get(flow_id)
-    if not flow:
-        raise HTTPException(status_code=404, detail="Flow не найден")
-    
-    await flow_repo.delete(flow_id)
-    
-    if flow.entry_point_agent:
-        await agent_repo.delete(flow.entry_point_agent)
-    
-    logger.info(f"✅ Flow {flow_id} успешно удалён")
-    
-    return {
-        "message": f"Flow '{flow.name}' успешно удалён",
-        "flow_id": flow_id
-    }

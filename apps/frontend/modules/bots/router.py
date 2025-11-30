@@ -86,10 +86,8 @@ async def bot_details(request: Request, bot_id: str):
     flow_config = await flow_repo.get(bot_id)
     
     if not flow_config:
-        return templates.TemplateResponse(
-            "error.html",
-            {"request": request, "error": "Бот не найден"}
-        )
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Бот не найден")
     
     agent_prompt = ""
     agent_local_variables = {}

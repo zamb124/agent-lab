@@ -9,7 +9,7 @@ from datetime import datetime
 
 from apps.frontend.core.template_loader import get_templates
 from apps.frontend.core.utils import render_with_dashboard
-from apps.frontend.container import get_frontend_container
+from apps.agents.container import get_agents_container
 
 router = APIRouter(prefix="/frontend/history", tags=["history"])
 templates = get_templates()
@@ -48,7 +48,7 @@ async def get_sessions_table(
     if date_to:
         date_to_dt = datetime.fromisoformat(date_to)
     
-    flow_factory = get_frontend_container().flow_factory
+    flow_factory = get_agents_container().flow_factory
     sessions = await flow_factory.get_flow_sessions(
         platform=platform,
         flow_id=flow_id,
@@ -81,7 +81,7 @@ async def get_session_messages_modal(
 ):
     """Получает модальное окно с историей сообщений сессии (HTMX endpoint)"""
     
-    flow_factory = get_frontend_container().flow_factory
+    flow_factory = get_agents_container().flow_factory
     history = await flow_factory.get_flow_history(
         session_id=session_id,
         limit=limit,

@@ -4,7 +4,7 @@
 
 from typing import List, Dict, Optional
 
-from core.models.trace_models import SpanRecord, TraceInfo, SpanStatus
+from apps.agents.models.trace_models import SpanRecord, TraceInfo, SpanStatus
 
 
 async def load_spans_from_storage(storage, prefix: str = "otel:") -> List[SpanRecord]:

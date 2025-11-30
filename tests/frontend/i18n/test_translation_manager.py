@@ -46,7 +46,8 @@ class TestTranslationManagerInit:
         assert manager.config.fallback_language == Language.RU
         assert manager.config.auto_generate_on_startup is True
     
-    def test_init_directories_creation(self):
+    @pytest.mark.asyncio
+    async def test_init_directories_creation(self):
         """Проверяем создание директорий при инициализации"""
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -57,7 +58,7 @@ class TestTranslationManagerInit:
             manager.translations_dir = Path(manager.config.translations_directory)
             
             # Запускаем метод создания директорий
-            asyncio.run(manager._ensure_directories())
+            await manager._ensure_directories()
             
             # Проверяем что директории созданы
             assert (temp_path / "custom_i18n" / "translations").exists()

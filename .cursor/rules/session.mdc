@@ -43,12 +43,12 @@ result = await agent.ainvoke({
 })
 ```
 
-2. **При вызове агента из воркера/обработчика задач:**
+2. **При вызове агента из TaskIQ задачи:**
 ```python
-# В TaskProcessor
+# В process_agent_task (apps/agents/tasks/agent_tasks.py)
 result = await entry_agent.ainvoke({
     "messages": [HumanMessage(content=user_message)],
-    "session_id": task.session_id  # Берем из задачи
+    "session_id": session_id  # Берем из параметров задачи
 })
 ```
 
@@ -218,7 +218,7 @@ async def calculator_node(state: State) -> State:
 2. Нода вызывает `agent.ainvoke(input_data)` без `session_id`
 3. `BaseAgent.ainvoke` проверяет `input_data` - `session_id` нет
 4. `BaseAgent.ainvoke` берет `session_id` из `context.session_id`
-5. `context.session_id` устанавливается в `TaskProcessor` при обработке задачи
+5. `context.session_id` устанавливается в TaskIQ задаче `process_agent_task` при обработке
 
 ## Правила для субагентов
 
@@ -300,7 +300,7 @@ class MainAgent(ReActAgent):
 ### Пример 4: Восстановление после interrupt
 
 ```python
-# TaskProcessor обрабатывает ответ пользователя
+# TaskIQ задача обрабатывает ответ пользователя
 saved_state = await state_manager.load_state(session_id)
 
 # Если есть interrupt_context от субагента
@@ -322,7 +322,7 @@ if saved_state.get("interrupt_context", {}).get("type") == "tool_call":
 2. **Субагенты всегда имеют новую сессию** - кроме случаев восстановления после interrupt
 3. **session_id = thread_id** - это одно и то же значение в разных контекстах
 4. **StateManager использует session_id** - для сохранения/загрузки состояния
-5. **Context автоматически предоставляет session_id** - если он установлен в `TaskProcessor`
+5. **Context автоматически предоставляет session_id** - если он установлен в TaskIQ задаче
 
 ## Типичные ошибки
 

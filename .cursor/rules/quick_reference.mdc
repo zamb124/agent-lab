@@ -175,6 +175,38 @@ from core.files import get_default_file_processor
 file_processor = await get_default_file_processor()
 ```
 
+## TaskIQ (очереди задач)
+
+```python
+from core.tasks import broker
+
+# Создание задачи
+@broker.task(retry_on_error=True, max_retries=3)
+async def my_task(param: str) -> str:
+    return "result"
+
+# Вызов задачи (асинхронно)
+task = await my_task.kiq(param="value")
+
+# Вызов с ожиданием результата
+task = await my_task.kiq(param="value")
+result = await task.wait_result(timeout=30)
+```
+
+### Основные задачи:
+- `process_agent_task` - обработка сообщения агентом
+- `send_message_task` - отправка через интерфейс
+- `send_notification_task` - уведомление во фронтенд
+
+### В интерфейсах:
+```python
+# Асинхронно
+task_id = await interface.create_task(message, flow_id)
+
+# С ожиданием
+result = await interface.create_task(message, flow_id, wait_timeout=30)
+```
+
 ## 🚨 ЗАПОМНИ
 
 - Storage теперь ПРИВАТНЫЙ
@@ -185,3 +217,5 @@ file_processor = await get_default_file_processor()
 - ВСЕ из контейнера
 - В middleware → `request.app.state.container`
 - FileProcessor использует `file_repository`, не `storage`
+- TaskIQ брокер в Shared DB (`core/tasks/broker.py`)
+- НЕТ TaskProcessor - используй TaskIQ задачи

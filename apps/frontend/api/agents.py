@@ -23,18 +23,6 @@ async def list_agents(
     return await agent_repo.list_all(limit=limit)
 
 
-@router.get("/{agent_id:path}", response_model=AgentConfig)
-async def get_agent(agent_id: str, agent_repo: AgentRepositoryDep) -> AgentConfig:
-    """Получить агента по ID"""
-    if agent_id.endswith("/graph"):
-        raise HTTPException(status_code=400, detail="Use /graph endpoint")
-    
-    agent = await agent_repo.get(agent_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    return agent
-
-
 @router.post("/", response_model=AgentConfig)
 async def create_agent(
     agent_data: Dict[str, Any],
@@ -58,49 +46,6 @@ async def create_agent(
     
     await agent_repo.set(agent_config)
     return agent_config
-
-
-@router.put("/{agent_id:path}", response_model=AgentConfig)
-async def update_agent(
-    agent_id: str,
-    updates: Dict[str, Any],
-    agent_repo: AgentRepositoryDep
-) -> AgentConfig:
-    """Обновить агента"""
-    if agent_id.endswith("/graph"):
-        raise HTTPException(status_code=400, detail="Use /graph endpoint")
-    
-    agent = await agent_repo.get(agent_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    
-    agent_dict = agent.model_dump(exclude={'agent_id', 'created_at'})
-    
-    allowed_fields = {"name", "description", "type", "prompt", "tools", "llm_config", "graph_definition", "store", "local_variables"}
-    for field, value in updates.items():
-        if field in allowed_fields:
-            agent_dict[field] = value
-    
-    agent_dict['agent_id'] = agent_id
-    agent_dict['created_at'] = agent.created_at
-    updated_agent = AgentConfig(**agent_dict)
-    
-    await agent_repo.set(updated_agent)
-    return updated_agent
-
-
-@router.delete("/{agent_id:path}")
-async def delete_agent(agent_id: str, agent_repo: AgentRepositoryDep) -> Dict[str, str]:
-    """Удалить агента"""
-    if agent_id.endswith("/graph"):
-        raise HTTPException(status_code=400, detail="Use /graph endpoint")
-    
-    agent = await agent_repo.get(agent_id)
-    if not agent:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    
-    await agent_repo.delete(agent_id)
-    return {"message": "Agent deleted successfully"}
 
 
 @router.get("/{agent_id:path}/graph")

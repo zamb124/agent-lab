@@ -1,0 +1,284 @@
+---
+description: "Правила работы с TaskIQ"
+alwaysApply: false
+globs: ["**/tasks/**", "**/broker.py", "**/worker.py"]
+---
+# Правила работы с TaskIQ
+
+## Обзор архитектуры
+
+TaskIQ - единая система очередей задач для всей платформы. Использует PostgreSQL как брокер (Shared DB).
+
+## Структура
+
+```
+core/tasks/
+├── __init__.py          # Экспорт get_broker, broker
+├── broker.py            # AsyncpgBroker (Shared DB)
+└── worker.py            # TaskiqWorker entry point
+
+apps/agents/tasks/
+├── __init__.py          # Экспорт задач
+├── agent_tasks.py       # process_agent_task
+└── message_tasks.py     # send_message_task
+
+apps/frontend/tasks/
+├── __init__.py          # Экспорт задач
+└── notification_tasks.py # send_notification_task
+```
+
+## Брокер
+
+Брокер живет в `core/tasks/broker.py` и использует Shared DB:
+
+```python
+from core.tasks import broker, get_broker
+
+# Получить брокер
+broker = get_broker()
+```
+
+**КРИТИЧНО**: Брокер использует `settings.database.shared_url` - общую БД для всех сервисов.
+
+## Создание задачи
+
+<good_example>
+from core.tasks import broker
+
+@broker.task(retry_on_error=True, max_retries=3)
+async def my_task(param1: str, param2: int) -> str:
+    """
+    Описание задачи.
+    
+    Args:
+        param1: Описание параметра
+        param2: Описание параметра
+        
+    Returns:
+        Результат выполнения
+    """
+    # Логика задачи
+    return "result"
+</good_example>
+
+<bad_example>
+# НЕ создавай свой брокер
+from taskiq_pg import AsyncpgBroker
+my_broker = AsyncpgBroker(dsn="...")  # НЕТ!
+
+# НЕ используй InMemoryBroker в продакшене
+from taskiq import InMemoryBroker
+broker = InMemoryBroker()  # НЕТ!
+</bad_example>
+
+## Вызов задачи
+
+### Асинхронный вызов (fire-and-forget)
+
+```python
+task = await my_task.kiq(param1="value", param2=42)
+# task.task_id - ID задачи
+```
+
+### Синхронный вызов с ожиданием результата
+
+```python
+task = await my_task.kiq(param1="value", param2=42)
+result = await task.wait_result(timeout=30)
+
+if result.is_err:
+    raise result.error
+    
+return result.return_value
+```
+
+## Основные задачи
+
+### process_agent_task
+
+Обработка сообщения агентом:
+
+```python
+from apps.agents.tasks.agent_tasks import process_agent_task
+
+task = await process_agent_task.kiq(
+    flow_id="flow_123",
+    session_id="session_456",
+    message="Привет",
+    platform="web",
+    user_id="user_789",
+    company_id="company_abc",
+    metadata={},
+    user_data={"name": "User"},
+    company_data={"name": "Company"},
+)
+```
+
+### send_message_task
+
+Отправка сообщения через интерфейс:
+
+```python
+from apps.agents.tasks.message_tasks import send_message_task
+
+await send_message_task.kiq(
+    platform="telegram",
+    session_id="session_456",
+    flow_id="flow_123",
+    content="Ответ агента",
+    metadata={},
+    user_id="user_789",
+)
+```
+
+### send_notification_task
+
+Отправка уведомления во фронтенд:
+
+```python
+from apps.frontend.tasks.notification_tasks import send_notification_task
+
+await send_notification_task.kiq(
+    session_id="session_456",
+    notification_data={"type": "agent_response", "content": "..."},
+    notification_key="chat_message",
+)
+```
+
+## Интеграция с интерфейсами
+
+### BaseInterface.create_task
+
+Метод `create_task` в `BaseInterface` создает TaskIQ задачу:
+
+```python
+# Асинхронный вызов (возвращает task_id)
+task_id = await interface.create_task(message, flow_id)
+
+# Синхронный вызов с ожиданием (возвращает результат)
+result = await interface.create_task(message, flow_id, wait_timeout=30)
+```
+
+### Отправка результатов
+
+После выполнения `process_agent_task` результат отправляется через `send_message_task`:
+
+```python
+# В agent_tasks.py после выполнения агента
+await send_message_task.kiq(
+    platform=platform,
+    session_id=session_id,
+    flow_id=flow_id,
+    content=response_text,
+    metadata=metadata,
+    user_id=user_id,
+)
+```
+
+## Запуск воркера
+
+### Локально
+
+```bash
+make taskiq           # Обычный режим
+make taskiq-reload    # С hot reload
+```
+
+### Docker
+
+```bash
+make worker-up        # Запустить контейнер
+make worker-logs      # Логи
+make worker-restart   # Перезапуск
+```
+
+### Конфигурация Docker
+
+```yaml
+# docker-compose.yml
+taskiq-worker:
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: taskiq_worker
+  command: python run_taskiq_worker.py
+  depends_on:
+    postgres:
+      condition: service_healthy
+```
+
+## Retry и обработка ошибок
+
+```python
+@broker.task(
+    retry_on_error=True,   # Повторять при ошибке
+    max_retries=3,         # Максимум попыток
+)
+async def reliable_task(data: str) -> str:
+    # При ошибке задача будет повторена до 3 раз
+    return await process(data)
+```
+
+## Тестирование
+
+### Инициализация брокера в тестах
+
+```python
+# tests/conftest.py
+@pytest.fixture(scope="session")
+async def taskiq_broker(event_loop):
+    """Инициализация TaskIQ брокера для тестов"""
+    from core.tasks import broker
+    
+    await broker.startup()
+    yield broker
+    await broker.shutdown()
+```
+
+### Использование в тестах
+
+```python
+@pytest.mark.asyncio
+async def test_agent_task(taskiq_broker, test_context):
+    from apps.agents.tasks.agent_tasks import process_agent_task
+    
+    task = await process_agent_task.kiq(
+        flow_id="test_flow",
+        session_id="test_session",
+        # ...
+    )
+    
+    result = await task.wait_result(timeout=30)
+    assert not result.is_err
+```
+
+## КРИТИЧНЫЕ ПРАВИЛА
+
+1. **ВСЕГДА** используй `broker` из `core.tasks`
+2. **НИКОГДА** не создавай свой брокер
+3. **ВСЕГДА** используй `.kiq()` для создания задач
+4. **НИКОГДА** не используй InMemoryBroker в продакшене
+5. **ВСЕГДА** инициализируй брокер в тестах через фикстуру
+6. **ВСЕГДА** используй `retry_on_error=True` для критичных задач
+
+## Миграция с TaskProcessor
+
+Старый `TaskProcessor` удален. Используй TaskIQ:
+
+<bad_example>
+# УДАЛЕНО - не существует
+from apps.agents.worker import TaskProcessor
+
+processor = TaskProcessor()
+await processor.process_task(task)
+</bad_example>
+
+<good_example>
+from apps.agents.tasks.agent_tasks import process_agent_task
+
+# Создание задачи через интерфейс
+task_id = await interface.create_task(message, flow_id)
+
+# Или напрямую через TaskIQ
+task = await process_agent_task.kiq(...)
+</good_example>

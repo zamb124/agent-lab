@@ -2,6 +2,7 @@
 Единая конфигурация фикстур для pytest.
 Все тесты используют фикстуры отсюда для унификации.
 """
+import asyncio
 import pytest
 import pytest_asyncio
 import os
@@ -49,6 +50,25 @@ _migration_completed = False
 
 # get_llm() автоматически определяет тестовое окружение через PYTEST_CURRENT_TEST
 # (устанавливается pytest автоматически)
+
+
+@pytest.fixture(scope="session")
+def event_loop_policy():
+    """Возвращает политику event loop для сессии"""
+    return asyncio.DefaultEventLoopPolicy()
+
+
+@pytest.fixture(scope="session")
+def event_loop(event_loop_policy):
+    """Общий event loop для всей сессии тестов.
+    
+    Необходимо для корректной работы PostgreSQL broker в TaskIQ -
+    все соединения asyncpg должны быть в одном event loop.
+    """
+    loop = event_loop_policy.new_event_loop()
+    asyncio.set_event_loop(loop)
+    yield loop
+    loop.close()
 
 
 
@@ -336,12 +356,13 @@ async def test_company() -> Company:
 
 @pytest_asyncio.fixture
 async def test_user(test_company: Company) -> User:
-    """Тестовый пользователь"""
+    """Тестовый пользователь с уникальным ID для изоляции тестов"""
+    unique_suffix = uuid.uuid4().hex[:8]
     return User(
-        user_id="test_user",
+        user_id=f"test_user_{unique_suffix}",
         provider="yandex",
-        provider_user_id="test_123",
-        email="test@example.com",
+        provider_user_id=f"test_{unique_suffix}",
+        email=f"test_{unique_suffix}@example.com",
         name="Test User",
         status="active",
         groups=["user"],
@@ -355,10 +376,12 @@ async def test_context(test_user: User, test_company: Company, migrated_db):
     """Тестовый контекст для тестов (используется явно где нужен полный контекст)
 
     Добавляй в параметры теста если нужен контекст с пользователем и компанией.
+    Каждый тест получает уникальный session_id для изоляции.
     """
+    unique_session_id = f"test_session_{uuid.uuid4().hex[:8]}"
     context = Context(
         user=test_user,
-        session_id="test_session",
+        session_id=unique_session_id,
         platform="api",
         active_company=test_company,
         user_companies=[test_company],
@@ -498,7 +521,128 @@ async def agents_app(migrated_db):
 async def frontend_app(migrated_db):
     """FastAPI приложение для frontend сервиса (порт 8002)"""
     from apps.frontend.main import create_app
-    return create_app()
+    from apps.frontend.core.plugin_loader import discover_and_load_plugins
+    
+    app = create_app()
+    
+    # Загружаем плагины вручную т.к. lifespan не выполняется при ASGITransport
+    await discover_and_load_plugins(app)
+    
+    return app
+
+
+@pytest_asyncio.fixture
+async def frontend_client(frontend_app, test_context, test_user, test_company):
+    """
+    HTTP клиент для тестирования frontend API с авторизацией.
+    
+    Создает JWT токен и передает его в cookies для авторизации.
+    Использует реальное FastAPI приложение через ASGITransport.
+    Host заголовок с поддоменом для определения компании.
+    """
+    import httpx
+    from httpx import ASGITransport
+    from core.utils.tokens import get_token_service
+    from core.db.repositories.subdomain_repository import SubdomainMapping
+    
+    container = frontend_app.state.container
+    
+    # Сохраняем компанию и subdomain
+    await container.company_repository.set(test_company)
+    
+    subdomain_mapping = SubdomainMapping(
+        subdomain=test_company.subdomain,
+        company_id=test_company.company_id
+    )
+    await container.subdomain_repository.set(subdomain_mapping)
+    
+    # Сохраняем пользователя
+    await container.user_repository.set(test_user)
+    
+    # Создаем JWT токен
+    unique_session_id = f"test_session_{uuid.uuid4().hex[:8]}"
+    token_service = get_token_service()
+    token = token_service.create_token(
+        user_id=test_user.user_id,
+        company_id=test_company.company_id,
+        session_id=unique_session_id
+    )
+    
+    subdomain = test_company.subdomain
+    
+    # Создаем HTTP клиент
+    transport = ASGITransport(app=frontend_app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=f"http://{subdomain}.localhost:8002",
+        cookies={"auth_token": token},
+        headers={"Host": f"{subdomain}.localhost:8002"}
+    ) as client:
+        # Добавляем ссылки на данные для использования в тестах
+        client.test_user = test_user
+        client.test_company = test_company
+        client.test_context = test_context
+        yield client
+    
+    # Очистка
+    try:
+        await container.user_repository.delete(test_user.user_id)
+        await container.subdomain_repository.delete(test_company.subdomain)
+        await container.company_repository.delete(test_company.company_id)
+    except Exception:
+        pass
+
+
+# Фикстуры репозиториев для frontend тестов с установленным контекстом
+# Используются когда нужна изоляция данных по компании frontend_client
+
+@pytest_asyncio.fixture
+async def frontend_agent_repo(frontend_app, frontend_client):
+    """AgentRepository с контекстом frontend_client"""
+    set_context(frontend_client.test_context)
+    return frontend_app.state.agents_container.agent_repository
+
+
+@pytest_asyncio.fixture
+async def frontend_flow_repo(frontend_app, frontend_client):
+    """FlowRepository с контекстом frontend_client"""
+    set_context(frontend_client.test_context)
+    return frontend_app.state.agents_container.flow_repository
+
+
+@pytest_asyncio.fixture
+async def frontend_tool_repo(frontend_app, frontend_client):
+    """ToolRepository с контекстом frontend_client"""
+    set_context(frontend_client.test_context)
+    return frontend_app.state.agents_container.tool_repository
+
+
+@pytest_asyncio.fixture
+async def frontend_session_repo(frontend_app, frontend_client):
+    """SessionRepository с контекстом frontend_client"""
+    set_context(frontend_client.test_context)
+    return frontend_app.state.agents_container.session_repository
+
+
+@pytest_asyncio.fixture
+async def frontend_mcp_repo(frontend_app, frontend_client):
+    """MCPServerRepository с контекстом frontend_client"""
+    set_context(frontend_client.test_context)
+    return frontend_app.state.agents_container.mcp_server_repository
+
+
+@pytest_asyncio.fixture
+async def frontend_variable_repo(frontend_app, frontend_client):
+    """VariableRepository с контекстом frontend_client"""
+    set_context(frontend_client.test_context)
+    return frontend_app.state.container.variable_repository
+
+
+@pytest_asyncio.fixture
+async def frontend_canvas_service(frontend_app, frontend_client):
+    """CanvasService с контекстом frontend_client"""
+    set_context(frontend_client.test_context)
+    return frontend_app.state.container.canvas_service
 
 
 class MockResponse:
@@ -705,6 +849,20 @@ from apps.agents.services.tool_decorator import tool
 async def test_helpers():
     """Вспомогательные функции для тестов"""
     return TestHelpers
+
+
+@pytest_asyncio.fixture(scope="session")
+async def taskiq_broker(migrated_db):
+    """Инициализирует PostgreSQL TaskIQ broker для всей сессии тестов"""
+    from core.tasks.broker import broker
+    
+    await broker.startup()
+    logger.info("✅ TaskIQ PostgreSQL broker запущен для сессии тестов")
+    
+    yield broker
+    
+    await broker.shutdown()
+    logger.info("✅ TaskIQ PostgreSQL broker остановлен")
 
 
 @pytest_asyncio.fixture

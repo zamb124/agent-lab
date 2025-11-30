@@ -30,7 +30,7 @@ async def variables_page(request: Request):
 @router.get("/list", response_class=HTMLResponse)
 async def variables_list(request: Request):
     """Список переменных (HTMX endpoint)"""
-    variables_service = get_variables_service()
+    variables_service = await get_variables_service()
     
     # Получаем все переменные компании
     all_vars = await variables_service.list_vars()

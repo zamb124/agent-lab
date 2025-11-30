@@ -55,6 +55,8 @@ tests/
 - `test_user` - тестовый пользователь
 - `test_context` - контекст с авторизацией
 - `unique_id` - генератор уникальных ID для изоляции
+- `taskiq_broker` - инициализированный TaskIQ брокер (session scope)
+- `event_loop` - event loop для async тестов (session scope)
 
 <good_example>
 @pytest.mark.asyncio
@@ -218,6 +220,50 @@ mock_provider.create_payment = AsyncMock(return_value=PaymentResponse(...))
 
 service = PaymentService(provider=mock_provider)
 </good_example>
+
+## Тестирование TaskIQ задач
+
+Для тестов с TaskIQ используй фикстуру `taskiq_broker`:
+
+<good_example>
+@pytest.mark.asyncio
+async def test_agent_task(taskiq_broker, test_context):
+    from apps.agents.tasks.agent_tasks import process_agent_task
+    
+    task = await process_agent_task.kiq(
+        flow_id="test_flow",
+        session_id="test_session",
+        message="test",
+        platform="test",
+        user_id="test_user",
+        company_id="test_company",
+    )
+    
+    result = await task.wait_result(timeout=30)
+    assert not result.is_err
+</good_example>
+
+<bad_example>
+# НЕ используй InMemoryBroker в тестах
+from taskiq import InMemoryBroker
+broker = InMemoryBroker()  # НЕТ!
+</bad_example>
+
+## Event Loop
+
+Используй session-scoped event loop через фикстуру `event_loop`:
+
+<good_example>
+# pytest.ini
+asyncio_default_fixture_loop_scope = session
+asyncio_default_test_loop_scope = session
+</good_example>
+
+<bad_example>
+# НЕ манипулируй event loop вручную
+asyncio.get_event_loop().run_until_complete(...)  # НЕТ!
+asyncio.run(...)  # НЕТ в тестах!
+</bad_example>
 
 ## Не генерируй тесты без запроса
 

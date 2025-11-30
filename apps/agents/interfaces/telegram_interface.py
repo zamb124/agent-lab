@@ -36,146 +36,140 @@ class TelegramInterface(BaseInterface):
     async def handle_message(
         self, raw_data: Dict[str, Any], flow_id: str
     ) -> Optional[Message]:
-        """Преобразует Telegram Update в Message"""
-        try:
-            if "message" not in raw_data:
-                return None
+        """Преобразует Telegram Update в Message
+        
+        Возвращает None только для валидных случаев:
+        - Нет message в update (callback_query и т.д.)
+        - Нет текста и файлов
+        - Обработана команда
+        - Доступ запрещен (после отправки сообщения)
+        - Медиа-группа (обрабатывается отдельно)
+        """
+        # Callback query, edited message и т.д. - не обрабатываем
+        if "message" not in raw_data:
+            return None
 
-            tg_message = raw_data["message"]
-            user_id = str(tg_message["from"]["id"])
-            chat_id = str(tg_message["chat"]["id"])
-            username = tg_message["from"].get("username")
-            text = tg_message.get("text", "") or tg_message.get("caption", "")
-            
-            # Проверяем доступ пользователя
-            is_allowed, error_message = self.check_user_access(user_id, username)
-            if not is_allowed:
-                logger.warning(f"🚫 Доступ запрещен для пользователя {username or user_id} в flow {flow_id}")
-                access_denied_message = Message(
+        tg_message = raw_data["message"]
+        
+        # Валидация обязательных полей
+        if "from" not in tg_message:
+            raise ValueError(f"Telegram update без поля 'from': {raw_data.get('update_id')}")
+        if "chat" not in tg_message:
+            raise ValueError(f"Telegram update без поля 'chat': {raw_data.get('update_id')}")
+        
+        user_id = str(tg_message["from"]["id"])
+        chat_id = str(tg_message["chat"]["id"])
+        username = tg_message["from"].get("username")
+        text = tg_message.get("text", "") or tg_message.get("caption", "")
+        
+        # Проверяем доступ пользователя
+        is_allowed, error_message = self.check_user_access(user_id, username)
+        if not is_allowed:
+            logger.warning(f"Доступ запрещен для пользователя {username or user_id} в flow {flow_id}")
+            access_denied_message = Message(
+                user_id=user_id,
+                session_id="access_denied",
+                content=error_message,
+                flow_id=flow_id,
+                platform="telegram",
+                metadata={"chat_id": chat_id},
+            )
+            await self.send_message(access_denied_message)
+            return None
+
+        # Обрабатываем файлы если есть
+        files_data = await self._extract_files_from_message(tg_message)
+
+        # Медиа-группа обрабатывается отдельно
+        media_group_id = tg_message.get("media_group_id")
+        logger.debug(f"media_group_id={media_group_id}, files_count={len(files_data) if files_data else 0}")
+        
+        if media_group_id and files_data:
+            logger.info(f"Обнаружена медиа-группа {media_group_id}, перенаправляем в группировку")
+            return await self._handle_media_group(
+                media_group_id, tg_message, user_id, chat_id, text, files_data, flow_id
+            )
+
+        # Пустое сообщение - игнорируем
+        if not text and not files_data:
+            return None
+
+        # Команды обрабатываются напрямую
+        is_command, command_response = await self.process_command(
+            text, chat_id, flow_id
+        )
+        if is_command:
+            if command_response:
+                command_message = Message(
                     user_id=user_id,
-                    session_id="access_denied",
-                    content=error_message,
+                    session_id="command_response",
+                    content=command_response,
                     flow_id=flow_id,
                     platform="telegram",
                     metadata={"chat_id": chat_id},
                 )
-                await self.send_message(access_denied_message)
-                return None
-
-            # Обрабатываем файлы если есть
-            files_data = await self._extract_files_from_message(tg_message)
-
-            # Проверяем на media_group_id для группировки фотографий
-            media_group_id = tg_message.get("media_group_id")
-            logger.info(f"🔍 DEBUG: media_group_id={media_group_id}, files_data={len(files_data) if files_data else 0}")
-            
-            if media_group_id and files_data:
-                # Это часть группы медиафайлов - накапливаем
-                logger.info(f"🎯 Обнаружена медиа-группа {media_group_id}, перенаправляем в группировку")
-                return await self._handle_media_group(
-                    media_group_id, tg_message, user_id, chat_id, text, files_data, flow_id
-                )
-
-            # Если нет текста и нет файлов - пропускаем
-            if not text and not files_data:
-                return None
-
-            # Проверяем команды
-            is_command, command_response = await self.process_command(
-                text, chat_id, flow_id
-            )
-            if is_command:
-                # Отправляем ответ на команду напрямую
-                if command_response:
-                    command_message = Message(
-                        user_id=user_id,
-                        session_id="command_response",  # Специальная сессия для команд
-                        content=command_response,
-                        flow_id=flow_id,  # ИСПРАВЛЕНИЕ: добавляем flow_id
-                        platform="telegram",
-                        metadata={"chat_id": chat_id},
-                    )
-                    await self.send_message(command_message)
-                return None  # Не создаем задачу для команд
-
-            # Для обычных сообщений получаем или создаем сессию
-            # Используем weather_flow как дефолтный flow (можно сделать настраиваемым)
-            session_id = await self.get_or_create_session(
-                user_id=chat_id,
-                flow_id=flow_id,
-                metadata={"chat_id": chat_id, "bot_username": self.username},
-            )
-
-            # Обрабатываем файлы и добавляем их в сообщение
-            processed_files = []
-            if files_data:
-                # Разделяем аудиофайлы и обычные файлы
-                audio_files = [f for f in files_data if f["type"] in ["audio", "voice"]]
-                regular_files = [f for f in files_data if f["type"] not in ["audio", "voice"]]
-                
-                # Обрабатываем обычные файлы
-                file_messages = []
-                if regular_files:
-                    file_messages = await self.process_files(regular_files, user_id)
-                
-                # Обрабатываем аудиофайлы
-                audio_messages = []
-                if audio_files:
-                    audio_messages = await self.process_audio_files(audio_files, user_id)
-                
-                # Объединяем все сообщения
-                all_messages = file_messages + audio_messages
-                processed_files = all_messages
-
-                # Если есть файлы, добавляем информацию к тексту
-                if all_messages:
-                    files_text = "\n\n".join(all_messages)
-                    if text:
-                        text = f"{text}\n\n{files_text}"
-                    else:
-                        text = files_text
-
-            return Message(
-                user_id=user_id,
-                session_id=session_id,
-                flow_id=flow_id,
-                content=text,
-                platform="telegram",
-                metadata={
-                    "chat_id": chat_id,
-                    "message_id": tg_message["message_id"],
-                    "bot_username": self.username,
-                },
-                files=processed_files,
-            )
-
-        except Exception as e:
-            logger.error(f"Ошибка парсинга Telegram update: {e}")
+                await self.send_message(command_message)
             return None
+
+        # Получаем или создаем сессию
+        session_id = await self.get_or_create_session(
+            user_id=chat_id,
+            flow_id=flow_id,
+            metadata={"chat_id": chat_id, "bot_username": self.username},
+        )
+
+        # Обрабатываем файлы
+        processed_files = []
+        if files_data:
+            audio_files = [f for f in files_data if f["type"] in ["audio", "voice"]]
+            regular_files = [f for f in files_data if f["type"] not in ["audio", "voice"]]
+            
+            file_messages = []
+            if regular_files:
+                file_messages = await self.process_files(regular_files, user_id)
+            
+            audio_messages = []
+            if audio_files:
+                audio_messages = await self.process_audio_files(audio_files, user_id)
+            
+            all_messages = file_messages + audio_messages
+            processed_files = all_messages
+
+            if all_messages:
+                files_text = "\n\n".join(all_messages)
+                text = f"{text}\n\n{files_text}" if text else files_text
+
+        return Message(
+            user_id=user_id,
+            session_id=session_id,
+            flow_id=flow_id,
+            content=text,
+            platform="telegram",
+            metadata={
+                "chat_id": chat_id,
+                "message_id": tg_message["message_id"],
+                "bot_username": self.username,
+            },
+            files=processed_files,
+        )
 
     async def send_message(self, message: Message):
         """Отправляет сообщение в Telegram с поддержкой аудиофайлов"""
-        try:
-            chat_id = message.metadata.get("chat_id")
-            if not chat_id:
-                return
+        chat_id = message.metadata.get("chat_id")
+        if not chat_id:
+            raise ValueError(
+            f"Не указан chat_id в metadata сообщения. "
+            f"session_id={message.session_id}, user_id={message.user_id}"
+        )
 
-            # Извлекаем аудиофайлы из сообщения
-            logger.info(f"🔍 Получено сообщение для отправки: {repr(message.content)}")
-            clean_text, audio_files = self.extract_outgoing_audio_from_message(message.content)
-            logger.info(f"🔍 Найдено аудиофайлов: {len(audio_files)}")
-            logger.info(f"🔍 Чистый текст: {repr(clean_text)}")
+        clean_text, audio_files = self.extract_outgoing_audio_from_message(message.content)
+        logger.debug(f"Отправка в Telegram chat_id={chat_id}: text={len(clean_text)}chars, audio={len(audio_files)}")
 
-            # Отправляем текстовое сообщение если есть
-            if clean_text.strip():
-                await self._send_text_message(chat_id, clean_text)
+        if clean_text.strip():
+            await self._send_text_message(chat_id, clean_text)
 
-            # Отправляем аудиофайлы как voice messages
-            for audio_info in audio_files:
-                await self._send_audio_message(chat_id, audio_info)
-
-        except Exception as e:
-            logger.error(f"Ошибка отправки в Telegram: {e}")
+        for audio_info in audio_files:
+            await self._send_audio_message(chat_id, audio_info)
 
     async def _send_text_message(self, chat_id: str, text: str):
         """Отправляет текстовое сообщение с автоматическим разбиением длинных сообщений"""

@@ -53,23 +53,23 @@ services:
     restart: unless-stopped
     command: python run_frontend_prod.py
 
-  # Task Worker (для agents)
-  worker:
+  # TaskIQ Worker (единая очередь задач)
+  taskiq-worker:
     build:
       context: .
       dockerfile: Dockerfile
       target: worker
     volumes:
-      - worker_logs:/app/logs
+      - taskiq_logs:/app/logs
     depends_on:
       postgres:
         condition: service_healthy
         required: false
     restart: unless-stopped
-    command: python run_worker.py
+    command: taskiq worker core.tasks.worker:broker --workers 4
 
 volumes:
   postgres_data:
   agents_logs:
   frontend_logs:
-  worker_logs:
+  taskiq_logs:

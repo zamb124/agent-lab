@@ -1,19 +1,30 @@
 """
-WebSocket для чата с агентами
+WebSocket для чата с агентами.
+
+ACK протокол:
+- Каждое сообщение имеет message_id
+- Клиент отправляет ACK после получения
+- Уведомление удаляется из БД только после ACK
 """
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
 import logging
 import asyncio
+import uuid
+from typing import Dict, Set
 from core.context import get_context, set_context, clear_context
 from core.models.context_models import Context
 from apps.agents.container import get_agents_container
+from apps.frontend.container import get_frontend_container
 from apps.frontend.core.websocket_manager import websocket_manager
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Трекинг неподтвержденных сообщений: {session_id: {message_id: notification_key}}
+_pending_acks: Dict[str, Dict[str, str]] = {}
 
 
 async def _poll_notifications(session_id: str, context: Context):
@@ -62,31 +73,35 @@ async def _poll_notifications(session_id: str, context: Context):
                                     notification = json.loads(notification_data)
                                     notification_type = notification.get('type', 'unknown')
                                     notification_session = notification.get('session_id', 'unknown')
-                                    logger.info(
-                                        f"📨 Отправляем уведомление типа {notification_type}: "
-                                        f"ws_session={session_id}, notification_session={notification_session}, key={key}"
-                                    )
 
-                                    # Проверяем, что WebSocket соединение все еще активно
+                                    # Проверяем соединение
                                     if session_id not in websocket_manager.connections["chat"]:
-                                        logger.warning(f"⚠️ WebSocket сессия {session_id} уже отключена, пропускаем уведомление")
+                                        logger.warning(f"WebSocket сессия {session_id} отключена, пропускаем уведомление")
                                         continue
+                                    
+                                    # Добавляем message_id для ACK протокола
+                                    message_id = f"msg_{uuid.uuid4().hex[:12]}"
+                                    notification["message_id"] = message_id
+                                    
+                                    # Регистрируем ожидание ACK
+                                    if session_id not in _pending_acks:
+                                        _pending_acks[session_id] = {}
+                                    _pending_acks[session_id][message_id] = key
                                     
                                     await websocket_manager.send_to_session(session_id, notification, "chat")
                                     logger.info(
-                                        f"✅ Уведомление отправлено в WebSocket: "
-                                        f"ws_session={session_id}, notification_session={notification_session}, "
-                                        f"type={notification_type}, content={notification.get('data', {}).get('content', '')[:50]}"
+                                        f"Уведомление отправлено: ws_session={session_id}, "
+                                        f"type={notification_type}, message_id={message_id}"
                                     )
                                     processed_notifications.add(key)
 
+                                    # Удаляем из БД сразу (ACK для логирования, не блокирует)
                                     await _storage.delete(key)
-                                    logger.debug(f"🗑️ Уведомление удалено: {key}")
                                 except json.JSONDecodeError as e:
-                                    logger.error(f"❌ Ошибка парсинга уведомления {key}: {e}")
+                                    logger.error(f"Ошибка парсинга уведомления {key}: {e}")
                                     await _storage.delete(key)
                                 except Exception as e:
-                                    logger.error(f"❌ Ошибка обработки уведомления {key}: {e}", exc_info=True)
+                                    logger.error(f"Ошибка обработки уведомления {key}: {e}", exc_info=True)
 
                 if len(processed_notifications) > 300:
                     logger.info(f"🧹 Очистка кэша обработанных уведомлений: {len(processed_notifications)} -> 0")
@@ -252,11 +267,12 @@ async def websocket_chat(websocket: WebSocket):
 
     except WebSocketDisconnect:
         websocket_manager.disconnect(chat_session_id, "chat")
+        _pending_acks.pop(chat_session_id, None)
     except Exception as e:
         logger.error(f"WebSocket ошибка для чата {chat_session_id}: {e}")
         websocket_manager.disconnect(chat_session_id, "chat")
+        _pending_acks.pop(chat_session_id, None)
     finally:
-        # Очищаем контекст после отключения
         clear_context()
 
 
@@ -265,8 +281,6 @@ async def handle_chat_message(message: dict, session_id: str):
     message_type = message.get("type")
 
     if message_type == "USER_MESSAGE":
-        # Обработка сообщения пользователя
-        # Используем session_id из сообщения для правильного polling
         message_session_id = message["data"].get("session_id", session_id)
         await process_user_message(
             message["data"],
@@ -274,14 +288,34 @@ async def handle_chat_message(message: dict, session_id: str):
             message_session_id=message_session_id,
         )
     elif message_type == "INTERRUPT_RESPONSE":
-        # Ответ на запрос ввода от агента
         await process_interrupt_response(message["data"], session_id)
+    elif message_type == "ACK":
+        # Подтверждение получения сообщения от клиента
+        await _handle_ack(message.get("message_id"), session_id)
     elif message_type == "PING":
-        # Ping/pong для поддержания соединения
-        logger.debug(f"📡 Получен PING от {session_id}, отправляем PONG")
         pong_message = {"type": "PONG"}
         await websocket_manager.send_to_session(session_id, pong_message, "chat")
-        logger.debug(f"✅ PONG отправлен в {session_id}")
+        logger.debug(f"PONG отправлен в {session_id}")
+
+
+async def _handle_ack(message_id: str, session_id: str):
+    """Обработка ACK от клиента.
+    
+    Клиент отправляет ACK после успешного получения сообщения.
+    Используется для логирования и трекинга доставки.
+    """
+    if not message_id:
+        return
+    
+    # Удаляем из pending
+    if session_id in _pending_acks:
+        notification_key = _pending_acks[session_id].pop(message_id, None)
+        if notification_key:
+            logger.debug(f"ACK получен: message_id={message_id}, session_id={session_id}")
+        
+        # Очищаем пустые записи
+        if not _pending_acks[session_id]:
+            del _pending_acks[session_id]
 
 
 async def process_user_message(

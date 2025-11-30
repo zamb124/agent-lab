@@ -40,6 +40,29 @@ class WebInterface(BaseInterface):
         """Устанавливает WebSocket менеджер для отправки сообщений"""
         self.websocket_manager = websocket_manager
 
+    def _build_web_session_id(
+        self, 
+        provided_session_id: Optional[str], 
+        user_id: str, 
+        flow_id: str
+    ) -> str:
+        """Формирует session_id для web платформы.
+        
+        Логика:
+        1. Если provided_session_id в формате "web:{user}:{flow}:{uuid}" 
+           и user совпадает - используем его
+        2. Иначе создаем новый session_id
+        """
+        # Проверяем валидный web session_id от того же пользователя
+        if provided_session_id and provided_session_id.startswith("web:"):
+            parts = provided_session_id.split(":")
+            # Формат: web:user_id:flow_id:uuid (минимум 4 части)
+            if len(parts) >= 4 and parts[1] == user_id:
+                return provided_session_id
+        
+        # Создаем новый session_id
+        return f"web:{user_id}:{flow_id}:{uuid.uuid4().hex[:8]}"
+
     @trace_span(
         name="web_interface.handle_message",
         span_type=SpanType.OTHER,
@@ -75,10 +98,9 @@ class WebInterface(BaseInterface):
         # Проверяем доступ пользователя
         is_allowed, error_message = self.check_user_access(real_user_id, user_email)
         if not is_allowed:
-            logger.warning(f"🚫 Доступ запрещен для пользователя {real_user_id} ({user_email}) в flow {flow_id}")
+            logger.warning(f"Доступ запрещен для пользователя {real_user_id} ({user_email}) в flow {flow_id}")
 
-            # Формируем временный session_id для ошибки
-            temp_session_id = f"web:{real_user_id}:{flow_id}:{uuid.uuid4().hex[:8]}"
+            temp_session_id = self._build_web_session_id(None, real_user_id, flow_id)
 
             access_denied_message = Message(
                 user_id=real_user_id,
@@ -94,25 +116,8 @@ class WebInterface(BaseInterface):
             await self.send_message(access_denied_message)
             return None
 
-        # Проверяем и валидируем session_id
-        if js_session_id and js_session_id.startswith('web:'):
-            parts = js_session_id.split(':')
-            if len(parts) >= 2:
-                session_user = parts[1]
-                if session_user != real_user_id:
-                    logger.warning(f"⚠️ Session от другого пользователя: {session_user} != {real_user_id}, создаем новый")
-                    session_id = f"web:{real_user_id}:{flow_id}:{uuid.uuid4().hex[:8]}"
-                else:
-                    session_id = js_session_id
-                    logger.debug(f"✅ Используем валидный session_id: {session_id}")
-            else:
-                session_id = f"web:{real_user_id}:{flow_id}:{uuid.uuid4().hex[:8]}"
-        elif js_session_id and (js_session_id.startswith('telegram:') or js_session_id.startswith('whatsapp:') or js_session_id.startswith('api:')):
-            logger.warning(f"⚠️ Получен session_id от другой платформы: {js_session_id[:50]}, создаем новый для web")
-            session_id = f"web:{real_user_id}:{flow_id}:{uuid.uuid4().hex[:8]}"
-        else:
-            session_id = f"web:{real_user_id}:{flow_id}:{js_session_id or uuid.uuid4().hex[:8]}"
-            logger.debug(f"🔧 Сформирован session_id: {session_id}")
+        # Формируем session_id через единую функцию
+        session_id = self._build_web_session_id(js_session_id, real_user_id, flow_id)
 
         # Если нет ни текста, ни файлов - пропускаем
         if not message_text and not files_data:

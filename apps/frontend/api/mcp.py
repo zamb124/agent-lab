@@ -68,7 +68,7 @@ async def create_server(data: MCPServerCreate):
     agents_container = get_agents_container()
     mcp_repo = agents_container.mcp_server_repository
     
-    server_id = generate_slug(data.name, prefix="mcp")
+    server_id = f"mcp_{generate_slug(data.name, add_hash=True)}"
     
     server = MCPServerConfig(
         server_id=server_id,
