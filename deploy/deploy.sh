@@ -34,12 +34,15 @@ cp "$LOCAL_DIR/apps/frontend/conf.json" "$TMP_DIR/frontend_conf.json"
 # Замена URL баз данных
 sed -i.bak "s|postgresql+asyncpg://[^\"]*agents_db|$PROD_AGENTS_DB|g" "$TMP_DIR/conf.json"
 sed -i.bak "s|postgresql+asyncpg://[^\"]*shared_db|$PROD_SHARED_DB|g" "$TMP_DIR/conf.json"
+sed -i.bak "s|postgresql+asyncpg://[^\"]*agent_platform|$PROD_SHARED_DB|g" "$TMP_DIR/conf.json"
 
 sed -i.bak "s|postgresql+asyncpg://[^\"]*agents_db|$PROD_AGENTS_DB|g" "$TMP_DIR/agents_conf.json"
 sed -i.bak "s|postgresql+asyncpg://[^\"]*shared_db|$PROD_SHARED_DB|g" "$TMP_DIR/agents_conf.json"
+sed -i.bak "s|postgresql+asyncpg://[^\"]*agent_platform|$PROD_AGENTS_DB|g" "$TMP_DIR/agents_conf.json"
 
 sed -i.bak "s|postgresql+asyncpg://[^\"]*agents_db|$PROD_AGENTS_DB|g" "$TMP_DIR/frontend_conf.json"
 sed -i.bak "s|postgresql+asyncpg://[^\"]*shared_db|$PROD_SHARED_DB|g" "$TMP_DIR/frontend_conf.json"
+sed -i.bak "s|postgresql+asyncpg://[^\"]*agent_platform|$PROD_SHARED_DB|g" "$TMP_DIR/frontend_conf.json"
 
 # Замена env на production
 sed -i.bak 's|"env": "local"|"env": "production"|g' "$TMP_DIR/conf.json"
