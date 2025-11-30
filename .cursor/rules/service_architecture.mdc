@@ -1,0 +1,282 @@
+# Архитектура сервисов (main.py)
+
+## Фабрика создания сервисов
+
+Все сервисы создаются через единую фабрику `create_service_app` из `core/app/factory.py`.
+
+```python
+from core.app import create_service_app
+
+app = create_service_app(
+    service_name="agents",
+    settings_class=AgentsSettings,
+    get_container=get_agents_container,
+    routers=[...],
+    on_startup=on_startup,
+    ...
+)
+```
+
+## Параметры create_service_app
+
+### Обязательные параметры
+
+| Параметр | Описание |
+|----------|----------|
+| `service_name` | Имя сервиса ("agents", "frontend"). Используется для путей, логов, конфигов |
+| `settings_class` | Класс настроек, наследник `BaseSettings` |
+| `get_container` | Функция получения контейнера зависимостей |
+
+### Роутеры
+
+| Параметр | Описание |
+|----------|----------|
+| `routers` | API роутеры. Получают prefix `/{service}/api/{version}` |
+| `pages_routers` | Page роутеры (HTML/HTMX). БЕЗ дополнительного prefix |
+| `repository_names` | Список репозиториев для автоматических CRUD роутеров |
+
+<good_example>
+# agents/main.py - REST API сервис
+app = create_service_app(
+    service_name="agents",
+    routers=[webhook_router, admin_router],  # → /agents/api/v1/...
+    api_version="v1",
+    include_crud_routers=True,  # Автоматические CRUD
+)
+
+# frontend/main.py - Сайт с HTMX
+app = create_service_app(
+    service_name="frontend",
+    routers=[api_router],           # → /frontend/...  (JSON API)
+    pages_routers=[pages_router],   # → Свой prefix из роутера (HTML)
+    api_version=None,               # Без /api/v1
+    include_crud_routers=False,     # Нет автоматических CRUD
+)
+</good_example>
+
+### Lifecycle хуки
+
+| Параметр | Описание |
+|----------|----------|
+| `on_startup` | Async функция вызываемая при запуске: `async def(app, container, settings)` |
+| `on_shutdown` | Async функция вызываемая при остановке: `async def(app, container)` |
+
+<good_example>
+async def on_startup(app: FastAPI, container: AgentsContainer, settings: AgentsSettings):
+    """Кастомная логика при запуске"""
+    # Инициализация процессоров файлов
+    initialize_default_processors(...)
+    
+    # Запуск миграции агентов
+    await run_migration()
+
+async def on_shutdown(app: FastAPI, container: AgentsContainer):
+    """Очистка ресурсов"""
+    await cleanup_resources()
+</good_example>
+
+### БД и таблицы
+
+| Параметр | Описание |
+|----------|----------|
+| `create_tables_config` | Конфиг создания таблиц: `{"service": [...], "shared": [...]}` |
+
+<good_example>
+create_tables_config={
+    "service": ["storage", "tasks", "variables"],  # service БД
+    "shared": ["users"],                           # shared БД
+}
+</good_example>
+
+### Middleware и CORS
+
+| Параметр | Описание |
+|----------|----------|
+| `cors_origins` | Разрешенные origins для CORS |
+| `extra_middlewares` | Дополнительные middleware: `[(MiddlewareClass, {kwargs}), ...]` |
+| `include_auth_middleware` | Включить AuthMiddleware (default: True) |
+
+<good_example>
+extra_middlewares=[
+    (ProfilingMiddleware, {"slow_threshold_ms": 500}),
+    (HTMXHeaderMiddleware, {}),
+]
+</good_example>
+
+### Статика и документация
+
+| Параметр | Описание |
+|----------|----------|
+| `static_mounts` | Статические директории: `[(path, directory, name), ...]` |
+| `docs_url` | URL для Swagger UI |
+| `redoc_url` | URL для ReDoc |
+| `openapi_url` | URL для OpenAPI схемы |
+
+### Флаги включения компонентов
+
+| Параметр | Default | Описание |
+|----------|---------|----------|
+| `include_auth_middleware` | True | AuthMiddleware для авторизации |
+| `include_crud_routers` | True | Автоматические CRUD эндпоинты |
+| `include_broker` | True | TaskIQ broker для очередей |
+
+<good_example>
+# Frontend не нужны CRUD роутеры и broker
+app = create_service_app(
+    service_name="frontend",
+    include_crud_routers=False,
+    include_broker=False,
+)
+
+# Тесты могут отключать broker для изоляции
+app = create_service_app(
+    include_broker=False,  # Не запускать TaskIQ
+)
+</good_example>
+
+### Дополнительный state
+
+| Параметр | Описание |
+|----------|----------|
+| `extra_state` | Дополнительные атрибуты для `app.state`: `{"key": value}` |
+
+<good_example>
+# Frontend добавляет agents_container для межсервисного взаимодействия
+app = create_service_app(
+    extra_state={
+        "agents_container": get_agents_container(),
+    }
+)
+
+# Доступ в коде
+app.state.agents_container
+</good_example>
+
+## API Prefix
+
+Формирование prefix зависит от `api_version`:
+
+| api_version | Результат |
+|-------------|-----------|
+| `"v1"` | `/{service}/api/v1` (REST API) |
+| `None` | `/{service}` (сайт без /api/) |
+
+<good_example>
+# agents: api_version="v1"
+# routers получают prefix: /agents/api/v1
+# CRUD роутеры: /agents/api/v1/agent, /agents/api/v1/flow
+
+# frontend: api_version=None  
+# routers получают prefix: /frontend
+# pages_routers: без дополнительного prefix
+</good_example>
+
+## Автоматически добавляемое
+
+`create_service_app` автоматически:
+
+1. **Загружает конфигурацию** из `conf.json` и `apps/{service}/conf.json`
+2. **Настраивает логирование** через `setup_logging()`
+3. **Создает контейнер** и сохраняет в `app.state.container`
+4. **Создает таблицы БД** если указан `create_tables_config`
+5. **Запускает TaskIQ broker** если `include_broker=True`
+6. **Добавляет middleware**: CORS, ProxyHeaders, Auth
+7. **Регистрирует CRUD роутеры** из контейнера
+8. **Добавляет health endpoints**: `/health`, `/{service}/health`
+9. **Добавляет root endpoint**: `/` с информацией о сервисе
+
+## Пример agents/main.py
+
+```python
+from core.app import create_service_app
+from apps.agents.config import AgentsSettings
+from apps.agents.container import get_agents_container
+
+async def on_startup(app: FastAPI, container: AgentsContainer, settings: AgentsSettings):
+    initialize_default_processors(...)
+    await run_migration()
+
+def _create_app() -> FastAPI:
+    return create_service_app(
+        service_name="agents",
+        settings_class=AgentsSettings,
+        get_container=get_agents_container,
+        routers=[webhook_router, admin_router],
+        repository_names=["agent_repository", "flow_repository"],
+        on_startup=on_startup,
+        create_tables_config={
+            "service": ["storage", "tasks", "variables"],
+            "shared": ["users"],
+        },
+        cors_origins=["*"],
+        api_version="v1",
+    )
+
+app = _create_app()
+```
+
+## Пример frontend/main.py
+
+```python
+from core.app import create_service_app
+from apps.frontend.config import FrontendSettings
+from apps.frontend.container import get_frontend_container
+
+async def on_startup(app: FastAPI, container: FrontendContainer, settings: FrontendSettings):
+    load_plugins(...)
+
+def _create_app() -> FastAPI:
+    return create_service_app(
+        service_name="frontend",
+        settings_class=FrontendSettings,
+        get_container=get_frontend_container,
+        routers=[api_router, auth_router],          # JSON API
+        pages_routers=[pages_router],                # HTML страницы
+        extra_middlewares=[
+            (HTMXHeaderMiddleware, {}),
+        ],
+        extra_state={
+            "agents_container": get_agents_container(),
+        },
+        on_startup=on_startup,
+        api_version=None,                            # Без /api/v1
+        include_crud_routers=False,
+        include_broker=False,
+    )
+
+app = _create_app()
+```
+
+## Создание нового сервиса
+
+1. Создать директорию `apps/{service_name}/`
+2. Создать `config.py` с классом настроек
+3. Создать `container.py` с контейнером
+4. Создать `conf.json` с конфигурацией (особенно `server.name`)
+5. Создать `main.py` используя `create_service_app`
+
+<good_example>
+# apps/newservice/main.py
+from core.app import create_service_app
+from apps.newservice.config import NewServiceSettings
+from apps.newservice.container import get_newservice_container
+
+def _create_app() -> FastAPI:
+    return create_service_app(
+        service_name="newservice",
+        settings_class=NewServiceSettings,
+        get_container=get_newservice_container,
+        routers=[my_router],
+    )
+
+app = _create_app()
+</good_example>
+
+## Важные напоминания
+
+1. **service_name** должен совпадать с `server.name` в `conf.json`
+2. **pages_routers** должны иметь свой prefix в самом роутере
+3. **on_startup** получает `(app, container, settings)` - используй для инициализации
+4. **extra_state** - для добавления объектов в `app.state`
+5. **include_broker=False** - для сервисов без очередей (frontend)
+6. **include_crud_routers=False** - для сервисов без автоматических CRUD

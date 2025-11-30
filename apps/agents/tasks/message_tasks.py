@@ -11,7 +11,7 @@ from apps.agents.container import get_agents_container
 logger = logging.getLogger(__name__)
 
 
-@broker.task(retry_on_error=True, max_retries=5)
+@broker.task()
 async def send_message_task(
     platform: str,
     flow_id: str,

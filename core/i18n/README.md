@@ -152,7 +152,7 @@ uv run python migrate_translations.py
 
 ```bash
 # Через API (нужны права админа)
-curl -X POST http://localhost:8001/frontend/api/i18n/refresh
+curl -X POST http://localhost:8001/frontend/i18n/refresh
 
 # При запуске приложения (автоматически)
 uv run python run.py
@@ -162,10 +162,10 @@ uv run python run.py
 
 ```bash
 # Через API
-curl http://localhost:8001/frontend/api/i18n/stats
+curl http://localhost:8001/frontend/i18n/stats
 
 # В консоли браузера
-fetch('/frontend/api/i18n/stats').then(r => r.json()).then(console.log)
+fetch('/frontend/i18n/stats').then(r => r.json()).then(console.log)
 ```
 
 ### Проверка полноты переводов

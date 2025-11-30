@@ -78,9 +78,9 @@ class TestStoreInstallBotScenario:
         await page.wait_for_load_state("networkidle")
         await screenshots.capture(name, page)
 
-    async def test_store_page_loads(self, page: Page, server_url: str, scenario_screenshots):
+    async def test_store_page_loads(self, page: Page, e2e_base_url: str, scenario_screenshots):
         """Шаг 1: Проверяем загрузку страницы магазина"""
-        response = await page.goto(f"{server_url}/frontend/store")
+        response = await page.goto(f"{e2e_base_url}/frontend/store")
         await page.wait_for_load_state("domcontentloaded")
         await scenario_screenshots.capture("store_initial", page)
         
@@ -102,9 +102,9 @@ class TestStoreInstallBotScenario:
         container_html = await store_container.inner_html()
         assert len(container_html) > 50, f"HTMX контент не загрузился"
 
-    async def test_open_flow_details(self, page: Page, server_url: str, scenario_screenshots):
+    async def test_open_flow_details(self, page: Page, e2e_base_url: str, scenario_screenshots):
         """Шаг 2: Открываем детали первого flow в магазине"""
-        await page.goto(f"{server_url}/frontend/store")
+        await page.goto(f"{e2e_base_url}/frontend/store")
         await page.wait_for_load_state("domcontentloaded")
         
         # Ждем загрузки карточек
@@ -138,9 +138,9 @@ class TestStoreInstallBotScenario:
         is_installed = await uninstall_btn.count() > 0
         assert await install_btn.count() > 0 or is_installed, "Нет кнопки установки/удаления"
 
-    async def test_install_flow_and_navigate_to_bots(self, page: Page, server_url: str, scenario_screenshots):
+    async def test_install_flow_and_navigate_to_bots(self, page: Page, e2e_base_url: str, scenario_screenshots):
         """Шаг 3-4: Устанавливаем flow (если не установлен) и переходим к ботам"""
-        await page.goto(f"{server_url}/frontend/store")
+        await page.goto(f"{e2e_base_url}/frontend/store")
         await page.wait_for_load_state("domcontentloaded")
         await self._wait_for_htmx_content(page, ".store-card", timeout=15000)
         
@@ -191,7 +191,7 @@ class TestStoreInstallBotScenario:
             pytest.skip("Нет доступных flows")
         
         # Переходим на страницу ботов
-        await page.goto(f"{server_url}/frontend/bots")
+        await page.goto(f"{e2e_base_url}/frontend/bots")
         await page.wait_for_load_state("domcontentloaded")
         await self._wait_for_htmx_content(page, "#bots-list-view .bot-card", timeout=15000)
         await scenario_screenshots.capture("bots_page", page)
@@ -200,9 +200,9 @@ class TestStoreInstallBotScenario:
         bot_cards = page.locator(".bot-card:not(.bot-card-create)")
         assert await bot_cards.count() > 0, "Нет установленных ботов"
 
-    async def test_open_bot_details(self, page: Page, server_url: str, scenario_screenshots):
+    async def test_open_bot_details(self, page: Page, e2e_base_url: str, scenario_screenshots):
         """Шаг 5-6: Открываем детали бота"""
-        await page.goto(f"{server_url}/frontend/bots")
+        await page.goto(f"{e2e_base_url}/frontend/bots")
         await page.wait_for_load_state("domcontentloaded")
         await self._wait_for_htmx_content(page, "#bots-list-view .bot-card", timeout=15000)
         await scenario_screenshots.capture("bots_list", page)
@@ -231,9 +231,9 @@ class TestStoreInstallBotScenario:
         launch_btn = page.locator("button:has-text('Запустить'), button:has-text('Launch')")
         assert await launch_btn.count() > 0 or await page.locator(".ti-message-dots").count() > 0, "Нет кнопки запуска чата"
 
-    async def test_open_chat_and_send_message(self, page: Page, server_url: str, scenario_screenshots):
+    async def test_open_chat_and_send_message(self, page: Page, e2e_base_url: str, scenario_screenshots):
         """Шаг 7-9: Открываем чат и отправляем сообщение"""
-        await page.goto(f"{server_url}/frontend/bots")
+        await page.goto(f"{e2e_base_url}/frontend/bots")
         await page.wait_for_load_state("domcontentloaded")
         await self._wait_for_htmx_content(page, "#bots-list-view .bot-card", timeout=15000)
         
@@ -305,42 +305,42 @@ class TestStoreInstallBotScenario:
                 # Проверяем что есть хотя бы одно сообщение пользователя
                 assert user_count > 0, "Сообщение пользователя не появилось в чате"
 
-    async def test_full_navigation_scenario(self, page: Page, server_url: str, scenario_screenshots):
+    async def test_full_navigation_scenario(self, page: Page, e2e_base_url: str, scenario_screenshots):
         """Полный сценарий навигации: Dashboard -> Store -> Bots -> Variables -> History"""
         # Dashboard
-        await page.goto(f"{server_url}/frontend/dashboard")
+        await page.goto(f"{e2e_base_url}/frontend/dashboard")
         await page.wait_for_load_state("networkidle")
         await scenario_screenshots.capture("nav_dashboard", page)
         assert "/auth" not in page.url
         
         # Store
-        await page.goto(f"{server_url}/frontend/store")
+        await page.goto(f"{e2e_base_url}/frontend/store")
         await page.wait_for_load_state("domcontentloaded")
         await self._wait_for_htmx_content(page, "#store-list-view")
         await scenario_screenshots.capture("nav_store", page)
         
         # Bots
-        await page.goto(f"{server_url}/frontend/bots")
+        await page.goto(f"{e2e_base_url}/frontend/bots")
         await page.wait_for_load_state("domcontentloaded")
         await self._wait_for_htmx_content(page, "#bots-list-view")
         await scenario_screenshots.capture("nav_bots", page)
         
         # Variables
-        await page.goto(f"{server_url}/frontend/variables")
+        await page.goto(f"{e2e_base_url}/frontend/variables")
         await page.wait_for_load_state("networkidle")
         await scenario_screenshots.capture("nav_variables", page)
         
         # History
-        await page.goto(f"{server_url}/frontend/history")
+        await page.goto(f"{e2e_base_url}/frontend/history")
         await page.wait_for_load_state("networkidle")
         await scenario_screenshots.capture("nav_history", page)
         
         # Abilities
-        await page.goto(f"{server_url}/frontend/abilities")
+        await page.goto(f"{e2e_base_url}/frontend/abilities")
         await page.wait_for_load_state("networkidle")
         await scenario_screenshots.capture("nav_abilities", page)
         
         # MCP
-        await page.goto(f"{server_url}/frontend/mcp")
+        await page.goto(f"{e2e_base_url}/frontend/mcp")
         await page.wait_for_load_state("networkidle")
         await scenario_screenshots.capture("nav_mcp", page)

@@ -80,6 +80,7 @@ from apps.frontend.websockets_router import router as frontend_websockets_router
 from apps.frontend.websockets.notifications import router as websocket_notifications_router
 from apps.frontend.api import models as frontend_models
 from apps.frontend.api.mcp import router as mcp_api_router
+from apps.frontend.api.debug import router as debug_router
 from core.api import auth_router
 from apps.agents.api.v1.admin import router as admin_router
 from apps.agents.container import get_agents_container
@@ -98,14 +99,18 @@ def _create_app() -> FastAPI:
         get_container=get_frontend_container,
         routers=[
             frontend_api_router,
-            frontend_pages_router,
             frontend_websockets_router,
-            websocket_notifications_router,
             frontend_models.router,
             mcp_api_router,
-            auth_router,
             admin_router,
         ],
+        pages_routers=[
+            frontend_pages_router,
+            auth_router,
+            websocket_notifications_router,
+            debug_router,  # Debug endpoints для E2E тестов
+        ],
+        api_version=None,  # Frontend не использует версионирование API
         extra_middlewares=[
             (ProfilingMiddleware, {"log_slow_requests": True, "slow_threshold_ms": 500}),
             (HTMXHeaderMiddleware, {}),
@@ -119,7 +124,7 @@ def _create_app() -> FastAPI:
         redoc_url="/api/redoc",
         openapi_url="/api/openapi.json",
         include_crud_routers=False,
-        include_broker=False,
+        include_broker=True,
         title="Frontend Service",
         description="Фронтенд сервис с HTMX и плагинной системой",
     )

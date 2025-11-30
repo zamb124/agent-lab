@@ -42,8 +42,8 @@ abilities/
 
 Модуль использует следующие API endpoints:
 
-- `/frontend/api/agents/?public_only=true` - Получение публичных агентов
-- `/frontend/api/tools/?public_only=true` - Получение публичных инструментов
+- `/frontend/agents/?public_only=true` - Получение публичных агентов
+- `/frontend/tools/?public_only=true` - Получение публичных инструментов
 
 ## Стили
 

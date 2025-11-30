@@ -90,14 +90,14 @@ async def test_agent_with_graph(frontend_agent_repo, frontend_client) -> AgentCo
 
 
 class TestAgentsListAPI:
-    """Тесты для GET /frontend/api/v1/agents/ endpoint"""
+    """Тесты для GET /frontend/api/agents/ endpoint"""
     
     @pytest.mark.asyncio
     async def test_list_agents_returns_agents(
         self, frontend_client, test_agent, agent_repo
     ):
         """Проверяем получение списка агентов"""
-        response = await frontend_client.get("/frontend/api/v1/agents/")
+        response = await frontend_client.get("/frontend/api/agents/")
         
         assert response.status_code == 200
         data = response.json()
@@ -108,7 +108,7 @@ class TestAgentsListAPI:
         self, frontend_client, test_agent
     ):
         """Проверяем лимит при получении списка"""
-        response = await frontend_client.get("/frontend/api/v1/agents/?limit=5")
+        response = await frontend_client.get("/frontend/api/agents/?limit=5")
         
         assert response.status_code == 200
         data = response.json()
@@ -117,12 +117,12 @@ class TestAgentsListAPI:
 
 
 class TestAgentGraphAPI:
-    """Тесты для GET/PUT /frontend/api/v1/agents/{agent_id}/graph endpoints"""
+    """Тесты для GET/PUT /frontend/api/agents/{agent_id}/graph endpoints"""
     
     @pytest.mark.asyncio
     async def test_get_graph_empty(self, frontend_client, test_agent):
         """Проверяем получение пустого графа"""
-        response = await frontend_client.get(f"/frontend/api/v1/agents/{test_agent.agent_id}/graph")
+        response = await frontend_client.get(f"/frontend/api/agents/{test_agent.agent_id}/graph")
         
         assert response.status_code == 200
         data = response.json()
@@ -135,7 +135,7 @@ class TestAgentGraphAPI:
     @pytest.mark.asyncio
     async def test_get_graph_with_definition(self, frontend_client, test_agent_with_graph):
         """Проверяем получение графа с definition"""
-        response = await frontend_client.get(f"/frontend/api/v1/agents/{test_agent_with_graph.agent_id}/graph")
+        response = await frontend_client.get(f"/frontend/api/agents/{test_agent_with_graph.agent_id}/graph")
         
         assert response.status_code == 200
         data = response.json()
@@ -148,7 +148,7 @@ class TestAgentGraphAPI:
     @pytest.mark.asyncio
     async def test_get_graph_not_found(self, frontend_client):
         """Проверяем 404 для несуществующего агента"""
-        response = await frontend_client.get("/frontend/api/v1/agents/nonexistent_agent/graph")
+        response = await frontend_client.get("/frontend/api/agents/nonexistent_agent/graph")
         
         assert response.status_code == 404
     
@@ -180,7 +180,7 @@ class TestAgentGraphAPI:
         }
         
         response = await frontend_client.put(
-            f"/frontend/api/v1/agents/{test_agent.agent_id}/graph",
+            f"/frontend/api/agents/{test_agent.agent_id}/graph",
             json=graph_data
         )
         
@@ -197,7 +197,7 @@ class TestAgentGraphAPI:
         }
         
         response = await frontend_client.put(
-            "/frontend/api/v1/agents/nonexistent_agent/graph",
+            "/frontend/api/agents/nonexistent_agent/graph",
             json=graph_data
         )
         

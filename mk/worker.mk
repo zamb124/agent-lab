@@ -18,12 +18,14 @@ worker-build:
 	docker-compose build worker
 
 # TaskIQ worker (новый)
+# ВАЖНО: --workers 1 обязателен для taskiq-pg, иначе NOTIFY дублирует задачи
 taskiq:
-	uv run taskiq worker core.tasks.worker:broker
+	uv run taskiq worker core.tasks.worker:broker --workers 1
 
 taskiq-reload:
-	uv run taskiq worker core.tasks.worker:broker --reload
+	uv run taskiq worker core.tasks.worker:broker --workers 1 --reload
 
+# Для масштабирования запускайте несколько процессов воркера, а не --workers N
 taskiq-prod:
-	uv run taskiq worker core.tasks.worker:broker --workers 4
+	uv run taskiq worker core.tasks.worker:broker --workers 1
 

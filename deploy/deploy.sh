@@ -51,6 +51,11 @@ sed -i.bak 's|"domain": "localhost"|"domain": "agents-lab.ru"|g' "$TMP_DIR/conf.
 sed -i.bak 's|"domain": "localhost"|"domain": "agents-lab.ru"|g' "$TMP_DIR/agents_conf.json"
 sed -i.bak 's|"domain": "localhost"|"domain": "agents-lab.ru"|g' "$TMP_DIR/frontend_conf.json"
 
+# Замена debug на false для production
+sed -i.bak 's|"debug": true|"debug": false|g' "$TMP_DIR/conf.json"
+sed -i.bak 's|"debug": true|"debug": false|g' "$TMP_DIR/agents_conf.json"
+sed -i.bak 's|"debug": true|"debug": false|g' "$TMP_DIR/frontend_conf.json"
+
 rm -f "$TMP_DIR"/*.bak
 
 echo "[3/7] Копирование конфигов на сервер..."
@@ -88,11 +93,17 @@ echo "Checking frontend service (8002)..."
 $SSH_CMD "curl -sf http://localhost:8002/health || echo 'FAIL: frontend'"
 sleep 2
 
+echo "Checking taskiq-worker..."
+$SSH_CMD "cd $REMOTE_DIR && sudo docker compose ps taskiq-worker --format '{{.Status}}' | grep -q 'Up' && echo 'OK: taskiq-worker running' || echo 'FAIL: taskiq-worker'"
+$SSH_CMD "cd $REMOTE_DIR && sudo docker compose logs taskiq-worker --tail=5"
+sleep 2
+
 echo "Reloading nginx..."
 $SSH_CMD "sudo systemctl reload nginx"
 
 echo ""
 echo "=== Deploy завершен ==="
-echo "Agents: https://agents-lab.ru/api/v1/health"
+echo "Agents: https://agents-lab.ru/agents/api/v1/health"
 echo "Frontend: https://agents-lab.ru/health"
+echo "Worker: docker compose logs taskiq-worker"
 

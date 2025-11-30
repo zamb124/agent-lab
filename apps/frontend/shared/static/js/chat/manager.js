@@ -246,7 +246,7 @@ class ChatManager {
 
     async getFlowInfo(flowId) {
         try {
-            const response = await fetch(`/agents/api/v1/flows/${encodeURIComponent(flowId)}/info`);
+            const response = await fetch(`/frontend/api/flows/${encodeURIComponent(flowId)}/info`);
             if (response.ok) {
                 return await response.json();
             }

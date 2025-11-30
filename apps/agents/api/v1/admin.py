@@ -26,7 +26,7 @@ from apps.agents.services.business.telegram_poller import telegram_poller
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 @router.get("/me")

@@ -18,13 +18,13 @@
 
 import functools
 import logging
-from typing import Optional, Any, Callable, Dict, List, Type, Union
+from typing import Optional, Any, Callable, Dict, List, Type, Union, get_args, TYPE_CHECKING
 from fastapi import APIRouter
+
+from core.db.http_repository import HTTPRepositoryProxy
 
 logger = logging.getLogger(__name__)
 
-# TYPE_CHECKING import для избежания циклических зависимостей
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from core.db.base_repository import BaseRepository
 
@@ -127,10 +127,17 @@ class BaseContainer:
                 storage = self.shared_storage if repository_class.is_global else self.storage
             return repository_class(storage=storage)
         
-        from core.db.http_repository import HTTPRepositoryProxy
+        # Извлекаем model_class из generic параметра BaseRepository[T]
+        model_class = None
+        for base in getattr(repository_class, '__orig_bases__', []):
+            args = get_args(base)
+            if args:
+                model_class = args[0]
+                break
+        
         return HTTPRepositoryProxy(
             repository_class=repository_class,
-            model_class=repository_class.model_class if hasattr(repository_class, 'model_class') else None
+            model_class=model_class
         )
     
     # === Storage ===

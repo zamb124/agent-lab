@@ -8,15 +8,22 @@ import os
 def get_agents_service_url() -> str:
     """
     URL сервиса agents.
-    Для тестов использует переменные окружения AGENTS_SERVICE_HOST/PORT.
-    Для production использует settings.server.get_service_url().
+    Приоритет:
+    1. TEST_AGENTS_SERVICE_URL (env) - для тестов
+    2. AGENTS_SERVICE_URL (env) - для docker-compose
+    3. settings.server.agents_service_url - из конфига
+    4. settings.server.get_service_url() - по умолчанию
     """
-    host = os.environ.get("AGENTS_SERVICE_HOST")
-    port = os.environ.get("AGENTS_SERVICE_PORT")
-    if host and port:
-        return f"http://{host}:{port}"
+    test_url = os.environ.get("TEST_AGENTS_SERVICE_URL")
+    if test_url:
+        return test_url
+    
+    env_url = os.environ.get("AGENTS_SERVICE_URL")
+    if env_url:
+        return env_url
+    
     from core.config import get_settings
-    return get_settings().server.get_service_url()
+    return get_settings().server.get_agents_service_url()
 
 
 from apps.agents.db.repositories.agent_repository import AgentRepository

@@ -19,8 +19,8 @@ from apps.frontend.services.canvas_service import CanvasService
 
 
 @pytest_asyncio.fixture
-async def canvas_service(test_context) -> CanvasService:
-    """CanvasService для тестов"""
+async def canvas_service(test_context, agents_service) -> CanvasService:
+    """CanvasService для тестов (требует agents_service для HTTP proxy)"""
     return CanvasService()
 
 

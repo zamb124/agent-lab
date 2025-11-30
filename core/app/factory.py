@@ -69,6 +69,7 @@ def create_service_app(
     settings_class: Type[PydanticBaseSettings],
     get_container: Callable,
     routers: List[APIRouter] = None,
+    pages_routers: List[APIRouter] = None,
     repository_names: List[str] = None,
     on_startup: Optional[Callable] = None,
     on_shutdown: Optional[Callable] = None,
@@ -80,6 +81,7 @@ def create_service_app(
     title: str = None,
     description: str = None,
     version: str = "1.0.0",
+    api_version: str = "v1",  # None - без /api/, "v1" - /api/v1
     docs_url: str = "/docs",
     redoc_url: str = "/redoc",
     openapi_url: str = "/openapi.json",
@@ -94,7 +96,8 @@ def create_service_app(
         service_name: Имя сервиса (например, "agents")
         settings_class: Класс настроек (наследник BaseSettings)
         get_container: Функция получения контейнера
-        routers: Список кастомных роутеров
+        routers: Список API роутеров (prefix зависит от api_version)
+        pages_routers: Список page роутеров (без prefix - они имеют свой)
         repository_names: Имена репозиториев для CRUD роутеров
         on_startup: Функция вызываемая при старте (async)
         on_shutdown: Функция вызываемая при остановке (async)
@@ -102,6 +105,7 @@ def create_service_app(
         cors_origins: Разрешенные origins для CORS
         extra_middlewares: Дополнительные middleware [(MiddlewareClass, {kwargs}), ...]
         static_mounts: Статические директории [(path, directory, name), ...]
+        api_version: Версия API ("v1" для agents, None для frontend)
         docs_url, redoc_url, openapi_url: Пути для документации
         include_auth_middleware: Включать ли AuthMiddleware
         include_crud_routers: Включать ли автоматические CRUD роутеры
@@ -205,8 +209,13 @@ def create_service_app(
         for middleware_class, kwargs in extra_middlewares:
             app.add_middleware(middleware_class, **kwargs)
     
-    # API prefix из settings
-    api_prefix = f"/{settings.server.name}/api/v1"
+    # API prefix
+    # api_version="v1" → /agents/api/v1 (REST API)
+    # api_version=None → /frontend (сайт без /api/)
+    if api_version:
+        api_prefix = f"/{settings.server.name}/api/{api_version}"
+    else:
+        api_prefix = f"/{settings.server.name}"
     logger.info(f"API prefix: {api_prefix}")
     
     # Инициализация репозиториев для CRUD роутеров
@@ -221,11 +230,17 @@ def create_service_app(
         for router in crud_routers:
             app.include_router(router, prefix=api_prefix)
     
-    # Кастомные роутеры
+    # API роутеры (с prefix /service_name/api/v1)
     if routers:
         for router in routers:
             tags = router.tags or [service_name]
             app.include_router(router, prefix=api_prefix, tags=tags)
+    
+    # Pages роутеры (без дополнительного prefix - они уже имеют свой)
+    if pages_routers:
+        for router in pages_routers:
+            tags = router.tags or [f"{service_name}-pages"]
+            app.include_router(router, tags=tags)
     
     # Статические файлы
     if static_mounts:

@@ -37,7 +37,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     async def _setup_webhook_context(self, request: Request, platform: str) -> None:
         """Устанавливает контекст для webhook запросов (Telegram/WhatsApp)"""
-        flow_key = request.url.path.split(f"/api/v1/webhook/{platform}/")[1]
+        flow_key = request.url.path.split(f"/agents/api/v1/webhook/{platform}/")[1]
 
         parts = flow_key.split(":")
         if len(parts) < 4 or parts[0] != "company" or parts[2] != "flow":
@@ -71,14 +71,25 @@ class AuthMiddleware(BaseHTTPMiddleware):
             request.url.path.startswith("/static/")
             or request.url.path.startswith("/.well-known/")
             or request.url.path.startswith("/favicon.ico")
-            or request.url.path.startswith("/api/v1/payments/webhook/")
+            or request.url.path.startswith("/agents/api/v1/payments/webhook/")
             or request.url.path == "/health"
             or request.url.path == "/agents/health"
             or request.url.path.startswith("/debug/")
-            or request.url.path == "/api/v1/lead"
+            or request.url.path == "/agents/api/v1/lead"
         ):
             return await call_next(request)
         
+        # Webhook endpoints обрабатываются отдельно - они сами извлекают company из URL
+        # Для Telegram webhook
+        if request.url.path.startswith("/agents/api/v1/webhook/telegram/"):
+            await self._setup_webhook_context(request, "telegram")
+            return await call_next(request)
+
+        # Для WhatsApp webhook
+        if request.url.path.startswith("/agents/api/v1/webhook/whatsapp/"):
+            await self._setup_webhook_context(request, "whatsapp")
+            return await call_next(request)
+
         # Обработка CRUD API для межсервисного взаимодействия
         # Пути вида /agents/api/v1/* используют X-Company-Id для контекста
         if request.url.path.startswith("/agents/api/v1/"):
@@ -94,18 +105,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 return JSONResponse(status_code=e.status_code, content={"detail": e.detail})
             finally:
                 clear_context()
-
-        # Для Telegram webhook
-        if request.url.path.startswith("/api/v1/webhook/telegram/"):
-            await self._setup_webhook_context(request, "telegram")
-            return await call_next(request)
-
-        # Для WhatsApp webhook
-        if request.url.path.startswith("/api/v1/webhook/whatsapp/"):
-            await self._setup_webhook_context(request, "whatsapp")
-            return await call_next(request)
         # Для скачивания файлов - создаем минимальный контекст с компанией из поддомена
-        if request.url.path.startswith("/api/v1/files/download/"):
+        if request.url.path.startswith("/agents/api/v1/files/download/"):
             try:
                 container = self._get_container(request)
                 subdomain_repo = container.subdomain_repository
@@ -212,14 +213,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
         elif "/webhook/whatsapp/" in path:
             logger.info("📱 WhatsApp контекст")
             return await self._create_whatsapp_context(request, requested_company)
-        elif path == "/api/v1/admin/create-my-company" or path == "/frontend/api/admin/create-my-company":
-            logger.info("🏢 API создания компании - требует авторизации")
+        elif path == "/frontend/api/admin/create-my-company":
+            logger.info("API создания компании - требует авторизации")
             return await self._create_frontend_context(request, requested_company, allow_no_company=True, has_subdomain=has_subdomain)
-        elif "/api/v1/admin/" in path or "/api/v1/history/" in path or "/frontend/api/admin/" in path:
+        elif "/frontend/api/admin/" in path or "/frontend/api/history/" in path:
             # Frontend endpoints - используют токен из куки
-            logger.info("🖥️ Frontend API контекст (токен из куки)")
+            logger.info("Frontend API контекст (токен из куки)")
             return await self._create_frontend_context(request, requested_company, has_subdomain=has_subdomain)
-        elif "/api/v1/" in path or "/agents/api/v1/" in path:
+        elif "/agents/api/v1/" in path:
             # Публичные API endpoints - проверяем наличие токена
             token = request.cookies.get("auth_token")
             if not token:

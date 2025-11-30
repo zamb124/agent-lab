@@ -77,12 +77,12 @@ async def test_session(frontend_session_repo, test_flow_for_history, frontend_cl
 
 
 class TestSessionsListAPI:
-    """Тесты для GET /frontend/api/v1/history/sessions endpoint"""
+    """Тесты для GET /frontend/api/history/sessions endpoint"""
     
     @pytest.mark.asyncio
     async def test_list_sessions(self, frontend_client, test_session):
         """Проверяем получение списка сессий"""
-        response = await frontend_client.get("/frontend/api/v1/history/sessions")
+        response = await frontend_client.get("/frontend/api/history/sessions")
         
         assert response.status_code == 200
         data = response.json()
@@ -93,7 +93,7 @@ class TestSessionsListAPI:
     async def test_list_sessions_by_platform(self, frontend_client, test_session):
         """Проверяем фильтрацию по платформе"""
         response = await frontend_client.get(
-            "/frontend/api/v1/history/sessions?platform=test"
+            "/frontend/api/history/sessions?platform=test"
         )
         
         assert response.status_code == 200
@@ -102,20 +102,20 @@ class TestSessionsListAPI:
     async def test_list_sessions_with_limit(self, frontend_client, test_session):
         """Проверяем лимит"""
         response = await frontend_client.get(
-            "/frontend/api/v1/history/sessions?limit=5"
+            "/frontend/api/history/sessions?limit=5"
         )
         
         assert response.status_code == 200
 
 
 class TestSessionMessagesAPI:
-    """Тесты для GET /frontend/api/v1/history/sessions/{session_id}/messages endpoint"""
+    """Тесты для GET /frontend/api/history/sessions/{session_id}/messages endpoint"""
     
     @pytest.mark.asyncio
     async def test_get_session_messages(self, frontend_client, test_session):
         """Проверяем получение сообщений сессии"""
         response = await frontend_client.get(
-            f"/frontend/api/v1/history/sessions/{test_session.session_id}/messages"
+            f"/frontend/api/history/sessions/{test_session.session_id}/messages"
         )
         
         assert response.status_code == 200
@@ -126,7 +126,7 @@ class TestSessionMessagesAPI:
     async def test_get_session_messages_with_checkpoints(self, frontend_client, test_session):
         """Проверяем получение сообщений с чекпоинтами"""
         response = await frontend_client.get(
-            f"/frontend/api/v1/history/sessions/{test_session.session_id}/messages?include_checkpoints=true"
+            f"/frontend/api/history/sessions/{test_session.session_id}/messages?include_checkpoints=true"
         )
         
         assert response.status_code == 200

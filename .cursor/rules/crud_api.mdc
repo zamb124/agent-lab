@@ -37,7 +37,7 @@ alwaysApply: true
 ## ❌ НЕ создавай новые CRUD endpoints
 
 <bad_example>
-# apps/frontend/api/agents.py
+# apps/frontend/agents.py
 @router.get("/")
 async def list_agents(agent_repo: AgentRepositoryDep) -> List[AgentConfig]:
     """Получить список всех агентов"""
@@ -119,7 +119,7 @@ async def get_public_agents(agent_repo: AgentRepositoryDep):
 3. **Обнови** фронтенд, чтобы использовать автоматические CRUD роутеры
 
 <good_example>
-# БЫЛО (apps/frontend/api/agents.py):
+# БЫЛО (apps/frontend/agents.py):
 @router.get("/")
 async def list_agents(...):  # УДАЛИТЬ - есть в CRUD
     ...

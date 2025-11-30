@@ -16,7 +16,7 @@ from core.identity import AuthService
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def get_auth_service(request: Request) -> AuthService:

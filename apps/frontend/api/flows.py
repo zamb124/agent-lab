@@ -75,6 +75,30 @@ async def create_flow(
 
 # Специфичные роуты ДОЛЖНЫ быть перед общим /{flow_id:path}
 
+@router.get("/{flow_id:path}/info")
+async def get_flow_info(
+    flow_id: str,
+    flow_repo: FlowRepositoryDep
+) -> Dict[str, Any]:
+    """
+    Получает информацию о боте: название, описание, поддерживаемые платформы.
+    """
+    flow_config = await flow_repo.get(flow_id)
+    if not flow_config:
+        raise HTTPException(status_code=404, detail=f"Flow {flow_id} не найден")
+
+    api_supported = "api" in flow_config.platforms
+
+    return {
+        "flow_id": flow_config.flow_id,
+        "name": flow_config.name,
+        "description": flow_config.description or "",
+        "platforms": list(flow_config.platforms.keys()),
+        "api_supported": api_supported,
+        "entry_point_agent": flow_config.entry_point_agent
+    }
+
+
 @router.get("/{flow_id:path}/variables")
 async def get_flow_variables(
     flow_id: str,

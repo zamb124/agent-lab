@@ -10,392 +10,159 @@ alwaysApply: true
 - Используй `AsyncPostgresSaver` через фикстуры
 - Очищай БД после каждого теста
 
-<good_example>
-import pytest
-from core.state_manager import get_state_manager
-
-@pytest.mark.asyncio
-async def test_agent_execution():
-    state_manager = await get_state_manager()
-    # Тест с реальным StateManager
-</good_example>
-
-<bad_example>
-# НЕ используй моки для StateManager в platform тестах
-# Используй реальный StateManager через get_state_manager()
-</bad_example>
-
 ## Структура тестов
 
 ```
 tests/
-├── conftest.py           # Общие фикстуры
-├── core/                 # Тесты core модуля
-│   ├── auth/            # Авторизация
-│   ├── conf/            # Конфигурация
-│   └── core_clients/    # S3, HTTP клиенты
-├── agents/              # Тесты apps/agents
-│   ├── arch/            # Архитектурные тесты
-│   ├── billing/         # Биллинг
-│   ├── crud/            # CRUD операции
-│   ├── integration/     # Интеграционные
-│   ├── interfaces/      # Telegram, WhatsApp
-│   ├── mcp/             # MCP серверы
-│   ├── payments/        # Платежи
-│   └── rag/             # RAG
-└── frontend/            # Тесты apps/frontend
-    ├── api/             # API тесты
-    ├── i18n/            # Интернационализация
-    ├── modules/         # Тесты модулей
-    ├── pages/           # Тесты страниц (httpx)
-    └── browser/         # Playwright browser тесты
-        ├── conftest.py          # Запуск сервера в процессе
-        ├── test_public_pages.py # Landing, privacy, terms
-        ├── test_auth_pages.py   # Авторизация
-        ├── test_dashboard.py    # Dashboard
-        ├── test_modules.py      # Все модули
-        └── test_ui_elements.py  # UI, responsive, API
+├── conftest.py              # ЕДИНСТВЕННОЕ место для всех фикстур!
+├── core/                    # Тесты core модуля
+│   ├── auth/               # Авторизация
+│   ├── conf/               # Конфигурация
+│   ├── core_clients/       # S3, HTTP клиенты
+│   └── repositories/       # Тесты core репозиториев
+├── agents/                  # Тесты apps/agents
+│   ├── arch/               # Архитектурные тесты
+│   ├── billing/            # Биллинг
+│   ├── crud/               # CRUD операции
+│   ├── integration/        # Интеграционные
+│   ├── interfaces/         # Telegram, WhatsApp
+│   ├── mcp/                # MCP серверы
+│   ├── payments/           # Платежи
+│   └── rag/                # RAG
+└── frontend/               # Тесты apps/frontend
+    ├── conftest.py         # ТОЛЬКО agents_service фикстура!
+    ├── api/                # API тесты
+    ├── browser/            # Playwright browser тесты
+    ├── i18n/               # Интернационализация
+    ├── modules/            # Модули
+    ├── pages/              # Страницы
+    └── services/           # Сервисы
 ```
 
-## Фикстуры
+## Единая архитектура фикстур
 
-Используй фикстуры из `tests/conftest.py`:
-- `agent_repo`, `flow_repo`, `user_repo` - репозитории
+**ВСЕ фикстуры в `tests/conftest.py`!**
+
+Исключение - `agents_service` в `tests/frontend/conftest.py` (запуск сервиса в отдельном процессе).
+
+## Основные фикстуры
+
+Из `tests/conftest.py`:
+- `migrated_db` - инициализированная БД (обязательная зависимость)
+- `agent_repo`, `flow_repo`, `user_repo`, `company_repo` и др. - репозитории
 - `test_company` - тестовая компания (с уникальным ID)
 - `test_user` - тестовый пользователь
 - `test_context` - контекст с авторизацией
+- `frontend_client` - HTTP клиент для frontend API с авторизацией
 - `unique_id` - генератор уникальных ID для изоляции
-- `taskiq_broker` - инициализированный TaskIQ брокер (session scope)
-- `event_loop` - event loop для async тестов (session scope)
+- `mock_llm` - MockLLM для тестирования агентов
 
-<good_example>
-@pytest.mark.asyncio
-async def test_flow_execution(agent_repo, flow_repo, test_user, test_context, unique_id):
-    session_id = unique_id("session")
-    # Используй репозитории вместо storage
-    flow_config = FlowConfig(...)
-    await flow_repo.set(flow_config)
-</good_example>
+Из `tests/frontend/conftest.py`:
+- `agents_service` - запускает agents в отдельном процессе для межсервисных тестов
 
-## Без PYTHONPATH
+## Frontend тесты
 
-Не используй PYTHONPATH при запуске тестов:
-- Команды должны работать напрямую: `uv run pytest`
-- Не делай `PYTHONPATH=. pytest`
+### frontend_client
 
-<good_example>
-# В терминале
-uv run pytest tests/
-
-# В Makefile
-test:
-    uv run pytest tests/
-</good_example>
-
-<bad_example>
-PYTHONPATH=. pytest tests/
-</bad_example>
-
-## Маркеры pytest
-
-Используй маркеры для категоризации тестов:
-- `@pytest.mark.asyncio` - для асинхронных тестов
-- `@pytest.mark.integration` - интеграционные тесты
-- `@pytest.mark.slow` - медленные тесты
-
-<good_example>
-@pytest.mark.asyncio
-@pytest.mark.integration
-async def test_full_flow():
-    # Интеграционный тест
-    pass
-</good_example>
-
-## Изоляция тестов
-
-Каждый тест должен быть изолирован:
-- Создавай уникальные ID для сущностей
-- Очищай данные после теста
-- Не полагайся на порядок выполнения тестов
-
-<good_example>
-@pytest.mark.asyncio
-async def test_agent_creation(storage):
-    agent_id = f"test_agent_{uuid.uuid4()}"
+```python
+async def test_frontend(frontend_client):
+    # frontend_client - httpx.AsyncClient с авторизацией
+    # Имеет атрибуты: test_user, test_company, test_context, auth_token
     
-    try:
-        # Тест
-        await storage.set(f"agent:{agent_id}", {...})
-    finally:
-        # Очистка
-        await storage.delete(f"agent:{agent_id}")
-</good_example>
+    response = await frontend_client.get("/frontend/flows/")
+    assert response.status_code == 200
+```
 
-## Критерий успеха
+### agents_service (межсервисное взаимодействие)
 
-Тест считается успешным только если:
-- ВСЕ тесты в suite проходят
-- Нет warnings или deprecations
-- Покрытие кода достаточное
+```python
+async def test_repository_gateway(agents_service, company_repo):
+    """Тесты где frontend вызывает agents через HTTP"""
+    
+    url = f"{agents_service['url']}/agents/api/v1/flow"
+    headers = {"X-Company-Id": "test_company_id"}
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers)
+```
 
-Частичный успех НЕ допустим.
+## API пути
 
-<bad_example>
-# 185 из 187 тестов прошли - ЭТО НЕ УСПЕХ
-# Нужно исправить 2 падающих теста
-</bad_example>
+**Структура путей frontend:**
+- HTML страницы (pages/modules): `/frontend/...`
+- JSON API: `/frontend/api/...`
+
+```python
+# JSON API эндпоинты
+response = await frontend_client.get("/frontend/api/flows/")
+response = await frontend_client.get("/frontend/api/history/sessions")
+response = await frontend_client.get("/frontend/api/admin/me")
+
+# HTML страницы
+response = await frontend_client.get("/frontend/")
+response = await frontend_client.get("/frontend/history/")
+response = await frontend_client.get("/frontend/bots/")
+```
 
 ## Запрет на моки внутренних компонентов
 
-**КРИТИЧНО**: ЗАПРЕЩЕНО создавать моки для внутренних компонентов системы.
-
 ### ❌ ЗАПРЕЩЕНО мокать:
-
-- **Storage** - используй реальную БД через фикстуру `storage`
-- **Репозитории** - используй реальные репозитории через фикстуры (`agent_repo`, `flow_repo`, `user_repo`, etc)
-- **StateManager** - используй реальный StateManager через `get_state_manager()`
-- **Внутренние сервисы** - PaymentService, VariablesService, AuthService и другие должны работать с реальными зависимостями
-- **Контейнеры** - используй реальные контейнеры через `get_agents_container()`, `get_frontend_container()`
-
-<bad_example>
-# НЕ ТАК - мокаем Storage
-from unittest.mock import AsyncMock, patch
-
-mock_storage = AsyncMock()
-mock_storage.get = AsyncMock(return_value=None)
-
-with patch("core.db.storage.Storage", return_value=mock_storage):
-    result = await some_function()
-</bad_example>
-
-<bad_example>
-# НЕ ТАК - мокаем репозиторий
-mock_company_repo = AsyncMock()
-mock_company_repo.get = AsyncMock(return_value=test_company)
-
-service = PaymentService(company_repository=mock_company_repo)
-</bad_example>
-
-<good_example>
-# ТАК - используем реальные компоненты
-@pytest.mark.asyncio
-async def test_payment_service(storage, company_repo, test_company):
-    # Используем реальные фикстуры
-    service = PaymentService(company_repository=company_repo)
-    # Тест с реальной БД
-    result = await service.create_payment(...)
-</good_example>
+- Storage, Репозитории, StateManager
+- Внутренние сервисы (PaymentService, VariablesService)
+- Контейнеры
 
 ### ✅ РАЗРЕШЕНО мокать:
+- Внешние HTTP клиенты
+- Внешние API (Telegram, WhatsApp, платежные провайдеры)
+- MockLLM для агентов
 
-- **Внешние HTTP клиенты** - `httpx.AsyncClient` для внешних API
-- **Внешние API провайдеры** - Telegram API, WhatsApp API, платежные провайдеры (YooMoney, Stripe)
-- **MockLLM** - для тестирования агентов используй `mock_llm` фикстуру
+## Изоляция тестов
 
-<good_example>
-# ТАК - мокаем внешний HTTP клиент
-from unittest.mock import patch, AsyncMock
-
-with patch('httpx.AsyncClient') as mock_client:
-    mock_response = AsyncMock()
-    mock_response.status_code = 200
-    mock_response.json = AsyncMock(return_value={"ok": True})
-    
-    mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_response)
-    
-    result = await call_external_api()
-</good_example>
-
-<good_example>
-# ТАК - используем MockLLM для агентов
-@pytest.mark.asyncio
-async def test_agent_execution(migrated_db, agent_factory, mock_llm):
-    # mock_llm - это специальная фикстура для тестирования агентов
-    mock_llm.configure(
-        responses={
-            "привет": "Здравствуйте! Чем могу помочь?"
-        }
-    )
-    
-    agent = await agent_factory.get_agent("my_agent")
-    result = await agent.ainvoke({"messages": [HumanMessage(content="привет")]})
-</good_example>
-
-<good_example>
-# ТАК - мокаем внешний платежный провайдер
-from unittest.mock import Mock, AsyncMock
-
-mock_provider = Mock(spec=BasePaymentProvider)
-mock_provider.create_payment = AsyncMock(return_value=PaymentResponse(...))
-
-service = PaymentService(provider=mock_provider)
-</good_example>
-
-## Тестирование TaskIQ задач
-
-Для тестов с TaskIQ используй фикстуру `taskiq_broker`:
-
-<good_example>
-@pytest.mark.asyncio
-async def test_agent_task(taskiq_broker, test_context):
-    from apps.agents.tasks.agent_tasks import process_agent_task
-    
-    task = await process_agent_task.kiq(
-        flow_id="test_flow",
-        session_id="test_session",
-        message="test",
-        platform="test",
-        user_id="test_user",
-        company_id="test_company",
-    )
-    
-    result = await task.wait_result(timeout=30)
-    assert not result.is_err
-</good_example>
-
-<bad_example>
-# НЕ используй InMemoryBroker в тестах
-from taskiq import InMemoryBroker
-broker = InMemoryBroker()  # НЕТ!
-</bad_example>
-
-## Event Loop
-
-Используй session-scoped event loop через фикстуру `event_loop`:
-
-<good_example>
-# pytest.ini
-asyncio_default_fixture_loop_scope = session
-asyncio_default_test_loop_scope = session
-</good_example>
-
-<bad_example>
-# НЕ манипулируй event loop вручную
-asyncio.get_event_loop().run_until_complete(...)  # НЕТ!
-asyncio.run(...)  # НЕТ в тестах!
-</bad_example>
-
-## Не генерируй тесты без запроса
-
-Не создавай тесты автоматически:
-- Генерируй тесты только по явному запросу пользователя
-- Не создавай demo файлы для демонстрации
-
-## Playwright Browser тесты для Frontend
-
-Browser тесты frontend находятся в `tests/frontend/browser/` и используют async Playwright API.
-
-### Структура
-
-```
-tests/frontend/browser/
-├── conftest.py              # Запускает сервер в отдельном процессе
-├── test_public_pages.py     # Публичные страницы (landing, privacy, terms)
-├── test_auth_pages.py       # Страницы авторизации
-├── test_dashboard.py        # Dashboard
-├── test_modules.py          # Все модули (bots, builder, abilities, etc.)
-└── test_ui_elements.py      # UI элементы, responsive, API endpoints
+```python
+async def test_isolated(unique_id, agent_repo):
+    agent_id = unique_id("agent")  # → agent_abc123
+    # Тест изолирован благодаря уникальному ID
 ```
 
-### Запуск
+## Команды запуска
 
 ```bash
-# Все browser тесты (headless)
-uv run pytest tests/frontend/browser/ -v
+# Все тесты
+uv run pytest tests/
 
-# С открытым браузером
-HEADED=true uv run pytest tests/frontend/browser/ -v
-
-# С замедлением для отладки
-HEADED=true SLOW_MO=500 uv run pytest tests/frontend/browser/ -v
+# Frontend тесты
+uv run pytest tests/frontend/
 
 # Конкретный файл
-uv run pytest tests/frontend/browser/test_public_pages.py -v
+uv run pytest tests/frontend/test_flows.py -v
+
+# С timeout
+uv run pytest tests/frontend/ --timeout=120
 ```
 
-### Особенности
+## 🚨 КРИТИЧНЫЕ ПРАВИЛА
 
-1. **Async Playwright API** - используем `playwright.async_api` для совместимости с pytest-asyncio
-2. **Сервер запускается автоматически** в отдельном процессе (multiprocessing)
-3. **Совместимость с xdist** - тесты работают вместе с остальными при `-n N`
-4. **Авторизация через cookies** - JWT токен автоматически добавляется в browser context
+1. **ВСЕ фикстуры** в `tests/conftest.py`
+2. **frontend_client** имеет атрибуты: `test_user`, `test_company`, `test_context`
+3. **API пути**: `/frontend/` (не `/frontend/`)
+4. **Не мокай** внутренние компоненты
+5. **agents_service** - только в `tests/frontend/conftest.py`
 
-### Фикстуры
+## 🚨🚨🚨 НЕ ДУБЛИРУЙ ФИКСТУРЫ!
 
-- `live_server` - запускает uvicorn в отдельном процессе, возвращает `{"host", "port", "url"}`
-- `server_url` - базовый URL сервера (из `live_server`)
-- `url_builder` - фабрика URL с поддержкой поддоменов
-- `page` - async страница Playwright (из pytest-playwright-asyncio)
-- `e2e_auth_token` - JWT токен для авторизации
+**ПЕРЕД созданием любой фикстуры ОБЯЗАТЕЛЬНО проверь:**
 
-<good_example>
-@pytest.mark.asyncio(loop_scope="session")
-class TestLandingPage:
-    async def test_landing_page_loads(self, page: Page, server_url: str):
-        await page.goto(server_url)
-        await page.wait_for_load_state("domcontentloaded")
-        
-        title = await page.title()
-        assert title, "Страница должна иметь title"
-        
-    async def test_landing_has_navigation(self, page: Page, server_url: str):
-        await page.goto(server_url)
-        
-        nav = page.locator("nav, header, .navbar")
-        count = await nav.count()
-        if count > 0:
-            await expect(nav.first).to_be_visible(timeout=10000)
-</good_example>
+1. Существует ли уже такая фикстура в `tests/conftest.py`?
+2. Существует ли в `tests/frontend/conftest.py`?
+3. Существует ли в `tests/frontend/browser/conftest.py`?
 
-### Проверки
-
-```python
-from playwright.async_api import Page, expect
-
-# Проверка видимости элемента
-await expect(page.locator(".my-element")).to_be_visible(timeout=10000)
-
-# Проверка текста
-await expect(page.locator("h1")).to_have_text("Welcome")
-
-# Проверка контента страницы
-content = await page.content()
-assert len(content) > 500, "Страница должна иметь контент"
-
-# HTTP запросы через Playwright
-response = await page.request.get(f"{server_url}/health")
-assert response.ok
-```
-
-### Responsive тестирование
-
-```python
-async def test_mobile_viewport(self, page: Page, server_url: str):
-    await page.set_viewport_size({"width": 375, "height": 812})
-    response = await page.goto(server_url)
-    assert response.status in [200, 302, 303]
-```
-
-### Установка
-
+**Поиск существующих фикстур:**
 ```bash
-# Установка pytest-playwright-asyncio
-uv add pytest-playwright-asyncio
-
-# Установка браузеров
-uv run playwright install chromium
+grep -r "@pytest.fixture" tests/ --include="conftest.py"
+grep -r "def agents_service" tests/ --include="conftest.py"
+grep -r "def frontend_client" tests/ --include="conftest.py"
 ```
 
-### ВАЖНО: Пути Frontend
+**Если фикстура уже существует - ИСПОЛЬЗУЙ ЕЁ, НЕ СОЗДАВАЙ ДУБЛИКАТ!**
 
-Все роуты frontend используют префикс `/frontend/`:
-
-```python
-# Правильно
-await page.goto(f"{server_url}/frontend/bots")
-await page.goto(f"{server_url}/frontend/dashboard")
-await page.goto(f"{server_url}/frontend/auth")
-
-# Неправильно
-await page.goto(f"{server_url}/bots")  # 404!
-```
+Pytest автоматически находит фикстуры из родительских conftest.py файлов.

@@ -13,7 +13,7 @@ export async function getFlow(flowId) {
 }
 
 export async function getFlowInfo(flowId) {
-    return apiClient.get(`/agents/api/v1/flows/${encodeURIComponent(flowId)}/info`);
+    return apiClient.get(`/frontend/api/flows/${encodeURIComponent(flowId)}/info`);
 }
 
 export async function getFlowCanvas(flowId) {

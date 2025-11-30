@@ -8,33 +8,58 @@ alwaysApply: false
 
 ```
 tests/
-├── conftest.py           # Общие фикстуры
-├── core/                 # Тесты core модуля
-│   ├── auth/            # Авторизация (core/identity)
-│   ├── conf/            # Конфигурация (core/config)
-│   └── core_clients/    # S3, HTTP клиенты
-├── agents/              # Тесты apps/agents
-│   ├── arch/            # Архитектурные тесты
-│   ├── billing/         # Биллинг
-│   ├── clients/         # AmoCRM и др.
-│   ├── crud/            # CRUD операции
-│   ├── integration/     # Интеграционные
-│   ├── interfaces/      # Telegram, WhatsApp
-│   ├── mcp/             # MCP серверы
-│   ├── payments/        # Платежи
-│   ├── rag/             # RAG
-│   └── repositories/    # Репозитории
-└── frontend/            # Тесты apps/frontend
-    └── i18n/            # Интернационализация
+├── conftest.py              # ВСЕ фикстуры здесь (включая серверные)
+├── core/                    # Тесты core модуля
+│   ├── auth/               # Авторизация (core/identity)
+│   ├── conf/               # Конфигурация (core/config)
+│   ├── core_clients/       # S3, HTTP клиенты
+│   └── repositories/       # Тесты core репозиториев
+├── agents/                  # Тесты apps/agents
+│   ├── arch/               # Архитектурные тесты
+│   ├── billing/            # Биллинг
+│   ├── clients/            # AmoCRM и др.
+│   ├── crud/               # CRUD операции
+│   ├── integration/        # Интеграционные
+│   ├── interfaces/         # Telegram, WhatsApp
+│   ├── mcp/                # MCP серверы
+│   ├── payments/           # Платежи
+│   └── rag/                # RAG
+└── frontend/               # Тесты apps/frontend
+    ├── conftest.py         # Пустой (фикстуры наследуются из tests/conftest.py)
+    ├── api/                # API тесты
+    ├── browser/            # Playwright browser тесты
+    │   └── conftest.py     # Playwright-специфичные фикстуры
+    ├── i18n/               # Интернационализация
+    ├── modules/            # Модули
+    ├── pages/              # Страницы
+    └── services/           # Сервисы
 ```
 
-## Единая архитектура
+## Единая архитектура фикстур
 
-Все тесты используют унифицированные фикстуры из `tests/conftest.py`.
+**ВСЕ фикстуры в `tests/conftest.py`!**
+
+### Серверные фикстуры (session scope)
+
+```python
+# Запускает agents сервер в subprocess
+agents_server_process  # → {"host": "127.0.0.1", "port": 55123, "url": "http://..."}
+
+# Алиас с установкой переменных окружения
+agents_service  # → то же + os.environ["AGENTS_SERVICE_HOST/PORT"]
+
+# Frontend сервер
+frontend_server_process  # → {"host": "...", "port": ..., "url": "..."}
+
+# TaskIQ воркер
+taskiq_worker_process  # → subprocess.Popen
+```
+
+Все серверные фикстуры имеют `scope="session"` - один сервер на всю сессию тестов.
 
 ## Основные фикстуры
 
-### Репозитории (новая архитектура)
+### Репозитории
 
 ```python
 async def test_example(
@@ -47,65 +72,22 @@ async def test_example(
     user_repo,         # UserRepository
     company_repo,      # CompanyRepository
     variable_repo,     # VariableRepository
+    subdomain_repo,    # SubdomainRepository
+    file_repo,         # FileRepository
+    usage_repo,        # UsageRepository
+    mcp_repo,          # MCPServerRepository
 ):
     # Работа через репозитории
     agent = await agent_repo.get("agent_id")
     await agent_repo.set(agent_config)
-    
-    user = await user_repo.get("user_id")
-    company = await company_repo.get("company_id")
-```
-
-### Storage (deprecated, для совместимости)
-
-```python
-async def test_with_storage(migrated_db, storage):
-    # storage - для обратной совместимости
-    # РЕКОМЕНДУЕТСЯ: используй репозитории вместо storage
-    ...
 ```
 
 ### Фабрики
 
 ```python
 async def test_with_factories(agent_factory, flow_factory, tool_factory, migrator):
-    # Фабрики создают живые объекты из конфигураций
     agent = await agent_factory.get_agent("agent_id")
     flow = await flow_factory.get_flow("flow_id")
-    
-    # Migrator для миграции
-    await migrator.migrate_for_company(
-        company=company,
-        flows=["flow_id"],
-        with_dependencies=True
-    )
-```
-
-### Сервисы
-
-```python
-async def test_services(
-    variables_service,    # VariablesService
-    billing_service,      # BillingService
-    payment_service,      # PaymentService
-    auth_service,         # AuthService
-):
-    # Работа с переменными
-    await variables_service.set_var("key", "value", is_secret=True)
-    value = await variables_service.get_var("key")
-    
-    # Биллинг
-    can_use, reason = await billing_service.can_use_resource(
-        user, company, "llm:gpt-4"
-    )
-    await billing_service.record_usage(
-        user, company, "tool:api", cost=0.5
-    )
-    
-    # Платежи
-    result = await payment_service.create_payment(
-        company, user, 1000.0, provider
-    )
 ```
 
 ### Контекст и данные
@@ -116,25 +98,46 @@ async def test_with_context(
     test_company,         # Company с уникальным ID (test_company_{uuid})
     test_user,            # User
     system_context,       # Context для системной компании
-    save_test_company,    # Сохраняет test_company в БД
     unique_id,            # Генератор уникальных ID для изоляции
 ):
-    # test_context автоматически установлен
-    # ВАЖНО: test_company.company_id - уникальный для каждого теста
-    
-    # Используй unique_id для изоляции
     session_id = unique_id("session")  # → session_abc123
-    thread_id = unique_id("thread")    # → thread_def456
+```
+
+### Frontend тесты
+
+```python
+async def test_frontend(frontend_client, test_context):
+    # frontend_client - httpx.AsyncClient с авторизацией
+    # Имеет атрибуты: test_user, test_company, test_context, auth_token
+    
+    response = await frontend_client.get("/frontend/flows/")
+    assert response.status_code == 200
+    
+    # Доступ к данным теста
+    company_id = frontend_client.test_company.company_id
+```
+
+### Межсервисное взаимодействие (agents_service)
+
+```python
+async def test_repository_gateway(agents_service, company_repo):
+    """Тесты где frontend вызывает agents через HTTP"""
+    
+    # agents_service запускает agents в отдельном процессе
+    # Возвращает: {"host": "127.0.0.1", "port": 12345, "url": "http://..."}
+    
+    url = f"{agents_service['url']}/agents/api/v1/flow"
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers={"X-Company-Id": "test"})
 ```
 
 ### MockLLM
 
 ```python
 def test_with_mock_llm(mock_llm):
-    # Настрой mock ответы
     mock_llm.configure(
         tool_responses={
-            "ключ в запросе": {"tool": "tool_name", "args": {"param": "value"}}
+            "ключ": {"tool": "tool_name", "args": {"param": "value"}}
         },
         responses={
             "ключ": "Текстовый ответ"
@@ -143,46 +146,50 @@ def test_with_mock_llm(mock_llm):
     )
 ```
 
-## Вспомогательные функции (test_helpers)
+## API пути
 
-### create_simple_agent (ОБНОВЛЕНО)
+**Структура путей frontend:**
+- HTML страницы (pages/modules): `/frontend/...`
+- JSON API: `/frontend/api/...`
 
 ```python
-async def test_example(test_helpers, agent_repo):
-    # БЕЗ параметра storage!
+# JSON API эндпоинты
+response = await frontend_client.get("/frontend/api/flows/")
+response = await frontend_client.get("/frontend/api/history/sessions")
+response = await frontend_client.get("/frontend/api/admin/me")
+
+# HTML страницы
+response = await frontend_client.get("/frontend/")
+response = await frontend_client.get("/frontend/history/")
+```
+
+## Вспомогательные функции (test_helpers)
+
+```python
+async def test_example(test_helpers):
     agent = await test_helpers.create_simple_agent(
         agent_id="test_agent",
         name="Test Agent",
         prompt="Промпт",
         tools=[tool1, tool2]
     )
-    # Агент автоматически сохранен через agent_repo
-```
-
-### create_simple_flow (ОБНОВЛЕНО)
-
-```python
-async def test_example(test_helpers, flow_repo):
-    # БЕЗ параметра storage!
+    
     flow = await test_helpers.create_simple_flow(
         flow_id="test_flow",
         name="Test Flow",
         entry_point_agent="agent_id"
     )
-    # Flow автоматически сохранен через flow_repo
 ```
 
 ## Создание тестовых компаний
 
-<good_example>
+```python
 from core.db.repositories.subdomain_repository import SubdomainMapping
 
 async def test_example(company_repo, subdomain_repo):
-    # Создание компании
     company = Company(company_id="test", subdomain="test", name="Test")
     await company_repo.set(company)
     
-    # Создание маппинга subdomain
     subdomain_mapping = SubdomainMapping(
         subdomain=company.subdomain,
         company_id=company.company_id
@@ -192,29 +199,23 @@ async def test_example(company_repo, subdomain_repo):
     # Cleanup
     await company_repo.delete(company.company_id)
     await subdomain_repo.delete(company.subdomain)
-</good_example>
+```
+
+## Правила
+
+### 1. Все фикстуры в tests/conftest.py
 
 <bad_example>
-# НЕ используй Storage напрямую
-await storage.set(f"company:{company_id}", company.model_dump_json(), force_global=True)
-await storage.set(f"subdomain:{subdomain}", f'"{company_id}"', force_global=True)
-</bad_example>
-
-## Правила использования
-
-### 1. Используй фикстуры, НЕ создавай объекты
-
-<bad_example>
-from core.db.storage import Storage
-from apps.agents.services.migrator import Migrator
-
-storage = Storage()
-migrator = Migrator()
+# tests/frontend/conftest.py
+@pytest.fixture
+def frontend_client():  # НЕТ! Дублирует основной conftest
+    ...
 </bad_example>
 
 <good_example>
-async def test_example(migrated_db, agent_repo, flow_repo, migrator):
-    # Все через фикстуры
+# tests/conftest.py - единственное место для фикстур
+@pytest.fixture
+def frontend_client():
     ...
 </good_example>
 
@@ -222,7 +223,6 @@ async def test_example(migrated_db, agent_repo, flow_repo, migrator):
 
 <bad_example>
 await storage.set("agent:my_agent", agent.model_dump_json())
-data = await storage.get("agent:my_agent")
 </bad_example>
 
 <good_example>
@@ -230,15 +230,17 @@ await agent_repo.set(agent)
 agent = await agent_repo.get("my_agent")
 </good_example>
 
-### 3. Используй test_helpers для создания
+### 3. НЕ создавай объекты вручную
+
+<bad_example>
+from core.db.storage import Storage
+storage = Storage()  # НЕТ!
+</bad_example>
 
 <good_example>
-# Обновлено - БЕЗ параметра storage
-agent = await test_helpers.create_simple_agent(
-    agent_id="test_agent",
-    name="Test",
-    prompt="..."
-)
+async def test_example(migrated_db, agent_repo):
+    # Все через фикстуры
+    ...
 </good_example>
 
 ## Cleanup
@@ -248,14 +250,49 @@ Cleanup выполняется автоматически:
 - База данных изолирована для каждого теста
 - MockLLM сбрасывает счетчики
 
-НЕ НУЖНО делать cleanup вручную.
-
 ## 🚨 КРИТИЧНЫЕ ПРАВИЛА
 
-1. **ВСЕГДА** используй фикстуры репозиториев
+1. **ВСЕ фикстуры** в `tests/conftest.py` (кроме `agents_service`)
 2. **НИКОГДА** не создавай Storage, Migrator, Сервисы вручную
-3. **ВСЕГДА** используй test_helpers для создания тестовых данных
-4. **НИКОГДА** не используй Storage для работы с моделями в тестах
-5. **ВСЕГДА** используй company_repo/subdomain_repo для компаний
+3. **ВСЕГДА** используй правильные API пути (`/frontend/api/` для JSON, `/frontend/` для HTML)
+4. **ВСЕГДА** используй репозитории для работы с данными
+5. **frontend_client** имеет атрибуты: `test_user`, `test_company`, `test_context`
 
 **Нарушение приведет к падению тестов!**
+
+## 🚨🚨🚨 НЕ ДУБЛИРУЙ ФИКСТУРЫ!
+
+**ПЕРЕД созданием любой фикстуры ОБЯЗАТЕЛЬНО проверь существующие:**
+
+```bash
+# Поиск всех фикстур
+grep -r "@pytest.fixture" tests/ --include="conftest.py"
+
+# Поиск конкретной фикстуры
+grep -r "def agents_service" tests/ --include="conftest.py"
+grep -r "def frontend_client" tests/ --include="conftest.py"
+grep -r "def test_company" tests/ --include="conftest.py"
+```
+
+**Иерархия conftest.py файлов:**
+```
+tests/conftest.py                    # Главный - ВСЕ основные фикстуры
+tests/frontend/conftest.py           # agents_service (запуск в subprocess)
+tests/frontend/browser/conftest.py   # НЕ дублировать agents_server!
+```
+
+**Pytest автоматически находит фикстуры из родительских conftest.py!**
+
+<bad_example>
+# tests/frontend/browser/conftest.py
+@pytest.fixture
+def agents_server():  # ДУБЛИКАТ agents_service из frontend/conftest.py!
+    ...
+</bad_example>
+
+<good_example>
+# tests/frontend/browser/conftest.py
+@pytest.fixture
+def live_server(agents_service):  # Используем существующую фикстуру
+    ...
+</good_example>

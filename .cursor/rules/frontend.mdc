@@ -6,6 +6,75 @@ globs:
 ---
 # Правила для Frontend
 
+## Архитектура Frontend сервиса
+
+Frontend использует `create_service_app` из `core/app/factory.py`:
+
+```python
+# apps/frontend/main.py
+from core.app import create_service_app
+
+def _create_app() -> FastAPI:
+    return create_service_app(
+        service_name="frontend",
+        settings_class=FrontendSettings,
+        get_container=get_frontend_container,
+        routers=[api_router, auth_router],          # JSON API → /frontend/api/...
+        pages_routers=[pages_router],                # HTML страницы → свой prefix
+        extra_middlewares=[
+            (HTMXHeaderMiddleware, {}),
+        ],
+        extra_state={
+            "agents_container": get_agents_container(),
+        },
+        on_startup=on_startup,
+        api_version=None,                            # БЕЗ /api/v1 в prefix
+        include_crud_routers=False,                  # Frontend не имеет своих CRUD
+        include_broker=False,                        # Frontend не использует TaskIQ
+    )
+
+app = _create_app()
+```
+
+### Ключевые параметры для Frontend
+
+| Параметр | Значение | Зачем |
+|----------|----------|-------|
+| `api_version=None` | Без `/api/v1` | Frontend - сайт, не REST API |
+| `include_crud_routers=False` | Без CRUD | Данные через agents service |
+| `include_broker=False` | Без TaskIQ | Очереди в agents service |
+| `pages_routers` | HTML страницы | Без дополнительного prefix |
+| `extra_state.agents_container` | Контейнер agents | Для репозиториев через HTTP |
+
+### Роутеры Frontend
+
+**API роутеры** (`routers`) - JSON API:
+- Получают prefix `/frontend`
+- Для HTMX запросов и JSON данных
+- Пример: `/frontend/api/history`
+
+**Pages роутеры** (`pages_routers`) - HTML страницы:
+- БЕЗ дополнительного prefix от factory
+- Используют свой prefix из роутера
+- Пример: `/frontend/history` (HTML страница)
+
+### Репозитории через HTTP Proxy
+
+Frontend НЕ имеет своих репозиториев - все данные через agents service:
+
+```python
+# apps/frontend/container.py
+class FrontendContainer(BaseContainer):
+    @property
+    def flow_repository(self):
+        # HTTPRepositoryProxy → HTTP запросы к /agents/api/v1/flow
+        return self._get_repository(FlowRepository)
+```
+
+**Подробнее про архитектуру сервисов:** `.cursor/rules/service_architecture.mdc`
+
+---
+
 ## Компонентная система
 
 ### Обязательные принципы
@@ -445,7 +514,7 @@ async def create_agent(...):  # Дублирует автоматический 
 
 #### Отправка формы
 ```html
-<form hx-post="/frontend/api/flows"
+<form hx-post="/frontend/flows"
       hx-target="#flows-list"
       hx-swap="afterbegin"
       hx-ext="json-enc"

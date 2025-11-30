@@ -11,7 +11,7 @@ from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/mcp", tags=["mcp-api"])
+router = APIRouter(prefix="/api/mcp", tags=["mcp-api"])
 
 
 class MCPServerCreate(BaseModel):

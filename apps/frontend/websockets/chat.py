@@ -39,8 +39,8 @@ async def _poll_notifications(session_id: str, context: Context):
 
     set_context(context)
 
-    frontend_container = get_frontend_container()
-    _storage = frontend_container.storage
+    agents_container = get_agents_container()
+    _storage = agents_container.storage
     processed_notifications = set()
 
     logger.info(f"🔄 Начинаем polling уведомлений для сессии {session_id}")

@@ -119,20 +119,11 @@ class HTTPRepositoryProxy(Generic[T]):
         if result is None:
             return None
         
-        if isinstance(result, dict):
-            # Проверяем есть ли это словарь моделей или одна модель
-            if self.model_class:
-                try:
-                    return self.model_class.model_validate(result)
-                except Exception:
-                    pass
-            return result
+        if isinstance(result, dict) and self.model_class:
+            return self.model_class.model_validate(result)
         
         if isinstance(result, list) and self.model_class:
-            try:
-                return [self.model_class.model_validate(item) for item in result]
-            except Exception:
-                pass
+            return [self.model_class.model_validate(item) for item in result]
         
         return result
     

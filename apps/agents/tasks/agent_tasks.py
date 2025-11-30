@@ -20,7 +20,7 @@ from apps.agents.models import SessionStatus
 from apps.agents.exceptions import TariffError, BillingError, AgentInterrupt
 from apps.agents.services.state_manager import get_state_manager
 from apps.agents.services.tracing.callback_factory import get_callbacks_for_agent
-from apps.agents.tasks.message_tasks import send_message_task
+from apps.agents.tasks.message_tasks import send_message_task, send_typing_task
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,15 @@ async def process_agent_task(
     set_context(context)
     
     try:
+        # Отправляем typing notification (агент начал работу)
+        await send_typing_task.kiq(
+            platform=platform,
+            flow_id=flow_id,
+            session_id=session_id,
+            metadata=metadata,
+            action="start",
+        )
+        
         # Получаем flow config
         flow_repo = container.flow_repository
         flow_config = await flow_repo.get(flow_id)
@@ -90,8 +99,17 @@ async def process_agent_task(
         if "__interrupt__" in result:
             interrupt_value = _extract_interrupt_value(result["__interrupt__"])
             
-            # Отправляем interrupt сообщение через TaskIQ
-            await send_message_task.kiq(
+            # Останавливаем typing
+            await send_typing_task.kiq(
+                platform=platform,
+                flow_id=flow_id,
+                session_id=session_id,
+                metadata=metadata,
+                action="stop",
+            )
+            
+            # Отправляем interrupt сообщение напрямую
+            await send_message_task(
                 platform=platform,
                 flow_id=flow_id,
                 session_id=session_id,
@@ -112,8 +130,17 @@ async def process_agent_task(
         # Извлекаем ответ
         response_text = _extract_response_text(result)
         
-        # Отправляем ответ через TaskIQ
-        await send_message_task.kiq(
+        # Останавливаем typing
+        await send_typing_task.kiq(
+            platform=platform,
+            flow_id=flow_id,
+            session_id=session_id,
+            metadata=metadata,
+            action="stop",
+        )
+        
+        # Отправляем ответ напрямую (не через kiq чтобы избежать дублирования)
+        await send_message_task(
             platform=platform,
             flow_id=flow_id,
             session_id=session_id,
@@ -134,6 +161,15 @@ async def process_agent_task(
         
     except AgentInterrupt as interrupt:
         logger.info(f"AgentInterrupt для session {session_id}: {interrupt.value}")
+        
+        # Останавливаем typing
+        await send_typing_task.kiq(
+            platform=platform,
+            flow_id=flow_id,
+            session_id=session_id,
+            metadata=metadata,
+            action="stop",
+        )
         
         await _send_message_direct(
             platform=platform,
@@ -169,9 +205,20 @@ async def process_agent_task(
             logger.error(f"OpenRouter 402 для session {session_id}: {e}")
             error_msg = "Недостаточно кредитов для LLM. Обратитесь к администратору."
             await _send_error_message(platform, flow_id, session_id, error_msg, metadata, user_id)
+        else:
+            logger.error(f"ValueError для session {session_id}: {e}")
+            await _send_error_message(platform, flow_id, session_id, f"Ошибка: {e}", metadata, user_id)
+        raise
+        
+    except Exception as e:
+        logger.error(f"Неожиданная ошибка для session {session_id}: {e}", exc_info=True)
+        error_msg = "Произошла ошибка при обработке запроса. Попробуйте еще раз."
+        await _send_error_message(platform, flow_id, session_id, error_msg, metadata, user_id)
         raise
         
     finally:
+        # Всегда останавливаем typing
+        await _stop_typing_safe(platform, flow_id, session_id, metadata)
         clear_context()
 
 
@@ -348,4 +395,23 @@ async def _send_error_message(
         metadata=metadata,
         user_id=user_id,
     )
+
+
+async def _stop_typing_safe(
+    platform: str,
+    flow_id: str,
+    session_id: str,
+    metadata: Dict,
+):
+    """Безопасно останавливает typing (игнорирует ошибки)"""
+    try:
+        await send_typing_task.kiq(
+            platform=platform,
+            flow_id=flow_id,
+            session_id=session_id,
+            metadata=metadata,
+            action="stop",
+        )
+    except Exception as e:
+        logger.warning(f"Не удалось остановить typing для {session_id}: {e}")
 

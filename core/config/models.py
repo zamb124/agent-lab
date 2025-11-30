@@ -101,10 +101,17 @@ class ServerConfig(BaseModel):
     debug: bool = False
     domain: str = "agents-lab.ru"
     public_domain: Optional[str] = None  # Публичный домен для OAuth (если отличается от domain)
+    agents_service_url: Optional[str] = None  # URL сервиса agents для межсервисного взаимодействия
     
     def get_service_url(self) -> str:
         """Возвращает URL сервиса"""
         return f"http://{self.domain}:{self.port}"
+    
+    def get_agents_service_url(self) -> str:
+        """URL сервиса agents для HTTP проксирования репозиториев"""
+        if self.agents_service_url:
+            return self.agents_service_url
+        return f"http://{self.domain}:8001"
     workers: int = 4
     
     def get_public_domain(self) -> str:

@@ -19,7 +19,7 @@ from apps.frontend.container import get_frontend_container
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/frontend/models", tags=["frontend"])
+router = APIRouter(prefix="/api/models", tags=["frontend"])
 templates = get_templates()
 
 
@@ -81,7 +81,7 @@ async def get_model(
 
         if model_type == "create_company_form":
             html = f"""
-            <form hx-post="/frontend/api/admin/create-my-company"
+            <form hx-post="/frontend/admin/create-my-company"
                   hx-ext="json-enc"
                   hx-trigger="submit"
                   class="space-y-6">

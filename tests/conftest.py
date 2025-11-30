@@ -457,12 +457,17 @@ async def test_user(test_company: Company) -> User:
 
 
 @pytest_asyncio.fixture
-async def test_context(test_user: User, test_company: Company, migrated_db):
+async def test_context(test_user: User, test_company: Company, migrated_db, company_repo):
     """Тестовый контекст для тестов (используется явно где нужен полный контекст)
 
     Добавляй в параметры теста если нужен контекст с пользователем и компанией.
     Каждый тест получает уникальный session_id для изоляции.
+    
+    Сохраняет test_company в БД для межсервисного взаимодействия.
     """
+    # Сохраняем компанию в БД для доступа из других процессов (agents_service)
+    await company_repo.set(test_company)
+    
     unique_session_id = f"test_session_{uuid.uuid4().hex[:8]}"
     context = Context(
         user=test_user,
@@ -477,6 +482,8 @@ async def test_context(test_user: User, test_company: Company, migrated_db):
     yield context
 
     clear_context()
+    # Очистка компании после теста
+    await company_repo.delete(test_company.company_id)
 
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
@@ -1072,22 +1079,22 @@ def _get_localhost_env() -> dict:
 def _run_agents_server(host: str, port: int):
     """Запуск agents сервера (для multiprocessing)"""
     import uvicorn
-    from apps.agents.main import app
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    # Используем строковый путь для корректной работы multiprocessing
+    uvicorn.run("apps.agents.main:app", host=host, port=port, log_level="warning")
 
 
 def _run_frontend_server(host: str, port: int):
     """Запуск frontend сервера (для multiprocessing)"""
     import uvicorn
-    from apps.frontend.main import app
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    # Используем строковый путь для корректной работы multiprocessing
+    uvicorn.run("apps.frontend.main:app", host=host, port=port, log_level="warning")
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def taskiq_worker_process(migrated_db):
     """
     Запускает TaskIQ воркер в отдельном subprocess.
-    Module scope - один воркер на модуль тестов.
+    Session scope - один воркер на всю сессию тестов.
     """
     project_root = Path(__file__).parent.parent
     env = _get_localhost_env()
@@ -1117,11 +1124,11 @@ def taskiq_worker_process(migrated_db):
     logger.info("✅ TaskIQ воркер остановлен")
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def agents_server_process(migrated_db):
     """
     Запускает agents сервер в отдельном процессе.
-    Module scope - один сервер на модуль тестов.
+    Session scope - один сервер на всю сессию тестов.
     """
     port = _get_free_port()
     host = "127.0.0.1"
@@ -1146,11 +1153,28 @@ def agents_server_process(migrated_db):
     logger.info("✅ Agents сервер остановлен")
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
+def agents_service(agents_server_process):
+    """
+    Алиас для agents_server_process с установкой переменных окружения.
+    Используется для межсервисного взаимодействия в тестах.
+    """
+    import os
+    host = agents_server_process["host"]
+    port = agents_server_process["port"]
+    
+    os.environ["AGENTS_SERVICE_HOST"] = host
+    os.environ["AGENTS_SERVICE_PORT"] = str(port)
+    os.environ["TEST_AGENTS_SERVICE_URL"] = agents_server_process["url"]
+    
+    return agents_server_process
+
+
+@pytest.fixture(scope="session")
 def frontend_server_process(migrated_db):
     """
     Запускает frontend сервер в отдельном процессе.
-    Module scope - один сервер на модуль тестов.
+    Session scope - один сервер на всю сессию тестов.
     """
     port = _get_free_port()
     host = "127.0.0.1"

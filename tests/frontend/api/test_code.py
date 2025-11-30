@@ -8,13 +8,13 @@ import pytest
 
 
 class TestCodeValidateAPI:
-    """Тесты для POST /frontend/api/v1/code/validate-python endpoint"""
+    """Тесты для POST /frontend/api/code/validate-python endpoint"""
     
     @pytest.mark.asyncio
     async def test_validate_valid_code(self, frontend_client):
         """Проверяем валидацию валидного кода"""
         response = await frontend_client.post(
-            "/frontend/api/v1/code/validate-python",
+            "/frontend/api/code/validate-python",
             json={"code": "x = 1\ny = 2\nprint(x + y)"}
         )
         
@@ -27,7 +27,7 @@ class TestCodeValidateAPI:
     async def test_validate_invalid_syntax(self, frontend_client):
         """Проверяем валидацию невалидного кода"""
         response = await frontend_client.post(
-            "/frontend/api/v1/code/validate-python",
+            "/frontend/api/code/validate-python",
             json={"code": "def broken(:\n    pass"}
         )
         
@@ -40,7 +40,7 @@ class TestCodeValidateAPI:
     async def test_validate_empty_code(self, frontend_client):
         """Проверяем валидацию пустого кода"""
         response = await frontend_client.post(
-            "/frontend/api/v1/code/validate-python",
+            "/frontend/api/code/validate-python",
             json={"code": ""}
         )
         
@@ -50,13 +50,13 @@ class TestCodeValidateAPI:
 
 
 class TestCodeFormatAPI:
-    """Тесты для POST /frontend/api/v1/code/format-python endpoint"""
+    """Тесты для POST /frontend/api/code/format-python endpoint"""
     
     @pytest.mark.asyncio
     async def test_format_valid_code(self, frontend_client):
         """Проверяем форматирование кода"""
         response = await frontend_client.post(
-            "/frontend/api/v1/code/format-python",
+            "/frontend/api/code/format-python",
             json={"code": "x=1"}
         )
         
@@ -66,13 +66,13 @@ class TestCodeFormatAPI:
 
 
 class TestCodeAutocompleteAPI:
-    """Тесты для POST /frontend/api/v1/code/completion endpoint"""
+    """Тесты для POST /frontend/api/code/completion endpoint"""
     
     @pytest.mark.asyncio
     async def test_autocomplete_basic(self, frontend_client):
         """Проверяем базовый автокомплит"""
         response = await frontend_client.post(
-            "/frontend/api/v1/code/completion",
+            "/frontend/api/code/completion",
             json={"code": "import ", "cursor_position": 7}
         )
         
@@ -85,7 +85,7 @@ class TestCodeAutocompleteAPI:
     async def test_autocomplete_empty_code(self, frontend_client):
         """Проверяем автокомплит для пустого кода"""
         response = await frontend_client.post(
-            "/frontend/api/v1/code/completion",
+            "/frontend/api/code/completion",
             json={"code": "", "cursor_position": 0}
         )
         
@@ -93,12 +93,12 @@ class TestCodeAutocompleteAPI:
 
 
 class TestCodeDocumentationAPI:
-    """Тесты для GET /frontend/api/v1/code/documentation endpoint"""
+    """Тесты для GET /frontend/api/code/documentation endpoint"""
     
     @pytest.mark.asyncio
     async def test_get_documentation(self, frontend_client):
         """Проверяем получение документации библиотек"""
-        response = await frontend_client.get("/frontend/api/v1/code/documentation")
+        response = await frontend_client.get("/frontend/api/code/documentation")
         
         assert response.status_code == 200
         data = response.json()
