@@ -5,8 +5,10 @@ Nano Banana клиент для генерации изображений чер
 АДАПТИРОВАНО: убраны зависимости от app/*, используется только core/*
 """
 
+import json
 import logging
 import base64
+import re
 from typing import List, Optional, TYPE_CHECKING
 
 from core.config import get_settings
@@ -98,7 +100,6 @@ class NanoBananaClient:
                     logger.warning(f"Файл {file_id} не найден")
                     continue
                 
-                import json
                 file_data = json.loads(file_data_json)
                 
                 s3_client = S3ClientFactory.create_client_for_bucket(file_data['s3_bucket'])
@@ -134,7 +135,6 @@ class NanoBananaClient:
             "content": content
         }])
         
-        import re
         file_pattern = r'file_([a-f0-9]{12})'
         file_ids = re.findall(file_pattern, response.content)
         file_ids = [f"file_{fid}" for fid in file_ids]

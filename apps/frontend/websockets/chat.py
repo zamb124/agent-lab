@@ -15,7 +15,9 @@ import uuid
 from typing import Dict, Set
 from core.context import get_context, set_context, clear_context
 from core.models.context_models import Context
+from core.utils.tokens import get_token_service
 from apps.agents.container import get_agents_container
+from apps.agents.interfaces.web_interface import get_web_interface
 from apps.frontend.container import get_frontend_container
 from apps.frontend.core.websocket_manager import websocket_manager
 
@@ -136,10 +138,7 @@ async def _poll_notifications(session_id: str, context: Context):
 @router.websocket("/ws/chat")
 async def websocket_chat(websocket: WebSocket):
     """WebSocket endpoint для чата"""
-    
-    from core.utils.tokens import get_token_service
-
-    chat_session_id = None  # Инициализируем переменную
+    chat_session_id = None
 
     try:
         # Получаем токен из query параметров (для embed чата)
@@ -356,8 +355,6 @@ async def process_user_message(
     }
 
     agents_container = get_agents_container()
-    
-    from apps.agents.interfaces.web_interface import get_web_interface
     web_interface = get_web_interface()
     
     message = await web_interface.handle_message(raw_message_data, flow_id)

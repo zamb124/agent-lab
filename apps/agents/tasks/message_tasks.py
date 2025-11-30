@@ -7,7 +7,6 @@ from typing import Any, Dict
 
 from core.tasks.broker import broker
 from apps.agents.container import get_agents_container
-from apps.agents.interfaces.base import Message
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +51,8 @@ async def send_message_task(
         logger.info(f"Интерфейс не создан для платформы {platform}, результат сохранен в БД")
         return True
     
+    # Локальный импорт чтобы избежать circular import
+    from apps.agents.interfaces.base import Message
     message = Message(
         user_id=user_id,
         session_id=session_id,

@@ -258,11 +258,7 @@ class PaymentService:
         # 2. txn_{uuid} - старый формат для обратной совместимости
         
         if ":" in transaction_id:
-            # Современный формат: извлекаем company_id
             company_id = transaction_id.split(":")[0]
-            
-            # Пробуем все доступные типы провайдеров из enum
-            from core.models.payment_models import PaymentProviderType
             
             for provider_type in PaymentProviderType:
                 key = f"payment:{company_id}:{provider_type.value}:{transaction_id}"

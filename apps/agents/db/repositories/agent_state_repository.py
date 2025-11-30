@@ -18,9 +18,18 @@ class AgentStateRepository(BaseRepository[Dict[str, Any]]):
     """
     Репозиторий для работы с agent_states.
     is_global=False - состояния изолированы по компаниям.
+    owner_service=agents - принадлежит сервису agents.
     """
     
     is_global = False
+    owner_service = "agents"
+    api_prefix = "agent_state"
+    
+    @classmethod
+    def get_service_url(cls) -> str:
+        """URL сервиса agents"""
+        from apps.agents.db.repositories import get_agents_service_url
+        return get_agents_service_url()
 
     def __init__(self, storage: Storage):
         # Используем dict как модель, так как state_data - это просто JSONB

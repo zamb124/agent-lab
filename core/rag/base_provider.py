@@ -3,10 +3,13 @@
 Определяет единый интерфейс работы с векторными хранилищами.
 """
 
+import logging
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any
 
 from core.rag.models import RAGDocument, RAGSearchResult, RAGNamespace
+
+logger = logging.getLogger(__name__)
 
 
 class BaseRAGProvider(ABC):
@@ -145,9 +148,6 @@ class BaseRAGProvider(ABC):
         Поиск сразу по нескольким namespace.
         Базовая реализация вызывает search() для каждого namespace.
         """
-        import logging
-        logger = logging.getLogger(__name__)
-        
         results = {}
         for ns_id in namespace_ids:
             ns_results = await self.search(ns_id, query, limit, **kwargs)

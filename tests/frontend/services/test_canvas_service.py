@@ -164,8 +164,8 @@ class TestCanvasServiceSaveCanvasData:
     """Тесты для save_canvas_data"""
     
     @pytest.mark.asyncio
-    async def test_save_canvas_data(self, canvas_service, test_flow, flow_repo):
-        """Проверяем сохранение canvas данных"""
+    async def test_save_canvas_data(self, canvas_service, test_flow, flow_repo, agents_service):
+        """Проверяем сохранение canvas данных (зависит от agents_service)"""
         canvas_data = {
             "nodes": [
                 {

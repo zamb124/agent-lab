@@ -1,5 +1,6 @@
 {
   "server": {
+    "name": "frontend",
     "port": 8002,
     "env": "local",
     "domain": "localhost",

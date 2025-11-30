@@ -104,12 +104,12 @@ async def test_flow_with_canvas(frontend_flow_repo, test_agent_for_flow, fronten
 
 
 class TestFlowsListAPI:
-    """Тесты для GET /frontend/api/flows/ endpoint"""
+    """Тесты для GET /frontend/api/v1/flows/ endpoint"""
     
     @pytest.mark.asyncio
     async def test_list_flows_returns_flows(self, frontend_client, test_flow):
         """Проверяем получение списка flows"""
-        response = await frontend_client.get("/frontend/api/flows/")
+        response = await frontend_client.get("/frontend/api/v1/flows/")
         
         assert response.status_code == 200
         data = response.json()
@@ -118,7 +118,7 @@ class TestFlowsListAPI:
     @pytest.mark.asyncio
     async def test_list_flows_with_pagination(self, frontend_client, test_flow):
         """Проверяем пагинацию"""
-        response = await frontend_client.get("/frontend/api/flows/?limit=5&offset=0")
+        response = await frontend_client.get("/frontend/api/v1/flows/?limit=5&offset=0")
         
         assert response.status_code == 200
         data = response.json()
@@ -127,12 +127,12 @@ class TestFlowsListAPI:
 
 
 class TestFlowDetailAPI:
-    """Тесты для GET /frontend/api/flows/{flow_id} endpoint"""
+    """Тесты для GET /frontend/api/v1/flows/{flow_id} endpoint"""
 
     @pytest.mark.asyncio
     async def test_get_flow_by_id(self, frontend_client, test_flow):
         """Проверяем получение flow по ID"""
-        response = await frontend_client.get(f"/frontend/api/flows/{test_flow.flow_id}")
+        response = await frontend_client.get(f"/frontend/api/v1/flows/{test_flow.flow_id}")
         
         assert response.status_code == 200
         data = response.json()
@@ -142,7 +142,7 @@ class TestFlowDetailAPI:
     @pytest.mark.asyncio
     async def test_get_flow_not_found(self, frontend_client):
         """Проверяем 404 для несуществующего flow"""
-        response = await frontend_client.get("/frontend/api/flows/nonexistent_flow")
+        response = await frontend_client.get("/frontend/api/v1/flows/nonexistent_flow")
         
         assert response.status_code == 404
 
@@ -163,7 +163,7 @@ class TestFlowCreateAPI:
             "source": "test"
         }
         
-        response = await frontend_client.post("/frontend/api/flows/", json=flow_data)
+        response = await frontend_client.post("/frontend/api/v1/flows/", json=flow_data)
         
         assert response.status_code == 200
         
@@ -181,7 +181,7 @@ class TestFlowCreateAPI:
             "source": "test"
         }
         
-        response = await frontend_client.post("/frontend/api/flows/", json=flow_data)
+        response = await frontend_client.post("/frontend/api/v1/flows/", json=flow_data)
         
         assert response.status_code == 200
         
@@ -195,7 +195,7 @@ class TestFlowCanvasAPI:
     @pytest.mark.asyncio
     async def test_get_canvas_data_empty(self, frontend_client, test_flow):
         """Проверяем получение пустых canvas данных"""
-        response = await frontend_client.get(f"/frontend/api/flows/{test_flow.flow_id}/canvas")
+        response = await frontend_client.get(f"/frontend/api/v1/flows/{test_flow.flow_id}/canvas")
         
         assert response.status_code == 200
         data = response.json()
@@ -206,7 +206,7 @@ class TestFlowCanvasAPI:
     async def test_get_canvas_data_with_content(self, frontend_client, test_flow_with_canvas):
         """Проверяем получение canvas данных с содержимым"""
         response = await frontend_client.get(
-            f"/frontend/api/flows/{test_flow_with_canvas.flow_id}/canvas"
+            f"/frontend/api/v1/flows/{test_flow_with_canvas.flow_id}/canvas"
         )
         
         assert response.status_code == 200
@@ -217,7 +217,7 @@ class TestFlowCanvasAPI:
     @pytest.mark.asyncio
     async def test_get_canvas_not_found(self, frontend_client):
         """Проверяем 404 для несуществующего flow"""
-        response = await frontend_client.get("/frontend/api/flows/nonexistent_flow/canvas")
+        response = await frontend_client.get("/frontend/api/v1/flows/nonexistent_flow/canvas")
         
         assert response.status_code == 404
 
@@ -229,7 +229,7 @@ class TestFlowVariablesAPI:
     async def test_get_flow_variables_empty(self, frontend_client, test_flow):
         """Проверяем получение пустых переменных"""
         response = await frontend_client.get(
-            f"/frontend/api/flows/{test_flow.flow_id}/variables"
+            f"/frontend/api/v1/flows/{test_flow.flow_id}/variables"
         )
         
         assert response.status_code == 200
@@ -240,7 +240,7 @@ class TestFlowVariablesAPI:
     async def test_get_flow_variables_not_found(self, frontend_client):
         """Проверяем 404 для несуществующего flow"""
         response = await frontend_client.get(
-            "/frontend/api/flows/nonexistent_flow/variables"
+            "/frontend/api/v1/flows/nonexistent_flow/variables"
         )
         
         assert response.status_code == 404

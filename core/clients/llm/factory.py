@@ -5,9 +5,10 @@
 """
 
 import logging
+import os
 from typing import Optional, Dict
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage, AIMessage
+from langchain_core.messages import BaseMessage, AIMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_openai import ChatOpenAI
 
@@ -107,8 +108,6 @@ class MockLLM(BaseChatModel):
         2. Удаляем его из очереди
         3. Если очередь пуста - raise RuntimeError
         """
-        from langchain_core.messages import ToolMessage
-        
         # Если есть очередь ответов - используем её
         if self._response_queue:
             response = self._response_queue.pop(0)
@@ -224,8 +223,6 @@ def get_llm(model_name: Optional[str] = None, temperature: Optional[float] = Non
         >>> llm = get_llm("anthropic/claude-sonnet-4.5")  # Конкретная модель
         >>> llm = get_llm(temperature=0.7)  # Дефолтная модель с кастомной температурой
     """
-    import os
-    
     settings = get_settings()
 
     model = model_name or settings.llm.default_model

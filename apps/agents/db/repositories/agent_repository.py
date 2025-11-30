@@ -17,9 +17,18 @@ class AgentRepository(BaseRepository[AgentConfig]):
     """
     Репозиторий для работы с конфигурациями агентов.
     is_global=False - агенты изолированы по компаниям.
+    owner_service=agents - принадлежит сервису agents.
     """
     
     is_global = False
+    owner_service = "agents"
+    api_prefix = "agent"
+    
+    @classmethod
+    def get_service_url(cls) -> str:
+        """URL сервиса agents"""
+        from apps.agents.db.repositories import get_agents_service_url
+        return get_agents_service_url()
 
     def __init__(self, storage: Storage):
         super().__init__(storage=storage, model_class=AgentConfig)

@@ -94,12 +94,17 @@ class LoggingConfig(BaseModel):
 class ServerConfig(BaseModel):
     """Конфигурация сервера"""
 
+    name: str = "core"  # Имя сервиса для маршрутизации репозиториев
     env: str = "production"
     host: str = "0.0.0.0"
     port: int = 8001
     debug: bool = False
     domain: str = "agents-lab.ru"
     public_domain: Optional[str] = None  # Публичный домен для OAuth (если отличается от domain)
+    
+    def get_service_url(self) -> str:
+        """Возвращает URL сервиса"""
+        return f"http://{self.domain}:{self.port}"
     workers: int = 4
     
     def get_public_domain(self) -> str:

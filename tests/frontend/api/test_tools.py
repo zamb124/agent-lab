@@ -59,12 +59,12 @@ async def test_inline_tool(query: str) -> str:
 
 
 class TestToolsListAPI:
-    """Тесты для GET /frontend/api/tools/ endpoint"""
+    """Тесты для GET /frontend/api/v1/tools/ endpoint"""
     
     @pytest.mark.asyncio
     async def test_list_tools_returns_tools(self, frontend_client, test_tool):
         """Проверяем получение списка инструментов"""
-        response = await frontend_client.get("/frontend/api/tools/")
+        response = await frontend_client.get("/frontend/api/v1/tools/")
         
         assert response.status_code == 200
         data = response.json()
@@ -73,7 +73,7 @@ class TestToolsListAPI:
     @pytest.mark.asyncio
     async def test_list_tools_public_only(self, frontend_client, test_tool):
         """Проверяем фильтр public_only"""
-        response = await frontend_client.get("/frontend/api/tools/?public_only=true")
+        response = await frontend_client.get("/frontend/api/v1/tools/?public_only=true")
         
         assert response.status_code == 200
         data = response.json()
@@ -81,12 +81,12 @@ class TestToolsListAPI:
 
 
 class TestToolDetailAPI:
-    """Тесты для GET /frontend/api/tools/{tool_id} endpoint"""
+    """Тесты для GET /frontend/api/v1/tools/{tool_id} endpoint"""
     
     @pytest.mark.asyncio
     async def test_get_tool_by_id(self, frontend_client, test_tool):
         """Проверяем получение инструмента по ID"""
-        response = await frontend_client.get(f"/frontend/api/tools/{test_tool.tool_id}")
+        response = await frontend_client.get(f"/frontend/api/v1/tools/{test_tool.tool_id}")
         
         assert response.status_code == 200
         data = response.json()
@@ -96,14 +96,14 @@ class TestToolDetailAPI:
     @pytest.mark.asyncio
     async def test_get_tool_not_found(self, frontend_client):
         """Проверяем 404 для несуществующего инструмента"""
-        response = await frontend_client.get("/frontend/api/tools/nonexistent_tool")
+        response = await frontend_client.get("/frontend/api/v1/tools/nonexistent_tool")
         
         assert response.status_code == 404
     
     @pytest.mark.asyncio
     async def test_get_inline_tool(self, frontend_client, test_inline_tool):
         """Проверяем получение inline инструмента"""
-        response = await frontend_client.get(f"/frontend/api/tools/{test_inline_tool.tool_id}")
+        response = await frontend_client.get(f"/frontend/api/v1/tools/{test_inline_tool.tool_id}")
         
         assert response.status_code == 200
         data = response.json()
@@ -113,7 +113,7 @@ class TestToolDetailAPI:
 
 
 class TestToolCreateAPI:
-    """Тесты для POST /frontend/api/tools/ endpoint"""
+    """Тесты для POST /frontend/api/v1/tools/ endpoint"""
     
     @pytest.mark.asyncio
     async def test_create_tool(self, frontend_client, frontend_tool_repo):
@@ -128,7 +128,7 @@ class TestToolCreateAPI:
             "params": {}
         }
         
-        response = await frontend_client.post("/frontend/api/tools/", json=tool_data)
+        response = await frontend_client.post("/frontend/api/v1/tools/", json=tool_data)
         
         assert response.status_code == 200
         

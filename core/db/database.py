@@ -33,22 +33,24 @@ def _get_loop_id() -> int:
 
 async def get_engine(db_url: Optional[str] = None) -> AsyncEngine:
     """
-    Лениво создает engine для текущего event loop.
+    Лениво создает engine для текущего event loop и URL БД.
     
     Args:
         db_url: URL БД (если не указан, берется из settings.database.url)
     """
     loop_id = _get_loop_id()
-
-    if loop_id in _engines:
-        return _engines[loop_id]
-
-    settings = get_settings()
     
+    settings = get_settings()
     if db_url is None:
         db_url = settings.database.url
     
-    logger.debug(f"Создаем engine для event loop {loop_id}")
+    # Ключ кэша включает и loop_id и db_url
+    cache_key = (loop_id, db_url)
+    
+    if cache_key in _engines:
+        return _engines[cache_key]
+    
+    logger.debug(f"Создаем engine для event loop {loop_id}, db_url={db_url[:50]}...")
 
     is_testing = os.environ.get("PYTEST_CURRENT_TEST") is not None
 
@@ -74,29 +76,36 @@ async def get_engine(db_url: Optional[str] = None) -> AsyncEngine:
         )
         logger.debug(f"Engine создан (loop {loop_id})")
 
-    _engines[loop_id] = engine
+    _engines[cache_key] = engine
     return engine
 
 
 async def get_session_factory(db_url: Optional[str] = None) -> async_sessionmaker:
     """
-    Лениво создает session factory для текущего event loop.
+    Лениво создает session factory для текущего event loop и URL БД.
     
     Args:
         db_url: URL БД (если не указан, берется из settings.database.url)
     """
     loop_id = _get_loop_id()
-
-    if loop_id in _session_factories:
-        return _session_factories[loop_id]
+    
+    settings = get_settings()
+    if db_url is None:
+        db_url = settings.database.url
+    
+    # Ключ кэша включает и loop_id и db_url
+    cache_key = (loop_id, db_url)
+    
+    if cache_key in _session_factories:
+        return _session_factories[cache_key]
 
     engine = await get_engine(db_url)
     session_factory = async_sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
     )
 
-    _session_factories[loop_id] = session_factory
-    logger.debug(f"Session factory создана (loop {loop_id})")
+    _session_factories[cache_key] = session_factory
+    logger.debug(f"Session factory создана (loop {loop_id}, db_url={db_url[:50]}...)")
     return session_factory
 
 

@@ -321,8 +321,6 @@ async def _send_message_direct(
     user_id: str,
 ):
     """Отправляет сообщение напрямую через интерфейс"""
-    from apps.agents.tasks.message_tasks import send_message_task
-    # Вызываем функцию напрямую, не через .kiq()
     await send_message_task(
         platform=platform,
         flow_id=flow_id,

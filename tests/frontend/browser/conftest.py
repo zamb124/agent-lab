@@ -44,10 +44,18 @@ def get_free_port() -> int:
         return s.getsockname()[1]
 
 
-def run_server(host: str, port: int):
-    """Запуск uvicorn сервера в отдельном процессе"""
+def run_frontend_server(host: str, port: int):
+    """Запуск frontend uvicorn сервера в отдельном процессе"""
     import uvicorn
     from apps.frontend.main import app
+    
+    uvicorn.run(app, host=host, port=port, log_level="warning")
+
+
+def run_agents_server(host: str, port: int):
+    """Запуск agents uvicorn сервера в отдельном процессе"""
+    import uvicorn
+    from apps.agents.main import app
     
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
@@ -127,17 +135,19 @@ def taskiq_worker_process(migrated_db):
 
 
 @pytest.fixture(scope="session")
-def live_server(migrated_db, e2e_test_data, taskiq_worker_process):
+def agents_server(migrated_db):
     """
-    Запускает frontend сервер в отдельном процессе.
-    Зависит от taskiq_worker_process чтобы воркер был запущен.
-    Пользователь уже создан в migrated_db.
+    Запускает agents сервер в отдельном процессе.
+    Frontend зависит от agents через HTTP API.
     """
     port = get_free_port()
     host = "127.0.0.1"
     
+    # Устанавливаем порт agents в переменные окружения для frontend
+    os.environ["AGENTS_SERVICE_URL"] = f"http://{host}:{port}"
+    
     server_process = multiprocessing.Process(
-        target=run_server,
+        target=run_agents_server,
         args=(host, port),
         daemon=True
     )
@@ -145,12 +155,45 @@ def live_server(migrated_db, e2e_test_data, taskiq_worker_process):
     
     if not wait_for_server(host, port):
         server_process.terminate()
-        raise RuntimeError(f"Сервер не запустился на {host}:{port}")
+        raise RuntimeError(f"Agents сервер не запустился на {host}:{port}")
+    
+    print(f"Agents сервер запущен на http://{host}:{port}")
     
     yield {"host": host, "port": port, "url": f"http://{host}:{port}"}
     
     server_process.terminate()
     server_process.join(timeout=5)
+    print("Agents сервер остановлен")
+
+
+@pytest.fixture(scope="session")
+def live_server(migrated_db, e2e_test_data, taskiq_worker_process, agents_server):
+    """
+    Запускает frontend сервер в отдельном процессе.
+    Зависит от agents_server, taskiq_worker_process.
+    Пользователь уже создан в migrated_db.
+    """
+    port = get_free_port()
+    host = "127.0.0.1"
+    
+    server_process = multiprocessing.Process(
+        target=run_frontend_server,
+        args=(host, port),
+        daemon=True
+    )
+    server_process.start()
+    
+    if not wait_for_server(host, port):
+        server_process.terminate()
+        raise RuntimeError(f"Frontend сервер не запустился на {host}:{port}")
+    
+    print(f"Frontend сервер запущен на http://{host}:{port}")
+    
+    yield {"host": host, "port": port, "url": f"http://{host}:{port}"}
+    
+    server_process.terminate()
+    server_process.join(timeout=5)
+    print("Frontend сервер остановлен")
 
 
 @pytest.fixture(scope="session")

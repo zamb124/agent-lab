@@ -3,6 +3,7 @@
 """
 
 import logging
+import re
 from typing import Dict, Any, Optional
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -128,8 +129,6 @@ class VariableResolver:
         variables = VariableResolver.resolve_all(local_vars=local_vars, include_system=include_system)
         
         result = template
-        
-        import re
         
         # Паттерн с поддержкой опциональности и дефолтов
         # {?variable|default} или {variable} или {dict.key[0]}

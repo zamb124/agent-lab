@@ -5,6 +5,7 @@
 
 import json
 import logging
+import re
 import uuid
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, Tuple, List
@@ -12,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from apps.agents.models import TaskConfig, TaskStatus, SessionConfig, SessionStatus
+from apps.agents.tasks.agent_tasks import process_agent_task
 from core.files.processors import (
     get_default_file_processor,
     get_default_audio_processor,
@@ -276,8 +278,6 @@ class BaseInterface(ABC):
         
         await self._update_session_for_task(message, flow_id)
         
-        from apps.agents.tasks.agent_tasks import process_agent_task
-        
         task = await process_agent_task.kiq(
             flow_id=flow_id,
             session_id=message.session_id,
@@ -306,8 +306,6 @@ class BaseInterface(ABC):
     
     async def _update_session_for_task(self, message: Message, flow_id: str):
         """Обновляет или создает сессию для задачи"""
-        import json
-
         storage = get_agents_container().storage
         session_key = self._get_session_storage_key(message.session_id, flow_id)
         session_data = await storage.get(session_key)
@@ -640,8 +638,6 @@ class BaseInterface(ABC):
         if not audio_files:
             return message_content, []
 
-        # Удаляем [AUDIO] блоки из текста сообщения
-        import re
         pattern = r"\[AUDIO\].*?\[/AUDIO\]"
         clean_text = re.sub(pattern, "", message_content, flags=re.DOTALL).strip()
 

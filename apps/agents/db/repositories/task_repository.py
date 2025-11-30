@@ -22,9 +22,18 @@ class TaskRepository(BaseRepository[TaskConfig]):
     """
     Репозиторий для работы с задачами.
     is_global=False - задачи изолированы по компаниям.
+    owner_service=agents - принадлежит сервису agents.
     """
     
     is_global = False
+    owner_service = "agents"
+    api_prefix = "task"
+    
+    @classmethod
+    def get_service_url(cls) -> str:
+        """URL сервиса agents"""
+        from apps.agents.db.repositories import get_agents_service_url
+        return get_agents_service_url()
 
     def __init__(self, storage: Storage):
         super().__init__(storage=storage, model_class=TaskConfig)

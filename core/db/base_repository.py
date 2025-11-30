@@ -25,14 +25,32 @@ class BaseRepository(ABC, Generic[T]):
     Архитектура:
     - Композиция с Storage (приватный _storage)
     - is_global определяет изоляцию (атрибут класса)
+    - owner_service определяет какому сервису принадлежит репозиторий
     - Каждый репозиторий знает свою таблицу (_get_table_name)
     
     Логика изоляции:
     - is_global=True → ключ: {prefix}:{id}
     - is_global=False → ключ: company:{company_id}:{prefix}:{id}
+    
+    Логика маршрутизации:
+    - Если settings.server.name == owner_service → работа с БД напрямую
+    - Иначе → HTTP запросы к сервису-владельцу
     """
     
     is_global: bool = False
+    owner_service: str = "core"  # Сервис-владелец репозитория
+    api_prefix: str = ""  # Префикс для HTTP API (без двоеточия)
+    
+    @classmethod
+    def get_service_url(cls) -> str:
+        """
+        Возвращает URL сервиса-владельца репозитория.
+        Переопределяется в каждом репозитории для указания своего контейнера.
+        """
+        raise NotImplementedError(
+            f"Репозиторий {cls.__name__} должен реализовать get_service_url() "
+            f"для работы через HTTP"
+        )
 
     def __init__(self, storage: Storage, model_class: Type[T]):
         """

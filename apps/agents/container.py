@@ -18,7 +18,7 @@ def _repository_to_prefix(repository) -> str:
     
     Использует префикс из самого репозитория.
     """
-    prefix = repository._get_prefix()
+    prefix = repository.api_prefix or repository._get_prefix()
     return f"/{prefix.rstrip(':')}"
 
 
@@ -28,7 +28,7 @@ def _repository_to_tags(repository) -> list[str]:
     
     Использует префикс из самого репозитория.
     """
-    prefix = repository._get_prefix()
+    prefix = repository.api_prefix or repository._get_prefix()
     tag = prefix.rstrip(':')
     return [tag]
 

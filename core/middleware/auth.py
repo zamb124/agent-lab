@@ -73,10 +73,27 @@ class AuthMiddleware(BaseHTTPMiddleware):
             or request.url.path.startswith("/favicon.ico")
             or request.url.path.startswith("/api/v1/payments/webhook/")
             or request.url.path == "/health"
+            or request.url.path == "/agents/health"
             or request.url.path.startswith("/debug/")
             or request.url.path == "/api/v1/lead"
         ):
             return await call_next(request)
+        
+        # Обработка CRUD API для межсервисного взаимодействия
+        # Пути вида /agents/api/v1/* используют X-Company-Id для контекста
+        if request.url.path.startswith("/agents/api/v1/"):
+            try:
+                context = await self._create_service_api_context(request)
+                set_context(context)
+                request.state.context = context
+                request.state.user = context.user
+                request.state.language = context.language.value
+                response = await call_next(request)
+                return response
+            except HTTPException as e:
+                return JSONResponse(status_code=e.status_code, content={"detail": e.detail})
+            finally:
+                clear_context()
 
         # Для Telegram webhook
         if request.url.path.startswith("/api/v1/webhook/telegram/"):
@@ -202,7 +219,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             # Frontend endpoints - используют токен из куки
             logger.info("🖥️ Frontend API контекст (токен из куки)")
             return await self._create_frontend_context(request, requested_company, has_subdomain=has_subdomain)
-        elif "/api/v1/" in path:
+        elif "/api/v1/" in path or "/agents/api/v1/" in path:
             # Публичные API endpoints - проверяем наличие токена
             token = request.cookies.get("auth_token")
             if not token:
@@ -286,11 +303,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Для тестов: переопределение компании через заголовок X-Company-Id (только local env)
         if settings.server.env == "local":
             override_company_id = request.headers.get("X-Company-Id")
+            import sys
+            print(f"[AUTH] X-Company-Id check: env={settings.server.env}, header={override_company_id}", file=sys.stderr, flush=True)
             if override_company_id:
                 company = await company_repo.get(override_company_id)
+                print(f"[AUTH] X-Company-Id lookup: company_id={override_company_id}, found={company is not None}", file=sys.stderr, flush=True)
                 if company:
                     logger.info(f"Компания из X-Company-Id заголовка: {override_company_id}")
                     return company
+                else:
+                    print(f"[AUTH] Компания {override_company_id} не найдена в БД!", file=sys.stderr, flush=True)
 
         # Специальная логика для локальной разработки
         if settings.server.env == "local" and ".localhost" in host:
@@ -711,6 +733,55 @@ class AuthMiddleware(BaseHTTPMiddleware):
         user = await container.user_repository.get(user_id)
         logger.info(f"🔍 _get_user_by_id({user_id}): found={user is not None}")
         return user
+    
+    async def _create_service_api_context(self, request: Request) -> Context:
+        """
+        Создает контекст для межсервисного API.
+        
+        Использует X-Company-Id заголовок для определения компании.
+        Применяется для CRUD API (/agents/api/v1/*).
+        """
+        container = self._get_container(request)
+        company_repo = container.company_repository
+        
+        # Получаем company_id из заголовка X-Company-Id
+        company_id = request.headers.get("X-Company-Id")
+        user_id = request.headers.get("X-User-Id")
+        
+        # Если нет X-Company-Id - используем системную компанию
+        if company_id:
+            company = await company_repo.get(company_id)
+            if not company:
+                logger.warning(f"Компания {company_id} из X-Company-Id не найдена")
+                raise HTTPException(status_code=404, detail=f"Company {company_id} not found")
+            logger.info(f"Service API: компания из X-Company-Id: {company_id}")
+        else:
+            company = await self._get_system_company(request)
+            logger.info("Service API: используем системную компанию")
+        
+        # Создаем сервисного пользователя
+        user = User(
+            user_id=user_id or "service_api",
+            provider=AuthProvider.YANDEX,
+            provider_user_id=user_id or "service_api",
+            email="",
+            name="Service API User",
+            status=UserStatus.ACTIVE,
+            groups=["service"],
+            companies={company.company_id: ["admin"]},
+            active_company_id=company.company_id,
+        )
+        
+        language = self._detect_user_language(request)
+        
+        return Context(
+            user=user,
+            platform="service_api",
+            active_company=company,
+            user_companies=[company],
+            language=language,
+            metadata={"service_api": True, "x_company_id": company_id}
+        )
 
     async def _update_user_active_company(self, request: Request, user: User):
         """Обновляет активную компанию пользователя"""

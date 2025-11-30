@@ -6,6 +6,8 @@ import logging
 import json
 from datetime import datetime
 
+from core.context import get_context
+
 
 class JSONFormatter(logging.Formatter):
     """
@@ -26,7 +28,6 @@ class JSONFormatter(logging.Formatter):
             "thread": record.thread,
         }
 
-        from core.context import get_context
         context = get_context()
 
         if context:
@@ -115,7 +116,6 @@ class StructuredConsoleFormatter(logging.Formatter):
         lines = [f"{timestamp} {level_colored} {logger_name} {location_colored}"]
         lines.append(f"  ▸ {message}")
 
-        from core.context import get_context
         context = get_context()
 
         if context:

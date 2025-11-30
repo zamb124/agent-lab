@@ -27,9 +27,12 @@ class FrontendContainer(BaseContainer):
     """
     Контейнер для сервиса фронтенда.
     
+    Репозитории agents-сервиса автоматически проксируются через HTTP,
+    так как owner_service="agents" != service_name="frontend".
+    
     Пример:
         container = get_frontend_container()
-        user = await container.user_repository.get("user_id")
+        agent = await container.agent_repository.get("agent_id")  # HTTP запрос к agents
     """
     
     @lazy
@@ -39,33 +42,33 @@ class FrontendContainer(BaseContainer):
     
     @lazy
     def agent_repository(self):
-        """AgentRepository - проксируется из AgentsContainer"""
-        from apps.agents.container import get_agents_container
-        return get_agents_container().agent_repository
+        """AgentRepository - HTTP прокси к сервису agents"""
+        from apps.agents.db.repositories import AgentRepository
+        return self._get_repository(AgentRepository)
     
     @lazy
     def flow_repository(self):
-        """FlowRepository - проксируется из AgentsContainer"""
-        from apps.agents.container import get_agents_container
-        return get_agents_container().flow_repository
+        """FlowRepository - HTTP прокси к сервису agents"""
+        from apps.agents.db.repositories import FlowRepository
+        return self._get_repository(FlowRepository)
     
     @lazy
     def tool_repository(self):
-        """ToolRepository - проксируется из AgentsContainer"""
-        from apps.agents.container import get_agents_container
-        return get_agents_container().tool_repository
+        """ToolRepository - HTTP прокси к сервису agents"""
+        from apps.agents.db.repositories import ToolRepository
+        return self._get_repository(ToolRepository)
     
     @lazy
     def task_repository(self):
-        """TaskRepository - проксируется из AgentsContainer"""
-        from apps.agents.container import get_agents_container
-        return get_agents_container().task_repository
+        """TaskRepository - HTTP прокси к сервису agents"""
+        from apps.agents.db.repositories import TaskRepository
+        return self._get_repository(TaskRepository)
     
     @lazy
     def session_repository(self):
-        """SessionRepository - проксируется из AgentsContainer"""
-        from apps.agents.container import get_agents_container
-        return get_agents_container().session_repository
+        """SessionRepository - HTTP прокси к сервису agents"""
+        from apps.agents.db.repositories import SessionRepository
+        return self._get_repository(SessionRepository)
     
     def get_repository_by_model_type(self, model_type: str) -> Any:
         """

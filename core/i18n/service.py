@@ -7,6 +7,7 @@ import json
 import re
 import ast
 import logging
+import threading
 from pathlib import Path
 from typing import Dict, Optional
 from datetime import datetime
@@ -54,8 +55,6 @@ class TranslationManager:
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                # Если цикл событий уже запущен, загружаем в отдельной корутине
-                import threading
                 def load_in_thread():
                     new_loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(new_loop)

@@ -59,7 +59,7 @@ class TestCompanyVariablesAPI:
     @pytest.mark.asyncio
     async def test_list_company_variables(self, frontend_client):
         """Проверяем получение списка переменных компании"""
-        response = await frontend_client.get("/frontend/api/variables/admin/variables")
+        response = await frontend_client.get("/frontend/api/v1/variables/admin/variables")
         
         assert response.status_code == 200
         data = response.json()
@@ -71,7 +71,7 @@ class TestCompanyVariablesAPI:
         var_name = make_unique_id("company_var")
         
         response = await frontend_client.post(
-            "/frontend/api/variables/admin/variables",
+            "/frontend/api/v1/variables/admin/variables",
             json={"key": var_name, "value": "test_value"}
         )
         
@@ -83,11 +83,11 @@ class TestCompanyVariablesAPI:
         var_name = make_unique_id("get_var")
         
         await frontend_client.post(
-            "/frontend/api/variables/admin/variables",
+            "/frontend/api/v1/variables/admin/variables",
             json={"key": var_name, "value": "get_test_value"}
         )
         
-        response = await frontend_client.get(f"/frontend/api/variables/admin/variables/{var_name}")
+        response = await frontend_client.get(f"/frontend/api/v1/variables/admin/variables/{var_name}")
         
         assert response.status_code == 200
     
@@ -96,12 +96,12 @@ class TestCompanyVariablesAPI:
         """Проверяем обновление переменной компании"""
         var_name = make_unique_id("update_var")
         await frontend_client.post(
-            "/frontend/api/variables/admin/variables",
+            "/frontend/api/v1/variables/admin/variables",
             json={"key": var_name, "value": "original_value"}
         )
 
         response = await frontend_client.put(
-            f"/frontend/api/variables/admin/variables/{var_name}",
+            f"/frontend/api/v1/variables/admin/variables/{var_name}",
             json={"key": var_name, "value": "updated_value"}
         )
         assert response.status_code == 200
@@ -112,11 +112,11 @@ class TestCompanyVariablesAPI:
         var_name = make_unique_id("del_var")
         
         await frontend_client.post(
-            "/frontend/api/variables/admin/variables",
+            "/frontend/api/v1/variables/admin/variables",
             json={"key": var_name, "value": "to_delete"}
         )
         
-        response = await frontend_client.delete(f"/frontend/api/variables/admin/variables/{var_name}")
+        response = await frontend_client.delete(f"/frontend/api/v1/variables/admin/variables/{var_name}")
         
         assert response.status_code == 200
 
@@ -128,7 +128,7 @@ class TestFlowVariablesAPI:
     async def test_flow_variables_contain_system_vars(self, frontend_client, test_flow_for_variables):
         """Проверяем получение переменных flow"""
         response = await frontend_client.get(
-            f"/frontend/api/variables/flow/{test_flow_for_variables.flow_id}"
+            f"/frontend/api/v1/variables/flow/{test_flow_for_variables.flow_id}"
         )
         
         assert response.status_code == 200

@@ -7,6 +7,8 @@ import logging
 import re
 from typing import Optional, Dict, Any, Set, List, TYPE_CHECKING
 
+from core.db.repositories.variable_repository import Variable
+
 if TYPE_CHECKING:
     from core.db.repositories.variable_repository import VariableRepository
 
@@ -44,8 +46,6 @@ class VariablesService:
         Returns:
             True если сохранено
         """
-        from core.db.repositories.variable_repository import Variable
-        
         variable = Variable(
             key=key,
             value=value,

@@ -11,6 +11,7 @@ import re
 import typing
 from typing import List, Any, Dict
 from langchain_core.tools import StructuredTool
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from pydantic import BaseModel, Field, create_model
 
 from apps.agents.models import ToolReference, CodeMode
@@ -202,9 +203,6 @@ from apps.agents.services.tool_decorator import tool
         except ImportError:
             pass
 
-        # Добавляем платформенные функции и классы
-        from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
-        
         platform_functions = {
             'tool': tool,
             'get_context': get_context,

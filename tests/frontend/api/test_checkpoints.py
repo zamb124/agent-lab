@@ -77,13 +77,13 @@ async def test_session_for_checkpoints(frontend_session_repo, test_flow_for_chec
 
 
 class TestCheckpointsTimelineAPI:
-    """Тесты для GET /frontend/api/checkpoints/timeline/{thread_id} endpoint"""
+    """Тесты для GET /frontend/api/v1/checkpoints/timeline/{thread_id} endpoint"""
     
     @pytest.mark.asyncio
     async def test_get_timeline(self, frontend_client, test_session_for_checkpoints):
         """Проверяем получение timeline"""
         response = await frontend_client.get(
-            f"/frontend/api/checkpoints/timeline/{test_session_for_checkpoints.session_id}"
+            f"/frontend/api/v1/checkpoints/timeline/{test_session_for_checkpoints.session_id}"
         )
         
         assert response.status_code == 200
@@ -94,20 +94,20 @@ class TestCheckpointsTimelineAPI:
     async def test_get_timeline_without_values(self, frontend_client, test_session_for_checkpoints):
         """Проверяем timeline без значений"""
         response = await frontend_client.get(
-            f"/frontend/api/checkpoints/timeline/{test_session_for_checkpoints.session_id}?include_values=false"
+            f"/frontend/api/v1/checkpoints/timeline/{test_session_for_checkpoints.session_id}?include_values=false"
         )
         
         assert response.status_code == 200
 
 
 class TestCheckpointsConnectionsAPI:
-    """Тесты для GET /frontend/api/checkpoints/connections/{thread_id} endpoint"""
+    """Тесты для GET /frontend/api/v1/checkpoints/connections/{thread_id} endpoint"""
     
     @pytest.mark.asyncio
     async def test_get_connections(self, frontend_client, test_session_for_checkpoints):
         """Проверяем получение connections"""
         response = await frontend_client.get(
-            f"/frontend/api/checkpoints/connections/{test_session_for_checkpoints.session_id}"
+            f"/frontend/api/v1/checkpoints/connections/{test_session_for_checkpoints.session_id}"
         )
         
         assert response.status_code == 200

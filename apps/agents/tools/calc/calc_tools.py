@@ -2,14 +2,14 @@
 Инструменты для калькулятора.
 """
 
+from simpleeval import simple_eval
+
 from apps.agents.services.tool_decorator import tool
 
 
 @tool(is_public=True, group="Математика", title="Калькулятор")
 async def calculate(expression: str) -> str:
     """Вычислить математическое выражение."""
-    from simpleeval import simple_eval
-    
     allowed_chars = set("0123456789+-*/.() ")
     if not all(c in allowed_chars for c in expression):
         raise ValueError(f"Недопустимые символы в выражении '{expression}'")

@@ -6,6 +6,7 @@ RAG провайдер на базе Agentset.ai.
 
 import httpx
 import logging
+import uuid
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse, unquote
@@ -364,9 +365,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
         if not s3_client:
             raise ValueError("S3 клиент не настроен для загрузки текста в RAG")
 
-        # Создаем временный файл в S3
-        import uuid
-        file_id_short = str(uuid.uuid4())[:8]  # Короткий UUID (8 символов)
+        file_id_short = str(uuid.uuid4())[:8]
 
         # Генерируем читаемое название файла
         if document_name and document_name.strip():

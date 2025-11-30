@@ -18,10 +18,15 @@
 
 import functools
 import logging
-from typing import Optional, Any, Callable, Dict, List
+from typing import Optional, Any, Callable, Dict, List, Type, Union
 from fastapi import APIRouter
 
 logger = logging.getLogger(__name__)
+
+# TYPE_CHECKING import для избежания циклических зависимостей
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from core.db.base_repository import BaseRepository
 
 
 def lazy(func: Callable) -> property:
@@ -85,6 +90,48 @@ class BaseContainer:
         self.shared_db_url = shared_db_url
         
         self._crud_routers: Dict[str, APIRouter] = {}
+        self._service_name: Optional[str] = None
+    
+    @property
+    def service_name(self) -> str:
+        """
+        Имя текущего сервиса из settings.server.name.
+        Используется для определения локальный репозиторий или HTTP прокси.
+        """
+        if self._service_name is None:
+            from core.config import get_settings
+            self._service_name = get_settings().server.name
+        return self._service_name
+    
+    def _get_repository(
+        self,
+        repository_class: Type["BaseRepository"],
+        storage: Optional[Any] = None
+    ) -> Union["BaseRepository", Any]:
+        """
+        Возвращает локальный репозиторий или HTTP прокси.
+        
+        Если owner_service репозитория совпадает с текущим сервисом,
+        создается локальный репозиторий с доступом к БД.
+        Иначе создается HTTPRepositoryProxy для HTTP запросов.
+        
+        Args:
+            repository_class: Класс репозитория
+            storage: Storage для локального репозитория (опционально)
+            
+        Returns:
+            Локальный репозиторий или HTTPRepositoryProxy
+        """
+        if repository_class.owner_service == self.service_name:
+            if storage is None:
+                storage = self.shared_storage if repository_class.is_global else self.storage
+            return repository_class(storage=storage)
+        
+        from core.db.http_repository import HTTPRepositoryProxy
+        return HTTPRepositoryProxy(
+            repository_class=repository_class,
+            model_class=repository_class.model_class if hasattr(repository_class, 'model_class') else None
+        )
     
     # === Storage ===
     
