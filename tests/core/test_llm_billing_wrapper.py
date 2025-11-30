@@ -6,8 +6,8 @@ import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from langchain_core.messages import HumanMessage
-from langchain_core.tools import tool
 
+from apps.agents.services.tool_decorator import tool
 from apps.agents.services.llm_billing_wrapper import ChatOpenAIWithBilling
 
 

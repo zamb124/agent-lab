@@ -75,21 +75,16 @@ class BaseAgent(ABC):
         return CompiledGraphWrapper(self)
 
     async def ainvoke(self, input_data: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """
-        Единый метод вызова агента.
-        Обрабатывает как обычное выполнение, так и resume после interrupt.
-        """
+        """Единый метод вызова агента"""
         if not self.config:
             raise ValueError("config должен быть установлен")
         
-        state_manager = await get_state_manager()
         context = get_context()
         if not context:
             raise ValueError("Контекст отсутствует")
         
-        session_id = input_data.get("session_id") or (config or {}).get("configurable", {}).get("session_id") or context.session_id
-        if not session_id:
-            raise ValueError("session_id не указан")
+        session_id = self._resolve_session_id(input_data, config, context)
+        state_manager = await get_state_manager()
         
         state = await state_manager.get_or_create_session(
             session_id=session_id,
@@ -98,26 +93,40 @@ class BaseAgent(ABC):
             initial_store=context.flow_config.store if context.flow_config else None
         )
         
-        input_store = input_data.get("store")
-        if isinstance(input_store, StoreProxy):
-            state["store"] = input_store
-            state["store_id"] = input_store.store_id
+        if isinstance(input_data.get("store"), StoreProxy):
+            state["store"] = input_data["store"]
+            state["store_id"] = input_data["store"].store_id
         
         interrupt_context = state.get("interrupt_context")
         if interrupt_context:
-            return await self._handle_resume(state, input_data, config, state_manager, interrupt_context)
+            # Для stategraph_node типа interrupt просто продолжаем execute - runner сам обработает
+            if interrupt_context.get("type") == "stategraph_node":
+                self._merge_input_to_state(state, input_data, context)
+                return await self._execute(state, input_data, config, context, state_manager)
+            return await self._handle_resume(state, input_data, config, state_manager)
         
         return await self._execute(state, input_data, config, context, state_manager)
+
+    def _resolve_session_id(self, input_data: Dict, config: Optional[Dict], context) -> str:
+        """Определяет session_id из доступных источников"""
+        session_id = (
+            input_data.get("session_id") or 
+            (config or {}).get("configurable", {}).get("session_id") or 
+            context.session_id
+        )
+        if not session_id:
+            raise ValueError("session_id не указан")
+        return session_id
 
     async def _handle_resume(
         self, 
         state: Dict[str, Any], 
         input_data: Dict[str, Any], 
         config: Optional[Dict[str, Any]],
-        state_manager,
-        interrupt_context: Dict[str, Any]
+        state_manager
     ) -> Dict[str, Any]:
         """Обработка resume после interrupt"""
+        interrupt_context = state["interrupt_context"]
         interrupted_session_id = interrupt_context.get("interrupted_session_id")
         interrupted_agent_id = interrupt_context.get("agent_id")
         
@@ -179,6 +188,23 @@ class BaseAgent(ABC):
         state_manager
     ) -> Dict[str, Any]:
         """Основное выполнение агента"""
+        self._merge_input_to_state(state, input_data, context)
+        
+        set_state_in_context(state)
+        context.agent_config = self.config
+        set_context(context)
+        
+        runner = await self.get_runner()
+        
+        try:
+            final_state = await runner.arun(state)
+            return await self._finalize_state(final_state, state, state_manager)
+        except AgentInterrupt as interrupt:
+            await self._handle_interrupt(state, state_manager)
+            raise interrupt
+
+    def _merge_input_to_state(self, state: Dict, input_data: Dict, context) -> None:
+        """Объединяет входные данные с state"""
         state["messages"].extend(input_data.get("messages", []))
         
         input_store = input_data.get("store")
@@ -193,30 +219,22 @@ class BaseAgent(ABC):
         state["remaining_steps"] = input_data.get("remaining_steps") or state.get("remaining_steps")
         if state["remaining_steps"] is None:
             raise ValueError("remaining_steps должен быть указан")
+
+    async def _finalize_state(self, final_state: Dict, original_state: Dict, state_manager) -> Dict:
+        """Финализация state после выполнения"""
+        store_proxy = original_state["store"]
         
-        set_state_in_context(state)
-        context.agent_config = self.config
-        set_context(context)
+        final_state["session_id"] = original_state["session_id"]
+        final_state["store"] = store_proxy
+        final_state["store_id"] = store_proxy.store_id
         
-        runner = await self.get_runner()
-        store_proxy = state["store"]
+        # Сохраняем локальные изменения и загружаем обновленные данные из БД
+        await store_proxy.refresh()
         
-        try:
-            final_state = await runner.arun(state)
-            final_state["session_id"] = state["session_id"]
-            final_state["store"] = store_proxy
-            final_state["store_id"] = store_proxy.store_id
-            
-            await store_proxy.ensure_saved()
-            await state_manager.save_session(final_state)
-            set_state_in_context(final_state)
-            await store_proxy.refresh()
-            
-            return dict(final_state)
-            
-        except AgentInterrupt as interrupt:
-            await self._handle_interrupt(state, state_manager)
-            raise interrupt
+        await state_manager.save_session(final_state)
+        set_state_in_context(final_state)
+        
+        return dict(final_state)
 
     async def _handle_interrupt(self, state: Dict[str, Any], state_manager) -> None:
         """Сохранение состояния при interrupt"""
@@ -226,23 +244,20 @@ class BaseAgent(ABC):
         
         existing = state.get("interrupt_context")
         if existing and existing.get("type") == "stategraph_node":
-            await state_manager.save_session(state)
-            return
-        
-        if ":sub:" in session_id:
-            await state_manager.save_session(state)
-            return
-        
-        reloaded = await state_manager.get_or_create_session(session_id)
-        existing_interrupt = reloaded.get("interrupt_context")
-        
-        if existing_interrupt and ":sub:" in (existing_interrupt.get("interrupted_session_id") or ""):
-            state["interrupt_context"] = existing_interrupt
+            pass
+        elif ":sub:" in session_id:
+            pass
         else:
-            state["interrupt_context"] = {
-                "interrupted_session_id": session_id,
-                "agent_id": self.config.agent_id
-            }
+            reloaded = await state_manager.get_or_create_session(session_id)
+            existing_interrupt = reloaded.get("interrupt_context")
+            
+            if existing_interrupt and ":sub:" in (existing_interrupt.get("interrupted_session_id") or ""):
+                state["interrupt_context"] = existing_interrupt
+            else:
+                state["interrupt_context"] = {
+                    "interrupted_session_id": session_id,
+                    "agent_id": self.config.agent_id
+                }
         
         await state_manager.save_session(state)
 
@@ -325,6 +340,13 @@ class BaseAgent(ABC):
         )
         tool_obj._is_agent_tool = True
         return tool_obj
+
+    def as_node(self):
+        """Превращает агента в ноду для использования в StateGraph"""
+        async def node_func(state: Dict[str, Any]) -> Dict[str, Any]:
+            result = await self.ainvoke(state)
+            return result
+        return node_func
 
     async def _sync_store(self, result: Dict[str, Any], parent_session_id: str, state_manager) -> None:
         """Синхронизация store между субагентом и родителем"""

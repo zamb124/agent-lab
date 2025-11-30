@@ -4,6 +4,30 @@ alwaysApply: false
 ---
 # Правила работы с фикстурами тестов
 
+## Структура тестов
+
+```
+tests/
+├── conftest.py           # Общие фикстуры
+├── core/                 # Тесты core модуля
+│   ├── auth/            # Авторизация (core/identity)
+│   ├── conf/            # Конфигурация (core/config)
+│   └── core_clients/    # S3, HTTP клиенты
+├── agents/              # Тесты apps/agents
+│   ├── arch/            # Архитектурные тесты
+│   ├── billing/         # Биллинг
+│   ├── clients/         # AmoCRM и др.
+│   ├── crud/            # CRUD операции
+│   ├── integration/     # Интеграционные
+│   ├── interfaces/      # Telegram, WhatsApp
+│   ├── mcp/             # MCP серверы
+│   ├── payments/        # Платежи
+│   ├── rag/             # RAG
+│   └── repositories/    # Репозитории
+└── frontend/            # Тесты apps/frontend
+    └── i18n/            # Интернационализация
+```
+
 ## Единая архитектура
 
 Все тесты используют унифицированные фикстуры из `tests/conftest.py`.
@@ -89,14 +113,18 @@ async def test_services(
 ```python
 async def test_with_context(
     test_context,         # Context с test_user и test_company
-    test_company,         # Company с балансом
+    test_company,         # Company с уникальным ID (test_company_{uuid})
     test_user,            # User
     system_context,       # Context для системной компании
     save_test_company,    # Сохраняет test_company в БД
+    unique_id,            # Генератор уникальных ID для изоляции
 ):
     # test_context автоматически установлен
-    assert test_context.user.user_id == "test_user"
-    assert test_context.active_company.company_id == "test_company"
+    # ВАЖНО: test_company.company_id - уникальный для каждого теста
+    
+    # Используй unique_id для изоляции
+    session_id = unique_id("session")  # → session_abc123
+    thread_id = unique_id("thread")    # → thread_def456
 ```
 
 ### MockLLM

@@ -5,11 +5,22 @@ FrontendContainer - DI контейнер для сервиса фронтенд
 """
 
 import logging
-from typing import Optional
+from typing import Optional, Any
 
 from core.container import BaseContainer, lazy
 
 logger = logging.getLogger(__name__)
+
+
+# Маппинг model_type -> атрибут репозитория в контейнере
+MODEL_TYPE_TO_REPOSITORY = {
+    "agent": "agent_repository",
+    "flow": "flow_repository",
+    "tool": "tool_repository",
+    "task": "task_repository",
+    "user": "user_repository",
+    "session": "session_repository",
+}
 
 
 class FrontendContainer(BaseContainer):
@@ -25,6 +36,58 @@ class FrontendContainer(BaseContainer):
     def canvas_service(self):
         from apps.frontend.services.canvas_service import CanvasService
         return CanvasService()
+    
+    @lazy
+    def agent_repository(self):
+        """AgentRepository - проксируется из AgentsContainer"""
+        from apps.agents.container import get_agents_container
+        return get_agents_container().agent_repository
+    
+    @lazy
+    def flow_repository(self):
+        """FlowRepository - проксируется из AgentsContainer"""
+        from apps.agents.container import get_agents_container
+        return get_agents_container().flow_repository
+    
+    @lazy
+    def tool_repository(self):
+        """ToolRepository - проксируется из AgentsContainer"""
+        from apps.agents.container import get_agents_container
+        return get_agents_container().tool_repository
+    
+    @lazy
+    def task_repository(self):
+        """TaskRepository - проксируется из AgentsContainer"""
+        from apps.agents.container import get_agents_container
+        return get_agents_container().task_repository
+    
+    @lazy
+    def session_repository(self):
+        """SessionRepository - проксируется из AgentsContainer"""
+        from apps.agents.container import get_agents_container
+        return get_agents_container().session_repository
+    
+    def get_repository_by_model_type(self, model_type: str) -> Any:
+        """
+        Получить репозиторий по типу модели.
+        
+        Args:
+            model_type: Тип модели (agent, flow, tool, task, user, session)
+            
+        Returns:
+            Репозиторий для данного типа модели
+            
+        Raises:
+            ValueError: Если для данного типа нет репозитория
+        """
+        repo_attr = MODEL_TYPE_TO_REPOSITORY.get(model_type)
+        if not repo_attr:
+            raise ValueError(
+                f"Тип модели '{model_type}' не имеет репозитория. "
+                f"Доступные типы: {list(MODEL_TYPE_TO_REPOSITORY.keys())}. "
+                f"Для вложенных объектов (llm_config, graph_definition) используйте show_inline_modal."
+            )
+        return getattr(self, repo_attr)
 
 
 # === Глобальный контейнер ===

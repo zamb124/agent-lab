@@ -53,7 +53,7 @@ async def test_stategraph_agent_requires_definition():
     )
     agent = StateGraphAgent(config)
     
-    with pytest.raises(NotImplementedError, match="должен переопределить метод graph_definition"):
+    with pytest.raises(NotImplementedError, match="должен определить атрибут graph_definition"):
         await agent.get_runner()
 
 

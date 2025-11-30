@@ -182,21 +182,9 @@ async def create_delayed_task(
 
 
 @tool(is_public=True, group="Планирование задач и напоминаний", title="Список отложенных задач", state_aware=True)
-def list_delayed_tasks() -> str:
-    """
-    Показывает список всех отложенных задач текущей сессии из state.
-    
-    Задачи персистятся в state["store"]["delayed_tasks"] через checkpointer.
-    
-    Returns:
-        Форматированный список задач или сообщение об отсутствии
-    
-    Examples:
-        list_delayed_tasks()
-    """
-    logger.info("🔍 list_delayed_tasks: функция вызвана")
+async def list_delayed_tasks() -> str:
+    """Показывает список отложенных задач текущей сессии."""
     state = get_state()
-    logger.info(f"🔍 list_delayed_tasks: state = {state}")
     
     if not state or "store" not in state or "delayed_tasks" not in state["store"]:
         return "📭 У вас нет отложенных задач"

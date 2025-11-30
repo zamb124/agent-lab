@@ -25,20 +25,44 @@ async def test_agent_execution():
 # Используй реальный StateManager через get_state_manager()
 </bad_example>
 
+## Структура тестов
+
+```
+tests/
+├── conftest.py           # Общие фикстуры
+├── core/                 # Тесты core модуля
+│   ├── auth/            # Авторизация
+│   ├── conf/            # Конфигурация
+│   └── core_clients/    # S3, HTTP клиенты
+├── agents/              # Тесты apps/agents
+│   ├── arch/            # Архитектурные тесты
+│   ├── billing/         # Биллинг
+│   ├── crud/            # CRUD операции
+│   ├── integration/     # Интеграционные
+│   ├── interfaces/      # Telegram, WhatsApp
+│   ├── mcp/             # MCP серверы
+│   ├── payments/        # Платежи
+│   └── rag/             # RAG
+└── frontend/            # Тесты apps/frontend
+    └── i18n/            # Интернационализация
+```
+
 ## Фикстуры
 
 Используй фикстуры из `tests/conftest.py`:
-- `storage` - Storage экземпляр
-- `test_company` - тестовая компания
+- `agent_repo`, `flow_repo`, `user_repo` - репозитории
+- `test_company` - тестовая компания (с уникальным ID)
 - `test_user` - тестовый пользователь
-- `auth_context` - контекст с авторизацией
+- `test_context` - контекст с авторизацией
+- `unique_id` - генератор уникальных ID для изоляции
 
 <good_example>
 @pytest.mark.asyncio
-async def test_flow_execution(storage, test_user, auth_context):
-    # Используй готовые фикстуры
+async def test_flow_execution(agent_repo, flow_repo, test_user, test_context, unique_id):
+    session_id = unique_id("session")
+    # Используй репозитории вместо storage
     flow_config = FlowConfig(...)
-    await storage.set(f"flow:{flow_config.flow_id}", flow_config.model_dump())
+    await flow_repo.set(flow_config)
 </good_example>
 
 ## Без PYTHONPATH

@@ -1,13 +1,12 @@
 """
 API для работы с флоу в Builder.
 
-Кастомные endpoints для специфичной логики работы с флоу.
-Стандартные CRUD операции доступны через автоматические роутеры: /agents/api/v1/flow/...
+CRUD endpoints для frontend UI.
 """
 
 import logging
-from fastapi import APIRouter, HTTPException
-from typing import Dict, Any
+from fastapi import APIRouter, HTTPException, Query
+from typing import Dict, Any, List
 import uuid
 
 from apps.agents.models import AgentConfig, AgentType, CodeMode, FlowConfig
@@ -18,6 +17,41 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/flows", tags=["builder-flows"])
+
+
+@router.get("/", response_model=List[FlowConfig])
+async def list_flows(
+    flow_repo: FlowRepositoryDep,
+    limit: int = Query(100, ge=1, le=1000)
+) -> List[FlowConfig]:
+    """Получить список flows"""
+    return await flow_repo.list_all(limit=limit)
+
+
+@router.get("/{flow_id:path}", response_model=FlowConfig)
+async def get_flow(flow_id: str, flow_repo: FlowRepositoryDep) -> FlowConfig:
+    """Получить flow по ID"""
+    if flow_id in ("canvas", "variables", "install", "uninstall") or "/" in flow_id:
+        raise HTTPException(status_code=400, detail="Invalid flow_id")
+    
+    flow = await flow_repo.get(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return flow
+
+
+@router.delete("/{flow_id:path}")
+async def delete_flow(flow_id: str, flow_repo: FlowRepositoryDep) -> Dict[str, str]:
+    """Удалить flow"""
+    if "/" in flow_id:
+        raise HTTPException(status_code=400, detail="Invalid flow_id")
+    
+    flow = await flow_repo.get(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    
+    await flow_repo.delete(flow_id)
+    return {"message": "Flow deleted successfully"}
 
 
 @router.post("/", response_model=FlowConfig)

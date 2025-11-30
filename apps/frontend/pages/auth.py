@@ -2,15 +2,14 @@
 Страницы авторизации и управления компаниями
 """
 
-import json
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from apps.frontend.core.template_loader import get_templates
-from core.models import AuthProvider
 
+from apps.frontend.core.template_loader import get_templates
+from apps.frontend.container import get_frontend_container
+from core.models import AuthProvider
 from core.config import get_settings
 from core.context import get_context
-from apps.frontend.container import get_frontend_container
 
 router = APIRouter(prefix="/frontend", tags=["auth-pages"])
 templates = get_templates()
@@ -35,19 +34,15 @@ async def select_company_page(request: Request):
         return RedirectResponse(url="/frontend/create-company")
 
     settings = get_settings()
-    storage = get_frontend_container().storage
+    company_repo = get_frontend_container().company_repository
     user_companies = []
 
     protocol = "http" if settings.server.env == "local" else "https"
     for company_id, roles in user.companies.items():
         company_url = f"{protocol}://{company_id}.{settings.server.domain}/frontend/dashboard"
 
-        company_data = await storage.get(f"company:{company_id}", force_global=True)
-        company_name = company_id
-
-        if company_data:
-            company_dict = json.loads(company_data) if isinstance(company_data, str) else company_data
-            company_name = company_dict.get("name", company_id)
+        company = await company_repo.get(company_id)
+        company_name = company.name if company else company_id
 
         user_companies.append({
             "name": company_name,
@@ -71,4 +66,3 @@ async def create_company_page(request: Request):
         "request": request,
         "domain": settings.server.domain
     })
-

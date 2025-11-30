@@ -23,22 +23,46 @@ class StateGraphAgent(BaseAgent):
     Переопредели метод graph_definition() для определения графа.
     """
 
-    def graph_definition(self) -> Dict[str, Any]:
+    def get_graph_definition(self) -> GraphDefinition:
         """
         Возвращает определение графа.
-        Переопредели этот метод в подклассе для определения структуры графа.
+        
+        Проверяет в порядке:
+        1. Атрибут класса graph_definition (если это GraphDefinition)
+        2. Метод graph_definition() (если переопределен в подклассе)
+        3. self.config.graph_definition
         
         Returns:
-            Словарь с определением графа (nodes, edges, entry_point) или GraphDefinition объект
+            GraphDefinition объект
             
         Raises:
-            NotImplementedError: Если метод не переопределен и нет graph_definition в config
+            NotImplementedError: Если graph_definition не найден
         """
+        # Проверяем атрибут класса (может быть переопределен в подклассе как GraphDefinition)
+        class_attr = getattr(type(self), 'graph_definition', None)
+        if class_attr is not None and isinstance(class_attr, GraphDefinition):
+            return class_attr
+        
+        # Проверяем метод graph_definition() в подклассе (если переопределен и это callable)
+        if class_attr is not None and callable(class_attr):
+            # Это метод - проверяем что это не базовый метод
+            base_method = getattr(StateGraphAgent, 'get_graph_definition', None)
+            if class_attr is not base_method:
+                try:
+                    result = class_attr(self)
+                    if isinstance(result, GraphDefinition):
+                        return result
+                    elif isinstance(result, dict):
+                        return GraphDefinition.model_validate(result)
+                except NotImplementedError:
+                    pass
+        
+        # Проверяем config
         if self.config and self.config.graph_definition:
             return self.config.graph_definition
         
         raise NotImplementedError(
-            f"StateGraph агент {type(self).__name__} должен переопределить метод graph_definition() "
+            f"StateGraph агент {type(self).__name__} должен определить атрибут graph_definition "
             f"или иметь graph_definition в конфигурации"
         )
 
@@ -49,7 +73,7 @@ class StateGraphAgent(BaseAgent):
         Returns:
             StateGraphRunner для выполнения графа
         """
-        graph_def = self.graph_definition()
+        graph_definition = self.get_graph_definition()
         
         llm_kwargs = {}
         if self.config and self.config.llm_config:
@@ -61,8 +85,6 @@ class StateGraphAgent(BaseAgent):
         llm = get_llm(**llm_kwargs) if llm_kwargs else get_llm()
         
         tools = await self.get_tools()
-        
-        graph_definition = GraphDefinition.model_validate(graph_def)
         prompt = self.config.prompt if self.config else None
         
         runner = StateGraphRunner(

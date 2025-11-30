@@ -50,12 +50,29 @@ class StoreProxy(dict):
         
         store_repo = get_agents_container().store_repository
         await store_repo.set(self.store_id, dict(self))
-        
         self._dirty = False
     
     async def refresh(self) -> None:
-        await self.ensure_saved()
+        """Мерджит локальные изменения с данными из БД и сохраняет"""
+        store_repo = get_agents_container().store_repository
+        db_data = await store_repo.get(self.store_id) or {}
         
+        # Мерджим: сначала данные из БД, потом локальные изменения поверх
+        merged = {**db_data, **dict(self)}
+        
+        # Обновляем себя мердженными данными
+        self.clear()
+        super().update(merged)  # Используем super() чтобы не помечать dirty
+        
+        # Сохраняем если есть изменения
+        if merged != db_data:
+            self._dirty = True
+            await self.ensure_saved()
+        else:
+            self._dirty = False
+    
+    async def reload_from_db(self) -> None:
+        """Загружает данные из БД БЕЗ сохранения локальных изменений (перезаписывает локальные данные)"""
         store_repo = get_agents_container().store_repository
         store_data = await store_repo.get(self.store_id)
         
@@ -68,69 +85,54 @@ class StoreProxy(dict):
         await self._save_to_db()
 
 
+def _sanitize_value(value: Any) -> Any:
+    """Санитизирует значение для JSON сериализации"""
+    if isinstance(value, (str, int, float, bool, type(None))):
+        return value
+    return str(value)
+
+
+def _sanitize_args(args: Any) -> Dict[str, Any]:
+    """Санитизирует аргументы tool_call"""
+    if not isinstance(args, dict):
+        return {}
+    return {k: _sanitize_value(v) for k, v in args.items()}
+
+
+def _serialize_tool_call(tc: Any) -> Dict[str, Any]:
+    """Сериализует один tool_call"""
+    if isinstance(tc, dict):
+        result = tc.copy()
+        if "args" in result:
+            result["args"] = _sanitize_args(result["args"])
+        return result
+    return {
+        "name": getattr(tc, "name", ""),
+        "args": _sanitize_args(getattr(tc, "args", {})),
+        "id": str(getattr(tc, "id", "")),
+    }
+
+
 def _messages_to_dicts(messages: List[BaseMessage]) -> List[Dict[str, Any]]:
     """Конвертирует сообщения в словари для сериализации"""
     result = []
     for msg in messages:
-        additional_kwargs = {}
-        if msg.additional_kwargs:
-            additional_kwargs = _sanitize_dict_for_message(dict(msg.additional_kwargs))
-        
-        response_metadata = {}
-        if msg.response_metadata:
-            response_metadata = _sanitize_dict_for_message(dict(msg.response_metadata))
-        
         msg_dict = {
             "type": msg.__class__.__name__,
             "content": msg.content,
-            "additional_kwargs": additional_kwargs,
-            "response_metadata": response_metadata,
+            "additional_kwargs": _sanitize_dict_for_message(dict(msg.additional_kwargs)) if msg.additional_kwargs else {},
+            "response_metadata": _sanitize_dict_for_message(dict(msg.response_metadata)) if msg.response_metadata else {},
         }
+        
         if hasattr(msg, "id") and msg.id:
             msg_dict["id"] = str(msg.id)
         if hasattr(msg, "tool_calls") and msg.tool_calls:
-            tool_calls_list = []
-            for tc in msg.tool_calls:
-                if isinstance(tc, dict):
-                    sanitized_tc = tc.copy()
-                    if "args" in sanitized_tc:
-                        args = sanitized_tc["args"]
-                        if isinstance(args, dict):
-                            sanitized_args = {}
-                            for key, value in args.items():
-                                if isinstance(value, (str, int, float, bool, type(None))):
-                                    sanitized_args[key] = value
-                                elif isinstance(value, BaseMessage):
-                                    sanitized_args[key] = str(value)
-                                else:
-                                    sanitized_args[key] = str(value)
-                            sanitized_tc["args"] = sanitized_args
-                    tool_calls_list.append(sanitized_tc)
-                else:
-                    args = getattr(tc, "args", {})
-                    if isinstance(args, dict):
-                        sanitized_args = {}
-                        for key, value in args.items():
-                            if isinstance(value, (str, int, float, bool, type(None))):
-                                sanitized_args[key] = value
-                            elif isinstance(value, BaseMessage):
-                                sanitized_args[key] = str(value)
-                            else:
-                                sanitized_args[key] = str(value)
-                    else:
-                        sanitized_args = str(args) if args else {}
-                    
-                    tc_dict = {
-                        "name": getattr(tc, "name", ""),
-                        "args": sanitized_args,
-                        "id": str(getattr(tc, "id", "")),
-                    }
-                    tool_calls_list.append(tc_dict)
-            msg_dict["tool_calls"] = tool_calls_list
+            msg_dict["tool_calls"] = [_serialize_tool_call(tc) for tc in msg.tool_calls]
         if hasattr(msg, "tool_call_id") and msg.tool_call_id:
             msg_dict["tool_call_id"] = str(msg.tool_call_id)
         if hasattr(msg, "name") and msg.name:
             msg_dict["name"] = str(msg.name)
+        
         result.append(msg_dict)
     return result
 
@@ -171,53 +173,53 @@ def _sanitize_dict_for_message(d: dict, _visited: Optional[set] = None) -> dict:
     return result
 
 
+MESSAGE_CLASSES = {
+    "HumanMessage": HumanMessage,
+    "AIMessage": AIMessage,
+    "SystemMessage": SystemMessage,
+}
+
+
+def _create_message(msg_dict: Dict[str, Any]) -> Optional[BaseMessage]:
+    """Создает сообщение из словаря"""
+    msg_type = msg_dict.get("type", "HumanMessage")
+    content = msg_dict.get("content", "")
+    
+    if isinstance(content, str) and len(content) > 100000:
+        content = content[:1000] + "... [обрезано]"
+    
+    if msg_type == "ToolMessage":
+        msg = ToolMessage(
+            content=content,
+            tool_call_id=msg_dict.get("tool_call_id", ""),
+            name=msg_dict.get("name", "")
+        )
+    else:
+        msg_class = MESSAGE_CLASSES.get(msg_type, HumanMessage)
+        msg = msg_class(content=content)
+        if msg_type == "AIMessage" and "tool_calls" in msg_dict:
+            msg.tool_calls = msg_dict["tool_calls"]
+    
+    if "id" in msg_dict and hasattr(msg, "id"):
+        msg.id = msg_dict["id"]
+    
+    return msg
+
+
 def _dicts_to_messages(msg_dicts: List[Dict[str, Any]]) -> List[BaseMessage]:
     """Конвертирует словари обратно в сообщения"""
-    import logging
-    logger = logging.getLogger(__name__)
-    
     if not msg_dicts:
         return []
     
-    # Защита от слишком большого количества сообщений (может быть признаком проблемы)
     if len(msg_dicts) > 1000:
-        logger.error(f"StateManager: слишком много сообщений: {len(msg_dicts)}. Возможна проблема с сохранением состояния.")
-        msg_dicts = msg_dicts[-100:]  # Берем только последние 100
+        logger.error(f"StateManager: слишком много сообщений: {len(msg_dicts)}")
+        msg_dicts = msg_dicts[-100:]
     
     result = []
-    for i, msg_dict in enumerate(msg_dicts):
-        msg_type = msg_dict.get("type", "HumanMessage")
-        content = msg_dict.get("content", "")
-        
-        # Защита от слишком большого content (может быть циклическая ссылка)
-        if isinstance(content, str) and len(content) > 100000:
-            logger.warning(f"StateManager: сообщение {i+1} имеет очень большой content ({len(content)} символов), обрезаем")
-            content = content[:1000] + "... [обрезано]"
-        
-        try:
-            if msg_type == "HumanMessage":
-                msg = HumanMessage(content=content)
-            elif msg_type == "AIMessage":
-                msg = AIMessage(content=content)
-                if "tool_calls" in msg_dict:
-                    msg.tool_calls = msg_dict["tool_calls"]
-            elif msg_type == "SystemMessage":
-                msg = SystemMessage(content=content)
-            elif msg_type == "ToolMessage":
-                tool_call_id = msg_dict.get("tool_call_id", "")
-                name = msg_dict.get("name", "")
-                msg = ToolMessage(content=content, tool_call_id=tool_call_id, name=name)
-            else:
-                msg = HumanMessage(content=content)
-            
-            if "id" in msg_dict and hasattr(msg, "id"):
-                msg.id = msg_dict["id"]
-            
+    for msg_dict in msg_dicts:
+        msg = _create_message(msg_dict)
+        if msg:
             result.append(msg)
-        except Exception as e:
-            logger.error(f"StateManager: ошибка при создании сообщения {i+1} (type={msg_type}): {e}", exc_info=True)
-            # Пропускаем проблемное сообщение вместо падения
-            continue
     
     return result
 

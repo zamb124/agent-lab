@@ -2,7 +2,7 @@
 description: фронтенд плагины
 alwaysApply: false
 globs:
-  - "app/frontend/**/*"
+  - "apps/frontend/**/*"
 ---
 # Правила для Frontend
 
@@ -10,7 +10,7 @@ globs:
 
 ### Обязательные принципы
 
-**ВСЕГДА** используй компоненты из `app/frontend/shared/templates/components.html`:
+**ВСЕГДА** используй компоненты из `apps/frontend/shared/templates/components.html`:
 
 1. **DRY** - не дублируй HTML код
 2. **Консистентность** - единый стиль везде
@@ -19,7 +19,7 @@ globs:
 ### Структура компонентов (без дублирования)
 
 ```
-app/frontend/shared/templates/
+apps/frontend/shared/templates/
 ├── components.html          # ← Реэкспортирует все макросы (77 строк)
 │                           # {% from 'macros/...' import ... %}
 │                           # В страницах: {% import 'components.html' as c %}
@@ -293,9 +293,9 @@ app/frontend/shared/templates/
 
 **Fields** (автогенерация) и **Components** (ручная верстка) - ДОПОЛНЯЮТ друг друга:
 
-- `app/frontend/shared/templates/fields/` - автоматический рендеринг Pydantic моделей
-- `app/frontend/shared/templates/components.html` - переиспользуемые UI компоненты
-- `app/frontend/shared/templates/macros/` - исходники макросов
+- `apps/frontend/shared/templates/fields/` - автоматический рендеринг Pydantic моделей
+- `apps/frontend/shared/templates/components.html` - переиспользуемые UI компоненты
+- `apps/frontend/shared/templates/macros/` - исходники макросов
 
 <good_example>
 {# Модалка (components/) с автоформой (fields/) #}
@@ -537,21 +537,21 @@ async def create_agent(...):  # Дублирует автоматический 
 
 **ВСЕГДА** используй shared компоненты, специфичные стили - только в крайнем случае:
 
-1. **Приоритет 1: Shared компоненты** (`app/frontend/shared/static/css/components/`)
+1. **Приоритет 1: Shared компоненты** (`apps/frontend/shared/static/css/components/`)
    - `.btn`, `.card`, `.modal`, `.form-control`, `.badge`, `.table`
    - Определены ОДИН РАЗ и используются везде
 
-2. **Приоритет 2: Shared utilities** (`app/frontend/shared/static/css/utilities/`)
+2. **Приоритет 2: Shared utilities** (`apps/frontend/shared/static/css/utilities/`)
    - `.flex`, `.gap-4`, `.text-center`, `.rounded-lg`, `.shadow-md`
 
 3. **Приоритет 3: Модульные стили** (только если компонент уникален)
-   - `app/frontend/modules/{module}/static/css/{module}.css`
+   - `apps/frontend/modules/{module}/static/css/{module}.css`
    - Используй префикс модуля: `.billing-card`, `.bot-modal`, `.builder-canvas`
 
 ### Структура CSS
 
 ```
-app/frontend/shared/static/css/
+apps/frontend/shared/static/css/
 ├── main.css                  # Единая точка входа
 ├── core/                     # Базовые настройки
 │   ├── variables.css        # CSS переменные
@@ -704,7 +704,7 @@ app/frontend/shared/static/css/
 ## Template Loader
 
 Используй единый template loader:
-- Импортируй `get_templates()` из `app/frontend/core/template_loader.py`
+- Импортируй `get_templates()` из `apps/frontend/core/template_loader.py`
 - НЕ создавай свой Jinja2Templates
 
 <good_example>
@@ -723,7 +723,7 @@ async def my_page(request: Request):
 
 При создании нового модуля:
 
-1. Создай `app/frontend/modules/{module_name}/`
+1. Создай `apps/frontend/modules/{module_name}/`
 2. Добавь `router.py` с prefix `/frontend/{module_name}`
 3. Создай `templates/` для HTML
 4. Создай `static/` для CSS/JS (только если нужны уникальные стили)
@@ -941,10 +941,10 @@ modules/my_module/static/
 
 ## Документация
 
-- `app/frontend/shared/templates/components/README.md` - API всех компонентов
-- `app/frontend/shared/templates/components/INTEGRATION.md` - интеграция с fields/
-- `app/frontend/shared/templates/components.html` - реэкспорт макросов (77 строк)
-- `app/frontend/shared/templates/macros/` - исходники макросов (7 файлов)
+- `apps/frontend/shared/templates/components/README.md` - API всех компонентов
+- `apps/frontend/shared/templates/components/INTEGRATION.md` - интеграция с fields/
+- `apps/frontend/shared/templates/components.html` - реэкспорт макросов (77 строк)
+- `apps/frontend/shared/templates/macros/` - исходники макросов (7 файлов)
 - `FRONTEND_MODERNIZATION_PLAN.md` - план модернизации UI
-- `app/frontend/PLUGIN_SYSTEM.md` - документация плагинной системы
+- `apps/frontend/PLUGIN_SYSTEM.md` - документация плагинной системы
 - `.cursor/rules/frontend_plugins.mdc` - правила создания плагинов

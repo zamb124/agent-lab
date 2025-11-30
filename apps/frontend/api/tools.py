@@ -105,6 +105,42 @@ async def get_tool(tool_id: str, tool_repo: ToolRepositoryDep) -> Dict[str, Any]
     }
 
 
+@router.put("/{tool_id:path}", response_model=ToolReference)
+async def update_tool(
+    tool_id: str,
+    updates: Dict[str, Any],
+    tool_repo: ToolRepositoryDep
+) -> ToolReference:
+    """Обновить инструмент"""
+    tool = await tool_repo.get(tool_id)
+    if not tool:
+        raise HTTPException(status_code=404, detail="Tool not found")
+    
+    tool_dict = tool.model_dump(exclude={'tool_id'})
+    
+    allowed_fields = {"title", "description", "params", "inline_code", "cost", "billing_name"}
+    for field, value in updates.items():
+        if field in allowed_fields:
+            tool_dict[field] = value
+    
+    tool_dict['tool_id'] = tool_id
+    updated_tool = ToolReference(**tool_dict)
+    
+    await tool_repo.set(updated_tool)
+    return updated_tool
+
+
+@router.delete("/{tool_id:path}")
+async def delete_tool(tool_id: str, tool_repo: ToolRepositoryDep) -> Dict[str, str]:
+    """Удалить инструмент"""
+    tool = await tool_repo.get(tool_id)
+    if not tool:
+        raise HTTPException(status_code=404, detail="Tool not found")
+    
+    await tool_repo.delete(tool_id)
+    return {"message": "Tool deleted successfully"}
+
+
 # Вспомогательные функции для работы с инструментами из БД
 
 

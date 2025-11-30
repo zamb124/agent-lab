@@ -7,7 +7,7 @@ alwaysApply: false
 ## Когда применять это правило
 
 **Применяй это правило ТОЛЬКО когда:**
-- Работаешь с JavaScript файлами в `app/frontend/` или `apps/frontend/`
+- Работаешь с JavaScript файлами в `apps/frontend/`
 - Создаешь или редактируешь `.js` файлы в директории `static/js/`
 - Работаешь с фронтенд модулями, плагинами или компонентами
 - Интегрируешь JavaScript в HTML шаблоны
@@ -42,7 +42,7 @@ alwaysApply: false
 ## Структура директорий
 
 ```
-app/frontend/shared/static/js/
+apps/frontend/shared/static/js/
 ├── app.js                  # Точка входа, инициализация APP
 ├── 
 ├── managers/               # Менеджеры (существующие)
@@ -515,7 +515,7 @@ function openSettingsModal() {
 
 ### Внутри модуля
 ```javascript
-// /app/frontend/modules/bots/static/js/bots.js
+// /apps/frontend/modules/bots/static/js/bots.js
 import { slugify } from '/static/js/utils/slugify.js';
 import { showNotification } from '/static/js/components/notification.js';
 
@@ -557,7 +557,7 @@ import { formatFileSize } from '/static/js/utils/formatting.js';
 
 Это правило автоматически активируется при работе с:
 - Файлами в `**/static/js/**/*.js`
-- Файлами в `app/frontend/**/*.js` или `apps/frontend/**/*.js`
+- Файлами в `apps/frontend/**/*.js`
 - HTML шаблонами, которые подключают JavaScript (`<script>` теги)
 - Запросами, содержащими: "javascript", "frontend", "js модуль", "утилита js", "компонент js", "api client", "notification", "modal", "loader"
 - Созданием новых фронтенд компонентов, утилит или API клиентов

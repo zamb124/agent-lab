@@ -1,25 +1,21 @@
 """
-Простое API для работы с моделями через HTMX + JSON
+API для работы с моделями через HTMX + JSON.
+
+Использует репозитории для работы с данными.
 """
 
 import json
-import uuid
 import logging
-import inspect
-from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from typing import Dict, Any, get_origin, get_args, Union, Optional
-from pydantic import BaseModel
+from typing import Dict, Any
+
 from apps.frontend.wrappers import ModelListWrapper
 from apps.frontend.model_registry import ModelRegistry
 from apps.frontend.core.template_loader import render_template, get_templates
 from apps.frontend.websockets.notifications import notify_model_updated
 from apps.frontend.core.utils import is_htmx_request
-
 from apps.frontend.container import get_frontend_container
-
-# ПРИНУДИТЕЛЬНЫЙ импорт field_extensions для применения monkey patches
 
 logger = logging.getLogger(__name__)
 
@@ -27,53 +23,34 @@ router = APIRouter(prefix="/frontend/models", tags=["frontend"])
 templates = get_templates()
 
 
+def _serialize_field_value(field_value: Any) -> str:
+    """Сериализовать значение поля в JSON для отображения"""
+    if hasattr(field_value, 'model_dump'):
+        return json.dumps(field_value.model_dump(), indent=2, ensure_ascii=False)
+    
+    if isinstance(field_value, list) and field_value and hasattr(field_value[0], 'model_dump'):
+        return json.dumps([item.model_dump() for item in field_value], indent=2, ensure_ascii=False)
+    
+    return json.dumps(field_value, indent=2, ensure_ascii=False)
+
+
 @router.post("/show-inline-modal")
 async def show_inline_modal(request_data: Dict[str, Any]) -> HTMLResponse:
     """Показать вложенную модель в модальном окне"""
-    # Получаем данные
     field_name = request_data.get("field_name", "unknown")
     parent_model_type = request_data.get("parent_model_type", "unknown")
     parent_model_id = request_data.get("parent_model_id", "unknown")
 
-    # Загружаем родительскую модель из storage
-    storage = get_frontend_container().storage
-    key = f"{parent_model_type}:{parent_model_id}"
-    data = await storage.get(key)
-
-    if not data:
+    container = get_frontend_container()
+    repo = container.get_repository_by_model_type(parent_model_type)
+    parent_model = await repo.get(parent_model_id)
+    
+    if not parent_model:
         raise HTTPException(status_code=404, detail=f"Parent model {parent_model_id} not found")
 
-    # Получаем класс модели из registry
-    ModelClass = ModelRegistry.get_model_class(parent_model_type)
+    field_value = getattr(parent_model, field_name, None)
+    formatted_json = _serialize_field_value(field_value)
 
-    # Парсим данные
-    if isinstance(data, str):
-        model_data = json.loads(data)
-    else:
-        model_data = data
-
-    # Создаем модель
-    model = ModelClass(**model_data)
-
-    # Получаем значение поля
-    field_value = getattr(model, field_name, None)
-
-    # Сериализуем значение поля в JSON
-    try:
-        if hasattr(field_value, 'model_dump'):
-            # Для BaseModel объектов используем model_dump
-            formatted_json = json.dumps(field_value.model_dump(), indent=2, ensure_ascii=False)
-        elif isinstance(field_value, list) and field_value and hasattr(field_value[0], 'model_dump'):
-            # Для списков BaseModel объектов
-            formatted_json = json.dumps([item.model_dump() for item in field_value], indent=2, ensure_ascii=False)
-        else:
-            # Для обычных значений
-            formatted_json = json.dumps(field_value, indent=2, ensure_ascii=False)
-    except (TypeError, AttributeError):
-        # Если не удается сериализовать, показываем строковое представление
-        formatted_json = str(field_value)
-
-    # Рендерим форму через шаблон
     content = render_template(
         "modals/inline_edit.html",
         field_name=field_name,
@@ -82,7 +59,6 @@ async def show_inline_modal(request_data: Dict[str, Any]) -> HTMLResponse:
         formatted_json=formatted_json,
     )
 
-    # Оборачиваем в модальное окно
     html = render_template(
         "modals/modal.html",
         model_type=f"{parent_model_type}.{field_name}",
@@ -98,17 +74,12 @@ async def get_model(
     model_type: str, model_id: str, view: str = "table", parent_view_mode: str = None
 ) -> HTMLResponse:
     """Получить конкретную модель как HTML"""
-
-    # Специальный случай: создание новой модели
+    
     if model_id == "new":
         ModelClass = ModelRegistry.get_model_class(model_type)
-
-        # Создаем пустую модель с дефолтными значениями
         model = ModelClass()
 
-        # Для формы создания компании добавляем HTMX атрибуты
         if model_type == "create_company_form":
-            # Рендерим только форму с HTMX атрибутами
             html = f"""
             <form hx-post="/frontend/api/admin/create-my-company"
                   hx-ext="json-enc"
@@ -137,7 +108,6 @@ async def get_model(
             """
             return HTMLResponse(content=html)
 
-        # Для остальных моделей - обычный рендер
         kwargs = {"model_type": model_type, "model_id": "new"}
         if parent_view_mode:
             kwargs["parent_view_mode"] = parent_view_mode
@@ -145,33 +115,18 @@ async def get_model(
         html = model.render(view_mode=view, **kwargs)
         return HTMLResponse(content=html)
 
-    # Обычный случай: загрузка существующей модели
-    storage = get_frontend_container().storage
-    key = f"{model_type}:{model_id}"
-    data = await storage.get(key)
+    container = get_frontend_container()
+    repo = container.get_repository_by_model_type(model_type)
+    model = await repo.get(model_id)
 
-    if not data:
+    if not model:
         raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
 
-    # Получаем класс модели из registry
-    ModelClass = ModelRegistry.get_model_class(model_type)
-
-    # Парсим данные
-    if isinstance(data, str):
-        model_data = json.loads(data)
-    else:
-        model_data = data
-
-    # Создаем модель и рендерим
-    model = ModelClass(**model_data)
-
-    # Передаем parent_view_mode если указан
     kwargs = {"model_type": model_type, "model_id": model_id}
     if parent_view_mode:
         kwargs["parent_view_mode"] = parent_view_mode
 
     html = model.render(view_mode=view, **kwargs)
-
     return HTMLResponse(content=html)
 
 
@@ -179,7 +134,6 @@ async def get_model(
 async def get_models(request: Request, model_type: str, view: str = "table") -> HTMLResponse:
     """Получить список моделей в указанном виде"""
 
-    # При прямом переходе (не HTMX) возвращаем dashboard с preload_url
     if not is_htmx_request(request):
         return templates.TemplateResponse(
             "dashboard.html",
@@ -189,34 +143,11 @@ async def get_models(request: Request, model_type: str, view: str = "table") -> 
             }
         )
 
-    # При HTMX запросе возвращаем фрагмент
-    storage = get_frontend_container().storage
+    container = get_frontend_container()
+    repo = container.get_repository_by_model_type(model_type)
+    models = await repo.list_all(limit=1000)
 
-    # Получаем все модели данного типа (Storage автоматически добавит префикс компании)
-    keys = await storage.list_by_prefix(f"{model_type}:")
-    models_data = []
-
-    for key in keys:
-        data = await storage.get(key)
-        if data:
-            # Парсим JSON если это строка
-            if isinstance(data, str):
-                model_data = json.loads(data)
-            else:
-                model_data = data
-            models_data.append(model_data)
-
-    # Создаем конкретные модели из данных
-    models = []
-    ModelClass = ModelRegistry.get_model_class(model_type)
-
-    for model_data in models_data:
-        model = ModelClass(**model_data)
-        models.append(model)
-
-    # Создаем wrapper с конкретными моделями
     wrapper = ModelListWrapper(models=models, count=len(models), model_type=model_type)
-
     html = wrapper.render(view_mode=view, model_type=model_type)
     return HTMLResponse(content=html)
 
@@ -224,165 +155,117 @@ async def get_models(request: Request, model_type: str, view: str = "table") -> 
 @router.post("/{model_type}")
 async def create_model(model_type: str, model_data: Dict[str, Any]) -> HTMLResponse:
     """Создать новую модель и вернуть HTML"""
-
-    # Генерируем ID если его нет
-    model_id = model_data.get(f"{model_type}_id")
-    if not model_id:
-        model_id = f"{model_type}_{uuid.uuid4().hex[:8]}"
-        model_data[f"{model_type}_id"] = model_id
-
-    storage = get_frontend_container().storage
-    key = f"{model_type}:{model_id}"
-    await storage.set(key, json.dumps(model_data))
-
-    # Создаем модель и рендерим
     ModelClass = ModelRegistry.get_model_class(model_type)
     model = ModelClass(**model_data)
-    html = model.render()
 
+    container = get_frontend_container()
+    repo = container.get_repository_by_model_type(model_type)
+    await repo.set(model)
+
+    html = model.render()
     return HTMLResponse(content=html)
 
 
 @router.put("/{model_type}/{model_id:path}")
 async def update_model(
     model_type: str, model_id: str, model_data: Dict[str, Any], view: str = "form"
-) -> HTMLResponse:
-    """Обновить модель и вернуть обновленную строку таблицы"""
-    storage = get_frontend_container().storage
-    key = f"{model_type}:{model_id}"
-
-    # Получаем существующие данные
-    existing_data = await storage.get(key)
-    if not existing_data:
+) -> Dict[str, Any]:
+    """Обновить модель"""
+    container = get_frontend_container()
+    repo = container.get_repository_by_model_type(model_type)
+    
+    existing_model = await repo.get(model_id)
+    if not existing_model:
         raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
 
-    # Парсим существующие данные
-    if isinstance(existing_data, str):
-        existing_model_data = json.loads(existing_data)
-    else:
-        existing_model_data = existing_data
-
-    # Получаем класс модели для проверки типов полей
+    existing_data = existing_model.model_dump()
+    
     ModelClass = ModelRegistry.get_model_class(model_type)
-
-    # Обновляем поля с учетом их типов
+    
     for field_name, field_value in model_data.items():
-        # Если поле BaseModel и пришла строка - парсим
-        if field_name in ModelClass.model_fields:
-            field_info = ModelClass.model_fields[field_name]
+        if field_name not in ModelClass.model_fields:
+            existing_data[field_name] = field_value
+            continue
+            
+        field_info = ModelClass.model_fields[field_name]
+        
+        if field_info.frozen:
+            continue
 
-            # Пропускаем frozen поля (они неизменяемы)
-            if field_info.frozen:
-                continue
+        parsed_value = _parse_field_value(field_value, field_info.annotation)
+        existing_data[field_name] = parsed_value
 
-            annotation = field_info.annotation
+    model = ModelClass(**existing_data)
+    await repo.set(model)
 
-            # Убираем Optional
-            if get_origin(annotation) is Union:
-                args = get_args(annotation)
-                non_none_args = [arg for arg in args if arg is not type(None)]
-                if len(non_none_args) == 1:
-                    annotation = non_none_args[0]
-
-            # Если BaseModel поле и строка - парсим JSON
-            try:
-                if isinstance(field_value, str):
-                    # Пустая строка = None для Optional полей
-                    if field_value == "":
-                        # Для datetime, int, float полей пустая строка = None
-                        if annotation in [datetime, Optional[datetime], int, Optional[int], float, Optional[float]]:
-                            existing_model_data[field_name] = None
-                            continue
-                    # Пустая строка или JSON для dict
-                    elif field_value == "{}" or (get_origin(annotation) is dict or annotation is dict):
-                        if field_value:
-                            # Обрабатываем как одинарные, так и двойные кавычки
-                            try:
-                                # Сначала пробуем стандартный JSON
-                                parsed_value = json.loads(field_value)
-                            except json.JSONDecodeError:
-                                # Если не получилось, пробуем заменить одинарные кавычки на двойные
-                                try:
-                                    fixed_value = field_value.replace("'", '"')
-                                    parsed_value = json.loads(fixed_value)
-                                except json.JSONDecodeError:
-                                    # Если совсем не JSON, оставляем как есть
-                                    parsed_value = field_value
-                            existing_model_data[field_name] = parsed_value
-                        else:
-                            existing_model_data[field_name] = {}
-                    # Пустая строка или JSON для list
-                    elif field_value == "[]" or (get_origin(annotation) is list or annotation is list):
-                        if field_value:
-                            try:
-                                # Сначала пробуем стандартный JSON
-                                parsed_value = json.loads(field_value)
-                            except json.JSONDecodeError:
-                                # Если не получилось, пробуем заменить одинарные кавычки на двойные
-                                try:
-                                    fixed_value = field_value.replace("'", '"')
-                                    parsed_value = json.loads(fixed_value)
-                                except json.JSONDecodeError:
-                                    # Если совсем не JSON, оставляем как есть
-                                    parsed_value = field_value
-                            existing_model_data[field_name] = parsed_value
-                        else:
-                            existing_model_data[field_name] = []
-                    # Проверяем, является ли это BaseModel
-                    elif inspect.isclass(annotation) and issubclass(annotation, BaseModel):
-                        try:
-                            parsed_value = json.loads(field_value)
-                        except json.JSONDecodeError:
-                            # Если не получилось, пробуем заменить одинарные кавычки на двойные
-                            fixed_value = field_value.replace("'", '"')
-                            parsed_value = json.loads(fixed_value)
-                        existing_model_data[field_name] = parsed_value
-                    # Проверяем, является ли это List[BaseModel]
-                    elif (hasattr(annotation, '__origin__') and
-                          annotation.__origin__ is list and
-                          len(annotation.__args__) > 0 and
-                          issubclass(annotation.__args__[0], BaseModel)):
-                        try:
-                            parsed_value = json.loads(field_value)
-                        except json.JSONDecodeError:
-                            # Если не получилось, пробуем заменить одинарные кавычки на двойные
-                            fixed_value = field_value.replace("'", '"')
-                            parsed_value = json.loads(fixed_value)
-                        existing_model_data[field_name] = parsed_value
-                    else:
-                        existing_model_data[field_name] = field_value
-                else:
-                    existing_model_data[field_name] = field_value
-            except (TypeError, ValueError, json.JSONDecodeError):
-                existing_model_data[field_name] = field_value
-        else:
-            existing_model_data[field_name] = field_value
-
-    # Валидируем через модель
-    model = ModelClass(**existing_model_data)
-
-    # Сохраняем валидированные данные как JSON
-    await storage.set(key, model.model_dump_json())
-
-    # Отправляем WebSocket уведомление об обновлении модели
     await notify_model_updated(model_type, model_id)
 
-    # Возвращаем просто 200 OK
     return {"success": True, "message": "Модель обновлена"}
 
 
 @router.delete("/{model_type}/{model_id:path}")
 async def delete_model(model_type: str, model_id: str) -> Dict[str, Any]:
     """Удалить модель"""
-    storage = get_frontend_container().storage
-    key = f"{model_type}:{model_id}"
-
-    # Проверяем что модель существует
-    existing_data = await storage.get(key)
-    if not existing_data:
+    container = get_frontend_container()
+    repo = container.get_repository_by_model_type(model_type)
+    
+    existing_model = await repo.get(model_id)
+    if not existing_model:
         raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
 
-    # Удаляем
-    await storage.delete(key)
+    await repo.delete(model_id)
 
     return {"deleted": True, "id": model_id}
+
+
+def _parse_field_value(field_value: Any, annotation: Any) -> Any:
+    """Парсинг значения поля с учетом типа аннотации"""
+    from typing import get_origin, get_args, Union, Optional
+    from datetime import datetime
+    from pydantic import BaseModel
+    import inspect
+    
+    if get_origin(annotation) is Union:
+        args = get_args(annotation)
+        non_none_args = [arg for arg in args if arg is not type(None)]
+        if len(non_none_args) == 1:
+            annotation = non_none_args[0]
+
+    if not isinstance(field_value, str):
+        return field_value
+
+    if field_value == "":
+        if annotation in [datetime, Optional[datetime], int, Optional[int], float, Optional[float]]:
+            return None
+        return field_value
+
+    if get_origin(annotation) is dict or annotation is dict:
+        return _parse_json_value(field_value, {})
+    
+    if get_origin(annotation) is list or annotation is list:
+        return _parse_json_value(field_value, [])
+    
+    if inspect.isclass(annotation) and issubclass(annotation, BaseModel):
+        return _parse_json_value(field_value, field_value)
+    
+    if hasattr(annotation, '__origin__') and annotation.__origin__ is list:
+        args = getattr(annotation, '__args__', ())
+        if args and inspect.isclass(args[0]) and issubclass(args[0], BaseModel):
+            return _parse_json_value(field_value, field_value)
+    
+    return field_value
+
+
+def _parse_json_value(value: str, default: Any) -> Any:
+    """Парсинг JSON значения с поддержкой одинарных кавычек"""
+    if not value:
+        return default
+        
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        try:
+            fixed_value = value.replace("'", '"')
+            return json.loads(fixed_value)
+        except json.JSONDecodeError:
+            return value

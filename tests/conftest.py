@@ -317,12 +317,14 @@ async def migrator(migrated_db):
 
 @pytest_asyncio.fixture
 async def test_company() -> Company:
-    """Тестовая компания с достаточным балансом"""
+    """Тестовая компания с достаточным балансом и уникальным ID"""
     from core.models.billing_models import TariffPlan
+    import uuid
     
+    unique_suffix = uuid.uuid4().hex[:8]
     return Company(
-        company_id="test_company",
-        subdomain="test",
+        company_id=f"test_company_{unique_suffix}",
+        subdomain=f"test_{unique_suffix}",
         name="Test Company",
         tariff_plan=TariffPlan.ENTERPRISE,
         balance=100000.0,
@@ -483,6 +485,20 @@ async def httpx_client():
     import httpx
     async with httpx.AsyncClient(base_url="http://localhost:8001") as client:
         yield client
+
+
+@pytest_asyncio.fixture(scope="session")
+async def agents_app(migrated_db):
+    """FastAPI приложение для agents сервиса (порт 8001)"""
+    from apps.agents.main import create_app
+    return create_app()
+
+
+@pytest_asyncio.fixture(scope="session")
+async def frontend_app(migrated_db):
+    """FastAPI приложение для frontend сервиса (порт 8002)"""
+    from apps.frontend.main import create_app
+    return create_app()
 
 
 class MockResponse:
@@ -663,12 +679,18 @@ class TestHelpers:
         function_body: str,
         description: str = ""
     ) -> ToolReference:
-        """Создать inline tool для тестов"""
+        """Создать inline tool для тестов (все тулы async)"""
+        # Конвертируем def в async def если нужно (но не дублируем async)
+        if "async def " not in function_body:
+            async_body = function_body.replace("def ", "async def ", 1)
+        else:
+            async_body = function_body
+        
         inline_code = f'''
 from apps.agents.services.tool_decorator import tool
 
 @tool
-{function_body}
+{async_body}
 '''
 
         return ToolReference(
@@ -740,10 +762,21 @@ async def mock_provider():
     return provider
 
 
-def skip_if_no_external_access(e: Exception):
-    """Пропускает тест, если нет доступа к внешнему серверу"""
+def skip_if_no_external_access(e: Exception = None, message: str = None):
+    """Пропускает тест, если нет доступа к внешнему серверу или ошибка авторизации"""
+    if message:
+        # Прямая проверка текста сообщения
+        msg_lower = message.lower()
+        if "unauthorized" in msg_lower or "forbidden" in msg_lower or "api key" in msg_lower:
+            pytest.skip(f"Ошибка авторизации внешнего сервиса: {message[:100]}")
+    
+    if e is None:
+        return
+        
     import httpx
     error_str = str(e).lower()
+    
+    # Проверка на ошибки сети
     if (
         "event loop is closed" in str(e) or
         "connect" in error_str or
@@ -751,4 +784,9 @@ def skip_if_no_external_access(e: Exception):
         isinstance(e, (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError, RuntimeError))
     ):
         pytest.skip(f"Нет доступа к внешнему серверу: {e}")
+    
+    # Проверка на ошибки авторизации
+    if "unauthorized" in error_str or "forbidden" in error_str or "api key" in error_str:
+        pytest.skip(f"Ошибка авторизации внешнего сервиса: {e}")
+    
     raise

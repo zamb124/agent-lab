@@ -1,6 +1,5 @@
 """
 Раннеры для выполнения агентов.
-Заменяют скомпилированные графы LangGraph на прозрачную императивную логику.
 """
 
 import asyncio
@@ -8,13 +7,16 @@ import importlib
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, List
+
 from langchain_core.messages import AIMessage
+
 from apps.agents.services.state import State
 from apps.agents.services.tool_executor import ToolExecutor
-from core.variables import VariableResolver
-from apps.agents.services.state_modifier import render_state_variables
+from apps.agents.exceptions import AgentInterrupt
 from apps.agents.container import get_agents_container
 from apps.agents.models import ConditionType, CodeMode
+from core.variables import VariableResolver
+from apps.agents.services.state_modifier import render_state_variables
 
 logger = logging.getLogger(__name__)
 
@@ -146,21 +148,13 @@ class ReactAgentRunner(BaseAgentRunner):
             if not tool_calls:
                 break
             
-            from apps.agents.exceptions import AgentInterrupt
-            
-            try:
-                tool_names = [getattr(t, 'name', str(t)) for t in self.tools]
-                logger.debug(f"🔧 ReactAgentRunner: доступно {len(self.tools)} tools: {tool_names}")
-                tool_messages = await self.tool_executor.execute(
-                    tool_calls=tool_calls,
-                    tools=self.tools,
-                    state=state
-                )
-
-                state["messages"] = state["messages"] + tool_messages
-                state["remaining_steps"] = max_iterations - iteration
-            except AgentInterrupt as interrupt:
-                raise interrupt
+            tool_messages = await self.tool_executor.execute(
+                tool_calls=tool_calls,
+                tools=self.tools,
+                state=state
+            )
+            state["messages"] = state["messages"] + tool_messages
+            state["remaining_steps"] = max_iterations - iteration
 
         if iteration >= max_iterations:
             logger.warning(f"ReAct достиг максимального количества итераций ({max_iterations})")
@@ -168,30 +162,18 @@ class ReactAgentRunner(BaseAgentRunner):
         return state
 
     def _extract_tool_calls(self, message: AIMessage) -> List[Dict[str, Any]]:
-        """
-        Извлекает tool_calls из ответа LLM.
-
-        Args:
-            message: Ответ от LLM
-
-        Returns:
-            Список вызовов инструментов
-        """
+        """Извлекает tool_calls из ответа LLM"""
         if not hasattr(message, "tool_calls") or not message.tool_calls:
             return []
 
-        tool_calls = []
-        for tool_call in message.tool_calls:
-            if isinstance(tool_call, dict):
-                tool_calls.append(tool_call)
-            else:
-                tool_calls.append({
-                    "name": getattr(tool_call, "name", ""),
-                    "args": getattr(tool_call, "args", {}),
-                    "id": getattr(tool_call, "id", ""),
-                })
-
-        return tool_calls
+        return [
+            tc if isinstance(tc, dict) else {
+                "name": getattr(tc, "name", ""),
+                "args": getattr(tc, "args", {}),
+                "id": getattr(tc, "id", ""),
+            }
+            for tc in message.tool_calls
+        ]
 
 
 class StateGraphRunner(BaseAgentRunner):
@@ -309,10 +291,11 @@ class StateGraphRunner(BaseAgentRunner):
         await self._ensure_initialized()
 
         interrupt_context = state.get("interrupt_context", {})
+        is_resuming = False
         
         if interrupt_context.get("type") == "stategraph_node":
             current_node = interrupt_context.get("current_node", self._entry_point)
-            state.pop("interrupt_context", None)
+            is_resuming = True
         else:
             current_node = self._entry_point
         
@@ -335,26 +318,15 @@ class StateGraphRunner(BaseAgentRunner):
                 logger.error(f"StateGraph: нода {current_node} не найдена в графе")
                 break
             
-            from apps.agents.exceptions import AgentInterrupt
-            from apps.agents.services.state_manager import get_state_manager
-            
             try:
                 state = await node_func(state)
-                
-                # Сохраняем store после выполнения ноды, если он был изменен
-                from apps.agents.services.state_manager import StoreProxy
-                store = state.get("store")
-                if isinstance(store, StoreProxy) and store._dirty:
-                    await store.ensure_saved()
+                await self._save_store_if_dirty(state)
+                # После успешного выполнения ноды удаляем interrupt_context
+                if is_resuming:
+                    state.pop("interrupt_context", None)
+                    is_resuming = False
             except AgentInterrupt as interrupt:
-                state["interrupt_context"] = {
-                    "type": "stategraph_node",
-                    "current_node": current_node
-                }
-                session_id = state.get("session_id")
-                if session_id:
-                    state_manager = await get_state_manager()
-                    await state_manager.save_session(state)
+                await self._handle_node_interrupt(state, current_node)
                 raise interrupt
 
             # Определяем следующую ноду
@@ -373,6 +345,26 @@ class StateGraphRunner(BaseAgentRunner):
             logger.warning(f"StateGraph достиг максимального количества итераций ({max_iterations})")
 
         return state
+
+    async def _save_store_if_dirty(self, state: State) -> None:
+        """Сохраняет store если он был изменен"""
+        from apps.agents.services.state_manager import StoreProxy
+        store = state.get("store")
+        if isinstance(store, StoreProxy) and store._dirty:
+            await store.ensure_saved()
+
+    async def _handle_node_interrupt(self, state: State, current_node: str) -> None:
+        """Обрабатывает interrupt в ноде StateGraph"""
+        from apps.agents.services.state_manager import get_state_manager
+        
+        state["interrupt_context"] = {
+            "type": "stategraph_node",
+            "current_node": current_node
+        }
+        session_id = state.get("session_id")
+        if session_id:
+            state_manager = await get_state_manager()
+            await state_manager.save_session(state)
 
     async def _get_next_node(self, current_node: str, state: State) -> Optional[str]:
         """Определяет следующую ноду на основе текущей ноды и состояния"""

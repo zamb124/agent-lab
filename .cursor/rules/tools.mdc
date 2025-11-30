@@ -97,6 +97,8 @@ async def get_company_info() -> str:
 - Используй `raise ... from e` для цепочки исключений
 
 <good_example>
+from core.http import get_httpx_client
+
 @tool
 async def fetch_data(url: str) -> dict:
     """Получить данные по URL"""
@@ -104,7 +106,7 @@ async def fetch_data(url: str) -> dict:
         raise ValueError(f"Небезопасный URL: {url}")
     
     try:
-        async with httpx.AsyncClient() as client:
+        async with get_httpx_client(timeout=30.0, use_proxy_from_config=False) as client:
             response = await client.get(url)
             response.raise_for_status()
             return response.json()

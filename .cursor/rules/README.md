@@ -12,25 +12,33 @@
 - **exception.mdc** - Правила обработки исключений
 - **architecture.mdc** - Архитектурные принципы (Database-First, асинхронность)
 - **container.mdc** - Контейнер зависимостей (DI, доступ к сущностям)
-- **langgraph.mdc** - Работа с графами состояний и раннерами (StateGraph агенты, ReAct агенты, State)
-- **state_manager.mdc** - Работа с StateManager и персистентностью состояния (политики памяти, синхронизация store)
+- **agent_architecture.mdc** - Архитектура агентов (StateGraph, ReAct, субагенты)
+- **state_manager.mdc** - Работа с StateManager и персистентностью состояния
 - **session.mdc** - Правила работы с сессиями и session_id
-- **database.mdc** - Работа с базой данных (Storage, изоляция по компаниям)
-- **tools.mdc** - Создание инструментов (@tool decorator, типизация)
-- **project.mdc** - Общие правила проекта (UV, импорты, обработка ошибок)
-- **http_client.mdc** - Правила работы с HTTP клиентами (get_httpx_client, прокси)
-- **crud_api.mdc** - Автоматические CRUD роутеры (использование вместо создания новых API)
+- **database_architecture.mdc** - Архитектура БД и репозиториев
+- **repository_pattern.mdc** - Repository Pattern и изоляция данных
+- **tools.mdc** - Создание инструментов (@tool decorator)
+- **project.mdc** - Общие правила проекта (UV, импорты)
+- **http_client.mdc** - Правила работы с HTTP клиентами
+- **crud_api.mdc** - Автоматические CRUD роутеры
 - **main.mdc** - Конфигурация чтения README файлов
+- **code_quality.mdc** - Качество кода, лаконичность
 
 ### Контекстные (alwaysApply: false)
 
 Эти правила применяются только для релевантных файлов:
 
 - **configuration.mdc** - Работа с конфигурацией (ENV переменные, приоритеты)
-- **documentation.mdc** - Работа с документацией (MkDocs, структура, стиль)
 - **makefile.mdc** - Работа с Makefile (команды, модули)
-- **frontend.mdc** - Фронтенд (рекурсивный рендеринг, HTMX, модули, автоматические CRUD роутеры)
-- **testing.mdc** - Тестирование (реальная БД, фикстуры, изоляция)
+- **frontend.mdc** - Фронтенд (рекурсивный рендеринг, HTMX, модули)
+- **frontend_plugins.mdc** - Плагинная система фронтенда
+- **javascript.mdc** - Архитектура JavaScript Frontend
+- **testing.mdc** - Тестирование (структура тестов, фикстуры)
+- **testing_fixtures.mdc** - Фикстуры и best practices
+- **mcp.mdc** - MCP серверы и интеграция
+- **variables.mdc** - Переменные и Session Store
+- **tracing.mdc** - OpenTelemetry Tracing
+- **monorepo_architecture.mdc** - Архитектура монорепозитория
 
 ## Ключевые принципы
 
@@ -58,19 +66,17 @@
 
 ## Связь с документацией
 
-Каждое правило основано на документации:
+Каждое правило основано на документации и коде:
 - `architecture.mdc` ← `docs/architecture.md`
-- `container.mdc` ← `docs/architecture.md` + `app/core/container.py`
-- `configuration.mdc` ← `docs/configuration.md`
-- `documentation.mdc` ← `mkdocs.yml` + правила работы с MkDocs
-- `makefile.mdc` ← `docs/makefile.md`
-- `langgraph.mdc` ← `docs/architecture.md`
-- `state_manager.mdc` ← `app/core/state_manager.py` + `docs/state_and_variables.md`
-- `session.mdc` ← `docs/state_and_variables.md` + `app/core/state_manager.py`
-- `database.mdc` ← `docs/architecture.md`
-- `http_client.mdc` ← `app/core/http_utils.py` + паттерны использования
-- `frontend.mdc` ← `docs/frontend.md`
-- `testing.mdc` ← опыт разработки + memories
+- `container.mdc` ← `core/container/base.py` + `apps/agents/container.py`
+- `configuration.mdc` ← `core/config/`
+- `monorepo_architecture.mdc` ← `docs/architecture.md`
+- `state_manager.mdc` ← `apps/agents/services/state_manager.py`
+- `session.mdc` ← `docs/state_and_variables.md`
+- `database_architecture.mdc` ← `core/db/`
+- `http_client.mdc` ← `core/http/`
+- `frontend.mdc` ← `apps/frontend/`
+- `testing.mdc` ← `tests/`
 
 ## Формат правил
 

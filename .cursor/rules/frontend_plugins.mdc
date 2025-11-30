@@ -2,7 +2,7 @@
 description: фронтенд плагины
 alwaysApply: false
 globs:
-  - "app/frontend/**/*"
+  - "apps/frontend/**/*"
 ---
 # Плагинная система фронтенда
 
@@ -21,7 +21,7 @@ globs:
 ## Архитектура плагина
 
 ```
-app/frontend/modules/{plugin_name}/
+apps/frontend/modules/{plugin_name}/
 ├── __init__.py
 ├── plugin.py                    # Описание плагина (Python)
 ├── router.py                    # FastAPI роутер
@@ -39,8 +39,8 @@ app/frontend/modules/{plugin_name}/
 ### Шаг 1: Структура
 
 ```bash
-mkdir -p app/frontend/modules/my_plugin/{static/{js,css},templates}
-touch app/frontend/modules/my_plugin/{__init__.py,plugin.py,router.py}
+mkdir -p apps/frontend/modules/my_plugin/{static/{js,css},templates}
+touch apps/frontend/modules/my_plugin/{__init__.py,plugin.py,router.py}
 ```
 
 ### Шаг 2: Описание плагина (plugin.py)
@@ -409,7 +409,7 @@ class AnalyticsPlugin(Plugin):
 **Используй префикс модуля** для CSS классов:
 
 <good_example>
-/* app/frontend/modules/builder/static/css/builder.css */
+/* apps/frontend/modules/builder/static/css/builder.css */
 
 .builder-canvas {
     background: var(--bg-secondary);
@@ -515,7 +515,7 @@ class BillingPlugin(Plugin):
 ## Чеклист создания плагина
 
 ### Backend (Python):
-- [ ] Создана структура: `app/frontend/modules/{name}/`
+- [ ] Создана структура: `apps/frontend/modules/{name}/`
 - [ ] Создан `plugin.py` с классом наследующим `Plugin`
 - [ ] Указан уникальный `name`
 - [ ] Указан `display_name`

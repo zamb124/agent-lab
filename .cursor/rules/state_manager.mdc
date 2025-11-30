@@ -129,11 +129,11 @@ sub_state = await state_manager.load_state_for_sub_agent(sub_session_id, parent_
 ```
 
 **Важно**: 
-- `agent_id` - это уникальный идентификатор субагента (например, `app.agents.weather.agent.WeatherAgent`)
+- `agent_id` - это уникальный идентификатор субагента (например, `apps.agents.weather.agent.WeatherAgent`)
 - Каждый субагент имеет свой собственный накапливаемый session_id
 - Если у родителя есть несколько субагентов с ACCUMULATED, у каждого будет свой session_id:
-  - `parent:sub:app.agents.weather.agent.WeatherAgent:accumulated`
-  - `parent:sub:app.agents.order.agent.OrderAgent:accumulated`
+  - `parent:sub:apps.agents.weather.agent.WeatherAgent:accumulated`
+  - `parent:sub:apps.agents.order.agent.OrderAgent:accumulated`
 
 **Поведение:**
 - Фиксированный `session_id` для всех вызовов одного субагента
@@ -219,7 +219,7 @@ session_id = "parent:sub:agent:abc123"
 policy = state_manager._detect_memory_policy(session_id)  # ISOLATED
 
 # ACCUMULATED
-session_id = "parent:sub:app.agents.weather.agent.WeatherAgent:accumulated"
+session_id = "parent:sub:apps.agents.weather.agent.WeatherAgent:accumulated"
 policy = state_manager._detect_memory_policy(session_id)  # ACCUMULATED
 
 # SNAPSHOT
@@ -244,24 +244,24 @@ state_manager = await get_state_manager()
 # ISOLATED
 sub_session_id = await state_manager.get_sub_session_id(
     parent_session_id="parent",
-    sub_agent_id="app.agents.weather.agent.WeatherAgent",
+    sub_agent_id="apps.agents.weather.agent.WeatherAgent",
     policy=SubAgentMemoryPolicy.ISOLATED
 )
-# "parent:sub:app.agents.weather.agent.WeatherAgent:abc123"
+# "parent:sub:apps.agents.weather.agent.WeatherAgent:abc123"
 
 # ACCUMULATED
 sub_session_id = await state_manager.get_sub_session_id(
     parent_session_id="parent",
-    sub_agent_id="app.agents.weather.agent.WeatherAgent",
+    sub_agent_id="apps.agents.weather.agent.WeatherAgent",
     policy=SubAgentMemoryPolicy.ACCUMULATED
 )
-# "parent:sub:app.agents.weather.agent.WeatherAgent:accumulated"
+# "parent:sub:apps.agents.weather.agent.WeatherAgent:accumulated"
 # Каждый субагент имеет свой собственный накапливаемый session_id
 
 # SHARED
 sub_session_id = await state_manager.get_sub_session_id(
     parent_session_id="parent",
-    sub_agent_id="app.agents.weather.agent.WeatherAgent",
+    sub_agent_id="apps.agents.weather.agent.WeatherAgent",
     policy=SubAgentMemoryPolicy.SHARED
 )
 # "parent" (та же сессия)

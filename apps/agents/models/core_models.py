@@ -55,6 +55,8 @@ class CodeMode(str, Enum):
     CODE_REFERENCE = "code_reference"  # Ссылка на код в файлах
     INLINE_CODE = "inline_code"        # Код хранится в БД
     MCP_TOOL = "mcp_tool"              # Внешний MCP инструмент (HTTP/SSE)
+    AGENT_TOOL = "agent_tool"          # Агент как инструмент
+    FLOW_TOOL = "flow_tool"            # Flow как инструмент
 
 
 class ConditionType(str, Enum):
@@ -240,6 +242,16 @@ class GraphDefinition(BaseModel):
     async def _migrate_from_agent_class(cls, agent_class) -> Optional["GraphDefinition"]:
         """Извлекает GraphDefinition из класса агента"""
         logger.info(f"🔍 Анализируем граф агента {agent_class.__name__}")
+        
+        # Проверяем атрибут класса graph_definition (определен как class attribute)
+        class_graph_def = getattr(agent_class, "graph_definition", None)
+        if class_graph_def is not None and not callable(class_graph_def):
+            if isinstance(class_graph_def, GraphDefinition):
+                logger.info(f"🔍 Найден graph_definition как атрибут класса для {agent_class.__name__}")
+                return class_graph_def
+            elif isinstance(class_graph_def, dict):
+                logger.info(f"🔍 Найден graph_definition как dict для {agent_class.__name__}")
+                return GraphDefinition(**class_graph_def)
 
         temp_config = AgentConfig(
             agent_id=f"{agent_class.__module__}.{agent_class.__name__}",
@@ -261,7 +273,6 @@ class GraphDefinition(BaseModel):
                         return graph_def
                 except NotImplementedError:
                     # Базовый класс StateGraphAgent выбрасывает NotImplementedError
-                    # Это нормально - значит это базовый класс, а не конкретная реализация
                     logger.debug(f"🔍 {agent_class.__name__} - базовый класс без graph_definition, пропускаем")
                     pass
 
@@ -370,7 +381,9 @@ class ToolReference(BuilderEntity):
         if tool_id.startswith('mcp:'):
             return CodeMode.MCP_TOOL
         elif tool_id.startswith('agent:'):
-            return CodeMode.CODE_REFERENCE
+            return CodeMode.AGENT_TOOL
+        elif tool_id.startswith('flow:'):
+            return CodeMode.FLOW_TOOL
         else:
             return v or CodeMode.CODE_REFERENCE
     function_path: Optional[str] = Field(
@@ -667,8 +680,11 @@ class AgentConfig(BuilderEntity):
         if 'graph_definition' in data:
             graph_def = data.get('graph_definition')
             # Если graph_definition есть и не пустая → StateGraph
-            if graph_def and (isinstance(graph_def, dict) and graph_def.get('nodes')):
-                return AgentType.STATEGRAPH
+            if graph_def:
+                if isinstance(graph_def, dict) and graph_def.get('nodes'):
+                    return AgentType.STATEGRAPH
+                elif isinstance(graph_def, GraphDefinition) and graph_def.nodes:
+                    return AgentType.STATEGRAPH
 
         # Если передан тип явно, используем его
         if v:

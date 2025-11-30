@@ -364,7 +364,7 @@ await variable_repo.set(variable)
 VariablesService доступен через контейнер для программной работы с переменными:
 
 <good_example>
-from core.container import get_container
+from apps.agents.container import get_agents_container
 from apps.frontend.dependencies import VariablesServiceDep
 
 # В коде (сервисы, фабрики)

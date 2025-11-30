@@ -37,38 +37,10 @@ logger = logging.getLogger(__name__)
 
 
 class ToolFactory:
-    """Фабрика для создания инструментов с кэшированием"""
+    """Фабрика для создания инструментов"""
 
     def __init__(self):
-        self._tool_cache = {}
         self._module_cache = {}
-
-    def _is_agent_path(self, tool_id: str) -> bool:
-        """
-        Проверяет, является ли tool_id путем к агенту.
-        
-        Агент определяется по:
-        - Префикс "agent:"
-        - Путь содержит ".agent." и заканчивается на "Agent"
-        - Путь соответствует паттерну apps.agents.agents.*.agent.*Agent
-        
-        Args:
-            tool_id: ID инструмента
-            
-        Returns:
-            True если это путь к агенту
-        """
-        if tool_id.startswith("agent:"):
-            return True
-        
-        # Проверяем паттерн пути к агенту: apps.agents.agents.*.agent.*Agent
-        if ".agent." in tool_id and tool_id.endswith("Agent"):
-            # Проверяем что это не путь к тулу (например, apps.agents.tools.*)
-            if ".tools." in tool_id:
-                return False
-            return True
-        
-        return False
 
     def _get_cached_module(self, module_path: str, reload: bool = False):
         """
@@ -99,54 +71,25 @@ class ToolFactory:
         logger.info("Кэш ToolFactory очищен")
 
     async def create_tools(self, tool_refs: List[ToolReference]) -> List[Any]:
-        """
-        Создает экземпляры инструментов по списку ToolReference из БД.
-
-        Args:
-            tool_refs: Список ссылок на инструменты
-
-        Returns:
-            Список созданных инструментов
-        """
-        created_tools = []
-
-        for ref in tool_refs:
-            try:
-                tool_instance = await self._create_single_tool(ref)
-                if tool_instance is not None:
-                    created_tools.append(tool_instance)
-            except Exception as e:
-                logger.error(f"Не удалось создать инструмент '{ref.tool_id}': {e}")
-                # Не падаем, просто пропускаем сломанный инструмент
-                continue
-
-        logger.info(
-            f"Создано {len(created_tools)} инструментов из {len(tool_refs)} запрошенных"
-        )
-        return created_tools
+        """Создает инструменты по списку ToolReference"""
+        return [await self._create_single_tool(ref) for ref in tool_refs]
 
     async def _create_single_tool(self, ref: ToolReference) -> Any:
-        """Создает один инструмент по ссылке с поддержкой биллинга"""
-        tool_id = ref.tool_id
+        """Создает инструмент по ссылке. Тип определяется через code_mode."""
+        match ref.code_mode:
+            case CodeMode.MCP_TOOL:
+                tool = await self._create_mcp_tool(ref)
+            case CodeMode.AGENT_TOOL:
+                tool = await self._create_agent_tool(ref)
+            case CodeMode.FLOW_TOOL:
+                tool = await self._create_flow_tool(ref)
+            case CodeMode.INLINE_CODE:
+                tool = await self._create_inline_code_tool(ref)
+            case CodeMode.CODE_REFERENCE:
+                tool = await self._create_function_tool(ref)
+            case _:
+                raise ValueError(f"Неизвестный code_mode: {ref.code_mode}")
 
-        # Создаем базовый инструмент
-        if ref.code_mode == CodeMode.MCP_TOOL:
-            tool = await self._create_mcp_tool(ref)
-        elif tool_id.startswith("agent:") or self._is_agent_path(tool_id):
-            tool = await self._create_agent_tool(ref)
-        elif tool_id.startswith("flow:") or "flows" in tool_id:
-            tool = await self._create_flow_tool(ref)
-        elif ref.code_mode == CodeMode.INLINE_CODE:
-            tool = await self._create_inline_code_tool(ref)
-        elif ref.code_mode == CodeMode.CODE_REFERENCE:
-            tool = await self._create_function_tool(ref)
-        else:
-            raise ValueError(f"Неизвестный тип тула: code_mode={ref.code_mode}, tool_id={ref.tool_id}")
-
-        if tool is None:
-            raise ValueError(f"Tool {tool_id} не создан (вернул None)")
-
-        # Оборачиваем в биллинг если есть стоимость или лимиты
         if ref.cost > 0 or ref.tariff_limits or ref.free_for_plans:
             tool = self._wrap_tool_with_billing(tool, ref)
 
@@ -169,22 +112,23 @@ class ToolFactory:
         
         # Если нет @tool декоратора, добавляем его автоматически
         if not has_tool_decorator:
-            logger.debug("🔥 @tool декоратор не найден, добавляем автоматически")
+            logger.debug("@tool декоратор не найден, добавляем автоматически")
             
-            # Добавляем импорт и декоратор
+            # Конвертируем def в async def если нужно
+            code_body = ref.inline_code.strip()
+            if 'async def ' not in code_body and 'def ' in code_body:
+                code_body = code_body.replace('def ', 'async def ', 1)
+            
             enhanced_code = f'''
 from apps.agents.services.tool_decorator import tool
 
 @tool
-{ref.inline_code.strip()}
+{code_body}
 '''
-            logger.debug(f"🔥 Улучшенный код: {enhanced_code[:200]}...")
-            
-            # Выполняем улучшенный код
+            logger.debug(f"Улучшенный код: {enhanced_code[:200]}...")
             exec(enhanced_code, namespace, namespace)
         else:
-            logger.debug("🔥 @tool декоратор уже есть в коде")
-            # Выполняем оригинальный код
+            logger.debug("@tool декоратор уже есть в коде")
             exec(ref.inline_code, namespace, namespace)
         
         # Ищем функцию main или первую функцию через регулярку
@@ -258,13 +202,20 @@ from apps.agents.services.tool_decorator import tool
         except ImportError:
             pass
 
-        # Добавляем платформенные функции
+        # Добавляем платформенные функции и классы
+        from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
+        
         platform_functions = {
             'tool': tool,
             'get_context': get_context,
             'get_state': get_state,
             'send_progress': send_progress,
             'interrupt': interrupt,
+            'AgentInterrupt': AgentInterrupt,
+            'HumanMessage': HumanMessage,
+            'AIMessage': AIMessage,
+            'SystemMessage': SystemMessage,
+            'ToolMessage': ToolMessage,
             # Для session_tools используем оригинальные функции из StructuredTool объектов
             'ask_user': ask_user.func if hasattr(ask_user, 'func') else ask_user,
             'session_set': session_set.func if hasattr(session_set, 'func') else session_set,
@@ -279,206 +230,89 @@ from apps.agents.services.tool_decorator import tool
         return namespace
 
     async def _create_function_tool(self, ref: ToolReference) -> Any:
-        """Создает инструмент из обычной функции или класса"""
-        # Используем function_path если есть, иначе tool_id
+        """Создает инструмент из функции по CODE_REFERENCE"""
         function_path = ref.function_path or ref.tool_id
+        
+        if "." not in function_path:
+            raise ValueError(f"function_path должен содержать точку (модуль.функция): {function_path}")
 
-        try:
-            # Специальная обработка для MCP tools
-            if function_path.startswith("mcp:"):
-                raise ValueError(f"MCP tools должны обрабатываться через _create_mcp_tool, а не _create_function_tool: {function_path}")
+        module_path, name = function_path.rsplit(".", 1)
+        module = self._get_cached_module(module_path)
+        tool_obj = getattr(module, name)
 
-            # Для INLINE_CODE точка не обязательна (может быть просто именем функции)
-            if ref.code_mode == CodeMode.INLINE_CODE:
-                # Inline code - ищем функцию в глобальном пространстве или создаем динамически
-                if "." in function_path:
-                    module_path, name = function_path.rsplit(".", 1)
-                    module = self._get_cached_module(module_path)
-                    tool_obj = getattr(module, name)
-                else:
-                    # Ищем в глобальном пространстве имен
-                    tool_obj = globals().get(function_path)
-                    if tool_obj is None:
-                        raise ValueError(f"Функция {function_path} не найдена для INLINE_CODE")
-            else:
-                # Для CODE_REFERENCE точка обязательна
-                if "." not in function_path:
-                    raise ValueError(f"function_path должен содержать точку (модуль.функция): {function_path}")
-
-                module_path, name = function_path.rsplit(".", 1)
-                module = self._get_cached_module(module_path)
-                tool_obj = getattr(module, name)
-
-            # Если это класс, создаем экземпляр
-            if inspect.isclass(tool_obj):
-                # Передаем параметры в конструктор, если они есть
-                return tool_obj(**ref.params)
-            else:
-                # Это функция, возвращаем как есть
-                # Функции с декоратором @tool уже обернуты в StructuredTool
-                if hasattr(tool_obj, '_is_platform_tool') or isinstance(tool_obj, StructuredTool):
-                    logger.debug(f"✅ Функция {function_path} уже обернута в StructuredTool через @tool")
-                else:
-                    logger.warning(f"⚠️ Функция {function_path} не обернута в StructuredTool, может быть проблема")
-                return tool_obj
-
-        except Exception as e:
-            logger.error(f"Ошибка создания функции-инструмента {function_path}: {e}")
-            raise
+        if inspect.isclass(tool_obj):
+            return tool_obj(**ref.params)
+        
+        return tool_obj
 
     async def _create_agent_tool(self, ref: ToolReference) -> Any:
         """Создает инструмент из агента"""
+        agent_id = ref.tool_id.removeprefix("agent:")
         
-        try:
-            # Убираем префикс agent: если он есть
-            agent_class_path = ref.tool_id
-            if agent_class_path.startswith("agent:"):
-                agent_class_path = agent_class_path[6:]  # Убираем 'agent:'
+        agent_factory = get_agents_container().agent_factory
+        agent = await agent_factory.get_agent(agent_id)
 
-            # Получаем агента через контейнер
-            container = get_agents_container()
-            agent_factory = container.agent_factory
-            agent = await agent_factory.get_agent(agent_class_path)
+        memory_policy = ref.memory_policy
+        if memory_policy is None:
+            context = get_context()
+            if context and context.agent_config:
+                memory_policy = context.agent_config.default_memory_policy
 
-            # Определяем политику памяти (приоритет: ToolReference > родительский агент > ISOLATED)
-            memory_policy = None
-            if ref.memory_policy is not None:
-                # Явно указанная в ToolReference - самый высокий приоритет
-                memory_policy = ref.memory_policy
-            else:
-                # Получаем родительского агента из контекста
-                context = get_context()
-                if context and context.agent_config and context.agent_config.default_memory_policy is not None:
-                    # default_memory_policy из родительского AgentConfig - средний приоритет
-                    memory_policy = context.agent_config.default_memory_policy
-                # Иначе останется None, и as_tool() использует ISOLATED по умолчанию
-
-            return agent.as_tool(
-                description=ref.description,
-                memory_policy=memory_policy
-            )
-
-        except Exception as e:
-            logger.error(f"Ошибка создания агента-инструмента {ref.tool_id}: {e}")
-            raise
+        return agent.as_tool(description=ref.description, memory_policy=memory_policy)
 
     async def _create_flow_tool(self, ref: ToolReference) -> Any:
         """Создает инструмент из флоу"""
+        flow_id = ref.tool_id.removeprefix("flow:")
+        flow_factory = get_agents_container().flow_factory
 
         class FlowInput(BaseModel):
             input: str = Field(description="Входные данные для флоу")
 
-        try:
-            flow_factory = get_agents_container().flow_factory
+        async def flow_func(input: str) -> str:
+            flow_graph = await flow_factory.get_flow(flow_id)
+            result = await flow_graph.ainvoke({"input": input})
+            return str(result)
 
-            async def flow_func(input: str) -> str:
-                """Функция-обертка для вызова флоу как инструмента"""
-                try:
-                    flow_graph = await flow_factory.get_flow(ref.tool_id)
-                    result = await flow_graph.ainvoke({"input": input})
-                    return str(result)
-                except Exception as e:
-                    return f"Ошибка выполнения флоу: {str(e)}"
-
-            flow_name = f"flow_{ref.tool_id.split('.')[-1].replace('.', '_')}"
-            return StructuredTool.from_function(
-                func=flow_func,
-                name=flow_name,
-                description=f"Флоу {ref.tool_id}",
-                args_schema=FlowInput,
-            )
-
-        except Exception as e:
-            logger.error(f"Ошибка создания флоу-инструмента {ref.tool_id}: {e}")
-            raise
+        flow_name = f"flow_{flow_id.split('.')[-1].replace('.', '_')}"
+        return StructuredTool.from_function(
+            coroutine=flow_func,
+            name=flow_name,
+            description=ref.description or f"Флоу {flow_id}",
+            args_schema=FlowInput,
+        )
 
     async def _create_mcp_tool(self, ref: ToolReference) -> Any:
-        """
-        Создает MCP инструмент через @tool декоратор.
-
-        Динамически создает функцию и оборачивает её в @tool для
-        единообразия с остальными тулами платформы.
-        """
-        logger.info(f"🎯 Создание MCP tool: {ref.tool_id}")
-
-        # Проверяем CodeMode для безопасности
-        if ref.code_mode != CodeMode.MCP_TOOL:
-            logger.warning(f"⚠️ Ожидался CodeMode.MCP_TOOL для {ref.tool_id}, получен {ref.code_mode}")
-            raise ValueError(f"Ожидался CodeMode.MCP_TOOL для {ref.tool_id}, получен {ref.code_mode}")
-
-        # Парсим tool_id: "mcp:server_id:tool_name"
+        """Создает MCP инструмент"""
         parts = ref.tool_id.split(":", 2)
         if len(parts) != 3 or parts[0] != "mcp":
-            logger.error(f"❌ Невалидный MCP tool_id: {ref.tool_id}")
             raise ValueError(f"Невалидный MCP tool_id: {ref.tool_id}")
 
         _, server_id, tool_name = parts
-        logger.info(f"📦 Разобран MCP tool: server={server_id}, tool={tool_name}")
-
-        # Получаем company_id из params
         company_id = ref.params.get("company_id")
-        logger.info(f"🏢 Company ID: {company_id}")
-
-        # Получаем HTTP клиент для этого MCP сервера
-        try:
-            mcp_client = await get_mcp_client(server_id, company_id)
-            logger.info(f"🌐 MCP клиент получен для сервера {server_id}")
-        except Exception as e:
-            raise ValueError(f"Не удалось получить MCP клиент для сервера {server_id}: {e}") from e
+        mcp_client = await get_mcp_client(server_id, company_id)
         
-        # Получаем схему из params
         input_schema = ref.params.get("input_schema", {})
-        
-        # Создаем Pydantic модель из JSON Schema
         args_schema = self._json_schema_to_pydantic(input_schema, tool_name)
-        
-        # Создаем функцию с валидным Python именем
         safe_tool_name = tool_name.replace("-", "_").replace(".", "_")
-        
-        # Создаем функцию с нужным именем ДО применения декоратора
-        async def dynamic_mcp_func(**kwargs):
-            """Динамически созданная функция для вызова MCP тула"""
-            try:
-                # Вызываем MCP тул через HTTP/SSE
-                result = await mcp_client.call_tool(tool_name, kwargs)
-                
-                # Обрабатываем ошибки
-                if result.get("isError"):
-                    error_msg = format_mcp_result(result.get("content", []))
-                    logger.error(f"MCP тул {tool_name} вернул ошибку: {error_msg}")
-                    return f"❌ Ошибка: {error_msg}"
-                
-                # Форматируем успешный результат
-                formatted = format_mcp_result(result.get("content", []))
-                logger.info(f"✅ MCP тул {tool_name} выполнен")
-                
-                return formatted
-                
-            except Exception as e:
-                logger.error(f"Ошибка вызова MCP тула {tool_name}: {e}", exc_info=True)
-                raise ValueError(f"Ошибка MCP тула: {str(e)}") from e
-        
-        # Устанавливаем имя ДО декоратора
-        dynamic_mcp_func.__name__ = safe_tool_name
-        dynamic_mcp_func.__qualname__ = safe_tool_name
-        
-        # Применяем @tool декоратор
-        try:
-            mcp_tool = tool(
-                description=ref.description or f"MCP тул {tool_name}",
-                args_schema=args_schema,
-                cost=ref.cost,
-                billing_name=ref.billing_name or f"mcp_{server_id}_{tool_name}",
-                is_public=ref.is_public,
-                state_aware=True,
-                group=ref.group
-            )(dynamic_mcp_func)
 
-            logger.info(f"✅ MCP tool {ref.tool_id} успешно создан")
-            return mcp_tool
-
-        except Exception as e:
-            raise ValueError(f"Ошибка создания MCP tool {ref.tool_id}: {e}") from e
+        async def mcp_func(**kwargs):
+            result = await mcp_client.call_tool(tool_name, kwargs)
+            if result.get("isError"):
+                raise ValueError(format_mcp_result(result.get("content", [])))
+            return format_mcp_result(result.get("content", []))
+        
+        mcp_func.__name__ = safe_tool_name
+        mcp_func.__qualname__ = safe_tool_name
+        
+        return tool(
+            description=ref.description or f"MCP тул {tool_name}",
+            args_schema=args_schema,
+            cost=ref.cost,
+            billing_name=ref.billing_name or f"mcp_{server_id}_{tool_name}",
+            is_public=ref.is_public,
+            state_aware=True,
+            group=ref.group
+        )(mcp_func)
     
     def _json_schema_to_pydantic(self, schema: Dict[str, Any], model_name: str):
         """Конвертирует JSON Schema в Pydantic модель для args_schema"""

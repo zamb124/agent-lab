@@ -60,6 +60,17 @@ dependencies = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.pytest.ini_options]
+markers = [
+    "integration: integration tests that require external services",
+    "slow: slow tests that take longer to run",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:starlette.templating:",
+    "ignore::DeprecationWarning:httpx._models:",
+    "ignore::DeprecationWarning:httpx._client:",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
 

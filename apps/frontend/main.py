@@ -7,28 +7,35 @@ Frontend Service - FastAPI приложение для фронтенда.
 
 import logging
 from pathlib import Path
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
-from contextlib import asynccontextmanager
 
 from core.config.loader import load_merged_config
-from core.config import BaseSettings, set_settings
+from core.config import set_settings
 from core.logging import setup_logging
-from core.db import create_tables
 from core.middleware.auth import AuthMiddleware
 from core.middleware.profiling import ProfilingMiddleware
 from core.files import initialize_default_processors
+from core.api import auth_router
+
+from apps.frontend.config import FrontendSettings
 from apps.frontend.container import get_frontend_container
 from apps.frontend.core.htmx_helpers import HTMXHeaderMiddleware
+from apps.frontend.core.plugin_loader import discover_and_load_plugins
+from apps.frontend.api_router import router as frontend_api_router
+from apps.frontend.pages_router import router as frontend_pages_router
+from apps.frontend.websockets_router import router as frontend_websockets_router
+from apps.frontend.websockets.notifications import router as websocket_notifications_router
+from apps.frontend.api import models as frontend_models
+from apps.frontend.api.mcp import router as mcp_api_router
+from apps.agents.container import get_agents_container
+from apps.agents.api.v1.admin import router as admin_router
 
 logger = logging.getLogger(__name__)
-
-
-class FrontendSettings(BaseSettings):
-    """Настройки для frontend сервиса"""
-    pass
 
 
 @asynccontextmanager
@@ -36,11 +43,7 @@ async def lifespan(app: FastAPI):
     """Lifespan события для FastAPI"""
     logger.info("Запуск Frontend Service...")
     
-    container = app.state.container
-    settings = app.state.settings
-    
     logger.info("Загрузка плагинов...")
-    from apps.frontend.core.plugin_loader import discover_and_load_plugins
     await discover_and_load_plugins(app)
     
     logger.info("Frontend Service запущен")
@@ -68,7 +71,6 @@ def create_app() -> FastAPI:
     
     setup_logging("frontend", settings.logging)
     
-    # Контейнер создается автоматически при первом вызове
     container = get_frontend_container()
     
     initialize_default_processors(
@@ -89,8 +91,6 @@ def create_app() -> FastAPI:
     
     app.state.container = container
     app.state.settings = settings
-    # AgentsContainer для доступа к agents сервисам (migrator, billing_service и т.д.)
-    from apps.agents.container import get_agents_container
     app.state.agents_container = get_agents_container()
     
     app.add_middleware(
@@ -140,15 +140,6 @@ def create_app() -> FastAPI:
     
     logger.info("Подключение роутеров...")
     
-    from apps.frontend.api_router import router as frontend_api_router
-    from apps.frontend.pages_router import router as frontend_pages_router
-    from apps.frontend.websockets_router import router as frontend_websockets_router
-    from apps.frontend.websockets.notifications import router as websocket_notifications_router
-    from apps.frontend.api import models as frontend_models
-    from core.api import auth_router
-    from apps.agents.api.v1.admin import router as admin_router
-    from apps.frontend.api.mcp import router as mcp_api_router
-    
     app.include_router(frontend_api_router, prefix="/frontend/api")
     app.include_router(frontend_pages_router)
     app.include_router(frontend_websockets_router, prefix="/frontend")
@@ -182,7 +173,6 @@ def create_app() -> FastAPI:
     docs_dir = project_root / "site"
     if docs_dir.exists():
         app.mount("/docs", StaticFiles(directory=str(docs_dir), html=True), name="docs")
-        logger.info("📚 Документация MkDocs доступна на /docs")
     
     logger.info("Frontend Service создан")
     
@@ -206,4 +196,3 @@ async def root():
         "version": "1.0.0",
         "status": "running"
     }
-

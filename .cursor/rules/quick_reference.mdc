@@ -120,6 +120,14 @@ await agent_repo.set(agent)
 
 ## В тестах
 
+```
+tests/
+├── conftest.py           # Общие фикстуры
+├── core/                 # Тесты core модуля
+├── agents/              # Тесты apps/agents (основные)
+└── frontend/            # Тесты apps/frontend
+```
+
 ```python
 async def test_example(
     migrated_db,
@@ -127,7 +135,10 @@ async def test_example(
     user_repo,         # Фикстура
     company_repo,      # Фикстура
     test_helpers,      # Вспомогательные функции
+    unique_id,         # Генератор уникальных ID для изоляции
 ):
+    session_id = unique_id("session")  # → session_abc123
+    
     # Создание тестовых данных (обновлено - БЕЗ storage)
     agent = await test_helpers.create_simple_agent(
         agent_id="test",

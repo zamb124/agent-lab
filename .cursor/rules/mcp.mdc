@@ -612,7 +612,7 @@ POST /call_tool   # ❌
 ### Структура плагина
 
 <good_example>
-app/frontend/modules/mcp/
+apps/frontend/modules/mcp/
 ├── __init__.py
 ├── plugin.py                    # Описание плагина
 ├── router.py                    # FastAPI роутер
@@ -627,7 +627,7 @@ app/frontend/modules/mcp/
 ### Регистрация плагина
 
 <good_example>
-# app/frontend/modules/mcp/plugin.py
+# apps/frontend/modules/mcp/plugin.py
 class MCPPlugin(Plugin):
     name = "mcp"
     display_name = "MCP Серверы"
@@ -722,29 +722,3 @@ GET /api/mcp/servers/{server_id}
 - Awesome MCP Servers: https://github.com/punkpeye/awesome-mcp-servers
 - Cloudflare MCP: https://github.com/cloudflare/mcp-server-cloudflare
 - Context7 MCP: https://mcp.context7.com
-# Правила работы с MCP (Model Context Protocol)
-
-## Обзор
-
-MCP (Model Context Protocol) - протокол для подключения внешних инструментов к агентам.
-
-**Ключевые принципы:**
-- Database-First: конфигурация MCP серверов хранится в БД
-- Мультитенантность: каждая компания имеет свои MCP серверы
-- Единая ToolFactory: MCP тулы создаются как обычные
-- State-aware: MCP тулы могут читать/писать state
-
-## Архитектура
-
-```
-User → Agent → ToolFactory → MCPHttpClient → MCP Server
-                    ↓
-              @tool decorator
-                    ↓
-            LangChain StructuredTool
-```
-
-## Модели данных
-
-### MCPServerConfig
-
