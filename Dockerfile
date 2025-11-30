@@ -57,8 +57,13 @@ EXPOSE 8002
 CMD ["python", "run_frontend_prod.py"]
 
 
-# Worker
-FROM agents AS worker
+# Worker (требует доступ ко всем apps для импорта задач)
+FROM base AS worker
+
+COPY core/ ./core/
+COPY apps/ ./apps/
+COPY run_worker.py ./
+COPY conf.json ./
 
 CMD ["python", "run_worker.py"]
 
