@@ -129,16 +129,16 @@ async def search_agents(
 #### Репозитории
 - `AgentRepositoryDep` - AgentRepository
 - `FlowRepositoryDep` - FlowRepository
-- `TaskRepositoryDep` - TaskRepository
 - `SessionRepositoryDep` - SessionRepository
 - `ToolRepositoryDep` - ToolRepository
+- `MCPServerRepositoryDep` - MCPServerRepository
 
 #### Сервисы
 - `AuthServiceDep` - AuthService
 - `VariablesServiceDep` - VariablesService
 - `InterfaceFactoryDep` - InterfaceFactory
 
-**ВАЖНО**: `StorageDep` удален! Используй репозитории.
+**ВАЖНО**: Используй репозитории, не Storage напрямую.
 
 ## В сервисах и фабриках
 
@@ -161,8 +161,7 @@ class AgentFactory:
 ## Service БД vs Shared БД
 
 **Service БД (`container.storage`)** - для специфичных данных сервиса:
-- agent, flow, tool, mcp_server
-- task, session
+- agent, flow, tool, mcp_server, session
 - var, usage, file
 
 **Shared БД (`container.shared_storage`)** - для общих данных:
@@ -179,7 +178,7 @@ container = AgentsContainer(
 # Репозитории автоматически используют правильную БД:
 agent_repo = container.agent_repository      # → service БД
 user_repo = container.user_repository        # → shared БД
-task_repo = container.task_repository        # → service БД
+session_repo = container.session_repository  # → service БД
 company_repo = container.company_repository  # → shared БД
 </good_example>
 

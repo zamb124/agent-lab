@@ -19,8 +19,6 @@ class Storage(Base):
     - agent:agent_id
     - flow:flow_id
     - session:session_id
-
-    Задачи (task:*) теперь в отдельной таблице Tasks.
     """
 
     __tablename__ = "storage"
@@ -94,50 +92,6 @@ class Users(Base):
 
     def __repr__(self):
         return f"<Users(key='{self.key}', updated_at='{self.updated_at}')>"
-
-
-class Tasks(Base):
-    """
-    Таблица для задач (Tasks).
-
-    Ключи имеют формат: task:task_id
-    Физическая изоляция задач для лучшей производительности.
-    """
-
-    __tablename__ = "tasks"
-
-    key = Column(String, primary_key=True, index=True)
-    value = Column(JSONB, nullable=False)
-    created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-    updated_at = Column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
-    expired_at = Column(DateTime(timezone=True), nullable=True)
-
-    __table_args__ = (
-        UniqueConstraint("key", name="uq_tasks_key"),
-        Index("ix_tasks_key_prefix", "key"),
-        Index("ix_tasks_updated_at", "updated_at"),
-        Index("ix_tasks_expired_at", "expired_at"),
-        Index("ix_tasks_key_created_at", "key", "created_at"),
-        Index("ix_tasks_key_updated_at", "key", "updated_at"),
-        Index("ix_tasks_status", (text("(value->>'status')"))),
-        Index("ix_tasks_execute_at", (text("(value->>'execute_at')"))),
-        Index("ix_tasks_session_flow", (text("(value->>'session_id')")), (text("(value->>'flow_id')"))),
-        Index(
-            "ix_tasks_pending_ready",
-            (text("(value->>'status')")),
-            (text("(value->>'execute_at')")),
-            postgresql_where=text("(value->>'status') = 'pending'")
-        ),
-    )
-
-    def __repr__(self):
-        return f"<Tasks(key='{self.key}', updated_at='{self.updated_at}')>"
 
 
 class Variables(Base):

@@ -10,7 +10,7 @@ from apps.agents.tools.task.delayed_task_tools import DELAYED_TASK_TOOLS
 
 
 @pytest.mark.asyncio
-async def test_tools_persist_state_between_calls(migrated_db, agent_factory, agent_repo, flow_repo, mock_llm, unique_id, test_context):
+async def test_tools_persist_state_between_calls(migrated_db, agent_factory, agent_repo, flow_repo, mock_llm, unique_id, test_context, taskiq_schedule_source):
     """
     Чистый тест: агент создает задачу → агент показывает список → задача там есть.
     Проверяет что изменения state персистятся между вызовами.

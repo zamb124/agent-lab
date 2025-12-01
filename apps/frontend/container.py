@@ -17,7 +17,6 @@ MODEL_TYPE_TO_REPOSITORY = {
     "agent": "agent_repository",
     "flow": "flow_repository",
     "tool": "tool_repository",
-    "task": "task_repository",
     "user": "user_repository",
     "session": "session_repository",
 }
@@ -57,12 +56,6 @@ class FrontendContainer(BaseContainer):
         """ToolRepository - HTTP прокси к сервису agents"""
         from apps.agents.db.repositories import ToolRepository
         return self._get_repository(ToolRepository)
-    
-    @lazy
-    def task_repository(self):
-        """TaskRepository - HTTP прокси к сервису agents"""
-        from apps.agents.db.repositories import TaskRepository
-        return self._get_repository(TaskRepository)
     
     @lazy
     def session_repository(self):

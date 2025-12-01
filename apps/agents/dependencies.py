@@ -7,7 +7,7 @@ Dependency Injection для сервиса агентов
 from typing import Annotated, TYPE_CHECKING, Dict, Callable, Any
 from fastapi import Depends
 
-from apps.agents.db.repositories import AgentRepository, FlowRepository, TaskRepository, SessionRepository, ToolRepository
+from apps.agents.db.repositories import AgentRepository, FlowRepository, SessionRepository, ToolRepository
 from apps.agents.container import get_agents_container
 from core.context import get_context
 from core.models import Context
@@ -41,12 +41,6 @@ async def get_flow_repository() -> FlowRepository:
     """Получить FlowRepository из контейнера"""
     container = get_agents_container()
     return container.flow_repository
-
-
-async def get_task_repository() -> TaskRepository:
-    """Получить TaskRepository из контейнера"""
-    container = get_agents_container()
-    return container.task_repository
 
 
 async def get_session_repository() -> SessionRepository:
@@ -133,7 +127,6 @@ def get_repository_dependency(repository_name: str) -> Callable:
 ContextDep = Annotated[Context, Depends(get_request_context)]
 AgentRepositoryDep = Annotated[AgentRepository, Depends(get_agent_repository)]
 FlowRepositoryDep = Annotated[FlowRepository, Depends(get_flow_repository)]
-TaskRepositoryDep = Annotated[TaskRepository, Depends(get_task_repository)]
 SessionRepositoryDep = Annotated[SessionRepository, Depends(get_session_repository)]
 ToolRepositoryDep = Annotated[ToolRepository, Depends(get_tool_repository)]
 VariablesServiceDep = Annotated[VariablesService, Depends(get_variables_service)]

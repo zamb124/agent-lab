@@ -9,36 +9,51 @@ globs: ["**/tasks/**", "**/broker.py", "**/worker.py"]
 
 TaskIQ - единая система очередей задач для всей платформы. Использует PostgreSQL как брокер (Shared DB).
 
+**Компоненты:**
+- **AsyncpgBroker** - брокер сообщений (PostgreSQL)
+- **AsyncpgResultBackend** - хранение результатов
+- **AsyncpgScheduleSource** - отложенные/cron задачи
+- **TaskiqScheduler** - планировщик отложенных задач
+
 ## Структура
 
 ```
 core/tasks/
-├── __init__.py          # Экспорт get_broker, broker
-├── broker.py            # AsyncpgBroker (Shared DB)
-└── worker.py            # TaskiqWorker entry point
+├── __init__.py          # Экспорт broker, scheduler, schedule_source
+├── broker.py            # AsyncpgBroker + AsyncpgScheduleSource + TaskiqScheduler
+└── worker.py            # TaskiqWorker entry point (экспортирует scheduler)
 
 apps/agents/tasks/
 ├── __init__.py          # Экспорт задач
 ├── agent_tasks.py       # process_agent_task
 └── message_tasks.py     # send_message_task
 
+apps/agents/tools/task/
+└── delayed_task_tools.py # create_delayed_task, list_delayed_tasks, cancel_delayed_task
+
 apps/frontend/tasks/
 ├── __init__.py          # Экспорт задач
 └── notification_tasks.py # send_notification_task
 ```
 
-## Брокер
+## Брокер и Scheduler
 
-Брокер живет в `core/tasks/broker.py` и использует Shared DB:
+Брокер и scheduler живут в `core/tasks/broker.py`:
 
 ```python
-from core.tasks import broker, get_broker
+from core.tasks import broker, scheduler, schedule_source
 
-# Получить брокер
+# Брокер для задач
 broker = get_broker()
+
+# Schedule source для отложенных задач
+schedule_source = get_schedule_source()
+
+# Scheduler для выполнения отложенных
+scheduler = get_scheduler()
 ```
 
-**КРИТИЧНО**: Брокер использует `settings.database.shared_url` - общую БД для всех сервисов.
+**КРИТИЧНО**: Все компоненты используют `settings.database.shared_url` - общую БД.
 
 ## Создание задачи
 
@@ -261,24 +276,116 @@ async def test_agent_task(taskiq_broker, test_context):
 5. **ВСЕГДА** инициализируй брокер в тестах через фикстуру
 6. **ВСЕГДА** используй `retry_on_error=True` для критичных задач
 
-## Миграция с TaskProcessor
+## Отложенные задачи (Delayed Tasks)
 
-Старый `TaskProcessor` удален. Используй TaskIQ:
+### Архитектура
 
-<bad_example>
-# УДАЛЕНО - не существует
-from apps.agents.worker import TaskProcessor
+Отложенные задачи реализованы через `taskiq-postgres`:
+- **AsyncpgScheduleSource** - хранит расписание в таблице `taskiq_schedules`
+- **TaskiqScheduler** - выполняет задачи по расписанию
+- **schedule_by_time()** - метод для планирования на конкретное время
 
-processor = TaskProcessor()
-await processor.process_task(task)
-</bad_example>
+### Создание отложенной задачи
 
-<good_example>
+```python
+from datetime import datetime, timezone, timedelta
 from apps.agents.tasks.agent_tasks import process_agent_task
+from core.tasks import schedule_source
 
-# Создание задачи через интерфейс
-task_id = await interface.create_task(message, flow_id)
+# Время выполнения
+execute_at = datetime.now(timezone.utc) + timedelta(minutes=30)
 
-# Или напрямую через TaskIQ
-task = await process_agent_task.kiq(...)
-</good_example>
+# Планирование задачи
+schedule = await process_agent_task.schedule_by_time(
+    schedule_source,
+    execute_at,
+    flow_id="flow_123",
+    session_id="session_456",
+    message="Напоминание: проверить статус заказа",
+    platform="api",
+    user_id="user_789",
+    company_id="company_abc",
+    metadata={"delayed": True, "task_type": "reminder"},
+)
+
+# schedule.schedule_id - ID для отмены
+```
+
+### Отмена отложенной задачи
+
+```python
+await schedule.unschedule()
+```
+
+### Тулы для агентов
+
+Агенты могут создавать отложенные задачи через тулы:
+
+```python
+from apps.agents.tools.task.delayed_task_tools import (
+    create_delayed_task,
+    list_delayed_tasks,
+    cancel_delayed_task,
+    get_delayed_task_status,
+)
+
+class MyAgent(BaseAgent):
+    tools = [create_delayed_task, list_delayed_tasks]
+    prompt = """
+    Можешь создавать отложенные задачи:
+    - create_delayed_task(delay_seconds=3600, message="Напоминание")
+    - create_delayed_task(delay_seconds=60, tool_call={"name": "check_status", "args": {"order_id": "123"}})
+    """
+```
+
+### Типы отложенных задач
+
+1. **Текстовое сообщение**:
+```python
+await create_delayed_task.invoke({
+    "delay_seconds": 3600,
+    "message": "Напоминание через час"
+})
+```
+
+2. **Вызов функции (tool_call)**:
+```python
+await create_delayed_task.invoke({
+    "delay_seconds": 60,
+    "tool_call": {
+        "name": "check_order_status",
+        "args": {"order_id": "ORD-12345"}
+    }
+})
+```
+
+### Хранение в state
+
+Созданные отложенные задачи сохраняются в `state["store"]["delayed_tasks"]`:
+
+```python
+state["store"]["delayed_tasks"] = {
+    "task_abc123": {
+        "task_id": "task_abc123",
+        "schedule_id": "sched_xyz",
+        "execute_at": "2025-01-15T15:00:00Z",
+        "message": "Напоминание",
+        "tool_call": None,
+        "status": "scheduled"
+    }
+}
+```
+
+### Запуск Scheduler
+
+**Локально:**
+```bash
+make taskiq-scheduler
+```
+
+**Docker:**
+```bash
+docker-compose up -d taskiq-scheduler
+```
+
+**КРИТИЧНО**: Scheduler должен работать для выполнения отложенных задач!

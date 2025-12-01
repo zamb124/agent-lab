@@ -23,7 +23,6 @@ from apps.agents.models.core_models import (
     GraphEdge,
     SubAgentMemoryPolicy,
 )
-from apps.agents.models.task_models import TaskConfig, TaskStatus
 from apps.agents.models.session_models import SessionConfig, SessionStatus
 from core.models.billing_models import UsageRecord, UsageType
 from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
@@ -51,8 +50,6 @@ __all__ = [
     "GraphNode",
     "GraphEdge",
     "SubAgentMemoryPolicy",
-    "TaskConfig",
-    "TaskStatus",
     "SessionConfig",
     "SessionStatus",
     "FileRecord",

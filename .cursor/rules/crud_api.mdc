@@ -30,7 +30,6 @@ alwaysApply: true
 - `/agents/api/v1/agent` - AgentRepository
 - `/agents/api/v1/flow` - FlowRepository
 - `/agents/api/v1/tool` - ToolRepository
-- `/agents/api/v1/task` - TaskRepository
 - `/agents/api/v1/session` - SessionRepository
 - `/agents/api/v1/mcp_server` - MCPServerRepository
 

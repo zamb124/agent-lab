@@ -177,7 +177,7 @@ async def create_tables(db_url: Optional[str] = None, table_names: Optional[List
     """
     # Явный импорт всех моделей для регистрации в Base.metadata
     from core.db.models import (
-        Storage, Users, Variables, Tasks, Stores, AgentStates, OtelSpans
+        Storage, Users, Variables, Stores, AgentStates, OtelSpans
     )
     
     await wait_for_db(db_url=db_url)

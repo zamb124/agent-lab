@@ -12,7 +12,7 @@ from typing import Dict, Any, Optional, Tuple, List
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from apps.agents.models import TaskConfig, TaskStatus, SessionConfig, SessionStatus
+from apps.agents.models import SessionConfig, SessionStatus
 from apps.agents.tasks.agent_tasks import process_agent_task
 from core.files.processors import (
     get_default_file_processor,
@@ -54,7 +54,6 @@ class BaseInterface(ABC):
 
         container = get_agents_container()
         self.flow_repository = container.flow_repository
-        self.task_repository = container.task_repository
         self.session_repository = container.session_repository
 
     def check_user_access(self, user_identifier: str, username: str = None) -> Tuple[bool, Optional[str]]:

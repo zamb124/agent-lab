@@ -99,24 +99,6 @@ class AgentsContainer(BaseContainer):
         return repository
     
     @lazy
-    def task_repository(self):
-        from apps.agents.db.repositories.task_repository import TaskRepository
-        from apps.agents.dependencies import generate_repository_dependency
-        
-        repository = TaskRepository(storage=self.storage)
-        dependency = generate_repository_dependency("task_repository", TaskRepository)
-        
-        self._register_crud_router(
-            repository_name="task_repository",
-            repository=repository,
-            prefix=_repository_to_prefix(repository),
-            tags=_repository_to_tags(repository),
-            repository_dependency=dependency
-        )
-        
-        return repository
-    
-    @lazy
     def session_repository(self):
         from apps.agents.db.repositories.session_repository import SessionRepository
         from apps.agents.dependencies import generate_repository_dependency

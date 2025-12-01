@@ -1,6 +1,11 @@
 """
-Инструменты для работы с отложенными задачами.
+Инструменты для работы с отложенными задачами через TaskIQ Scheduler.
 Позволяют агентам создавать задачи для выполнения в будущем.
+
+АРХИТЕКТУРА:
+- Отложенные задачи создаются через TaskIQ schedule_by_time()
+- Scheduler хранит расписания в PostgreSQL (AsyncpgScheduleSource)
+- При наступлении времени Scheduler вызывает process_agent_task
 
 ИСПОЛЬЗОВАНИЕ:
 Эти тулы предназначены для АВТОМАТИЗАЦИИ внутри flow, а не для прямого взаимодействия с пользователями.
@@ -22,9 +27,7 @@ class OrderProcessingAgent(BaseAgent):
 
 НЕПРАВИЛЬНЫЙ ПРИМЕР:
 class FAQAgent(BaseAgent):
-    tools = [DELAYED_TASK_TOOLS]  # ❌ НЕТ! Пользователь может написать "напомни..." → цикл!
-
-Декоратор @tool автоматически оборачивает в Command если state изменился.
+    tools = [DELAYED_TASK_TOOLS]  # НЕТ! Пользователь может написать "напомни..." -> цикл!
 """
 
 import logging
@@ -35,8 +38,8 @@ from datetime import datetime, timezone, timedelta
 from apps.agents.services.tool_decorator import tool
 from core.context import get_context
 from core.variables import get_state
-from apps.agents.models import TaskConfig, TaskStatus
-from apps.agents.container import get_agents_container
+from core.tasks.broker import schedule_source
+from apps.agents.tasks.agent_tasks import process_agent_task
 
 logger = logging.getLogger(__name__)
 
@@ -52,13 +55,16 @@ async def create_delayed_task(
     """
     Создает отложенную задачу для текущего flow через указанное время.
     
+    Задача выполняется через TaskIQ Scheduler - когда наступает время,
+    scheduler вызывает process_agent_task с указанным сообщением.
+    
     ВАРИАНТ 1 - Текстовое напоминание:
     create_delayed_task(3600, message="Напоминание: позвонить маме")
-    → Через час отправится сообщение напрямую (skip_agent=True)
+    -> Через час агент получит сообщение и обработает его
     
     ВАРИАНТ 2 - Вызов тула:
     create_delayed_task(3600, tool_name="check_order_status", tool_args={"order_id": "123"})
-    → Через час выполнится агент с вызовом тула (skip_agent=False)
+    -> Через час агент выполнит вызов указанного тула
     
     ВАЖНО для message: указывай ДЕЙСТВИЕ/КОНТЕКСТ, а НЕ текст пользователя!
     ПРАВИЛЬНО: "Напоминание: позвонить маме"
@@ -66,13 +72,13 @@ async def create_delayed_task(
     
     Args:
         delay_seconds: Задержка в секундах (например, 3600 = 1 час)
-        message: Текст напоминания (для skip_agent=True)
-        tool_name: Имя тула для вызова (для skip_agent=False)
+        message: Текст напоминания
+        tool_name: Имя тула для вызова
         tool_args: Аргументы тула (dict)
         metadata: Дополнительные данные
     
     Returns:
-        Сообщение об успешном создании
+        Сообщение об успешном создании с schedule_id
     
     Examples:
         # Напоминание
@@ -85,7 +91,6 @@ async def create_delayed_task(
             tool_args={"client_id": "456", "subject": "Проверка заявки"}
         )
     """
-    # Проверяем что указано либо message, либо tool_name
     if not message and not tool_name:
         raise ValueError("Укажите либо message, либо tool_name")
     
@@ -102,51 +107,45 @@ async def create_delayed_task(
     
     flow_id = context.flow_config.flow_id
     session_id = context.session_id
+    platform = context.platform or "api"
+    user_id = context.user.user_id if context.user else "system"
+    company_id = context.active_company.company_id if context.active_company else "default"
     
     task_id = f"task_{uuid.uuid4().hex[:8]}"
     execute_at = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
     
-    # Определяем тип задачи
+    # Формируем сообщение для агента
     if message:
-        # Текстовое напоминание - отправляется напрямую
-        task_input = {"message": message, "metadata": metadata or {}}
-        task_skip_agent = True
-        task_description = message
+        task_message = f"[DELAYED_TASK:{task_id}] {message}"
     else:
-        # Вызов тула - выполняется через агента
-        task_input = {
-            "tool_call": {
-                "tool_name": tool_name,
-                "tool_args": tool_args or {}
-            },
-            "metadata": metadata or {}
-        }
-        task_skip_agent = False
-        task_description = f"Вызов тула {tool_name}"
+        # Для вызова тула формируем специальное сообщение
+        tool_args_str = ", ".join(f'{k}={v}' for k, v in (tool_args or {}).items())
+        task_message = f"[DELAYED_TASK:{task_id}] Выполни инструмент {tool_name}({tool_args_str})"
     
-    task_config = TaskConfig(
-        task_id=task_id,
+    # Планируем задачу через TaskIQ
+    schedule = await process_agent_task.schedule_by_time(
+        schedule_source,
+        execute_at,
         flow_id=flow_id,
-        context=context,
-        status=TaskStatus.PENDING,
-        input_data=task_input,
-        created_at=datetime.now(timezone.utc),
-        execute_at=execute_at,
-        skip_agent=task_skip_agent,
+        session_id=session_id,
+        message=task_message,
+        platform=platform,
+        user_id=user_id,
+        company_id=company_id,
+        metadata={
+            **(metadata or {}),
+            "delayed_task_id": task_id,
+            "original_message": message,
+            "tool_name": tool_name,
+            "tool_args": tool_args,
+        },
     )
-
-    storage = get_agents_container().storage
-    task_key = f"task:{task_id}"
     
-    logger.info(f"📝 Сохраняем задачу: key={task_key}, flow_id={flow_id}")
-    success = await storage.set(task_key, task_config.model_dump_json(), force_global=True)
+    schedule_id = schedule.schedule_id
     
-    if not success:
-        raise ValueError(f"Не удалось сохранить задачу {task_id}")
+    logger.info(f"Scheduled delayed task {task_id} (schedule_id={schedule_id}) for {execute_at}")
     
-    logger.info(f"✅ Задача {task_id} сохранена в БД")
-    
-    # Просто добавляем в state - декоратор автоматически обернет в Command!
+    # Сохраняем в state для отслеживания
     state = get_state()
     if not state:
         raise ValueError("State недоступен")
@@ -158,6 +157,7 @@ async def create_delayed_task(
     
     state["store"]["delayed_tasks"][task_id] = {
         "task_id": task_id,
+        "schedule_id": schedule_id,
         "flow_id": flow_id,
         "session_id": session_id,
         "type": "message" if message else "tool_call",
@@ -171,14 +171,12 @@ async def create_delayed_task(
         "delay_seconds": delay_seconds,
     }
     
-    logger.info(f"📅 Создана отложенная задача {task_id} на {execute_at}")
-    
     execute_at_str = execute_at.strftime('%Y-%m-%d %H:%M:%S UTC')
     
     if message:
-        return f"✅ Создана отложенная задача {task_id}\n⏰ Выполнится: {execute_at_str}\n📝 Сообщение: {message}"
+        return f"Создана отложенная задача {task_id}\nВыполнится: {execute_at_str}\nСообщение: {message}"
     else:
-        return f"✅ Создана отложенная задача {task_id}\n⏰ Выполнится: {execute_at_str}\n🔧 Тул: {tool_name}({tool_args})"
+        return f"Создана отложенная задача {task_id}\nВыполнится: {execute_at_str}\nТул: {tool_name}({tool_args})"
 
 
 @tool(is_public=True, group="Планирование задач и напоминаний", title="Список отложенных задач", state_aware=True)
@@ -187,49 +185,41 @@ async def list_delayed_tasks() -> str:
     state = get_state()
     
     if not state or "store" not in state or "delayed_tasks" not in state["store"]:
-        return "📭 У вас нет отложенных задач"
+        return "У вас нет отложенных задач"
     
     tasks = state["store"]["delayed_tasks"]
     
     if not tasks:
-        return "📭 У вас нет отложенных задач"
+        return "У вас нет отложенных задач"
     
-    # Фильтруем только активные и еще не выполненные
-    # Автоматически помечаем как executed те, у которых время прошло
     now = datetime.now(timezone.utc)
     
     active_tasks = {}
     for tid, t in tasks.items():
         if t.get("status") != "scheduled":
-            continue  # Пропускаем cancelled/executed
+            continue
         
-        # Проверяем что время еще не наступило
         execute_at_str = t.get("execute_at")
         if execute_at_str:
             execute_at = datetime.fromisoformat(execute_at_str)
             if execute_at > now:
-                # Задача еще не выполнилась - показываем
                 active_tasks[tid] = t
             else:
-                # Время прошло - помечаем как executed (автоматическая очистка)
                 tasks[tid]["status"] = "executed"
                 tasks[tid]["executed_at"] = now.isoformat()
-                logger.debug(f"📅 Задача {tid} автоматически помечена как executed (время прошло)")
     
     if not active_tasks:
-        return "📭 У вас нет активных отложенных задач"
+        return "У вас нет активных отложенных задач"
     
-    # Сортируем по времени выполнения
     sorted_tasks = sorted(active_tasks.values(), key=lambda x: x["execute_at"])
     
-    result_lines = [f"📅 Отложенные задачи ({len(sorted_tasks)}):"]
+    result_lines = [f"Отложенные задачи ({len(sorted_tasks)}):"]
     result_lines.append("")
     
     for idx, task in enumerate(sorted_tasks, 1):
         execute_at = datetime.fromisoformat(task["execute_at"])
         execute_at_str = execute_at.strftime('%Y-%m-%d %H:%M:%S UTC')
         
-        now = datetime.now(timezone.utc)
         remaining = execute_at - now
         
         if remaining.total_seconds() > 0:
@@ -241,16 +231,16 @@ async def list_delayed_tasks() -> str:
         
         task_type = task.get('type', 'message')
         
-        result_lines.append(f"{idx}. {task['task_id']} ⏰ {execute_at_str} ({time_left})")
+        result_lines.append(f"{idx}. {task['task_id']} - {execute_at_str} ({time_left})")
         
         if task_type == 'message':
-            result_lines.append(f"   📝 {task['message']}")
+            result_lines.append(f"   Сообщение: {task['message']}")
         else:
             tool_name = task.get('tool_name', 'unknown')
             tool_args = task.get('tool_args', {})
-            result_lines.append(f"   🔧 {tool_name}({', '.join(f'{k}={v}' for k, v in tool_args.items())})")
+            result_lines.append(f"   Тул: {tool_name}({', '.join(f'{k}={v}' for k, v in tool_args.items())})")
         
-        result_lines.append(f"   🎯 Flow: {task['flow_id']}")
+        result_lines.append(f"   Flow: {task['flow_id']}")
         result_lines.append("")
     
     return "\n".join(result_lines)
@@ -261,7 +251,7 @@ async def cancel_delayed_task(task_id: str) -> str:
     """
     Отменяет отложенную задачу.
     
-    Database-First: проверяет задачу в БД, а не только в state.
+    Удаляет задачу из TaskIQ Scheduler и помечает её как cancelled в state.
     Можно отменить только свои задачи (из текущей сессии).
     
     Args:
@@ -276,41 +266,37 @@ async def cancel_delayed_task(task_id: str) -> str:
     context = get_context()
     
     if not context or not context.session_id:
-        return "❌ Сессия не определена"
+        return "Сессия не определена"
     
-    # Проверяем задачу в БД
-    task_repo = get_agents_container().task_repository
-    task_config = await task_repo.get(task_id)
+    state = get_state()
     
-    if not task_config:
-        return f"❌ Задача {task_id} не найдена"
+    if not state or "store" not in state or "delayed_tasks" not in state["store"]:
+        return f"Задача {task_id} не найдена"
     
-    # Проверяем что задача принадлежит текущей сессии
-    if task_config.session_id != context.session_id:
-        return f"❌ Задача {task_id} не найдена в вашей сессии"
+    tasks = state["store"]["delayed_tasks"]
     
-    # Проверяем статус
-    if task_config.status != TaskStatus.PENDING:
-        return f"⚠️ Задача {task_id} уже в статусе {task_config.status.value}"
+    if task_id not in tasks:
+        return f"Задача {task_id} не найдена в вашей сессии"
     
-    # Удаляем задачу из БД
-    success = await task_repo.delete(task_id)
+    task_info = tasks[task_id]
     
-    if success:
-        # Опционально: помечаем в state если доступен
-        state = get_state()
-        if state and "store" in state and "delayed_tasks" in state["store"]:
-            if task_id in state["store"]["delayed_tasks"]:
-                state["store"]["delayed_tasks"][task_id]["status"] = "cancelled"
-                state["store"]["delayed_tasks"][task_id]["cancelled_at"] = datetime.now(timezone.utc).isoformat()
-                logger.debug("📦 Задача помечена cancelled в state (локальный кэш)")
-        
-        logger.info(f"🗑️ Задача {task_id} отменена")
-        
-        message = task_config.input_data.get("message", "")
-        return f"✅ Задача {task_id} отменена\n📝 Было: {message}"
-    else:
-        return f"❌ Не удалось отменить задачу {task_id}"
+    if task_info.get("status") != "scheduled":
+        return f"Задача {task_id} уже в статусе {task_info.get('status')}"
+    
+    schedule_id = task_info.get("schedule_id")
+    
+    if schedule_id:
+        try:
+            await schedule_source.delete_schedule(schedule_id)
+            logger.info(f"Deleted schedule {schedule_id} for task {task_id}")
+        except Exception as e:
+            logger.warning(f"Failed to delete schedule {schedule_id}: {e}")
+    
+    tasks[task_id]["status"] = "cancelled"
+    tasks[task_id]["cancelled_at"] = datetime.now(timezone.utc).isoformat()
+    
+    message = task_info.get("message", task_info.get("tool_name", ""))
+    return f"Задача {task_id} отменена\nБыло: {message}"
 
 
 @tool(is_public=False, title="Статус отложенной задачи")
@@ -318,7 +304,7 @@ async def get_delayed_task_status(task_id: str) -> str:
     """
     Проверяет статус отложенной задачи.
     
-    Показывает подробную информацию о задаче из БД и сессионной памяти.
+    Показывает информацию о задаче из сессионной памяти.
     
     Args:
         task_id: ID задачи
@@ -331,43 +317,45 @@ async def get_delayed_task_status(task_id: str) -> str:
     """
     state = get_state()
     
-    if state and "store" in state and "delayed_tasks" in state["store"]:
-        tasks = state["store"]["delayed_tasks"]
-        if task_id in tasks:
-            task_info = tasks[task_id]
-
-            storage = get_agents_container().storage
-            task_data = await storage.get(f"task:{task_id}", force_global=True)
-            
-            if task_data:
-                task_config = TaskConfig.model_validate_json(task_data)
-                
-                result = [
-                    f"📋 Задача {task_id}",
-                    "",
-                    f"🎯 Flow: {task_info['flow_id']}",
-                    f"📝 Сообщение: {task_info['message']}",
-                    f"⏰ Запланировано: {task_info['execute_at']}",
-                    f"🔄 Статус в памяти: {task_info['status']}",
-                    f"🔄 Статус в БД: {task_config.status.value}",
-                ]
-                
-                if task_config.execute_at:
-                    now = datetime.now(timezone.utc)
-                    remaining = task_config.execute_at - now
-                    
-                    if remaining.total_seconds() > 0:
-                        hours = int(remaining.total_seconds() // 3600)
-                        minutes = int((remaining.total_seconds() % 3600) // 60)
-                        result.append(f"⏳ Осталось: {hours}ч {minutes}м")
-                    else:
-                        result.append("⏳ Время наступило, задача в очереди на выполнение")
-                
-                return "\n".join(result)
-            else:
-                return f"⚠️ Задача {task_id} есть в памяти но отсутствует в БД (возможно выполнена)"
+    if not state or "store" not in state or "delayed_tasks" not in state["store"]:
+        return f"Задача {task_id} не найдена"
     
-    return f"❌ Задача {task_id} не найдена в вашей сессии"
+    tasks = state["store"]["delayed_tasks"]
+    
+    if task_id not in tasks:
+        return f"Задача {task_id} не найдена в вашей сессии"
+    
+    task_info = tasks[task_id]
+    
+    result = [
+        f"Задача {task_id}",
+        "",
+        f"Flow: {task_info['flow_id']}",
+        f"Статус: {task_info['status']}",
+        f"Запланировано: {task_info['execute_at']}",
+        f"Schedule ID: {task_info.get('schedule_id', 'N/A')}",
+    ]
+    
+    if task_info.get("type") == "message":
+        result.append(f"Сообщение: {task_info['message']}")
+    else:
+        result.append(f"Тул: {task_info.get('tool_name')}")
+        result.append(f"Аргументы: {task_info.get('tool_args')}")
+    
+    execute_at_str = task_info.get("execute_at")
+    if execute_at_str and task_info["status"] == "scheduled":
+        execute_at = datetime.fromisoformat(execute_at_str)
+        now = datetime.now(timezone.utc)
+        remaining = execute_at - now
+        
+        if remaining.total_seconds() > 0:
+            hours = int(remaining.total_seconds() // 3600)
+            minutes = int((remaining.total_seconds() % 3600) // 60)
+            result.append(f"Осталось: {hours}ч {minutes}м")
+        else:
+            result.append("Время наступило, задача в очереди на выполнение")
+    
+    return "\n".join(result)
 
 
 DELAYED_TASK_TOOLS = [
@@ -376,4 +364,3 @@ DELAYED_TASK_TOOLS = [
     cancel_delayed_task,
     get_delayed_task_status,
 ]
-

@@ -55,7 +55,7 @@ dependencies = [
     "opentelemetry-instrumentation-asyncpg>=0.59b0",
     "simpleeval>=1.0.3",
     "taskiq>=0.12.0",
-    "taskiq-pg>=0.2.0",
+    "taskiq-postgres[asyncpg]>=0.1.0",
     "pytest-playwright-asyncio>=0.7.2",
 ]
 

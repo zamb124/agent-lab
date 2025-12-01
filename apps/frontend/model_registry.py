@@ -8,7 +8,6 @@ from pydantic import BaseModel
 from apps.agents.models import (
     AgentConfig,
     FlowConfig,
-    TaskConfig,
     LLMConfig,
     GraphDefinition,
     ToolReference,
@@ -48,7 +47,6 @@ def register_all_models():
     """Регистрирует все модели с storage_prefix"""
     ModelRegistry.register(AgentConfig)
     ModelRegistry.register(FlowConfig)
-    ModelRegistry.register(TaskConfig)
     ModelRegistry.register(LLMConfig)
     ModelRegistry.register(GraphDefinition)
     ModelRegistry.register(ToolReference)

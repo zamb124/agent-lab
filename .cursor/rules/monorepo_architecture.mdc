@@ -153,7 +153,6 @@ container = AgentsContainer(
 
 # Маршрутизация репозиториев:
 # agent_repository → service БД (agents_db)
-# task_repository → service БД (agents_db)
 # session_repository → service БД (agents_db)
 # user_repository → shared БД (shared_db)
 # company_repository → shared БД (shared_db)
@@ -168,7 +167,7 @@ container = AgentsContainer(
 
 **Специфичные модели** (в apps/agents/models/):
 - AgentConfig, FlowConfig (конфигурация агентов)
-- TaskConfig, SessionConfig (задачи и сессии)
+- SessionConfig (сессии)
 - ToolReference (инструменты)
 - Billing, Payment модели (бизнес-логика)
 

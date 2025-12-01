@@ -61,11 +61,11 @@ help:
 	@echo "Миграции:"
 	@echo "  make remigrate COMPANY=<id>  - Перемигрировать компанию (тулы и flows)"
 	@echo ""
-	@echo "Документация:"
-	@echo "  make doc          - Локальная сборка документации"
-	@echo "  make doc-serve    - Запустить dev-сервер (http://127.0.0.1:8000)"
-	@echo "  make doc-docker   - Собрать документацию в Docker"
-	@echo "  make doc-clean    - Удалить собранную документацию"
+	@echo "Документация (MkDocs):"
+	@echo "  make doc-docker - Полная сборка в Docker (agents + API docs + MkDocs)"
+	@echo "  make doc        - Собрать MkDocs (без генерации API)"
+	@echo "  make doc-serve  - Запустить dev-сервер (http://127.0.0.1:8000)"
+	@echo "  make doc-clean  - Удалить собранную документацию"
 	@echo ""
 	@echo "Тесты:"
 	@echo "  make test              - Запустить тесты (по умолчанию 4 воркера)"
@@ -83,22 +83,28 @@ include mk/migrate.mk
 
 # Короткие алиасы
 doc:
-	@echo "📚 Локальная сборка документации..."
+	@echo "Локальная сборка документации..."
 	uv run mkdocs build --clean
-	@echo "✅ Документация собрана в site/"
+	@echo "Документация собрана в site/"
 
 doc-serve:
 	@echo "📚 Запуск dev-сервера документации на http://127.0.0.1:8000"
 	uv run mkdocs serve
 
 doc-docker:
-	@echo "🐳 Сборка документации в Docker..."
+	@echo "Сборка документации в Docker (полный цикл)..."
+	@echo "1. Запуск agents сервиса..."
+	docker-compose up -d agents
+	@echo "2. Ожидание готовности сервиса..."
+	@sleep 5
+	@echo "3. Генерация API документации..."
+	docker-compose --profile docs run --rm docs-generator
+	@echo "4. Сборка MkDocs..."
 	docker build -t agent-lab-docs --target docs-builder .
-	@echo "📦 Извлечение собранной документации из контейнера..."
 	docker create --name temp-docs agent-lab-docs
 	docker cp temp-docs:/app/site ./site
 	docker rm temp-docs
-	@echo "✅ Документация собрана в site/ через Docker"
+	@echo "Документация собрана в site/"
 
 doc-clean:
 	@echo "🧹 Очистка документации..."

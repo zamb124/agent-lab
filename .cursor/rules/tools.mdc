@@ -163,3 +163,88 @@ class MyAgent(BaseAgent):
     - session_get("warehouse_id")
     """
 </good_example>
+
+## Отложенные задачи (Delayed Tasks)
+
+Тулы для создания отложенных задач из `apps/agents/tools/task/delayed_task_tools.py`:
+- `create_delayed_task` - создать отложенную задачу
+- `list_delayed_tasks` - список активных задач
+- `cancel_delayed_task` - отменить задачу
+- `get_delayed_task_status` - статус задачи
+
+### Типы отложенных задач
+
+**Текстовое сообщение:**
+```python
+await create_delayed_task.invoke({
+    "delay_seconds": 3600,  # через 1 час
+    "message": "Напоминание: проверить статус заказа"
+})
+```
+
+**Вызов функции (tool_call):**
+```python
+await create_delayed_task.invoke({
+    "delay_seconds": 60,
+    "tool_call": {
+        "name": "check_order_status",
+        "args": {"order_id": "ORD-12345"}
+    }
+})
+```
+
+### Использование в агентах
+
+<good_example>
+from apps.agents.tools.task.delayed_task_tools import create_delayed_task, list_delayed_tasks
+
+class ReminderAgent(BaseAgent):
+    tools = [create_delayed_task, list_delayed_tasks]
+    prompt = """
+    Ты помощник по напоминаниям.
+    
+    Создание напоминания:
+    - create_delayed_task(delay_seconds=3600, message="Текст напоминания")
+    
+    Отложенный вызов функции:
+    - create_delayed_task(delay_seconds=60, tool_call={"name": "check_status", "args": {"id": "123"}})
+    
+    Список активных задач:
+    - list_delayed_tasks()
+    """
+</good_example>
+
+### Хранение в state
+
+Задачи сохраняются в `state["store"]["delayed_tasks"]`:
+```python
+{
+    "task_abc123": {
+        "task_id": "task_abc123",
+        "schedule_id": "sched_xyz",
+        "execute_at": "2025-01-15T15:00:00Z",
+        "message": "Напоминание",
+        "tool_call": None,
+        "status": "scheduled"
+    }
+}
+```
+
+### Реализация под капотом
+
+Отложенные задачи реализованы через `taskiq-postgres`:
+- `AsyncpgScheduleSource` хранит расписание в таблице `taskiq_schedules`
+- `process_agent_task.schedule_by_time()` планирует выполнение
+- `TaskiqScheduler` выполняет задачи по времени
+
+```python
+from apps.agents.tasks.agent_tasks import process_agent_task
+from core.tasks import schedule_source
+
+schedule = await process_agent_task.schedule_by_time(
+    schedule_source,
+    execute_at,
+    flow_id=..., session_id=..., message=...,
+    platform=..., user_id=..., company_id=..., metadata={},
+)
+```

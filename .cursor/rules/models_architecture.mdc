@@ -34,9 +34,6 @@ alwaysApply: true
 - LLMConfig
 - SubAgentMemoryPolicy
 
-**apps/agents/models/task_models.py**:
-- TaskConfig, TaskStatus
-
 **apps/agents/models/session_models.py**:
 - SessionConfig, SessionStatus
 
@@ -49,12 +46,11 @@ alwaysApply: true
 ## Правило: НЕТ дубликатов
 
 <bad_example>
-# apps/agents/models/context_models.py - УДАЛЕНО!
-# apps/agents/models/i18n_models.py - УДАЛЕНО!
-# apps/agents/models/identity_models.py - УДАЛЕНО!
-# apps/agents/models/file_models.py - УДАЛЕНО!
-
-# Эти модели теперь ТОЛЬКО в core!
+# НЕ создавай эти файлы в apps/agents/models/:
+# apps/agents/models/context_models.py - Context в core!
+# apps/agents/models/i18n_models.py - Language в core!
+# apps/agents/models/identity_models.py - User, Company в core!
+# apps/agents/models/file_models.py - FileRecord в core!
 </bad_example>
 
 ## Импорты моделей
@@ -127,7 +123,6 @@ class User(BaseModel):
 # Company → CompanyRepository (core/db/repositories/)
 # AgentConfig → AgentRepository (apps/agents/db/repositories/)
 # FlowConfig → FlowRepository (apps/agents/db/repositories/)
-# TaskConfig → TaskRepository (apps/agents/db/repositories/)
 # SessionConfig → SessionRepository (apps/agents/db/repositories/)
 # ToolReference → ToolRepository (apps/agents/db/repositories/)
 # MCPServerConfig → MCPServerRepository (apps/agents/db/repositories/)
@@ -150,7 +145,7 @@ agent = await agent_repo.get("my_agent")
 
 1. **НЕТ дубликатов** между core и apps
 2. **Shared модели** (User, Company, FileRecord) → core → shared БД
-3. **Бизнес-модели** (AgentConfig, FlowConfig, TaskConfig) → apps/agents → service БД
+3. **Бизнес-модели** (AgentConfig, FlowConfig, SessionConfig) → apps/agents → service БД
 4. Используй **core.fields.Field** везде (Pydantic v2 совместимый)
 5. Реэкспортируй shared модели в apps/{service}/models/__init__.py
 6. **ВСЕ модели** через репозитории, НЕ через Storage

@@ -236,10 +236,10 @@ async def migrated_db():
         from core.db.database import create_tables, get_session_factory
         from core.db.models import Stores, AgentStates  # Явный импорт для регистрации в Base.metadata
         from sqlalchemy import text
-        # Service БД (agents_db): storage, tasks, stores, agent_states, otel_spans
+        # Service БД (agents_db): storage, stores, agent_states, otel_spans
         await create_tables(
             db_url=settings.database.url,
-            table_names=["storage", "tasks", "stores", "agent_states", "otel_spans"]
+            table_names=["storage", "stores", "agent_states", "otel_spans"]
         )
         # Проверяем, что таблицы действительно созданы
         session_factory = await get_session_factory(settings.database.url)
@@ -309,12 +309,6 @@ async def agent_repo(migrated_db):
 async def flow_repo(migrated_db):
     """FlowRepository из контейнера воркера"""
     return get_agents_container().flow_repository
-
-
-@pytest_asyncio.fixture
-async def task_repo(migrated_db):
-    """TaskRepository из контейнера воркера"""
-    return get_agents_container().task_repository
 
 
 @pytest_asyncio.fixture
@@ -950,12 +944,49 @@ async def taskiq_broker(migrated_db):
     from core.tasks.broker import broker
     
     await broker.startup()
-    logger.info("✅ TaskIQ PostgreSQL broker запущен для сессии тестов")
+    logger.info("TaskIQ PostgreSQL broker запущен для сессии тестов")
     
     yield broker
     
     await broker.shutdown()
-    logger.info("✅ TaskIQ PostgreSQL broker остановлен")
+    logger.info("TaskIQ PostgreSQL broker остановлен")
+
+
+@pytest_asyncio.fixture(scope="session")
+async def taskiq_schedule_source(migrated_db):
+    """Инициализирует PostgreSQL TaskIQ schedule source для отложенных задач"""
+    from core.tasks.broker import schedule_source
+    
+    await schedule_source.startup()
+    logger.info("TaskIQ schedule source запущен для сессии тестов")
+    
+    yield schedule_source
+    
+    await schedule_source.shutdown()
+    logger.info("TaskIQ schedule source остановлен")
+
+
+@pytest_asyncio.fixture(scope="session")
+async def taskiq_scheduler(taskiq_broker, taskiq_schedule_source):
+    """TaskIQ scheduler для отложенных задач (зависит от broker и schedule_source)"""
+    from core.tasks.broker import scheduler
+    
+    logger.info("TaskIQ scheduler готов к использованию")
+    
+    yield scheduler
+
+
+@pytest_asyncio.fixture
+async def taskiq_environment(taskiq_broker, taskiq_schedule_source, taskiq_scheduler):
+    """
+    Полное окружение TaskIQ для тестов: broker + schedule_source + scheduler.
+    Используйте эту фикстуру когда нужно всё вместе.
+    """
+    yield {
+        "broker": taskiq_broker,
+        "schedule_source": taskiq_schedule_source,
+        "scheduler": taskiq_scheduler,
+    }
 
 
 @pytest_asyncio.fixture

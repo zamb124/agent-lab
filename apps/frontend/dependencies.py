@@ -16,7 +16,6 @@ from apps.agents.container import get_agents_container
 if TYPE_CHECKING:
     from apps.agents.db.repositories.agent_repository import AgentRepository
     from apps.agents.db.repositories.flow_repository import FlowRepository
-    from apps.agents.db.repositories.task_repository import TaskRepository
     from apps.agents.db.repositories.session_repository import SessionRepository
     from apps.agents.db.repositories.tool_repository import ToolRepository
     from core.variables import VariablesService
@@ -35,12 +34,6 @@ async def get_flow_repository() -> "FlowRepository":
     """Получить FlowRepository из AgentsContainer"""
     container = get_agents_container()
     return container.flow_repository
-
-
-async def get_task_repository() -> "TaskRepository":
-    """Получить TaskRepository из AgentsContainer"""
-    container = get_agents_container()
-    return container.task_repository
 
 
 async def get_session_repository() -> "SessionRepository":
@@ -111,7 +104,6 @@ CanvasServiceDep = Annotated[CanvasService, Depends(get_canvas_service)]
 ContextDep = Annotated[Context, Depends(get_request_context)]
 AgentRepositoryDep = Annotated["AgentRepository", Depends(get_agent_repository)]
 FlowRepositoryDep = Annotated["FlowRepository", Depends(get_flow_repository)]
-TaskRepositoryDep = Annotated["TaskRepository", Depends(get_task_repository)]
 SessionRepositoryDep = Annotated["SessionRepository", Depends(get_session_repository)]
 ToolRepositoryDep = Annotated["ToolRepository", Depends(get_tool_repository)]
 VariablesServiceDep = Annotated["VariablesService", Depends(get_variables_service)]

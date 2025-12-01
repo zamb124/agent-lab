@@ -28,7 +28,6 @@ apps/agents/db/repositories/  # Agents репозитории (service БД)
 ├── agent_repository.py
 ├── flow_repository.py
 ├── tool_repository.py
-├── task_repository.py
 ├── session_repository.py
 ├── mcp_repository.py
 └── __init__.py
@@ -95,7 +94,6 @@ class BaseRepository(ABC, Generic[T]):
 | AgentRepository | False | storage | company:X:agent: |
 | FlowRepository | False | storage | company:X:flow: |
 | ToolRepository | False | storage | company:X:tool: |
-| TaskRepository | False | tasks | company:X:task: |
 | SessionRepository | False | storage | company:X:session: |
 | MCPServerRepository | False | storage | company:X:mcp_server: |
 
@@ -128,7 +126,7 @@ agents_dict = await container.agent_repository.get_many(["id1", "id2"])
 
 **Service БД** (`container.storage`):
 - Данные специфичные для сервиса agents
-- agent, flow, tool, task, session, mcp_server
+- agent, flow, tool, session, mcp_server
 - var, usage, file
 
 **Shared БД** (`container.shared_storage`):
@@ -145,7 +143,7 @@ container = AgentsContainer(
 # Маршрутизация:
 agent_repo = container.agent_repository      # → service БД
 user_repo = container.user_repository        # → shared БД
-task_repo = container.task_repository        # → service БД
+session_repo = container.session_repository  # → service БД
 company_repo = container.company_repository  # → shared БД
 </good_example>
 
@@ -246,7 +244,7 @@ MyRepositoryDep = Annotated[MyRepository, Depends(get_my_repository)]
 1. **ВСЕГДА** через репозитории, НИКОГДА напрямую Storage
 2. **НИКОГДА** не добавляй префикс `company:` вручную
 3. **ВСЕГДА** определяй `is_global` в классе
-4. **НИКОГДА** не используй параметр `force_global` (удален)
+4. **НИКОГДА** не используй параметр `force_global`
 5. **ВСЕГДА** получай репозитории из контейнера
 
 **Нарушение приведет к ошибкам изоляции и дублированию данных!**

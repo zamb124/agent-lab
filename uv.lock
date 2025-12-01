@@ -50,7 +50,7 @@ dependencies = [
     { name = "simpleeval" },
     { name = "sqlalchemy" },
     { name = "taskiq" },
-    { name = "taskiq-pg" },
+    { name = "taskiq-postgres", extra = ["asyncpg"] },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -106,7 +106,7 @@ requires-dist = [
     { name = "simpleeval", specifier = ">=1.0.3" },
     { name = "sqlalchemy", extras = ["asyncpg"], specifier = ">=2.0.23" },
     { name = "taskiq", specifier = ">=0.12.0" },
-    { name = "taskiq-pg", specifier = ">=0.2.0" },
+    { name = "taskiq-postgres", extras = ["asyncpg"], specifier = ">=0.1.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.24.0" },
 ]
 
@@ -2458,16 +2458,20 @@ wheels = [
 ]
 
 [[package]]
-name = "taskiq-pg"
-version = "0.2.0"
+name = "taskiq-postgres"
+version = "0.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "asyncpg" },
     { name = "taskiq" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c0/51/865dea9b32c27ee09c2567cffeec12efec9702fe0a0db0abe886cba9e3ac/taskiq_pg-0.2.0.tar.gz", hash = "sha256:8106d089278c31660b9e8372bdb165354f2bb711595861b5bb3211ff0fd8401c", size = 9302, upload-time = "2025-03-06T18:17:03.768Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/05/18/f6bde0d262c587b9b2f3aec2b07bfa6031fcf276810b19e29e5b6f43cdb2/taskiq_postgres-0.6.1.tar.gz", hash = "sha256:82d72d35987bdb1f10982e6b03736cdc6a9d442bc9a0f2fc3b1e61008687661f", size = 14438, upload-time = "2025-11-29T14:52:44.665Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c0/3a/9c456b86975a19f2a8ca5c9fdca74029a98d10c231c54099519012346af8/taskiq_pg-0.2.0-py3-none-any.whl", hash = "sha256:14fa3d38a21c07e21594d4e47b1bc40103e5f96c7c6f349d9b30cd929139ca5b", size = 9266, upload-time = "2025-03-06T18:17:01.769Z" },
+    { url = "https://files.pythonhosted.org/packages/80/bf/ea02cbd9ca8ff8833679f8f3f95c1c21162ba3bad2bd3b1810eb9ebe9d20/taskiq_postgres-0.6.1-py3-none-any.whl", hash = "sha256:7d95085908a0dfbbdc324890c7e9fd52266ed9b22c11bc1d7ee7732c435ef6d0", size = 29836, upload-time = "2025-11-29T14:52:43.55Z" },
+]
+
+[package.optional-dependencies]
+asyncpg = [
+    { name = "asyncpg" },
 ]
 
 [[package]]

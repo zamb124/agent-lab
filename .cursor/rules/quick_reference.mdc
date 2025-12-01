@@ -49,7 +49,6 @@ agents = await container.agent_repository.list_all(limit=100)
 - `agent_repository` (AgentConfig, is_global=False)
 - `flow_repository` (FlowConfig, is_global=False)
 - `tool_repository` (ToolReference, is_global=False)
-- `task_repository` (TaskConfig, is_global=False)
 - `session_repository` (SessionConfig, is_global=False)
 - `mcp_server_repository` (MCPServerConfig, is_global=False)
 
@@ -95,7 +94,7 @@ await storage.get("agent:agent_id")  # НЕТ!
 # НЕТ ручных префиксов
 key = f"company:{company_id}:agent:{agent_id}"  # НЕТ!
 
-# НЕТ force_global (параметр удален)
+# НЕТ force_global
 await storage.get(key, force_global=True)  # НЕТ!
 
 # НЕТ прямых импортов
@@ -207,6 +206,39 @@ task_id = await interface.create_task(message, flow_id)
 result = await interface.create_task(message, flow_id, wait_timeout=30)
 ```
 
+### Отложенные задачи:
+```python
+from datetime import datetime, timezone, timedelta
+from apps.agents.tasks.agent_tasks import process_agent_task
+from core.tasks import schedule_source
+
+execute_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+schedule = await process_agent_task.schedule_by_time(
+    schedule_source,
+    execute_at,
+    flow_id="...", session_id="...", message="...",
+    platform="api", user_id="...", company_id="...", metadata={},
+)
+
+# Отмена
+await schedule.unschedule()
+```
+
+### Тулы для агентов:
+```python
+from apps.agents.tools.task.delayed_task_tools import create_delayed_task
+
+# Текстовое сообщение через 1 час
+await create_delayed_task.invoke({"delay_seconds": 3600, "message": "Напоминание"})
+
+# Вызов функции через 1 минуту
+await create_delayed_task.invoke({
+    "delay_seconds": 60,
+    "tool_call": {"name": "check_status", "args": {"id": "123"}}
+})
+```
+
 ## 🚨 ЗАПОМНИ
 
 - Storage теперь ПРИВАТНЫЙ
@@ -218,4 +250,5 @@ result = await interface.create_task(message, flow_id, wait_timeout=30)
 - В middleware → `request.app.state.container`
 - FileProcessor использует `file_repository`, не `storage`
 - TaskIQ брокер в Shared DB (`core/tasks/broker.py`)
-- НЕТ TaskProcessor - используй TaskIQ задачи
+- Отложенные задачи через `schedule_by_time()`
+- Scheduler должен работать для выполнения отложенных задач

@@ -59,7 +59,7 @@ services:
     command: python run_frontend_prod.py
 
   # TaskIQ Worker (единая очередь задач)
-  # ВАЖНО: --workers 1 обязателен для taskiq-pg
+  # ВАЖНО: --workers 1 обязателен для taskiq-postgres
   # Для масштабирования: docker-compose up --scale taskiq-worker=4
   taskiq-worker:
     build:
@@ -74,6 +74,42 @@ services:
         required: false
     restart: unless-stopped
     command: taskiq worker core.tasks.worker:broker --workers 1
+
+  # TaskIQ Scheduler (для отложенных задач)
+  # ВАЖНО: Запускать только один экземпляр scheduler
+  taskiq-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    volumes:
+      - taskiq_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+    restart: unless-stopped
+    command: taskiq scheduler core.tasks.worker:scheduler
+
+  # Генератор API документации
+  # Запуск: docker-compose run --rm docs-generator
+  docs-generator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: agents
+    environment:
+      - AGENTS_SERVICE_URL=http://agents:8001
+      - DOCS_OUTPUT_DIR=/app/docs/api
+    volumes:
+      - ./scripts:/app/scripts
+      - ./docs/api:/app/docs/api
+    depends_on:
+      agents:
+        condition: service_started
+    profiles:
+      - docs
+    command: python scripts/generate_api_docs.py
 
 volumes:
   postgres_data:

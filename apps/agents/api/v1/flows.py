@@ -11,7 +11,6 @@ from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List
 
 from apps.agents.interfaces.api_interface import get_api_interface
-from apps.agents.models import TaskStatus
 from apps.agents.dependencies import FlowRepositoryDep
 from apps.agents.container import get_agents_container
 from core.tasks.broker import result_backend
@@ -133,42 +132,10 @@ async def send_message_to_flow(flow_id: str, request: FlowMessageRequest, flow_r
     if not message:
         raise HTTPException(status_code=400, detail="Не удалось обработать сообщение")
 
-    # ПРОВЕРЯЕМ: есть ли прерванная задача для этой сессии
-    task_repo = get_agents_container().task_repository
-    interrupted_task = await task_repo.find_interrupted(message.session_id, flow_id)
+    # Создаем задачу через TaskIQ
+    task_id = await api_interface.create_task(message, flow_id)
 
-    if interrupted_task:
-        # ПРОДОЛЖАЕМ прерванную задачу вместо создания новой
-        logger.info(
-            f"🔄 Найдена прерванная задача {interrupted_task.task_id} для сессии {message.session_id}"
-        )
-
-        # Обновляем прерванную задачу с новым сообщением пользователя
-        logger.info(
-            f"🔄 Обновляем задачу: старое сообщение='{interrupted_task.input_data.get('message', '')}', новое='{message.content}'"
-        )
-        interrupted_task.input_data["message"] = message.content
-        interrupted_task.input_data["metadata"] = message.metadata or {}
-        logger.info(
-            f"🔄 Переводим задачу {interrupted_task.task_id} из {interrupted_task.status} в pending"
-        )
-        interrupted_task.status = (
-            TaskStatus.PENDING
-        )  # Возвращаем в pending для обработки
-
-        await task_repo.set(interrupted_task)
-        logger.info(
-            f"🔄 Задача {interrupted_task.task_id} обновлена и сохранена в pending"
-        )
-        task_id = interrupted_task.task_id
-
-        logger.info(f"📋 Продолжаем прерванную задачу {task_id} для флоу {flow_id}")
-    else:
-        # Создаем новую задачу как обычно
-        api_interface = get_api_interface()
-        task_id = await api_interface.create_task(message, flow_id)
-
-    logger.info(f"📋 Создана API задача {task_id} для флоу {flow_id}")
+    logger.info(f"Создана API задача {task_id} для флоу {flow_id}")
 
     return FlowMessageResponse(
         task_id=task_id,

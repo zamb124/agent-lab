@@ -67,7 +67,6 @@ async def test_example(
     agent_repo,        # AgentRepository
     flow_repo,         # FlowRepository
     tool_repo,         # ToolRepository
-    task_repo,         # TaskRepository
     session_repo,      # SessionRepository
     user_repo,         # UserRepository
     company_repo,      # CompanyRepository

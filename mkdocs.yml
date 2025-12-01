@@ -158,3 +158,8 @@ nav:
       - Настройка бота: user_docs/user_scenarios/bot_settings/index.md
       - Настройка MCP: user_docs/user_scenarios/mcp_setup/index.md
 
+  - API:
+      - Обзор: api/index.md
+      - Flows API: api/flows.md
+      - Variables API: api/variables.md
+
