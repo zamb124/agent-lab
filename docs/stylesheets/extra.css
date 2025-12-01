@@ -1,1 +1,15 @@
-/* No custom styles */
+/* Extra styles for Agent Lab documentation */
+
+/* Image styling */
+img {
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    margin: 1rem 0;
+}
+
+/* Step headers */
+h2 {
+    border-bottom: 2px solid var(--md-primary-fg-color);
+    padding-bottom: 0.5rem;
+}
+

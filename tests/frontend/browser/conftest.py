@@ -182,7 +182,7 @@ class ScenarioScreenshots:
         try:
             await page.screenshot(path=str(filepath))
         except Exception:
-            pass  # Игнорируем ошибки скриншотов
+            pass
 
 
 @pytest_asyncio.fixture
@@ -191,6 +191,169 @@ async def scenario_screenshots(request):
     test_name = request.node.name.replace("/", "_").replace("::", "_")
     screenshots_dir = Path(__file__).parent / "screenshots" / "scenarios"
     return ScenarioScreenshots(test_name, screenshots_dir)
+
+
+# === Генератор документации из сценариев ===
+
+# Путь к директории документации
+DOCS_DIR = Path(__file__).parent.parent.parent.parent / "docs" / "user_docs" / "user_scenarios"
+
+
+class ScenarioDocGenerator:
+    """
+    Генератор пользовательской документации из browser тестов.
+    
+    Функционал:
+    - Автоматическое создание папок для сценариев
+    - Визуализация кликов на скриншотах (красная рамка)
+    - Сбор markdown описаний шагов
+    - Генерация итогового index.md файла
+    """
+    
+    def __init__(self, scenario_name: str, title: str):
+        """
+        Args:
+            scenario_name: Имя папки сценария (английское, snake_case)
+            title: Заголовок сценария на русском
+        """
+        self.scenario_name = scenario_name
+        self.title = title
+        self.output_dir = DOCS_DIR / scenario_name
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.steps: list[dict] = []
+        self.counter = 0
+    
+    async def step(self, page: Page, description: str, selector: str = None):
+        """
+        Записывает шаг сценария.
+        
+        Args:
+            page: Playwright Page
+            description: Описание шага на русском
+            selector: CSS селектор элемента для подсветки (опционально)
+        """
+        self.counter += 1
+        screenshot_name = f"{self.counter:02d}.png"
+        screenshot_path = self.output_dir / screenshot_name
+        
+        if selector:
+            await self._highlight_element(page, selector)
+        
+        await page.screenshot(path=str(screenshot_path))
+        
+        if selector:
+            await self._remove_highlight(page, selector)
+        
+        self.steps.append({
+            "number": self.counter,
+            "description": description,
+            "screenshot": screenshot_name,
+        })
+    
+    async def click(self, page: Page, selector: str, description: str):
+        """
+        Подсвечивает элемент, делает скриншот, затем кликает.
+        
+        Args:
+            page: Playwright Page
+            selector: CSS селектор элемента для клика
+            description: Описание действия на русском
+        """
+        await self.step(page, description, selector)
+        await page.click(selector)
+    
+    async def fill(self, page: Page, selector: str, value: str, description: str):
+        """
+        Подсвечивает поле ввода, делает скриншот, затем заполняет.
+        
+        Args:
+            page: Playwright Page
+            selector: CSS селектор поля ввода
+            value: Значение для ввода
+            description: Описание действия на русском
+        """
+        await self.step(page, description, selector)
+        await page.fill(selector, value)
+    
+    async def _highlight_element(self, page: Page, selector: str):
+        """Добавляет красную рамку на элемент"""
+        await page.evaluate(f"""
+            (selector) => {{
+                const el = document.querySelector(selector);
+                if (el) {{
+                    el.dataset.originalOutline = el.style.outline;
+                    el.dataset.originalBoxShadow = el.style.boxShadow;
+                    el.style.outline = '3px solid #ff0000';
+                    el.style.boxShadow = '0 0 15px 5px rgba(255, 0, 0, 0.5)';
+                }}
+            }}
+        """, selector)
+        await page.wait_for_timeout(100)
+    
+    async def _remove_highlight(self, page: Page, selector: str):
+        """Убирает подсветку с элемента"""
+        await page.evaluate(f"""
+            (selector) => {{
+                const el = document.querySelector(selector);
+                if (el) {{
+                    el.style.outline = el.dataset.originalOutline || '';
+                    el.style.boxShadow = el.dataset.originalBoxShadow || '';
+                    delete el.dataset.originalOutline;
+                    delete el.dataset.originalBoxShadow;
+                }}
+            }}
+        """, selector)
+    
+    def generate_markdown(self) -> str:
+        """Генерирует markdown документацию"""
+        lines = [
+            f"# {self.title}",
+            "",
+        ]
+        
+        for step in self.steps:
+            lines.extend([
+                f"## Шаг {step['number']}",
+                "",
+                step['description'],
+                "",
+                f"![Шаг {step['number']}]({step['screenshot']})",
+                "",
+            ])
+        
+        return "\n".join(lines)
+    
+    def save(self):
+        """Сохраняет index.md файл с документацией"""
+        markdown = self.generate_markdown()
+        index_path = self.output_dir / "index.md"
+        index_path.write_text(markdown, encoding="utf-8")
+        return index_path
+
+
+@pytest_asyncio.fixture
+async def doc_generator():
+    """
+    Фабрика для создания генератора документации.
+    
+    Использование:
+        async def test_my_scenario(doc_generator):
+            doc = doc_generator("my_scenario", "Мой сценарий")
+            await doc.step(page, "Открываем страницу")
+            await doc.click(page, "#button", "Нажимаем кнопку")
+            doc.save()
+    """
+    generators = []
+    
+    def create(scenario_name: str, title: str) -> ScenarioDocGenerator:
+        gen = ScenarioDocGenerator(scenario_name, title)
+        generators.append(gen)
+        return gen
+    
+    yield create
+    
+    for gen in generators:
+        gen.save()
 
 
 @pytest_asyncio.fixture
