@@ -78,7 +78,7 @@ weather_flow_config = FlowConfig(
     entry_point_agent=WeatherAgent,
     
     is_public=True,
-    image_path="app/flows/weather_flow.jpg",
+    image_path="apps/agents/flows/weather_flow.jpg",
     author=FlowAuthor(
         name="Viktor Shved",
         email="viktor@shved.com",

@@ -12,7 +12,7 @@
                 </span>
                 {% endif %}
                 <div class="store-card-image-wrapper">
-                    <img src="{{ flow.image_url }}" alt="{{ flow.name }}" loading="lazy">
+                    <img src="{{ flow.image_url }}" alt="{{ flow.name }}" loading="lazy" onerror="this.onerror=null; this.src='/static/img/empty.png';">
                 </div>
             </div>
             <div class="store-card-body">

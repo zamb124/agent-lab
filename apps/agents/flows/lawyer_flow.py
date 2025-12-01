@@ -70,7 +70,7 @@ lawyer_flow = FlowConfig(
 Документы автоматически индексируются и доступны для поиска.""",
     entry_point_agent="apps.agents.agents.lawyer.agent.LawyerAgent",
     
-    image_path="app/agents/lawyer/LAWYER.png",
+    image_path="apps/agents/agents/lawyer/LAWYER.png",
     
     platforms={
         "api": {},
