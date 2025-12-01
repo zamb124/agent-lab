@@ -21,7 +21,7 @@ async def telegram_webhook(flow_key: str, request: Request, flow_repo: FlowRepos
     Создает TelegramInterface на лету.
     
     Args:
-        flow_key: Полный ключ flow включая company (company:ssd:flow:app.flows...)
+        flow_key: Полный ключ flow включая company (company:ssd:flow:apps.agents.flows...)
     """
     # Извлекаем flow_id из ключа
     if ":flow:" in flow_key:

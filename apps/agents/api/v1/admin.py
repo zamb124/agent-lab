@@ -558,7 +558,7 @@ async def remigrate_entity(entity_type: str, entity_id: str):
 
     Args:
         entity_type: Тип сущности (flow, agent, tool)
-        entity_id: ID сущности (например, app.flows.test_flow.test_flow_config)
+        entity_id: ID сущности (например, apps.agents.flows.test_flow.test_flow_config)
     """
     context = get_context()
     if not context or not context.active_company:
@@ -587,7 +587,7 @@ async def remigrate_flow_with_dependencies(flow_id: str):
     Полный сброс flow к базовому состоянию.
     
     Args:
-        flow_id: ID flow (например, app.flows.test_flow.test_flow_config)
+        flow_id: ID flow (например, apps.agents.flows.test_flow.test_flow_config)
     """
     context = get_context()
     if not context or not context.active_company:

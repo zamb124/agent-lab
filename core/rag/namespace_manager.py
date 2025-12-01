@@ -45,7 +45,7 @@ async def get_or_create_namespace(scope_type: str, scope_id: str) -> str:
     
     Args:
         scope_type: Тип скоупа (company, flow, session)
-        scope_id: ID скоупа (company_123, app.flows.lawyer_flow.lawyer_flow, etc)
+        scope_id: ID скоупа (company_123, apps.agents.flows.lawyer_flow.lawyer_flow, etc)
         
     Returns:
         Реальный namespace_id в Agentset

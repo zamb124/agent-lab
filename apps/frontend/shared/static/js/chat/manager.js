@@ -71,7 +71,7 @@ class ChatManager {
     }
 
     getDefaultAgent() {
-        const DEFAULT_FAQ_FLOW_ID = 'app.flows.faq_flow.faq_flow_config';
+        const DEFAULT_FAQ_FLOW_ID = 'apps.agents.flows.faq_flow.faq_flow_config';
         
         const customDefault = localStorage.getItem('default_agent_id');
         if (customDefault) {

@@ -7,7 +7,7 @@
  *   EmbedChat.init({
  *     apiUrl: 'https://your-domain.com',
  *     token: 'your-token',
- *     flowId: 'app.flows.faq_flow.faq_flow_config',
+ *     flowId: 'apps.agents.flows.faq_flow.faq_flow_config',
  *     position: 'bottom-right', // или 'bottom-left'
  *     theme: 'light' // или 'dark'
  *   });

@@ -193,7 +193,7 @@ async def test_embed(request: Request):
     # Получаем параметры из URL
     api_url = request.query_params.get("api_url")
     token = request.query_params.get("token")
-    flow_id = request.query_params.get("flow_id", "app.flows.faq_flow.faq_flow_config")
+    flow_id = request.query_params.get("flow_id", "apps.agents.flows.faq_flow.faq_flow_config")
     
     # Если api_url не указан, используем текущий домен
     if not api_url:
