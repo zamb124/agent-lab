@@ -1,0 +1,66 @@
+/* Fira Sans */
+@font-face {
+    font-family: 'Fira Sans';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/static/fonts/fira-sans-v18-cyrillic_latin-regular.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Fira Sans';
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url('/static/fonts/fira-sans-v18-cyrillic_latin-500.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Fira Sans';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('/static/fonts/fira-sans-v18-cyrillic_latin-600.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Fira Sans';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/static/fonts/fira-sans-v18-cyrillic_latin-700.woff2') format('woff2');
+}
+
+/* Fira Sans Condensed */
+@font-face {
+    font-family: 'Fira Sans Condensed';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/static/fonts/fira-sans-condensed-v11-cyrillic_latin-regular.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Fira Sans Condensed';
+    font-style: normal;
+    font-weight: 600;
+    font-display: swap;
+    src: url('/static/fonts/fira-sans-condensed-v11-cyrillic_latin-600.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Fira Sans Condensed';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('/static/fonts/fira-sans-condensed-v11-cyrillic_latin-700.woff2') format('woff2');
+}
+
+@font-face {
+    font-family: 'Fira Sans Condensed';
+    font-style: normal;
+    font-weight: 800;
+    font-display: swap;
+    src: url('/static/fonts/fira-sans-condensed-v11-cyrillic_latin-800.woff2') format('woff2');
+}
+

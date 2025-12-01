@@ -10,10 +10,8 @@
         <div class="container">
             <div class="header-content">
                 <a href="/" class="brand">
-                    <button class="app-launcher-trigger" onclick="event.preventDefault(); toggleAppLauncher()" title="Все приложения">
-                        <i class="ti ti-apps"></i>
-                    </button>
-                    <span class="brand-text">NeuroFlow</span>
+                    <img src="/static/landing/img/logo.svg" alt="Humanitec" class="brand-logo">
+                    <span class="brand-text">Humanitec</span>
                 </a>
                 
                 <!-- Desktop navigation -->
@@ -106,8 +104,8 @@
     <!-- Hero Section -->
     <section class="hero-section">
         <div class="hero-visual-container">
-            <h1 class="hero-title">NEUROFLOW</h1>
-            <img src="/static/design/back-Photoroom.png" alt="NeuroFlow Background" class="hero-background-img">
+            <h1 class="hero-title">HUMANITEC</h1>
+            <img src="/static/design/back-Photoroom.png" alt="Humanitec Background" class="hero-background-img">
         </div>
         <div class="hero-bottom-bar">
             <div class="hero-bottom-item">
@@ -218,11 +216,11 @@
             <div class="container">
                 <h2 class="results-title">{{ t('landing.results.title') | safe }}</h2>
                 <div class="floating-tags-container">
-                    <div class="floating-tag" style="top: 10%; left: 15%;">{{ t('landing.results.tag1') }}</div>
-                    <div class="floating-tag" style="top: 45%; left: 55%;">{{ t('landing.results.tag2') }}</div>
-                    <div class="floating-tag" style="top: 65%; left: 10%;">{{ t('landing.results.tag3') }}</div>
-                    <div class="floating-tag" style="top: 80%; left: 55%;">{{ t('landing.results.tag4') }}</div>
-                    <div class="floating-tag" style="top: 85%; left: 25%;">{{ t('landing.results.tag5') }}</div>
+                    <div class="floating-tag" style="top: 5%; left: 10%;">{{ t('landing.results.tag1') }}</div>
+                    <div class="floating-tag" style="top: 12%; right: 10%; left: auto;">{{ t('landing.results.tag2') }}</div>
+                    <div class="floating-tag" style="top: 60%; left: 5%;">{{ t('landing.results.tag3') }}</div>
+                    <div class="floating-tag" style="top: 55%; right: 5%; left: auto;">{{ t('landing.results.tag4') }}</div>
+                    <div class="floating-tag" style="top: 80%; left: 50%; transform: translateX(-50%);">{{ t('landing.results.tag5') }}</div>
                 </div>
             </div>
         </section>
@@ -448,17 +446,21 @@
         <div class="container">
             <div class="footer-top">
                 <div class="footer-contact">
-                    <a href="mailto:helpme@neuroflow.ru">helpme@neuroflow.ru</a>
-                    <span>© 2025 NeuroFlow</span>
+                    <a href="mailto:helpme@humanitec.ru">helpme@humanitec.ru</a>
+                    <span>© 2025 Humanitec</span>
                 </div>
                 <div class="footer-links">
-                    <a href="#">{{ t('landing.footer.docs') }}</a>
-                    <a href="#">{{ t('landing.footer.privacy') }}</a>
-                    <a href="#">{{ t('landing.footer.terms') }}</a>
+                    <div class="footer-links-docs">
+                        <a href="/docs/" target="_blank">{{ t('landing.footer.docs') }}</a>
+                    </div>
+                    <div class="footer-links-legal">
+                        <a href="/privacy" target="_blank">{{ t('landing.footer.privacy') }}</a>
+                        <a href="/terms" target="_blank">{{ t('landing.footer.terms') }}</a>
+                    </div>
                 </div>
             </div>
             <div class="footer-bottom">
-                <span class="footer-logo">NeuroFlow</span>
+                <span class="footer-logo">Humanitec</span>
             </div>
         </div>
     </footer>
@@ -757,6 +759,17 @@ function getCookie(name) {
     if (parts.length === 2) return parts.pop().split(';').shift();
     return null;
 }
+
+// Glow effect following mouse on metric cards
+document.querySelectorAll('.metric-card').forEach(card => {
+    card.addEventListener('mousemove', (e) => {
+        const rect = card.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 100;
+        const y = ((e.clientY - rect.top) / rect.height) * 100;
+        card.style.setProperty('--mouse-x', x + '%');
+        card.style.setProperty('--mouse-y', y + '%');
+    });
+});
 
 // Инициализация языкового индикатора при загрузке
 document.addEventListener('DOMContentLoaded', function() {

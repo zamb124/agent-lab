@@ -8,20 +8,9 @@ theme:
   name: material
   language: ru
   palette:
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: purple
-      accent: purple
-      toggle:
-        icon: material/brightness-7
-        name: Переключить на тёмную тему
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: purple
-      accent: purple
-      toggle:
-        icon: material/brightness-4
-        name: Переключить на светлую тему
+    - scheme: slate
+      primary: custom
+      accent: custom
   features:
     - navigation.instant
     - navigation.instant.progress
@@ -46,10 +35,10 @@ theme:
     - toc.integrate
   icon:
     repo: fontawesome/brands/github
-  logo: logo.png
-  favicon: logo.png
+  logo: logo.svg
+  favicon: logo.svg
   font:
-    text: Inter
+    text: Fira Sans
     code: JetBrains Mono
 
 extra:
