@@ -44,7 +44,6 @@ from apps.agents.api.v1.payments import router as payments_router
 from apps.agents.api.v1.fashn import router as fashn_router
 from apps.agents.api.v1.webhooks import router as webhooks_router
 from apps.agents.api.v1.leads import router as leads_router
-from apps.agents.api.v1.knowledge_base import router as kb_router
 from apps.agents.api.v1.variables import router as variables_router
 
 
@@ -72,7 +71,6 @@ def _create_app() -> FastAPI:
         fashn_router,
         webhooks_router,
         leads_router,
-        kb_router,
         variables_router,
     ],
     repository_names=[

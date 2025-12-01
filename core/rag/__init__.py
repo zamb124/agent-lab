@@ -10,6 +10,7 @@ from .factory import (
     get_default_rag_provider,
     close_default_rag_provider
 )
+from .repository import RAGRepository
 
 __all__ = [
     "BaseRAGProvider",
@@ -20,5 +21,6 @@ __all__ = [
     "get_rag_provider",
     "get_default_rag_provider",
     "close_default_rag_provider",
+    "RAGRepository",
 ]
 

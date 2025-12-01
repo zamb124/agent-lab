@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from core.variables import VariablesService
     from core.identity.auth_service import AuthService
     from apps.agents.interfaces.factory import InterfaceFactory
+    from core.rag import RAGRepository
 
 
 async def get_agent_repository() -> "AgentRepository":
@@ -72,6 +73,12 @@ async def get_auth_service() -> "AuthService":
     return container.auth_service
 
 
+async def get_rag_repository() -> "RAGRepository":
+    """Получить RAGRepository из контейнера"""
+    container = get_frontend_container()
+    return container.rag_repository
+
+
 async def get_canvas_service() -> CanvasService:
     """
     Получить Canvas Service из контейнера
@@ -110,3 +117,4 @@ ToolRepositoryDep = Annotated["ToolRepository", Depends(get_tool_repository)]
 VariablesServiceDep = Annotated["VariablesService", Depends(get_variables_service)]
 InterfaceFactoryDep = Annotated["InterfaceFactory", Depends(get_interface_factory)]
 AuthServiceDep = Annotated["AuthService", Depends(get_auth_service)]
+RAGRepositoryDep = Annotated["RAGRepository", Depends(get_rag_repository)]

@@ -8,7 +8,7 @@ from typing import Optional
 from langchain_core.runnables import RunnableConfig
 
 from apps.agents.services.tool_decorator import tool
-from core.rag.factory import get_default_rag_provider
+from apps.agents.container import get_agents_container
 from core.rag.namespace_manager import get_or_create_namespace
 from core.context import get_context
 from core.files.processors import get_default_file_processor
@@ -60,8 +60,6 @@ async def search_knowledge_base(
     
     limit = max(1, min(limit, 50))
     
-    rag_provider = get_default_rag_provider()
-    
     namespace_ids = []
     company_id = context.active_company.company_id
     flow_id = context.flow_config.flow_id if context.flow_config else "unknown"
@@ -82,9 +80,10 @@ async def search_knowledge_base(
     if not namespace_ids:
         return "Не настроены скоупы поиска"
     
-    logger.info(f"🔍 Поиск в RAG: query='{query[:50]}...', limit={limit}, scopes={len(namespace_ids)}")
+    logger.info(f"Поиск в RAG: query='{query[:50]}...', limit={limit}, scopes={len(namespace_ids)}")
     
-    all_results = await rag_provider.search_multiple_namespaces(
+    rag_repo = get_agents_container().rag_repository
+    all_results = await rag_repo.search_multiple_namespaces(
         namespace_ids=namespace_ids,
         query=query,
         limit=limit
@@ -131,7 +130,7 @@ async def upload_document_to_knowledge_base(
     context = get_context()
     rag_config = _get_rag_config_from_context(context)
     
-    logger.info(f"🔍 upload_document: context.flow_config={context.flow_config is not None}, rag_config={rag_config}")
+    logger.info(f"upload_document: context.flow_config={context.flow_config is not None}, rag_config={rag_config}")
     
     if not rag_config or not rag_config.enabled:
         return "RAG не настроен для этого flow"
@@ -147,7 +146,7 @@ async def upload_document_to_knowledge_base(
     session_id = context.session_id
     scope = rag_config.namespace_scope
     
-    logger.info(f"🔍 upload_document: scope={scope}, company={company_id}, flow={flow_id}, session={session_id}")
+    logger.info(f"upload_document: scope={scope}, company={company_id}, flow={flow_id}, session={session_id}")
     
     if scope == "flow":
         namespace_id = await get_or_create_namespace("flow", f"{company_id}_{flow_id}")
@@ -156,11 +155,10 @@ async def upload_document_to_knowledge_base(
     else:
         namespace_id = await get_or_create_namespace("session", f"{company_id}_{flow_id}_{session_id}")
     
-    logger.info(f"✅ upload_document: используем namespace_id={namespace_id}")
+    logger.info(f"upload_document: используем namespace_id={namespace_id}")
     
-    rag_provider = get_default_rag_provider()
-    
-    document = await rag_provider.upload_document_from_s3(
+    rag_repo = get_agents_container().rag_repository
+    document = await rag_repo.upload_document_from_s3(
         namespace_id=namespace_id,
         s3_key=file_record.s3_key,
         document_name=file_record.original_name,
@@ -224,9 +222,8 @@ async def upload_text_to_knowledge_base(
 
     doc_name = document_name or f"Text document ({len(text)} chars)"
 
-    rag_provider = get_default_rag_provider()
-
-    document = await rag_provider.upload_document_from_text(
+    rag_repo = get_agents_container().rag_repository
+    document = await rag_repo.upload_text(
         namespace_id=namespace_id,
         text=text,
         document_name=doc_name,
@@ -266,8 +263,6 @@ async def list_documents_in_knowledge_base(
     if not rag_config or not rag_config.enabled:
         return "RAG не настроен для этого flow"
     
-    rag_provider = get_default_rag_provider()
-    
     company_id = context.active_company.company_id
     flow_id = context.flow_config.flow_id if context.flow_config else "unknown"
     session_id = context.session_id
@@ -280,9 +275,10 @@ async def list_documents_in_knowledge_base(
     else:
         namespace_id = await get_or_create_namespace("session", f"{company_id}_{flow_id}_{session_id}")
     
-    logger.info(f"✅ upload_document: используем namespace_id={namespace_id}")
+    logger.info(f"list_documents: используем namespace_id={namespace_id}")
     
-    documents = await rag_provider.list_documents(namespace_id, limit=50)
+    rag_repo = get_agents_container().rag_repository
+    documents = await rag_repo.list_documents(namespace_id, limit=50)
     
     if not documents:
         return "В базе знаний пока нет документов"

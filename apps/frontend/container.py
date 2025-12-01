@@ -70,6 +70,12 @@ class FrontendContainer(BaseContainer):
         from apps.agents.db.repositories import SessionRepository
         return self._get_repository(SessionRepository)
     
+    @lazy
+    def rag_repository(self):
+        """RAGRepository - работа с RAG документами"""
+        from core.rag import RAGRepository
+        return RAGRepository()
+    
     def get_repository_by_model_type(self, model_type: str) -> Any:
         """
         Получить репозиторий по типу модели.

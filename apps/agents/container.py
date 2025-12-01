@@ -164,6 +164,12 @@ class AgentsContainer(BaseContainer):
         from apps.agents.db.repositories.agent_state_repository import AgentStateRepository
         return AgentStateRepository(storage=self.storage)
     
+    @lazy
+    def rag_repository(self):
+        """RAGRepository для работы с RAG документами"""
+        from core.rag import RAGRepository
+        return RAGRepository()
+    
     # === Фабрики ===
     
     @lazy

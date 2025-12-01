@@ -110,7 +110,7 @@
         <div class="flow-main-content">
             
             <div class="flow-image">
-                <img src="{{ flow.image_url }}" alt="{{ flow.name }}">
+                <img src="{{ flow.image_url }}" alt="{{ flow.name }}" onerror="this.onerror=null; this.src='/static/img/empty.png';">
             </div>
             
             <div class="flow-description markdown-content" id="flow-description-content">{{ flow.description }}</div>

@@ -144,7 +144,7 @@ async def websocket_chat(websocket: WebSocket):
         # Получаем токен из query параметров (для embed чата)
         embed_token = websocket.query_params.get("token")
         
-        logger.info(f"🔍 WebSocket подключение: token в query={'есть' if embed_token else 'нет'}, cookies={list(websocket.cookies.keys())}")
+        logger.info(f"WebSocket подключение: token в query={'есть' if embed_token else 'нет'}, cookies={list(websocket.cookies.keys())}")
         
         # Принимаем WebSocket соединение
         await websocket.accept()
@@ -152,9 +152,12 @@ async def websocket_chat(websocket: WebSocket):
         # Получаем session_id из cookies (для обычного чата)
         auth_session_id = websocket.cookies.get("session_id")
         
+        # Если нет session_id, пробуем auth_token (JWT)
+        auth_token = websocket.cookies.get("auth_token")
+        
         # Если нет cookie, пытаемся получить токен из query параметров
         is_embed_chat = False
-        if not auth_session_id and embed_token:
+        if not auth_session_id and not auth_token and embed_token:
             logger.info("🔑 Используем токен для встроенного чата")
             is_embed_chat = True
             token_service = get_token_service()
@@ -186,9 +189,38 @@ async def websocket_chat(websocket: WebSocket):
             # Используем session_id из токена
             auth_session_id = token_data.session_id
             
+        elif auth_token:
+            # Авторизация через JWT токен (auth_token cookie)
+            logger.info("Используем auth_token JWT для авторизации")
+            token_service = get_token_service()
+            token_data = token_service.validate_token(auth_token)
+            
+            if not token_data:
+                logger.error("Невалидный auth_token JWT")
+                await websocket.close(code=4001, reason="Invalid auth token")
+                return
+            
+            frontend_container = get_frontend_container()
+            company_repo = frontend_container.company_repository
+            active_company = await company_repo.get(token_data.company_id)
+            if not active_company:
+                logger.error(f"Компания {token_data.company_id} не найдена")
+                await websocket.close(code=4003, reason=f"Company {token_data.company_id} not found")
+                return
+            
+            auth_service = frontend_container.auth_service
+            user = await auth_service._get_user(token_data.user_id)
+            
+            if not user:
+                logger.error(f"Пользователь {token_data.user_id} не найден")
+                await websocket.close(code=4001, reason="User not found")
+                return
+            
+            auth_session_id = token_data.session_id
+            
         elif not auth_session_id:
             # Нет авторизации - закрываем соединение
-            logger.error("❌ Нет авторизации - нет session и токена")
+            logger.error("Нет авторизации - нет session и токена")
             await websocket.close(code=4001, reason="Unauthorized - no session or token")
             return
         else:

@@ -245,7 +245,7 @@ async def test_flow_with_image(migrated_db,  system_context, agent_repo, flow_re
 
     weather_flow = await flow_repo.get("apps.agents.flows.weather_flow.weather_flow_config")
     assert weather_flow is not None, "Weather flow должен быть мигрирован"
-    assert weather_flow.image_path == "app/flows/weather_flow.jpg", "image_path должен быть сохранен"
+    assert weather_flow.image_path == "apps/agents/flows/weather_flow.jpg", "image_path должен быть сохранен"
 
     print("✅ Тест flow_with_image пройден!")
     clear_context()
