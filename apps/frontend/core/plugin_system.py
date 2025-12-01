@@ -16,7 +16,7 @@ class Plugin(ABC):
     display_name: str
     version: str = "1.0.0"
     description: str = ""
-    author: str = "Agents Lab"
+    author: str = "Humanitec"
     
     dependencies: List[str] = []
     requires_auth: bool = True

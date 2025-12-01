@@ -163,7 +163,7 @@ search_depth: "advanced"
     is_public=True,
     
     author=FlowAuthor(
-        name="Agent Lab Team",
+        name="Humanitec Team",
         email="team@agents-lab.ru",
         website="https://agents-lab.ru",
     ),

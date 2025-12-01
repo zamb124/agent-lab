@@ -12,7 +12,7 @@ class AbilitiesPlugin(Plugin):
     display_name = "Способности"
     version = "1.0.0"
     description = "Библиотека доступных агентов и инструментов"
-    author = "Agents Lab"
+    author = "Humanitec"
     
     requires_auth = True
     requires_role = "user"

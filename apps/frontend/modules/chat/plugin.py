@@ -12,7 +12,7 @@ class ChatPlugin(Plugin):
     display_name = "Чат"
     version = "1.0.0"
     description = "Виджет чата доступен на всех страницах"
-    author = "Agents Lab"
+    author = "Humanitec"
     
     requires_auth = True
     requires_role = "user"

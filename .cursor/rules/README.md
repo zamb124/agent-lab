@@ -1,4 +1,4 @@
-# Cursor Rules для Agent Lab
+# Cursor Rules для Humanitec
 
 Набор правил для AI-ассистента Cursor, сгенерированных на основе документации проекта.
 

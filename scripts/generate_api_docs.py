@@ -198,7 +198,7 @@ def generate_index(tags: list[dict]) -> str:
     lines = [
         "# API документация",
         "",
-        "REST API для интеграции с платформой Agent Lab.",
+        "REST API для интеграции с платформой Humanitec.",
         "",
         "## Базовый URL",
         "",

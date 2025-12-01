@@ -12,7 +12,7 @@ class HistoryPlugin(Plugin):
     display_name = "История"
     version = "1.0.0"
     description = "История диалогов и сессий"
-    author = "Agents Lab"
+    author = "Humanitec"
     
     requires_auth = True
     requires_role = "user"

@@ -12,7 +12,7 @@ class ChatsPlugin(Plugin):
     display_name = "Чаты"
     version = "1.0.0"
     description = "Список активных чатов"
-    author = "Agents Lab"
+    author = "Humanitec"
     
     requires_auth = True
     requires_role = "user"

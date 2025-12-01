@@ -12,7 +12,7 @@ class TracesPlugin(Plugin):
     display_name = "Трейсы"
     version = "1.0.0"
     description = "Просмотр OpenTelemetry трейсов и spans"
-    author = "Agents Lab"
+    author = "Humanitec"
 
     requires_auth = True
     requires_role = "user"

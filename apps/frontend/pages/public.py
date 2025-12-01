@@ -21,7 +21,7 @@ templates = get_templates()
 
 @router.get("/", response_class=HTMLResponse)
 async def landing_page(request: Request):
-    """Главная страница - лендинг Agents Lab"""
+    """Главная страница - лендинг Humanitec"""
     from apps.frontend.core.plugin_loader import get_plugins_for_template
     
     # Определяем язык из cookie ПЕРЕД получением контекста

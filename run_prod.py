@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Скрипт запуска Agents Lab в продакшн режиме с Gunicorn.
+Скрипт запуска Humanitec в продакшн режиме с Gunicorn.
 Используется в Docker для запуска нескольких воркеров.
 """
 
@@ -18,7 +18,7 @@ if __name__ == "__main__":
     else:
         workers = settings.server.workers
 
-    print("🚀 Запуск Agents Lab в продакшн режиме...")
+    print("🚀 Запуск Humanitec в продакшн режиме...")
     print(f"📍 Адрес: http://{settings.server.host}:{settings.server.port}")
     print(f"💻 CPU cores: {multiprocessing.cpu_count()}")
     print(f"🔧 Воркеров: {workers}")

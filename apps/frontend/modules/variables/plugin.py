@@ -12,7 +12,7 @@ class VariablesPlugin(Plugin):
     display_name = "Переменные"
     version = "1.0.0"
     description = "Управление ключами и переменными"
-    author = "Agents Lab"
+    author = "Humanitec"
     
     requires_auth = True
     requires_role = "user"

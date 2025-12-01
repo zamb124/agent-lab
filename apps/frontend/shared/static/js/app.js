@@ -1,5 +1,5 @@
 /**
- * Agents Lab - Главный JavaScript файл
+ * Humanitec - Главный JavaScript файл
  */
 
 import { getCookie } from '/static/js/utils/cookies.js';

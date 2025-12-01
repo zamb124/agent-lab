@@ -58,7 +58,7 @@ class MyPlugin(Plugin):
     display_name = "Мой плагин"
     version = "1.0.0"
     description = "Краткое описание"
-    author = "Agents Lab"
+    author = "Humanitec"
 
     requires_auth = True
     requires_role = "user"
@@ -208,7 +208,7 @@ export default class MyPluginModule {
 
 - `version` - версия плагина (default: "1.0.0")
 - `description` - описание
-- `author` - автор (default: "Agents Lab")
+- `author` - автор (default: "Humanitec")
 - `dependencies` - список зависимостей от других плагинов
 - `requires_auth` - требуется авторизация (default: True)
 - `requires_role` - требуемая роль пользователя

@@ -48,7 +48,7 @@ class MyModulePlugin(Plugin):
     display_name = "Мой модуль"
     version = "1.0.0"
     description = "Краткое описание"
-    author = "Agents Lab"
+    author = "Humanitec"
     
     requires_auth = True
     requires_role = "user"

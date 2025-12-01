@@ -1,7 +1,7 @@
 [project]
 name = "agent-lab"
 version = "0.1.0"
-description = "AI Agents Lab with LangGraph"
+description = "AI Humanitec with LangGraph"
 requires-python = ">=3.12"
 dependencies = [
     # Web Framework & Server

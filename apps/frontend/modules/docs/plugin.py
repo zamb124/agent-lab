@@ -15,7 +15,7 @@ class DocsPlugin(Plugin):
     display_name = "Документация"
     version = "1.0.0"
     description = "Техническая документация проекта"
-    author = "Agents Lab"
+    author = "Humanitec"
     
     requires_auth = False
     

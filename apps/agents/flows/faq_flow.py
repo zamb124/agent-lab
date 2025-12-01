@@ -7,7 +7,7 @@ from apps.agents.agents.faq_agent import FAQAgent
 
 faq_flow_config = FlowConfig(
     name="FAQ - Помощник",
-    description="Отвечает на вопросы о платформе Agent Lab",
+    description="Отвечает на вопросы о платформе Humanitec",
     entry_point_agent=FAQAgent,
     
     platforms={

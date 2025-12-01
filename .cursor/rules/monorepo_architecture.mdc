@@ -1,9 +1,9 @@
 ---
-description: "Архитектурные принципы Agent Lab"
+description: "Архитектурные принципы Humanitec"
 alwaysApply: true
 ---
 
-# Архитектура монорепозитория Agent Lab
+# Архитектура монорепозитория Humanitec
 
 ## Общая структура
 

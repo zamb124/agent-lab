@@ -47,7 +47,7 @@ class OpenRouterConfig(BaseModel):
     api_key: Optional[str] = None
     base_url: str = "https://openrouter.ai/api/v1"
     site_url: str = "https://agents-lab.ru"
-    site_name: str = "Agent Lab"
+    site_name: str = "Humanitec"
     timeout: int = 60
     max_retries: int = 3
     enabled: bool = True

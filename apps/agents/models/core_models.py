@@ -985,7 +985,7 @@ class FlowAuthor(BaseModel):
     """Информация об авторе flow"""
 
     name: str = Field(
-        default="Agent Lab",
+        default="Humanitec",
         title="Имя",
         description="Имя автора или организации"
     )

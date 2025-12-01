@@ -1,4 +1,4 @@
-# 🎨 Design System - Agent Lab Components
+# 🎨 Design System - Humanitec Components
 
 ## Архитектура
 

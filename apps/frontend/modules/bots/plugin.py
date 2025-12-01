@@ -12,7 +12,7 @@ class BotsPlugin(Plugin):
     display_name = "Боты"
     version = "1.0.0"
     description = "Управление ботами и агентами"
-    author = "Agents Lab"
+    author = "Humanitec"
     
     requires_auth = True
     requires_role = "user"

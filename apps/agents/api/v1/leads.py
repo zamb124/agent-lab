@@ -105,7 +105,7 @@ async def send_telegram_notification(lead_data: dict):
             
         # Формируем сообщение
         message_parts = [
-            "🆕 <b>Новый лид с сайта Agents Lab</b>",
+            "🆕 <b>Новый лид с сайта Humanitec</b>",
             "",
             f"📧 <b>Email:</b> {lead_data['email']}",
         ]

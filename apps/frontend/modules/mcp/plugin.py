@@ -12,7 +12,7 @@ class MCPPlugin(Plugin):
     display_name = "MCP Серверы"
     version = "1.0.0"
     description = "Управление MCP серверами и синхронизация инструментов"
-    author = "Agents Lab"
+    author = "Humanitec"
     
     requires_auth = True
     requires_role = "user"

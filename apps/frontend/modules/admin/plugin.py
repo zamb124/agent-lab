@@ -12,7 +12,7 @@ class AdminPlugin(Plugin):
     display_name = "Администрирование"
     version = "1.0.0"
     description = "Управление компаниями и системой"
-    author = "Agents Lab"
+    author = "Humanitec"
     
     requires_auth = True
     requires_role = None

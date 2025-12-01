@@ -1,4 +1,4 @@
-Agent Lab - LangGraph Platform
+Humanitec - LangGraph Platform
 
 Канал для создания и управления ИИ-агентами на базе LangGraph.
 

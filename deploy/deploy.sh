@@ -15,7 +15,7 @@ PROD_SHARED_DB="postgresql+asyncpg://agent_user:agent_password@${PROD_DB_HOST}/s
 
 LOCAL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-echo "=== Deploy Agent Lab ==="
+echo "=== Deploy Humanitec ==="
 echo "Server: $SSH_USER@$SSH_HOST"
 echo "Remote dir: $REMOTE_DIR"
 echo ""

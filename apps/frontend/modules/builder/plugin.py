@@ -12,7 +12,7 @@ class BuilderPlugin(Plugin):
     display_name = "Flow Builder"
     version = "1.0.0"
     description = "Визуальный редактор для создания flows"
-    author = "Agents Lab"
+    author = "Humanitec"
     
     requires_auth = True
     requires_role = "user"

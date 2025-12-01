@@ -1,5 +1,5 @@
 """
-Декоратор @tool для платформы Agent Lab.
+Декоратор @tool для платформы Humanitec.
 Все тулы должны быть async.
 """
 
@@ -34,7 +34,7 @@ def tool(
     infer_schema: bool = True,
 ):
     """
-    Декоратор @tool для платформы Agent Lab.
+    Декоратор @tool для платформы Humanitec.
     
     Args:
         title: Название для UI

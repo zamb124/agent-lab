@@ -12,7 +12,7 @@ class BillingPlugin(Plugin):
     display_name = "Биллинг"
     version = "1.0.0"
     description = "Управление подписками и оплатой"
-    author = "Agents Lab"
+    author = "Humanitec"
     
     requires_auth = True
     requires_role = "user"

@@ -1,5 +1,5 @@
-site_name: Agent Lab
-site_description: Документация платформы Agent Lab - создание и управление ИИ-агентами на базе LangGraph
+site_name: Humanitec
+site_description: Документация платформы Humanitec - создание и управление ИИ-агентами на базе LangGraph
 site_url: http://localhost:8001
 
 docs_dir: docs

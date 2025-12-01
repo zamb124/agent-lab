@@ -12,7 +12,7 @@ class StorePlugin(Plugin):
     display_name = "Магазин"
     version = "1.0.0"
     description = "Магазин готовых ботов и flows"
-    author = "Agents Lab"
+    author = "Humanitec"
     
     requires_auth = True
     requires_role = "user"
