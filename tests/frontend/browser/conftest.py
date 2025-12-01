@@ -223,13 +223,14 @@ class ScenarioDocGenerator:
         self.steps: list[dict] = []
         self.counter = 0
     
-    async def step(self, page: Page, description: str, selector: str = None):
+    async def step(self, page: Page, title: str, description: str, selector: str = None):
         """
         Записывает шаг сценария.
         
         Args:
             page: Playwright Page
-            description: Описание шага на русском
+            title: Короткое название шага (например, "Открытие раздела")
+            description: Подробное описание шага на русском
             selector: CSS селектор элемента для подсветки (опционально)
         """
         self.counter += 1
@@ -246,23 +247,25 @@ class ScenarioDocGenerator:
         
         self.steps.append({
             "number": self.counter,
+            "title": title,
             "description": description,
             "screenshot": screenshot_name,
         })
     
-    async def click(self, page: Page, selector: str, description: str):
+    async def click(self, page: Page, selector: str, title: str, description: str):
         """
         Подсвечивает элемент, делает скриншот, затем кликает.
         
         Args:
             page: Playwright Page
             selector: CSS селектор элемента для клика
-            description: Описание действия на русском
+            title: Короткое название шага
+            description: Подробное описание действия на русском
         """
-        await self.step(page, description, selector)
+        await self.step(page, title, description, selector)
         await page.click(selector)
     
-    async def fill(self, page: Page, selector: str, value: str, description: str):
+    async def fill(self, page: Page, selector: str, value: str, title: str, description: str):
         """
         Подсвечивает поле ввода, делает скриншот, затем заполняет.
         
@@ -270,9 +273,10 @@ class ScenarioDocGenerator:
             page: Playwright Page
             selector: CSS селектор поля ввода
             value: Значение для ввода
-            description: Описание действия на русском
+            title: Короткое название шага
+            description: Подробное описание действия на русском
         """
-        await self.step(page, description, selector)
+        await self.step(page, title, description, selector)
         await page.fill(selector, value)
     
     async def _highlight_element(self, page: Page, selector: str):
@@ -313,11 +317,11 @@ class ScenarioDocGenerator:
         
         for step in self.steps:
             lines.extend([
-                f"## Шаг {step['number']}",
+                f"## {step['number']}. {step['title']}",
                 "",
                 step['description'],
                 "",
-                f"![Шаг {step['number']}]({step['screenshot']})",
+                f"![{step['title']}]({step['screenshot']})",
                 "",
             ])
         

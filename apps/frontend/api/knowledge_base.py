@@ -161,15 +161,18 @@ async def upload_text_to_flow(
     
     namespace_id = await _get_namespace_id_for_flow(flow_id, flow_repo)
     
+    metadata = {
+        "flow_id": flow_id,
+        "uploaded_by": context.user.user_id,
+    }
+    if request.description:
+        metadata["description"] = request.description
+    
     document = await rag_repo.upload_text(
         namespace_id=namespace_id,
         text=request.text,
         document_name=request.document_name,
-        metadata={
-            "flow_id": flow_id,
-            "uploaded_by": context.user.user_id,
-            "description": request.description
-        }
+        metadata=metadata
     )
     
     doc_name = request.document_name or f"Text document ({len(request.text)} chars)"

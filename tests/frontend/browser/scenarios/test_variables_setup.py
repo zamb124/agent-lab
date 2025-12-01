@@ -19,12 +19,12 @@ class TestVariablesSetupScenario:
         await page.goto(f"{e2e_base_url}/frontend/variables")
         await page.wait_for_load_state("networkidle")
         
-        # Ждем загрузки HTMX контента
         await page.wait_for_selector(".variable-card-create", timeout=15000)
         await page.wait_for_timeout(500)
         
         await doc.step(
             page,
+            "Открытие раздела Переменные",
             "Откройте раздел **Переменные** в боковом меню. "
             "Здесь отображается список всех переменных компании."
         )
@@ -32,10 +32,10 @@ class TestVariablesSetupScenario:
         await doc.click(
             page,
             ".variable-card-create",
+            "Создание переменной",
             "Нажмите на карточку **Создать переменную** для добавления новой переменной."
         )
         
-        # Модалка открывается через style.display = 'flex'
         await page.wait_for_function(
             "document.getElementById('variable-modal')?.style.display === 'flex'",
             timeout=10000
@@ -44,6 +44,7 @@ class TestVariablesSetupScenario:
         
         await doc.step(
             page,
+            "Форма создания",
             "Откроется модальное окно для ввода данных переменной."
         )
         
@@ -51,6 +52,7 @@ class TestVariablesSetupScenario:
             page,
             "#variable-key",
             "telegram_bot_token",
+            "Ввод ключа",
             "Введите **ключ переменной** - это уникальный идентификатор. "
             "Используйте snake_case без пробелов (например, `telegram_bot_token`)."
         )
@@ -59,6 +61,7 @@ class TestVariablesSetupScenario:
             page,
             "#variable-description",
             "Токен Telegram бота для уведомлений",
+            "Добавление описания",
             "Добавьте **описание** переменной, чтобы потом было понятно её назначение."
         )
         
@@ -66,18 +69,21 @@ class TestVariablesSetupScenario:
             page,
             "#variable-value",
             "123456789:ABCdefGHIjklMNOpqrsTUVwxyz",
+            "Ввод значения",
             "Введите **значение** переменной. Для API ключей и токенов это обычно длинная строка."
         )
         
         await doc.click(
             page,
             "#variable-secret",
+            "Установка флага секрета",
             "Отметьте чекбокс **Секрет**, если значение должно быть скрыто (для паролей и токенов)."
         )
         
         await doc.click(
             page,
             "button[onclick='saveVariable()']",
+            "Сохранение переменной",
             "Нажмите кнопку **сохранения** (иконка дискеты) для создания переменной."
         )
         
@@ -86,9 +92,9 @@ class TestVariablesSetupScenario:
         
         await doc.step(
             page,
+            "Переменная создана",
             "Переменная создана! Теперь её можно использовать в конфигурации ботов "
             "с помощью синтаксиса `@var:telegram_bot_token`."
         )
         
         doc.save()
-
