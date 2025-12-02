@@ -71,6 +71,7 @@ class TestStoreInstallBotScenario:
         
         await doc.step(
             page,
+            "Открытие магазина",
             "Откройте раздел **Магазин** в боковом меню. "
             "Здесь представлены доступные для установки боты."
         )
@@ -86,6 +87,7 @@ class TestStoreInstallBotScenario:
         await doc.click(
             page,
             ".store-card",
+            "Выбор бота",
             "Нажмите на карточку бота, чтобы открыть его описание."
         )
         
@@ -94,6 +96,7 @@ class TestStoreInstallBotScenario:
         
         await doc.step(
             page,
+            "Просмотр описания",
             "Откроется окно с подробным описанием бота: его возможности, "
             "список способностей и необходимые настройки."
         )
@@ -107,6 +110,7 @@ class TestStoreInstallBotScenario:
             # Бот уже установлен - сценарий уже выполнен
             await doc.step(
                 page,
+                "Бот установлен",
                 "Этот бот уже установлен. Вы можете найти его в разделе **Боты**."
             )
             doc.save()
@@ -119,6 +123,7 @@ class TestStoreInstallBotScenario:
         if has_variables:
             await doc.step(
                 page,
+                "Настройка переменных",
                 "Некоторые боты требуют настройки переменных перед установкой. "
                 "Заполните обязательные поля (отмечены звёздочкой)."
             )
@@ -136,7 +141,7 @@ class TestStoreInstallBotScenario:
         
         # Находим кнопку установки
         install_btn = page.locator("button:has-text('Установить')").first
-        await doc.step(page, "Нажмите кнопку **Установить** для добавления бота в ваш аккаунт.")
+        await doc.step(page, "Установка", "Нажмите кнопку **Установить** для добавления бота в ваш аккаунт.")
         await install_btn.click()
         
         # Ждем завершения установки
@@ -144,6 +149,7 @@ class TestStoreInstallBotScenario:
         
         await doc.step(
             page,
+            "Завершение",
             "После установки бот появится в разделе **Боты**. "
             "Вы можете запустить его и начать общение."
         )
@@ -162,6 +168,7 @@ class TestStoreInstallBotScenario:
         
         await doc.step(
             page,
+            "Открытие ботов",
             "Откройте раздел **Боты** в боковом меню. "
             "Здесь отображаются все установленные боты."
         )
@@ -174,6 +181,7 @@ class TestStoreInstallBotScenario:
         await doc.click(
             page,
             ".bot-card:not(.bot-card-create)",
+            "Выбор бота",
             "Нажмите на карточку бота для открытия его настроек."
         )
         
@@ -182,13 +190,14 @@ class TestStoreInstallBotScenario:
         
         await doc.step(
             page,
+            "Панель управления",
             "Откроется панель управления ботом с настройками и кнопкой запуска."
         )
         
         # Запускаем чат
         launch_btn = page.locator("button:has-text('Запустить')").first
         if await launch_btn.count() > 0:
-            await doc.step(page, "Нажмите кнопку **Запустить** для открытия чата с ботом.")
+            await doc.step(page, "Запуск чата", "Нажмите кнопку **Запустить** для открытия чата с ботом.")
             await launch_btn.click()
             
             await page.wait_for_selector("#chat-widget:not(.hidden)", timeout=5000)
@@ -202,6 +211,7 @@ class TestStoreInstallBotScenario:
         
         await doc.step(
             page,
+            "Подключение",
             "Откроется окно чата. Дождитесь подключения (индикатор станет зелёным)."
         )
         
@@ -212,12 +222,14 @@ class TestStoreInstallBotScenario:
                 page,
                 "#chat-widget-input",
                 "Привет! Расскажи о себе.",
+                "Ввод сообщения",
                 "Введите сообщение в поле ввода внизу чата."
             )
             
             await doc.click(
                 page,
                 "#chat-widget-send",
+                "Отправка",
                 "Нажмите кнопку отправки или клавишу Enter."
             )
             
@@ -230,6 +242,7 @@ class TestStoreInstallBotScenario:
             
             await doc.step(
                 page,
+                "Ответ бота",
                 "Бот обработает ваше сообщение и отправит ответ. "
                 "Вы можете продолжить диалог, задавая вопросы."
             )

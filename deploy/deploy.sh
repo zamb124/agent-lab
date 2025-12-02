@@ -1,23 +1,107 @@
 #!/bin/bash
 set -e
 
+# === КОНФИГУРАЦИЯ ===
 SSH_USER="zambas124"
 SSH_HOST="46.21.244.79"
 REMOTE_DIR="/opt/agents-lab"
 
-SSH_OPTS="-o ConnectTimeout=30 -o ConnectionAttempts=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
-SSH_CMD="ssh $SSH_OPTS -l $SSH_USER $SSH_HOST"
-SCP_CMD="scp $SSH_OPTS"
+# Список поддерживаемых доменов (должен совпадать с SUPPORTED_DOMAINS в core/utils/domain.py)
+DOMAINS=("humanitec.ru" "agents-lab.ru")
+PRIMARY_DOMAIN="humanitec.ru"
 
 PROD_DB_HOST="rc1b-gsgkmvrv04yanye2.mdb.yandexcloud.net:6432"
 PROD_AGENTS_DB="postgresql+asyncpg://agent_user:agent_password@${PROD_DB_HOST}/agents_db"
 PROD_SHARED_DB="postgresql+asyncpg://agent_user:agent_password@${PROD_DB_HOST}/shared_db"
 
+SSH_OPTS="-o ConnectTimeout=30 -o ConnectionAttempts=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+SSH_CMD="ssh $SSH_OPTS -l $SSH_USER $SSH_HOST"
+SCP_CMD="scp $SSH_OPTS"
+
 LOCAL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+# === ФУНКЦИИ ===
+
+# Проверка и получение SSL сертификата для домена
+check_ssl_cert() {
+    local domain=$1
+    local cert_dir_wildcard="/etc/letsencrypt/live/${domain}-0001"
+    local cert_dir_basic="/etc/letsencrypt/live/${domain}"
+    
+    echo "Checking SSL for ${domain}..."
+    
+    # Проверяем wildcard сертификат (предпочтительно)
+    if $SSH_CMD "sudo test -d ${cert_dir_wildcard}"; then
+        echo "  SSL for ${domain} (wildcard): OK"
+        return 0
+    fi
+    
+    # Проверяем базовый сертификат
+    if $SSH_CMD "sudo test -d ${cert_dir_basic}"; then
+        echo "  SSL for ${domain} (basic): OK"
+        echo "  WARNING: Wildcard cert missing - subdomains may show SSL warnings"
+        return 0
+    fi
+    
+    # Сертификат не найден - предлагаем получить
+    echo ""
+    echo "  SSL for ${domain}: NOT FOUND"
+    echo ""
+    echo "  Для поддоменов (*.${domain}) нужен wildcard сертификат."
+    echo "  Wildcard требует DNS challenge (добавление TXT записи)."
+    echo ""
+    read -p "  Хотите получить wildcard сертификат для ${domain}? (y/n): " answer
+    
+    if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
+        obtain_wildcard_cert "$domain"
+    else
+        echo "  Пропускаем получение сертификата для ${domain}"
+        echo "  WARNING: HTTPS для ${domain} и поддоменов не будет работать!"
+    fi
+}
+
+# Получение wildcard сертификата через DNS challenge
+obtain_wildcard_cert() {
+    local domain=$1
+    
+    echo ""
+    echo "=== Получение wildcard сертификата для ${domain} ==="
+    echo ""
+    echo "ИНСТРУКЦИЯ:"
+    echo "1. Сейчас certbot покажет TXT запись которую нужно добавить в DNS"
+    echo "2. Зайдите в панель управления DNS вашего регистратора"
+    echo "3. Добавьте TXT запись:"
+    echo "   - Имя: _acme-challenge"
+    echo "   - Тип: TXT"
+    echo "   - Значение: (то что покажет certbot)"
+    echo "4. Подождите 1-2 минуты пока DNS обновится"
+    echo "5. Нажмите Enter в certbot для продолжения"
+    echo ""
+    read -p "Нажмите Enter чтобы начать..."
+    
+    # Запускаем certbot в интерактивном режиме
+    $SSH_CMD -t "sudo certbot certonly --manual --preferred-challenges dns -d '${domain}' -d '*.${domain}'"
+    
+    # Проверяем что сертификат получен
+    if $SSH_CMD "sudo test -d /etc/letsencrypt/live/${domain}-0001"; then
+        echo ""
+        echo "  Wildcard сертификат для ${domain} успешно получен!"
+    elif $SSH_CMD "sudo test -d /etc/letsencrypt/live/${domain}"; then
+        echo ""
+        echo "  Сертификат для ${domain} получен (возможно без wildcard)"
+    else
+        echo ""
+        echo "  ОШИБКА: Не удалось получить сертификат для ${domain}"
+        echo "  Проверьте логи: /var/log/letsencrypt/letsencrypt.log"
+    fi
+}
+
+# === ОСНОВНОЙ СКРИПТ ===
 
 echo "=== Deploy Humanitec ==="
 echo "Server: $SSH_USER@$SSH_HOST"
 echo "Remote dir: $REMOTE_DIR"
+echo "Domains: ${DOMAINS[*]}"
 echo ""
 
 echo "[1/8] Git pull на сервере..."
@@ -67,28 +151,10 @@ sleep 2
 
 rm -rf "$TMP_DIR"
 
-echo "[4/8] Проверка и получение SSL сертификатов..."
-
-# Проверка SSL для agents-lab.ru
-echo "Checking SSL for agents-lab.ru..."
-if $SSH_CMD "sudo test -d /etc/letsencrypt/live/agents-lab.ru-0001"; then
-    echo "SSL for agents-lab.ru: OK"
-else
-    echo "SSL for agents-lab.ru: NOT FOUND, attempting to obtain..."
-    $SSH_CMD "sudo certbot certonly --nginx -d agents-lab.ru -d '*.agents-lab.ru' --non-interactive --agree-tos --email admin@agents-lab.ru || echo 'WARN: Failed to get wildcard cert, trying main domain only...'"
-    $SSH_CMD "sudo certbot certonly --nginx -d agents-lab.ru -d www.agents-lab.ru --non-interactive --agree-tos --email admin@agents-lab.ru || true"
-fi
-
-# Проверка SSL для humanitec.ru
-echo "Checking SSL for humanitec.ru..."
-if $SSH_CMD "sudo test -d /etc/letsencrypt/live/humanitec.ru"; then
-    echo "SSL for humanitec.ru: OK"
-else
-    echo "SSL for humanitec.ru: NOT FOUND, attempting to obtain..."
-    $SSH_CMD "sudo certbot certonly --nginx -d humanitec.ru -d '*.humanitec.ru' --non-interactive --agree-tos --email admin@humanitec.ru || echo 'WARN: Failed to get wildcard cert, trying main domain only...'"
-    $SSH_CMD "sudo certbot certonly --nginx -d humanitec.ru -d www.humanitec.ru --non-interactive --agree-tos --email admin@humanitec.ru || true"
-fi
-
+echo "[4/8] Проверка SSL сертификатов..."
+for domain in "${DOMAINS[@]}"; do
+    check_ssl_cert "$domain"
+done
 sleep 2
 
 echo "[5/8] Проверка nginx конфига..."
@@ -121,7 +187,12 @@ $SSH_CMD "sudo systemctl reload nginx"
 
 echo ""
 echo "=== Deploy завершен ==="
-echo "Agents: https://humanitec.ru/agents/api/v1/health"
-echo "Frontend: https://humanitec.ru/health"
-echo "Alt domain: https://agents-lab.ru"
-echo "Worker: docker compose logs taskiq-worker"
+echo "Primary: https://${PRIMARY_DOMAIN}"
+echo "Agents API: https://${PRIMARY_DOMAIN}/agents/api/v1/health"
+echo "Frontend: https://${PRIMARY_DOMAIN}/health"
+for domain in "${DOMAINS[@]}"; do
+    if [[ "$domain" != "$PRIMARY_DOMAIN" ]]; then
+        echo "Alt domain: https://${domain}"
+    fi
+done
+echo "Worker logs: docker compose logs taskiq-worker"

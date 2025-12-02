@@ -238,6 +238,8 @@ class TestAuthMiddlewareContextCreation:
         # Мокаем request с Telegram данными
         request = Mock(spec=Request)
         request.body = AsyncMock(return_value=b'{"message": {"from": {"id": 123, "username": "testuser", "first_name": "Test", "last_name": "User"}}}')
+        request.headers = Mock()
+        request.headers.get = Mock(return_value="localhost")
         
         context = await self.middleware._create_telegram_context(request, self.test_company)
         
@@ -301,6 +303,8 @@ class TestAuthMiddlewareContextCreation:
         mock_detect_lang.return_value = Language.EN
         
         request = Mock(spec=Request)
+        request.headers = Mock()
+        request.headers.get = Mock(return_value="localhost")
         
         context = await self.middleware._create_anonymous_context(request, self.test_company)
         
@@ -336,6 +340,8 @@ class TestAuthMiddlewareContextCreation:
             "auth_token": "valid.jwt.token.here"
         }.get(key, default)
         request.cookies.keys.return_value = ["auth_token"]
+        request.headers = Mock()
+        request.headers.get = Mock(return_value="localhost")
 
         with patch('core.middleware.auth.get_token_service') as mock_token_service:
             # Мокаем валидацию токена
