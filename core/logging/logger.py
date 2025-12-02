@@ -22,7 +22,7 @@ def setup_logging(service_name: str = "core", logging_config: Optional[LoggingCo
     Настраивает логирование для сервиса.
     
     Args:
-        service_name: Имя сервиса (core, agents, frontend)
+        service_name: Имя сервиса (core, agents, frontend, worker)
         logging_config: Конфигурация логирования (если не указана, берется из settings)
     """
     if logging_config is None:
@@ -48,7 +48,11 @@ def setup_logging(service_name: str = "core", logging_config: Optional[LoggingCo
         root_logger.addHandler(console_handler)
 
     if logging_config.file_enabled:
-        log_file = Path(logging_config.file_path)
+        # Выбираем путь к файлу логов в зависимости от сервиса
+        if service_name == "worker":
+            log_file = Path(logging_config.worker_file_path)
+        else:
+            log_file = Path(logging_config.file_path)
         log_file.parent.mkdir(parents=True, exist_ok=True)
 
         file_handler = logging.handlers.RotatingFileHandler(

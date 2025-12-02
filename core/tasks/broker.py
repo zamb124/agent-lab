@@ -36,6 +36,14 @@ result_backend = AsyncpgResultBackend(
 # Broker с result backend
 broker = AsyncpgBroker(dsn=_get_dsn).with_result_backend(result_backend)
 
+
+@broker.on_event("startup")
+async def setup_worker_logging() -> None:
+    """Настройка логирования при запуске воркера"""
+    from core.logging import setup_logging
+    setup_logging("worker")
+
+
 # Schedule source для отложенных задач (хранит расписания в PostgreSQL)
 # Требует broker как первый аргумент
 schedule_source = AsyncpgScheduleSource(broker=broker, dsn=_get_dsn)
