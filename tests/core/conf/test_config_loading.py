@@ -267,27 +267,24 @@ class TestOAuthRedirectUri:
 
     def test_oauth_redirect_should_use_real_domain_for_local(self, project_root):
         """
-        При env=local, OAuth redirect_uri должен использовать реальный домен,
+        При env=local, OAuth redirect_uri должен использовать PRIMARY_DOMAIN (humanitec.ru),
         а не localhost (т.к. OAuth провайдеры требуют зарегистрированный callback)
         """
+        from core.utils.domain import PRIMARY_DOMAIN
+        
         merged = load_merged_config(
             base_config_path=project_root / "conf.json",
             service_config_path=project_root / "apps" / "frontend" / "conf.json"
         )
         
         env = merged.get("server", {}).get("env")
-        domain = merged.get("server", {}).get("domain")
         
-        # Проверяем что env=local и domain=localhost
+        # Проверяем что env=local
         assert env == "local", f"Для теста нужен env=local, получили: {env}"
-        assert domain == "localhost", f"Для теста нужен domain=localhost, получили: {domain}"
         
-        # Логика из core/api/auth.py
-        oauth_domain = "agents-lab.ru" if env == "local" else domain
-        redirect_uri = f"https://{oauth_domain}/auth/callback/yandex"
+        # Логика из core/api/auth.py - всегда используем PRIMARY_DOMAIN
+        redirect_uri = f"https://{PRIMARY_DOMAIN}/auth/callback/yandex"
         
-        assert oauth_domain == "agents-lab.ru", \
-            f"Для local окружения oauth_domain должен быть 'agents-lab.ru', получили: {oauth_domain}"
-        assert redirect_uri == "https://agents-lab.ru/auth/callback/yandex", \
-            f"redirect_uri должен быть 'https://agents-lab.ru/auth/callback/yandex', получили: {redirect_uri}"
+        assert redirect_uri == f"https://{PRIMARY_DOMAIN}/auth/callback/yandex", \
+            f"redirect_uri должен быть 'https://{PRIMARY_DOMAIN}/auth/callback/yandex', получили: {redirect_uri}"
 

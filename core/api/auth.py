@@ -13,6 +13,7 @@ from fastapi.responses import RedirectResponse
 from core.config import get_settings
 from core.models import AuthProvider, AuthRequest
 from core.identity import AuthService
+from core.utils.domain import PRIMARY_DOMAIN, extract_base_domain
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +64,8 @@ async def start_auth(provider_name: str, auth_service: AuthServiceDep, redirect_
         )
 
     if redirect_uri is None:
-        # OAuth callback на публичный домен (провайдеры требуют зарегистрированный URL)
-        public_domain = settings.server.get_public_domain()
-        redirect_uri = f"https://{public_domain}/auth/callback/{provider_name}"
+        # OAuth callback на PRIMARY_DOMAIN (провайдеры требуют зарегистрированный URL)
+        redirect_uri = f"https://{PRIMARY_DOMAIN}/auth/callback/{provider_name}"
     
     logger.info(f"start_auth: redirect_uri={redirect_uri}")
 
@@ -79,6 +79,7 @@ async def start_auth(provider_name: str, auth_service: AuthServiceDep, redirect_
 
 @router.get("/callback/{provider_name}")
 async def auth_callback(
+    request: Request,
     provider_name: str,
     code: str,
     state: str,
@@ -115,8 +116,7 @@ async def auth_callback(
         )
 
     if redirect_uri is None:
-        public_domain = settings.server.get_public_domain()
-        redirect_uri = f"https://{public_domain}/auth/callback/{provider_name}"
+        redirect_uri = f"https://{PRIMARY_DOMAIN}/auth/callback/{provider_name}"
 
     logger.info(f"auth_callback: redirect_uri={redirect_uri}")
 
@@ -134,7 +134,11 @@ async def auth_callback(
 
     response = RedirectResponse(url="/frontend/select-company")
     is_production = settings.server.env == "production"
-    cookie_domain = f".{settings.server.domain}" if is_production else None
+    
+    # Cookie domain определяется из Host header для поддержки нескольких доменов
+    host = request.headers.get("host", "")
+    base_domain = extract_base_domain(host)
+    cookie_domain = f".{base_domain}" if is_production else None
 
     logger.info(f"Устанавливаем cookies: session_id={result.session.session_id}, auth_token={result.token[:8]}..., domain={cookie_domain}, secure={is_production}")
 

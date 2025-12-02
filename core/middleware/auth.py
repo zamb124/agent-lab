@@ -17,6 +17,7 @@ from core.config import settings
 from core.models.identity_models import User, AuthProvider, UserStatus, Company
 from core.models.i18n_models import Language
 from core.utils.tokens import get_token_service
+from core.utils.domain import extract_base_domain, extract_subdomain, SUPPORTED_DOMAINS
 logger = logging.getLogger(__name__)
 
 
@@ -114,7 +115,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 
                 # Определяем компанию по Host - для файлов всегда требуется поддомен
                 host = request.headers.get("host", "")
-                domain = settings.server.domain
                 requested_company = None
 
                 # Для локальной разработки: требуем поддомен
@@ -131,8 +131,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                         logger.warning(f"⚠️ Запрос файла без поддомена: {host}")
                         raise HTTPException(status_code=400, detail="Для скачивания файла требуется указать поддомен компании (например, ssd.localhost:8001)")
                 else:
-                    if host.endswith(f".{domain}") and not host.startswith(domain):
-                        subdomain = host.split(".")[0]
+                    subdomain = extract_subdomain(host)
+                    if subdomain:
                         company_id = await subdomain_repo.get_company_id(subdomain)
                         if company_id:
                             requested_company = await company_repo.get(company_id)
@@ -281,14 +281,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     def _has_subdomain(self, host: str) -> bool:
         """Проверяет, содержит ли host субдомен"""
-        domain = settings.server.domain
-
         # Для локальной разработки: проверяем наличие точки перед localhost
         if settings.server.env == "local":
             return ".localhost" in host
 
-        # Для продакшена: проверяем, что есть субдомен перед основным доменом
-        return host.endswith(f".{domain}") and not host.startswith(domain)
+        # Для продакшена: используем утилиту extract_subdomain
+        return extract_subdomain(host) is not None
 
     async def _get_company_from_host(self, request: Request) -> Company:
         """Определяет компанию по Host заголовку"""
@@ -297,9 +295,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
         company_repo = container.company_repository
         
         host = request.headers.get("host", "")
-        domain = settings.server.domain
+        base_domain = extract_base_domain(host)
 
-        logger.info(f"🔍 Определяем компанию: host={host}, domain={domain}, env={settings.server.env}")
+        logger.info(f"🔍 Определяем компанию: host={host}, base_domain={base_domain}, env={settings.server.env}")
 
         # Для тестов: переопределение компании через заголовок X-Company-Id (только local env)
         if settings.server.env == "local":
@@ -327,21 +325,22 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     logger.info(f"Найдена компания по поддомену: {company_id}")
                     return company
 
-        # Продакшен логика
-        elif host.endswith(f".{domain}") and not host.startswith(domain):
-            subdomain = host.split(".")[0]
-            logger.info(f"Продакшен режим: subdomain={subdomain}")
-            company_id = await subdomain_repo.get_company_id(subdomain)
-            logger.info(f"company_id из subdomain: {company_id}")
-            if company_id:
-                company = await company_repo.get(company_id)
-                if company:
-                    logger.info(f"Найдена компания по поддомену: {company_id}")
-                    return company
+        # Продакшен логика - используем extract_subdomain для поддержки нескольких доменов
+        else:
+            subdomain = extract_subdomain(host)
+            if subdomain:
+                logger.info(f"Продакшен режим: subdomain={subdomain}")
+                company_id = await subdomain_repo.get_company_id(subdomain)
+                logger.info(f"company_id из subdomain: {company_id}")
+                if company_id:
+                    company = await company_repo.get(company_id)
+                    if company:
+                        logger.info(f"Найдена компания по поддомену: {company_id}")
+                        return company
 
-            # Если поддомен есть, но компания не найдена - это ошибка
-            logger.error(f"❌ Компания не найдена для поддомена: {subdomain}")
-            raise HTTPException(status_code=404, detail=f"Company not found for subdomain: {subdomain}")
+                # Если поддомен есть, но компания не найдена - это ошибка
+                logger.error(f"❌ Компания не найдена для поддомена: {subdomain}")
+                raise HTTPException(status_code=404, detail=f"Company not found for subdomain: {subdomain}")
 
         # Если это основной домен (без поддомена) - возвращаем системную компанию
         logger.info("🔍 Основной домен без поддомена, возвращаем системную компанию")
@@ -429,6 +428,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         context = Context(
             user=user,
+            host=request.headers.get("host", ""),
             platform="telegram",
             active_company=requested_company,
             user_companies=[requested_company],
@@ -486,6 +486,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         return Context(
             user=user,
+            host=request.headers.get("host", ""),
             platform="whatsapp",
             active_company=requested_company,
             user_companies=[requested_company],
@@ -563,6 +564,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         return Context(
             user=user,
+            host=request.headers.get("host", ""),
             session_id=token,  # Используем токен как session_id
             platform="api",
             active_company=active_company,
@@ -595,6 +597,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         context = Context(
             user=user,
+            host=request.headers.get("host", ""),
             platform="api",
             active_company=requested_company,
             user_companies=[requested_company],
@@ -622,6 +625,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         context = Context(
             user=user,
+            host=request.headers.get("host", ""),
             platform="amocrm",
             active_company=requested_company,
             user_companies=[requested_company],
@@ -670,6 +674,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 # Разрешаем доступ к странице создания компании
                 return Context(
                     user=user,
+                    host=request.headers.get("host", ""),
                     session_id=token_data.session_id,
                     platform="frontend",
                     active_company=None,
@@ -709,6 +714,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         return Context(
             user=user,
+            host=request.headers.get("host", ""),
             session_id=token_data.session_id,
             platform="frontend",
             active_company=active_company,
@@ -777,6 +783,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         return Context(
             user=user,
+            host=request.headers.get("host", ""),
             platform="service_api",
             active_company=company,
             user_companies=[company],

@@ -46,7 +46,7 @@ class OpenRouterConfig(BaseModel):
 
     api_key: Optional[str] = None
     base_url: str = "https://openrouter.ai/api/v1"
-    site_url: str = "https://agents-lab.ru"
+    site_url: str = "https://humanitec.ru"
     site_name: str = "Humanitec"
     timeout: int = 60
     max_retries: int = 3
@@ -99,24 +99,18 @@ class ServerConfig(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8001
     debug: bool = False
-    domain: str = "agents-lab.ru"
-    public_domain: Optional[str] = None  # Публичный домен для OAuth (если отличается от domain)
     agents_service_url: Optional[str] = None  # URL сервиса agents для межсервисного взаимодействия
     
     def get_service_url(self) -> str:
         """Возвращает URL сервиса"""
-        return f"http://{self.domain}:{self.port}"
+        return f"http://localhost:{self.port}"
     
     def get_agents_service_url(self) -> str:
         """URL сервиса agents для HTTP проксирования репозиториев"""
         if self.agents_service_url:
             return self.agents_service_url
-        return f"http://{self.domain}:8001"
+        return f"http://localhost:8001"
     workers: int = 4
-    
-    def get_public_domain(self) -> str:
-        """Возвращает публичный домен для OAuth callback"""
-        return self.public_domain or self.domain
     worker_class: str = "uvicorn.workers.UvicornWorker"
     worker_connections: int = 1000
     max_requests: int = 1000

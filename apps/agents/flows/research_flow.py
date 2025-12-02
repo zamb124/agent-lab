@@ -164,8 +164,8 @@ search_depth: "advanced"
     
     author=FlowAuthor(
         name="Humanitec Team",
-        email="team@agents-lab.ru",
-        website="https://agents-lab.ru",
+        email="team@humanitec.ru",
+        website="https://humanitec.ru",
     ),
 )
 

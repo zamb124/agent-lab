@@ -14,6 +14,7 @@ from apps.agents.config import get_agents_settings
 settings = get_agents_settings()
 from core.files.processors import get_default_audio_processor
 from apps.agents.container import get_agents_container
+from core.utils.domain import PRIMARY_DOMAIN
 
 logger = logging.getLogger(__name__)
 
@@ -880,7 +881,7 @@ class WhatsAppInterface(BaseInterface):
         # В production устанавливаем webhook
         if settings.server.env != "local":
             # Webhook URL для WhatsApp
-            webhook_url = f"https://{settings.server.domain}/api/v1/webhook/whatsapp/{flow_key}"
+            webhook_url = f"https://{PRIMARY_DOMAIN}/api/v1/webhook/whatsapp/{flow_key}"
             
             # Здесь можно добавить автоматическую установку webhook через API
             # Но обычно это делается вручную в Meta for Developers

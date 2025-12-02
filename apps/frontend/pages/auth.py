@@ -8,8 +8,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from apps.frontend.core.template_loader import get_templates
 from apps.frontend.container import get_frontend_container
 from core.models import AuthProvider
-from core.config import get_settings
 from core.context import get_context
+from core.utils.domain import build_url, get_host_with_port
 
 router = APIRouter(prefix="/frontend", tags=["auth-pages"])
 templates = get_templates()
@@ -33,13 +33,12 @@ async def select_company_page(request: Request):
     if not user or not user.companies:
         return RedirectResponse(url="/frontend/create-company")
 
-    settings = get_settings()
     company_repo = get_frontend_container().company_repository
     user_companies = []
 
-    protocol = "http" if settings.server.env == "local" else "https"
+    host = context.host
     for company_id, roles in user.companies.items():
-        company_url = f"{protocol}://{company_id}.{settings.server.domain}/frontend/dashboard"
+        company_url = build_url(host, "/frontend/dashboard", subdomain=company_id)
 
         company = await company_repo.get(company_id)
         company_name = company.name if company else company_id
@@ -53,7 +52,7 @@ async def select_company_page(request: Request):
 
     return templates.TemplateResponse("select_company.html", {
         "request": request,
-        "domain": settings.server.domain,
+        "domain": get_host_with_port(host),
         "user_companies": user_companies
     })
 
@@ -61,8 +60,10 @@ async def select_company_page(request: Request):
 @router.get("/create-company", response_class=HTMLResponse)
 async def create_company_page(request: Request):
     """Страница создания компании"""
-    settings = get_settings()
+    context = get_context()
+    host = context.host if context else request.headers.get("host", "")
+    
     return templates.TemplateResponse("create_company.html", {
         "request": request,
-        "domain": settings.server.domain
+        "domain": get_host_with_port(host)
     })

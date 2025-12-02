@@ -19,6 +19,11 @@ class Context(BaseModel):
         title="Пользователь",
         description="Пользователь выполняющий запрос",
     )
+    host: str = Field(
+        default="",
+        title="Host",
+        description="Host header из запроса (для построения URL)",
+    )
     session_id: Optional[str] = Field(
         default=None,
         title="ID сессии",

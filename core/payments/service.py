@@ -22,6 +22,7 @@ from core.models.payment_models import (
 )
 from core.models.identity_models import Company, User
 from core.config import get_settings
+from core.utils.domain import PRIMARY_DOMAIN
 
 if TYPE_CHECKING:
     from core.db.repositories.company_repository import CompanyRepository
@@ -71,8 +72,8 @@ class PaymentService:
         if settings.server.env == "local":
             base_url = f"http://{company.subdomain}.localhost:{settings.server.port}"
         else:
-            # Для production используем HTTPS и поддомен
-            base_url = f"https://{company.subdomain}.{settings.server.domain}"
+            # Для production используем PRIMARY_DOMAIN для единообразия payment callbacks
+            base_url = f"https://{company.subdomain}.{PRIMARY_DOMAIN}"
         
         success_url = f"{base_url}/frontend/billing?payment=success&transaction_id={transaction_id}"
         fail_url = f"{base_url}/frontend/billing?payment=fail&transaction_id={transaction_id}"

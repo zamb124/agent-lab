@@ -16,6 +16,7 @@ from core.files.processors import FileProcessor
 from core.context import get_context
 from core.config import get_settings
 from apps.agents.container import get_container, get_agents_container
+from core.utils.domain import build_url
 from apps.agents.dependencies import (
     AgentRepositoryDep,
     FlowRepositoryDep,
@@ -72,7 +73,7 @@ async def get_current_user(auth_service: AuthServiceDep):
 
 
 @router.post("/switch-company/{company_id}")
-async def switch_company(company_id: str):
+async def switch_company(request: Request, company_id: str):
     """Переключить активную компанию пользователя"""
     logger.info(f"Запрос переключения компании на: {company_id}")
     
@@ -97,12 +98,9 @@ async def switch_company(company_id: str):
     logger.info(f"Сохраняем active_company_id={company_id} для пользователя {user.user_id}")
     await user_repo.set(user)
     
-    settings = get_settings()
-    
-    if settings.server.env == "local":
-        redirect_url = f"http://{company_id}.localhost:{settings.server.port}/frontend/dashboard"
-    else:
-        redirect_url = f"https://{company_id}.{settings.server.domain}/frontend/dashboard"
+    context = get_context()
+    host = context.host if context else request.headers.get("host", "")
+    redirect_url = build_url(host, "/frontend/dashboard", subdomain=company_id)
     
     logger.info(f"✅ Переключение успешно, redirect_url: {redirect_url}")
     return {"success": True, "redirect_url": redirect_url}
@@ -542,12 +540,9 @@ async def create_my_company(request: Request):
     logger.info(f"DEBUG: Обновлен глобальный пользователь - добавлена компания {company_id}")
     
     # Редиректим на dashboard поддомена компании
-    settings = get_settings()
-    if settings.server.env == "local":
-        # Для local добавляем порт frontend сервиса
-        company_url = f"http://{subdomain}.localhost:8002/frontend/dashboard"
-    else:
-        company_url = f"https://{subdomain}.{settings.server.domain}/frontend/dashboard"
+    context = get_context()
+    host = context.host if context else request.headers.get("host", "")
+    company_url = build_url(host, "/frontend/dashboard", subdomain=subdomain)
     return RedirectResponse(url=company_url, status_code=302)
 
 

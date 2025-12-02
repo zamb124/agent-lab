@@ -108,7 +108,7 @@ class Company(BaseModel):
     subdomain: Optional[str] = Field(
         default=None,
         title="Поддомен",
-        description="Поддомен компании (company.agents-lab.ru)",
+        description="Поддомен компании (company.humanitec.ru)",
         groups={"admin": {"readonly": False}, "user": {"readonly": True}},
     )
     owner_user_id: Optional[str] = Field(

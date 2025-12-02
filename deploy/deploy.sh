@@ -20,11 +20,11 @@ echo "Server: $SSH_USER@$SSH_HOST"
 echo "Remote dir: $REMOTE_DIR"
 echo ""
 
-echo "[1/7] Git pull на сервере..."
+echo "[1/8] Git pull на сервере..."
 $SSH_CMD "cd $REMOTE_DIR && git fetch origin && git reset --hard origin/main"
 sleep 3
 
-echo "[2/7] Подготовка конфигов..."
+echo "[2/8] Подготовка конфигов..."
 TMP_DIR=$(mktemp -d)
 
 cp "$LOCAL_DIR/conf.json" "$TMP_DIR/conf.json"
@@ -49,11 +49,6 @@ sed -i.bak 's|"env": "local"|"env": "production"|g' "$TMP_DIR/conf.json"
 sed -i.bak 's|"env": "local"|"env": "production"|g' "$TMP_DIR/agents_conf.json"
 sed -i.bak 's|"env": "local"|"env": "production"|g' "$TMP_DIR/frontend_conf.json"
 
-# Замена domain на agents-lab.ru
-sed -i.bak 's|"domain": "localhost"|"domain": "agents-lab.ru"|g' "$TMP_DIR/conf.json"
-sed -i.bak 's|"domain": "localhost"|"domain": "agents-lab.ru"|g' "$TMP_DIR/agents_conf.json"
-sed -i.bak 's|"domain": "localhost"|"domain": "agents-lab.ru"|g' "$TMP_DIR/frontend_conf.json"
-
 # Замена debug на false для production
 sed -i.bak 's|"debug": true|"debug": false|g' "$TMP_DIR/conf.json"
 sed -i.bak 's|"debug": true|"debug": false|g' "$TMP_DIR/agents_conf.json"
@@ -61,7 +56,7 @@ sed -i.bak 's|"debug": true|"debug": false|g' "$TMP_DIR/frontend_conf.json"
 
 rm -f "$TMP_DIR"/*.bak
 
-echo "[3/7] Копирование конфигов на сервер..."
+echo "[3/8] Копирование конфигов на сервер..."
 sleep 2
 $SCP_CMD "$TMP_DIR/conf.json" "$SSH_USER@$SSH_HOST:$REMOTE_DIR/conf.json"
 sleep 2
@@ -72,20 +67,40 @@ sleep 2
 
 rm -rf "$TMP_DIR"
 
-echo "[4/7] Проверка nginx конфига..."
+echo "[4/8] Проверка и получение SSL сертификатов..."
+
+# Проверка SSL для agents-lab.ru
+echo "Checking SSL for agents-lab.ru..."
+if $SSH_CMD "sudo test -d /etc/letsencrypt/live/agents-lab.ru-0001"; then
+    echo "SSL for agents-lab.ru: OK"
+else
+    echo "SSL for agents-lab.ru: NOT FOUND, attempting to obtain..."
+    $SSH_CMD "sudo certbot certonly --nginx -d agents-lab.ru -d '*.agents-lab.ru' --non-interactive --agree-tos --email admin@agents-lab.ru || echo 'WARN: Failed to get wildcard cert, trying main domain only...'"
+    $SSH_CMD "sudo certbot certonly --nginx -d agents-lab.ru -d www.agents-lab.ru --non-interactive --agree-tos --email admin@agents-lab.ru || true"
+fi
+
+# Проверка SSL для humanitec.ru
+echo "Checking SSL for humanitec.ru..."
+if $SSH_CMD "sudo test -d /etc/letsencrypt/live/humanitec.ru"; then
+    echo "SSL for humanitec.ru: OK"
+else
+    echo "SSL for humanitec.ru: NOT FOUND, attempting to obtain..."
+    $SSH_CMD "sudo certbot certonly --nginx -d humanitec.ru -d '*.humanitec.ru' --non-interactive --agree-tos --email admin@humanitec.ru || echo 'WARN: Failed to get wildcard cert, trying main domain only...'"
+    $SSH_CMD "sudo certbot certonly --nginx -d humanitec.ru -d www.humanitec.ru --non-interactive --agree-tos --email admin@humanitec.ru || true"
+fi
+
+sleep 2
+
+echo "[5/8] Проверка nginx конфига..."
 $SCP_CMD "$LOCAL_DIR/deploy/nginx.conf" "$SSH_USER@$SSH_HOST:/tmp/nginx.conf"
 sleep 2
-$SSH_CMD "sudo cp /tmp/nginx.conf /etc/nginx/sites-available/agents-lab.conf && sudo rm -f /etc/nginx/sites-enabled/agents-lab.ru /etc/nginx/sites-enabled/agents-lab.conf && sudo ln -s /etc/nginx/sites-available/agents-lab.conf /etc/nginx/sites-enabled/agents-lab.conf && sudo nginx -t"
+$SSH_CMD "sudo cp /tmp/nginx.conf /etc/nginx/sites-available/humanitec.conf && sudo rm -f /etc/nginx/sites-enabled/agents-lab.ru /etc/nginx/sites-enabled/agents-lab.conf /etc/nginx/sites-enabled/humanitec.conf && sudo ln -s /etc/nginx/sites-available/humanitec.conf /etc/nginx/sites-enabled/humanitec.conf && sudo nginx -t"
 sleep 2
 
-echo "[5/7] Проверка SSL сертификатов..."
-$SSH_CMD "sudo ls -la /etc/letsencrypt/live/agents-lab.ru-0001/ | head -5"
-sleep 2
-
-echo "[6/7] Перезапуск сервисов..."
+echo "[6/8] Перезапуск сервисов..."
 $SSH_CMD "cd $REMOTE_DIR && sudo docker compose down && sudo docker compose up -d --build"
 
-echo "[7/7] Проверка сервисов..."
+echo "[7/8] Проверка сервисов..."
 sleep 20
 
 echo "Checking agents service (8001)..."
@@ -101,12 +116,12 @@ $SSH_CMD "cd $REMOTE_DIR && sudo docker compose ps taskiq-worker --format '{{.St
 $SSH_CMD "cd $REMOTE_DIR && sudo docker compose logs taskiq-worker --tail=5"
 sleep 2
 
-echo "Reloading nginx..."
+echo "[8/8] Reloading nginx..."
 $SSH_CMD "sudo systemctl reload nginx"
 
 echo ""
 echo "=== Deploy завершен ==="
-echo "Agents: https://agents-lab.ru/agents/api/v1/health"
-echo "Frontend: https://agents-lab.ru/health"
+echo "Agents: https://humanitec.ru/agents/api/v1/health"
+echo "Frontend: https://humanitec.ru/health"
+echo "Alt domain: https://agents-lab.ru"
 echo "Worker: docker compose logs taskiq-worker"
-

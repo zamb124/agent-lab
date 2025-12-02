@@ -15,6 +15,7 @@ from apps.agents.config import get_agents_settings
 settings = get_agents_settings()
 from core.files.processors import get_default_audio_processor
 from apps.agents.container import get_agents_container
+from core.utils.domain import PRIMARY_DOMAIN
 
 logger = logging.getLogger(__name__)
 
@@ -287,12 +288,11 @@ class TelegramInterface(BaseInterface):
         """Отправляет ссылку на аудио (с кнопкой в prod или текстом в dev)"""
         try:
             # Получаем конфигурацию
-            
-            
-            domain = settings.server.domain
             protocol = "https" if settings.server.env == "production" else "http"
             port = f":{settings.server.port}" if settings.server.port != 80 and settings.server.port != 443 else ""
             
+            # Используем PRIMARY_DOMAIN для внешних ссылок
+            domain = PRIMARY_DOMAIN if settings.server.env == "production" else "localhost"
             full_url = f"{protocol}://{domain}{port}/api/v1/files/download/audio/{audio_record.audio_id}"
             
             if settings.server.env == "production":
@@ -773,7 +773,7 @@ class TelegramInterface(BaseInterface):
                 "flow_key": flow_key
             }
         else:
-            webhook_url = f"https://{settings.server.domain}/api/v1/webhook/telegram/{flow_key}"
+            webhook_url = f"https://{PRIMARY_DOMAIN}/api/v1/webhook/telegram/{flow_key}"
             webhook_success = await cls.set_webhook(token, webhook_url)
             
             if not webhook_success:

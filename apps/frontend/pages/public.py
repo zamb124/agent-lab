@@ -14,6 +14,7 @@ from core.models.i18n_models import Language
 from core.context import get_context
 from core.i18n import get_translation_manager
 from apps.agents.container import get_agents_container
+from core.utils.domain import build_url, get_host_with_port
 
 router = APIRouter(tags=["public-pages"])
 templates = get_templates()
@@ -110,6 +111,10 @@ async def privacy_policy(
                 "description": flow_config.description
             }
     
+    # Определяем домен из контекста или Host header
+    context = get_context()
+    host = context.host if context else request.headers.get("host", "")
+    
     return templates.TemplateResponse(
         "privacy.html",
         {
@@ -124,8 +129,8 @@ async def privacy_policy(
             "support_email": settings.legal.support_email,
             "dpo_email": settings.legal.dpo_email,
             "phone": settings.legal.phone or "",
-            "site_url": f"https://{settings.server.domain}",
-            "domain": settings.server.domain,
+            "site_url": build_url(host, ""),
+            "domain": get_host_with_port(host),
             "min_age": settings.legal.min_age,
             "retention_logs": settings.legal.retention_logs,
             "retention_messages": settings.legal.retention_messages,
@@ -177,6 +182,10 @@ async def terms_of_service(
                 "description": flow_config.description
             }
     
+    # Определяем домен из контекста или Host header
+    context = get_context()
+    host = context.host if context else request.headers.get("host", "")
+    
     return templates.TemplateResponse(
         "terms.html",
         {
@@ -190,8 +199,8 @@ async def terms_of_service(
             "contact_email": settings.legal.contact_email,
             "support_email": settings.legal.support_email,
             "phone": settings.legal.phone or "",
-            "site_url": f"https://{settings.server.domain}",
-            "domain": settings.server.domain,
+            "site_url": build_url(host, ""),
+            "domain": get_host_with_port(host),
             "current_date": datetime.now().strftime("%d.%m.%Y" if lang == "ru" else "%B %d, %Y"),
             "flow_info": flow_info
         }
