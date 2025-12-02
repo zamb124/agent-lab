@@ -1,0 +1,163 @@
+---
+description: "Утилиты для работы с доменами (humanitec.ru, agents-lab.ru)"
+globs: ["**/domain.py", "**/auth.py", "**/admin.py", "**/nginx.conf", "**/deploy.sh"]
+alwaysApply: false
+---
+
+# Утилиты для работы с доменами
+
+## Обзор
+
+Система поддерживает несколько доменов (`humanitec.ru`, `agents-lab.ru`) и localhost для разработки.
+Все утилиты находятся в `core/utils/domain.py`.
+
+## Константы
+
+```python
+from core.utils.domain import PRIMARY_DOMAIN, SUPPORTED_DOMAINS
+
+PRIMARY_DOMAIN = "humanitec.ru"  # Основной домен для OAuth, webhooks, payments
+SUPPORTED_DOMAINS = ["humanitec.ru", "agents-lab.ru"]  # Все поддерживаемые домены
+```
+
+## Утилиты
+
+### extract_base_domain(host) → str
+
+Извлекает базовый домен из Host header.
+
+```python
+extract_base_domain("humanitec.ru")           # → "humanitec.ru"
+extract_base_domain("company.humanitec.ru")   # → "humanitec.ru"
+extract_base_domain("localhost:8002")         # → "localhost"
+extract_base_domain("company.localhost:8002") # → "localhost"
+extract_base_domain("unknown.com")            # → "humanitec.ru" (fallback)
+```
+
+### extract_subdomain(host) → str | None
+
+Извлекает субдомен из Host header.
+
+```python
+extract_subdomain("humanitec.ru")             # → None
+extract_subdomain("www.humanitec.ru")         # → None (www не субдомен)
+extract_subdomain("company.humanitec.ru")     # → "company"
+extract_subdomain("company.localhost:8002")   # → "company"
+```
+
+### is_local(host) → bool
+
+Проверяет является ли host локальным (localhost).
+
+```python
+is_local("localhost:8002")         # → True
+is_local("company.localhost:8002") # → True
+is_local("humanitec.ru")           # → False
+```
+
+### get_protocol(host) → str
+
+Возвращает протокол: `http` для localhost, `https` для production.
+
+```python
+get_protocol("localhost:8002") # → "http"
+get_protocol("humanitec.ru")   # → "https"
+```
+
+### get_host_with_port(host) → str
+
+Возвращает базовый домен с портом для localhost (порт важен для локальной разработки).
+
+```python
+get_host_with_port("localhost:8002")         # → "localhost:8002"
+get_host_with_port("company.localhost:8002") # → "localhost:8002"
+get_host_with_port("humanitec.ru")           # → "humanitec.ru"
+get_host_with_port("company.humanitec.ru")   # → "humanitec.ru"
+```
+
+### build_url(host, path, subdomain) → str
+
+Строит полный URL с учетом текущего домена. **Основная функция для построения URL.**
+
+```python
+# Localhost
+build_url("localhost:8002", "/dashboard", "company")
+# → "http://company.localhost:8002/dashboard"
+
+# Production
+build_url("humanitec.ru", "/dashboard", "company")
+# → "https://company.humanitec.ru/dashboard"
+
+# Без субдомена
+build_url("humanitec.ru", "/api/health")
+# → "https://humanitec.ru/api/health"
+```
+
+## Когда использовать
+
+### build_url - для внутренних редиректов
+
+Используй `build_url` когда нужно построить URL для редиректа пользователя внутри системы.
+
+<good_example>
+from core.utils.domain import build_url
+from core.context import get_context
+
+# В API endpoint или page
+context = get_context()
+redirect_url = build_url(context.host, "/frontend/dashboard", subdomain=company_id)
+return {"redirect_url": redirect_url}
+</good_example>
+
+<bad_example>
+# НЕ хардкодь домен!
+redirect_url = f"https://humanitec.ru/{company_id}.humanitec.ru/frontend/dashboard"
+
+# НЕ проверяй env вручную!
+if settings.server.env == "local":
+    url = f"http://{company_id}.localhost:8002/dashboard"
+else:
+    url = f"https://{company_id}.humanitec.ru/dashboard"
+</bad_example>
+
+### PRIMARY_DOMAIN - для внешних сервисов
+
+Используй `PRIMARY_DOMAIN` для URL которые регистрируются во внешних сервисах:
+- OAuth callback URLs (Google, Yandex, GitHub)
+- Webhook URLs (Telegram, WhatsApp)
+- Payment callback URLs
+
+<good_example>
+from core.utils.domain import PRIMARY_DOMAIN
+
+# OAuth callback (должен быть зарегистрирован в провайдере)
+redirect_uri = f"https://{PRIMARY_DOMAIN}/auth/callback/yandex"
+
+# Telegram webhook
+webhook_url = f"https://{PRIMARY_DOMAIN}/api/v1/webhook/telegram/{flow_key}"
+</good_example>
+
+### Context.host - откуда брать host
+
+Host доступен в контексте запроса:
+
+```python
+from core.context import get_context
+
+context = get_context()
+host = context.host  # Например: "company.humanitec.ru" или "localhost:8002"
+```
+
+## Добавление нового домена
+
+При добавлении нового домена нужно изменить:
+
+1. **core/utils/domain.py** - добавить в `SUPPORTED_DOMAINS`
+2. **deploy/deploy.sh** - добавить в массив `DOMAINS`
+3. **deploy/nginx.conf** - добавить server блоки
+4. **DNS** - настроить A записи
+5. **SSL** - получить wildcard сертификат через DNS challenge
+
+## Тесты
+
+Тесты в `tests/core/test_domain_utils.py` покрывают все функции и edge cases.

@@ -40,6 +40,7 @@
 - **tracing.mdc** - OpenTelemetry Tracing
 - **monorepo_architecture.mdc** - Архитектура монорепозитория
 - **taskiq.mdc** - TaskIQ задачи и очереди
+- **domain_utils.mdc** - Утилиты для работы с доменами (humanitec.ru, agents-lab.ru)
 
 ## Ключевые принципы
 
@@ -79,6 +80,7 @@
 - `frontend.mdc` ← `apps/frontend/`
 - `testing.mdc` ← `tests/`
 - `taskiq.mdc` ← `core/tasks/` + `apps/*/tasks/`
+- `domain_utils.mdc` ← `core/utils/domain.py` + `deploy/`
 
 ## Формат правил
 

@@ -16,7 +16,8 @@ from core.files.processors import FileProcessor
 from core.context import get_context
 from core.config import get_settings
 from apps.agents.container import get_container, get_agents_container
-from core.utils.domain import build_url
+from core.utils.domain import build_url, extract_base_domain, is_local
+from core.utils.tokens import get_token_service
 from apps.agents.dependencies import (
     AgentRepositoryDep,
     FlowRepositoryDep,
@@ -539,11 +540,43 @@ async def create_my_company(request: Request):
     await user_repo.set(user)
     logger.info(f"DEBUG: Обновлен глобальный пользователь - добавлена компания {company_id}")
     
+    # Создаем новый токен с правильным company_id
+    token_service = get_token_service()
+    auth_token = request.cookies.get("auth_token")
+    old_token_data = token_service.validate_token(auth_token) if auth_token else None
+    
+    new_token = token_service.create_token(
+        user_id=user.user_id,
+        company_id=company_id,
+        session_id=old_token_data.session_id if old_token_data else None,
+        expires_in=86400 * 7,
+        metadata=old_token_data.metadata if old_token_data else {"user_name": user.name}
+    )
+    
     # Редиректим на dashboard поддомена компании
     context = get_context()
     host = context.host if context else request.headers.get("host", "")
     company_url = build_url(host, "/frontend/dashboard", subdomain=subdomain)
-    return RedirectResponse(url=company_url, status_code=302)
+    
+    response = RedirectResponse(url=company_url, status_code=302)
+    
+    # Устанавливаем новый токен в cookie
+    base_domain = extract_base_domain(host)
+    is_localhost = is_local(host)
+    cookie_domain = None if is_localhost else f".{base_domain}"
+    
+    response.set_cookie(
+        key="auth_token",
+        value=new_token,
+        domain=cookie_domain,
+        httponly=False,
+        secure=not is_localhost,
+        samesite="lax",
+    )
+    
+    logger.info(f"Создан новый токен для пользователя {user.user_id} с company_id={company_id}, domain={cookie_domain}")
+    
+    return response
 
 
 @router.post("/remigrate/{entity_type}/{entity_id:path}")

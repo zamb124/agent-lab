@@ -166,6 +166,62 @@ class TestCreateCompanyEndpoint:
         
         assert response.status_code == 400
 
+    @pytest.mark.asyncio
+    async def test_create_company_updates_auth_token_with_company_id(
+        self,
+        async_client,
+        auth_token_for_new_user,
+        company_repo,
+        subdomain_repo,
+        user_repo
+    ):
+        """Тест что после создания компании токен обновляется с правильным company_id"""
+        token, user = auth_token_for_new_user
+        token_service = get_token_service()
+        
+        # Проверяем что исходный токен имеет пустой company_id
+        old_token_data = token_service.validate_token(token)
+        assert old_token_data.company_id == "" or old_token_data.company_id is None
+        
+        test_slug = "test-token-update-slug"
+        
+        # Очистка если существует
+        existing_company = await company_repo.get(test_slug)
+        if existing_company:
+            await company_repo.delete(test_slug)
+        existing_mapping = await subdomain_repo.get(test_slug)
+        if existing_mapping:
+            await subdomain_repo.delete(test_slug)
+        
+        response = await async_client.post(
+            "/frontend/api/admin/create-my-company",
+            data={
+                "name": "Token Update Test Company",
+                "slug": test_slug
+            },
+            cookies={"auth_token": token},
+            follow_redirects=False
+        )
+        
+        assert response.status_code in [302, 307]
+        
+        # Проверяем что в response есть новый auth_token cookie (в заголовках set-cookie)
+        set_cookie_header = response.headers.get("set-cookie", "")
+        assert "auth_token=" in set_cookie_header, f"auth_token cookie должен быть в set-cookie заголовке, получили: {set_cookie_header[:100]}"
+        
+        # Извлекаем токен из set-cookie заголовка
+        import re
+        token_match = re.search(r'auth_token=([^;]+)', set_cookie_header)
+        assert token_match is not None, "Не удалось извлечь auth_token из set-cookie"
+        new_token = token_match.group(1)
+        
+        # Проверяем что новый токен содержит правильный company_id
+        new_token_data = token_service.validate_token(new_token)
+        assert new_token_data is not None, "Новый токен должен быть валидным"
+        assert new_token_data.company_id == test_slug, f"company_id должен быть {test_slug}, получили {new_token_data.company_id}"
+        assert new_token_data.user_id == user.user_id, "user_id должен сохраниться"
+        assert new_token_data.session_id == old_token_data.session_id, "session_id должен сохраниться"
+
 
 class TestCreateCompanyMiddlewarePath:
     """Тесты для проверки что middleware правильно обрабатывает путь создания компании"""
