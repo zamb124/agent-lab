@@ -384,3 +384,34 @@ class Migrator:
                 await ToolReference.migrate(tool_id, migrator=self)
 
         logger.info("✅ Миграция завершена")
+
+
+# TaskIQ задача для фоновой миграции
+from core.tasks.broker import broker
+
+
+@broker.task(retry_on_error=True, max_retries=3)
+async def migrate_company_defaults(company_id: str) -> dict:
+    """
+    Миграция дефолтных сущностей для компании.
+    
+    Можно вызвать двумя способами:
+    - await migrate_company_defaults(company_id)  # синхронно
+    - await migrate_company_defaults.kiq(company_id)  # через TaskIQ (фоново)
+    
+    Args:
+        company_id: ID компании для миграции
+        
+    Returns:
+        dict с результатом миграции
+    """
+    container = get_agents_container()
+    company = await container.company_repository.get(company_id)
+    if not company:
+        raise ValueError(f"Company {company_id} not found")
+    
+    migrator = container.migrator
+    await migrator.migrate_defaults_for_company(company)
+    
+    logger.info(f"Фоновая миграция завершена для компании {company_id}")
+    return {"status": "completed", "company_id": company_id}

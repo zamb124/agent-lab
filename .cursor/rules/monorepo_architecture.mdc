@@ -253,7 +253,9 @@ class User(BaseModel):
     )
 </good_example>
 
-## Правило 9: НЕТ локальных импортов
+## Правило 9: НИКОГДА локальных импортов
+
+**КРИТИЧНО**: Все импорты ТОЛЬКО в начале файла!
 
 <bad_example>
 def my_function():
@@ -269,7 +271,11 @@ def my_function():
     config = AgentConfig(...)
 </good_example>
 
+**Единственное исключение**: `@lazy` декоратор в контейнере для ленивой инициализации.
+
 ## Правило 10: НЕТ try-except фолбэков
+
+**КРИТИЧНО**: try-except ТОЛЬКО для IO операций и внешних сервисов!
 
 <bad_example>
 try:
@@ -285,15 +291,45 @@ if not api_key:
 result = await api.fetch()  # Если упадет - исключение прокинется
 </good_example>
 
+## Правило 11: НЕТ лишних if-else
+
+**КРИТИЧНО**: Логика должна быть прозрачной! Используй early return.
+
+<bad_example>
+def process(data):
+    if data:
+        if data.valid:
+            return do_work(data)
+        else:
+            return None
+    else:
+        return None
+</bad_example>
+
+<good_example>
+def process(data):
+    if not data:
+        raise ValueError("data обязателен")
+    
+    if not data.valid:
+        raise ValueError("data невалиден")
+    
+    return do_work(data)
+</good_example>
+
 ## Критичные напоминания
 
-1. **core/** НЕ зависит от **apps/**
-2. Каждый сервис имеет **config.py** (расширяет BaseSettings)
-3. Каждый сервис имеет **container.py** (расширяет BaseContainer)
-4. **Service БД** + **Shared БД** для каждого сервиса
-5. **НЕТ дубликатов моделей** - User, Company, FileRecord в core
-6. **НЕТ локальных импортов**
-7. **НЕТ try-except фолбэков**
-8. Используй **get_agents_container()**, НЕ get_agents_container()
-9. Хардкодные строки: `"apps.agents.agents.*"` вместо `"app.agents.*"`
-10. Field переносит UI поля в json_schema_extra (Pydantic v2)
+### ТРИ ГЛАВНЫХ ПРАВИЛА:
+1. **НИКАКИХ локальных импортов** - все импорты в начале файла
+2. **НИКАКИХ лишних if-else** - логика должна быть прозрачной, используй early return
+3. **try-except ТОЛЬКО для IO/внешних сервисов** - не для бизнес-логики
+
+### Архитектурные правила:
+4. **core/** НЕ зависит от **apps/**
+5. Каждый сервис имеет **config.py** (расширяет BaseSettings)
+6. Каждый сервис имеет **container.py** (расширяет BaseContainer)
+7. **Service БД** + **Shared БД** для каждого сервиса
+8. **НЕТ дубликатов моделей** - User, Company, FileRecord в core
+9. Используй **get_agents_container()** для доступа к зависимостям
+10. Хардкодные строки: `"apps.agents.agents.*"` вместо `"app.agents.*"`
+11. Field переносит UI поля в json_schema_extra (Pydantic v2)

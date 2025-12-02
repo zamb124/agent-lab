@@ -5,18 +5,111 @@ alwaysApply: true
 
 # Правила качества кода и лаконичности
 
-## КРИТИЧНО: Минимум try-except
+## КРИТИЧНО: Никаких локальных импортов
 
-**Используй try-except ТОЛЬКО когда это критически необходимо:**
-- Обработка внешних API/сетевых запросов
-- Операции с файловой системой
-- Парсинг данных из внешних источников
-- Обработка специфичных исключений библиотек
+**НИКОГДА не делай локальные импорты внутри функций/методов.**
+Все импорты ТОЛЬКО в начале файла. Локальные импорты допустимы ТОЛЬКО в крайних случаях циркулярных зависимостей.
 
-**НЕ используй try-except для:**
+<bad_example>
+def process_user(user_id: str):
+    from apps.agents.models import AgentConfig  # НЕТ!
+    from core.db.storage import Storage  # НЕТ!
+    ...
+
+async def get_agent(agent_id: str):
+    from apps.agents.container import get_agents_container  # НЕТ!
+    container = get_agents_container()
+    ...
+</bad_example>
+
+<good_example>
+from apps.agents.models import AgentConfig
+from apps.agents.container import get_agents_container
+from core.db.storage import Storage
+
+def process_user(user_id: str):
+    ...
+
+async def get_agent(agent_id: str):
+    container = get_agents_container()
+    ...
+</good_example>
+
+**Единственное исключение** - циркулярные зависимости, которые невозможно решить иначе. Но это сигнал о проблемах архитектуры.
+
+## КРИТИЧНО: Никаких лишних if-else
+
+**Логика должна быть прозрачной и линейной.**
+Избегай вложенных if-else. Используй ранний выход (early return), guard clauses, полиморфизм.
+
+<bad_example>
+def process_request(request):
+    if request.user:
+        if request.user.is_active:
+            if request.data:
+                result = do_work(request.data)
+                return result
+            else:
+                return None
+        else:
+            return None
+    else:
+        return None
+</bad_example>
+
+<good_example>
+def process_request(request):
+    if not request.user:
+        raise ValueError("Пользователь не указан")
+    
+    if not request.user.is_active:
+        raise ValueError("Пользователь неактивен")
+    
+    if not request.data:
+        raise ValueError("Данные не указаны")
+    
+    return do_work(request.data)
+</good_example>
+
+<bad_example>
+def get_status_text(status):
+    if status == "active":
+        return "Активен"
+    elif status == "inactive":
+        return "Неактивен"
+    elif status == "pending":
+        return "Ожидает"
+    else:
+        return "Неизвестно"
+</bad_example>
+
+<good_example>
+STATUS_TEXTS = {
+    "active": "Активен",
+    "inactive": "Неактивен", 
+    "pending": "Ожидает",
+}
+
+def get_status_text(status: str) -> str:
+    if status not in STATUS_TEXTS:
+        raise ValueError(f"Неизвестный статус: {status}")
+    return STATUS_TEXTS[status]
+</good_example>
+
+## КРИТИЧНО: try-except ТОЛЬКО для IO и внешних сервисов
+
+**НИКОГДА не используй try-except для бизнес-логики.**
+try-except допустим ТОЛЬКО в трех случаях:
+
+1. **IO операции** - работа с файлами, сокетами
+2. **Внешние сервисы** - HTTP запросы к API, БД соединения
+3. **Интеграции** - сторонние библиотеки с непредсказуемым поведением
+
+**СТРОГО ЗАПРЕЩЕНО try-except для:**
 - Валидации входных данных (используй проверки)
 - Бизнес-логики (используй условия)
 - Обработки ошибок конфигурации (бросай исключение)
+- Проверки наличия данных (используй if)
 
 <bad_example>
 def get_user(user_id: str):
@@ -353,9 +446,17 @@ def handle_status(status: TaskStatus) -> str:
 
 ## Итоговые принципы
 
-1. **Проверки вместо try-except** - валидируй входные данные явно
-2. **Исключения вместо фолбеков** - если что-то не так, бросай исключение
-3. **Однозначные типы** - если сущность может быть разных типов, исправляй архитектуру, не делай isinstance проверки
-4. **Рекурсия вместо вложенных if'ов** - используй рекурсию для иерархий с четкой структурой
-5. **Лаконичность** - используй встроенные функции Python, comprehensions, match/case
-6. **Однозначность** - код должен иметь один путь выполнения для каждого случая
+### ТРИ ГЛАВНЫХ ПРАВИЛА:
+
+1. **НИКАКИХ локальных импортов** - все импорты в начале файла
+2. **НИКАКИХ лишних if-else** - логика должна быть прозрачной, используй early return
+3. **try-except ТОЛЬКО для IO/внешних сервисов** - не для бизнес-логики
+
+### Дополнительные принципы:
+
+4. **Проверки вместо try-except** - валидируй входные данные явно
+5. **Исключения вместо фолбеков** - если что-то не так, бросай исключение
+6. **Однозначные типы** - если сущность может быть разных типов, исправляй архитектуру, не делай isinstance проверки
+7. **Рекурсия вместо вложенных if'ов** - используй рекурсию для иерархий с четкой структурой
+8. **Лаконичность** - используй встроенные функции Python, comprehensions, match/case
+9. **Однозначность** - код должен иметь один путь выполнения для каждого случая

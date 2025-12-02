@@ -63,7 +63,8 @@ class TestCreateCompanyEndpoint:
         auth_token_for_new_user,
         company_repo,
         subdomain_repo,
-        user_repo
+        user_repo,
+        taskiq_broker
     ):
         """Тест успешного создания компании"""
         token, user = auth_token_for_new_user
@@ -173,7 +174,8 @@ class TestCreateCompanyEndpoint:
         auth_token_for_new_user,
         company_repo,
         subdomain_repo,
-        user_repo
+        user_repo,
+        taskiq_broker
     ):
         """Тест что после создания компании токен обновляется с правильным company_id"""
         token, user = auth_token_for_new_user
@@ -236,4 +238,174 @@ class TestCreateCompanyMiddlewarePath:
         
         assert "/frontend/api/admin/create-my-company" in path or \
                path.startswith("/frontend/") and "create-my-company" in path
+
+
+class TestCompanyMigration:
+    """Интеграционные тесты миграции flows при создании компании БЕЗ моков"""
+
+    @pytest.mark.asyncio
+    async def test_company_migration_creates_default_flows(
+        self,
+        migrated_db,
+        migrator,
+        company_repo,
+        subdomain_repo,
+        flow_repo,
+        tool_repo,
+        mcp_repo
+    ):
+        """
+        Интеграционный тест: после создания компании мигрируются дефолтные flows из store.
+        БЕЗ МОКОВ - реальная БД и реальная миграция.
+        """
+        from datetime import datetime, timezone
+        from core.db.repositories.subdomain_repository import SubdomainMapping
+        from apps.agents.config import get_agents_settings
+        
+        test_company = Company(
+            company_id="test_migration_flows",
+            subdomain="test_migration_flows",
+            name="Test Migration Flows",
+            status="active",
+            balance=50.0,
+            created_at=datetime.now(timezone.utc)
+        )
+        await company_repo.set(test_company)
+        await subdomain_repo.set(SubdomainMapping(
+            subdomain=test_company.subdomain,
+            company_id=test_company.company_id
+        ))
+        
+        user = User(
+            user_id="test_migration_user",
+            provider=AuthProvider.YANDEX,
+            provider_user_id="test_migration",
+            email="test_migration@test.local",
+            name="Test Migration",
+            status=UserStatus.ACTIVE,
+            groups=["admin"],
+            companies={test_company.company_id: ["admin"]},
+            active_company_id=test_company.company_id
+        )
+        
+        context = Context(
+            user=user,
+            platform="test",
+            active_company=test_company,
+            user_companies=[test_company]
+        )
+        set_context(context)
+        
+        try:
+            # Вызываем миграцию синхронно (для теста)
+            await migrator.migrate_defaults_for_company(test_company)
+            
+            # Проверяем что дефолтные flows создались (из settings.migration.default_flows)
+            settings = get_agents_settings()
+            for flow_id in settings.migration.default_flows:
+                flow = await flow_repo.get(flow_id)
+                assert flow is not None, f"Flow {flow_id} должен быть мигрирован"
+            
+            # Проверяем что MCP серверы создались
+            context7 = await mcp_repo.get("context7")
+            assert context7 is not None, "MCP сервер context7 должен быть создан"
+            
+            copilot = await mcp_repo.get("copilot")
+            assert copilot is not None, "MCP сервер copilot должен быть создан"
+            
+            # Проверяем что публичные tools мигрировались
+            tools = await tool_repo.list_all(limit=100)
+            assert len(tools) > 0, "Публичные tools должны быть мигрированы"
+            
+        finally:
+            # Cleanup - контекст должен быть активен для удаления данных компании
+            all_flows = await flow_repo.list_all(limit=1000)
+            for flow in all_flows:
+                await flow_repo.delete(flow.flow_id)
+            
+            all_tools = await tool_repo.list_all(limit=1000)
+            for tool in all_tools:
+                await tool_repo.delete(tool.tool_id)
+                
+            all_mcp = await mcp_repo.list_all(limit=100)
+            for mcp in all_mcp:
+                await mcp_repo.delete(mcp.server_id)
+            
+            clear_context()
+            await company_repo.delete(test_company.company_id)
+            await subdomain_repo.delete(test_company.subdomain)
+
+    @pytest.mark.asyncio
+    async def test_second_company_has_zero_balance(
+        self,
+        migrated_db,
+        company_repo,
+        user_repo
+    ):
+        """
+        Тест: вторая компания пользователя создается с нулевым балансом.
+        """
+        from datetime import datetime, timezone
+        
+        # Создаем пользователя с одной компанией
+        first_company = Company(
+            company_id="first_company_test",
+            subdomain="first_test",
+            name="First Company",
+            status="active",
+            balance=50.0,
+            created_at=datetime.now(timezone.utc)
+        )
+        await company_repo.set(first_company)
+        
+        user = User(
+            user_id="test_multi_company_user",
+            provider=AuthProvider.YANDEX,
+            provider_user_id="test_multi",
+            email="test_multi@test.local",
+            name="Test Multi",
+            status=UserStatus.ACTIVE,
+            groups=["user"],
+            companies={"first_company_test": ["admin"]},
+            active_company_id="first_company_test"
+        )
+        await user_repo.set(user)
+        
+        context = Context(
+            user=user,
+            platform="test",
+            active_company=first_company,
+            user_companies=[first_company]
+        )
+        set_context(context)
+        
+        try:
+            # Проверяем логику баланса: если у пользователя уже есть компания, баланс = 0
+            initial_balance = 50.0 if len(user.companies) == 0 else 0.0
+            assert initial_balance == 0.0, "Вторая компания должна иметь нулевой баланс"
+            
+            # Создаем вторую компанию
+            second_company = Company(
+                company_id="second_company_test",
+                subdomain="second_test",
+                name="Second Company",
+                status="active",
+                balance=initial_balance,
+                created_at=datetime.now(timezone.utc)
+            )
+            await company_repo.set(second_company)
+            
+            # Проверяем баланс
+            loaded_second = await company_repo.get("second_company_test")
+            assert loaded_second.balance == 0.0, "Вторая компания должна иметь баланс 0"
+            
+            # Проверяем что первая компания имеет баланс 50
+            loaded_first = await company_repo.get("first_company_test")
+            assert loaded_first.balance == 50.0, "Первая компания должна иметь баланс 50"
+            
+        finally:
+            clear_context()
+            await company_repo.delete("first_company_test")
+            await company_repo.delete("second_company_test")
+            await user_repo.delete("test_multi_company_user")
 

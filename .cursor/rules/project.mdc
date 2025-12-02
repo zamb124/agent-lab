@@ -77,9 +77,17 @@ uv run pytest
 
 ## Структура импортов
 
-Импорты должны быть в начале файла:
-- Не делай локальные импорты внутри функций
-- Группируй: stdlib → third-party → local
+**КРИТИЧНО: НИКАКИХ локальных импортов!**
+
+Все импорты ТОЛЬКО в начале файла. Группируй: stdlib → third-party → local.
+Локальные импорты допустимы ТОЛЬКО при неразрешимых циркулярных зависимостях.
+
+<bad_example>
+def my_function():
+    from apps.agents.models import AgentConfig  # НЕТ!
+    from core.db.storage import Storage  # НЕТ!
+    ...
+</bad_example>
 
 <good_example>
 import asyncio

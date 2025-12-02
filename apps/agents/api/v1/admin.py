@@ -25,6 +25,7 @@ from apps.agents.dependencies import (
 )
 from fastapi.responses import RedirectResponse
 from apps.agents.services.business.telegram_poller import telegram_poller
+from apps.agents.services.migration.migrator import migrate_company_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -516,11 +517,15 @@ async def create_my_company(request: Request):
     company_id = slug
     subdomain = slug
     
+    # Первая компания получает стартовый баланс, последующие - 0
+    initial_balance = 50.0 if len(user.companies) == 0 else 0.0
+    
     company = Company(
         company_id=company_id,
         subdomain=subdomain,
         name=company_name,
         status="active",
+        balance=initial_balance,
         created_at=datetime.now(timezone.utc)
     )
     
@@ -528,10 +533,9 @@ async def create_my_company(request: Request):
     await subdomain_repo.set_mapping(subdomain, company_id)
     logger.info(f"DEBUG: subdomain:{subdomain} -> {company_id} сохранен")
     
-    migrator = get_container().migrator
-    logger.info(f"Начинаем миграцию базовых сущностей для компании {company_id}...")
-    await migrator.migrate_defaults_for_company(company)
-    logger.info(f"Базовые сущности успешно мигрированы для компании {company_id}")
+    # Запускаем миграцию базовых сущностей в фоне через TaskIQ
+    logger.info(f"Запускаем фоновую миграцию для компании {company_id}...")
+    await migrate_company_defaults.kiq(company_id)
     
     user.companies[company_id] = ["admin", "user"]
     user.active_company_id = company_id

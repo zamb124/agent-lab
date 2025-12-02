@@ -11,6 +11,8 @@ alwaysApply: true
 
 Используется для всех операций с агентами, flows, tools. Используй декоратор `@lazy` для ленивой инициализации зависимостей.
 
+**Примечание**: Локальные импорты в `@lazy` методах - единственное допустимое исключение из правила "никаких локальных импортов". Это необходимо для ленивой загрузки и избежания циркулярных зависимостей.
+
 <good_example>
 from apps.agents.container import get_agents_container
 from core.container import BaseContainer, lazy
