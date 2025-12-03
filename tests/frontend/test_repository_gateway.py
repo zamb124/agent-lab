@@ -91,23 +91,23 @@ class TestRepositoryGateway:
         
         service_auth_headers уже создает test_company и test_user в БД.
         """
-            url = f"{agents_service['url']}/agents/api/v1/flow"
-            
+        url = f"{agents_service['url']}/agents/api/v1/flow"
+        
         # Запрос с системной компанией - вернет flows системной компании
-            async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient() as client:
             response_system = await client.get(url, headers=system_auth_headers)
-            
+        
         # Запрос с тестовой компанией - должен вернуть пустой список
-            async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient() as client:
             response_test = await client.get(url, headers=service_auth_headers)
-            
-            # Системная компания имеет мигрированные flows
+        
+        # Системная компания имеет мигрированные flows
         assert response_system.status_code == 200, f"System company request failed: {response_system.text}"
-            assert len(response_system.json()) > 0, "System company должна иметь flows"
-            
-            # Тестовая компания НЕ должна иметь flows
+        assert len(response_system.json()) > 0, "System company должна иметь flows"
+        
+        # Тестовая компания НЕ должна иметь flows
         assert response_test.status_code == 200, f"Test company request failed: {response_test.text}"
-            assert len(response_test.json()) == 0, "Test company НЕ должна иметь flows"
+        assert len(response_test.json()) == 0, "Test company НЕ должна иметь flows"
     
     @pytest.mark.asyncio
     async def test_agents_crud_with_company_header(
