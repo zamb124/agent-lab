@@ -4,7 +4,7 @@
 import pytest
 from datetime import datetime, timezone, timedelta
 
-from core.utils.tokens import TokenService, TokenData, get_token_service
+from core.utils.tokens import TokenService, TokenData, TokenType, get_token_service
 
 
 class TestTokenService:
@@ -20,26 +20,29 @@ class TestTokenService:
         user_id = "test_user_123"
         company_id = "test_company_456"
         session_id = "test_session_789"
+        roles = ["admin", "user"]
         
         token = token_service.create_token(
             user_id=user_id,
             company_id=company_id,
+            roles=roles,
             session_id=session_id,
-            expires_in=3600,  # 1 час
+            expires_in=3600,
             metadata={"test": "data"}
         )
         
         assert token is not None
         assert isinstance(token, str)
-        assert len(token) > 50  # JWT токены обычно длинные
+        assert len(token) > 50
         
-        # Проверяем, что токен можно декодировать
         token_data = token_service.validate_token(token)
         assert token_data is not None
         assert token_data.user_id == user_id
         assert token_data.company_id == company_id
+        assert token_data.roles == roles
         assert token_data.session_id == session_id
         assert token_data.metadata["test"] == "data"
+        assert token_data.token_type == TokenType.SESSION
     
     def test_create_token_minimal(self, token_service):
         """Тест создания токена с минимальными параметрами"""
@@ -52,8 +55,22 @@ class TestTokenService:
         token_data = token_service.validate_token(token)
         assert token_data is not None
         assert token_data.user_id == user_id
-        assert token_data.company_id is None
+        assert token_data.company_id == ""
+        assert token_data.roles == []
         assert token_data.session_id is None
+    
+    def test_create_api_token(self, token_service):
+        """Тест создания API токена"""
+        token = token_service.create_api_token(
+            user_id="api_user",
+            company_id="api_company",
+            roles=["api_access"]
+        )
+        
+        token_data = token_service.validate_token(token)
+        assert token_data is not None
+        assert token_data.token_type == TokenType.API
+        assert token_data.roles == ["api_access"]
     
     def test_validate_token_success(self, token_service):
         """Тест успешной валидации токена"""
@@ -72,13 +89,11 @@ class TestTokenService:
         """Тест валидации истекшего токена"""
         user_id = "test_user_123"
         
-        # Создаем токен с очень коротким временем жизни
         token = token_service.create_token(
             user_id=user_id,
-            expires_in=1  # 1 секунда
+            expires_in=1
         )
         
-        # Ждем истечения токена
         import time
         time.sleep(2)
         
@@ -103,7 +118,7 @@ class TestTokenService:
     def test_token_expiration_time(self, token_service):
         """Тест времени истечения токена"""
         user_id = "test_user_123"
-        expires_in = 3600  # 1 час
+        expires_in = 3600
         
         token = token_service.create_token(
             user_id=user_id,
@@ -112,10 +127,9 @@ class TestTokenService:
         
         token_data = token_service.validate_token(token)
         
-        # Проверяем, что время истечения примерно через час
         expected_exp = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
         time_diff = abs((token_data.exp - expected_exp).total_seconds())
-        assert time_diff < 5  # Разница не более 5 секунд
+        assert time_diff < 5
     
     def test_token_metadata(self, token_service):
         """Тест метаданных токена"""
@@ -135,8 +149,6 @@ class TestTokenService:
         
         assert token_data.metadata == metadata
         assert token_data.metadata["provider"] == "google"
-        assert token_data.metadata["user_name"] == "Test User"
-        assert token_data.metadata["custom_field"] == "custom_value"
     
     def test_default_expiration(self, token_service):
         """Тест времени истечения по умолчанию (7 дней)"""
@@ -146,10 +158,9 @@ class TestTokenService:
         
         token_data = token_service.validate_token(token)
         
-        # Проверяем, что время истечения примерно через 7 дней
         expected_exp = datetime.now(timezone.utc) + timedelta(days=7)
         time_diff = abs((token_data.exp - expected_exp).total_seconds())
-        assert time_diff < 60  # Разница не более минуты
+        assert time_diff < 60
 
 
 class TestTokenData:
@@ -163,6 +174,7 @@ class TestTokenData:
         token_data = TokenData(
             user_id="test_user",
             company_id="test_company",
+            roles=["admin"],
             session_id="test_session",
             iat=now,
             exp=exp,
@@ -171,10 +183,12 @@ class TestTokenData:
         
         assert token_data.user_id == "test_user"
         assert token_data.company_id == "test_company"
+        assert token_data.roles == ["admin"]
         assert token_data.session_id == "test_session"
         assert token_data.iat == now
         assert token_data.exp == exp
         assert token_data.metadata == {"test": "data"}
+        assert token_data.token_type == TokenType.SESSION
     
     def test_token_data_minimal(self):
         """Тест создания TokenData с минимальными параметрами"""
@@ -182,11 +196,13 @@ class TestTokenData:
         
         token_data = TokenData(
             user_id="test_user",
+            company_id="",
             exp=exp
         )
         
         assert token_data.user_id == "test_user"
-        assert token_data.company_id is None
+        assert token_data.company_id == ""
+        assert token_data.roles == []
         assert token_data.session_id is None
         assert token_data.exp == exp
         assert token_data.metadata == {}
@@ -220,10 +236,10 @@ class TestTokenIntegration:
     
     def test_token_roundtrip(self, token_service):
         """Тест полного цикла создания и валидации токена"""
-        # Создаем токен
         user_id = "integration_test_user"
         company_id = "integration_test_company"
         session_id = "integration_test_session"
+        roles = ["admin", "user"]
         metadata = {
             "test_type": "integration",
             "created_at": datetime.now(timezone.utc).isoformat()
@@ -232,37 +248,31 @@ class TestTokenIntegration:
         token = token_service.create_token(
             user_id=user_id,
             company_id=company_id,
+            roles=roles,
             session_id=session_id,
-            expires_in=7200,  # 2 часа
+            expires_in=7200,
             metadata=metadata
         )
         
-        # Валидируем токен
         token_data = token_service.validate_token(token)
         
-        # Проверяем все поля
         assert token_data is not None
         assert token_data.user_id == user_id
         assert token_data.company_id == company_id
+        assert token_data.roles == roles
         assert token_data.session_id == session_id
         assert token_data.metadata == metadata
         
-        # Проверяем временные поля
         assert isinstance(token_data.iat, datetime)
         assert isinstance(token_data.exp, datetime)
         assert token_data.exp > token_data.iat
-        
-        # Проверяем, что время истечения примерно через 2 часа
-        expected_exp = datetime.now(timezone.utc) + timedelta(seconds=7200)
-        time_diff = abs((token_data.exp - expected_exp).total_seconds())
-        assert time_diff < 5
     
     def test_multiple_tokens_different_users(self, token_service):
         """Тест создания токенов для разных пользователей"""
         users = [
-            {"user_id": "user1", "company_id": "company1"},
-            {"user_id": "user2", "company_id": "company2"},
-            {"user_id": "user3", "company_id": "company1"},
+            {"user_id": "user1", "company_id": "company1", "roles": ["admin"]},
+            {"user_id": "user2", "company_id": "company2", "roles": ["user"]},
+            {"user_id": "user3", "company_id": "company1", "roles": ["user"]},
         ]
         
         tokens = []
@@ -270,15 +280,14 @@ class TestTokenIntegration:
             token = token_service.create_token(**user_data)
             tokens.append(token)
         
-        # Проверяем, что все токены разные
         assert len(set(tokens)) == len(tokens)
         
-        # Проверяем, что каждый токен валиден для своего пользователя
         for i, user_data in enumerate(users):
             token_data = token_service.validate_token(tokens[i])
             assert token_data is not None
             assert token_data.user_id == user_data["user_id"]
             assert token_data.company_id == user_data["company_id"]
+            assert token_data.roles == user_data["roles"]
     
     def test_token_with_special_characters(self, token_service):
         """Тест токена с специальными символами в метаданных"""

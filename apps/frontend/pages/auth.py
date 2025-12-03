@@ -37,17 +37,26 @@ async def select_company_page(request: Request):
     user_companies = []
 
     host = context.host
+    total_companies = len(user.companies)
+    
     for company_id, roles in user.companies.items():
         company_url = build_url(host, "/frontend/dashboard", subdomain=company_id)
 
         company = await company_repo.get(company_id)
         company_name = company.name if company else company_id
+        company_status = company.status if company else "active"
+        
+        is_admin = "admin" in roles
+        can_delete = is_admin and total_companies > 1 and company_status != "deleting"
 
         user_companies.append({
             "name": company_name,
             "subdomain": company_id,
             "roles": roles,
-            "url": company_url
+            "url": company_url,
+            "status": company_status,
+            "is_admin": is_admin,
+            "can_delete": can_delete,
         })
 
     return templates.TemplateResponse("select_company.html", {

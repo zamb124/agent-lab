@@ -55,10 +55,18 @@
         
         .company-item {
             margin-bottom: 12px;
+            position: relative;
+        }
+        
+        .company-row {
+            display: flex;
+            align-items: stretch;
+            gap: 8px;
         }
         
         .company-link {
             display: block;
+            flex: 1;
             padding: 16px 20px;
             background: #f8f9fa;
             border: 2px solid #e1e5e9;
@@ -74,6 +82,13 @@
             border-color: #667eea;
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+        }
+        
+        .company-link.deleting {
+            background: #fff3cd;
+            border-color: #ffc107;
+            opacity: 0.7;
+            pointer-events: none;
         }
         
         .company-name {
@@ -94,6 +109,36 @@
             transform: translateY(-50%);
             font-size: 12px;
             color: #999;
+        }
+        
+        .company-status {
+            font-size: 11px;
+            color: #856404;
+            margin-top: 4px;
+        }
+        
+        .delete-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            background: #f8f9fa;
+            border: 2px solid #e1e5e9;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #999;
+        }
+        
+        .delete-btn:hover {
+            background: #dc3545;
+            border-color: #dc3545;
+            color: white;
+        }
+        
+        .delete-btn svg {
+            width: 18px;
+            height: 18px;
         }
         
         .actions {
@@ -133,6 +178,117 @@
             color: white !important;
             text-decoration: none;
         }
+        
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .modal-overlay.active {
+            display: flex;
+        }
+        
+        .modal {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+        
+        .modal h2 {
+            color: #dc3545;
+            font-size: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .modal p {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        
+        .modal .company-name-confirm {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .modal input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        
+        .modal input:focus {
+            outline: none;
+            border-color: #dc3545;
+        }
+        
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+        }
+        
+        .modal-btn {
+            flex: 1;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+        
+        .modal-btn.cancel {
+            background: #f8f9fa;
+            color: #666;
+        }
+        
+        .modal-btn.cancel:hover {
+            background: #e9ecef;
+        }
+        
+        .modal-btn.confirm {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .modal-btn.confirm:hover {
+            background: #c82333;
+        }
+        
+        .modal-btn.confirm:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .error-message.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -146,7 +302,8 @@
         <ul class="company-list">
             {% for company in user_companies %}
             <li class="company-item">
-                <a href="{{ company.url }}" class="company-link">
+                <div class="company-row">
+                    <a href="{{ company.url }}" class="company-link {% if company.status == 'deleting' %}deleting{% endif %}">
                     <div class="company-name">{{ company.name }}</div>
                     <div class="company-subdomain">
                         {% if 'localhost' in company.url %}
@@ -155,8 +312,22 @@
                             {{ company.subdomain }}.{{ domain }}
                         {% endif %}
                     </div>
+                        {% if company.status == 'deleting' %}
+                        <div class="company-status">Удаляется...</div>
+                        {% endif %}
                     <div class="company-roles">{{ company.roles | join(', ') }}</div>
                 </a>
+                    {% if company.can_delete %}
+                    <button class="delete-btn delete-company-btn" 
+                            data-company-id="{{ company.subdomain }}"
+                            onclick="showDeleteModal('{{ company.subdomain }}', '{{ company.name }}')"
+                            title="Удалить компанию">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </button>
+                    {% endif %}
+                </div>
             </li>
             {% endfor %}
         </ul>
@@ -170,5 +341,97 @@
             <a href="/auth/logout">Выйти из аккаунта</a>
         </div>
     </div>
+
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal">
+            <h2>Удаление компании</h2>
+            <p>
+                Вы собираетесь удалить компанию <span class="company-name-confirm" id="modalCompanyName"></span>.<br><br>
+                Это действие необратимо. Все данные компании (агенты, flows, сессии, переменные) будут удалены.<br><br>
+                Для подтверждения введите название компании:
+            </p>
+            <div class="error-message" id="deleteError"></div>
+            <input type="text" id="confirmNameInput" placeholder="Введите название компании">
+            <div class="modal-buttons">
+                <button class="modal-btn cancel" onclick="hideDeleteModal()">Отмена</button>
+                <button class="modal-btn confirm" id="confirmDeleteBtn" disabled onclick="confirmDelete()">Удалить</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let companyToDelete = null;
+        let companyNameToDelete = null;
+
+        function showDeleteModal(companyId, companyName) {
+            companyToDelete = companyId;
+            companyNameToDelete = companyName;
+            document.getElementById('modalCompanyName').textContent = companyName;
+            document.getElementById('confirmNameInput').value = '';
+            document.getElementById('confirmDeleteBtn').disabled = true;
+            document.getElementById('deleteError').classList.remove('show');
+            document.getElementById('deleteModal').classList.add('active');
+        }
+
+        function hideDeleteModal() {
+            document.getElementById('deleteModal').classList.remove('active');
+            companyToDelete = null;
+            companyNameToDelete = null;
+        }
+
+        document.getElementById('confirmNameInput').addEventListener('input', function() {
+            const inputValue = this.value.trim();
+            const confirmBtn = document.getElementById('confirmDeleteBtn');
+            confirmBtn.disabled = inputValue !== companyNameToDelete;
+        });
+
+        async function confirmDelete() {
+            if (!companyToDelete) return;
+
+            const confirmBtn = document.getElementById('confirmDeleteBtn');
+            const errorDiv = document.getElementById('deleteError');
+            
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Удаление...';
+            errorDiv.classList.remove('show');
+
+            try {
+                const response = await fetch(`/frontend/api/admin/company/${companyToDelete}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include',
+                });
+
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    const error = await response.json();
+                    errorDiv.textContent = error.detail || 'Ошибка при удалении компании';
+                    errorDiv.classList.add('show');
+                    confirmBtn.textContent = 'Удалить';
+                    confirmBtn.disabled = false;
+                }
+            } catch (error) {
+                errorDiv.textContent = 'Ошибка соединения с сервером';
+                errorDiv.classList.add('show');
+                confirmBtn.textContent = 'Удалить';
+                confirmBtn.disabled = false;
+            }
+        }
+
+        document.getElementById('deleteModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                hideDeleteModal();
+            }
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                hideDeleteModal();
+            }
+        });
+    </script>
 </body>
 </html>

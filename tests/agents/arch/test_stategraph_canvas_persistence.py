@@ -7,7 +7,7 @@ from apps.agents.models import FlowConfig, AgentConfig, AgentType, CodeMode
 
 
 @pytest.mark.asyncio
-async def test_stategraph_canvas_persistence(migrated_db, flow_repo, agent_repo):
+async def test_stategraph_canvas_persistence(migrated_db, flow_repo, agent_repo, test_context, agents_service):
     """
     Проверяет что canvas для StateGraph flow сохраняется и загружается правильно
     """

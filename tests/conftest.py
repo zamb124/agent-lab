@@ -451,33 +451,53 @@ async def test_user(test_company: Company) -> User:
 
 
 @pytest_asyncio.fixture
-async def test_context(test_user: User, test_company: Company, migrated_db, company_repo):
+async def test_context(test_user: User, test_company: Company, migrated_db, company_repo, user_repo):
     """Тестовый контекст для тестов (используется явно где нужен полный контекст)
 
     Добавляй в параметры теста если нужен контекст с пользователем и компанией.
     Каждый тест получает уникальный session_id для изоляции.
     
-    Сохраняет test_company в БД для межсервисного взаимодействия.
+    Сохраняет test_company и test_user в БД для межсервисного взаимодействия.
+    Создает auth_token для HTTPRepositoryProxy.
     """
-    # Сохраняем компанию в БД для доступа из других процессов (agents_service)
+    from core.utils.tokens import get_token_service
+    
+    # Сохраняем компанию и пользователя в БД для доступа из других процессов (agents_service)
     await company_repo.set(test_company)
+    await user_repo.set(test_user)
     
     unique_session_id = f"test_session_{uuid.uuid4().hex[:8]}"
+    
+    # Создаем JWT токен для межсервисной авторизации
+    token_service = get_token_service()
+    roles = test_user.companies.get(test_company.company_id, ["admin"])
+    auth_token = token_service.create_token(
+        user_id=test_user.user_id,
+        company_id=test_company.company_id,
+        roles=roles,
+        session_id=unique_session_id,
+    )
+    
     context = Context(
         user=test_user,
         session_id=unique_session_id,
         platform="api",
         active_company=test_company,
         user_companies=[test_company],
-        metadata={}
+        metadata={},
+        auth_token=auth_token,
     )
 
     set_context(context)
     yield context
 
     clear_context()
-    # Очистка компании после теста
-    await company_repo.delete(test_company.company_id)
+    # Очистка после теста
+    try:
+        await user_repo.delete(test_user.user_id)
+        await company_repo.delete(test_company.company_id)
+    except Exception:
+        pass
 
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
@@ -603,6 +623,70 @@ async def agents_app(migrated_db):
     return create_app()
 
 
+@pytest_asyncio.fixture
+async def agents_client(agents_app, test_context, test_user, test_company):
+    """
+    HTTP клиент для тестирования agents API с авторизацией.
+    
+    Создает JWT токен и передает его в cookies/headers для авторизации.
+    Передает X-Company-Id для определения компании.
+    """
+    import httpx
+    from httpx import ASGITransport
+    from core.utils.tokens import get_token_service
+    from core.db.repositories.subdomain_repository import SubdomainMapping
+    
+    container = agents_app.state.container
+    
+    # Сохраняем компанию и subdomain
+    await container.company_repository.set(test_company)
+    
+    subdomain_mapping = SubdomainMapping(
+        subdomain=test_company.subdomain,
+        company_id=test_company.company_id
+    )
+    await container.subdomain_repository.set(subdomain_mapping)
+    
+    # Сохраняем пользователя
+    await container.user_repository.set(test_user)
+    
+    # Создаем JWT токен
+    unique_session_id = f"test_session_{uuid.uuid4().hex[:8]}"
+    token_service = get_token_service()
+    roles = test_user.companies.get(test_company.company_id, ["admin"])
+    token = token_service.create_token(
+        user_id=test_user.user_id,
+        company_id=test_company.company_id,
+        roles=roles,
+        session_id=unique_session_id,
+    )
+    
+    # Создаем HTTP клиент с авторизацией
+    transport = ASGITransport(app=agents_app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        cookies={"auth_token": token},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "X-Company-Id": test_company.company_id,
+        }
+    ) as client:
+        client.test_user = test_user
+        client.test_company = test_company
+        client.test_context = test_context
+        client.auth_token = token
+        yield client
+    
+    # Очистка
+    try:
+        await container.user_repository.delete(test_user.user_id)
+        await container.subdomain_repository.delete(test_company.subdomain)
+        await container.company_repository.delete(test_company.company_id)
+    except Exception:
+        pass
+
+
 @pytest_asyncio.fixture(scope="session")
 async def frontend_app(migrated_db):
     """FastAPI приложение для frontend сервиса (порт 8002)"""
@@ -648,10 +732,12 @@ async def frontend_client(frontend_app, test_context, test_user, test_company):
     # Создаем JWT токен
     unique_session_id = f"test_session_{uuid.uuid4().hex[:8]}"
     token_service = get_token_service()
+    roles = test_user.companies.get(test_company.company_id, ["admin"])
     token = token_service.create_token(
         user_id=test_user.user_id,
         company_id=test_company.company_id,
-        session_id=unique_session_id
+        roles=roles,
+        session_id=unique_session_id,
     )
     
     subdomain = test_company.subdomain
@@ -1080,7 +1166,6 @@ import subprocess
 import sys
 import socket
 import time
-import multiprocessing
 
 
 def _get_free_port() -> int:
@@ -1090,15 +1175,23 @@ def _get_free_port() -> int:
         return s.getsockname()[1]
 
 
-def _wait_for_server(host: str, port: int, timeout: float = 30.0) -> bool:
-    """Ждать пока сервер станет доступен"""
+def _wait_for_server(host: str, port: int, timeout: float = 45.0, process: subprocess.Popen = None) -> bool:
+    """
+    Ждать пока сервер станет доступен.
+    Проверяет что процесс жив во время ожидания.
+    """
     start = time.time()
     while time.time() - start < timeout:
+        # Проверяем что процесс ещё жив
+        if process and process.poll() is not None:
+            logger.error(f"Процесс сервера умер (exit code: {process.returncode})")
+            return False
+        
         try:
-            with socket.create_connection((host, port), timeout=1):
+            with socket.create_connection((host, port), timeout=2):
                 return True
         except OSError:
-            time.sleep(0.3)
+            time.sleep(0.5)
     return False
 
 
@@ -1107,18 +1200,32 @@ def _get_localhost_env() -> dict:
     return os.environ.copy()
 
 
-def _run_agents_server(host: str, port: int):
-    """Запуск agents сервера (для multiprocessing)"""
-    import uvicorn
-    # Используем строковый путь для корректной работы multiprocessing
-    uvicorn.run("apps.agents.main:app", host=host, port=port, log_level="warning")
-
-
-def _run_frontend_server(host: str, port: int):
-    """Запуск frontend сервера (для multiprocessing)"""
-    import uvicorn
-    # Используем строковый путь для корректной работы multiprocessing
-    uvicorn.run("apps.frontend.main:app", host=host, port=port, log_level="warning")
+def _start_server_subprocess(app_path: str, host: str, port: int, name: str) -> subprocess.Popen:
+    """
+    Запускает сервер через subprocess (надежнее чем multiprocessing на macOS).
+    """
+    project_root = Path(__file__).parent.parent
+    env = _get_localhost_env()
+    
+    cmd = [
+        sys.executable, "-m", "uvicorn",
+        app_path,
+        "--host", host,
+        "--port", str(port),
+        "--log-level", "warning"
+    ]
+    
+    # Не используем PIPE чтобы избежать блокировки при заполнении буфера
+    process = subprocess.Popen(
+        cmd,
+        cwd=str(project_root),
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    
+    logger.info(f"Запускаем {name} на {host}:{port} (PID: {process.pid})")
+    return process
 
 
 @pytest.fixture(scope="session")
@@ -1158,29 +1265,31 @@ def taskiq_worker_process(migrated_db):
 @pytest.fixture(scope="session")
 def agents_server_process(migrated_db):
     """
-    Запускает agents сервер в отдельном процессе.
+    Запускает agents сервер через subprocess.
     Session scope - один сервер на всю сессию тестов.
     """
     port = _get_free_port()
     host = "127.0.0.1"
     
-    server_process = multiprocessing.Process(
-        target=_run_agents_server,
-        args=(host, port),
-        daemon=True
+    process = _start_server_subprocess(
+        "apps.agents.main:app",
+        host, port,
+        "Agents сервер"
     )
-    server_process.start()
     
-    if not _wait_for_server(host, port, timeout=30):
-        server_process.terminate()
+    if not _wait_for_server(host, port, timeout=45, process=process):
+        process.terminate()
         raise RuntimeError(f"Agents сервер не запустился на {host}:{port}")
     
     logger.info(f"✅ Agents сервер запущен на http://{host}:{port}")
     
     yield {"host": host, "port": port, "url": f"http://{host}:{port}"}
     
-    server_process.terminate()
-    server_process.join(timeout=5)
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
     logger.info("✅ Agents сервер остановлен")
 
 
@@ -1201,30 +1310,67 @@ def agents_service(agents_server_process):
     return agents_server_process
 
 
+@pytest_asyncio.fixture
+async def service_auth_headers(test_user, test_company, user_repo, company_repo):
+    """
+    Заголовки авторизации для межсервисных запросов.
+    Создает JWT токен и сохраняет пользователя/компанию в БД.
+    """
+    from core.utils.tokens import get_token_service
+    
+    # Сохраняем в shared БД для доступа из agents_service
+    await company_repo.set(test_company)
+    await user_repo.set(test_user)
+    
+    token_service = get_token_service()
+    token = token_service.create_token(
+        user_id=test_user.user_id,
+        company_id=test_company.company_id,
+        roles=["admin"],
+        metadata={"service": "test"}
+    )
+    
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-Company-Id": test_company.company_id,
+    }
+    
+    yield headers
+    
+    # Очистка
+    try:
+        await user_repo.delete(test_user.user_id)
+        await company_repo.delete(test_company.company_id)
+    except Exception:
+        pass
+
+
 @pytest.fixture(scope="session")
 def frontend_server_process(migrated_db):
     """
-    Запускает frontend сервер в отдельном процессе.
+    Запускает frontend сервер через subprocess.
     Session scope - один сервер на всю сессию тестов.
     """
     port = _get_free_port()
     host = "127.0.0.1"
     
-    server_process = multiprocessing.Process(
-        target=_run_frontend_server,
-        args=(host, port),
-        daemon=True
+    process = _start_server_subprocess(
+        "apps.frontend.main:app",
+        host, port,
+        "Frontend сервер"
     )
-    server_process.start()
     
-    if not _wait_for_server(host, port, timeout=30):
-        server_process.terminate()
+    if not _wait_for_server(host, port, timeout=45, process=process):
+        process.terminate()
         raise RuntimeError(f"Frontend сервер не запустился на {host}:{port}")
     
     logger.info(f"✅ Frontend сервер запущен на http://{host}:{port}")
     
     yield {"host": host, "port": port, "url": f"http://{host}:{port}"}
     
-    server_process.terminate()
-    server_process.join(timeout=5)
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
     logger.info("✅ Frontend сервер остановлен")

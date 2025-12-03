@@ -596,3 +596,33 @@ class Storage:
                     data[key] = json.dumps(value)
 
             return data
+
+    async def _list_keys_by_prefix_and_table(
+        self, prefix: str, table_name: str, limit: int = 10000
+    ) -> List[str]:
+        """
+        Низкоуровневый метод для получения списка ключей по префиксу из конкретной таблицы.
+        Используется для массового удаления данных компании.
+        
+        Args:
+            prefix: Префикс ключей (например, "company:acme:agent:")
+            table_name: Имя таблицы
+            limit: Максимальное количество результатов
+            
+        Returns:
+            Список ключей
+        """
+        async with self._get_session() as session:
+            model = self._get_table_model(table_name)
+            
+            if model in TABLE_MODELS.values():
+                result = await session.execute(
+                    select(model.key)
+                    .where(model.key.like(f"{prefix}%"))
+                    .limit(limit)
+                )
+                return [row.key for row in result]
+            else:
+                query = text(f"SELECT key FROM {table_name} WHERE key LIKE :prefix LIMIT :limit")
+                result = await session.execute(query, {"prefix": f"{prefix}%", "limit": limit})
+                return [row[0] for row in result]

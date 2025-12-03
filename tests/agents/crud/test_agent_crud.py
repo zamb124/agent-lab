@@ -3,26 +3,6 @@
 """
 
 import pytest
-import pytest_asyncio
-from httpx import AsyncClient
-
-from apps.agents.main import create_app
-from tests.conftest import test_context, save_test_company
-
-
-@pytest_asyncio.fixture
-async def app(migrated_db, test_context, save_test_company):
-    """FastAPI приложение для тестов"""
-    return create_app()
-
-
-@pytest_asyncio.fixture
-async def client(app):
-    """Асинхронный тестовый клиент"""
-    from httpx import ASGITransport
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
 
 
 @pytest.fixture
@@ -47,18 +27,18 @@ def test_agent_data():
 
 
 @pytest.mark.asyncio
-async def test_list_agents_empty(client):
+async def test_list_agents_empty(agents_client):
     """Тест получения списка агентов"""
-    response = await client.get("/agents/api/v1/agent")
+    response = await agents_client.get("/agents/api/v1/agent")
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
 
 
 @pytest.mark.asyncio
-async def test_create_agent(client, test_agent_data):
+async def test_create_agent(agents_client, test_agent_data):
     """Тест создания агента"""
-    response = await client.post("/agents/api/v1/agent", json=test_agent_data)
+    response = await agents_client.post("/agents/api/v1/agent", json=test_agent_data)
     assert response.status_code == 200
     
     data = response.json()
@@ -67,12 +47,12 @@ async def test_create_agent(client, test_agent_data):
 
 
 @pytest.mark.asyncio
-async def test_get_agent(client, test_agent_data):
+async def test_get_agent(agents_client, test_agent_data):
     """Тест получения агента по ID"""
-    create_response = await client.post("/agents/api/v1/agent", json=test_agent_data)
+    create_response = await agents_client.post("/agents/api/v1/agent", json=test_agent_data)
     assert create_response.status_code == 200
     
-    response = await client.get(f"/agents/api/v1/agent/{test_agent_data['agent_id']}")
+    response = await agents_client.get(f"/agents/api/v1/agent/{test_agent_data['agent_id']}")
     assert response.status_code == 200
     
     data = response.json()
@@ -81,21 +61,21 @@ async def test_get_agent(client, test_agent_data):
 
 
 @pytest.mark.asyncio
-async def test_get_agent_not_found(client):
+async def test_get_agent_not_found(agents_client):
     """Тест получения несуществующего агента"""
-    response = await client.get("/agents/api/v1/agent/non_existent")
+    response = await agents_client.get("/agents/api/v1/agent/non_existent")
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_update_agent(client, test_agent_data):
+async def test_update_agent(agents_client, test_agent_data):
     """Тест обновления агента"""
-    await client.post("/agents/api/v1/agent", json=test_agent_data)
+    await agents_client.post("/agents/api/v1/agent", json=test_agent_data)
     
     updated_data = test_agent_data.copy()
     updated_data["name"] = "Updated Agent Name"
     
-    response = await client.post("/agents/api/v1/agent", json=updated_data)
+    response = await agents_client.post("/agents/api/v1/agent", json=updated_data)
     assert response.status_code == 200
     
     data = response.json()
@@ -103,60 +83,60 @@ async def test_update_agent(client, test_agent_data):
 
 
 @pytest.mark.asyncio
-async def test_delete_agent(client, test_agent_data):
+async def test_delete_agent(agents_client, test_agent_data):
     """Тест удаления агента"""
-    await client.post("/agents/api/v1/agent", json=test_agent_data)
+    await agents_client.post("/agents/api/v1/agent", json=test_agent_data)
     
-    response = await client.delete(f"/agents/api/v1/agent/{test_agent_data['agent_id']}")
+    response = await agents_client.delete(f"/agents/api/v1/agent/{test_agent_data['agent_id']}")
     assert response.status_code == 200
     
     data = response.json()
     assert data["success"] is True
     assert data["entity_id"] == test_agent_data["agent_id"]
     
-    get_response = await client.get(f"/agents/api/v1/agent/{test_agent_data['agent_id']}")
+    get_response = await agents_client.get(f"/agents/api/v1/agent/{test_agent_data['agent_id']}")
     assert get_response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_delete_agent_not_found(client):
+async def test_delete_agent_not_found(agents_client):
     """Тест удаления несуществующего агента"""
-    response = await client.delete("/agents/api/v1/agent/non_existent")
+    response = await agents_client.delete("/agents/api/v1/agent/non_existent")
     assert response.status_code == 404
 
 
 @pytest.mark.asyncio
-async def test_list_agents_with_pagination(client, test_agent_data):
+async def test_list_agents_with_pagination(agents_client, test_agent_data):
     """Тест получения списка агентов с пагинацией"""
     for i in range(5):
         agent_data = test_agent_data.copy()
         agent_data["agent_id"] = f"test_agent_{i}"
         agent_data["name"] = f"Test Agent {i}"
-        await client.post("/agents/api/v1/agent", json=agent_data)
+        await agents_client.post("/agents/api/v1/agent", json=agent_data)
     
-    response = await client.get("/agents/api/v1/agent?limit=3")
+    response = await agents_client.get("/agents/api/v1/agent?limit=3")
     assert response.status_code == 200
     data = response.json()
     assert len(data) <= 3
     
-    response = await client.get("/agents/api/v1/agent?limit=2&offset=2")
+    response = await agents_client.get("/agents/api/v1/agent?limit=2&offset=2")
     assert response.status_code == 200
     data = response.json()
     assert len(data) <= 2
 
 
 @pytest.mark.asyncio
-async def test_get_many_agents(client, test_agent_data):
+async def test_get_many_agents(agents_client, test_agent_data):
     """Тест получения нескольких агентов по ID"""
     agent_ids = []
     for i in range(3):
         agent_data = test_agent_data.copy()
         agent_data["agent_id"] = f"test_agent_{i}"
         agent_data["name"] = f"Test Agent {i}"
-        await client.post("/agents/api/v1/agent", json=agent_data)
+        await agents_client.post("/agents/api/v1/agent", json=agent_data)
         agent_ids.append(f"test_agent_{i}")
     
-    response = await client.post("/agents/api/v1/agent/many", json=agent_ids)
+    response = await agents_client.post("/agents/api/v1/agent/many", json=agent_ids)
     assert response.status_code == 200
     
     data = response.json()
@@ -167,17 +147,16 @@ async def test_get_many_agents(client, test_agent_data):
 
 
 @pytest.mark.asyncio
-async def test_get_many_agents_empty(client):
+async def test_get_many_agents_empty(agents_client):
     """Тест получения пустого списка агентов"""
-    response = await client.post("/agents/api/v1/agent/many", json=[])
+    response = await agents_client.post("/agents/api/v1/agent/many", json=[])
     assert response.status_code == 200
     assert response.json() == {}
 
 
 @pytest.mark.asyncio
-async def test_create_agent_invalid_data(client):
+async def test_create_agent_invalid_data(agents_client):
     """Тест создания агента с невалидными данными"""
     invalid_data = {"invalid": "data"}
-    response = await client.post("/agents/api/v1/agent", json=invalid_data)
+    response = await agents_client.post("/agents/api/v1/agent", json=invalid_data)
     assert response.status_code == 400
-

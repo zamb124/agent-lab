@@ -20,6 +20,7 @@ import apps.frontend.api.websocket_status as websocket_status_api
 import apps.frontend.api.checkpoints as frontend_checkpoints
 import apps.frontend.api.history as frontend_history
 import apps.frontend.api.knowledge_base as frontend_knowledge_base
+import apps.frontend.api.admin as frontend_admin
 
 # Создание главного frontend API роутера с prefix /api
 router = APIRouter(prefix="/api", tags=["frontend-api"])
@@ -36,3 +37,4 @@ router.include_router(frontend_code.router, tags=["frontend-code"], include_in_s
 router.include_router(websocket_status_api.router, tags=["websocket-status"], include_in_schema=False)
 router.include_router(frontend_checkpoints.router, tags=["frontend-checkpoints"], include_in_schema=False)
 router.include_router(frontend_knowledge_base.router, tags=["knowledge-base"], include_in_schema=False)
+router.include_router(frontend_admin.router, tags=["frontend-admin"])

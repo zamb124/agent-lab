@@ -19,6 +19,21 @@ import pytest_asyncio
 from playwright.async_api import Page
 
 
+# === Группировка для pytest-xdist ===
+# Все browser тесты запускаются в одном worker'е чтобы разделять сервер
+
+def pytest_collection_modifyitems(items):
+    """
+    Группирует все browser тесты в один xdist worker.
+    Это нужно потому что frontend_server_process имеет session scope
+    и не может быть разделен между worker'ами.
+    """
+    for item in items:
+        # Добавляем маркер xdist_group для всех тестов в этой директории
+        if "/browser/" in str(item.fspath):
+            item.add_marker(pytest.mark.xdist_group("browser"))
+
+
 # === Хук для сохранения статуса теста ===
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)

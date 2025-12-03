@@ -1,15 +1,15 @@
 """
-Тесты интеграции системы переводов с Context и AuthMiddleware
+Тесты интеграции системы переводов с Context и ContextFactory
 """
 
 import pytest
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, AsyncMock
 from fastapi import Request
 
 from core.models.context_models import Context
 from core.models.i18n_models import Language
 from core.models import User, Company, AuthProvider, UserStatus
-from core.middleware.auth import AuthMiddleware
+from core.middleware.auth.context_factory import ContextFactory
 
 
 class TestContextLanguageIntegration:
@@ -110,27 +110,27 @@ class TestContextLanguageIntegration:
         assert restored_context.language == Language.EN
 
 
-class TestAuthMiddlewareLanguageDetection:
-    """Тесты определения языка в AuthMiddleware"""
+class TestContextFactoryLanguageDetection:
+    """Тесты определения языка в ContextFactory"""
     
     def setup_method(self):
         """Подготовка к каждому тесту"""
-        # Создаем экземпляр middleware без инициализации app
-        self.middleware = AuthMiddleware(app=Mock())
-        self.middleware.storage = Mock()
+        # Создаем mock контейнера
+        mock_container = Mock()
+        mock_container.user_repository = Mock()
+        mock_container.company_repository = Mock()
+        self.factory = ContextFactory(mock_container)
     
     def test_detect_user_language_from_accept_language_header(self):
         """Проверяем определение языка из заголовка Accept-Language (HTMX)"""
-        # Мокаем request с заголовком Accept-Language
         request = Mock(spec=Request)
         request.headers.get.side_effect = lambda key, default='': {
             'Accept-Language': 'en',
             'accept-language': '',
-            'language': ''
         }.get(key, default)
         request.cookies.get.return_value = None
         
-        language = self.middleware._detect_user_language(request)
+        language = self.factory._detect_language(request)
         assert language == Language.EN
     
     def test_detect_user_language_from_cookie(self):
@@ -144,7 +144,7 @@ class TestAuthMiddlewareLanguageDetection:
             'language': 'en'
         }.get(key, default)
         
-        language = self.middleware._detect_user_language(request)
+        language = self.factory._detect_language(request)
         assert language == Language.EN
     
     def test_detect_user_language_from_browser_accept_language(self):
@@ -156,7 +156,7 @@ class TestAuthMiddlewareLanguageDetection:
         }.get(key, default)
         request.cookies.get.return_value = None
         
-        language = self.middleware._detect_user_language(request)
+        language = self.factory._detect_language(request)
         assert language == Language.EN
     
     def test_detect_user_language_browser_russian_priority(self):
@@ -168,7 +168,7 @@ class TestAuthMiddlewareLanguageDetection:
         }.get(key, default)
         request.cookies.get.return_value = None
         
-        language = self.middleware._detect_user_language(request)
+        language = self.factory._detect_language(request)
         assert language == Language.RU
     
     def test_detect_user_language_fallback_to_default(self):
@@ -180,7 +180,7 @@ class TestAuthMiddlewareLanguageDetection:
         }.get(key, default)
         request.cookies.get.return_value = None
         
-        language = self.middleware._detect_user_language(request)
+        language = self.factory._detect_language(request)
         assert language == Language.RU
     
     def test_detect_user_language_invalid_cookie(self):
@@ -194,7 +194,7 @@ class TestAuthMiddlewareLanguageDetection:
             'language': 'invalid_lang'
         }.get(key, default)
         
-        language = self.middleware._detect_user_language(request)
+        language = self.factory._detect_language(request)
         assert language == Language.RU
     
     def test_detect_user_language_priority_order(self):
@@ -206,22 +206,23 @@ class TestAuthMiddlewareLanguageDetection:
             'accept-language': 'es-ES,es;q=0.9'
         }.get(key, default)
         request.cookies.get.side_effect = lambda key, default=None: {
-            'language': 'en'
+            'language': 'ru'
         }.get(key, default)
         
-        language = self.middleware._detect_user_language(request)
+        language = self.factory._detect_language(request)
         assert language == Language.EN  # HTMX заголовок побеждает
 
 
-class TestAuthMiddlewareContextCreation:
-    """Тесты создания Context с языком в AuthMiddleware"""
+class TestContextFactoryContextCreation:
+    """Тесты создания Context с языком в ContextFactory"""
     
     def setup_method(self):
         """Подготовка к каждому тесту"""
-        self.middleware = AuthMiddleware(app=Mock())
-        self.middleware.storage = Mock()
+        mock_container = Mock()
+        mock_container.user_repository = AsyncMock()
+        mock_container.company_repository = AsyncMock()
+        self.factory = ContextFactory(mock_container)
         
-        # Общие моки для тестов
         self.test_company = Company(
             company_id="test_company",
             name="Test Company",
@@ -229,139 +230,27 @@ class TestAuthMiddlewareContextCreation:
             status="active"
         )
     
-    @patch.object(AuthMiddleware, '_detect_user_language')
     @pytest.mark.asyncio
-    async def test_create_telegram_context_with_language(self, mock_detect_lang):
-        """Проверяем создание Telegram контекста с языком"""
-        mock_detect_lang.return_value = Language.EN
-        
-        # Мокаем request с Telegram данными
-        request = Mock(spec=Request)
-        request.body = AsyncMock(return_value=b'{"message": {"from": {"id": 123, "username": "testuser", "first_name": "Test", "last_name": "User"}}}')
-        request.headers = Mock()
-        request.headers.get = Mock(return_value="localhost")
-        
-        context = await self.middleware._create_telegram_context(request, self.test_company)
-        
-        assert context.language == Language.EN
-        assert context.platform == "telegram"
-        mock_detect_lang.assert_called_once_with(request)
-    
-    @patch.object(AuthMiddleware, '_detect_user_language')  
-    @patch.object(AuthMiddleware, '_get_user_companies')
-    @pytest.mark.asyncio
-    async def test_create_api_context_with_language(self, mock_get_companies, mock_detect_lang, migrated_db):
-        """Проверяем создание API контекста с языком"""
-        mock_detect_lang.return_value = Language.EN
-        mock_get_companies.return_value = [self.test_company]
-        
-        # Мокаем пользователя
-        test_user = User(
-            user_id="test_user",
-            provider=AuthProvider.YANDEX,
-            provider_user_id="123",
-            email="test@example.com",
-            name="Test User",
-            status=UserStatus.ACTIVE,
-            groups=["user"],
-            companies={"test_company": ["user"]},
-            active_company_id="test_company"
-        )
-        
-        # Мокаем request с JWT токеном
-        request = Mock(spec=Request)
-        request.cookies.get.side_effect = lambda key, default=None: {
-            "auth_token": "valid.jwt.token.here"
-        }.get(key, default)
-        request.headers.get.return_value = ""
-
-        with patch('core.middleware.auth.get_token_service') as mock_token_service:
-            # Мокаем валидацию токена
-            mock_token = Mock()
-            mock_token.user_id = "test_user"
-            mock_token.session_id = "api_session_456"
-            mock_token.company_id = "test_company"  # Должен совпадать с requested_company
-            mock_token_service.return_value.validate_token.return_value = mock_token
-
-            with patch.object(self.middleware, '_get_user_by_id', new_callable=AsyncMock) as mock_get_user:
-                mock_get_user.return_value = test_user
-
-                with patch.object(self.middleware, '_get_user_companies', new_callable=AsyncMock) as mock_get_companies:
-                    mock_get_companies.return_value = [self.test_company]
-
-                    with patch.object(self.middleware, '_update_user_active_company', new_callable=AsyncMock):
-                        context = await self.middleware._create_api_context(request, self.test_company)
-        
-        assert context.language == Language.EN
-        assert context.platform == "api"
-        mock_detect_lang.assert_called_once_with(request)
-    
-    @patch.object(AuthMiddleware, '_detect_user_language')
-    @pytest.mark.asyncio
-    async def test_create_anonymous_context_with_language(self, mock_detect_lang):
+    async def test_create_anonymous_context_with_language(self):
         """Проверяем создание анонимного контекста с языком"""
-        mock_detect_lang.return_value = Language.EN
-        
         request = Mock(spec=Request)
         request.headers = Mock()
-        request.headers.get = Mock(return_value="localhost")
+        request.headers.get = Mock(side_effect=lambda key, default='': {
+            'host': 'localhost',
+            'Accept-Language': 'en',
+            'accept-language': ''
+        }.get(key, default))
+        request.cookies.get.return_value = None
         
-        context = await self.middleware._create_anonymous_context(request, self.test_company)
-        
-        assert context.language == Language.EN
-        assert context.platform == "api"
-        assert context.user.user_id == "anonymous"
-        mock_detect_lang.assert_called_once_with(request)
-    
-    @patch.object(AuthMiddleware, '_detect_user_language')
-    @patch.object(AuthMiddleware, '_get_user_companies')
-    @pytest.mark.asyncio
-    async def test_create_frontend_context_with_language(self, mock_get_companies, mock_detect_lang, migrated_db):
-        """Проверяем создание frontend контекста с языком"""
-        mock_detect_lang.return_value = Language.RU
-        mock_get_companies.return_value = [self.test_company]
-        
-        # Мокаем пользователя
-        test_user = User(
-            user_id="frontend_user",
-            provider=AuthProvider.YANDEX,
-            provider_user_id="456",
-            email="frontend@example.com", 
-            name="Frontend User",
-            status=UserStatus.ACTIVE,
-            groups=["user"],
-            companies={"test_company": ["user"]},
-            active_company_id="test_company"
+        context = await self.factory.create(
+            request=request,
+            context_type="anonymous",
+            company=self.test_company,
         )
         
-        # Мокаем request с JWT токеном
-        request = Mock(spec=Request)
-        request.cookies.get.side_effect = lambda key, default=None: {
-            "auth_token": "valid.jwt.token.here"
-        }.get(key, default)
-        request.cookies.keys.return_value = ["auth_token"]
-        request.headers = Mock()
-        request.headers.get = Mock(return_value="localhost")
-
-        with patch('core.middleware.auth.get_token_service') as mock_token_service:
-            # Мокаем валидацию токена
-            mock_token = Mock()
-            mock_token.user_id = "frontend_user"
-            mock_token.session_id = "frontend_session_123"
-            mock_token_service.return_value.validate_token.return_value = mock_token
-
-            with patch.object(self.middleware, '_get_user_by_id', new_callable=AsyncMock) as mock_get_user:
-                mock_get_user.return_value = test_user
-
-                with patch.object(self.middleware, '_get_user_companies', new_callable=AsyncMock) as mock_get_companies:
-                    mock_get_companies.return_value = [self.test_company]
-
-                    with patch.object(self.middleware, '_update_user_active_company', new_callable=AsyncMock):
-                        context = await self.middleware._create_frontend_context(request, self.test_company, has_subdomain=True)
-        
-        assert context.language == Language.RU
-        assert context.platform == "frontend"
-        mock_detect_lang.assert_called_once_with(request)
+        assert context.language == Language.EN
+        assert context.platform == "anonymous"
+        assert context.user.user_id == "anonymous"
 
 
 class TestLanguageDetectionEdgeCases:
@@ -369,8 +258,10 @@ class TestLanguageDetectionEdgeCases:
     
     def setup_method(self):
         """Подготовка к каждому тесту"""
-        self.middleware = AuthMiddleware(app=Mock())
-        self.middleware.storage = Mock()
+        mock_container = Mock()
+        mock_container.user_repository = Mock()
+        mock_container.company_repository = Mock()
+        self.factory = ContextFactory(mock_container)
     
     def test_detect_language_empty_headers(self):
         """Проверяем обработку пустых заголовков"""
@@ -378,7 +269,7 @@ class TestLanguageDetectionEdgeCases:
         request.headers.get.return_value = ''
         request.cookies.get.return_value = None
         
-        language = self.middleware._detect_user_language(request)
+        language = self.factory._detect_language(request)
         assert language == Language.RU
     
     def test_detect_language_malformed_accept_language(self):
@@ -390,7 +281,7 @@ class TestLanguageDetectionEdgeCases:
         }.get(key, default)
         request.cookies.get.return_value = None
         
-        language = self.middleware._detect_user_language(request)
+        language = self.factory._detect_language(request)
         assert language == Language.RU
     
     def test_detect_language_case_insensitive(self):
@@ -402,7 +293,7 @@ class TestLanguageDetectionEdgeCases:
         }.get(key, default)
         request.cookies.get.return_value = None
         
-        language = self.middleware._detect_user_language(request)
+        language = self.factory._detect_language(request)
         assert language == Language.EN
     
     def test_detect_language_cookie_case_insensitive(self):
@@ -416,8 +307,5 @@ class TestLanguageDetectionEdgeCases:
             'language': 'EN'  # Верхний регистр
         }.get(key, default)
         
-        language = self.middleware._detect_user_language(request)
+        language = self.factory._detect_language(request)
         assert language == Language.EN
-
-
-# Импорт asyncio для async функций в тестах

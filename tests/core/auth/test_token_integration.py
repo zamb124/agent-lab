@@ -182,13 +182,13 @@ class TestTokenAuthIntegration:
         assert service1 is service2
         assert isinstance(service1, type(service2))
     
-    def test_token_creation_with_none_values(self):
-        """Тест создания токена с None значениями"""
+    def test_token_creation_with_empty_values(self):
+        """Тест создания токена с пустыми значениями"""
         token_service = get_token_service()
         
         token = token_service.create_token(
-            user_id="none_test_user",
-            company_id=None,
+            user_id="test_user",
+            company_id="",
             session_id=None,
             metadata=None
         )
@@ -196,8 +196,8 @@ class TestTokenAuthIntegration:
         token_data = token_service.validate_token(token)
         
         assert token_data is not None
-        assert token_data.user_id == "none_test_user"
-        assert token_data.company_id is None
+        assert token_data.user_id == "test_user"
+        assert token_data.company_id == ""
         assert token_data.session_id is None
         assert token_data.metadata == {}
     

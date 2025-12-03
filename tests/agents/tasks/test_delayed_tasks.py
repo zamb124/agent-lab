@@ -343,12 +343,12 @@ class TestSchedulerStartup:
         assert len(taskiq_scheduler.sources) > 0
     
     @pytest.mark.asyncio
-    async def test_scheduler_can_startup(self, taskiq_scheduler):
-        """Проверяет что scheduler может быть запущен."""
-        # Scheduler уже запущен через фикстуры
-        # Просто проверяем что он работает
-        await taskiq_scheduler.startup()
-        await taskiq_scheduler.shutdown()
+    async def test_scheduler_has_sources(self, taskiq_scheduler):
+        """Проверяет что scheduler имеет настроенные sources."""
+        # НЕ вызываем startup/shutdown - scheduler уже запущен через session-scoped фикстуру
+        # и shutdown сломает его для остальных тестов
+        assert len(taskiq_scheduler.sources) > 0
+        assert taskiq_scheduler.broker is not None
 
 
 class TestScheduledTaskExecution:

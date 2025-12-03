@@ -55,16 +55,17 @@ async def get_engine(db_url: Optional[str] = None) -> AsyncEngine:
     is_testing = os.environ.get("PYTEST_CURRENT_TEST") is not None
 
     if is_testing:
-        # В тестах используем NullPool чтобы избежать проблем с event loops
-        # Каждый тест имеет свой event loop, и соединения из пула могут оставаться
-        # привязанными к закрытому loop, что вызывает RuntimeError
-        # Теперь все операции используют session factory, что правильно
+        # В тестах используем маленький пул чтобы не превысить max_connections PostgreSQL
+        # при параллельном запуске тестов (pytest-xdist)
         engine = create_async_engine(
             db_url,
             echo=False,
-            poolclass=NullPool,
+            pool_size=2,
+            max_overflow=3,
+            pool_pre_ping=True,
+            pool_recycle=300,
         )
-        logger.debug(f"Engine создан с NullPool для тестов (loop {loop_id})")
+        logger.debug(f"Engine создан с маленьким пулом для тестов (loop {loop_id})")
     else:
         engine = create_async_engine(
             db_url,

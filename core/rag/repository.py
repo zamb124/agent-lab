@@ -250,3 +250,4 @@ class RAGRepository:
             logger.info(f"Namespace {namespace_id} удален")
         return success
 
+

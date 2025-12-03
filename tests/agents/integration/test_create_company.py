@@ -101,6 +101,89 @@ class TestCreateCompanyEndpoint:
         assert updated_user.active_company_id == test_slug
 
     @pytest.mark.asyncio
+    async def test_create_company_with_migration(
+        self,
+        async_client,
+        auth_token_for_new_user,
+        company_repo,
+        subdomain_repo,
+        user_repo,
+        taskiq_broker,
+        taskiq_worker_process,
+        flow_repo,
+        tool_repo,
+        mcp_repo,
+    ):
+        """Тест создания компании с проверкой миграции через TaskIQ"""
+        import asyncio
+        from core.context import set_context, clear_context
+        from apps.agents.config import get_agents_settings
+        
+        token, user = auth_token_for_new_user
+        
+        test_slug = "test-company-migration"
+        existing_company = await company_repo.get(test_slug)
+        if existing_company:
+            await company_repo.delete(test_slug)
+        existing_mapping = await subdomain_repo.get(test_slug)
+        if existing_mapping:
+            await subdomain_repo.delete(test_slug)
+        
+        response = await async_client.post(
+            "/frontend/api/admin/create-my-company",
+            data={
+                "name": "Test Company Migration",
+                "slug": test_slug
+            },
+            cookies={"auth_token": token},
+            follow_redirects=False
+        )
+        
+        assert response.status_code in [302, 307]
+        
+        company = await company_repo.get(test_slug)
+        assert company is not None
+        
+        # Устанавливаем контекст новой компании для проверки
+        context = Context(
+            user=user,
+            platform="test",
+            active_company=company,
+            user_companies=[company]
+        )
+        set_context(context)
+        
+        try:
+            settings = get_agents_settings()
+            
+            # Ждем выполнения миграции (макс 60 сек) - проверяем ВСЕ сущности
+            migration_complete = False
+            for _ in range(60):
+                await asyncio.sleep(1)
+                
+                # Проверяем все сущности - tools, MCP серверы
+                tools = await tool_repo.list_all(limit=100)
+                context7 = await mcp_repo.get("context7")
+                copilot = await mcp_repo.get("copilot")
+                
+                if len(tools) > 0 and context7 is not None and copilot is not None:
+                    migration_complete = True
+                    break
+            
+            assert migration_complete, "Миграция не завершилась за 60 секунд"
+            
+            # Проверяем что публичные tools появились в БД
+            tools = await tool_repo.list_all(limit=100)
+            assert len(tools) > 0, "Публичные tools должны быть мигрированы через TaskIQ"
+            
+            # Проверяем MCP серверы
+            assert await mcp_repo.get("context7") is not None, "MCP context7 должен быть создан"
+            assert await mcp_repo.get("copilot") is not None, "MCP copilot должен быть создан"
+            
+        finally:
+            clear_context()
+
+    @pytest.mark.asyncio
     async def test_create_company_without_auth(self, async_client):
         """Тест создания компании без авторизации"""
         response = await async_client.post(

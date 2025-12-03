@@ -171,12 +171,15 @@ class AuthService:
         session = await self._create_session(user, auth_request.provider, access_token, refresh_token)
 
         token_service = get_token_service()
+        
+        # Получаем roles для активной компании
+        roles = user.companies.get(user.active_company_id, []) if user.active_company_id else []
+        
         jwt_token = token_service.create_token(
             user_id=user.user_id,
-            company_id=user.active_company_id,
+            company_id=user.active_company_id or "",
+            roles=roles,
             session_id=session.session_id,
-            expires_in=86400 * 7,
-            metadata={"provider": auth_request.provider.value, "user_name": user.name}
         )
 
         result_cache = json.dumps({

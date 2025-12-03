@@ -90,6 +90,12 @@ class Context(BaseModel):
         description="Контейнер с изолированными сервисами",
         exclude=True,
     )
+    auth_token: Optional[str] = Field(
+        default=None,
+        title="JWT токен",
+        description="JWT токен для межсервисной авторизации (передается в HTTPRepositoryProxy)",
+        exclude=True,
+    )
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True

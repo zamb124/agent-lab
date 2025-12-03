@@ -121,6 +121,7 @@ async def embed_demo(request: Request):
     embed_token = token_service.create_token(
         user_id=token_data.user_id,
         company_id=token_data.company_id,
+        roles=token_data.roles,
         session_id=token_data.session_id,
         expires_in=86400,  # 1 день
         metadata={"flow_id": "demo_flow", "embed": True, "demo": True}
@@ -165,10 +166,11 @@ async def create_embed_token(
     if not user_token_data:
         raise HTTPException(status_code=401, detail="Invalid authentication token")
     
-    # Создаем токен для встраивания (тот же JWT, но с метаданными)
+    # Создаем токен для встраивания
     embed_token = token_service.create_token(
         user_id=user_token_data.user_id,
         company_id=company_id or user_token_data.company_id,
+        roles=user_token_data.roles,
         session_id=user_token_data.session_id,
         expires_in=expires_in,
         metadata={"flow_id": flow_id, "embed": True, "created_by": user_token_data.user_id}
