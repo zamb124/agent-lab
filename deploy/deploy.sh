@@ -187,9 +187,18 @@ echo "Checking frontend service (8002)..."
 $SSH_CMD "curl -sf http://localhost:8002/health || echo 'FAIL: frontend'"
 sleep 2
 
+echo "Checking redis service..."
+$SSH_CMD "cd $REMOTE_DIR && sudo docker compose ps redis --format '{{.Status}}' | grep -q 'Up' && echo 'OK: redis running' || echo 'FAIL: redis'"
+$SSH_CMD "cd $REMOTE_DIR && sudo docker compose exec -T redis redis-cli ping || echo 'FAIL: redis not responding'"
+sleep 2
+
 echo "Checking taskiq-worker..."
 $SSH_CMD "cd $REMOTE_DIR && sudo docker compose ps taskiq-worker --format '{{.Status}}' | grep -q 'Up' && echo 'OK: taskiq-worker running' || echo 'FAIL: taskiq-worker'"
 $SSH_CMD "cd $REMOTE_DIR && sudo docker compose logs taskiq-worker --tail=5"
+sleep 2
+
+echo "Checking taskiq-scheduler..."
+$SSH_CMD "cd $REMOTE_DIR && sudo docker compose ps taskiq-scheduler --format '{{.Status}}' | grep -q 'Up' && echo 'OK: taskiq-scheduler running' || echo 'FAIL: taskiq-scheduler'"
 sleep 2
 
 echo "Checking chroma service (8100)..."
