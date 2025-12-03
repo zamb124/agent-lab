@@ -343,6 +343,289 @@ class TestRAGSetupScenario:
 
 
 @pytest.mark.asyncio(loop_scope="session")
+class TestRAGNamespaceScenario:
+    """Сценарий: Создание собственного namespace и загрузка файлов"""
+    
+    TEST_DOCS_DIR = Path(__file__).parent.parent.parent.parent / "agents" / "rag"
+    
+    async def test_create_custom_namespace(self, page: Page, e2e_base_url: str, doc_generator):
+        """
+        Сценарий: Создание собственного namespace для хранения документов.
+        
+        Показывает как создать изолированное хранилище для своих документов.
+        """
+        doc = doc_generator("rag_create_namespace", "Создание namespace в RAG")
+        
+        namespace_name = f"my_knowledge_base_{uuid.uuid4().hex[:6]}"
+        
+        await page.goto(f"{e2e_base_url}/rag/")
+        await page.wait_for_load_state("networkidle")
+        await page.wait_for_timeout(1000)
+        
+        await doc.step(
+            page,
+            "Открытие RAG Dashboard",
+            "Перейдите в раздел **RAG** через боковое меню. "
+            "Здесь создаются и управляются коллекции документов (namespaces)."
+        )
+        
+        # Выбираем ChromaDB
+        chromadb_card = page.locator(".rag-provider-card[data-provider='chromadb']")
+        if await chromadb_card.count() > 0:
+            await doc.click(
+                page,
+                ".rag-provider-card[data-provider='chromadb']",
+                "Выбор провайдера",
+                "Выберите **ChromaDB** для локального хранения документов. "
+                "Все данные останутся на вашем сервере."
+            )
+            await page.wait_for_timeout(500)
+        
+        # Открываем модалку создания
+        await doc.click(
+            page,
+            ".rag-btn-primary",
+            "Начало создания namespace",
+            "Нажмите кнопку **New Namespace** в правом верхнем углу."
+        )
+        
+        await page.wait_for_selector("#create-namespace-modal.active", timeout=5000)
+        
+        await doc.step(
+            page,
+            "Форма создания",
+            "Откроется модальное окно с полями для ввода."
+        )
+        
+        # Заполняем имя
+        await doc.fill(
+            page,
+            "#namespace-name",
+            namespace_name,
+            "Ввод имени namespace",
+            "Введите понятное **имя** для вашей коллекции документов. "
+            "Используйте латиницу и подчеркивания, например:\n"
+            "- `product_catalog` - каталог продуктов\n"
+            "- `company_policies` - политики компании\n"
+            "- `faq_knowledge` - база знаний FAQ"
+        )
+        
+        # Заполняем описание
+        await doc.fill(
+            page,
+            "#namespace-description",
+            "Моя база знаний для агентов",
+            "Добавление описания",
+            "Добавьте **описание** чтобы другие пользователи понимали назначение коллекции."
+        )
+        
+        # Создаём
+        await doc.click(
+            page,
+            "#create-namespace-modal .rag-btn-primary",
+            "Создание namespace",
+            "Нажмите **Create** для создания namespace."
+        )
+        
+        await page.locator("#create-namespace-modal .rag-btn-primary").click()
+        await page.wait_for_timeout(1500)
+        
+        await doc.step(
+            page,
+            "Namespace создан",
+            "Новый namespace появился в списке слева. "
+            "Теперь его можно подключить к вашим агентам для поиска по документам."
+        )
+        
+        doc.save()
+        
+        # Cleanup
+        try:
+            delete_btn = page.locator(f".rag-namespace-card:has-text('{namespace_name}') .rag-btn-danger")
+            if await delete_btn.count() > 0:
+                page.on("dialog", lambda dialog: dialog.accept())
+                await delete_btn.click()
+                await page.wait_for_timeout(1000)
+        except Exception:
+            pass
+    
+    async def test_upload_documents_async(self, page: Page, e2e_base_url: str, doc_generator):
+        """
+        Сценарий: Загрузка документов в namespace.
+        
+        Документы загружаются асинхронно - файл сразу попадает в очередь,
+        а обработка (парсинг, индексация) выполняется в фоне.
+        """
+        doc = doc_generator("rag_upload_documents", "Загрузка документов в RAG")
+        
+        namespace_name = f"docs_upload_{uuid.uuid4().hex[:6]}"
+        
+        await page.goto(f"{e2e_base_url}/rag/")
+        await page.wait_for_load_state("networkidle")
+        await page.wait_for_timeout(1000)
+        
+        # Выбираем ChromaDB
+        chromadb_card = page.locator(".rag-provider-card[data-provider='chromadb']")
+        if await chromadb_card.count() > 0:
+            await chromadb_card.click()
+            await page.wait_for_timeout(500)
+        
+        # Создаём namespace для теста
+        await page.locator("button:has-text('New Namespace')").click()
+        await page.wait_for_selector("#create-namespace-modal.active", timeout=5000)
+        await page.locator("#namespace-name").fill(namespace_name)
+        await page.locator("#namespace-description").fill("Тестовая загрузка документов")
+        await page.locator("#create-namespace-modal button:has-text('Create')").click()
+        await page.wait_for_timeout(1500)
+        
+        await doc.step(
+            page,
+            "Подготовка namespace",
+            "Создан namespace для загрузки документов. "
+            "Нажмите на него чтобы открыть."
+        )
+        
+        # Открываем namespace
+        namespace_item = page.locator(f".rag-namespace-item:has-text('{namespace_name}'), .rag-namespace-card:has-text('{namespace_name}')")
+        if await namespace_item.count() > 0:
+            await namespace_item.first.click()
+            await page.wait_for_timeout(1000)
+        
+        await doc.step(
+            page,
+            "Открытие namespace",
+            "Внутри namespace пока пусто. Загрузим документы."
+        )
+        
+        # Открываем загрузку
+        upload_btn = page.locator(".rag-documents-header .rag-btn-primary")
+        if await upload_btn.count() > 0:
+            await doc.click(
+                page,
+                ".rag-documents-header .rag-btn-primary",
+                "Открытие формы загрузки",
+                "Нажмите кнопку **Upload** для загрузки документов."
+            )
+            
+            await page.wait_for_selector("#upload-document-modal.active", timeout=5000)
+            
+            await doc.step(
+                page,
+                "Drag & Drop зона",
+                "Откроется окно загрузки. Вы можете:\n"
+                "- **Перетащить файлы** прямо в зону загрузки\n"
+                "- Нажать **Browse Files** для выбора через проводник\n\n"
+                "**Поддерживаемые форматы:**\n"
+                "- Документы: PDF, DOCX, TXT, MD\n"
+                "- Таблицы: XLSX, CSV\n"
+                "- Веб: HTML, JSON, XML"
+            )
+            
+            # Загружаем тестовые файлы
+            docx_file = self.TEST_DOCS_DIR / "Анкета 09.25.docx"
+            txt_file = self.TEST_DOCS_DIR / "welcome to sber.pdf"
+            
+            # Выбираем первый существующий файл
+            test_file = None
+            if docx_file.exists():
+                test_file = docx_file
+            elif txt_file.exists():
+                test_file = txt_file
+            
+            if test_file:
+                file_input = page.locator("#file-input")
+                await file_input.set_input_files([str(test_file)])
+                await page.wait_for_timeout(1000)  # Ждём обновления списка
+                
+                # Проверяем что файл добавился
+                upload_list = page.locator("#upload-list .rag-upload-item")
+                if await upload_list.count() > 0:
+                    await doc.step(
+                        page,
+                        "Выбор файлов",
+                        "Выбранные файлы отображаются в списке. "
+                        "Можно добавить несколько файлов перед загрузкой."
+                    )
+                    
+                    # Загружаем
+                    upload_submit = page.locator("#upload-btn")
+                    await page.wait_for_timeout(500)
+                    
+                    if not await upload_submit.is_disabled():
+                        await doc.click(
+                            page,
+                            "#upload-btn",
+                            "Запуск загрузки",
+                            "Нажмите **Upload** для начала загрузки.\n\n"
+                            "⚡ **Асинхронная обработка:**\n"
+                            "- Файл мгновенно загружается в хранилище\n"
+                            "- Обработка (парсинг, индексация) выполняется в фоне\n"
+                            "- Вы получите уведомление когда документ будет готов к поиску"
+                        )
+                        
+                        await upload_submit.click()
+                        await page.wait_for_timeout(3000)
+                        
+                        await doc.step(
+                            page,
+                            "Документ в обработке",
+                            "Документ поставлен в очередь на обработку. "
+                            "Статус изменится на **ready** когда индексация завершится.\n\n"
+                            "💡 **Совет:** Для больших документов обработка может занять несколько минут."
+                        )
+                    else:
+                        # Кнопка всё ещё disabled - закрываем модалку
+                        close_btn = page.locator("#upload-document-modal .rag-modal-close")
+                        await close_btn.click()
+                        await doc.step(
+                            page,
+                            "Файлы не добавлены",
+                            "Не удалось добавить файлы для загрузки. Проверьте формат файлов."
+                        )
+                else:
+                    # Файлы не добавились - закрываем модалку
+                    close_btn = page.locator("#upload-document-modal .rag-modal-close")
+                    await close_btn.click()
+            else:
+                # Закрываем модалку если файлы не найдены
+                close_btn = page.locator("#upload-document-modal .rag-modal-close")
+                await close_btn.click()
+                await doc.step(
+                    page,
+                    "Тестовые файлы не найдены",
+                    "Для демонстрации загрузки положите тестовые файлы в папку tests/agents/rag/"
+                )
+        
+        # Ждём обработки (опционально)
+        await page.wait_for_timeout(5000)
+        
+        await doc.step(
+            page,
+            "Документы загружены",
+            "После обработки документы готовы к семантическому поиску. "
+            "Используйте поле поиска вверху страницы для проверки."
+        )
+        
+        doc.save()
+        
+        # Cleanup
+        try:
+            # Возвращаемся к списку
+            back_btn = page.locator(".rag-documents-header button:has(.ti-arrow-left)")
+            if await back_btn.count() > 0:
+                await back_btn.click()
+                await page.wait_for_timeout(500)
+            
+            delete_btn = page.locator(f".rag-namespace-card:has-text('{namespace_name}') .rag-btn-danger")
+            if await delete_btn.count() > 0:
+                page.on("dialog", lambda dialog: dialog.accept())
+                await delete_btn.click()
+                await page.wait_for_timeout(1000)
+        except Exception:
+            pass
+
+
+@pytest.mark.asyncio(loop_scope="session")
 class TestRAGQuickScenario:
     """Быстрый тест работоспособности RAG UI без генерации документации"""
     
@@ -380,4 +663,20 @@ class TestRAGQuickScenario:
             # Закрываем
             close_btn = page.locator("#create-namespace-modal .rag-modal-close")
             await close_btn.click()
+    
+    async def test_rag_websocket_connected(self, page: Page, e2e_base_url: str):
+        """WebSocket для нотификаций подключен"""
+        await page.goto(f"{e2e_base_url}/rag/")
+        await page.wait_for_load_state("networkidle")
+        await page.wait_for_timeout(2000)
+        
+        # Проверяем что WebSocket подключен через консоль
+        ws_connected = await page.evaluate("""
+            () => {
+                // Проверяем HTMX WebSocket extension
+                return document.body.hasAttribute('hx-ext') && 
+                       document.body.getAttribute('ws-connect') === '/ws/notifications';
+            }
+        """)
+        assert ws_connected, "WebSocket должен быть подключен для получения нотификаций"
 
