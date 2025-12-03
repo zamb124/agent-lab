@@ -61,16 +61,14 @@ class TestBrokerConnection:
     @pytest.mark.asyncio
     async def test_broker_startup(self, migrated_db, taskiq_broker):
         """Брокер должен запуститься без ошибок"""
-        from core.tasks.broker import broker
+        from core.tasks.broker import broker, _redis_url
         
         assert broker is not None
         
-        dsn = broker.dsn
-        if callable(dsn):
-            dsn = dsn()
-        assert "localhost" in dsn or "postgres" in dsn
-        assert "shared_db" in dsn
-        print(f"✅ Брокер подключен к: {dsn[:50]}...")
+        # RedisStreamBroker использует Redis URL
+        assert _redis_url is not None
+        assert "redis://" in _redis_url
+        print(f"Брокер подключен к Redis: {_redis_url}")
     
     @pytest.mark.asyncio
     async def test_broker_is_initialized(self, migrated_db, taskiq_broker):

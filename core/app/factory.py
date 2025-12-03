@@ -36,6 +36,7 @@ from core.db import create_tables
 from core.logging import setup_logging
 from core.middleware.auth import AuthMiddleware
 from core.tasks.broker import broker
+from core.websocket import websocket_manager
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +149,10 @@ def create_service_app(
             await broker.startup()
             logger.info("TaskIQ broker подключен")
         
+        # Redis pub/sub listener для WebSocket нотификаций из воркеров
+        await websocket_manager.start_redis_listener()
+        logger.info("Redis pub/sub listener запущен")
+        
         # Кастомный startup
         if on_startup:
             await on_startup(app, container, settings)
@@ -161,6 +166,9 @@ def create_service_app(
         # Кастомный shutdown
         if on_shutdown:
             await on_shutdown(app, container)
+        
+        # Остановка Redis listener
+        await websocket_manager.stop_redis_listener()
         
         if include_broker:
             await broker.shutdown()

@@ -1,6 +1,21 @@
 version: '3.8'
 
 services:
+  # Redis для TaskIQ очередей
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-8099}:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   # PostgreSQL база данных
   postgres:
     image: postgres:15
@@ -34,6 +49,9 @@ services:
       postgres:
         condition: service_healthy
         required: false
+      chroma:
+        condition: service_healthy
+        required: false
     restart: unless-stopped
     command: python run_prod.py
 
@@ -55,12 +73,16 @@ services:
         required: false
       agents:
         condition: service_started
+      chroma:
+        condition: service_healthy
+        required: false
     restart: unless-stopped
     command: python run_frontend_prod.py
 
-  # TaskIQ Worker (единая очередь задач)
-  # ВАЖНО: --workers 1 обязателен для taskiq-postgres
-  # Для масштабирования: docker-compose up --scale taskiq-worker=4
+  # TaskIQ Worker (единая очередь задач на Redis)
+  # Redis обеспечивает блокирующую очередь - каждый воркер получает свою задачу
+  # SessionLockMiddleware гарантирует FIFO per session
+  # Для масштабирования: docker-compose up --scale taskiq-worker=N
   taskiq-worker:
     build:
       context: .
@@ -69,11 +91,13 @@ services:
     volumes:
       - taskiq_logs:/app/logs
     depends_on:
+      redis:
+        condition: service_healthy
       postgres:
         condition: service_healthy
         required: false
     restart: unless-stopped
-    command: taskiq worker core.tasks.worker:broker --workers 1
+    command: taskiq worker core.tasks.worker:broker --workers 4
 
   # TaskIQ Scheduler (для отложенных задач)
   # ВАЖНО: Запускать только один экземпляр scheduler
@@ -85,6 +109,8 @@ services:
     volumes:
       - taskiq_logs:/app/logs
     depends_on:
+      redis:
+        condition: service_healthy
       postgres:
         condition: service_healthy
         required: false
@@ -111,8 +137,27 @@ services:
       - docs
     command: python scripts/generate_api_docs.py
 
+  # ChromaDB Vector Database
+  chroma:
+    image: chromadb/chroma:latest
+    ports:
+      - "${CHROMA_PORT:-8100}:8100"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - ANONYMIZED_TELEMETRY=False
+    command: ["run", "--host", "0.0.0.0", "--port", "8100", "--path", "/chroma/chroma"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/api/v2/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  redis_data:
   agents_logs:
   frontend_logs:
   taskiq_logs:
+  chroma_data:

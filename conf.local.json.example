@@ -1,7 +1,8 @@
 {
   "database": {
     "url": "postgresql+asyncpg://agent_user:agent_password@localhost:5432/agent_platform",
-    "checkpointer_url": "postgresql://agent_user:agent_password@localhost:5432/agent_platform"
+    "checkpointer_url": "postgresql://agent_user:agent_password@localhost:5432/agent_platform",
+    "redis_url": "redis://localhost:8099"
   }
 }
 

@@ -55,6 +55,10 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/frontend/api/*", context_type="frontend", auth_required=True),
     RouteRule("/frontend/*", context_type="frontend", auth_required=True),
     
+    # RAG UI - отдельный интерфейс, требует авторизации
+    RouteRule("/rag/*", context_type="frontend", auth_required=True),
+    RouteRule("/rag", context_type="frontend", auth_required=True),
+    
     # API - авторизация через токен
     RouteRule("/agents/api/v1/files/download/*", context_type="api", auth_required=False),
     RouteRule("/agents/api/v1/*", context_type="api", auth_required=True),

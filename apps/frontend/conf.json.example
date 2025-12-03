@@ -1,0 +1,23 @@
+{
+  "server": {
+    "name": "frontend",
+    "port": 8002,
+    "env": "local",
+    "agents_service_url": "http://localhost:8001"
+  },
+  "database": {
+    "url": "postgresql+asyncpg://username:password@localhost:5432/shared_db",
+    "shared_url": "postgresql+asyncpg://username:password@localhost:5432/shared_db",
+    "agents_db_url": "postgresql+asyncpg://username:password@localhost:5432/agents_db",
+    "redis_url": "redis://localhost:8099"
+  },
+  "logging": {
+    "level": "INFO",
+    "file_path": "logs/frontend.log",
+    "loggers_levels": {
+      "apps.frontend": "INFO",
+      "core": "WARNING"
+    }
+  }
+}
+

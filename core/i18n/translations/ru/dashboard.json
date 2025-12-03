@@ -16,7 +16,8 @@
     "tasks": "Задачи",
     "users": "Пользователи",
     "company_management": "Управление компаниями",
-    "mcp": "MCP"
+    "mcp": "MCP",
+    "traces": "Трейсы"
   },
   "header": {
     "theme_toggle": "Переключить тему",
@@ -45,7 +46,8 @@
     "history": "История",
     "variables": "Ключи и переменные",
     "billing": "Тарифы и оплата",
-    "mcp": "MCP"
+    "mcp": "MCP",
+    "traces": "Трейсы"
   },
   "welcome": {
     "title": "Главная",

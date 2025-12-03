@@ -1,0 +1,62 @@
+{
+  "server": {
+    "name": "agents",
+    "env": "local",
+    "port": 8001,
+    "debug": true,
+    "domain": "localhost",
+    "public_domain": "your-domain.com"
+  },
+  "database": {
+    "url": "postgresql+asyncpg://username:password@localhost:5432/agents_db",
+    "shared_url": "postgresql+asyncpg://username:password@localhost:5432/shared_db"
+  },
+  "fashn": {
+    "enabled": false,
+    "api_key": "your-fashn-api-key",
+    "base_url": "https://api.fashn.ai/v1",
+    "timeout": 60,
+    "poll_interval": 5.0,
+    "poll_timeout": 180
+  },
+  "telegram": {
+    "enabled": false,
+    "bots": {
+      "your_bot_name": "your-telegram-bot-token"
+    }
+  },
+  "otel": {
+    "enabled": false,
+    "service_name": "agent-lab",
+    "instrument_langchain": true,
+    "instrument_openai": true,
+    "instrument_asyncpg": false,
+    "log_level": "INFO"
+  },
+  "amocrm": {
+    "access_token": "your-amocrm-access-token"
+  },
+  "sgr": {
+    "enabled": false,
+    "base_url": "http://localhost:8010",
+    "api_key": null,
+    "timeout": 300.0,
+    "llm_base_url": "https://openrouter.ai/api/v1",
+    "llm_api_key": "your-openrouter-api-key",
+    "llm_model": "x-ai/grok-code-fast-1",
+    "llm_max_tokens": 8000,
+    "llm_temperature": 0.4,
+    "tavily_api_key": "your-tavily-api-key",
+    "max_steps": 6,
+    "max_results": 10
+  },
+  "logging": {
+    "level": "INFO",
+    "file_path": "logs/agents.log",
+    "loggers_levels": {
+      "apps.agents": "INFO",
+      "core": "WARNING"
+    }
+  }
+}
+

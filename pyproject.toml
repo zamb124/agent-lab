@@ -55,8 +55,12 @@ dependencies = [
     "opentelemetry-instrumentation-asyncpg>=0.59b0",
     "simpleeval>=1.0.3",
     "taskiq>=0.12.0",
-    "taskiq-postgres[asyncpg]>=0.1.0",
+    "taskiq-redis>=1.0.0",
     "pytest-playwright-asyncio>=0.7.2",
+    # ChromaDB RAG
+    "chromadb>=0.6.0",
+    "tiktoken>=0.9.0",
+    "unstructured[all-docs]>=0.16.0",
 ]
 
 [build-system]
@@ -88,4 +92,3 @@ dev = [
     "pytest-cov>=4.1.0",
     "pytest-timeout>=2.4.0",
 ]
-

@@ -1,18 +1,25 @@
 """
-Универсальный WebSocket менеджер для всех типов соединений
+Универсальный WebSocket менеджер для всех типов соединений.
+Поддерживает Redis pub/sub для межпроцессной коммуникации (воркер → FastAPI).
 """
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import Dict, Optional, Literal
+import asyncio
 import json
 import logging
-import asyncio
+from typing import Dict, Optional, Literal
+
+import redis.asyncio as aioredis
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 ConnectionType = Literal["chat", "notifications", "updates"]
+
+REDIS_CHANNEL = "websocket_notifications"
 
 
 class WebSocketManager:
@@ -27,6 +34,7 @@ class WebSocketManager:
         }
         # Polling задачи для типов соединений
         self.polling_tasks: Dict[str, asyncio.Task] = {}
+        self._redis_listener_task: Optional[asyncio.Task] = None
 
     async def connect(
         self, 
@@ -194,6 +202,74 @@ class WebSocketManager:
                 del self.polling_tasks[old_key]
             
             logger.info(f"Сессия переключена: {old_session_id} → {new_session_id}")
+    
+    async def publish_to_redis(self, message: dict, connection_type: ConnectionType = "notifications"):
+        """
+        Публикует сообщение в Redis канал для межпроцессной коммуникации.
+        Используется из воркера TaskIQ.
+        """
+        settings = get_settings()
+        redis_url = settings.database.redis_url
+        
+        payload = json.dumps({
+            "connection_type": connection_type,
+            "message": message,
+        })
+        
+        client = aioredis.from_url(redis_url)
+        try:
+            await client.publish(REDIS_CHANNEL, payload)
+            logger.debug(f"Опубликовано в Redis: {message.get('type', 'unknown')}")
+        finally:
+            await client.aclose()
+    
+    async def start_redis_listener(self):
+        """
+        Запускает слушателя Redis pub/sub.
+        Вызывается при старте FastAPI приложения.
+        """
+        if self._redis_listener_task is not None:
+            return
+        
+        self._redis_listener_task = asyncio.create_task(self._redis_listener_loop())
+        logger.info("Redis pub/sub listener запущен")
+    
+    async def stop_redis_listener(self):
+        """Останавливает слушателя Redis"""
+        if self._redis_listener_task:
+            self._redis_listener_task.cancel()
+            self._redis_listener_task = None
+            logger.info("Redis pub/sub listener остановлен")
+    
+    async def _redis_listener_loop(self):
+        """Основной цикл слушателя Redis"""
+        settings = get_settings()
+        redis_url = settings.database.redis_url
+        
+        while True:
+            try:
+                client = aioredis.from_url(redis_url)
+                pubsub = client.pubsub()
+                await pubsub.subscribe(REDIS_CHANNEL)
+                
+                logger.info(f"Подписан на Redis канал: {REDIS_CHANNEL}")
+                
+                async for raw_message in pubsub.listen():
+                    if raw_message["type"] == "message":
+                        try:
+                            payload = json.loads(raw_message["data"])
+                            connection_type = payload.get("connection_type", "notifications")
+                            message = payload.get("message", {})
+                            
+                            await self.send_to_all(message, connection_type)
+                        except json.JSONDecodeError as e:
+                            logger.error(f"Ошибка парсинга Redis сообщения: {e}")
+                            
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Ошибка Redis listener: {e}", exc_info=True)
+                await asyncio.sleep(5)
 
 
 # Глобальный экземпляр менеджера

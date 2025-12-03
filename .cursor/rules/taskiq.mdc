@@ -7,20 +7,27 @@ globs: ["**/tasks/**", "**/broker.py", "**/worker.py"]
 
 ## Обзор архитектуры
 
-TaskIQ - единая система очередей задач для всей платформы. Использует PostgreSQL как брокер (Shared DB).
+TaskIQ - единая система очередей задач для всей платформы. Использует Redis как брокер.
 
 **Компоненты:**
-- **AsyncpgBroker** - брокер сообщений (PostgreSQL)
-- **AsyncpgResultBackend** - хранение результатов
-- **AsyncpgScheduleSource** - отложенные/cron задачи
+- **RedisStreamBroker** - брокер сообщений (Redis Streams с consumer groups)
+- **RedisAsyncResultBackend** - хранение результатов
+- **ListRedisScheduleSource** - отложенные/cron задачи
+- **SessionLockMiddleware** - FIFO выполнение в рамках одной сессии
 - **TaskiqScheduler** - планировщик отложенных задач
+
+**Преимущества Redis:**
+- Блокирующая очередь - каждый воркер получает свою задачу (XREADGROUP)
+- Consumer groups для надежной доставки
+- FIFO per session через distributed lock
 
 ## Структура
 
 ```
 core/tasks/
 ├── __init__.py          # Экспорт broker, scheduler, schedule_source
-├── broker.py            # AsyncpgBroker + AsyncpgScheduleSource + TaskiqScheduler
+├── broker.py            # RedisStreamBroker + ListRedisScheduleSource + TaskiqScheduler
+├── session_lock.py      # SessionLockMiddleware для FIFO per session
 └── worker.py            # TaskiqWorker entry point (экспортирует scheduler)
 
 apps/agents/tasks/
@@ -43,17 +50,33 @@ apps/frontend/tasks/
 ```python
 from core.tasks import broker, scheduler, schedule_source
 
-# Брокер для задач
+# Брокер для задач (Redis Streams)
 broker = get_broker()
 
-# Schedule source для отложенных задач
+# Schedule source для отложенных задач (Redis List)
 schedule_source = get_schedule_source()
 
 # Scheduler для выполнения отложенных
 scheduler = get_scheduler()
 ```
 
-**КРИТИЧНО**: Все компоненты используют `settings.database.shared_url` - общую БД.
+**КРИТИЧНО**: Все компоненты используют `settings.database.redis_url`.
+
+## FIFO per Session
+
+SessionLockMiddleware обеспечивает последовательное выполнение задач одной сессии:
+
+```
+[Task 1: session_A] → lock(session_A) → execute → unlock(session_A)
+[Task 2: session_A] → lock busy → requeue → wait → lock(session_A) → execute
+[Task 3: session_B] → lock(session_B) → execute (параллельно с session_A)
+```
+
+**Алгоритм:**
+1. Перед выполнением - `SETNX session_lock:{session_id}` (атомарный lock)
+2. Если lock занят - задача возвращается в очередь с задержкой 100ms
+3. После выполнения - `DEL session_lock:{session_id}`
+4. TTL lock = 5 минут (защита от зависших воркеров)
 
 ## Создание задачи
 
@@ -78,8 +101,8 @@ async def my_task(param1: str, param2: int) -> str:
 
 <bad_example>
 # НЕ создавай свой брокер
-from taskiq_pg import AsyncpgBroker
-my_broker = AsyncpgBroker(dsn="...")  # НЕТ!
+from taskiq_redis import RedisStreamBroker
+my_broker = RedisStreamBroker(url="...")  # НЕТ!
 
 # НЕ используй InMemoryBroker в продакшене
 from taskiq import InMemoryBroker
@@ -118,7 +141,7 @@ from apps.agents.tasks.agent_tasks import process_agent_task
 
 task = await process_agent_task.kiq(
     flow_id="flow_123",
-    session_id="session_456",
+    session_id="session_456",  # FIFO гарантируется для этой сессии
     message="Привет",
     platform="web",
     user_id="user_789",
@@ -211,15 +234,34 @@ make worker-restart   # Перезапуск
 
 ```yaml
 # docker-compose.yml
+redis:
+  image: redis:7-alpine
+  ports:
+    - "8099:6379"
+  healthcheck:
+    test: ["CMD", "redis-cli", "ping"]
+
 taskiq-worker:
   build:
     context: .
     dockerfile: Dockerfile
-    target: taskiq_worker
-  command: python run_taskiq_worker.py
+    target: worker
   depends_on:
-    postgres:
+    redis:
       condition: service_healthy
+  command: taskiq worker core.tasks.worker:broker --workers 1
+```
+
+### Масштабирование
+
+Redis с consumer groups позволяет безопасно масштабировать воркеры:
+
+```bash
+# Запуск нескольких воркеров
+docker-compose up --scale taskiq-worker=4
+
+# Каждый воркер получает свою задачу благодаря XREADGROUP
+# FIFO per session гарантируется SessionLockMiddleware
 ```
 
 ## Retry и обработка ошибок
@@ -235,6 +277,12 @@ async def reliable_task(data: str) -> str:
 ```
 
 ## Тестирование
+
+### Запуск тестов (с Redis)
+
+```bash
+make test  # Автоматически поднимает postgres, chroma, redis
+```
 
 ### Инициализация брокера в тестах
 
@@ -275,13 +323,14 @@ async def test_agent_task(taskiq_broker, test_context):
 4. **НИКОГДА** не используй InMemoryBroker в продакшене
 5. **ВСЕГДА** инициализируй брокер в тестах через фикстуру
 6. **ВСЕГДА** используй `retry_on_error=True` для критичных задач
+7. **ПОМНИ** что задачи с session_id выполняются последовательно (FIFO)
 
 ## Отложенные задачи (Delayed Tasks)
 
 ### Архитектура
 
-Отложенные задачи реализованы через `taskiq-postgres`:
-- **AsyncpgScheduleSource** - хранит расписание в таблице `taskiq_schedules`
+Отложенные задачи реализованы через `taskiq-redis`:
+- **ListRedisScheduleSource** - хранит расписание в Redis List
 - **TaskiqScheduler** - выполняет задачи по расписанию
 - **schedule_by_time()** - метод для планирования на конкретное время
 
@@ -389,3 +438,20 @@ docker-compose up -d taskiq-scheduler
 ```
 
 **КРИТИЧНО**: Scheduler должен работать для выполнения отложенных задач!
+
+## Конфигурация
+
+Redis URL настраивается в `conf.json`:
+
+```json
+{
+  "database": {
+    "redis_url": "redis://redis:6379"
+  }
+}
+```
+
+Или через переменную окружения:
+```bash
+export DATABASE__REDIS_URL="redis://localhost:8099"
+```

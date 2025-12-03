@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}RAG Dashboard{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="/static/rag/css/rag.css">
+<script>
+    (function() {
+        const savedTheme = localStorage.getItem('rag-theme') || 'dark';
+        document.documentElement.setAttribute('data-rag-theme', savedTheme);
+    })();
+</script>
+{% endblock %}
+
+{% block content %}
+<div class="rag-layout">
+    <!-- Sidebar -->
+    <aside class="rag-sidebar">
+        <div class="rag-sidebar-header">
+            <a href="/frontend/dashboard" class="rag-logo">
+                <i class="ti ti-arrow-left"></i>
+                <img src="/static/landing/img/logo.svg" alt="Humanitec" class="rag-logo-img">
+                <span>Humanitec</span>
+            </a>
+        </div>
+        
+        <div class="rag-sidebar-nav">
+            <a href="/rag/" class="rag-nav-item active">
+                <i class="ti ti-layout-dashboard"></i>
+                <span>Dashboard</span>
+            </a>
+        </div>
+        
+        <div class="rag-sidebar-section">
+            <div class="rag-section-title">Provider</div>
+            <div class="rag-provider-cards" id="provider-cards">
+                {% for provider in providers %}
+                <div class="rag-provider-card {% if provider.name == current_provider %}active{% endif %}" 
+                     data-provider="{{ provider.name }}"
+                     onclick="ragApp.selectProvider('{{ provider.name }}')">
+                    <div class="rag-provider-icon">
+                        {% if provider.name == 'chromadb' %}
+                        <i class="ti ti-database"></i>
+                        {% elif provider.name == 'agentset' %}
+                        <i class="ti ti-cloud"></i>
+                        {% else %}
+                        <i class="ti ti-box"></i>
+                        {% endif %}
+                    </div>
+                    <div class="rag-provider-info">
+                        <div class="rag-provider-name">{{ provider.name }}</div>
+                        <div class="rag-provider-badge">
+                            {% if provider.name == 'chromadb' %}LOCAL{% else %}CLOUD{% endif %}
+                        </div>
+                    </div>
+                    <i class="ti ti-chevron-right rag-provider-arrow"></i>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <div class="rag-sidebar-section">
+            <div class="rag-section-title">Namespaces</div>
+            <div class="rag-namespace-search">
+                <i class="ti ti-search"></i>
+                <input type="text" id="namespace-search" placeholder="Search namespaces...">
+            </div>
+            <div id="namespace-list" class="rag-namespace-list">
+                <div class="rag-loading">
+                    <i class="ti ti-loader-2 spinning"></i>
+                    <span>Loading...</span>
+                </div>
+            </div>
+        </div>
+    </aside>
+    
+    <!-- Main Content -->
+    <main class="rag-main">
+        <div class="rag-main-inner">
+            <header class="rag-header">
+                <div class="rag-header-left">
+                    <button class="rag-mobile-menu" onclick="toggleSidebar()">
+                        <i class="ti ti-menu-2"></i>
+                    </button>
+                    <h1 id="page-title">Dashboard</h1>
+                </div>
+                <div class="rag-header-right">
+                    <div class="rag-search-global">
+                        <i class="ti ti-search"></i>
+                        <input type="text" id="global-search" placeholder="Search across all documents...">
+                        <kbd>Enter</kbd>
+                    </div>
+                    <button class="rag-btn rag-btn-primary" onclick="showCreateNamespaceModal()">
+                        <i class="ti ti-plus"></i>
+                        <span>New Namespace</span>
+                    </button>
+                    <button class="rag-theme-toggle" onclick="toggleTheme()">
+                        <i class="ti ti-sun"></i>
+                    </button>
+                </div>
+            </header>
+            
+            <div class="rag-content" id="main-content">
+                {% if current_namespace %}
+                <div class="rag-namespace-view" data-namespace-id="{{ current_namespace }}">
+                    <div class="rag-loading-full">
+                        <i class="ti ti-loader-2 spinning"></i>
+                        <span>Loading namespace...</span>
+                    </div>
+                </div>
+                {% else %}
+                <div class="rag-dashboard-view">
+                    <div class="rag-loading-full">
+                        <i class="ti ti-loader-2 spinning"></i>
+                        <span>Loading namespaces...</span>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Create Namespace Modal -->
+<div class="rag-modal" id="create-namespace-modal">
+    <div class="rag-modal-backdrop" onclick="hideCreateNamespaceModal()"></div>
+    <div class="rag-modal-content">
+        <div class="rag-modal-header">
+            <h2>Create Namespace</h2>
+            <button class="rag-modal-close" onclick="hideCreateNamespaceModal()">
+                <i class="ti ti-x"></i>
+            </button>
+        </div>
+        <div class="rag-modal-body">
+            <div class="rag-form-group">
+                <label for="namespace-name">Name</label>
+                <input type="text" id="namespace-name" placeholder="my-namespace">
+            </div>
+            <div class="rag-form-group">
+                <label for="namespace-description">Description (optional)</label>
+                <textarea id="namespace-description" placeholder="Describe your namespace..."></textarea>
+            </div>
+        </div>
+        <div class="rag-modal-footer">
+            <button class="rag-btn" onclick="hideCreateNamespaceModal()">Cancel</button>
+            <button class="rag-btn rag-btn-primary" onclick="createNamespace()">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Document Modal -->
+<div class="rag-modal" id="upload-document-modal">
+    <div class="rag-modal-backdrop" onclick="hideUploadModal()"></div>
+    <div class="rag-modal-content">
+        <div class="rag-modal-header">
+            <h2>Upload Document</h2>
+            <button class="rag-modal-close" onclick="hideUploadModal()">
+                <i class="ti ti-x"></i>
+            </button>
+        </div>
+        <div class="rag-modal-body">
+            <div class="rag-upload-zone" id="upload-zone">
+                <i class="ti ti-cloud-upload"></i>
+                <p>Drag and drop files here</p>
+                <span>or</span>
+                <button class="rag-btn" onclick="document.getElementById('file-input').click()">
+                    Browse Files
+                </button>
+                <input type="file" id="file-input" hidden multiple 
+                       accept=".pdf,.txt,.docx,.html,.md,.csv,.xlsx,.json,.xml">
+            </div>
+            <div class="rag-upload-list" id="upload-list"></div>
+        </div>
+        <div class="rag-modal-footer">
+            <button class="rag-btn" onclick="hideUploadModal()">Cancel</button>
+            <button class="rag-btn rag-btn-primary" id="upload-btn" onclick="ragApp.uploadDocuments()" disabled>
+                Upload
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Search Results Modal -->
+<div class="rag-modal rag-modal-large" id="search-results-modal">
+    <div class="rag-modal-backdrop" onclick="hideSearchResults()"></div>
+    <div class="rag-modal-content">
+        <div class="rag-modal-header">
+            <h2>Search Results</h2>
+            <button class="rag-modal-close" onclick="hideSearchResults()">
+                <i class="ti ti-x"></i>
+            </button>
+        </div>
+        <div class="rag-modal-body">
+            <div id="search-results-container"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    window.RAG_CONFIG = {
+        currentProvider: '{{ current_provider }}',
+        currentNamespace: {% if current_namespace %}'{{ current_namespace }}'{% else %}null{% endif %},
+        apiBase: '/frontend/api/rag'
+    };
+</script>
+<script src="/static/rag/js/rag.module.js" type="module"></script>
+{% endblock %}

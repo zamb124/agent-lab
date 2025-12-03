@@ -1,0 +1,313 @@
+---
+description: "RAG система - провайдеры, namespaces, документы"
+alwaysApply: false
+globs:
+  - "core/rag/**/*"
+  - "apps/frontend/modules/rag/**/*"
+  - "apps/frontend/api/rag.py"
+---
+# RAG (Retrieval-Augmented Generation)
+
+## Обзор
+
+RAG система позволяет загружать документы, индексировать их и выполнять семантический поиск.
+
+**Ключевые особенности:**
+- Поддержка нескольких провайдеров (ChromaDB, Agentset)
+- Изоляция данных через namespaces
+- Автоматическое удаление старых чанков при перезаписи документа
+- Хранение оригиналов файлов в S3
+- Парсинг документов через Unstructured (PDF, DOCX, XLSX, и др.)
+
+## Архитектура
+
+```
+core/rag/
+├── base_provider.py        # Абстрактный базовый класс
+├── factory.py              # Фабрика провайдеров
+├── models.py               # Pydantic модели (RAGDocument, RAGNamespace, RAGSearchResult)
+├── providers/
+│   ├── agentset_provider.py   # Agentset.ai (внешний SaaS)
+│   └── chromadb_provider.py   # ChromaDB (локальный)
+└── services/
+    ├── document_parser.py     # Парсинг через Unstructured
+    └── embedding_service.py   # Embeddings через OpenRouter
+
+apps/frontend/
+├── api/rag.py              # REST API для RAG
+└── modules/rag/            # UI модуль
+    ├── plugin.py
+    ├── router.py
+    ├── templates/rag_base.html
+    └── static/{js,css}/
+```
+
+## Провайдеры
+
+### ChromaDB (локальный)
+
+**Особенности:**
+- Работает через HTTP (docker-контейнер `chromadb/chroma`)
+- Embeddings через OpenRouter
+- Парсинг документов через Unstructured
+- Автоматическое удаление старых чанков при перезаписи
+
+**Конфигурация (conf.json):**
+```json
+{
+  "rag": {
+    "enabled": true,
+    "default_provider": "chromadb",
+    "providers": {
+      "chromadb": {
+        "enabled": true,
+        "host": "localhost",        // "chroma" в docker
+        "port": 8100,
+        "embedding_model": "openai/text-embedding-3-small",
+        "embedding_api_key": "sk-or-...",
+        "chunk_size": 1000,
+        "chunk_overlap": 100,
+        "timeout": 60
+      }
+    }
+  }
+}
+```
+
+### Agentset (внешний SaaS)
+
+**Конфигурация:**
+```json
+{
+  "rag": {
+    "providers": {
+      "agentset": {
+        "enabled": true,
+        "api_key": "as-...",
+        "base_url": "https://api.agentset.ai"
+      }
+    }
+  }
+}
+```
+
+## BaseRAGProvider API
+
+Все провайдеры реализуют `BaseRAGProvider`:
+
+```python
+class BaseRAGProvider(ABC):
+    # Namespaces
+    async def create_namespace(name, description) -> RAGNamespace
+    async def get_namespace(namespace_id) -> RAGNamespace
+    async def list_namespaces() -> List[RAGNamespace]
+    async def delete_namespace(namespace_id) -> bool
+
+    # Documents
+    async def upload_document_from_file(namespace_id, file_path, ...) -> RAGDocument
+    async def upload_document_from_s3(namespace_id, s3_key, ...) -> RAGDocument
+    async def upload_document_from_text(namespace_id, text, ...) -> RAGDocument
+    async def get_document(namespace_id, document_id) -> RAGDocument
+    async def list_documents(namespace_id, limit) -> List[RAGDocument]
+    async def delete_document(namespace_id, document_id) -> bool
+
+    # Search
+    async def search(namespace_id, query, limit, filters) -> List[RAGSearchResult]
+
+    # S3 utilities (общие для всех провайдеров)
+    async def _upload_file_to_s3(file_path, namespace_id, public) -> tuple
+    async def _generate_s3_signed_url(s3_key, expiration) -> str
+```
+
+## Важные правила
+
+### Автоматическое удаление при перезаписи
+
+При загрузке документа с **тем же именем** в namespace - старые чанки автоматически удаляются:
+
+```python
+# ChromaDBRAGProvider._upload_text_internal
+existing = collection.get(where={"document_name": document_name})
+if existing["ids"]:
+    collection.delete(ids=existing["ids"])
+```
+
+### Хранение оригиналов в S3
+
+Оригинальные файлы **ВСЕГДА** сохраняются в S3:
+- `rag_files/{namespace_id}/{filename}` - для файлов
+- `rag_text/{namespace_id}/{filename}` - для текстов
+
+### Метаданные чанков
+
+Каждый чанк хранит:
+- `document_id` - UUID документа
+- `document_name` - имя файла (уникально в namespace)
+- `chunk_index` - индекс чанка
+- `total_chunks` - общее количество чанков
+- `s3_key` - ключ оригинала в S3
+
+### Batching embeddings
+
+`EmbeddingService` автоматически разбивает большие документы на батчи:
+
+```python
+BATCH_SIZE = 50  # Максимум текстов в одном запросе к OpenRouter
+```
+
+## REST API
+
+```
+GET    /frontend/api/rag/providers              # Список провайдеров
+GET    /frontend/api/rag/namespaces             # Список namespaces
+POST   /frontend/api/rag/namespaces             # Создать namespace
+DELETE /frontend/api/rag/namespaces/{id}        # Удалить namespace
+
+GET    /frontend/api/rag/namespaces/{id}/documents      # Список документов
+POST   /frontend/api/rag/namespaces/{id}/documents      # Загрузить документ
+DELETE /frontend/api/rag/namespaces/{id}/documents/{id} # Удалить документ
+GET    /frontend/api/rag/namespaces/{id}/documents/{id}/download  # Скачать оригинал
+
+POST   /frontend/api/rag/namespaces/{id}/search         # Семантический поиск
+POST   /frontend/api/rag/search                         # Глобальный поиск
+```
+
+## ChromaDB raw методы
+
+Для CRM интеграции доступны низкоуровневые методы:
+
+```python
+# Прямой запрос с фильтрами ChromaDB
+results = await provider.query_raw(
+    namespace_id="my_ns",
+    query_embeddings=[[0.1, 0.2, ...]],
+    n_results=10,
+    where={"category": "products"},
+    where_document={"$contains": "keyword"}
+)
+
+# Получение по ID с фильтрами
+results = await provider.get_raw(
+    namespace_id="my_ns",
+    ids=["chunk_1", "chunk_2"],
+    where={"status": "active"}
+)
+
+# Добавление без парсинга
+await provider.add_raw(
+    namespace_id="my_ns",
+    ids=["id1"],
+    embeddings=[[0.1, 0.2, ...]],
+    documents=["text"],
+    metadatas=[{"key": "value"}]
+)
+```
+
+## Docker Compose
+
+ChromaDB запускается как отдельный сервис:
+
+```yaml
+chroma:
+  image: chromadb/chroma:latest
+  ports:
+    - "8100:8100"
+  volumes:
+    - chroma_data:/chroma/chroma
+  command: ["run", "--host", "0.0.0.0", "--port", "8100", "--path", "/chroma/chroma"]
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:8100/api/v2/heartbeat"]
+```
+
+## Deploy
+
+При деплое `deploy.sh` автоматически заменяет:
+- `"host": "localhost"` → `"host": "chroma"` (имя сервиса в docker)
+
+## UI модуль
+
+RAG UI - отдельный standalone модуль (`/rag/`):
+
+**Особенности:**
+- Собственный layout (не использует shared/)
+- Dark/Light тема (по умолчанию dark)
+- Provider selector в sidebar
+- Поиск по всем документам
+- Загрузка/удаление документов
+- Скачивание оригиналов
+
+**JS функции экспортируются в window:**
+```javascript
+window.ragApp = new RAGApp();
+window.showCreateNamespaceModal = showCreateNamespaceModal;
+window.hideCreateNamespaceModal = hideCreateNamespaceModal;
+window.toggleTheme = toggleTheme;
+// ...
+```
+
+## Поддерживаемые форматы
+
+Через Unstructured парсятся:
+- PDF, DOCX, DOC, XLSX, XLS, PPTX, PPT
+- HTML, TXT, MD, RST, RTF, ODT
+- CSV, TSV, EML, MSG, EPUB
+- Изображения с OCR (JPG, PNG, TIFF, BMP)
+
+## Тестирование
+
+```bash
+# Все RAG тесты
+uv run pytest tests/agents/rag/ -v
+
+# Только ChromaDB
+uv run pytest tests/agents/rag/test_chromadb_provider.py -v
+
+# Совместимость провайдеров
+uv run pytest tests/agents/rag/test_provider_compatibility.py -v
+```
+
+## Типичные ошибки
+
+### ❌ Не используй Storage напрямую для RAG
+
+<bad_example>
+storage = container.storage
+await storage.set("rag:doc:123", data)
+</bad_example>
+
+<good_example>
+rag_provider = RAGProviderFactory.get_provider("chromadb")
+await rag_provider.upload_document_from_file(namespace_id, file_path)
+</good_example>
+
+### ❌ Не хардкодь embedding провайдера
+
+<bad_example>
+from openai import OpenAI
+client = OpenAI()
+embeddings = client.embeddings.create(...)
+</bad_example>
+
+<good_example>
+from core.rag.services import EmbeddingService
+
+service = EmbeddingService(
+    api_key=config.embedding_api_key,
+    model=config.embedding_model
+)
+embeddings = await service.generate_embeddings(texts)
+</good_example>
+
+### ❌ Не забывай про namespace изоляцию
+
+<bad_example>
+# Поиск без указания namespace
+results = await provider.search(query="test")
+</bad_example>
+
+<good_example>
+results = await provider.search(
+    namespace_id="company_123_docs",
+    query="test"
+)
+</good_example>

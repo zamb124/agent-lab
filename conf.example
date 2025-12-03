@@ -295,5 +295,27 @@
     "instrument_openai": true,
     "instrument_asyncpg": true,
     "log_level": "DEBUG"
+  },
+  "rag": {
+    "enabled": false,
+    "default_provider": "chromadb",
+    "providers": {
+      "chromadb": {
+        "enabled": true,
+        "host": "chroma",
+        "port": 8100,
+        "embedding_model": "openai/text-embedding-3-small",
+        "embedding_api_key": "sk-or-v1-your-openrouter-api-key",
+        "chunk_size": 1000,
+        "chunk_overlap": 100,
+        "timeout": 60
+      },
+      "agentset": {
+        "enabled": false,
+        "api_key": "your-agentset-api-key",
+        "base_url": "https://api.agentset.ai",
+        "timeout": 60
+      }
+    }
   }
 }

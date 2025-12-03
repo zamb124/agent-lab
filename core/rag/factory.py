@@ -6,12 +6,14 @@ import logging
 from typing import Optional
 from .base_provider import BaseRAGProvider
 from .providers.agentset_provider import AgentsetRAGProvider
+from .providers.chromadb_provider import ChromaDBRAGProvider
 from core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 RAG_PROVIDERS = {
     "agentset": AgentsetRAGProvider,
+    "chromadb": ChromaDBRAGProvider,
 }
 
 

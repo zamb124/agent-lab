@@ -3,8 +3,10 @@ TaskIQ задачи для отправки уведомлений через We
 """
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
+from core.websocket import websocket_manager
+from core.rag.factory import get_default_rag_provider
 from core.tasks.broker import broker
 
 logger = logging.getLogger(__name__)
@@ -29,8 +31,6 @@ async def send_notification_task(
     Returns:
         True если уведомление отправлено
     """
-    from apps.frontend.core.websocket_manager import websocket_manager
-    
     notification = {
         "type": notification_type,
         "data": data,
@@ -67,8 +67,6 @@ async def send_model_update_task(
     Returns:
         True если уведомление отправлено
     """
-    from apps.frontend.core.websocket_manager import websocket_manager
-    
     notification = {
         "type": "MODEL_UPDATE",
         "data": {
@@ -83,4 +81,72 @@ async def send_model_update_task(
     logger.debug(f"Model update: {model_type}/{action}/{model_id}")
     
     return True
+
+
+@broker.task(retry_on_error=True, max_retries=3)
+async def process_rag_document_task(
+    namespace_id: str,
+    s3_key: str,
+    document_name: str,
+    flow_id: str,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Асинхронная обработка документа для RAG (парсинг, chunking, embedding).
+    
+    Args:
+        namespace_id: ID namespace в RAG
+        s3_key: Ключ файла в S3
+        document_name: Имя документа
+        flow_id: ID flow
+        metadata: Дополнительные метаданные
+    
+    Returns:
+        Dict с результатом обработки
+    """
+    logger.info(f"RAG: начало обработки документа {document_name} в namespace {namespace_id}")
+    
+    try:
+        provider = get_default_rag_provider()
+        document = await provider.upload_document_from_s3(
+            namespace_id=namespace_id,
+            s3_key=s3_key,
+            document_name=document_name,
+            metadata=metadata or {},
+        )
+        
+        logger.info(f"RAG: документ {document_name} успешно обработан, document_id={document.document_id}")
+        
+        notification = {
+            "type": "RAG_DOCUMENT_READY",
+            "data": {
+                "document_id": document.document_id,
+                "document_name": document_name,
+                "flow_id": flow_id,
+                "status": "completed",
+            },
+        }
+        # Публикуем в Redis для межпроцессной доставки в FastAPI
+        await websocket_manager.publish_to_redis(notification, "notifications")
+        
+        return {
+            "status": "completed",
+            "document_id": document.document_id,
+            "document_name": document_name,
+        }
+        
+    except Exception as e:
+        logger.error(f"RAG: ошибка обработки документа {document_name}: {e}", exc_info=True)
+        
+        notification = {
+            "type": "RAG_DOCUMENT_ERROR",
+            "data": {
+                "document_name": document_name,
+                "flow_id": flow_id,
+                "error": str(e),
+            },
+        }
+        await websocket_manager.publish_to_redis(notification, "notifications")
+        
+        raise
 

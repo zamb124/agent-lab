@@ -1,6 +1,8 @@
 /**
  * HTMX Manager - обработка HTMX событий и модальных окон
  */
+import { showNotification } from './components/notification.js';
+
 export default class HTMXManager {
     constructor() {
         this.setupHTMXEvents();
@@ -97,6 +99,12 @@ export default class HTMXManager {
             case 'MODEL_UPDATED':
                 this.handleModelUpdate(data);
                 break;
+            case 'RAG_DOCUMENT_READY':
+                this.handleRAGDocumentReady(data);
+                break;
+            case 'RAG_DOCUMENT_ERROR':
+                this.handleRAGDocumentError(data);
+                break;
             default:
                 console.warn('⚠️ Неизвестный тип WebSocket сообщения:', type);
         }
@@ -165,6 +173,28 @@ export default class HTMXManager {
                 });
             }
         });
+    }
+    
+    handleRAGDocumentReady(data) {
+        console.log('✅ RAG документ готов:', data);
+        
+        const { document_name, flow_id } = data;
+        
+        showNotification(`Документ "${document_name}" успешно обработан`, 'success');
+        
+        // Обновляем список документов если открыта страница с этим flow
+        const kbDocsList = document.getElementById('knowledge-base-docs-list');
+        if (kbDocsList && window.currentFlowId === flow_id) {
+            window.dispatchEvent(new CustomEvent('rag-documents-updated', { detail: { flow_id } }));
+        }
+    }
+    
+    handleRAGDocumentError(data) {
+        console.log('❌ RAG ошибка:', data);
+        
+        const { document_name, error } = data;
+        
+        showNotification(`Ошибка обработки "${document_name}": ${error}`, 'danger');
     }
     
     showModal() {

@@ -39,6 +39,7 @@ class DatabaseConfig(BaseModel):
     )
     shared_url: Optional[str] = None  # URL для shared БД (users, companies, files)
     agents_db_url: Optional[str] = None  # URL для agents БД (agents, flows, tools)
+    redis_url: str = "redis://localhost:8099"  # URL для Redis (TaskIQ очереди)
 
 
 class OpenRouterConfig(BaseModel):
@@ -269,9 +270,20 @@ class RAGProviderConfig(BaseModel):
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     timeout: int = 60
-    embedding_provider: str = "openai"
-    embedding_model: str = "text-embedding-3-small"
+    
+    # ChromaDB specific
+    host: Optional[str] = None
+    port: Optional[int] = None
+    
+    # Embeddings (OpenRouter по умолчанию)
+    embedding_model: str = "openai/text-embedding-3-small"
     embedding_api_key: Optional[str] = None
+    embedding_base_url: Optional[str] = None
+    
+    # Chunking
+    chunk_size: int = 1000
+    chunk_overlap: int = 100
+    
     extra_params: Dict[str, Any] = Field(default_factory=dict)
 
 

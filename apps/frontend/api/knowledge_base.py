@@ -103,14 +103,16 @@ async def get_flow_documents(
 async def upload_document_to_flow(
     flow_id: str,
     flow_repo: FlowRepositoryDep,
-    rag_repo: RAGRepositoryDep,
     file: UploadFile = File(...)
 ):
     """
     Загружает документ в базу знаний flow.
+    Файл загружается в S3 сразу, а обработка (парсинг, embedding) выполняется в фоне.
     
     Поддерживаемые форматы: PDF, DOCX, TXT, MD, HTML, CSV
     """
+    from apps.frontend.tasks import process_rag_document_task
+    
     context = get_context()
     
     if not context or not context.active_company:
@@ -119,29 +121,31 @@ async def upload_document_to_flow(
     namespace_id = await _get_namespace_id_for_flow(flow_id, flow_repo)
     
     file_content = await file.read()
+    document_name = file.filename or "document"
     
     file_processor = await get_default_file_processor()
     file_record = await file_processor.process_file_from_bytes(
         data=file_content,
-        original_name=file.filename or "document",
+        original_name=document_name,
         content_type=file.content_type or "application/octet-stream",
         uploaded_by=context.user.user_id,
         public=False,
         metadata={"uploaded_via": "rag_ui", "flow_id": flow_id}
     )
     
-    document = await rag_repo.upload_document_from_s3(
+    await process_rag_document_task.kiq(
         namespace_id=namespace_id,
         s3_key=file_record.s3_key,
-        document_name=file.filename,
-        metadata={"flow_id": flow_id, "uploaded_by": context.user.user_id}
+        document_name=document_name,
+        flow_id=flow_id,
+        metadata={"flow_id": flow_id, "uploaded_by": context.user.user_id},
     )
     
-    logger.info(f"Документ {file.filename} загружен в flow {flow_id}, document_id={document.document_id}")
+    logger.info(f"Документ {document_name} поставлен в очередь на обработку для flow {flow_id}")
     
     return UploadDocumentResponse(
-        document_id=document.document_id,
-        name=file.filename or "document",
+        document_id=file_record.s3_key,
+        name=document_name,
         status="processing"
     )
 

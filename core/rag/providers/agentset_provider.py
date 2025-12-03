@@ -14,7 +14,7 @@ from urllib.parse import urlparse, unquote
 from ..base_provider import BaseRAGProvider
 from core.rag.models import RAGDocument, RAGSearchResult, RAGNamespace
 from core.http import get_httpx_client
-from core.files.s3_client import S3ClientFactory
+# S3ClientFactory используется через базовый класс BaseRAGProvider
 from core.utils.slug import generate_slug
 
 logger = logging.getLogger(__name__)
@@ -127,7 +127,8 @@ class AgentsetRAGProvider(BaseRAGProvider):
         """Получает namespace из Agentset"""
         response = await self._client.get(f"/v1/namespace/{namespace_id}")
         
-        if response.status_code == 404:
+        # Agentset возвращает 401 для чужих/несуществующих namespace (защита от перебора ID)
+        if response.status_code in (404, 401):
             return None
         
         response.raise_for_status()
@@ -165,7 +166,13 @@ class AgentsetRAGProvider(BaseRAGProvider):
         """Удаляет namespace"""
         response = await self._client.delete(f"/v1/namespace/{namespace_id}")
         
-        if response.status_code == 404:
+        # Agentset возвращает 401 для чужих/несуществующих namespace
+        if response.status_code in (404, 401):
+            return False
+        
+        # 422/500 - баг Agentset с полем createdAt (expected date, received string)
+        if response.status_code in (422, 500):
+            logger.warning(f"Не удалось удалить namespace {namespace_id}: {response.text}")
             return False
         
         response.raise_for_status()
@@ -213,21 +220,6 @@ class AgentsetRAGProvider(BaseRAGProvider):
         
         return data
     
-    def _get_content_type(self, file_path: str) -> str:
-        """Определяет content type по расширению файла"""
-        content_types = {
-            ".pdf": "application/pdf",
-            ".txt": "text/plain",
-            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            ".html": "text/html",
-            ".md": "text/markdown",
-            ".csv": "text/csv",
-            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        }
-        
-        suffix = Path(file_path).suffix.lower()
-        return content_types.get(suffix, "application/octet-stream")
-    
     async def upload_document_from_file(
         self,
         namespace_id: str,
@@ -240,41 +232,26 @@ class AgentsetRAGProvider(BaseRAGProvider):
         Загружает документ из локального файла.
         
         Стратегия:
-        1. Загружаем файл в S3 с публичным ACL
-        2. Используем direct_s3_url для доступа
-        3. Передаем URL в Agentset через fileUrl
-        4. Agentset скачивает и обрабатывает
+        1. Загружаем файл в S3 с публичным ACL (через базовый метод)
+        2. Передаем публичный URL в Agentset через fileUrl
+        3. Agentset скачивает и обрабатывает
         """
-        path = Path(file_path)
-        
-        if not path.exists():
-            raise FileNotFoundError(f"Файл не найден: {file_path}")
-        
-        s3_client = S3ClientFactory.create_default_client()
-        if not s3_client:
-            raise ValueError("S3 клиент не настроен для загрузки файлов в RAG")
-        
-        s3_key = f"rag_public/{namespace_id}/{path.name}"
-        
-        with open(file_path, "rb") as f:
-            file_data = f.read()
-        
-        await s3_client.upload_bytes(
-            data=file_data,
-            key=s3_key,
-            content_type=self._get_content_type(file_path),
-            acl="public-read"
+        s3_key, bucket_name, original_filename, file_url = await self._upload_file_to_s3(
+            file_path, namespace_id, public=True
         )
         
-        file_url = f"{s3_client.endpoint_url}/{s3_client.bucket_name}/{s3_key}"
+        doc_name = document_name or original_filename
         
-        doc_name = document_name or path.name
+        # Сохраняем s3_key в metadata для доступа к оригиналу
+        doc_metadata = metadata or {}
+        doc_metadata["s3_key"] = s3_key
+        doc_metadata["s3_bucket"] = bucket_name
         
         ingest_data = await self._create_ingest_job_from_url(
             namespace_id,
             file_url,
             doc_name,
-            metadata
+            doc_metadata
         )
         
         logger.info(f"Документ '{doc_name}' загружен в namespace {namespace_id} через S3: {file_url}")
@@ -284,7 +261,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
             name=doc_name,
             namespace=namespace_id,
             status=ingest_data.get("status", "processing"),
-            metadata=metadata or {},
+            metadata=doc_metadata,
             created_at=ingest_data.get("createdAt")
         )
     
@@ -305,32 +282,20 @@ class AgentsetRAGProvider(BaseRAGProvider):
         3. Передаем signed URL в Agentset (файл остается приватным в S3)
         4. После индексации URL протухнет, но документ уже в RAG
         """
-        s3_client = S3ClientFactory.create_default_client()
-        
-        if not s3_client:
-            raise ValueError("S3 клиент не настроен. Проверьте конфигурацию s3.enabled")
-        
-        # Генерируем signed URL на 24 часа (86400 сек) для индексации Agentset
-        signed_url = await s3_client.generate_presigned_url(
-            key=s3_key,
-            expiration=86400  # 24 часа
-        )
-        
-        if not signed_url:
-            raise ValueError(f"Не удалось создать signed URL для файла: {s3_key}")
+        # Генерируем signed URL на 24 часа для индексации Agentset
+        signed_url = await self._generate_signed_url(s3_key, expiration=86400)
         
         doc_name = document_name or Path(s3_key).name
         
         # Сохраняем оригинальный s3_key для генерации новых signed URL
-        if metadata is None:
-            metadata = {}
-        metadata["s3_key"] = s3_key
+        doc_metadata = metadata or {}
+        doc_metadata["s3_key"] = s3_key
         
         ingest_data = await self._create_ingest_job_from_url(
             namespace_id,
-            signed_url,  # Передаем signed URL вместо публичного
+            signed_url,
             doc_name,
-            metadata
+            doc_metadata
         )
         
         logger.info(
@@ -343,7 +308,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
             name=doc_name,
             namespace=namespace_id,
             status=ingest_data.get("status", "processing"),
-            metadata=metadata,
+            metadata=doc_metadata,
             created_at=ingest_data.get("createdAt")
         )
 
@@ -358,51 +323,27 @@ class AgentsetRAGProvider(BaseRAGProvider):
         """
         Загружает текст в Agentset, сначала сохраняя его как файл в S3.
         """
-        doc_name = document_name or f"text_document_{len(text)}"
-
-        # Сохраняем текст как файл в S3
-        s3_client = S3ClientFactory.create_default_client()
-        if not s3_client:
-            raise ValueError("S3 клиент не настроен для загрузки текста в RAG")
-
-        file_id_short = str(uuid.uuid4())[:8]
-
-        # Генерируем читаемое название файла
+        # Генерируем имя файла
         if document_name and document_name.strip():
-            # Если пользователь указал название - используем его, убираем расширение если есть
             base_name = document_name.strip()
             if '.' in base_name:
-                base_name = base_name.rsplit('.', 1)[0]  # Убираем расширение
-
-            safe_name = "".join(c for c in base_name if c.isalnum() or c in (' ', '-', '_')).strip()
-            if not safe_name:
-                safe_name = "document"
-            file_base_name = safe_name[:40]  # Ограничиваем длину
+                base_name = base_name.rsplit('.', 1)[0]
+            filename = base_name
         else:
-            # Если не указано - используем первые символы текста
             text_preview = text.strip()[:40].replace('\n', ' ').replace('\r', ' ')
-            safe_name = "".join(c for c in text_preview if c.isalnum() or c in (' ', '-', '_')).strip()
-            if not safe_name:
-                safe_name = "text"
-            file_base_name = safe_name
+            filename = text_preview or "text"
+        
+        doc_name = document_name or f"text_document_{len(text)}"
 
-        s3_key = f"rag_text/{namespace_id}/{file_id_short}_{file_base_name}.txt"
+        # Загружаем текст в S3 через базовый метод
+        s3_key, bucket_name = await self._upload_text_to_s3(text, namespace_id, filename)
 
-        # Загружаем текст как bytes в S3
-        text_bytes = text.encode('utf-8')
-        await s3_client.upload_bytes(
-            data=text_bytes,
-            key=s3_key,
-            content_type="text/plain"
-        )
-
-        # Обновляем метаданные с информацией о файле для правильного извлечения названия
-        if metadata is None:
-            metadata = {}
-        metadata.update({
-            "file_id": file_id_short,  # Добавляем короткий file_id для кодирования названия
+        # Обновляем метаданные
+        doc_metadata = metadata or {}
+        doc_metadata.update({
             "original_text_length": len(text),
             "s3_key": s3_key,
+            "s3_bucket": bucket_name,
             "uploaded_via": "text_upload"
         })
 
@@ -411,7 +352,7 @@ class AgentsetRAGProvider(BaseRAGProvider):
             namespace_id=namespace_id,
             s3_key=s3_key,
             document_name=doc_name,
-            metadata=metadata,
+            metadata=doc_metadata,
             **kwargs
         )
     
@@ -423,7 +364,8 @@ class AgentsetRAGProvider(BaseRAGProvider):
         """Получает информацию о документе"""
         response = await self._client.get(f"/v1/namespace/{namespace_id}/documents/{document_id}")
         
-        if response.status_code == 404:
+        # Agentset возвращает 401 для чужих/несуществующих ресурсов
+        if response.status_code in (404, 401):
             return None
         
         response.raise_for_status()
@@ -489,12 +431,10 @@ class AgentsetRAGProvider(BaseRAGProvider):
             # Генерируем signed URL если есть s3_key
             signed_url = None
             if s3_key:
-                s3_client = S3ClientFactory.create_default_client()
-                if s3_client:
-                    signed_url = await s3_client.generate_presigned_url(
-                        key=s3_key,
-                        expiration=3600
-                    )
+                try:
+                    signed_url = await self._generate_signed_url(s3_key, expiration=3600)
+                except ValueError:
+                    pass  # S3 не настроен
 
             documents.append(RAGDocument(
                 document_id=item["id"],
@@ -519,7 +459,8 @@ class AgentsetRAGProvider(BaseRAGProvider):
         """Удаляет документ"""
         response = await self._client.delete(f"/v1/namespace/{namespace_id}/documents/{document_id}")
         
-        if response.status_code == 404:
+        # Agentset возвращает 401 для чужих/несуществующих ресурсов
+        if response.status_code in (404, 401):
             return False
         
         response.raise_for_status()

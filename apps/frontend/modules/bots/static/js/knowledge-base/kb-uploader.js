@@ -7,6 +7,16 @@ import { showNotification } from '/static/js/components/notification.js';
 export class KnowledgeBaseUploader {
     constructor(kbManager) {
         this.kbManager = kbManager;
+        this._setupWebSocketListener();
+    }
+    
+    _setupWebSocketListener() {
+        window.addEventListener('rag-documents-updated', (event) => {
+            const { flow_id } = event.detail;
+            if (window.currentFlowId === flow_id) {
+                this.kbManager.loadDocuments(flow_id);
+            }
+        });
     }
     
     openTextModal() {
@@ -102,6 +112,8 @@ export class KnowledgeBaseUploader {
             return;
         }
         
+        window.currentFlowId = flowId;
+        
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.pdf,.txt,.docx,.html,.md,.csv';
@@ -112,7 +124,6 @@ export class KnowledgeBaseUploader {
             
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('flow_id', flowId);
             
             try {
                 showNotification('Загрузка документа...', 'info');
@@ -127,10 +138,9 @@ export class KnowledgeBaseUploader {
                 }
                 
                 const result = await response.json();
-                showNotification('Документ успешно загружен и добавлен в базу знаний', 'success');
+                showNotification('Документ загружен и обрабатывается. Вы получите уведомление когда он будет готов.', 'info');
                 
                 await this.kbManager.addSearchToolToAgent(flowId);
-                await this.kbManager.loadDocuments(flowId);
                 
             } catch (error) {
                 console.error('Ошибка загрузки документа:', error);

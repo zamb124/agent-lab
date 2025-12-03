@@ -138,6 +138,16 @@ sed -i.bak 's|"debug": true|"debug": false|g' "$TMP_DIR/conf.json"
 sed -i.bak 's|"debug": true|"debug": false|g' "$TMP_DIR/agents_conf.json"
 sed -i.bak 's|"debug": true|"debug": false|g' "$TMP_DIR/frontend_conf.json"
 
+# ChromaDB: заменяем localhost на chroma (имя сервиса в docker-compose)
+sed -i.bak 's|"host": "localhost"|"host": "chroma"|g' "$TMP_DIR/conf.json"
+sed -i.bak 's|"host": "localhost"|"host": "chroma"|g' "$TMP_DIR/agents_conf.json"
+sed -i.bak 's|"host": "localhost"|"host": "chroma"|g' "$TMP_DIR/frontend_conf.json"
+
+# Redis: заменяем localhost:8099 на redis:6379 (имя сервиса в docker-compose)
+sed -i.bak 's|redis://localhost:8099|redis://redis:6379|g' "$TMP_DIR/conf.json"
+sed -i.bak 's|redis://localhost:8099|redis://redis:6379|g' "$TMP_DIR/agents_conf.json"
+sed -i.bak 's|redis://localhost:8099|redis://redis:6379|g' "$TMP_DIR/frontend_conf.json"
+
 rm -f "$TMP_DIR"/*.bak
 
 echo "[3/8] Копирование конфигов на сервер..."
@@ -180,6 +190,11 @@ sleep 2
 echo "Checking taskiq-worker..."
 $SSH_CMD "cd $REMOTE_DIR && sudo docker compose ps taskiq-worker --format '{{.Status}}' | grep -q 'Up' && echo 'OK: taskiq-worker running' || echo 'FAIL: taskiq-worker'"
 $SSH_CMD "cd $REMOTE_DIR && sudo docker compose logs taskiq-worker --tail=5"
+sleep 2
+
+echo "Checking chroma service (8100)..."
+$SSH_CMD "cd $REMOTE_DIR && sudo docker compose ps chroma --format '{{.Status}}' | grep -q 'Up' && echo 'OK: chroma running' || echo 'FAIL: chroma'"
+$SSH_CMD "curl -sf http://localhost:8100/api/v2/heartbeat || echo 'FAIL: chroma API not responding'"
 sleep 2
 
 echo "[8/8] Reloading nginx..."

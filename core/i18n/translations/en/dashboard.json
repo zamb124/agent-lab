@@ -16,7 +16,8 @@
     "tasks": "Tasks",
     "users": "Users",
     "company_management": "Company Management",
-    "mcp": "MCP"
+    "mcp": "MCP",
+    "traces": "Traces"
   },
   "header": {
     "theme_toggle": "Toggle theme",
@@ -45,7 +46,8 @@
     "history": "History",
     "variables": "Keys and Variables",
     "billing": "Billing & Plans",
-    "mcp": "MCP"
+    "mcp": "MCP",
+    "traces": "Traces"
   },
   "welcome": {
     "title": "Welcome",

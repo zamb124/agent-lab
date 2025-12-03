@@ -13,6 +13,8 @@ export class KnowledgeBaseManager {
         const listContainer = document.getElementById('knowledge-base-docs-list');
         if (!listContainer) return;
         
+        window.currentFlowId = flowId;
+        
         listContainer.innerHTML = '<div class="loading-indicator"><div class="spinner"></div></div>';
         
         try {
@@ -45,6 +47,7 @@ export class KnowledgeBaseManager {
             documents.forEach(doc => {
                 const statusIcon = {
                     'ready': '<i class="ti ti-check-circle-fill text-success"></i>',
+                    'completed': '<i class="ti ti-check-circle-fill text-success"></i>',
                     'processing': '<i class="ti ti-hourglass-split text-warning"></i>',
                     'failed': '<i class="ti ti-x-circle-fill text-danger"></i>'
                 }[doc.status] || '<i class="ti ti-question-circle"></i>';

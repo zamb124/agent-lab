@@ -24,10 +24,13 @@ class TracesPlugin(Plugin):
         {
             "id": "traces",
             "label": "dashboard.navigation.traces",
-            "icon": "bi-diagram-3",
+            "icon": "activity",
             "url": "/frontend/traces/",
-            "order": 45,
-            "type": "htmx"
+            "order": 70,
+            "type": "htmx",
+            "group": "Инструменты",
+            "group_icon": "tools",
+            "group_order": 50
         }
     ]
 
@@ -36,9 +39,9 @@ class TracesPlugin(Plugin):
             "id": "traces",
             "title": "dashboard.widgets.traces",
             "description": "Просмотр OpenTelemetry трейсов",
-            "icon": "bi-diagram-3",
+            "icon": "activity",
             "url": "/frontend/traces/",
-            "order": 45
+            "order": 70
         }
     ]
 

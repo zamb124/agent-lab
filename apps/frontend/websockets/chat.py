@@ -19,7 +19,7 @@ from core.utils.tokens import get_token_service
 from apps.agents.container import get_agents_container
 from apps.agents.interfaces.web_interface import get_web_interface
 from apps.frontend.container import get_frontend_container
-from apps.frontend.core.websocket_manager import websocket_manager
+from core.websocket import websocket_manager
 
 logger = logging.getLogger(__name__)
 

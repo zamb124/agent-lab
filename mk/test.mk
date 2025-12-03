@@ -3,12 +3,12 @@
 WORKERS ?= 2
 
 test-up:
-	docker-compose up -d postgres
-	@echo "Ожидание готовности БД..."
-	@sleep 5
+	docker-compose up -d postgres chroma redis
+	@echo "Ожидание готовности сервисов (postgres, chroma, redis)..."
+	@sleep 7
 
 test-down:
-	docker-compose down
+	docker-compose stop postgres chroma redis
 
 # Запуск unit/API тестов параллельно (без browser тестов)
 test-unit: test-up
@@ -31,7 +31,6 @@ test: test-up
 	@echo ""
 	@echo "=== Запуск browser тестов (последовательно) ==="
 	uv run pytest tests/frontend/browser -v --timeout=180 || true
-	@$(MAKE) test-down
 
 test-all: test-up
 	@echo "=== Запуск всех unit/API тестов в $(WORKERS) воркерах ==="
@@ -40,7 +39,6 @@ test-all: test-up
 	@echo ""
 	@echo "=== Запуск browser тестов (последовательно) ==="
 	uv run pytest tests/frontend/browser -v --timeout=180 || true
-	@$(MAKE) test-down
 
 test-cov: test-up
 	@echo "Запуск тестов с покрытием в $(WORKERS) воркерах (без browser)..."
@@ -48,7 +46,6 @@ test-cov: test-up
 		--ignore=tests/frontend/browser \
 		-m "not integration" \
 		--cov=apps --cov=core --cov-report=term-missing --cov-report=html:htmlcov
-	@$(MAKE) test-down
 
 test-cov-all: test-up
 	@echo "Запуск всех тестов с покрытием..."
@@ -57,7 +54,6 @@ test-cov-all: test-up
 		--cov=apps --cov=core --cov-report=term-missing --cov-report=html:htmlcov
 	uv run pytest tests/frontend/browser -v --timeout=180 \
 		--cov=apps --cov=core --cov-append --cov-report=term-missing --cov-report=html:htmlcov
-	@$(MAKE) test-down
 
 test-cov-report:
 	@echo "Генерация HTML отчета покрытия..."

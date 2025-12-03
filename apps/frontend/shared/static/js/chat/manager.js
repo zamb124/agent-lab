@@ -1318,12 +1318,8 @@ class ChatManager {
             console.log('🔑 [SUCCESS] Используем токен для встроенного чата, токен:', this.embedToken.substring(0, 20) + '...');
             console.log('🔑 [SUCCESS] Полный URL (замаскирован):', wsUrl.replace(/\?token=[^&]+/, '?token=***'));
         } else {
-            console.error('❌ [ERROR] НЕТ ТОКЕНА для встроенного чата!');
-            console.error('❌ [ERROR]   this.embedToken =', this.embedToken);
-            console.error('❌ [ERROR]   typeof =', typeof this.embedToken);
-            console.error('❌ [ERROR]   пустая строка? =', this.embedToken === '');
-            console.error('❌ [ERROR]   null? =', this.embedToken === null);
-            console.error('❌ [ERROR]   undefined? =', this.embedToken === undefined);
+            // Токен не установлен - это нормально для обычных страниц
+            console.log('ℹ️ Чат без токена (обычная авторизация через cookies)');
         }
         
         console.log('🔌 [FINAL] Подключение к WebSocket:', wsUrl.replace(/\?token=[^&]+/, '?token=***'));

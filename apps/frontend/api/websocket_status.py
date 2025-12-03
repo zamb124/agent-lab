@@ -5,7 +5,7 @@ API для мониторинга статуса WebSocket соединений
 from fastapi import APIRouter
 from typing import Dict, Any
 
-from apps.frontend.core.websocket_manager import websocket_manager
+from core.websocket import websocket_manager
 
 router = APIRouter(prefix="/api/websocket", tags=["WebSocket Status"])
 
