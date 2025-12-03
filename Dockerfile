@@ -1,4 +1,5 @@
-FROM python:3.12-slim AS base
+# Минимальный базовый образ с core зависимостями
+FROM python:3.12-slim AS base-core
 
 RUN apt-get update && apt-get install -y \
     gcc \
@@ -13,25 +14,48 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY README.md ./
 
-# CPU-only PyTorch (без CUDA, экономит ~2-3 GB)
-ENV PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
-
+# Устанавливаем только core зависимости (без групп rag, docs)
 RUN uv pip install --system -e .
 
 
+# RAG образ с ML зависимостями (для worker)
+FROM base-core AS base-rag
+
+# CPU-only PyTorch (без CUDA, экономит ~2-3 GB)
+ENV PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
+
+# Устанавливаем RAG группу с тяжелыми ML пакетами
+RUN uv pip install --system --group rag
+
+
+# Docs образ - минимальный, только для сборки документации
+FROM python:3.12-slim AS base-docs
+
+RUN pip install uv
+
+WORKDIR /app
+
+# Устанавливаем только mkdocs и его зависимости напрямую (без pyproject.toml)
+RUN uv pip install --system \
+    "mkdocs>=1.6.1" \
+    "mkdocs-material>=9.6.21" \
+    "mkdocs-static-i18n>=1.3.0" \
+    "pymdown-extensions>=10.16.1"
+
+
 # Сборка документации
-FROM base AS docs-builder
+FROM base-docs AS docs-builder
 
 COPY mkdocs.yml ./
 COPY docs/ ./docs/
 COPY core/ ./core/
 COPY apps/ ./apps/
 
-RUN uv run mkdocs build --clean
+RUN mkdocs build --clean
 
 
-# Agents Service
-FROM base AS agents
+# Agents Service (легкий образ без ML)
+FROM base-core AS agents
 
 COPY core/ ./core/
 COPY apps/agents/ ./apps/agents/
@@ -45,8 +69,8 @@ EXPOSE 8001
 CMD ["python", "run_prod.py"]
 
 
-# Frontend Service
-FROM base AS frontend
+# Frontend Service (легкий образ без ML)
+FROM base-core AS frontend
 
 COPY core/ ./core/
 COPY apps/ ./apps/
@@ -60,8 +84,8 @@ EXPOSE 8002
 CMD ["python", "run_frontend_prod.py"]
 
 
-# Worker (требует доступ ко всем apps для импорта задач)
-FROM base AS worker
+# Worker (с RAG/ML зависимостями)
+FROM base-rag AS worker
 
 COPY core/ ./core/
 COPY apps/ ./apps/
@@ -71,8 +95,8 @@ COPY conf.json ./
 CMD ["python", "run_worker.py"]
 
 
-# Full (для локальной разработки)
-FROM base AS full
+# Full (для локальной разработки - с ML)
+FROM base-rag AS full
 
 COPY core/ ./core/
 COPY apps/ ./apps/

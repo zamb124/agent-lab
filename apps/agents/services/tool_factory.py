@@ -43,6 +43,16 @@ class ToolFactory:
     def __init__(self):
         self._module_cache = {}
 
+    def _normalize_module_path(self, module_path: str) -> str:
+        """
+        Нормализует путь модуля из старого формата app.* в apps.*
+        """
+        if module_path.startswith("app."):
+            normalized = "apps.agents." + module_path[4:]
+            logger.warning(f"Нормализация пути модуля: {module_path} → {normalized}")
+            return normalized
+        return module_path
+
     def _get_cached_module(self, module_path: str, reload: bool = False):
         """
         Получает модуль с кэшированием.
@@ -54,6 +64,8 @@ class ToolFactory:
         Returns:
             Загруженный модуль
         """
+        module_path = self._normalize_module_path(module_path)
+        
         if reload or module_path not in self._module_cache:
             module = importlib.import_module(module_path)
             if reload and module_path in self._module_cache:

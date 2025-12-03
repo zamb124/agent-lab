@@ -65,7 +65,8 @@ async def process_agent_task(
     
     try:
         # Отправляем typing notification (агент начал работу)
-        await send_typing_task.kiq(
+        # Вызываем напрямую, чтобы typing показался ДО начала работы агента
+        await send_typing_task(
             platform=platform,
             flow_id=flow_id,
             session_id=session_id,
@@ -100,7 +101,7 @@ async def process_agent_task(
             interrupt_value = _extract_interrupt_value(result["__interrupt__"])
             
             # Останавливаем typing
-            await send_typing_task.kiq(
+            await send_typing_task(
                 platform=platform,
                 flow_id=flow_id,
                 session_id=session_id,
@@ -131,7 +132,7 @@ async def process_agent_task(
         response_text = _extract_response_text(result)
         
         # Останавливаем typing
-        await send_typing_task.kiq(
+        await send_typing_task(
             platform=platform,
             flow_id=flow_id,
             session_id=session_id,
@@ -139,7 +140,7 @@ async def process_agent_task(
             action="stop",
         )
         
-        # Отправляем ответ напрямую (не через kiq чтобы избежать дублирования)
+        # Отправляем ответ напрямую
         await send_message_task(
             platform=platform,
             flow_id=flow_id,
@@ -163,7 +164,7 @@ async def process_agent_task(
         logger.info(f"AgentInterrupt для session {session_id}: {interrupt.value}")
         
         # Останавливаем typing
-        await send_typing_task.kiq(
+        await send_typing_task(
             platform=platform,
             flow_id=flow_id,
             session_id=session_id,
@@ -405,7 +406,7 @@ async def _stop_typing_safe(
 ):
     """Безопасно останавливает typing (игнорирует ошибки)"""
     try:
-        await send_typing_task.kiq(
+        await send_typing_task(
             platform=platform,
             flow_id=flow_id,
             session_id=session_id,
