@@ -35,6 +35,12 @@
     height: 40px;
 }
 
+.landing-header .brand-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
 .landing-header .brand {
     display: flex;
     align-items: center;
