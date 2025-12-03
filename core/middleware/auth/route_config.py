@@ -34,6 +34,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/agents/api/v1/payments/webhook/*", skip=True),
     
     # Публичные endpoints без авторизации
+    RouteRule("/", auth_required=False, context_type="anonymous"),  # Landing page
     RouteRule("/agents/api/v1/lead", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/auth", auth_required=False, context_type="anonymous"),
     RouteRule("/frontend/chat/embed*", auth_required=False, context_type="anonymous"),
