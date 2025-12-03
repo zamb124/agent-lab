@@ -6,16 +6,16 @@
     <title>AI Stylist - Виртуальная примерка</title>
     
     <!-- Favicon -->
-    <link rel="icon" href="/static/img/favicon/favicon.ico">
+    <link rel="icon" href="{{ static('/img/favicon/favicon.ico') }}">
     
     <!-- Tabler Icons -->
-    <link rel="stylesheet" href="/static/fonts/tabler-icons/tabler-icons.min.css">
+    <link rel="stylesheet" href="{{ static('/fonts/tabler-icons/tabler-icons.min.css') }}">
     
     <!-- HTMX -->
-    <script src="/static/js/htmx.min.js"></script>
+    <script src="{{ static('/js/htmx.min.js') }}"></script>
     
     <!-- FASHN Styles -->
-    <link rel="stylesheet" href="/static/css/fashn.css">
+    <link rel="stylesheet" href="{{ static('/css/fashn.css') }}">
 </head>
 <body>
     <!-- Header Section -->
@@ -228,6 +228,6 @@
         <div class="success-message" id="successMessage"></div>
     </div>
 
-    <script src="/static/js/fashn.js" type="module"></script>
+    <script src="{{ static('/js/fashn.js') }}" type="module"></script>
 </body>
 </html>

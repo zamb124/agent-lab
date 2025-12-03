@@ -1,5 +1,5 @@
 {% import 'components.html' as c %}
-<link rel="stylesheet" href="/static/history/css/history.css">
+<link rel="stylesheet" href="{{ static('/history/css/history.css') }}">
 
 <div class="modal-overlay" onclick="this.remove(); document.body.style.overflow = '';">
     <div class="modal-content" onclick="event.stopPropagation()">

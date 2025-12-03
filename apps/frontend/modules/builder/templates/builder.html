@@ -5,8 +5,8 @@
 
 {% block head %}
 {# Метаданные плагинов теперь в base.html #}
-<link rel="stylesheet" href="/static/builder/css/builder.css">
-<link rel="stylesheet" href="/static/builder/css/element-selector.css">
+<link rel="stylesheet" href="{{ static('/builder/css/builder.css') }}">
+<link rel="stylesheet" href="{{ static('/builder/css/element-selector.css') }}">
 {% endblock %}
 
 {% block content %}

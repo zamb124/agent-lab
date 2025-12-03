@@ -1,6 +1,6 @@
 {% import 'components.html' as c %}
-<link rel="stylesheet" href="/static/history/css/history.css">
-<link rel="stylesheet" href="/static/traces/css/traces.css">
+<link rel="stylesheet" href="{{ static('/history/css/history.css') }}">
+<link rel="stylesheet" href="{{ static('/traces/css/traces.css') }}">
 
 <div class="modal-overlay traces-modal" onclick="this.remove(); document.body.style.overflow = '';">
     <div class="modal-content" onclick="event.stopPropagation()">

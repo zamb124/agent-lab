@@ -6,11 +6,17 @@
 - modules/*/templates - шаблоны каждого модуля
 """
 
+from datetime import date
 from pathlib import Path
 from typing import List
+
 from fastapi.templating import Jinja2Templates
+
 from core.context import get_context
 from core.i18n import get_translation_manager
+
+# Версия статики - дата запуска приложения (обновляется при рестарте)
+STATIC_VERSION = date.today().strftime("%Y%m%d")
 
 
 class TemplateLoader:
@@ -153,6 +159,12 @@ class TemplateLoader:
                 return 'ru'
             except Exception:
                 return 'ru'
+        
+        def static(path: str) -> str:
+            """Путь к статическому файлу с версией для сброса кэша браузера"""
+            if path.startswith("/"):
+                return f"/static{path}?v={STATIC_VERSION}"
+            return f"/static/{path}?v={STATIC_VERSION}"
 
         templates.env.globals['current_user'] = get_current_user
         templates.env.globals['current_company'] = get_current_company
@@ -164,6 +176,7 @@ class TemplateLoader:
         templates.env.globals['t'] = t
         templates.env.globals['t_field'] = t_field
         templates.env.globals['get_current_language'] = get_current_language
+        templates.env.globals['static'] = static
         
         return templates
     
