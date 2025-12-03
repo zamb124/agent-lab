@@ -104,11 +104,17 @@ echo "Remote dir: $REMOTE_DIR"
 echo "Domains: ${DOMAINS[*]}"
 echo ""
 
-echo "[1/8] Git pull на сервере..."
+echo "[1/9] Git pull на сервере..."
 $SSH_CMD "cd $REMOTE_DIR && git fetch origin && git reset --hard origin/main"
 sleep 3
 
-echo "[2/8] Подготовка конфигов..."
+echo "[2/9] Остановка и очистка старых Docker образов..."
+$SSH_CMD "cd $REMOTE_DIR && sudo docker compose down || true"
+$SSH_CMD "sudo docker image prune -af"
+$SSH_CMD "sudo docker builder prune -af"
+sleep 2
+
+echo "[3/9] Подготовка конфигов..."
 TMP_DIR=$(mktemp -d)
 
 cp "$LOCAL_DIR/conf.json" "$TMP_DIR/conf.json"
@@ -150,7 +156,7 @@ sed -i.bak 's|redis://localhost:8099|redis://redis:6379|g' "$TMP_DIR/frontend_co
 
 rm -f "$TMP_DIR"/*.bak
 
-echo "[3/8] Копирование конфигов на сервер..."
+echo "[4/9] Копирование конфигов на сервер..."
 sleep 2
 $SCP_CMD "$TMP_DIR/conf.json" "$SSH_USER@$SSH_HOST:$REMOTE_DIR/conf.json"
 sleep 2
@@ -161,22 +167,22 @@ sleep 2
 
 rm -rf "$TMP_DIR"
 
-echo "[4/8] Проверка SSL сертификатов..."
+echo "[5/9] Проверка SSL сертификатов..."
 for domain in "${DOMAINS[@]}"; do
     check_ssl_cert "$domain"
 done
 sleep 2
 
-echo "[5/8] Проверка nginx конфига..."
+echo "[6/9] Проверка nginx конфига..."
 $SCP_CMD "$LOCAL_DIR/deploy/nginx.conf" "$SSH_USER@$SSH_HOST:/tmp/nginx.conf"
 sleep 2
 $SSH_CMD "sudo cp /tmp/nginx.conf /etc/nginx/sites-available/humanitec.conf && sudo rm -f /etc/nginx/sites-enabled/agents-lab.ru /etc/nginx/sites-enabled/agents-lab.conf /etc/nginx/sites-enabled/humanitec.conf && sudo ln -s /etc/nginx/sites-available/humanitec.conf /etc/nginx/sites-enabled/humanitec.conf && sudo nginx -t"
 sleep 2
 
-echo "[6/8] Перезапуск сервисов..."
-$SSH_CMD "cd $REMOTE_DIR && sudo docker compose down && sudo docker compose up -d --build"
+echo "[7/9] Сборка и запуск сервисов..."
+$SSH_CMD "cd $REMOTE_DIR && sudo docker compose up -d --build"
 
-echo "[7/8] Проверка сервисов..."
+echo "[8/9] Проверка сервисов..."
 sleep 20
 
 echo "Checking agents service (8001)..."
@@ -206,7 +212,7 @@ $SSH_CMD "cd $REMOTE_DIR && sudo docker compose ps chroma --format '{{.Status}}'
 $SSH_CMD "curl -sf http://localhost:8100/api/v2/heartbeat || echo 'FAIL: chroma API not responding'"
 sleep 2
 
-echo "[8/8] Reloading nginx..."
+echo "[9/9] Reloading nginx..."
 $SSH_CMD "sudo systemctl reload nginx"
 
 echo ""
