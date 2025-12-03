@@ -3,9 +3,12 @@ set -e
 
 # Docker Hub репозиторий
 REGISTRY="zambas/repo"
+# Платформа для сервера (amd64 для большинства VPS)
+PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
 
 echo "=== Build and Push Docker Images ==="
 echo "Registry: $REGISTRY"
+echo "Platform: $PLATFORM"
 echo ""
 
 # Проверяем авторизацию в Docker Hub
@@ -16,30 +19,18 @@ fi
 
 cd "$(dirname "$0")/.."
 
-echo "[1/6] Building base-core..."
-docker build --target base-core -t ${REGISTRY}:base-core .
+echo "[1/3] Building agents..."
+docker buildx build --platform $PLATFORM --target agents -t ${REGISTRY}:agents --load .
 
-echo "[2/6] Building base-rag..."
-docker build --target base-rag -t ${REGISTRY}:base-rag .
+echo "[2/3] Building frontend..."
+docker buildx build --platform $PLATFORM --target frontend -t ${REGISTRY}:frontend --load .
 
-echo "[3/6] Building base-docs..."
-docker build --target base-docs -t ${REGISTRY}:base-docs .
-
-echo "[4/6] Building agents..."
-docker build --target agents -t ${REGISTRY}:agents .
-
-echo "[5/6] Building frontend..."
-docker build --target frontend -t ${REGISTRY}:frontend .
-
-echo "[6/6] Building worker..."
-docker build --target worker -t ${REGISTRY}:worker .
+echo "[3/3] Building worker..."
+docker buildx build --platform $PLATFORM --target worker -t ${REGISTRY}:worker --load .
 
 echo ""
 echo "=== Pushing images to Docker Hub ==="
 
-docker push ${REGISTRY}:base-core
-docker push ${REGISTRY}:base-rag
-docker push ${REGISTRY}:base-docs
 docker push ${REGISTRY}:agents
 docker push ${REGISTRY}:frontend
 docker push ${REGISTRY}:worker
@@ -52,4 +43,3 @@ echo "  - ${REGISTRY}:frontend"
 echo "  - ${REGISTRY}:worker"
 echo ""
 echo "Now run: ./deploy/deploy.sh"
-

@@ -2,25 +2,21 @@
 
 # Docker Registry
 DOCKER_REGISTRY ?= zambas/repo
+# Платформа для сервера (amd64 для большинства VPS)
+DOCKER_PLATFORM ?= linux/amd64
 
 build:
 	docker-compose build
 
 docker-build:
-	@echo "Building Docker images..."
-	docker build --target base-core -t $(DOCKER_REGISTRY):base-core .
-	docker build --target base-rag -t $(DOCKER_REGISTRY):base-rag .
-	docker build --target base-docs -t $(DOCKER_REGISTRY):base-docs .
-	docker build --target agents -t $(DOCKER_REGISTRY):agents .
-	docker build --target frontend -t $(DOCKER_REGISTRY):frontend .
-	docker build --target worker -t $(DOCKER_REGISTRY):worker .
-	@echo "Done! Images built locally."
+	@echo "Building Docker images for $(DOCKER_PLATFORM)..."
+	docker buildx build --platform $(DOCKER_PLATFORM) --target agents -t $(DOCKER_REGISTRY):agents --load .
+	docker buildx build --platform $(DOCKER_PLATFORM) --target frontend -t $(DOCKER_REGISTRY):frontend --load .
+	docker buildx build --platform $(DOCKER_PLATFORM) --target worker -t $(DOCKER_REGISTRY):worker --load .
+	@echo "Done! Images built for $(DOCKER_PLATFORM)."
 
 docker-push:
 	@echo "Pushing images to $(DOCKER_REGISTRY)..."
-	docker push $(DOCKER_REGISTRY):base-core
-	docker push $(DOCKER_REGISTRY):base-rag
-	docker push $(DOCKER_REGISTRY):base-docs
 	docker push $(DOCKER_REGISTRY):agents
 	docker push $(DOCKER_REGISTRY):frontend
 	docker push $(DOCKER_REGISTRY):worker

@@ -21,10 +21,12 @@ RUN uv pip install --system -e .
 # RAG образ с ML зависимостями (для worker)
 FROM base-core AS base-rag
 
-# CPU-only PyTorch (без CUDA, экономит ~2-3 GB)
-ENV PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
+# Сначала ставим CPU-only PyTorch (без CUDA, экономит ~2-3 GB)
+RUN uv pip install --system \
+    torch torchvision \
+    --index-url https://download.pytorch.org/whl/cpu
 
-# Устанавливаем RAG группу с тяжелыми ML пакетами
+# Затем остальные RAG зависимости (torch уже установлен, не будет переустанавливаться)
 RUN uv pip install --system --group rag
 
 
