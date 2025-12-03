@@ -26,6 +26,14 @@ deploy: docker-build docker-push
 	@echo "Running deploy script..."
 	./deploy/deploy.sh
 
+deploy-fast:
+	@echo "Deploy without rebuild (just pull from registry)..."
+	./deploy/deploy.sh
+
+deploy-code: docker-build docker-push
+	@echo "Deploy with code changes (uses Docker cache for deps)..."
+	./deploy/deploy.sh
+
 prod:
 	@echo "🔄 Обновление репозитория (git pull)..."
 	@git pull --rebase --autostash
@@ -59,9 +67,11 @@ clean:
 
 help:
 	@echo "Деплой (Docker Hub):"
-	@echo "  make docker-build  - Собрать все образы локально"
-	@echo "  make docker-push   - Запушить образы в Docker Hub"
 	@echo "  make deploy        - Полный деплой (build + push + deploy.sh)"
+	@echo "  make deploy-fast   - Быстрый деплой (только pull с registry, без сборки)"
+	@echo "  make deploy-code   - Деплой с изменениями кода (Docker cache для deps)"
+	@echo "  make docker-build  - Только собрать образы локально"
+	@echo "  make docker-push   - Только запушить образы в Docker Hub"
 	@echo ""
 	@echo "Основные команды:"
 	@echo "  make build         - Собрать образы (docker-compose)"
