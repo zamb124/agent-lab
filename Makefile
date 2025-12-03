@@ -1,7 +1,34 @@
-.PHONY: build up rebuild down logs clean help
+.PHONY: build up rebuild down logs clean help docker-build docker-push deploy
+
+# Docker Registry
+DOCKER_REGISTRY ?= zambas/repo
 
 build:
 	docker-compose build
+
+docker-build:
+	@echo "Building Docker images..."
+	docker build --target base-core -t $(DOCKER_REGISTRY):base-core .
+	docker build --target base-rag -t $(DOCKER_REGISTRY):base-rag .
+	docker build --target base-docs -t $(DOCKER_REGISTRY):base-docs .
+	docker build --target agents -t $(DOCKER_REGISTRY):agents .
+	docker build --target frontend -t $(DOCKER_REGISTRY):frontend .
+	docker build --target worker -t $(DOCKER_REGISTRY):worker .
+	@echo "Done! Images built locally."
+
+docker-push:
+	@echo "Pushing images to $(DOCKER_REGISTRY)..."
+	docker push $(DOCKER_REGISTRY):base-core
+	docker push $(DOCKER_REGISTRY):base-rag
+	docker push $(DOCKER_REGISTRY):base-docs
+	docker push $(DOCKER_REGISTRY):agents
+	docker push $(DOCKER_REGISTRY):frontend
+	docker push $(DOCKER_REGISTRY):worker
+	@echo "Done! Images pushed to Docker Hub."
+
+deploy: docker-build docker-push
+	@echo "Running deploy script..."
+	./deploy/deploy.sh
 
 prod:
 	@echo "🔄 Обновление репозитория (git pull)..."
@@ -35,13 +62,18 @@ clean:
 	docker-compose down -v
 
 help:
+	@echo "Деплой (Docker Hub):"
+	@echo "  make docker-build  - Собрать все образы локально"
+	@echo "  make docker-push   - Запушить образы в Docker Hub"
+	@echo "  make deploy        - Полный деплой (build + push + deploy.sh)"
+	@echo ""
 	@echo "Основные команды:"
-	@echo "  make build         - Собрать образы"
+	@echo "  make build         - Собрать образы (docker-compose)"
 	@echo "  make prod          - Git pull, prune, build --pull, up -d (прод-запуск)"
-	@echo "  make up           - Запустить все сервисы"
-	@echo "  make down         - Остановить все сервисы"
-	@echo "  make logs         - Показать логи всех сервисов"
-	@echo "  make clean        - Удалить все (включая volumes)"
+	@echo "  make up            - Запустить все сервисы"
+	@echo "  make down          - Остановить все сервисы"
+	@echo "  make logs          - Показать логи всех сервисов"
+	@echo "  make clean         - Удалить все (включая volumes)"
 	@echo ""
 	@echo "Отдельные сервисы:"
 	@echo "  make db-up        - Запустить БД"

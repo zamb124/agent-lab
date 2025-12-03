@@ -179,8 +179,9 @@ sleep 2
 $SSH_CMD "sudo cp /tmp/nginx.conf /etc/nginx/sites-available/humanitec.conf && sudo rm -f /etc/nginx/sites-enabled/agents-lab.ru /etc/nginx/sites-enabled/agents-lab.conf /etc/nginx/sites-enabled/humanitec.conf && sudo ln -s /etc/nginx/sites-available/humanitec.conf /etc/nginx/sites-enabled/humanitec.conf && sudo nginx -t"
 sleep 2
 
-echo "[7/9] Сборка и запуск сервисов..."
-$SSH_CMD "cd $REMOTE_DIR && sudo docker compose up -d --build"
+echo "[7/9] Загрузка и запуск сервисов..."
+$SSH_CMD "cd $REMOTE_DIR && sudo docker compose pull"
+$SSH_CMD "cd $REMOTE_DIR && sudo docker compose up -d"
 
 echo "[8/9] Проверка сервисов..."
 sleep 20
