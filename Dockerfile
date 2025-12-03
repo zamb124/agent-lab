@@ -13,6 +13,9 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY README.md ./
 
+# CPU-only PyTorch (без CUDA, экономит ~2-3 GB)
+ENV PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
+
 RUN uv pip install --system -e .
 
 
