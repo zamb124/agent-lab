@@ -88,15 +88,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if rule.context_type == "webhook" and rule.platform:
             return await self._handle_webhook(request, rule, container, context_factory)
         
-        # Анонимный контекст
+        # Анонимный контекст (но пробуем загрузить пользователя если токен есть)
         if rule.context_type == "anonymous":
             company = await company_resolver.resolve(request, context_type="anonymous")
+            token_data, auth_token = self._extract_token(request)
+            user = await self._get_user(container, token_data) if token_data else None
             return await context_factory.create(
-                request, "anonymous", company
+                request, "anonymous", company, user, token_data, auth_token=auth_token
             )
         
         # Авторизованный контекст
-        token_data = self._extract_token(request)
+        token_data, auth_token = self._extract_token(request)
         
         if rule.auth_required and not token_data:
             raise HTTPException(status_code=401, detail="Unauthorized")
@@ -130,7 +132,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 await self._sync_active_company(container, user, company)
         
         return await context_factory.create(
-            request, rule.context_type, company, user, token_data, rule.platform
+            request, rule.context_type, company, user, token_data, rule.platform, auth_token
         )
     
     async def _handle_webhook(
@@ -161,8 +163,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
         logger.info(f"{rule.platform.title()} webhook: компания {company.company_id}")
         return context
     
-    def _extract_token(self, request: Request) -> Optional[TokenData]:
-        """Извлекает и валидирует токен из запроса"""
+    def _extract_token(self, request: Request) -> tuple[Optional[TokenData], Optional[str]]:
+        """
+        Извлекает и валидирует токен из запроса.
+        
+        Returns:
+            tuple: (token_data, raw_token) - данные токена и сам токен для межсервисных запросов
+        """
         token = request.cookies.get("auth_token")
         
         if not token:
@@ -171,10 +178,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 token = auth_header[7:]
         
         if not token:
-            return None
+            return None, None
         
         token_service = get_token_service()
-        return token_service.validate_token(token)
+        token_data = token_service.validate_token(token)
+        return token_data, token if token_data else None
     
     async def _get_user(self, container, token_data: TokenData) -> Optional[User]:
         """Получает пользователя по данным токена"""

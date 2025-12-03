@@ -4,8 +4,8 @@
 :root {
     --landing-primary: #5768FE;
     --landing-primary-rgb: 87, 104, 254;
-    --landing-font-base: 'Fira Sans', sans-serif;
-    --landing-font-display: 'Fira Sans Condensed', sans-serif;
+    --landing-font-base: var(--font-base);
+    --landing-font-display: var(--font-display);
     --landing-grid-columns: 12;
     --landing-grid-gap: 24px;
     --landing-container-max: 1200px;

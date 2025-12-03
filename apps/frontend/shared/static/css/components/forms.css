@@ -54,7 +54,7 @@
 }
 
 .form-control-code {
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
     line-height: 1.4;
 }

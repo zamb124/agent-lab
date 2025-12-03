@@ -1,6 +1,11 @@
 /* Humanitec - Матовый пастельный стиль */
 
 :root {
+    /* Типографика */
+    --font-base: 'Fira Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-display: 'Fira Sans Condensed', 'Fira Sans', sans-serif;
+    --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+    
     /* Основные цвета — тёмная схема в стиле референса (насыщенно‑синее основание) */
     --bg-primary: #0f172a; /* slate-900 */
     --bg-secondary: rgba(255, 255, 255, 0.03);

@@ -28,6 +28,7 @@ class ContextFactory:
         user: Optional[User] = None,
         token_data: Optional[TokenData] = None,
         platform: Optional[str] = None,
+        auth_token: Optional[str] = None,
     ) -> Context:
         """
         Создает Context для запроса.
@@ -39,11 +40,13 @@ class ContextFactory:
             user: Пользователь (None для anonymous)
             token_data: Данные токена
             platform: Платформа (telegram, whatsapp)
+            auth_token: JWT токен для межсервисной авторизации
         """
         language = self._detect_language(request)
         host = request.headers.get("host", "")
         
-        if context_type == "anonymous":
+        # Если анонимный контекст, но пользователь есть - используем его
+        if context_type == "anonymous" and not user:
             return self._create_anonymous_context(request, company, language)
         
         user_companies = await self._get_user_companies(user) if user else []
@@ -65,6 +68,7 @@ class ContextFactory:
             user_companies=user_companies,
             language=language,
             metadata=metadata,
+            auth_token=auth_token,
         )
     
     def _create_anonymous_context(

@@ -137,14 +137,14 @@
 .field-dict .form-control {
     min-height: 6rem;
     resize: vertical;
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    font-family: var(--font-mono);
     font-size: 0.8125rem;
     line-height: 1.4;
 }
 
 /* Специальные поля */
 .field-json .form-control {
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace, monospace;
+    font-family: var(--font-mono);
     font-size: 0.8125rem;
     line-height: 1.4;
     min-height: 8rem;
@@ -421,7 +421,7 @@ select.field-readonly:focus {
 
 /* Поля даты и времени */
 .field-datetime .form-control {
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace, monospace;
+    font-family: var(--font-mono);
     font-size: 0.8125rem;
 }
 
@@ -429,7 +429,7 @@ select.field-readonly:focus {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace, monospace;
+    font-family: var(--font-mono);
     font-size: 0.75rem;
 }
 
@@ -466,7 +466,7 @@ select.field-readonly:focus {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace, monospace;
+    font-family: var(--font-mono);
     font-size: 0.875rem;
 }
 

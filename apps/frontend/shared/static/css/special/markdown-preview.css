@@ -39,7 +39,7 @@
 }
 
 .preview-mode code {
-    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-family: var(--font-mono);
     font-size: 0.9em;
     background: var(--bg-tertiary);
     padding: 2px 6px;
