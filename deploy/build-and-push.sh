@@ -19,13 +19,16 @@ fi
 
 cd "$(dirname "$0")/.."
 
-echo "[1/3] Building agents..."
+echo "[1/4] Building agents..."
 docker buildx build --platform $PLATFORM --target agents -t ${REGISTRY}:agents --load .
 
-echo "[2/3] Building frontend..."
+echo "[2/4] Building frontend..."
 docker buildx build --platform $PLATFORM --target frontend -t ${REGISTRY}:frontend --load .
 
-echo "[3/3] Building worker..."
+echo "[3/4] Building crm..."
+docker buildx build --platform $PLATFORM --target crm -t ${REGISTRY}:crm --load .
+
+echo "[4/4] Building worker..."
 docker buildx build --platform $PLATFORM --target worker -t ${REGISTRY}:worker --load .
 
 echo ""
@@ -33,6 +36,7 @@ echo "=== Pushing images to Docker Hub ==="
 
 docker push ${REGISTRY}:agents
 docker push ${REGISTRY}:frontend
+docker push ${REGISTRY}:crm
 docker push ${REGISTRY}:worker
 
 echo ""
@@ -40,6 +44,7 @@ echo "=== Done! ==="
 echo "Images pushed to Docker Hub:"
 echo "  - ${REGISTRY}:agents"
 echo "  - ${REGISTRY}:frontend"
+echo "  - ${REGISTRY}:crm"
 echo "  - ${REGISTRY}:worker"
 echo ""
 echo "Now run: ./deploy/deploy.sh"

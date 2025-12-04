@@ -28,7 +28,7 @@ class TestRAGSetupScenario:
         doc = doc_generator("rag_provider_selection", "Выбор провайдера RAG")
         
         await page.goto(f"{e2e_base_url}/rag/")
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_load_state("domcontentloaded")
         await page.wait_for_timeout(1000)
         
         await doc.step(
@@ -114,7 +114,7 @@ class TestRAGSetupScenario:
         
         # Открываем RAG Dashboard
         await page.goto(f"{e2e_base_url}/rag/")
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_load_state("domcontentloaded")
         await page.wait_for_timeout(1000)
         
         await doc.step(
@@ -205,12 +205,12 @@ class TestRAGSetupScenario:
             "Нажмите на неймспейс чтобы открыть его и увидеть список документов."
         )
         
-        # Загружаем документы
-        upload_btn = page.locator("button:has-text('Upload')")
+        # Загружаем документы - используем кнопку в хедере, не в модалке
+        upload_btn = page.locator(".rag-documents-header .rag-btn-primary")
         if await upload_btn.count() > 0:
             await doc.click(
                 page,
-                "button:has-text('Upload')",
+                ".rag-documents-header .rag-btn-primary",
                 "Открытие загрузки",
                 "Нажмите кнопку **Upload** для загрузки документов."
             )
@@ -238,7 +238,18 @@ class TestRAGSetupScenario:
             if files_to_upload:
                 file_input = page.locator("#file-input")
                 await file_input.set_input_files(files_to_upload)
-                await page.wait_for_timeout(500)
+                
+                # Явно вызываем handleFileSelect через JavaScript
+                await page.evaluate("""
+                    () => {
+                        const input = document.getElementById('file-input');
+                        if (input && input.files.length > 0 && window.ragApp) {
+                            window.ragApp.handleFileSelect(input.files);
+                        }
+                    }
+                """)
+                
+                await page.wait_for_timeout(1000)
                 
                 await doc.step(
                     page,
@@ -249,9 +260,11 @@ class TestRAGSetupScenario:
                     "Файлы отображаются в списке перед загрузкой."
                 )
                 
-                # Загружаем файлы
+                # Проверяем состояние кнопки
                 upload_submit = page.locator("#upload-btn")
-                if not await upload_submit.is_disabled():
+                is_disabled = await upload_submit.is_disabled()
+                
+                if not is_disabled:
                     await doc.click(
                         page,
                         "#upload-btn",
@@ -259,8 +272,6 @@ class TestRAGSetupScenario:
                         "Нажмите **Upload** для начала загрузки. "
                         "Документы будут проиндексированы и добавлены в векторное хранилище."
                     )
-                    
-                    await upload_submit.click()
                     await page.wait_for_timeout(3000)
             else:
                 # Закрываем модалку если файлы не найдены
@@ -359,7 +370,7 @@ class TestRAGNamespaceScenario:
         namespace_name = f"my_knowledge_base_{uuid.uuid4().hex[:6]}"
         
         await page.goto(f"{e2e_base_url}/rag/")
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_load_state("domcontentloaded")
         await page.wait_for_timeout(1000)
         
         await doc.step(
@@ -461,8 +472,8 @@ class TestRAGNamespaceScenario:
         namespace_name = f"docs_upload_{uuid.uuid4().hex[:6]}"
         
         await page.goto(f"{e2e_base_url}/rag/")
-        await page.wait_for_load_state("networkidle")
-        await page.wait_for_timeout(1000)
+        await page.wait_for_load_state("domcontentloaded")
+        await page.wait_for_timeout(2000)
         
         # Выбираем ChromaDB
         chromadb_card = page.locator(".rag-provider-card[data-provider='chromadb']")
@@ -471,7 +482,9 @@ class TestRAGNamespaceScenario:
             await page.wait_for_timeout(500)
         
         # Создаём namespace для теста
-        await page.locator("button:has-text('New Namespace')").click()
+        new_ns_btn = page.locator("button:has-text('New Namespace')")
+        await new_ns_btn.wait_for(state="visible", timeout=10000)
+        await new_ns_btn.click()
         await page.wait_for_selector("#create-namespace-modal.active", timeout=5000)
         await page.locator("#namespace-name").fill(namespace_name)
         await page.locator("#namespace-description").fill("Тестовая загрузка документов")
@@ -535,10 +548,23 @@ class TestRAGNamespaceScenario:
             if test_file:
                 file_input = page.locator("#file-input")
                 await file_input.set_input_files([str(test_file)])
-                await page.wait_for_timeout(1000)  # Ждём обновления списка
+                
+                # Явно вызываем handleFileSelect через JavaScript
+                await page.evaluate("""
+                    () => {
+                        const input = document.getElementById('file-input');
+                        if (input && input.files.length > 0 && window.ragApp) {
+                            window.ragApp.handleFileSelect(input.files);
+                        }
+                    }
+                """)
+                
+                await page.wait_for_timeout(1000)
                 
                 # Проверяем что файл добавился
                 upload_list = page.locator("#upload-list .rag-upload-item")
+                upload_submit = page.locator("#upload-btn")
+                
                 if await upload_list.count() > 0:
                     await doc.step(
                         page,
@@ -547,23 +573,18 @@ class TestRAGNamespaceScenario:
                         "Можно добавить несколько файлов перед загрузкой."
                     )
                     
-                    # Загружаем
-                    upload_submit = page.locator("#upload-btn")
-                    await page.wait_for_timeout(500)
-                    
-                    if not await upload_submit.is_disabled():
+                    is_disabled = await upload_submit.is_disabled()
+                    if not is_disabled:
                         await doc.click(
                             page,
                             "#upload-btn",
                             "Запуск загрузки",
                             "Нажмите **Upload** для начала загрузки.\n\n"
-                            "⚡ **Асинхронная обработка:**\n"
+                            "Асинхронная обработка:\n"
                             "- Файл мгновенно загружается в хранилище\n"
                             "- Обработка (парсинг, индексация) выполняется в фоне\n"
                             "- Вы получите уведомление когда документ будет готов к поиску"
                         )
-                        
-                        await upload_submit.click()
                         await page.wait_for_timeout(3000)
                         
                         await doc.step(
@@ -571,10 +592,9 @@ class TestRAGNamespaceScenario:
                             "Документ в обработке",
                             "Документ поставлен в очередь на обработку. "
                             "Статус изменится на **ready** когда индексация завершится.\n\n"
-                            "💡 **Совет:** Для больших документов обработка может занять несколько минут."
+                            "Совет: Для больших документов обработка может занять несколько минут."
                         )
                     else:
-                        # Кнопка всё ещё disabled - закрываем модалку
                         close_btn = page.locator("#upload-document-modal .rag-modal-close")
                         await close_btn.click()
                         await doc.step(
@@ -583,7 +603,6 @@ class TestRAGNamespaceScenario:
                             "Не удалось добавить файлы для загрузки. Проверьте формат файлов."
                         )
                 else:
-                    # Файлы не добавились - закрываем модалку
                     close_btn = page.locator("#upload-document-modal .rag-modal-close")
                     await close_btn.click()
             else:
@@ -632,7 +651,7 @@ class TestRAGQuickScenario:
     async def test_rag_page_loads(self, page: Page, e2e_base_url: str):
         """RAG страница загружается корректно"""
         await page.goto(f"{e2e_base_url}/rag/")
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_load_state("domcontentloaded")
         
         # Проверяем основные элементы
         assert await page.locator(".rag-layout").count() > 0
@@ -642,7 +661,7 @@ class TestRAGQuickScenario:
     async def test_rag_provider_cards_visible(self, page: Page, e2e_base_url: str):
         """Карточки провайдеров отображаются"""
         await page.goto(f"{e2e_base_url}/rag/")
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_load_state("domcontentloaded")
         
         provider_cards = page.locator(".rag-provider-card")
         assert await provider_cards.count() >= 1
@@ -650,7 +669,7 @@ class TestRAGQuickScenario:
     async def test_rag_create_namespace_modal(self, page: Page, e2e_base_url: str):
         """Модалка создания неймспейса открывается"""
         await page.goto(f"{e2e_base_url}/rag/")
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_load_state("domcontentloaded")
         
         new_btn = page.locator("button:has-text('New Namespace')")
         if await new_btn.count() > 0:
@@ -667,7 +686,7 @@ class TestRAGQuickScenario:
     async def test_rag_websocket_connected(self, page: Page, e2e_base_url: str):
         """WebSocket для нотификаций подключен"""
         await page.goto(f"{e2e_base_url}/rag/")
-        await page.wait_for_load_state("networkidle")
+        await page.wait_for_load_state("domcontentloaded")
         await page.wait_for_timeout(2000)
         
         # Проверяем что WebSocket подключен через консоль

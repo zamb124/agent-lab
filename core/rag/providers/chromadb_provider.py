@@ -272,7 +272,8 @@ class ChromaDBRAGProvider(BaseRAGProvider):
                 f"{len(existing['ids'])} chunks"
             )
         
-        document_id = str(uuid.uuid4())
+        # Используем document_id из metadata если передан, иначе генерируем новый
+        document_id = metadata.get("document_id") or str(uuid.uuid4())
         
         chunks = self._chunk_text(text)
         if not chunks:

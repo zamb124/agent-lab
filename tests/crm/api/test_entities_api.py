@@ -71,6 +71,12 @@ async def test_get_entity(crm_client, unique_crm_id):
     
     # Cleanup
     await crm_client.delete(f"/crm/api/v1/entities/{created['entity_id']}")
+    data = response.json()
+    assert data["entity_id"] == created["entity_id"]
+    assert data["name"] == payload["name"]
+    
+    # Cleanup
+    await crm_client.delete(f"/crm/api/v1/entities/{created['entity_id']}")
 
 
 @pytest.mark.asyncio

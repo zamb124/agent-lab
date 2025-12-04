@@ -411,7 +411,8 @@ async def crm_client(crm_server_process, crm_api_user_company):
         headers={
             "Authorization": f"Bearer {token}",
             "X-Company-Id": company.company_id,
-        }
+        },
+        timeout=httpx.Timeout(60.0, connect=10.0),  # Увеличен timeout для embedding операций
     ) as client:
         client.test_user = user
         client.test_company = company

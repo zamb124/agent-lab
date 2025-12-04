@@ -79,6 +79,28 @@ services:
     restart: unless-stopped
     command: python run_frontend_prod.py
 
+  # CRM Service (API для CRM)
+  crm:
+    image: ${DOCKER_REGISTRY:-zambas/repo}:crm
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: crm
+    ports:
+      - "${CRM_PORT:-8003}:8003"
+    environment:
+      - AGENTS_SERVICE_URL=http://agents:8001
+    volumes:
+      - crm_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+      agents:
+        condition: service_started
+    restart: unless-stopped
+    command: python run_crm_prod.py
+
   # TaskIQ Worker (единая очередь задач на Redis)
   # Redis обеспечивает блокирующую очередь - каждый воркер получает свою задачу
   # SessionLockMiddleware гарантирует FIFO per session
@@ -161,5 +183,6 @@ volumes:
   redis_data:
   agents_logs:
   frontend_logs:
+  crm_logs:
   taskiq_logs:
   chroma_data:

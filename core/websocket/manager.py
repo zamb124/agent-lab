@@ -245,6 +245,7 @@ class WebSocketManager:
         """Основной цикл слушателя Redis"""
         settings = get_settings()
         redis_url = settings.database.redis_url
+        logger.info(f"Redis listener использует URL: {redis_url}")
         
         while True:
             try:

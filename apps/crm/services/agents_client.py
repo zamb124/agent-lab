@@ -126,9 +126,9 @@ class AgentsClient:
         Raises:
             httpx.RequestError: Сервис недоступен
         """
-        url = f"{self._base_url}/health"
+        url = f"{self._base_url}/agents/health"
         
-        async with get_httpx_client(timeout=5.0, use_proxy_from_config=True) as client:
+        async with get_httpx_client(timeout=5.0, use_proxy_from_config=False) as client:
             response = await client.get(url)
             response.raise_for_status()
             return True

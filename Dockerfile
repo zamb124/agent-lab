@@ -86,6 +86,20 @@ EXPOSE 8002
 CMD ["python", "run_frontend_prod.py"]
 
 
+# CRM Service (легкий образ без ML)
+FROM base-core AS crm
+
+COPY core/ ./core/
+COPY apps/crm/ ./apps/crm/
+COPY apps/__init__.py ./apps/
+COPY run_crm_prod.py ./
+COPY conf.json ./
+
+EXPOSE 8003
+
+CMD ["python", "run_crm_prod.py"]
+
+
 # Worker (с RAG/ML зависимостями)
 FROM base-rag AS worker
 

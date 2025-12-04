@@ -39,6 +39,7 @@ class DatabaseConfig(BaseModel):
     )
     shared_url: Optional[str] = None  # URL для shared БД (users, companies, files)
     agents_db_url: Optional[str] = None  # URL для agents БД (agents, flows, tools)
+    crm_url: Optional[str] = None  # URL для CRM БД (entity_types, notes, tasks, relationships)
     redis_url: str = "redis://localhost:8099"  # URL для Redis (TaskIQ очереди)
 
 

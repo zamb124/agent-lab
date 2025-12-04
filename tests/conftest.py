@@ -22,9 +22,10 @@ env_file = Path(__file__).parent.parent / ".env"
 if env_file.exists():
     load_dotenv(env_file)
 
-# Две БД как на продакшне
+# Три БД как на продакшне
 os.environ.setdefault("DATABASE__URL", "postgresql+asyncpg://agent_user:agent_password@localhost:5432/agents_db")
 os.environ.setdefault("DATABASE__SHARED_URL", "postgresql+asyncpg://agent_user:agent_password@localhost:5432/shared_db")
+os.environ.setdefault("DATABASE__CRM_URL", "postgresql+asyncpg://agent_user:agent_password@localhost:5432/crm_db")
 os.environ.setdefault("SERVER__DEBUG", "true")
 os.environ.setdefault("LLM__DEFAULT_MODEL", "mock-gpt-4")
 os.environ.setdefault("LLM__OPENROUTER__ENABLED", "true")

@@ -24,6 +24,7 @@ SKIP_PATHS = [
     "/favicon.ico",
     "/health",
     "/agents/health",
+    "/crm/health",
     "/debug/*",
 ]
 
@@ -63,6 +64,10 @@ ROUTE_RULES: List[RouteRule] = [
     # API - авторизация через токен
     RouteRule("/agents/api/v1/files/download/*", context_type="api", auth_required=False),
     RouteRule("/agents/api/v1/*", context_type="api", auth_required=True),
+    
+    # CRM API
+    RouteRule("/crm/api/v1/*", context_type="api", auth_required=True),
+    RouteRule("/crm/health", auth_required=False, context_type="anonymous"),
     
     # AmoCRM integration
     RouteRule("/api/amocrm*", context_type="amocrm", auth_required=False),
