@@ -10,11 +10,6 @@ REMOTE_DIR="/opt/agents-lab"
 DOMAINS=("humanitec.ru" "agents-lab.ru")
 PRIMARY_DOMAIN="humanitec.ru"
 
-PROD_DB_HOST="rc1b-gsgkmvrv04yanye2.mdb.yandexcloud.net:6432"
-PROD_AGENTS_DB="postgresql+asyncpg://agent_user:agent_password@${PROD_DB_HOST}/agents_db"
-PROD_SHARED_DB="postgresql+asyncpg://agent_user:agent_password@${PROD_DB_HOST}/shared_db"
-PROD_CRM_DB="postgresql+asyncpg://agent_user:agent_password@${PROD_DB_HOST}/crm_db"
-
 SSH_OPTS="-o ConnectTimeout=30 -o ConnectionAttempts=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
 SSH_CMD="ssh $SSH_OPTS -l $SSH_USER $SSH_HOST"
 SCP_CMD="scp $SSH_OPTS"
@@ -105,101 +100,33 @@ echo "Remote dir: $REMOTE_DIR"
 echo "Domains: ${DOMAINS[*]}"
 echo ""
 
-echo "[1/10] Git pull на сервере..."
+echo "[1/7] Git pull на сервере..."
 $SSH_CMD "cd $REMOTE_DIR && git fetch origin && git reset --hard origin/main"
 sleep 3
 
-echo "[2/10] Остановка и очистка старых Docker образов..."
+echo "[2/7] Остановка и очистка старых Docker образов..."
 $SSH_CMD "cd $REMOTE_DIR && sudo docker compose down || true"
 $SSH_CMD "sudo docker image prune -af"
 $SSH_CMD "sudo docker builder prune -af"
 sleep 2
 
-echo "[3/10] Подготовка конфигов..."
-TMP_DIR=$(mktemp -d)
-
-cp "$LOCAL_DIR/conf.json" "$TMP_DIR/conf.json"
-cp "$LOCAL_DIR/apps/agents/conf.json" "$TMP_DIR/agents_conf.json"
-cp "$LOCAL_DIR/apps/frontend/conf.json" "$TMP_DIR/frontend_conf.json"
-cp "$LOCAL_DIR/apps/crm/conf.json" "$TMP_DIR/crm_conf.json"
-
-# Замена URL баз данных
-sed -i.bak "s|postgresql+asyncpg://[^\"]*agents_db|$PROD_AGENTS_DB|g" "$TMP_DIR/conf.json"
-sed -i.bak "s|postgresql+asyncpg://[^\"]*shared_db|$PROD_SHARED_DB|g" "$TMP_DIR/conf.json"
-sed -i.bak "s|postgresql+asyncpg://[^\"]*agent_platform|$PROD_SHARED_DB|g" "$TMP_DIR/conf.json"
-
-sed -i.bak "s|postgresql+asyncpg://[^\"]*agents_db|$PROD_AGENTS_DB|g" "$TMP_DIR/agents_conf.json"
-sed -i.bak "s|postgresql+asyncpg://[^\"]*shared_db|$PROD_SHARED_DB|g" "$TMP_DIR/agents_conf.json"
-sed -i.bak "s|postgresql+asyncpg://[^\"]*agent_platform|$PROD_AGENTS_DB|g" "$TMP_DIR/agents_conf.json"
-
-sed -i.bak "s|postgresql+asyncpg://[^\"]*agents_db|$PROD_AGENTS_DB|g" "$TMP_DIR/frontend_conf.json"
-sed -i.bak "s|postgresql+asyncpg://[^\"]*shared_db|$PROD_SHARED_DB|g" "$TMP_DIR/frontend_conf.json"
-sed -i.bak "s|postgresql+asyncpg://[^\"]*agent_platform|$PROD_SHARED_DB|g" "$TMP_DIR/frontend_conf.json"
-
-sed -i.bak "s|postgresql+asyncpg://[^\"]*agents_db|$PROD_AGENTS_DB|g" "$TMP_DIR/crm_conf.json"
-sed -i.bak "s|postgresql+asyncpg://[^\"]*shared_db|$PROD_SHARED_DB|g" "$TMP_DIR/crm_conf.json"
-sed -i.bak "s|postgresql+asyncpg://[^\"]*crm_db|$PROD_CRM_DB|g" "$TMP_DIR/crm_conf.json"
-sed -i.bak "s|postgresql+asyncpg://[^\"]*agent_platform|$PROD_SHARED_DB|g" "$TMP_DIR/crm_conf.json"
-
-# Замена env на production
-sed -i.bak 's|"env": "local"|"env": "production"|g' "$TMP_DIR/conf.json"
-sed -i.bak 's|"env": "local"|"env": "production"|g' "$TMP_DIR/agents_conf.json"
-sed -i.bak 's|"env": "local"|"env": "production"|g' "$TMP_DIR/frontend_conf.json"
-sed -i.bak 's|"env": "local"|"env": "production"|g' "$TMP_DIR/crm_conf.json"
-
-# Замена debug на false для production
-sed -i.bak 's|"debug": true|"debug": false|g' "$TMP_DIR/conf.json"
-sed -i.bak 's|"debug": true|"debug": false|g' "$TMP_DIR/agents_conf.json"
-sed -i.bak 's|"debug": true|"debug": false|g' "$TMP_DIR/frontend_conf.json"
-sed -i.bak 's|"debug": true|"debug": false|g' "$TMP_DIR/crm_conf.json"
-
-# ChromaDB: заменяем localhost на chroma (имя сервиса в docker-compose)
-sed -i.bak 's|"host": "localhost"|"host": "chroma"|g' "$TMP_DIR/conf.json"
-sed -i.bak 's|"host": "localhost"|"host": "chroma"|g' "$TMP_DIR/agents_conf.json"
-sed -i.bak 's|"host": "localhost"|"host": "chroma"|g' "$TMP_DIR/frontend_conf.json"
-sed -i.bak 's|"host": "localhost"|"host": "chroma"|g' "$TMP_DIR/crm_conf.json"
-
-# Redis: заменяем localhost:8099 на redis:6379 (имя сервиса в docker-compose)
-sed -i.bak 's|redis://localhost:8099|redis://redis:6379|g' "$TMP_DIR/conf.json"
-sed -i.bak 's|redis://localhost:8099|redis://redis:6379|g' "$TMP_DIR/agents_conf.json"
-sed -i.bak 's|redis://localhost:8099|redis://redis:6379|g' "$TMP_DIR/frontend_conf.json"
-sed -i.bak 's|redis://localhost:8099|redis://redis:6379|g' "$TMP_DIR/crm_conf.json"
-
-# Agents Service URL: заменяем localhost:8001 на agents:8001 (имя сервиса в docker-compose)
-sed -i.bak 's|http://localhost:8001|http://agents:8001|g' "$TMP_DIR/crm_conf.json"
-
-rm -f "$TMP_DIR"/*.bak
-
-echo "[4/10] Копирование конфигов на сервер..."
-sleep 2
-$SCP_CMD "$TMP_DIR/conf.json" "$SSH_USER@$SSH_HOST:$REMOTE_DIR/conf.json"
-sleep 2
-$SCP_CMD "$TMP_DIR/agents_conf.json" "$SSH_USER@$SSH_HOST:$REMOTE_DIR/apps/agents/conf.json"
-sleep 2
-$SCP_CMD "$TMP_DIR/frontend_conf.json" "$SSH_USER@$SSH_HOST:$REMOTE_DIR/apps/frontend/conf.json"
-sleep 2
-$SCP_CMD "$TMP_DIR/crm_conf.json" "$SSH_USER@$SSH_HOST:$REMOTE_DIR/apps/crm/conf.json"
-sleep 2
-
-rm -rf "$TMP_DIR"
-
-echo "[5/10] Проверка SSL сертификатов..."
+echo "[3/7] Проверка SSL сертификатов..."
 for domain in "${DOMAINS[@]}"; do
     check_ssl_cert "$domain"
 done
 sleep 2
 
-echo "[6/10] Проверка nginx конфига..."
+echo "[4/7] Проверка nginx конфига..."
 $SCP_CMD "$LOCAL_DIR/deploy/nginx.conf" "$SSH_USER@$SSH_HOST:/tmp/nginx.conf"
 sleep 2
 $SSH_CMD "sudo cp /tmp/nginx.conf /etc/nginx/sites-available/humanitec.conf && sudo rm -f /etc/nginx/sites-enabled/agents-lab.ru /etc/nginx/sites-enabled/agents-lab.conf /etc/nginx/sites-enabled/humanitec.conf && sudo ln -s /etc/nginx/sites-available/humanitec.conf /etc/nginx/sites-enabled/humanitec.conf && sudo nginx -t"
 sleep 2
 
-echo "[7/10] Загрузка и запуск сервисов..."
+echo "[5/7] Загрузка и запуск сервисов..."
 $SSH_CMD "cd $REMOTE_DIR && sudo docker compose pull"
 $SSH_CMD "cd $REMOTE_DIR && sudo docker compose up -d"
 
-echo "[8/10] Проверка сервисов..."
+echo "[6/7] Проверка сервисов..."
 sleep 20
 
 echo "Checking agents service (8001)..."
@@ -233,11 +160,7 @@ $SSH_CMD "cd $REMOTE_DIR && sudo docker compose ps chroma --format '{{.Status}}'
 $SSH_CMD "curl -sf http://localhost:8100/api/v2/heartbeat || echo 'FAIL: chroma API not responding'"
 sleep 2
 
-echo "[9/10] Проверка CRM сервиса..."
-$SSH_CMD "cd $REMOTE_DIR && sudo docker compose ps crm --format '{{.Status}}' | grep -q 'Up' && echo 'OK: crm running' || echo 'FAIL: crm'"
-sleep 2
-
-echo "[10/10] Reloading nginx..."
+echo "[7/7] Reloading nginx..."
 $SSH_CMD "sudo systemctl reload nginx"
 
 echo ""

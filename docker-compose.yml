@@ -42,6 +42,7 @@ services:
       target: agents
     ports:
       - "${AGENTS_PORT:-8001}:8001"
+    env_file: .env
     volumes:
       - agents_logs:/app/logs
       - ./conf.json:/app/conf.json:ro
@@ -65,8 +66,7 @@ services:
       target: frontend
     ports:
       - "${FRONTEND_PORT:-8002}:8002"
-    environment:
-      - AGENTS_SERVICE_URL=http://agents:8001
+    env_file: .env
     volumes:
       - frontend_logs:/app/logs
       - ./conf.json:/app/conf.json:ro
@@ -92,8 +92,7 @@ services:
       target: crm
     ports:
       - "${CRM_PORT:-8003}:8003"
-    environment:
-      - AGENTS_SERVICE_URL=http://agents:8001
+    env_file: .env
     volumes:
       - crm_logs:/app/logs
       - ./conf.json:/app/conf.json:ro
@@ -117,6 +116,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: worker
+    env_file: .env
     volumes:
       - taskiq_logs:/app/logs
       - ./conf.json:/app/conf.json:ro
@@ -137,6 +137,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: worker
+    env_file: .env
     volumes:
       - taskiq_logs:/app/logs
       - ./conf.json:/app/conf.json:ro

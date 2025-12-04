@@ -1,9 +1,14 @@
-.PHONY: build up rebuild down logs clean help docker-build docker-push deploy
+.PHONY: build up rebuild down logs clean help docker-build docker-push deploy conf
 
 # Docker Registry
 DOCKER_REGISTRY ?= zambas/repo
 # Платформа для сервера (amd64 для большинства VPS)
 DOCKER_PLATFORM ?= linux/amd64
+
+# SSH настройки для деплоя
+SSH_USER ?= zambas124
+SSH_HOST ?= 46.21.244.79
+REMOTE_DIR ?= /opt/agents-lab
 
 build:
 	docker-compose build
@@ -31,6 +36,14 @@ deploy: docker-build docker-push
 deploy-fast:
 	@echo "Deploy without rebuild (just pull from registry)..."
 	./deploy/deploy.sh
+
+conf:
+	@echo "Копирование conf.json на продакшен..."
+	scp conf.json $(SSH_USER)@$(SSH_HOST):$(REMOTE_DIR)/conf.json
+	scp apps/agents/conf.json $(SSH_USER)@$(SSH_HOST):$(REMOTE_DIR)/apps/agents/conf.json
+	scp apps/frontend/conf.json $(SSH_USER)@$(SSH_HOST):$(REMOTE_DIR)/apps/frontend/conf.json
+	scp apps/crm/conf.json $(SSH_USER)@$(SSH_HOST):$(REMOTE_DIR)/apps/crm/conf.json
+	@echo "Конфиги скопированы!"
 
 deploy-code: docker-build docker-push
 	@echo "Deploy with code changes (uses Docker cache for deps)..."
@@ -72,6 +85,7 @@ help:
 	@echo "  make deploy        - Полный деплой (build + push + deploy.sh)"
 	@echo "  make deploy-fast   - Быстрый деплой (только pull с registry, без сборки)"
 	@echo "  make deploy-code   - Деплой с изменениями кода (Docker cache для deps)"
+	@echo "  make conf          - Скопировать conf.json на продакшен (секреты)"
 	@echo "  make docker-build  - Только собрать образы локально"
 	@echo "  make docker-push   - Только запушить образы в Docker Hub"
 	@echo ""
