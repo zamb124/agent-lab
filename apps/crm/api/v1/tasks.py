@@ -149,3 +149,4 @@ async def cancel_task(
         raise HTTPException(status_code=404, detail="Задача не найдена")
     return task
 
+

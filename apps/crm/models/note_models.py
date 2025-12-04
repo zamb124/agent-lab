@@ -120,3 +120,4 @@ class NoteAnalyzeResponse(BaseModel):
         title="Созданные задачи"
     )
 
+

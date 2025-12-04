@@ -96,3 +96,4 @@ class EntityTypeResponse(BaseModel):
     is_filtered: bool = Field(default=False, title="Фильтровать по умолчанию")
     created_at: datetime = Field(title="Дата создания", readonly=True)
 
+

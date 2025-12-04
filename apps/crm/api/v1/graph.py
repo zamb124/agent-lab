@@ -57,3 +57,4 @@ async def get_relationship_types(
     """Получает все уникальные типы связей"""
     return await graph_service.get_relationship_types()
 
+

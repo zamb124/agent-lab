@@ -293,3 +293,4 @@ class NoteService:
             updated_at=note.updated_at,
         )
 
+

@@ -193,3 +193,4 @@ async def test_search_notes(crm_client, unique_crm_id):
     
     await crm_client.delete(f"/crm/api/v1/notes/{note_id}")
 
+

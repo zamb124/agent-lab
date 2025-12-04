@@ -69,3 +69,4 @@ async def delete_entity_type(
         raise HTTPException(status_code=404, detail="Тип не найден")
     return {"status": "deleted"}
 
+

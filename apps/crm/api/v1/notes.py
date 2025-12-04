@@ -147,3 +147,4 @@ async def unlink_entity_from_note(
     """Убирает связь сущности с заметкой"""
     return await note_service.unlink_entity_from_note(note_id, entity_id)
 
+
