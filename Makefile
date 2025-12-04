@@ -12,6 +12,7 @@ docker-build:
 	@echo "Building Docker images for $(DOCKER_PLATFORM)..."
 	docker buildx build --platform $(DOCKER_PLATFORM) --target agents -t $(DOCKER_REGISTRY):agents --load .
 	docker buildx build --platform $(DOCKER_PLATFORM) --target frontend -t $(DOCKER_REGISTRY):frontend --load .
+	docker buildx build --platform $(DOCKER_PLATFORM) --target crm -t $(DOCKER_REGISTRY):crm --load .
 	docker buildx build --platform $(DOCKER_PLATFORM) --target worker -t $(DOCKER_REGISTRY):worker --load .
 	@echo "Done! Images built for $(DOCKER_PLATFORM)."
 
@@ -19,6 +20,7 @@ docker-push:
 	@echo "Pushing images to $(DOCKER_REGISTRY)..."
 	docker push $(DOCKER_REGISTRY):agents
 	docker push $(DOCKER_REGISTRY):frontend
+	docker push $(DOCKER_REGISTRY):crm
 	docker push $(DOCKER_REGISTRY):worker
 	@echo "Done! Images pushed to Docker Hub."
 

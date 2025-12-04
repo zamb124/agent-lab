@@ -44,6 +44,8 @@ services:
       - "${AGENTS_PORT:-8001}:8001"
     volumes:
       - agents_logs:/app/logs
+      - ./conf.json:/app/conf.json:ro
+      - ./apps/agents/conf.json:/app/apps/agents/conf.json:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,6 +69,8 @@ services:
       - AGENTS_SERVICE_URL=http://agents:8001
     volumes:
       - frontend_logs:/app/logs
+      - ./conf.json:/app/conf.json:ro
+      - ./apps/frontend/conf.json:/app/apps/frontend/conf.json:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -92,6 +96,8 @@ services:
       - AGENTS_SERVICE_URL=http://agents:8001
     volumes:
       - crm_logs:/app/logs
+      - ./conf.json:/app/conf.json:ro
+      - ./apps/crm/conf.json:/app/apps/crm/conf.json:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -113,6 +119,7 @@ services:
       target: worker
     volumes:
       - taskiq_logs:/app/logs
+      - ./conf.json:/app/conf.json:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -132,6 +139,7 @@ services:
       target: worker
     volumes:
       - taskiq_logs:/app/logs
+      - ./conf.json:/app/conf.json:ro
     depends_on:
       redis:
         condition: service_healthy

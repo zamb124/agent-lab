@@ -64,7 +64,6 @@ COPY apps/agents/ ./apps/agents/
 COPY apps/__init__.py ./apps/
 COPY run_prod.py ./
 COPY run_worker.py ./
-COPY conf.json ./
 
 EXPOSE 8001
 
@@ -77,7 +76,6 @@ FROM base-core AS frontend
 COPY core/ ./core/
 COPY apps/ ./apps/
 COPY run_frontend_prod.py ./
-COPY conf.json ./
 
 COPY --from=docs-builder /app/site ./site
 
@@ -93,7 +91,6 @@ COPY core/ ./core/
 COPY apps/crm/ ./apps/crm/
 COPY apps/__init__.py ./apps/
 COPY run_crm_prod.py ./
-COPY conf.json ./
 
 EXPOSE 8003
 
@@ -106,7 +103,6 @@ FROM base-rag AS worker
 COPY core/ ./core/
 COPY apps/ ./apps/
 COPY run_worker.py ./
-COPY conf.json ./
 
 CMD ["python", "run_worker.py"]
 
@@ -120,7 +116,6 @@ COPY run_prod.py ./
 COPY run_frontend_prod.py ./
 COPY run_worker.py ./
 COPY run.py ./
-COPY conf.json ./
 
 COPY --from=docs-builder /app/site ./site
 
