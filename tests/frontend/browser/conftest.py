@@ -295,33 +295,37 @@ class ScenarioDocGenerator:
         await page.fill(selector, value)
     
     async def _highlight_element(self, page: Page, selector: str):
-        """Добавляет красную рамку на элемент"""
-        await page.evaluate(f"""
-            (selector) => {{
-                const el = document.querySelector(selector);
-                if (el) {{
-                    el.dataset.originalOutline = el.style.outline;
-                    el.dataset.originalBoxShadow = el.style.boxShadow;
-                    el.style.outline = '3px solid #ff0000';
-                    el.style.boxShadow = '0 0 15px 5px rgba(255, 0, 0, 0.5)';
-                }}
-            }}
-        """, selector)
-        await page.wait_for_timeout(100)
+        """Добавляет красную рамку на элемент через Playwright locator"""
+        try:
+            locator = page.locator(selector).first
+            if await locator.count() > 0:
+                await locator.evaluate("""
+                    (el) => {
+                        el.dataset.originalOutline = el.style.outline;
+                        el.dataset.originalBoxShadow = el.style.boxShadow;
+                        el.style.outline = '3px solid #ff0000';
+                        el.style.boxShadow = '0 0 15px 5px rgba(255, 0, 0, 0.5)';
+                    }
+                """)
+            await page.wait_for_timeout(100)
+        except Exception:
+            pass
     
     async def _remove_highlight(self, page: Page, selector: str):
-        """Убирает подсветку с элемента"""
-        await page.evaluate(f"""
-            (selector) => {{
-                const el = document.querySelector(selector);
-                if (el) {{
-                    el.style.outline = el.dataset.originalOutline || '';
-                    el.style.boxShadow = el.dataset.originalBoxShadow || '';
-                    delete el.dataset.originalOutline;
-                    delete el.dataset.originalBoxShadow;
-                }}
-            }}
-        """, selector)
+        """Убирает подсветку с элемента через Playwright locator"""
+        try:
+            locator = page.locator(selector).first
+            if await locator.count() > 0:
+                await locator.evaluate("""
+                    (el) => {
+                        el.style.outline = el.dataset.originalOutline || '';
+                        el.style.boxShadow = el.dataset.originalBoxShadow || '';
+                        delete el.dataset.originalOutline;
+                        delete el.dataset.originalBoxShadow;
+                    }
+                """)
+        except Exception:
+            pass
     
     def generate_markdown(self) -> str:
         """Генерирует markdown документацию"""
