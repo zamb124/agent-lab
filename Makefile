@@ -1,4 +1,4 @@
-.PHONY: build up rebuild down logs clean help docker-build docker-push deploy conf
+.PHONY: build up rebuild down logs clean help docker-build docker-push deploy conf deploy-agents deploy-frontend deploy-crm deploy-worker
 
 # Docker Registry
 DOCKER_REGISTRY ?= zambas/repo
@@ -36,6 +36,31 @@ deploy: docker-build docker-push
 deploy-fast:
 	@echo "Deploy without rebuild (just pull from registry)..."
 	./deploy/deploy.sh
+
+# Деплой отдельных сервисов
+deploy-agents:
+	@echo "Building and deploying agents..."
+	docker buildx build --platform $(DOCKER_PLATFORM) --target agents -t $(DOCKER_REGISTRY):agents --load .
+	docker push $(DOCKER_REGISTRY):agents
+	ssh $(SSH_USER)@$(SSH_HOST) "cd $(REMOTE_DIR) && git pull && sudo docker compose pull agents && sudo docker compose up -d agents"
+
+deploy-frontend:
+	@echo "Building and deploying frontend..."
+	docker buildx build --platform $(DOCKER_PLATFORM) --target frontend -t $(DOCKER_REGISTRY):frontend --load .
+	docker push $(DOCKER_REGISTRY):frontend
+	ssh $(SSH_USER)@$(SSH_HOST) "cd $(REMOTE_DIR) && git pull && sudo docker compose pull frontend && sudo docker compose up -d frontend"
+
+deploy-crm:
+	@echo "Building and deploying crm..."
+	docker buildx build --platform $(DOCKER_PLATFORM) --target crm -t $(DOCKER_REGISTRY):crm --load .
+	docker push $(DOCKER_REGISTRY):crm
+	ssh $(SSH_USER)@$(SSH_HOST) "cd $(REMOTE_DIR) && git pull && sudo docker compose pull crm && sudo docker compose up -d crm"
+
+deploy-worker:
+	@echo "Building and deploying worker..."
+	docker buildx build --platform $(DOCKER_PLATFORM) --target worker -t $(DOCKER_REGISTRY):worker --load .
+	docker push $(DOCKER_REGISTRY):worker
+	ssh $(SSH_USER)@$(SSH_HOST) "cd $(REMOTE_DIR) && git pull && sudo docker compose pull taskiq-worker taskiq-scheduler && sudo docker compose up -d taskiq-worker taskiq-scheduler"
 
 conf:
 	@echo "Копирование conf.json на продакшен..."
@@ -82,12 +107,15 @@ clean:
 
 help:
 	@echo "Деплой (Docker Hub):"
-	@echo "  make deploy        - Полный деплой (build + push + deploy.sh)"
-	@echo "  make deploy-fast   - Быстрый деплой (только pull с registry, без сборки)"
-	@echo "  make deploy-code   - Деплой с изменениями кода (Docker cache для deps)"
-	@echo "  make conf          - Скопировать conf.json на продакшен (секреты)"
-	@echo "  make docker-build  - Только собрать образы локально"
-	@echo "  make docker-push   - Только запушить образы в Docker Hub"
+	@echo "  make deploy          - Полный деплой (build + push + deploy.sh)"
+	@echo "  make deploy-fast     - Быстрый деплой (только pull с registry, без сборки)"
+	@echo "  make deploy-agents   - Деплой только agents"
+	@echo "  make deploy-frontend - Деплой только frontend"
+	@echo "  make deploy-crm      - Деплой только crm"
+	@echo "  make deploy-worker   - Деплой только worker"
+	@echo "  make conf            - Скопировать conf.json на продакшен (секреты)"
+	@echo "  make docker-build    - Только собрать образы локально"
+	@echo "  make docker-push     - Только запушить образы в Docker Hub"
 	@echo ""
 	@echo "Основные команды:"
 	@echo "  make build         - Собрать образы (docker-compose)"

@@ -14,9 +14,11 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # PostgreSQL база данных
+  # PostgreSQL база данных (только для локальной разработки)
   postgres:
     image: postgres:15
+    profiles:
+      - local
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-agent_platform}
       POSTGRES_USER: ${POSTGRES_USER:-agent_user}
