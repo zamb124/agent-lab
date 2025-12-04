@@ -4,7 +4,7 @@ Dependency Injection для сервиса агентов
 Общие зависимости для API роутеров
 """
 
-from typing import Annotated, TYPE_CHECKING, Dict, Callable, Any
+from typing import Annotated, Dict, Callable, Any
 from fastapi import Depends
 
 from apps.agents.db.repositories import AgentRepository, FlowRepository, SessionRepository, ToolRepository
@@ -12,16 +12,14 @@ from apps.agents.container import get_agents_container
 from core.context import get_context
 from core.models import Context
 from core.variables import VariablesService
-
-if TYPE_CHECKING:
-    from core.identity.auth_service import AuthService
-    from apps.agents.interfaces.factory import InterfaceFactory
-    from core.db.storage import Storage
+from core.identity.auth_service import AuthService
+from apps.agents.interfaces.factory import InterfaceFactory
+from core.db.storage import Storage
 
 _repository_dependencies: Dict[str, Callable] = {}
 
 
-async def get_storage() -> "Storage":
+async def get_storage() -> Storage:
     """
     Получить Storage из контейнера (deprecated, для совместимости с тестами)
     
@@ -61,13 +59,13 @@ async def get_variables_service() -> VariablesService:
     return container.variables_service
 
 
-async def get_interface_factory() -> "InterfaceFactory":
+async def get_interface_factory() -> InterfaceFactory:
     """Получить InterfaceFactory из контейнера"""
     container = get_agents_container()
     return container.interface_factory
 
 
-async def get_auth_service() -> "AuthService":
+async def get_auth_service() -> AuthService:
     """Получить AuthService из контейнера"""
     container = get_agents_container()
     return container.auth_service
@@ -130,5 +128,5 @@ FlowRepositoryDep = Annotated[FlowRepository, Depends(get_flow_repository)]
 SessionRepositoryDep = Annotated[SessionRepository, Depends(get_session_repository)]
 ToolRepositoryDep = Annotated[ToolRepository, Depends(get_tool_repository)]
 VariablesServiceDep = Annotated[VariablesService, Depends(get_variables_service)]
-InterfaceFactoryDep = Annotated["InterfaceFactory", Depends(get_interface_factory)]
-AuthServiceDep = Annotated["AuthService", Depends(get_auth_service)]
+InterfaceFactoryDep = Annotated[InterfaceFactory, Depends(get_interface_factory)]
+AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
