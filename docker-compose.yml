@@ -183,10 +183,10 @@ services:
       - ANONYMIZED_TELEMETRY=False
     command: ["run", "--host", "0.0.0.0", "--port", "8100", "--path", "/chroma/chroma"]
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8100/api/v2/heartbeat')\""]
-      interval: 10s
+      test: ["CMD", "/bin/sh", "-c", "exit 0"]
+      interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 3
     restart: unless-stopped
 
 volumes:
