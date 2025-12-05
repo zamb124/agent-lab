@@ -1,5 +1,82 @@
 <!-- Notes List Partial -->
 <div class="crm-notes">
+    <!-- Filters -->
+    <div class="crm-filters" style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; padding: 16px; background: var(--crm-bg-card); border-radius: 12px; border: 1px solid var(--crm-border);">
+        <div class="crm-filter-group" style="flex: 1; min-width: 150px;">
+            <label class="crm-form-label" style="font-size: 11px; margin-bottom: 4px;">{{ t('crm.filters.type') }}</label>
+            <select class="crm-input crm-input-sm" 
+                    name="note_type"
+                    hx-get="/crm/partials/notes"
+                    hx-trigger="change"
+                    hx-target="#crm-content"
+                    hx-include="[name='user_id'],[name='entity_id'],[name='start_date'],[name='end_date'],[name='q']">
+                <option value="">{{ t('common.all') }}</option>
+                <option value="freeform" {% if filters and filters.note_type == 'freeform' %}selected{% endif %}>{{ t('crm.notes.type.freeform') }}</option>
+                <option value="meeting_minutes" {% if filters and filters.note_type == 'meeting_minutes' %}selected{% endif %}>{{ t('crm.notes.type.meeting_minutes') }}</option>
+                <option value="call_log" {% if filters and filters.note_type == 'call_log' %}selected{% endif %}>{{ t('crm.notes.type.call_log') }}</option>
+            </select>
+        </div>
+        
+        <div class="crm-filter-group" style="flex: 1; min-width: 150px;">
+            <label class="crm-form-label" style="font-size: 11px; margin-bottom: 4px;">{{ t('crm.filters.date_from') }}</label>
+            <input type="date" 
+                   class="crm-input crm-input-sm" 
+                   name="start_date"
+                   value="{{ filters.start_date if filters and filters.start_date else '' }}"
+                   hx-get="/crm/partials/notes"
+                   hx-trigger="change"
+                   hx-target="#crm-content"
+                   hx-include="[name='note_type'],[name='user_id'],[name='entity_id'],[name='end_date'],[name='q']">
+        </div>
+        
+        <div class="crm-filter-group" style="flex: 1; min-width: 150px;">
+            <label class="crm-form-label" style="font-size: 11px; margin-bottom: 4px;">{{ t('crm.filters.date_to') }}</label>
+            <input type="date" 
+                   class="crm-input crm-input-sm" 
+                   name="end_date"
+                   value="{{ filters.end_date if filters and filters.end_date else '' }}"
+                   hx-get="/crm/partials/notes"
+                   hx-trigger="change"
+                   hx-target="#crm-content"
+                   hx-include="[name='note_type'],[name='user_id'],[name='entity_id'],[name='start_date'],[name='q']">
+        </div>
+        
+        <div class="crm-filter-group" style="flex: 2; min-width: 200px;">
+            <label class="crm-form-label" style="font-size: 11px; margin-bottom: 4px;">{{ t('crm.search.placeholder') }}</label>
+            <input type="text" 
+                   class="crm-input crm-input-sm" 
+                   name="q"
+                   value="{{ filters.q if filters and filters.q else '' }}"
+                   placeholder="{{ t('crm.search.placeholder') }}"
+                   hx-get="/crm/partials/notes"
+                   hx-trigger="keyup changed delay:500ms"
+                   hx-target="#crm-content"
+                   hx-include="[name='note_type'],[name='user_id'],[name='entity_id'],[name='start_date'],[name='end_date']">
+        </div>
+        
+        <div class="crm-filter-group" style="align-self: flex-end;">
+            <button type="button" 
+                    class="crm-btn crm-btn-ghost crm-btn-sm"
+                    hx-get="/crm/partials/notes"
+                    hx-target="#crm-content">
+                <i class="ti ti-x"></i> {{ t('crm.filters.clear') }}
+            </button>
+        </div>
+        
+        <div class="crm-filter-group" style="align-self: flex-end;">
+            <button type="button" 
+                    class="crm-btn crm-btn-analyze crm-btn-sm"
+                    hx-get="/crm/partials/daily-summary?date={{ today }}"
+                    hx-target="#daily-summary-container"
+                    hx-swap="innerHTML">
+                <i class="ti ti-sparkles"></i> {{ t('crm.notes.daily_summary') }}
+            </button>
+        </div>
+    </div>
+    
+    <!-- Daily Summary Container -->
+    <div id="daily-summary-container"></div>
+    
     <!-- Note Editor -->
     <div class="crm-note-editor" style="margin-bottom: 24px;">
         <form hx-post="/crm/partials/notes" 
@@ -15,10 +92,14 @@
                        style="flex: 1;">
                 
                 <div class="crm-note-actions">
-                    <button type="button" class="crm-btn crm-btn-icon crm-btn-ghost">
+                    <button type="button" 
+                            class="crm-btn crm-btn-icon crm-btn-ghost"
+                            data-voice-input
+                            onclick="CRM.toggleVoice()"
+                            title="{{ t('crm.notes.voice_input') }}">
                         <i class="ti ti-microphone"></i>
                     </button>
-                    <button type="button" class="crm-btn crm-btn-icon crm-btn-ghost">
+                    <button type="button" class="crm-btn crm-btn-icon crm-btn-ghost" title="{{ t('crm.notes.attach_file') }}">
                         <i class="ti ti-paperclip"></i>
                     </button>
                     <button type="submit" class="crm-btn crm-btn-analyze">
@@ -54,9 +135,11 @@
                     </span>
                 </div>
                 
-                <p style="font-size: 14px; color: var(--crm-text-secondary); line-height: 1.5; margin-bottom: 12px;">
+                <div class="crm-note-content" 
+                     style="font-size: 14px; color: var(--crm-text-secondary); line-height: 1.5; margin-bottom: 12px;"
+                     data-markdown="{{ note.content | truncate(150) | default('') | e }}">
                     {{ note.content | truncate(150) | default('') }}
-                </p>
+                </div>
                 
                 {% if note.entities and note.entities | length > 0 %}
                 <div style="display: flex; gap: 8px; flex-wrap: wrap;">

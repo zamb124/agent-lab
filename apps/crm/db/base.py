@@ -64,9 +64,17 @@ class CRMDatabase:
         """Создает новую сессию"""
         return self._session_factory()
     
-    async def create_tables(self):
-        """Создает все таблицы CRM"""
+    async def create_tables(self, drop_existing: bool = False):
+        """
+        Создает все таблицы CRM.
+        
+        Args:
+            drop_existing: Если True - сначала удаляет существующие таблицы.
+                          Используется в тестах для пересоздания схемы.
+        """
         async with self._engine.begin() as conn:
+            if drop_existing:
+                await conn.run_sync(Base.metadata.drop_all)
             await conn.run_sync(Base.metadata.create_all)
         logger.info("CRM таблицы созданы")
     

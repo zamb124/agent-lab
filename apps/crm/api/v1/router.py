@@ -7,7 +7,7 @@
 
 from fastapi import APIRouter
 
-from apps.crm.api.v1 import entities, entity_types, relationships, notes, tasks, graph
+from apps.crm.api.v1 import entities, entity_types, relationships, notes, tasks, graph, access_requests, profile, export
 
 router = APIRouter()
 
@@ -17,4 +17,7 @@ router.include_router(relationships.router, prefix="/relationships", tags=["Rela
 router.include_router(notes.router, prefix="/notes", tags=["Notes"])
 router.include_router(tasks.router, prefix="/tasks", tags=["Tasks"])
 router.include_router(graph.router, prefix="/graph", tags=["Knowledge Graph"])
+router.include_router(access_requests.router, prefix="/access-requests", tags=["Access Requests"])
+router.include_router(profile.router, prefix="/profile", tags=["User Profile"])
+router.include_router(export.router, prefix="/export", tags=["Export"])
 

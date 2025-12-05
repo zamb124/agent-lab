@@ -1,0 +1,94 @@
+<!-- Access Requests Partial -->
+<div class="crm-access-requests-page">
+    <div class="crm-page-header">
+        <h1 class="crm-page-title">{{ t('crm.access_requests.title') }}</h1>
+    </div>
+    
+    <!-- Tabs -->
+    <div class="crm-tabs" style="margin-bottom: 24px;">
+        <button class="crm-tab {% if tab == 'incoming' %}active{% endif %}"
+                hx-get="/crm/partials/access-requests?tab=incoming"
+                hx-target="#crm-content">
+            <i class="ti ti-inbox"></i>
+            {{ t('crm.access_requests.incoming') }}
+            {% if pending_count > 0 %}
+            <span class="crm-badge">{{ pending_count }}</span>
+            {% endif %}
+        </button>
+        <button class="crm-tab {% if tab == 'outgoing' %}active{% endif %}"
+                hx-get="/crm/partials/access-requests?tab=outgoing"
+                hx-target="#crm-content">
+            <i class="ti ti-send"></i>
+            {{ t('crm.access_requests.outgoing') }}
+        </button>
+    </div>
+    
+    {% if requests and requests | length > 0 %}
+    <div class="crm-card">
+        <div class="crm-table-container">
+            <table class="crm-table">
+                <thead>
+                    <tr>
+                        <th>{{ t('crm.access_requests.resource') }}</th>
+                        <th>{% if tab == 'incoming' %}{{ t('crm.access_requests.requester') }}{% else %}{{ t('crm.access_requests.owner') }}{% endif %}</th>
+                        <th>{{ t('crm.access_requests.message') }}</th>
+                        <th>{{ t('crm.access_requests.status') }}</th>
+                        <th>{{ t('crm.access_requests.date') }}</th>
+                        {% if tab == 'incoming' %}
+                        <th>{{ t('common.actions') }}</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for req in requests %}
+                    <tr>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <i class="ti {% if req.resource_type == 'note' %}ti-note{% else %}ti-tag{% endif %}" 
+                                   style="color: var(--crm-blue);"></i>
+                                <span>{{ req.resource_title or req.resource_id | truncate(30) }}</span>
+                            </div>
+                        </td>
+                        <td>{{ req.requester_name or req.requester_id | truncate(20) if tab == 'incoming' else req.owner_id | truncate(20) }}</td>
+                        <td>{{ req.message | truncate(50) if req.message else '-' }}</td>
+                        <td>
+                            <span class="crm-status-badge crm-status-{{ req.status }}">
+                                {{ t('crm.access_requests.status_' + req.status) }}
+                            </span>
+                        </td>
+                        <td>{{ req.created_at.strftime('%d.%m.%Y %H:%M') if req.created_at else '' }}</td>
+                        {% if tab == 'incoming' and req.status == 'pending' %}
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button class="crm-btn crm-btn-sm crm-btn-success"
+                                        hx-post="/crm/api/access-requests/{{ req.request_id }}/approve"
+                                        hx-target="#crm-content"
+                                        hx-swap="innerHTML">
+                                    <i class="ti ti-check"></i>
+                                </button>
+                                <button class="crm-btn crm-btn-sm crm-btn-danger"
+                                        hx-post="/crm/api/access-requests/{{ req.request_id }}/reject"
+                                        hx-target="#crm-content"
+                                        hx-swap="innerHTML">
+                                    <i class="ti ti-x"></i>
+                                </button>
+                            </div>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="crm-empty-state">
+        <div class="crm-empty-icon">
+            <i class="ti ti-lock-access"></i>
+        </div>
+        <h3>{{ t('crm.access_requests.empty') }}</h3>
+        <p>{{ t('crm.access_requests.empty_description_' + tab) }}</p>
+    </div>
+    {% endif %}
+</div>
+

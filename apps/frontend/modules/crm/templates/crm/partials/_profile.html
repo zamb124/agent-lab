@@ -1,0 +1,222 @@
+<!-- User Profile Partial -->
+<div class="crm-profile-page">
+    <div class="crm-page-header">
+        <h1 class="crm-page-title">{{ t('crm.profile.title') }}</h1>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 24px;">
+        <!-- Profile Card -->
+        <div class="crm-card">
+            <div class="crm-card-body" style="text-align: center; padding: 32px;">
+                <div class="crm-profile-avatar" style="margin-bottom: 16px;">
+                    {% if profile.avatar_url %}
+                    <img src="{{ profile.avatar_url }}" alt="Avatar" class="crm-avatar-lg">
+                    {% else %}
+                    <div class="crm-avatar-placeholder-lg">
+                        {{ (profile.display_name or 'U')[:2] | upper }}
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <h2 style="margin: 0 0 4px; font-size: 20px;">
+                    {{ profile.display_name or t('crm.profile.no_name') }}
+                </h2>
+                <p style="color: var(--crm-text-muted); margin: 0 0 16px;">
+                    {{ profile.position or t('crm.profile.no_position') }}
+                </p>
+                
+                <div class="crm-profile-stats" style="display: flex; justify-content: center; gap: 24px; padding-top: 16px; border-top: 1px solid var(--crm-border-light);">
+                    <div>
+                        <div style="font-size: 24px; font-weight: 700; color: var(--crm-blue);">
+                            {{ profile.notes_count or 0 }}
+                        </div>
+                        <div style="font-size: 12px; color: var(--crm-text-muted);">
+                            {{ t('crm.profile.notes') }}
+                        </div>
+                    </div>
+                    <div>
+                        <div style="font-size: 24px; font-weight: 700; color: var(--crm-green);">
+                            {{ profile.tasks_completed or 0 }}
+                        </div>
+                        <div style="font-size: 12px; color: var(--crm-text-muted);">
+                            {{ t('crm.profile.tasks_completed') }}
+                        </div>
+                    </div>
+                </div>
+                
+                <button class="crm-btn crm-btn-primary" style="margin-top: 20px; width: 100%;"
+                        hx-get="/crm/partials/profile-modal"
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML">
+                    <i class="ti ti-edit"></i>
+                    {{ t('crm.profile.edit') }}
+                </button>
+            </div>
+        </div>
+        
+        <!-- Activity Heatmap -->
+        <div class="crm-card">
+            <div class="crm-card-header">
+                <h3 class="crm-card-title">{{ t('crm.profile.activity') }}</h3>
+                <div style="display: flex; gap: 8px;">
+                    <span style="font-size: 13px; color: var(--crm-text-muted);">
+                        <i class="ti ti-flame"></i> 
+                        {{ t('crm.profile.streak') }}: <strong>{{ stats.current_streak or 0 }}</strong> {{ t('crm.profile.days') }}
+                    </span>
+                </div>
+            </div>
+            <div class="crm-card-body">
+                <div class="crm-heatmap" id="activity-heatmap">
+                    <!-- Heatmap grid -->
+                    <div class="crm-heatmap-months" style="display: flex; margin-bottom: 4px; padding-left: 30px;">
+                        {% for month in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] %}
+                        <span style="flex: 1; font-size: 11px; color: var(--crm-text-muted);">{{ month }}</span>
+                        {% endfor %}
+                    </div>
+                    
+                    <div style="display: flex; gap: 4px;">
+                        <div class="crm-heatmap-days" style="display: flex; flex-direction: column; gap: 2px; margin-right: 4px;">
+                            {% for day in ['Mon', '', 'Wed', '', 'Fri', '', ''] %}
+                            <span style="font-size: 10px; color: var(--crm-text-muted); height: 12px; line-height: 12px;">{{ day }}</span>
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="crm-heatmap-grid" style="display: grid; grid-template-columns: repeat(53, 12px); grid-template-rows: repeat(7, 12px); gap: 2px;">
+                            {% for i in range(371) %}
+                            {% set date_key = dates[i] if dates else '' %}
+                            {% set count = stats.notes_by_date.get(date_key, 0) if stats else 0 %}
+                            {% set level = 0 if count == 0 else (1 if count <= 2 else (2 if count <= 4 else (3 if count <= 6 else 4))) %}
+                            <div class="crm-heatmap-cell crm-heatmap-level-{{ level }}" 
+                                 title="{{ date_key }}: {{ count }} {{ t('crm.profile.notes') }}"
+                                 data-date="{{ date_key }}"
+                                 data-count="{{ count }}"></div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div class="crm-heatmap-legend" style="display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 8px;">
+                        <span style="font-size: 11px; color: var(--crm-text-muted);">{{ t('crm.profile.less') }}</span>
+                        <div class="crm-heatmap-cell crm-heatmap-level-0"></div>
+                        <div class="crm-heatmap-cell crm-heatmap-level-1"></div>
+                        <div class="crm-heatmap-cell crm-heatmap-level-2"></div>
+                        <div class="crm-heatmap-cell crm-heatmap-level-3"></div>
+                        <div class="crm-heatmap-cell crm-heatmap-level-4"></div>
+                        <span style="font-size: 11px; color: var(--crm-text-muted);">{{ t('crm.profile.more') }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Contact Info -->
+    <div class="crm-card" style="margin-top: 24px;">
+        <div class="crm-card-header">
+            <h3 class="crm-card-title">{{ t('crm.profile.contact_info') }}</h3>
+        </div>
+        <div class="crm-card-body">
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;">
+                <div>
+                    <div style="font-size: 12px; color: var(--crm-text-muted); margin-bottom: 4px;">
+                        <i class="ti ti-phone"></i> {{ t('crm.profile.phone') }}
+                    </div>
+                    <div style="font-size: 14px;">{{ profile.phone or '-' }}</div>
+                </div>
+                <div>
+                    <div style="font-size: 12px; color: var(--crm-text-muted); margin-bottom: 4px;">
+                        <i class="ti ti-calendar"></i> {{ t('crm.profile.member_since') }}
+                    </div>
+                    <div style="font-size: 14px;">{{ profile.created_at.strftime('%d.%m.%Y') if profile.created_at else '-' }}</div>
+                </div>
+                <div>
+                    <div style="font-size: 12px; color: var(--crm-text-muted); margin-bottom: 4px;">
+                        <i class="ti ti-info-circle"></i> {{ t('crm.profile.bio') }}
+                    </div>
+                    <div style="font-size: 14px;">{{ profile.bio or '-' }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Interface Settings -->
+    <div class="crm-card" style="margin-top: 24px;">
+        <div class="crm-card-header">
+            <h3 class="crm-card-title">
+                <i class="ti ti-adjustments"></i>
+                {{ t('crm.profile.interface_settings') }}
+            </h3>
+        </div>
+        <div class="crm-card-body">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                <!-- Sidebar Settings -->
+                <div>
+                    <h4 style="font-size: 14px; margin: 0 0 12px; color: var(--crm-text-primary);">
+                        {{ t('crm.profile.sidebar_menu') }}
+                    </h4>
+                    <div id="sidebar-settings" class="crm-sidebar-settings">
+                        {% set default_items = [
+                            {'id': 'dashboard', 'label': 'Главная', 'icon': 'home'},
+                            {'id': 'notes', 'label': 'Заметки', 'icon': 'file-text'},
+                            {'id': 'tasks', 'label': 'Задачи', 'icon': 'check-square'},
+                            {'id': 'entities', 'label': 'Контакты', 'icon': 'users'},
+                            {'id': 'graph', 'label': 'Граф связей', 'icon': 'git-branch'},
+                            {'id': 'access-requests', 'label': 'Запросы доступа', 'icon': 'lock'},
+                            {'id': 'profile', 'label': 'Профиль', 'icon': 'user'}
+                        ] %}
+                        {% set user_config = profile.sidebar_config.get('items', []) if profile.sidebar_config else [] %}
+                        
+                        {% for item in default_items %}
+                        {% set user_item = user_config | selectattr('id', 'equalto', item.id) | first | default(none) %}
+                        {% set is_visible = user_item.visible if user_item else true %}
+                        <label class="crm-sidebar-setting-item" data-item-id="{{ item.id }}">
+                            <input type="checkbox" 
+                                   class="sidebar-visibility-toggle"
+                                   data-item-id="{{ item.id }}"
+                                   {{ 'checked' if is_visible else '' }}>
+                            <i class="ti ti-{{ item.icon }}"></i>
+                            <span>{{ item.label }}</span>
+                            <i class="ti ti-grip-vertical drag-handle" style="margin-left: auto; cursor: grab;"></i>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <button class="crm-btn crm-btn-secondary" style="margin-top: 12px; width: 100%;"
+                            onclick="window.CRM.saveSidebarSettings()">
+                        <i class="ti ti-device-floppy"></i>
+                        {{ t('crm.profile.save_sidebar') }}
+                    </button>
+                </div>
+                
+                <!-- Widgets Settings -->
+                <div>
+                    <h4 style="font-size: 14px; margin: 0 0 12px; color: var(--crm-text-primary);">
+                        {{ t('crm.profile.dashboard_widgets') }}
+                    </h4>
+                    <div id="widget-settings" class="crm-widget-settings">
+                        {% set default_widgets = [
+                            {'id': 'tasks', 'label': 'Задачи на сегодня'},
+                            {'id': 'notes', 'label': 'Последние заметки'},
+                            {'id': 'stats', 'label': 'Статистика'},
+                            {'id': 'calendar', 'label': 'Календарь'}
+                        ] %}
+                        {% set enabled_widgets = profile.widget_config.get('enabled_widgets', ['tasks', 'notes', 'stats']) if profile.widget_config else ['tasks', 'notes', 'stats'] %}
+                        
+                        {% for widget in default_widgets %}
+                        <label class="crm-widget-setting-item">
+                            <input type="checkbox"
+                                   class="widget-visibility-toggle"
+                                   data-widget-id="{{ widget.id }}"
+                                   {{ 'checked' if widget.id in enabled_widgets else '' }}>
+                            <span>{{ widget.label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <button class="crm-btn crm-btn-secondary" style="margin-top: 12px; width: 100%;"
+                            onclick="window.CRM.saveWidgetSettings()">
+                        <i class="ti ti-device-floppy"></i>
+                        {{ t('crm.profile.save_widgets') }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+

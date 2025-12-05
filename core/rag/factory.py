@@ -50,8 +50,18 @@ def get_rag_provider(provider_name: Optional[str] = None) -> BaseRAGProvider:
     if not config_dict.get("enabled", False):
         raise ValueError(f"Провайдер {provider} отключен (enabled = false)")
     
+    # Получаем общую конфигурацию embedding из RAGConfig
+    embedding_config = None
+    if hasattr(settings.rag, 'embedding') and settings.rag.embedding:
+        embedding_config = settings.rag.embedding.model_dump() if hasattr(settings.rag.embedding, 'model_dump') else dict(settings.rag.embedding)
+    
     provider_class = RAG_PROVIDERS[provider]
-    instance = provider_class(config_dict)
+    
+    # ChromaDB принимает embedding_config отдельным параметром
+    if provider == "chromadb":
+        instance = provider_class(config_dict, embedding_config=embedding_config)
+    else:
+        instance = provider_class(config_dict)
     
     logger.info(f"Создан RAG провайдер: {provider}")
     return instance

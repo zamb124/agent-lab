@@ -58,10 +58,20 @@
                             <i class="ti ti-calendar"></i>
                             {{ task.due_date | default('') }}
                         </span>
-                        {% if task.priority == 'high' %}
-                        <span class="crm-task-priority high">HIGH</span>
+                        {% if task.priority == 'high' or task.priority == 'urgent' %}
+                        <span class="crm-task-priority high">{{ task.priority | upper }}</span>
                         {% endif %}
                     </div>
+                    {% if task.tags and task.tags | length > 0 %}
+                    <div class="crm-task-tags" style="display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap;">
+                        {% for tag in task.tags[:3] %}
+                        <span class="crm-tag">{{ tag }}</span>
+                        {% endfor %}
+                        {% if task.tags | length > 3 %}
+                        <span class="crm-tag crm-tag-more">+{{ task.tags | length - 3 }}</span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                 </div>
                 
                 {% if task.entity %}

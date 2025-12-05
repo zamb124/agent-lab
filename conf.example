@@ -299,13 +299,31 @@
   "rag": {
     "enabled": false,
     "default_provider": "chromadb",
+    
+    "embedding": {
+      "preferred_dimension": 1536,
+      "model_groups": {
+        "1536": [
+          "openai/text-embedding-3-small",
+          "openai/text-embedding-3-large",
+          "mistralai/codestral-embed-2505"
+        ],
+        "1024": [
+          "mistralai/mistral-embed-2312",
+          "baai/bge-m3",
+          "intfloat/multilingual-e5-large"
+        ]
+      }
+    },
+    
     "providers": {
       "chromadb": {
         "enabled": true,
         "host": "chroma",
         "port": 8100,
-        "embedding_model": "openai/text-embedding-3-small",
         "embedding_api_key": "sk-or-v1-your-openrouter-api-key",
+        "embedding_cost_per_1m_tokens": 5.0,
+        "embedding_platform_markup": 1.1,
         "chunk_size": 1000,
         "chunk_overlap": 100,
         "timeout": 60
@@ -313,6 +331,9 @@
       "agentset": {
         "enabled": false,
         "api_key": "your-agentset-api-key",
+        "embedding_api_key": "sk-or-v1-your-openrouter-api-key",
+        "embedding_cost_per_1m_tokens": 5.0,
+        "embedding_platform_markup": 1.1,
         "base_url": "https://api.agentset.ai",
         "timeout": 60
       }

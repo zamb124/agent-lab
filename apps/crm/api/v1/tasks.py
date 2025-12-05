@@ -80,6 +80,26 @@ async def get_tasks_by_entity(
     return await task_service.get_tasks_by_entity(entity_id)
 
 
+@router.get("/tag/{tag}", response_model=List[TaskResponse])
+async def get_tasks_by_tag(
+    tag: str,
+    task_service: TaskServiceDep,
+    limit: int = Query(100, ge=1, le=1000),
+):
+    """Получает задачи по тегу"""
+    return await task_service.get_tasks_by_tag(tag, limit)
+
+
+@router.get("/assignee/{assignee_id}", response_model=List[TaskResponse])
+async def get_tasks_by_assignee(
+    assignee_id: str,
+    task_service: TaskServiceDep,
+    limit: int = Query(100, ge=1, le=1000),
+):
+    """Получает задачи по соучастнику"""
+    return await task_service.get_tasks_by_assignee(assignee_id, limit)
+
+
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
     task_id: str,
@@ -148,5 +168,45 @@ async def cancel_task(
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
     return task
+
+
+@router.post("/{task_id}/tags/{tag}", response_model=TaskResponse)
+async def add_tag_to_task(
+    task_id: str,
+    tag: str,
+    task_service: TaskServiceDep,
+):
+    """Добавляет тег к задаче"""
+    return await task_service.add_tag(task_id, tag)
+
+
+@router.delete("/{task_id}/tags/{tag}", response_model=TaskResponse)
+async def remove_tag_from_task(
+    task_id: str,
+    tag: str,
+    task_service: TaskServiceDep,
+):
+    """Удаляет тег из задачи"""
+    return await task_service.remove_tag(task_id, tag)
+
+
+@router.post("/{task_id}/assignees/{assignee_id}", response_model=TaskResponse)
+async def add_assignee_to_task(
+    task_id: str,
+    assignee_id: str,
+    task_service: TaskServiceDep,
+):
+    """Добавляет соучастника к задаче"""
+    return await task_service.add_assignee(task_id, assignee_id)
+
+
+@router.delete("/{task_id}/assignees/{assignee_id}", response_model=TaskResponse)
+async def remove_assignee_from_task(
+    task_id: str,
+    assignee_id: str,
+    task_service: TaskServiceDep,
+):
+    """Удаляет соучастника из задачи"""
+    return await task_service.remove_assignee(task_id, assignee_id)
 
 

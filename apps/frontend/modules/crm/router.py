@@ -151,12 +151,48 @@ async def partial_dashboard(request: Request):
 
 
 @router.get("/partials/notes", response_class=HTMLResponse)
-async def partial_notes(request: Request):
-    """Notes list partial"""
-    notes = await fetch_crm_data("/notes", request)
+async def partial_notes(
+    request: Request,
+    note_type: Optional[str] = Query(None),
+    user_id: Optional[str] = Query(None),
+    entity_id: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+):
+    """Notes list partial with filters"""
+    params = []
+    if note_type:
+        params.append(f"note_type={note_type}")
+    if user_id:
+        params.append(f"user_id={user_id}")
+    if entity_id:
+        params.append(f"entity_id={entity_id}")
+    if start_date:
+        params.append(f"start_date={start_date}")
+    if end_date:
+        params.append(f"end_date={end_date}")
+    if q:
+        params.append(f"q={q}")
+    
+    endpoint = "/notes" + ("?" + "&".join(params) if params else "")
+    notes = await fetch_crm_data(endpoint, request)
+    
     return templates.TemplateResponse(
         "crm/partials/_notes.html",
-        {"request": request, "notes": notes if isinstance(notes, list) else [], "today": str(date.today())}
+        {
+            "request": request, 
+            "notes": notes if isinstance(notes, list) else [], 
+            "today": str(date.today()),
+            "filters": {
+                "note_type": note_type,
+                "user_id": user_id,
+                "entity_id": entity_id,
+                "start_date": start_date,
+                "end_date": end_date,
+                "q": q,
+            }
+        }
     )
 
 
@@ -164,11 +200,15 @@ async def partial_notes(request: Request):
 async def create_note_and_analyze(request: Request, note_id: Optional[str] = Query(None)):
     """Create/update note, analyze with AI, create entities with pending status"""
     form_data = await request.form()
+    is_template = form_data.get("is_template") == "true"
+    
     note_data = {
         "title": form_data.get("title", ""),
         "content": form_data.get("content", ""),
         "note_type": form_data.get("note_type", "freeform"),
-        "note_date": form_data.get("note_date", str(date.today()))
+        "note_date": form_data.get("note_date", str(date.today())),
+        "is_template": is_template,
+        "status": "published"
     }
     
     if note_id:
@@ -255,6 +295,36 @@ async def partial_notes_database(request: Request):
         "crm/partials/_notes_database.html",
         {"request": request, "notes": notes if isinstance(notes, list) else []}
     )
+
+
+@router.get("/partials/daily-summary", response_class=HTMLResponse)
+async def partial_daily_summary(request: Request, date: Optional[str] = Query(None)):
+    """Daily summary partial"""
+    from datetime import date as date_cls
+    summary_date = date if date else str(date_cls.today())
+    
+    result = await fetch_crm_data(f"/notes/daily-summary/{summary_date}", request)
+    summary = result.get("summary", "") if isinstance(result, dict) else ""
+    
+    return HTMLResponse(f"""
+    <div class="crm-ai-suggestions" style="margin-bottom: 20px;">
+        <div class="crm-ai-header" style="margin-bottom: 12px;">
+            <div class="crm-ai-icon">
+                <i class="ti ti-sparkles"></i>
+            </div>
+            <div>
+                <div class="crm-ai-title">Саммари за {summary_date}</div>
+            </div>
+            <button type="button" 
+                    class="crm-btn crm-btn-ghost crm-btn-sm" 
+                    style="margin-left: auto;"
+                    onclick="this.closest('#daily-summary-container').innerHTML = ''">
+                <i class="ti ti-x"></i>
+            </button>
+        </div>
+        <div class="crm-prose" data-markdown="{summary.replace('"', '&quot;')}">{summary}</div>
+    </div>
+    """)
 
 
 @router.get("/partials/entities", response_class=HTMLResponse)
@@ -365,15 +435,41 @@ async def partial_search(request: Request, q: str = Query("")):
 # === Modals ===
 
 @router.get("/partials/note-modal", response_class=HTMLResponse)
-async def partial_note_modal(request: Request, note_id: Optional[str] = Query(None)):
+async def partial_note_modal(
+    request: Request, 
+    note_id: Optional[str] = Query(None),
+    template_id: Optional[str] = Query(None, alias="template-select")
+):
     """Note create/edit modal"""
     note = None
+    templates_list = []
+    
     if note_id:
         note = await fetch_crm_data(f"/notes/{note_id}", request)
         logger.debug(f"Loaded note: {note}")
+    elif template_id:
+        # Create note from template
+        template = await fetch_crm_data(f"/notes/{template_id}", request)
+        if template:
+            note = {
+                "title": template.get("title", ""),
+                "content": template.get("content", ""),
+                "note_type": template.get("note_type", "freeform"),
+            }
+    else:
+        # Load templates for selection
+        templates_list = await fetch_crm_data("/notes/templates", request)
+        if not isinstance(templates_list, list):
+            templates_list = []
+    
     return templates.TemplateResponse(
         "crm/partials/_note_modal.html",
-        {"request": request, "note": note, "today": str(date.today())}
+        {
+            "request": request, 
+            "note": note, 
+            "today": str(date.today()),
+            "templates": templates_list
+        }
     )
 
 
@@ -440,3 +536,178 @@ async def partial_settings(request: Request):
             "entity_types": entity_types if isinstance(entity_types, list) else []
         }
     )
+
+
+# === Access Requests ===
+
+@router.get("/access-requests", response_class=HTMLResponse)
+async def crm_access_requests(request: Request):
+    """Страница Access Requests"""
+    return templates.TemplateResponse(
+        "crm/crm_base.html",
+        {"request": request, "current_page": "crm_access_requests"}
+    )
+
+
+@router.get("/partials/access-requests", response_class=HTMLResponse)
+async def partial_access_requests(
+    request: Request,
+    tab: str = Query("incoming", description="incoming or outgoing")
+):
+    """Access Requests partial"""
+    if tab == "incoming":
+        requests_data = await fetch_crm_data("/access-requests/incoming", request)
+    else:
+        requests_data = await fetch_crm_data("/access-requests/outgoing", request)
+    
+    pending_count_data = await fetch_crm_data("/access-requests/pending-count", request)
+    pending_count = pending_count_data.get("count", 0) if isinstance(pending_count_data, dict) else 0
+    
+    return templates.TemplateResponse(
+        "crm/partials/_access_requests.html",
+        {
+            "request": request,
+            "requests": requests_data if isinstance(requests_data, list) else [],
+            "tab": tab,
+            "pending_count": pending_count
+        }
+    )
+
+
+@router.get("/partials/request-access-modal", response_class=HTMLResponse)
+async def partial_request_access_modal(
+    request: Request,
+    resource_type: str = Query(...),
+    resource_id: str = Query(...)
+):
+    """Request access modal"""
+    # Get resource info
+    resource_title = None
+    owner_id = None
+    
+    if resource_type == "note":
+        try:
+            note = await fetch_crm_data(f"/notes/{resource_id}", request)
+            if note:
+                resource_title = note.get("title")
+                owner_id = note.get("user_id")
+        except Exception:
+            pass
+    
+    return templates.TemplateResponse(
+        "crm/partials/_request_access_modal.html",
+        {
+            "request": request,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "resource_title": resource_title,
+            "owner_id": owner_id,
+        }
+    )
+
+
+# === Access Request API proxies ===
+
+@router.post("/api/access-requests", response_class=HTMLResponse)
+async def create_access_request(request: Request):
+    """Proxy to create access request"""
+    form = await request.form()
+    data = {
+        "resource_type": form.get("resource_type"),
+        "resource_id": form.get("resource_id"),
+        "message": form.get("message"),
+    }
+    try:
+        await fetch_crm_data("/access-requests", request, method="POST", json_data=data)
+        # Success - close modal and show notification
+        return HTMLResponse("""
+            <script>
+                CRM.closeModal();
+                CRM.showNotification('Запрос отправлен', 'success');
+            </script>
+        """)
+    except Exception as e:
+        return HTMLResponse(f"""
+            <div class="crm-alert crm-alert-error">
+                <i class="ti ti-alert-circle"></i>
+                {str(e)}
+            </div>
+        """)
+
+
+@router.post("/api/access-requests/{request_id}/approve", response_class=HTMLResponse)
+async def approve_access_request(request: Request, request_id: str):
+    """Proxy to approve access request"""
+    await fetch_crm_data(f"/access-requests/{request_id}/approve", request, method="POST")
+    # Reload access requests list
+    return await partial_access_requests(request, tab="incoming")
+
+
+@router.post("/api/access-requests/{request_id}/reject", response_class=HTMLResponse)
+async def reject_access_request(request: Request, request_id: str):
+    """Proxy to reject access request"""
+    await fetch_crm_data(f"/access-requests/{request_id}/reject", request, method="POST")
+    # Reload access requests list
+    return await partial_access_requests(request, tab="incoming")
+
+
+# === Profile ===
+
+@router.get("/profile", response_class=HTMLResponse)
+async def crm_profile(request: Request):
+    """Страница профиля пользователя"""
+    return templates.TemplateResponse(
+        "crm/crm_base.html",
+        {"request": request, "current_page": "crm_profile"}
+    )
+
+
+@router.get("/partials/profile", response_class=HTMLResponse)
+async def partial_profile(request: Request):
+    """Profile partial"""
+    from datetime import date, timedelta
+    
+    profile = await fetch_crm_data("/profile", request)
+    stats = await fetch_crm_data("/profile/stats?days=365", request)
+    
+    # Generate dates for heatmap (last 371 days = 53 weeks)
+    today = date.today()
+    dates = [(today - timedelta(days=370-i)).isoformat() for i in range(371)]
+    
+    return templates.TemplateResponse(
+        "crm/partials/_profile.html",
+        {
+            "request": request,
+            "profile": profile if isinstance(profile, dict) else {},
+            "stats": stats if isinstance(stats, dict) else {},
+            "dates": dates
+        }
+    )
+
+
+@router.get("/partials/profile-modal", response_class=HTMLResponse)
+async def partial_profile_modal(request: Request):
+    """Edit profile modal"""
+    profile = await fetch_crm_data("/profile", request)
+    return templates.TemplateResponse(
+        "crm/partials/_profile_modal.html",
+        {
+            "request": request,
+            "profile": profile if isinstance(profile, dict) else {}
+        }
+    )
+
+
+@router.put("/api/profile", response_class=HTMLResponse)
+async def update_profile(request: Request):
+    """Update profile proxy"""
+    form = await request.form()
+    data = {
+        "display_name": form.get("display_name") or None,
+        "position": form.get("position") or None,
+        "avatar_url": form.get("avatar_url") or None,
+        "phone": form.get("phone") or None,
+        "bio": form.get("bio") or None,
+    }
+    await fetch_crm_data("/profile", request, method="PUT", json_data=data)
+    return await partial_profile(request)

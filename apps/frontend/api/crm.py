@@ -62,8 +62,13 @@ async def proxy_request(
         else:
             raise ValueError(f"Unsupported method: {method}")
         
-        response.raise_for_status()
-        return JSONResponse(response.json(), status_code=response.status_code)
+        # Proxy передает ответ бэкенда как есть (включая 4xx/5xx)
+        try:
+            data = response.json()
+        except Exception:
+            data = {"detail": response.text}
+        
+        return JSONResponse(data, status_code=response.status_code)
 
 
 # === Notes ===

@@ -29,6 +29,28 @@ async def list_entities(
     return await entity_service.list_entities(entity_type=entity_type, limit=limit)
 
 
+@router.get("/autocomplete", response_model=List[EntityResponse])
+async def autocomplete_entities(
+    entity_service: EntityServiceDep,
+    q: str = Query(..., min_length=1, description="Поисковый запрос"),
+    entity_type: Optional[str] = Query(None, description="Фильтр по типу"),
+    limit: int = Query(10, ge=1, le=50),
+):
+    """
+    Быстрый поиск сущностей для @mention autocomplete.
+    Ищет по имени с использованием семантического поиска.
+    """
+    from apps.crm.models.entity_models import EntitySearchRequest
+    
+    request = EntitySearchRequest(
+        query=q,
+        entity_type=entity_type,
+        limit=limit
+    )
+    result = await entity_service.search_entities(request)
+    return result.entities
+
+
 @router.get("/{entity_id}", response_model=EntityResponse)
 async def get_entity(
     entity_id: str,

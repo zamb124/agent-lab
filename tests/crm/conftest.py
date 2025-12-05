@@ -33,6 +33,7 @@ async def crm_db(migrated_db):
     
     Создает таблицы CRM в отдельной БД crm_db.
     Использует session scope чтобы не пересоздавать каждый тест.
+    drop_existing=True гарантирует что схема таблиц актуальна.
     """
     from core.config import get_settings
     settings = get_settings()
@@ -40,7 +41,7 @@ async def crm_db(migrated_db):
     crm_db_url = settings.database.crm_url or settings.database.url
     
     db = CRMDatabase(crm_db_url)
-    await db.create_tables()
+    await db.create_tables(drop_existing=True)
     
     yield db
     
@@ -53,6 +54,7 @@ async def crm_container(crm_db, migrated_db):
     CRM Container для тестов.
     
     Session scope - переиспользуется между тестами.
+    Инициализирует системные типы сущностей (person, organization, project, task).
     """
     from core.config import get_settings
     settings = get_settings()
@@ -64,6 +66,9 @@ async def crm_container(crm_db, migrated_db):
         shared_db_url=settings.database.shared_url
     )
     set_crm_container(container)
+    
+    # Инициализируем системные типы сущностей
+    await container.entity_type_service.init_system_types()
     
     yield container
     
@@ -312,12 +317,13 @@ async def crm_api_user_company(migrated_db):
 # === CRM Server для API тестов ===
 
 @pytest.fixture(scope="session")
-def crm_server_process(crm_db, migrated_db, crm_api_user_company):
+def crm_server_process(crm_db, migrated_db, crm_api_user_company, agents_service):
     """
     Запускает CRM сервер в subprocess для E2E тестов.
     
-    Зависит от crm_api_user_company чтобы user/company были в БД
-    до запуска сервера.
+    Зависит от:
+    - crm_api_user_company: user/company в БД до запуска
+    - agents_service: agents сервер для AI вызовов
     """
     import subprocess
     import sys
@@ -353,10 +359,14 @@ def crm_server_process(crm_db, migrated_db, crm_api_user_company):
         "--log-level", "warning"
     ]
     
+    # Передаем URL agents service в окружение CRM
+    env = os.environ.copy()
+    env["CRM_AGENTS_SERVICE_URL"] = agents_service["url"]
+    
     process = subprocess.Popen(
         cmd,
         cwd=str(project_root),
-        env=os.environ.copy(),
+        env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -419,3 +429,97 @@ async def crm_client(crm_server_process, crm_api_user_company):
         yield client
     
     clear_context()
+
+
+# === Алиасы для тестов ===
+
+@pytest.fixture
+def test_user_id(crm_api_user_company):
+    """ID тестового пользователя для API тестов"""
+    return crm_api_user_company["user"].user_id
+
+
+@pytest.fixture
+def test_company_id(crm_api_user_company):
+    """ID тестовой компании для API тестов"""
+    return crm_api_user_company["company"].company_id
+
+
+@pytest_asyncio.fixture
+async def test_note(crm_container, crm_api_user_company):
+    """Тестовая заметка для API тестов"""
+    user = crm_api_user_company["user"]
+    company = crm_api_user_company["company"]
+    
+    note = Note(
+        note_id=f"test_note_{uuid.uuid4().hex[:8]}",
+        company_id=company.company_id,
+        user_id=user.user_id,
+        title="Test Note for API",
+        content="This is test content",
+        note_type="freeform",
+        note_date=date.today(),
+        visibility="public",
+    )
+    
+    created = await crm_container.note_repository.create(note)
+    yield created
+    
+    try:
+        await crm_container.note_repository.delete(created.note_id)
+    except Exception:
+        pass
+
+
+@pytest_asyncio.fixture
+async def test_task(crm_container, crm_api_user_company):
+    """Тестовая задача для API тестов"""
+    user = crm_api_user_company["user"]
+    company = crm_api_user_company["company"]
+    
+    task = Task(
+        task_id=f"test_task_{uuid.uuid4().hex[:8]}",
+        company_id=company.company_id,
+        user_id=user.user_id,
+        title="Test Task for API",
+        description="Test description",
+        priority="medium",
+        status="pending",
+        due_date=date.today(),
+    )
+    
+    created = await crm_container.task_repository.create(task)
+    yield created
+    
+    try:
+        await crm_container.task_repository.delete(created.task_id)
+    except Exception:
+        pass
+
+
+@pytest_asyncio.fixture
+async def test_entity(crm_container, crm_api_user_company):
+    """Тестовая сущность для API тестов"""
+    from apps.crm.models.entity_models import EntityCreate
+    
+    company = crm_api_user_company["company"]
+    
+    entity_data = EntityCreate(
+        name=f"Test Entity {uuid.uuid4().hex[:6]}",
+        type="person",
+        attributes={"email": "test@example.com"},
+    )
+    
+    entity = await crm_container.entity_service.create_entity(
+        entity_data, 
+        company_id=company.company_id
+    )
+    yield entity
+    
+    try:
+        await crm_container.entity_service.delete_entity(
+            entity.entity_id, 
+            company_id=company.company_id
+        )
+    except Exception:
+        pass

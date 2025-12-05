@@ -18,6 +18,27 @@
               hx-on::after-request="CRM.closeModal()">
             <input type="hidden" name="note_date" value="{{ note.note_date if note and note.note_date else today }}">
             <div class="crm-modal-body">
+                {% if not note and templates and templates | length > 0 %}
+                <!-- Template Selection -->
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('crm.notes.template.select') }}</label>
+                    <select class="crm-input" 
+                            id="template-select"
+                            hx-get="/crm/partials/note-modal"
+                            hx-trigger="change"
+                            hx-target="#modal-container"
+                            hx-swap="innerHTML"
+                            hx-include="this">
+                        <option value="">{{ t('crm.notes.template.none') }}</option>
+                        {% for tpl in templates %}
+                        <option value="{{ tpl.note_id }}" data-content="{{ tpl.content | e }}" data-title="{{ tpl.title | e }}">
+                            {{ tpl.title }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                
                 <!-- Title -->
                 <div class="crm-form-group">
                     <label class="crm-form-label">{{ t('common.title') }}</label>
@@ -45,13 +66,38 @@
                     </select>
                 </div>
                 
-                <!-- Content -->
+                <!-- Content with Markdown -->
                 <div class="crm-form-group">
-                    <label class="crm-form-label">{{ t('common.content') }}</label>
-                    <textarea name="content" 
-                              class="crm-input crm-textarea crm-note-textarea"
-                              placeholder="{{ t('crm.notes.placeholder') }}"
-                              style="min-height: 250px;">{{ note.content if note else '' }}</textarea>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label class="crm-form-label" style="margin-bottom: 0;">{{ t('common.content') }}</label>
+                        <div class="crm-btn-group" style="display: flex; gap: 4px;">
+                            <button type="button" class="crm-btn crm-btn-sm crm-btn-ghost crm-markdown-tab active" data-tab="edit">
+                                <i class="ti ti-pencil"></i> Edit
+                            </button>
+                            <button type="button" class="crm-btn crm-btn-sm crm-btn-ghost crm-markdown-tab" data-tab="preview">
+                                <i class="ti ti-eye"></i> Preview
+                            </button>
+                        </div>
+                    </div>
+                    <div class="crm-markdown-editor">
+                        <textarea name="content" 
+                                  id="note-content-editor"
+                                  class="crm-input crm-textarea crm-note-textarea"
+                                  placeholder="{{ t('crm.notes.placeholder') }}"
+                                  style="min-height: 250px;">{{ note.content if note else '' }}</textarea>
+                        <div id="note-content-preview" 
+                             class="crm-markdown-preview crm-prose" 
+                             style="display: none; min-height: 250px; padding: 12px; border: 1px solid var(--crm-border); border-radius: 8px; background: var(--crm-bg-primary);">
+                        </div>
+                    </div>
+                    <div style="margin-top: 8px; display: flex; gap: 16px; font-size: 12px; color: var(--crm-text-muted);">
+                        <span><i class="ti ti-markdown"></i> Markdown supported</span>
+                        <span class="crm-mention-hint">
+                            <i class="ti ti-at"></i> 
+                            {{ t('crm.notes.mention_hint') }}
+                            <kbd>@</kbd>
+                        </span>
+                    </div>
                 </div>
                 
                 <!-- AI Hint -->
@@ -67,14 +113,26 @@
                 </div>
             </div>
             
-            <div class="crm-modal-footer">
-                <button type="button" class="crm-btn crm-btn-secondary" onclick="CRM.closeModal()">
-                    {{ t('crm.actions.cancel') }}
-                </button>
-                <button type="submit" class="crm-btn crm-btn-analyze">
-                    <i class="ti ti-sparkles"></i>
-                    {{ t('crm.actions.analyze') }} & {{ t('crm.actions.save') }}
-                </button>
+            <div class="crm-modal-footer" style="justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" 
+                           id="is_template" 
+                           name="is_template" 
+                           value="true"
+                           {% if note and note.is_template %}checked{% endif %}>
+                    <label for="is_template" style="font-size: 13px; color: var(--crm-text-secondary); cursor: pointer;">
+                        {{ t('crm.notes.template.save_as') }}
+                    </label>
+                </div>
+                <div style="display: flex; gap: 12px;">
+                    <button type="button" class="crm-btn crm-btn-secondary" onclick="CRM.closeModal()">
+                        {{ t('crm.actions.cancel') }}
+                    </button>
+                    <button type="submit" class="crm-btn crm-btn-analyze">
+                        <i class="ti ti-sparkles"></i>
+                        {{ t('crm.actions.analyze') }} & {{ t('crm.actions.save') }}
+                    </button>
+                </div>
             </div>
         </form>
     </div>

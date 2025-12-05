@@ -130,6 +130,8 @@ class Note(Base):
     - call_log: лог звонка
     
     linked_entity_ids - список ID сущностей в ChromaDB, связанных с заметкой.
+    is_template - если True, заметка является шаблоном
+    status - draft (черновик) или published (опубликовано)
     """
     
     __tablename__ = "notes"
@@ -143,6 +145,11 @@ class Note(Base):
     note_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     ai_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     linked_entity_ids: Mapped[List[str]] = mapped_column(JSONB, default=list)
+    is_template: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="published", nullable=False)
+    visibility: Mapped[str] = mapped_column(String(20), default="public", nullable=False)
+    shared_with: Mapped[List[str]] = mapped_column(JSONB, default=list)
+    attachment_ids: Mapped[List[str]] = mapped_column(JSONB, default=list)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -158,6 +165,7 @@ class Note(Base):
     __table_args__ = (
         Index("ix_notes_note_type", "note_type"),
         Index("ix_notes_company_date", "company_id", "note_date"),
+        Index("ix_notes_is_template", "is_template"),
     )
     
     def __repr__(self) -> str:
@@ -170,6 +178,8 @@ class Task(Base):
     
     Приоритеты: low, medium, high, urgent
     Статусы: pending, in_progress, completed, cancelled
+    tags - теги для категоризации задач
+    assignees - соучастники задачи (user_ids)
     """
     
     __tablename__ = "tasks"
@@ -184,6 +194,8 @@ class Task(Base):
     due_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True, index=True)
     linked_entity_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
     source_note_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    tags: Mapped[List[str]] = mapped_column(JSONB, default=list)
+    assignees: Mapped[List[str]] = mapped_column(JSONB, default=list)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -205,3 +217,82 @@ class Task(Base):
     
     def __repr__(self) -> str:
         return f"<Task(task_id='{self.task_id}', title='{self.title[:30]}...')>"
+
+
+class AccessRequest(Base):
+    """
+    Запросы на доступ к скрытым заметкам/сущностям.
+    
+    Статусы: pending, approved, rejected
+    """
+    
+    __tablename__ = "access_requests"
+    
+    request_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    requester_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    resource_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    resource_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+    
+    __table_args__ = (
+        Index("ix_access_requests_owner_status", "owner_id", "status"),
+        Index("ix_access_requests_resource", "resource_type", "resource_id"),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<AccessRequest(request_id='{self.request_id}', status='{self.status}')>"
+
+
+class UserProfile(Base):
+    """
+    Профиль пользователя в CRM.
+    
+    Содержит дополнительную информацию о пользователе:
+    должность, аватар, контакты, настройки интерфейса.
+    """
+    
+    __tablename__ = "user_profiles"
+    
+    profile_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    company_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    display_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    position: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    avatar_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    bio: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    telegram_username: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    sidebar_config: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
+    widget_config: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+    
+    __table_args__ = (
+        Index("ix_user_profiles_user_company", "user_id", "company_id", unique=True),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<UserProfile(user_id='{self.user_id}', display_name='{self.display_name}')>"

@@ -690,7 +690,7 @@ class TestWhatsAppInterfaceRegistration:
     """Тесты регистрации WhatsApp"""
 
     @pytest.mark.asyncio
-    async def test_register_flow_success(self):
+    async def test_register_flow_success(self, test_context):
         """Тест успешной регистрации flow"""
         flow_id = "test_flow"
         username = "Test Bot"
@@ -711,9 +711,6 @@ class TestWhatsAppInterfaceRegistration:
 
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_phone_response)
-
-            with patch('core.db.storage.Storage.list_by_prefix') as mock_list:
-                mock_list.return_value = ["company:test:flow:test_flow"]
 
                 result = await WhatsAppInterface.register(flow_id, username, platform_config)
 

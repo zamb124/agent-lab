@@ -1,0 +1,54 @@
+<!-- Request Access Modal -->
+<div class="crm-modal-overlay" onclick="if(event.target === this) CRM.closeModal()">
+    <div class="crm-modal crm-modal-sm">
+        <div class="crm-modal-header">
+            <div class="crm-modal-title-group">
+                <h2 class="crm-modal-title">{{ t('crm.access_requests.request_access') }}</h2>
+            </div>
+            <button class="crm-modal-close" onclick="CRM.closeModal()">
+                <i class="ti ti-x"></i>
+            </button>
+        </div>
+        
+        <form hx-post="/crm/api/access-requests"
+              hx-target="#modal-container"
+              hx-swap="innerHTML">
+            <input type="hidden" name="resource_type" value="{{ resource_type }}">
+            <input type="hidden" name="resource_id" value="{{ resource_id }}">
+            
+            <div class="crm-modal-body">
+                <div class="crm-info-box" style="margin-bottom: 16px;">
+                    <i class="ti ti-lock"></i>
+                    <div>
+                        <strong>{{ resource_title or resource_id }}</strong>
+                        <p style="margin: 4px 0 0; color: var(--crm-text-muted); font-size: 13px;">
+                            {{ t('crm.access_requests.owner') }}: {{ owner_name or owner_id }}
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('crm.access_requests.message') }}</label>
+                    <textarea name="message" 
+                              class="crm-input crm-textarea"
+                              placeholder="{{ t('crm.access_requests.message_placeholder') }}"
+                              rows="3"></textarea>
+                    <div class="crm-form-hint">
+                        {{ t('crm.access_requests.message_hint') }}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="crm-modal-footer">
+                <button type="button" class="crm-btn crm-btn-secondary" onclick="CRM.closeModal()">
+                    {{ t('crm.actions.cancel') }}
+                </button>
+                <button type="submit" class="crm-btn crm-btn-primary">
+                    <i class="ti ti-send"></i>
+                    {{ t('crm.access_requests.send_request') }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+

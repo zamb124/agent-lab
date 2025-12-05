@@ -35,6 +35,14 @@
   "search": {
     "placeholder": "Поиск..."
   },
+  "filters": {
+    "type": "Тип",
+    "date_from": "С даты",
+    "date_to": "По дату",
+    "author": "Автор",
+    "entity": "Сущность",
+    "clear": "Сбросить"
+  },
   "actions": {
     "new_note": "Новая заметка",
     "save": "Сохранить",
@@ -44,7 +52,10 @@
     "create": "Создать",
     "analyze": "Анализировать",
     "link": "Связать",
-    "unlink": "Отвязать"
+    "unlink": "Отвязать",
+    "export": "Экспорт",
+    "export_pdf": "Экспорт в PDF",
+    "export_html": "Экспорт в HTML"
   },
   "notes": {
     "title": "Заметки",
@@ -56,9 +67,24 @@
       "meeting_minutes": "Протокол встречи",
       "call_log": "Журнал звонков"
     },
+    "template": {
+      "select": "Выбрать шаблон",
+      "none": "Без шаблона",
+      "save_as": "Сохранить как шаблон"
+    },
     "empty": "Нет заметок",
     "empty_description": "Создайте первую заметку нажав кнопку выше",
     "analyze_hint": "AI проанализирует заметку и извлечет сущности",
+    "daily_summary": "Саммари за день",
+    "visibility": {
+      "public": "Публичная",
+      "private": "Приватная",
+      "shared": "Ограниченный доступ"
+    },
+    "voice_input": "Голосовой ввод",
+    "attach_file": "Прикрепить файл",
+    "import_file": "Импорт из файла",
+    "mention_hint": "Упомяните сущность",
     "analysis": {
       "title": "Результаты анализа",
       "review_description": "Сущности созданы со статусом 'ожидает'. Вы можете подтвердить или отклонить их сейчас или позже.",
@@ -110,7 +136,8 @@
     "priority": {
       "high": "Высокий",
       "medium": "Средний",
-      "low": "Низкий"
+      "low": "Низкий",
+      "urgent": "Срочный"
     },
     "status": {
       "pending": "Ожидает",
@@ -118,6 +145,9 @@
       "completed": "Завершена",
       "cancelled": "Отменена"
     },
+    "tags": "Теги",
+    "tags_placeholder": "Введите тег и нажмите Enter",
+    "assignees": "Соучастники",
     "complete": "Завершить",
     "reopen": "Возобновить"
   },
@@ -153,6 +183,62 @@
       "tasks": "Задачи",
       "relationships": "Связи"
     }
+  },
+  "ai_assistant": {
+    "ask": "Спросить AI",
+    "title": "AI Помощник",
+    "placeholder": "Задайте вопрос о ваших данных CRM...",
+    "searching": "Ищу информацию...",
+    "no_results": "Ничего не найдено"
+  },
+  "profile": {
+    "title": "Профиль",
+    "edit": "Редактировать профиль",
+    "no_name": "Имя не указано",
+    "no_position": "Должность не указана",
+    "notes": "Заметок",
+    "tasks_completed": "Завершено задач",
+    "activity": "Активность",
+    "streak": "Серия",
+    "days": "дн.",
+    "less": "Меньше",
+    "more": "Больше",
+    "contact_info": "Контактная информация",
+    "phone": "Телефон",
+    "member_since": "В системе с",
+    "bio": "О себе",
+    "display_name": "Отображаемое имя",
+    "display_name_placeholder": "Иван Иванов",
+    "position": "Должность",
+    "position_placeholder": "Менеджер по продажам",
+    "avatar_url": "URL аватара",
+    "bio_placeholder": "Расскажите немного о себе...",
+    "interface_settings": "Настройки интерфейса",
+    "sidebar_menu": "Меню sidebar",
+    "dashboard_widgets": "Виджеты дашборда",
+    "save_sidebar": "Сохранить настройки меню",
+    "save_widgets": "Сохранить настройки виджетов"
+  },
+  "access_requests": {
+    "title": "Запросы на доступ",
+    "incoming": "Входящие",
+    "outgoing": "Исходящие",
+    "resource": "Ресурс",
+    "requester": "Запросивший",
+    "owner": "Владелец",
+    "message": "Сообщение",
+    "status": "Статус",
+    "date": "Дата",
+    "status_pending": "Ожидает",
+    "status_approved": "Одобрен",
+    "status_rejected": "Отклонен",
+    "empty": "Нет запросов",
+    "empty_description_incoming": "Входящих запросов на доступ к вашим ресурсам нет",
+    "empty_description_outgoing": "Вы еще не отправляли запросов на доступ",
+    "request_access": "Запросить доступ",
+    "message_placeholder": "Объясните, зачем вам нужен доступ...",
+    "message_hint": "Сообщение увидит владелец ресурса",
+    "send_request": "Отправить запрос"
   }
 }
 

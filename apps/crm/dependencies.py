@@ -18,6 +18,10 @@ from apps.crm.services.relationship_service import RelationshipService
 from apps.crm.services.note_service import NoteService
 from apps.crm.services.task_service import TaskService
 from apps.crm.services.graph_service import GraphService
+from apps.crm.services.access_request_service import AccessRequestService
+from apps.crm.services.profile_service import ProfileService
+from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
+from apps.crm.db.repositories.profile_repository import ProfileRepository
 
 
 # === Container ===
@@ -84,10 +88,20 @@ def get_graph_service(container: ContainerDep) -> GraphService:
     return container.graph_service
 
 
+def get_access_request_service(container: ContainerDep) -> AccessRequestService:
+    return container.access_request_service
+
+
+def get_profile_service(container: ContainerDep) -> ProfileService:
+    return container.profile_service
+
+
 EntityServiceDep = Annotated[EntityService, Depends(get_entity_service)]
 EntityTypeServiceDep = Annotated[EntityTypeService, Depends(get_entity_type_service)]
 RelationshipServiceDep = Annotated[RelationshipService, Depends(get_relationship_service)]
 NoteServiceDep = Annotated[NoteService, Depends(get_note_service)]
 TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
 GraphServiceDep = Annotated[GraphService, Depends(get_graph_service)]
+AccessRequestServiceDep = Annotated[AccessRequestService, Depends(get_access_request_service)]
+ProfileServiceDep = Annotated[ProfileService, Depends(get_profile_service)]
 

@@ -68,6 +68,16 @@ class CRMContainer(BaseContainer):
         from apps.crm.db.repositories.company_mapping_repository import CompanyMappingRepository
         return CompanyMappingRepository(db=self.crm_db)
     
+    @lazy
+    def access_request_repository(self):
+        from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
+        return AccessRequestRepository(db=self.crm_db)
+    
+    @lazy
+    def profile_repository(self):
+        from apps.crm.db.repositories.profile_repository import ProfileRepository
+        return ProfileRepository(db=self.crm_db)
+    
     # === Сервисы ===
     
     @lazy
@@ -130,6 +140,23 @@ class CRMContainer(BaseContainer):
         return GraphService(
             entity_service=self.entity_service,
             relationship_service=self.relationship_service,
+        )
+    
+    @lazy
+    def access_request_service(self):
+        from apps.crm.services.access_request_service import AccessRequestService
+        return AccessRequestService(
+            access_request_repository=self.access_request_repository,
+            note_repository=self.note_repository,
+        )
+    
+    @lazy
+    def profile_service(self):
+        from apps.crm.services.profile_service import ProfileService
+        return ProfileService(
+            profile_repository=self.profile_repository,
+            note_repository=self.note_repository,
+            task_repository=self.task_repository,
         )
     
     async def init_db(self):

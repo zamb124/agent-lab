@@ -2,7 +2,7 @@
 Модели конфигурации для различных компонентов системы.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 
 
@@ -264,11 +264,55 @@ class MigrationSettings(BaseModel):
     migrate_dependencies: bool = True
 
 
+class EmbeddingConfig(BaseModel):
+    """
+    Конфигурация embedding моделей с fallback.
+    
+    Модели сгруппированы по размерности для совместимости.
+    При недоступности первой модели в группе, используется следующая.
+    
+    API ключи хранятся в провайдерах (embedding_api_key).
+    """
+    
+    # Группы моделей по размерности (dimension -> список моделей)
+    # Первая рабочая модель из группы будет использована
+    model_groups: Dict[str, List[str]] = Field(default_factory=lambda: {
+        "1536": [
+            "openai/text-embedding-3-small",
+            "openai/text-embedding-3-large",
+            "mistralai/codestral-embed-2505",
+        ],
+        "1024": [
+            "mistralai/mistral-embed-2312",
+            "baai/bge-m3",
+            "intfloat/multilingual-e5-large",
+            "thenlper/gte-large",
+            "baai/bge-large-en-v1.5",
+        ],
+        "768": [
+            "thenlper/gte-base",
+            "intfloat/e5-base-v2",
+            "baai/bge-base-en-v1.5",
+        ],
+    })
+    
+    # Предпочтительная размерность (будет использована если возможно)
+    preferred_dimension: int = 1536
+    
+    def get_models_for_dimension(self, dimension: int) -> List[str]:
+        """Возвращает список моделей для указанной размерности"""
+        return self.model_groups.get(str(dimension), [])
+    
+    def get_preferred_models(self) -> List[str]:
+        """Возвращает список моделей для предпочтительной размерности"""
+        return self.get_models_for_dimension(self.preferred_dimension)
+
+
 class RAGProviderConfig(BaseModel):
     """Конфигурация одного RAG провайдера"""
 
     enabled: bool = False
-    api_key: Optional[str] = None
+    api_key: Optional[str] = None  # API ключ провайдера (например Agentset API)
     base_url: Optional[str] = None
     timeout: int = 60
     
@@ -276,10 +320,12 @@ class RAGProviderConfig(BaseModel):
     host: Optional[str] = None
     port: Optional[int] = None
     
-    # Embeddings (OpenRouter по умолчанию)
-    embedding_model: str = "openai/text-embedding-3-small"
+    # Embeddings - ключ для OpenRouter или другого embedding API
     embedding_api_key: Optional[str] = None
-    embedding_base_url: Optional[str] = None
+    # Средняя цена за 1M токенов (в рублях). ~$0.05 ≈ 5₽
+    embedding_cost_per_1m_tokens: float = 5.0
+    # Наценка платформы на embedding (1.1 = +10%)
+    embedding_platform_markup: float = 1.1
     
     # Chunking
     chunk_size: int = 1000
@@ -293,6 +339,10 @@ class RAGConfig(BaseModel):
 
     enabled: bool = False
     default_provider: str = "agentset"
+    
+    # Общая конфигурация embeddings для всех провайдеров
+    embedding: EmbeddingConfig = Field(default_factory=EmbeddingConfig)
+    
     providers: Dict[str, RAGProviderConfig] = Field(default_factory=dict)
 
 

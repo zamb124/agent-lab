@@ -3,7 +3,7 @@ Pydantic модели для задач CRM.
 """
 
 from datetime import datetime, date
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict
@@ -55,6 +55,14 @@ class TaskCreate(BaseModel):
         default=None,
         title="Исходная заметка"
     )
+    tags: List[str] = Field(
+        default_factory=list,
+        title="Теги"
+    )
+    assignees: List[str] = Field(
+        default_factory=list,
+        title="Соучастники"
+    )
 
 
 class TaskUpdate(BaseModel):
@@ -68,6 +76,8 @@ class TaskUpdate(BaseModel):
     status: Optional[TaskStatus] = Field(default=None, title="Статус")
     due_date: Optional[date] = Field(default=None, title="Дедлайн")
     linked_entity_id: Optional[str] = Field(default=None, title="Связанная сущность")
+    tags: Optional[List[str]] = Field(default=None, title="Теги")
+    assignees: Optional[List[str]] = Field(default=None, title="Соучастники")
 
 
 class TaskResponse(BaseModel):
@@ -85,6 +95,8 @@ class TaskResponse(BaseModel):
     due_date: Optional[date] = Field(default=None, title="Дедлайн")
     linked_entity_id: Optional[str] = Field(default=None, title="Связанная сущность")
     source_note_id: Optional[str] = Field(default=None, title="Исходная заметка")
+    tags: List[str] = Field(default_factory=list, title="Теги")
+    assignees: List[str] = Field(default_factory=list, title="Соучастники")
     created_at: datetime = Field(title="Дата создания", readonly=True)
     updated_at: datetime = Field(title="Дата обновления", readonly=True)
     

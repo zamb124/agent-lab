@@ -73,6 +73,8 @@ class TaskService:
             due_date=data.due_date,
             linked_entity_id=data.linked_entity_id,
             source_note_id=data.source_note_id,
+            tags=data.tags,
+            assignees=data.assignees,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
@@ -116,6 +118,10 @@ class TaskService:
             task.due_date = data.due_date
         if data.linked_entity_id is not None:
             task.linked_entity_id = data.linked_entity_id
+        if data.tags is not None:
+            task.tags = data.tags
+        if data.assignees is not None:
+            task.assignees = data.assignees
         
         task.updated_at = datetime.now(timezone.utc)
         
@@ -244,6 +250,110 @@ class TaskService:
         stats = await self._repo.count_by_status(company_id)
         return stats
     
+    async def add_tag(
+        self,
+        task_id: str,
+        tag: str,
+        company_id: Optional[str] = None
+    ) -> TaskResponse:
+        """Добавляет тег к задаче"""
+        task = await self._repo.get(task_id)
+        if not task:
+            raise ValueError(f"Задача {task_id} не найдена")
+        
+        tags = list(task.tags or [])
+        if tag not in tags:
+            tags.append(tag)
+            task.tags = tags
+            task.updated_at = datetime.now(timezone.utc)
+            await self._repo.update(task)
+        
+        return self._to_response(task)
+    
+    async def remove_tag(
+        self,
+        task_id: str,
+        tag: str,
+        company_id: Optional[str] = None
+    ) -> TaskResponse:
+        """Удаляет тег из задачи"""
+        task = await self._repo.get(task_id)
+        if not task:
+            raise ValueError(f"Задача {task_id} не найдена")
+        
+        tags = list(task.tags or [])
+        if tag in tags:
+            tags.remove(tag)
+            task.tags = tags
+            task.updated_at = datetime.now(timezone.utc)
+            await self._repo.update(task)
+        
+        return self._to_response(task)
+    
+    async def add_assignee(
+        self,
+        task_id: str,
+        assignee_id: str,
+        company_id: Optional[str] = None
+    ) -> TaskResponse:
+        """Добавляет соучастника к задаче"""
+        task = await self._repo.get(task_id)
+        if not task:
+            raise ValueError(f"Задача {task_id} не найдена")
+        
+        assignees = list(task.assignees or [])
+        if assignee_id not in assignees:
+            assignees.append(assignee_id)
+            task.assignees = assignees
+            task.updated_at = datetime.now(timezone.utc)
+            await self._repo.update(task)
+        
+        return self._to_response(task)
+    
+    async def remove_assignee(
+        self,
+        task_id: str,
+        assignee_id: str,
+        company_id: Optional[str] = None
+    ) -> TaskResponse:
+        """Удаляет соучастника из задачи"""
+        task = await self._repo.get(task_id)
+        if not task:
+            raise ValueError(f"Задача {task_id} не найдена")
+        
+        assignees = list(task.assignees or [])
+        if assignee_id in assignees:
+            assignees.remove(assignee_id)
+            task.assignees = assignees
+            task.updated_at = datetime.now(timezone.utc)
+            await self._repo.update(task)
+        
+        return self._to_response(task)
+    
+    async def get_tasks_by_tag(
+        self,
+        tag: str,
+        limit: int = 100,
+        company_id: Optional[str] = None
+    ) -> List[TaskResponse]:
+        """Получает задачи по тегу"""
+        company_id = company_id or self._get_company_id()
+        
+        tasks = await self._repo.get_by_tag(company_id, tag, limit)
+        return [self._to_response(task) for task in tasks]
+    
+    async def get_tasks_by_assignee(
+        self,
+        assignee_id: str,
+        limit: int = 100,
+        company_id: Optional[str] = None
+    ) -> List[TaskResponse]:
+        """Получает задачи по соучастнику"""
+        company_id = company_id or self._get_company_id()
+        
+        tasks = await self._repo.get_by_assignee(company_id, assignee_id, limit)
+        return [self._to_response(task) for task in tasks]
+    
     def _to_response(self, task: Task) -> TaskResponse:
         """Конвертирует модель в response"""
         return TaskResponse(
@@ -257,6 +367,8 @@ class TaskService:
             due_date=task.due_date,
             linked_entity_id=task.linked_entity_id,
             source_note_id=task.source_note_id,
+            tags=getattr(task, 'tags', []) or [],
+            assignees=getattr(task, 'assignees', []) or [],
             created_at=task.created_at,
             updated_at=task.updated_at,
         )

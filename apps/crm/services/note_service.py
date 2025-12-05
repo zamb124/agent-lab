@@ -64,6 +64,10 @@ class NoteService:
         company_id = company_id or self._get_company_id()
         user_id = user_id or self._get_user_id()
         
+        status_value = data.status.value if hasattr(data.status, 'value') else str(data.status)
+        
+        visibility_value = data.visibility.value if hasattr(data.visibility, 'value') else str(data.visibility)
+        
         note = Note(
             note_id=str(uuid.uuid4()),
             company_id=company_id,
@@ -74,12 +78,17 @@ class NoteService:
             note_date=data.note_date,
             ai_summary=None,
             linked_entity_ids=data.linked_entity_ids,
+            is_template=data.is_template,
+            status=status_value,
+            visibility=visibility_value,
+            shared_with=data.shared_with,
+            attachment_ids=data.attachment_ids,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
         
         await self._repo.create(note)
-        logger.info(f"Создана заметка: {note.note_id}")
+        logger.info(f"Создана заметка: {note.note_id} (шаблон: {note.is_template})")
         
         return self._to_response(note)
     
@@ -115,6 +124,16 @@ class NoteService:
             note.note_date = data.note_date
         if data.linked_entity_ids is not None:
             note.linked_entity_ids = data.linked_entity_ids
+        if data.is_template is not None:
+            note.is_template = data.is_template
+        if data.status is not None:
+            note.status = data.status.value if hasattr(data.status, 'value') else str(data.status)
+        if data.visibility is not None:
+            note.visibility = data.visibility.value if hasattr(data.visibility, 'value') else str(data.visibility)
+        if data.shared_with is not None:
+            note.shared_with = data.shared_with
+        if data.attachment_ids is not None:
+            note.attachment_ids = data.attachment_ids
         
         note.updated_at = datetime.now(timezone.utc)
         
@@ -174,6 +193,141 @@ class NoteService:
         
         return [self._to_response(note) for note in notes]
     
+    async def filter_notes(
+        self,
+        user_id: Optional[str] = None,
+        note_type: Optional[str] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        entity_id: Optional[str] = None,
+        search_text: Optional[str] = None,
+        is_template: Optional[bool] = None,
+        status: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+        company_id: Optional[str] = None
+    ) -> List[NoteResponse]:
+        """Расширенная фильтрация заметок по нескольким параметрам"""
+        company_id = company_id or self._get_company_id()
+        
+        notes = await self._repo.filter_notes(
+            company_id=company_id,
+            user_id=user_id,
+            note_type=note_type,
+            start_date=start_date,
+            end_date=end_date,
+            entity_id=entity_id,
+            search_text=search_text,
+            is_template=is_template,
+            status=status,
+            limit=limit,
+            offset=offset
+        )
+        
+        return [self._to_response(note) for note in notes]
+    
+    async def get_templates(
+        self,
+        note_type: Optional[str] = None,
+        limit: int = 100,
+        company_id: Optional[str] = None
+    ) -> List[NoteResponse]:
+        """Получает шаблоны заметок"""
+        company_id = company_id or self._get_company_id()
+        
+        templates = await self._repo.get_templates(company_id, note_type, limit)
+        return [self._to_response(t) for t in templates]
+    
+    async def import_from_file(
+        self,
+        file,
+        title: str,
+        note_type: str,
+        note_date: date,
+        company_id: Optional[str] = None,
+        user_id: Optional[str] = None
+    ) -> NoteResponse:
+        """
+        Импортирует заметку из файла (txt, docx, pdf).
+        Использует RAG парсер для извлечения текста.
+        """
+        from core.rag.processors import DocumentProcessor
+        
+        company_id = company_id or self._get_company_id()
+        user_id = user_id or self._get_user_id()
+        
+        # Читаем содержимое файла
+        content_bytes = await file.read()
+        filename = file.filename or "document"
+        
+        # Используем DocumentProcessor для парсинга
+        processor = DocumentProcessor()
+        content = processor.process_bytes(content_bytes, filename)
+        
+        # Создаем заметку
+        note = Note(
+            note_id=str(uuid.uuid4()),
+            company_id=company_id,
+            user_id=user_id,
+            title=title,
+            content=content,
+            note_type=note_type,
+            note_date=note_date,
+            ai_summary=None,
+            linked_entity_ids=[],
+            is_template=False,
+            status="draft",
+            visibility="private",
+            shared_with=[],
+            attachment_ids=[],
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        
+        await self._repo.create(note)
+        logger.info(f"Импортирована заметка из файла {filename}: {note.note_id}")
+        
+        return self._to_response(note)
+    
+    async def create_from_template(
+        self,
+        template_id: str,
+        note_date: date,
+        company_id: Optional[str] = None,
+        user_id: Optional[str] = None
+    ) -> NoteResponse:
+        """Создает новую заметку на основе шаблона"""
+        company_id = company_id or self._get_company_id()
+        user_id = user_id or self._get_user_id()
+        
+        template = await self._repo.get(template_id)
+        if not template:
+            raise ValueError(f"Шаблон {template_id} не найден")
+        
+        if not template.is_template:
+            raise ValueError(f"Заметка {template_id} не является шаблоном")
+        
+        note = Note(
+            note_id=str(uuid.uuid4()),
+            company_id=company_id,
+            user_id=user_id,
+            title=template.title,
+            content=template.content,
+            note_type=template.note_type,
+            note_date=note_date,
+            ai_summary=None,
+            linked_entity_ids=[],
+            is_template=False,
+            status="draft",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        
+        await self._repo.create(note)
+        logger.info(f"Создана заметка из шаблона {template_id}: {note.note_id}")
+        
+        return self._to_response(note)
+    
     async def search_notes(
         self,
         search_text: str,
@@ -196,6 +350,35 @@ class NoteService:
         
         notes = await self._repo.get_linked_to_entity(company_id, entity_id)
         return [self._to_response(note) for note in notes]
+    
+    async def get_daily_summary(
+        self,
+        note_date: date,
+        company_id: Optional[str] = None
+    ) -> str:
+        """
+        Генерирует AI саммари всех заметок за день.
+        """
+        company_id = company_id or self._get_company_id()
+        
+        notes = await self._repo.get_by_date(company_id, note_date)
+        
+        if not notes:
+            return "Нет заметок за этот день."
+        
+        # Собираем текст всех заметок
+        combined_text = "\n\n---\n\n".join([
+            f"**{note.title}**\n{note.content}" 
+            for note in notes
+        ])
+        
+        # Вызываем AI для генерации саммари
+        summary_result = await self._agents_client.extract_entities(
+            text=f"Создай краткое саммари следующих заметок за день:\n\n{combined_text}",
+            generate_summary=True,
+        )
+        
+        return summary_result.get("summary", "Не удалось сгенерировать саммари.")
     
     async def analyze_note(
         self,
@@ -289,6 +472,11 @@ class NoteService:
             note_date=note.note_date,
             ai_summary=note.ai_summary,
             linked_entity_ids=note.linked_entity_ids or [],
+            is_template=getattr(note, 'is_template', False),
+            status=getattr(note, 'status', 'published'),
+            visibility=getattr(note, 'visibility', 'public'),
+            shared_with=getattr(note, 'shared_with', []) or [],
+            attachment_ids=getattr(note, 'attachment_ids', []) or [],
             created_at=note.created_at,
             updated_at=note.updated_at,
         )

@@ -54,10 +54,14 @@ async def chromadb_provider():
         "host": "localhost",  # Для локальных тестов
         "port": 8100,
         "embedding_api_key": chromadb_config.embedding_api_key if chromadb_config else settings.llm.openrouter.api_key,
-        "embedding_model": chromadb_config.embedding_model if chromadb_config else "openai/text-embedding-3-small",
     }
     
-    provider = ChromaDBRAGProvider(config)
+    # Получаем embedding конфигурацию
+    embedding_config = None
+    if hasattr(settings.rag, 'embedding') and settings.rag.embedding:
+        embedding_config = settings.rag.embedding.model_dump()
+    
+    provider = ChromaDBRAGProvider(config, embedding_config=embedding_config)
     yield provider
     await provider.close()
 

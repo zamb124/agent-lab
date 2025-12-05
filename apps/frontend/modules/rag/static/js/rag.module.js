@@ -9,9 +9,23 @@ class RAGApp {
         this.currentProvider = this.config.currentProvider;
         this.currentNamespace = this.config.currentNamespace;
         this.apiBase = this.config.apiBase || '/frontend/api/rag';
+        this.i18n = this.config.i18n || {};
         this.uploadFiles = [];
         
         this.init();
+    }
+    
+    t(key) {
+        const keys = key.split('.');
+        let value = this.i18n;
+        for (const k of keys) {
+            if (value && typeof value === 'object') {
+                value = value[k];
+            } else {
+                return key;
+            }
+        }
+        return value || key;
     }
     
     async init() {
@@ -26,7 +40,6 @@ class RAGApp {
     }
     
     bindEvents() {
-        // Namespace search
         const namespaceSearch = document.getElementById('namespace-search');
         if (namespaceSearch) {
             namespaceSearch.addEventListener('input', (e) => {
@@ -34,7 +47,6 @@ class RAGApp {
             });
         }
         
-        // Global search
         const globalSearch = document.getElementById('global-search');
         if (globalSearch) {
             globalSearch.addEventListener('keypress', (e) => {
@@ -44,7 +56,6 @@ class RAGApp {
             });
         }
         
-        // File upload
         const fileInput = document.getElementById('file-input');
         if (fileInput) {
             fileInput.addEventListener('change', (e) => {
@@ -52,7 +63,6 @@ class RAGApp {
             });
         }
         
-        // Drag and drop
         const uploadZone = document.getElementById('upload-zone');
         if (uploadZone) {
             uploadZone.addEventListener('dragover', (e) => {
@@ -75,7 +85,6 @@ class RAGApp {
     async selectProvider(providerName) {
         this.currentProvider = providerName;
         
-        // Update active state on cards
         document.querySelectorAll('.rag-provider-card').forEach(card => {
             if (card.dataset.provider === providerName) {
                 card.classList.add('active');
@@ -95,7 +104,7 @@ class RAGApp {
         container.innerHTML = `
             <div class="rag-loading">
                 <i class="ti ti-loader-2 spinning"></i>
-                <span>Loading...</span>
+                <span>${this.t('loading.default')}</span>
             </div>
         `;
         
@@ -112,10 +121,10 @@ class RAGApp {
         } catch (error) {
             container.innerHTML = `
                 <div class="rag-empty">
-                    <p>Failed to load namespaces</p>
+                    <p>${this.t('errors.loadNamespaces')}</p>
                 </div>
             `;
-            this.showToast('Failed to load namespaces', 'error');
+            this.showToast(this.t('errors.loadNamespaces'), 'error');
         }
     }
     
@@ -126,7 +135,7 @@ class RAGApp {
         if (namespaces.length === 0) {
             container.innerHTML = `
                 <div class="rag-empty" style="padding: 20px;">
-                    <p>No namespaces yet</p>
+                    <p>${this.t('empty.namespaces')}</p>
                 </div>
             `;
             return;
@@ -139,7 +148,7 @@ class RAGApp {
                 <i class="ti ti-folder"></i>
                 <div class="rag-namespace-info">
                     <div class="rag-namespace-name">${this.escapeHtml(ns.name)}</div>
-                    <div class="rag-namespace-meta">${ns.document_count} documents</div>
+                    <div class="rag-namespace-meta">${ns.document_count} ${this.t('namespace.documents')}</div>
                 </div>
             </div>
         `).join('');
@@ -160,13 +169,13 @@ class RAGApp {
         if (!container) return;
         
         const pageTitle = document.getElementById('page-title');
-        if (pageTitle) pageTitle.textContent = 'Dashboard';
+        if (pageTitle) pageTitle.textContent = this.t('nav.dashboard');
         
         container.innerHTML = `
             <div class="rag-dashboard-view">
                 <div class="rag-loading-full">
                     <i class="ti ti-loader-2 spinning"></i>
-                    <span>Loading namespaces...</span>
+                    <span>${this.t('loading.namespaces')}</span>
                 </div>
             </div>
         `;
@@ -184,8 +193,8 @@ class RAGApp {
             container.innerHTML = `
                 <div class="rag-empty">
                     <i class="ti ti-database-off"></i>
-                    <h3>Failed to load namespaces</h3>
-                    <p>Please check your connection and try again</p>
+                    <h3>${this.t('errors.loadNamespaces')}</h3>
+                    <p>${this.t('errors.connection')}</p>
                 </div>
             `;
         }
@@ -199,11 +208,11 @@ class RAGApp {
             container.innerHTML = `
                 <div class="rag-empty">
                     <i class="ti ti-database"></i>
-                    <h3>No namespaces yet</h3>
-                    <p>Create your first namespace to get started</p>
+                    <h3>${this.t('empty.namespaces')}</h3>
+                    <p>${this.t('empty.namespacesDescription')}</p>
                     <button class="rag-btn rag-btn-primary" onclick="showCreateNamespaceModal()">
                         <i class="ti ti-plus"></i>
-                        Create Namespace
+                        ${this.t('actions.createNamespace')}
                     </button>
                 </div>
             `;
@@ -219,7 +228,7 @@ class RAGApp {
                             <div class="rag-namespace-card-actions">
                                 <button class="rag-btn rag-btn-icon rag-btn-sm rag-btn-danger" 
                                         onclick="event.stopPropagation(); ragApp.deleteNamespace('${ns.namespace_id}')"
-                                        title="Delete namespace">
+                                        title="${this.t('actions.delete')}">
                                     <i class="ti ti-trash"></i>
                                 </button>
                             </div>
@@ -227,7 +236,7 @@ class RAGApp {
                         <div class="rag-namespace-card-stats">
                             <div class="rag-stat">
                                 <div class="rag-stat-value">${ns.document_count}</div>
-                                <div class="rag-stat-label">documents</div>
+                                <div class="rag-stat-label">${this.t('namespace.documents')}</div>
                             </div>
                         </div>
                     </div>
@@ -239,10 +248,8 @@ class RAGApp {
     async selectNamespace(namespaceId) {
         this.currentNamespace = namespaceId;
         
-        // Update URL
         window.history.pushState({}, '', `/rag/namespace/${namespaceId}`);
         
-        // Update sidebar
         document.querySelectorAll('.rag-namespace-item').forEach(item => {
             item.classList.toggle('active', item.dataset.namespaceId === namespaceId);
         });
@@ -264,7 +271,7 @@ class RAGApp {
             <div class="rag-namespace-view">
                 <div class="rag-loading-full">
                     <i class="ti ti-loader-2 spinning"></i>
-                    <span>Loading documents...</span>
+                    <span>${this.t('loading.documents')}</span>
                 </div>
             </div>
         `;
@@ -282,8 +289,8 @@ class RAGApp {
             container.innerHTML = `
                 <div class="rag-empty">
                     <i class="ti ti-file-off"></i>
-                    <h3>Failed to load documents</h3>
-                    <p>Please try again</p>
+                    <h3>${this.t('errors.loadDocuments')}</h3>
+                    <p>${this.t('errors.connection')}</p>
                 </div>
             `;
         }
@@ -299,12 +306,12 @@ class RAGApp {
                     <button class="rag-btn rag-btn-icon rag-btn-sm" onclick="ragApp.loadDashboard(); window.history.pushState({}, '', '/rag/');">
                         <i class="ti ti-arrow-left"></i>
                     </button>
-                    <h2>Documents</h2>
+                    <h2>${this.t('namespace.documents')}</h2>
                     <span class="rag-documents-count">${documents.length}</span>
                 </div>
                 <button class="rag-btn rag-btn-primary" onclick="ragApp.showUploadModal('${namespaceId}')">
                     <i class="ti ti-upload"></i>
-                    Upload
+                    ${this.t('actions.upload')}
                 </button>
             </div>
         `;
@@ -314,11 +321,11 @@ class RAGApp {
                 ${header}
                 <div class="rag-empty">
                     <i class="ti ti-file-upload"></i>
-                    <h3>No documents yet</h3>
-                    <p>Upload your first document to this namespace</p>
+                    <h3>${this.t('empty.documents')}</h3>
+                    <p>${this.t('empty.documentsDescription')}</p>
                     <button class="rag-btn rag-btn-primary" onclick="ragApp.showUploadModal('${namespaceId}')">
                         <i class="ti ti-upload"></i>
-                        Upload Document
+                        ${this.t('actions.uploadDocument')}
                     </button>
                 </div>
             `;
@@ -354,12 +361,12 @@ class RAGApp {
                 <div class="rag-document-actions">
                     <button class="rag-btn rag-btn-icon rag-btn-sm" 
                             onclick="ragApp.downloadDocument('${namespaceId}', '${doc.document_id}')"
-                            title="Download">
+                            title="${this.t('actions.download')}">
                         <i class="ti ti-download"></i>
                     </button>
                     <button class="rag-btn rag-btn-icon rag-btn-sm rag-btn-danger" 
                             onclick="ragApp.deleteDocument('${namespaceId}', '${doc.document_id}')"
-                            title="Delete">
+                            title="${this.t('actions.delete')}">
                         <i class="ti ti-trash"></i>
                     </button>
                 </div>
@@ -407,7 +414,7 @@ class RAGApp {
     
     async performGlobalSearch(query) {
         if (!this.currentNamespace) {
-            this.showToast('Please select a namespace first', 'warning');
+            this.showToast(this.t('notifications.selectNamespaceFirst'), 'warning');
             return;
         }
         
@@ -418,7 +425,7 @@ class RAGApp {
         container.innerHTML = `
             <div class="rag-loading-full">
                 <i class="ti ti-loader-2 spinning"></i>
-                <span>Searching...</span>
+                <span>${this.t('loading.searching')}</span>
             </div>
         `;
         
@@ -440,8 +447,8 @@ class RAGApp {
             container.innerHTML = `
                 <div class="rag-empty">
                     <i class="ti ti-search-off"></i>
-                    <h3>Search failed</h3>
-                    <p>Please try again</p>
+                    <h3>${this.t('errors.searchFailed')}</h3>
+                    <p>${this.t('errors.connection')}</p>
                 </div>
             `;
         }
@@ -454,8 +461,8 @@ class RAGApp {
             container.innerHTML = `
                 <div class="rag-empty">
                     <i class="ti ti-search-off"></i>
-                    <h3>No results found</h3>
-                    <p>Try a different search query</p>
+                    <h3>${this.t('modals.searchResults.noResults')}</h3>
+                    <p>${this.t('modals.searchResults.noResultsDescription')}</p>
                 </div>
             `;
             return;
@@ -471,12 +478,12 @@ class RAGApp {
                                 <span class="rag-search-result-doc">${this.escapeHtml(result.document_name)}</span>
                                 <button class="rag-btn rag-btn-icon rag-btn-sm" 
                                     onclick="ragApp.downloadDocument('${result.namespace}', '${result.document_id}')"
-                                    title="Download document">
+                                    title="${this.t('actions.download')}">
                                     <i class="ti ti-download"></i>
                                 </button>
                             </div>
                             <span class="rag-search-result-score">
-                                ${Math.round(result.score * 100)}% match
+                                ${Math.round(result.score * 100)}% ${this.t('modals.searchResults.match')}
                             </span>
                         </div>
                         <div class="rag-search-result-content">
@@ -548,7 +555,7 @@ class RAGApp {
     async uploadDocuments() {
         const uploadBtn = document.getElementById('upload-btn');
         uploadBtn.disabled = true;
-        uploadBtn.innerHTML = '<i class="ti ti-loader-2 spinning"></i> Uploading...';
+        uploadBtn.innerHTML = `<i class="ti ti-loader-2 spinning"></i> ${this.t('loading.uploading')}`;
         
         let successCount = 0;
         let errorCount = 0;
@@ -577,13 +584,13 @@ class RAGApp {
         hideUploadModal();
         
         if (successCount > 0) {
-            this.showToast(`${successCount} document(s) uploaded successfully`, 'success');
+            this.showToast(`${successCount} ${this.t('notifications.documentUploaded')}`, 'success');
             await this.loadNamespaceDocuments(this.uploadNamespaceId);
             await this.loadNamespaces();
         }
         
         if (errorCount > 0) {
-            this.showToast(`${errorCount} document(s) failed to upload`, 'error');
+            this.showToast(`${errorCount} ${this.t('notifications.documentUploadFailed')}`, 'error');
         }
     }
     
@@ -598,12 +605,12 @@ class RAGApp {
             const data = await response.json();
             window.open(data.download_url, '_blank');
         } catch (error) {
-            this.showToast('Failed to download document', 'error');
+            this.showToast(this.t('errors.downloadDocument'), 'error');
         }
     }
     
     async deleteDocument(namespaceId, documentId) {
-        if (!confirm('Are you sure you want to delete this document?')) return;
+        if (!confirm(this.t('document.deleteConfirm'))) return;
         
         try {
             const response = await fetch(
@@ -613,16 +620,16 @@ class RAGApp {
             
             if (!response.ok) throw new Error('Failed to delete document');
             
-            this.showToast('Document deleted', 'success');
+            this.showToast(this.t('notifications.documentDeleted'), 'success');
             await this.loadNamespaceDocuments(namespaceId);
             await this.loadNamespaces();
         } catch (error) {
-            this.showToast('Failed to delete document', 'error');
+            this.showToast(this.t('errors.deleteDocument'), 'error');
         }
     }
     
     async deleteNamespace(namespaceId) {
-        if (!confirm('Are you sure you want to delete this namespace and all its documents?')) return;
+        if (!confirm(this.t('namespace.deleteConfirm'))) return;
         
         try {
             const response = await fetch(
@@ -632,7 +639,7 @@ class RAGApp {
             
             if (!response.ok) throw new Error('Failed to delete namespace');
             
-            this.showToast('Namespace deleted', 'success');
+            this.showToast(this.t('notifications.namespaceDeleted'), 'success');
             
             if (this.currentNamespace === namespaceId) {
                 this.currentNamespace = null;
@@ -642,12 +649,11 @@ class RAGApp {
             
             await this.loadNamespaces();
         } catch (error) {
-            this.showToast('Failed to delete namespace', 'error');
+            this.showToast(this.t('errors.deleteNamespace'), 'error');
         }
     }
     
     showToast(message, type = 'info') {
-        // Используем стандартную систему нотификаций платформы
         const typeMap = {
             'success': 'success',
             'error': 'danger',
@@ -664,7 +670,6 @@ class RAGApp {
     }
 }
 
-// Global functions for onclick handlers
 function showCreateNamespaceModal() {
     document.getElementById('create-namespace-modal').classList.add('active');
     document.getElementById('namespace-name').focus();
@@ -681,7 +686,7 @@ async function createNamespace() {
     const description = document.getElementById('namespace-description').value.trim();
     
     if (!name) {
-        ragApp.showToast('Please enter a namespace name', 'warning');
+        ragApp.showToast(ragApp.t('notifications.enterNamespaceName'), 'warning');
         return;
     }
     
@@ -701,7 +706,7 @@ async function createNamespace() {
         }
         
         hideCreateNamespaceModal();
-        ragApp.showToast('Namespace created', 'success');
+        ragApp.showToast(ragApp.t('notifications.namespaceCreated'), 'success');
         await ragApp.loadNamespaces();
         await ragApp.loadDashboard();
     } catch (error) {
@@ -733,7 +738,6 @@ function toggleSidebar() {
     document.querySelector('.rag-sidebar').classList.toggle('open');
 }
 
-// Export functions to window for onclick handlers
 window.showCreateNamespaceModal = showCreateNamespaceModal;
 window.hideCreateNamespaceModal = hideCreateNamespaceModal;
 window.createNamespace = createNamespace;
@@ -742,15 +746,12 @@ window.hideSearchResults = hideSearchResults;
 window.toggleTheme = toggleTheme;
 window.toggleSidebar = toggleSidebar;
 
-// Initialize app
 document.addEventListener('DOMContentLoaded', () => {
     window.ragApp = new RAGApp();
     
-    // Set initial theme icon
     const theme = localStorage.getItem('rag-theme') || 'dark';
     const icon = document.querySelector('.rag-theme-toggle i');
     if (icon) {
         icon.className = `ti ti-${theme === 'light' ? 'sun' : 'moon'}`;
     }
 });
-

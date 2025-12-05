@@ -182,3 +182,82 @@ class NoteRepository(BaseCRMRepository[Note]):
             )
             result = await session.execute(stmt)
             return list(result.scalars().all())
+
+    async def filter_notes(
+        self,
+        company_id: str,
+        user_id: Optional[str] = None,
+        note_type: Optional[str] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        entity_id: Optional[str] = None,
+        search_text: Optional[str] = None,
+        is_template: Optional[bool] = None,
+        status: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List[Note]:
+        """
+        Комбинированная фильтрация заметок по нескольким параметрам.
+        """
+        async with self._db.session() as session:
+            conditions = [Note.company_id == company_id]
+            
+            if user_id:
+                conditions.append(Note.user_id == user_id)
+            
+            if note_type:
+                conditions.append(Note.note_type == note_type)
+            
+            if start_date:
+                conditions.append(Note.note_date >= start_date)
+            
+            if end_date:
+                conditions.append(Note.note_date <= end_date)
+            
+            if entity_id:
+                conditions.append(Note.linked_entity_ids.contains([entity_id]))
+            
+            if search_text:
+                conditions.append(Note.content.ilike(f"%{search_text}%"))
+            
+            if is_template is not None:
+                conditions.append(Note.is_template == is_template)
+            
+            if status:
+                conditions.append(Note.status == status)
+            
+            stmt = (
+                select(Note)
+                .where(and_(*conditions))
+                .order_by(desc(Note.note_date))
+                .limit(limit)
+                .offset(offset)
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+    
+    async def get_templates(
+        self,
+        company_id: str,
+        note_type: Optional[str] = None,
+        limit: int = 100
+    ) -> List[Note]:
+        """Получает шаблоны заметок"""
+        async with self._db.session() as session:
+            conditions = [
+                Note.company_id == company_id,
+                Note.is_template == True
+            ]
+            
+            if note_type:
+                conditions.append(Note.note_type == note_type)
+            
+            stmt = (
+                select(Note)
+                .where(and_(*conditions))
+                .order_by(desc(Note.created_at))
+                .limit(limit)
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())

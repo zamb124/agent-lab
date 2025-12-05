@@ -5,7 +5,7 @@ API для заметок CRM (Daily Notes).
 from datetime import date
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
 
 from apps.crm.dependencies import NoteServiceDep
 from apps.crm.models.note_models import (
@@ -23,15 +23,55 @@ router = APIRouter()
 async def list_notes(
     note_service: NoteServiceDep,
     note_type: Optional[str] = Query(None, description="Фильтр по типу"),
+    user_id: Optional[str] = Query(None, description="Фильтр по автору"),
+    entity_id: Optional[str] = Query(None, description="Фильтр по связанной сущности"),
+    start_date: Optional[date] = Query(None, description="Начало диапазона дат"),
+    end_date: Optional[date] = Query(None, description="Конец диапазона дат"),
+    q: Optional[str] = Query(None, description="Поиск по тексту"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ):
-    """Получает список заметок"""
+    """Получает список заметок с расширенной фильтрацией"""
+    # Если есть фильтры - используем расширенный метод
+    if any([user_id, entity_id, start_date, end_date, q]):
+        return await note_service.filter_notes(
+            user_id=user_id,
+            note_type=note_type,
+            start_date=start_date,
+            end_date=end_date,
+            entity_id=entity_id,
+            search_text=q,
+            limit=limit,
+            offset=offset,
+        )
+    
     return await note_service.list_notes(
         note_type=note_type,
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/templates", response_model=List[NoteResponse])
+async def get_templates(
+    note_service: NoteServiceDep,
+    note_type: Optional[str] = Query(None, description="Фильтр по типу"),
+    limit: int = Query(100, ge=1, le=1000),
+):
+    """Получает список шаблонов заметок"""
+    return await note_service.get_templates(note_type=note_type, limit=limit)
+
+
+@router.post("/from-template/{template_id}", response_model=NoteResponse)
+async def create_from_template(
+    template_id: str,
+    note_service: NoteServiceDep,
+    note_date: date = Query(default=None),
+):
+    """Создает новую заметку на основе шаблона"""
+    from datetime import date as date_cls
+    actual_date = note_date if note_date else date_cls.today()
+    return await note_service.create_from_template(template_id, actual_date)
 
 
 @router.get("/daily/{note_date}", response_model=List[NoteResponse])
@@ -41,6 +81,40 @@ async def get_daily_notes(
 ):
     """Получает заметки за определенную дату"""
     return await note_service.get_daily_notes(note_date)
+
+
+@router.get("/daily-summary/{note_date}")
+async def get_daily_summary(
+    note_date: date,
+    note_service: NoteServiceDep,
+):
+    """Генерирует AI саммари всех заметок за день"""
+    summary = await note_service.get_daily_summary(note_date)
+    return {"date": str(note_date), "summary": summary}
+
+
+@router.post("/import", response_model=NoteResponse)
+async def import_note_from_file(
+    note_service: NoteServiceDep,
+    file: UploadFile = File(...),
+    title: str = Form(None),
+    note_type: str = Form("freeform"),
+    note_date: date = Form(None),
+):
+    """
+    Импортирует заметку из файла (txt, docx, pdf).
+    Использует RAG парсер для извлечения текста.
+    """
+    from datetime import date as date_cls
+    actual_date = note_date if note_date else date_cls.today()
+    actual_title = title if title else file.filename
+    
+    return await note_service.import_from_file(
+        file=file,
+        title=actual_title,
+        note_type=note_type,
+        note_date=actual_date,
+    )
 
 
 @router.get("/range", response_model=List[NoteResponse])

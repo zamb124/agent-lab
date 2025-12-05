@@ -18,6 +18,19 @@ class NoteType(str, Enum):
     CALL_LOG = "call_log"
 
 
+class NoteStatus(str, Enum):
+    """Статусы заметок"""
+    DRAFT = "draft"
+    PUBLISHED = "published"
+
+
+class NoteVisibility(str, Enum):
+    """Видимость заметок"""
+    PUBLIC = "public"
+    PRIVATE = "private"
+    SHARED = "shared"
+
+
 class NoteCreate(BaseModel):
     """Создание заметки"""
     
@@ -41,6 +54,29 @@ class NoteCreate(BaseModel):
         default_factory=list,
         title="Связанные сущности"
     )
+    is_template: bool = Field(
+        default=False,
+        title="Шаблон",
+        description="Если True - заметка является шаблоном"
+    )
+    status: NoteStatus = Field(
+        default=NoteStatus.PUBLISHED,
+        title="Статус"
+    )
+    visibility: NoteVisibility = Field(
+        default=NoteVisibility.PUBLIC,
+        title="Видимость"
+    )
+    shared_with: List[str] = Field(
+        default_factory=list,
+        title="Поделено с",
+        description="Список user_ids с доступом"
+    )
+    attachment_ids: List[str] = Field(
+        default_factory=list,
+        title="Прикрепленные файлы",
+        description="Список file_ids из core/files"
+    )
 
 
 class NoteUpdate(BaseModel):
@@ -53,6 +89,11 @@ class NoteUpdate(BaseModel):
     note_type: Optional[NoteType] = Field(default=None, title="Тип заметки")
     note_date: Optional[date] = Field(default=None, title="Дата заметки")
     linked_entity_ids: Optional[List[str]] = Field(default=None, title="Связанные сущности")
+    is_template: Optional[bool] = Field(default=None, title="Шаблон")
+    status: Optional[NoteStatus] = Field(default=None, title="Статус")
+    visibility: Optional[NoteVisibility] = Field(default=None, title="Видимость")
+    shared_with: Optional[List[str]] = Field(default=None, title="Поделено с")
+    attachment_ids: Optional[List[str]] = Field(default=None, title="Прикрепленные файлы")
 
 
 class NoteResponse(BaseModel):
@@ -69,6 +110,11 @@ class NoteResponse(BaseModel):
     note_date: date = Field(title="Дата заметки")
     ai_summary: Optional[str] = Field(default=None, title="AI резюме")
     linked_entity_ids: List[str] = Field(default_factory=list, title="Связанные сущности")
+    is_template: bool = Field(default=False, title="Шаблон")
+    status: str = Field(default="published", title="Статус")
+    visibility: str = Field(default="public", title="Видимость")
+    shared_with: List[str] = Field(default_factory=list, title="Поделено с")
+    attachment_ids: List[str] = Field(default_factory=list, title="Прикрепленные файлы")
     created_at: datetime = Field(title="Дата создания", readonly=True)
     updated_at: datetime = Field(title="Дата обновления", readonly=True)
     

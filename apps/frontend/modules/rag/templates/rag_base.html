@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}RAG Dashboard{% endblock %}
+{% block title %}{{ t('rag.title') }}{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="/static/rag/css/rag.css">
@@ -27,12 +27,12 @@
         <div class="rag-sidebar-nav">
             <a href="/rag/" class="rag-nav-item active">
                 <i class="ti ti-layout-dashboard"></i>
-                <span>Dashboard</span>
+                <span>{{ t('rag.nav.dashboard') }}</span>
             </a>
         </div>
         
         <div class="rag-sidebar-section">
-            <div class="rag-section-title">Provider</div>
+            <div class="rag-section-title">{{ t('rag.sidebar.provider') }}</div>
             <div class="rag-provider-cards" id="provider-cards">
                 {% for provider in providers %}
                 <div class="rag-provider-card {% if provider.name == current_provider %}active{% endif %}" 
@@ -50,7 +50,7 @@
                     <div class="rag-provider-info">
                         <div class="rag-provider-name">{{ provider.name }}</div>
                         <div class="rag-provider-badge">
-                            {% if provider.name == 'chromadb' %}LOCAL{% else %}CLOUD{% endif %}
+                            {% if provider.name == 'chromadb' %}{{ t('rag.sidebar.local') }}{% else %}{{ t('rag.sidebar.cloud') }}{% endif %}
                         </div>
                     </div>
                     <i class="ti ti-chevron-right rag-provider-arrow"></i>
@@ -60,15 +60,15 @@
         </div>
         
         <div class="rag-sidebar-section">
-            <div class="rag-section-title">Namespaces</div>
+            <div class="rag-section-title">{{ t('rag.sidebar.namespaces') }}</div>
             <div class="rag-namespace-search">
                 <i class="ti ti-search"></i>
-                <input type="text" id="namespace-search" placeholder="Search namespaces...">
+                <input type="text" id="namespace-search" placeholder="{{ t('rag.sidebar.search_namespaces') }}">
             </div>
             <div id="namespace-list" class="rag-namespace-list">
                 <div class="rag-loading">
                     <i class="ti ti-loader-2 spinning"></i>
-                    <span>Loading...</span>
+                    <span>{{ t('rag.loading.default') }}</span>
                 </div>
             </div>
         </div>
@@ -82,19 +82,38 @@
                     <button class="rag-mobile-menu" onclick="toggleSidebar()">
                         <i class="ti ti-menu-2"></i>
                     </button>
-                    <h1 id="page-title">Dashboard</h1>
+                    <h1 id="page-title">{{ t('rag.nav.dashboard') }}</h1>
                 </div>
                 <div class="rag-header-right">
                     <div class="rag-search-global">
                         <i class="ti ti-search"></i>
-                        <input type="text" id="global-search" placeholder="Search across all documents...">
+                        <input type="text" id="global-search" placeholder="{{ t('rag.header.search_placeholder') }}">
                         <kbd>Enter</kbd>
                     </div>
                     <button class="rag-btn rag-btn-primary" onclick="showCreateNamespaceModal()">
                         <i class="ti ti-plus"></i>
-                        <span>New Namespace</span>
+                        <span>{{ t('rag.header.new_namespace') }}</span>
                     </button>
-                    <button class="rag-theme-toggle" onclick="toggleTheme()">
+                    
+                    <!-- Language Switcher -->
+                    <div class="dropdown">
+                        <button class="rag-btn rag-btn-ghost" data-dropdown-toggle data-tooltip="{{ t('dashboard.header.language_toggle') }}">
+                            <i class="ti ti-translate"></i>
+                            <span id="current-language">{{ get_current_language().upper() }}</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); if(window.app && window.app.i18n) window.app.i18n.setLanguage('ru');">
+                                <i class="ti ti-check invisible" id="lang-ru"></i> 
+                                {{ t('languages.ru') }}
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); if(window.app && window.app.i18n) window.app.i18n.setLanguage('en');">
+                                <i class="ti ti-check invisible" id="lang-en"></i> 
+                                {{ t('languages.en') }}
+                            </a></li>
+                        </ul>
+                    </div>
+                    
+                    <button class="rag-theme-toggle" onclick="toggleTheme()" data-tooltip="{{ t('rag.header.theme_toggle') }}">
                         <i class="ti ti-sun"></i>
                     </button>
                 </div>
@@ -105,14 +124,14 @@
                 <div class="rag-namespace-view" data-namespace-id="{{ current_namespace }}">
                     <div class="rag-loading-full">
                         <i class="ti ti-loader-2 spinning"></i>
-                        <span>Loading namespace...</span>
+                        <span>{{ t('rag.loading.namespace') }}</span>
                     </div>
                 </div>
                 {% else %}
                 <div class="rag-dashboard-view">
                     <div class="rag-loading-full">
                         <i class="ti ti-loader-2 spinning"></i>
-                        <span>Loading namespaces...</span>
+                        <span>{{ t('rag.loading.namespaces') }}</span>
                     </div>
                 </div>
                 {% endif %}
@@ -126,24 +145,24 @@
     <div class="rag-modal-backdrop" onclick="hideCreateNamespaceModal()"></div>
     <div class="rag-modal-content">
         <div class="rag-modal-header">
-            <h2>Create Namespace</h2>
+            <h2>{{ t('rag.modals.create_namespace.title') }}</h2>
             <button class="rag-modal-close" onclick="hideCreateNamespaceModal()">
                 <i class="ti ti-x"></i>
             </button>
         </div>
         <div class="rag-modal-body">
             <div class="rag-form-group">
-                <label for="namespace-name">Name</label>
-                <input type="text" id="namespace-name" placeholder="my-namespace">
+                <label for="namespace-name">{{ t('rag.modals.create_namespace.name_label') }}</label>
+                <input type="text" id="namespace-name" placeholder="{{ t('rag.modals.create_namespace.name_placeholder') }}">
             </div>
             <div class="rag-form-group">
-                <label for="namespace-description">Description (optional)</label>
-                <textarea id="namespace-description" placeholder="Describe your namespace..."></textarea>
+                <label for="namespace-description">{{ t('rag.modals.create_namespace.description_label') }}</label>
+                <textarea id="namespace-description" placeholder="{{ t('rag.modals.create_namespace.description_placeholder') }}"></textarea>
             </div>
         </div>
         <div class="rag-modal-footer">
-            <button class="rag-btn" onclick="hideCreateNamespaceModal()">Cancel</button>
-            <button class="rag-btn rag-btn-primary" onclick="createNamespace()">Create</button>
+            <button class="rag-btn" onclick="hideCreateNamespaceModal()">{{ t('rag.modals.create_namespace.cancel') }}</button>
+            <button class="rag-btn rag-btn-primary" onclick="createNamespace()">{{ t('rag.modals.create_namespace.create') }}</button>
         </div>
     </div>
 </div>
@@ -153,7 +172,7 @@
     <div class="rag-modal-backdrop" onclick="hideUploadModal()"></div>
     <div class="rag-modal-content">
         <div class="rag-modal-header">
-            <h2>Upload Document</h2>
+            <h2>{{ t('rag.modals.upload_document.title') }}</h2>
             <button class="rag-modal-close" onclick="hideUploadModal()">
                 <i class="ti ti-x"></i>
             </button>
@@ -161,10 +180,10 @@
         <div class="rag-modal-body">
             <div class="rag-upload-zone" id="upload-zone">
                 <i class="ti ti-cloud-upload"></i>
-                <p>Drag and drop files here</p>
-                <span>or</span>
+                <p>{{ t('rag.modals.upload_document.drag_drop') }}</p>
+                <span>{{ t('rag.modals.upload_document.or') }}</span>
                 <button class="rag-btn" onclick="document.getElementById('file-input').click()">
-                    Browse Files
+                    {{ t('rag.modals.upload_document.browse') }}
                 </button>
                 <input type="file" id="file-input" hidden multiple 
                        accept=".pdf,.txt,.docx,.html,.md,.csv,.xlsx,.json,.xml">
@@ -172,9 +191,9 @@
             <div class="rag-upload-list" id="upload-list"></div>
         </div>
         <div class="rag-modal-footer">
-            <button class="rag-btn" onclick="hideUploadModal()">Cancel</button>
+            <button class="rag-btn" onclick="hideUploadModal()">{{ t('rag.modals.upload_document.cancel') }}</button>
             <button class="rag-btn rag-btn-primary" id="upload-btn" onclick="ragApp.uploadDocuments()" disabled>
-                Upload
+                {{ t('rag.modals.upload_document.upload') }}
             </button>
         </div>
     </div>
@@ -185,7 +204,7 @@
     <div class="rag-modal-backdrop" onclick="hideSearchResults()"></div>
     <div class="rag-modal-content">
         <div class="rag-modal-header">
-            <h2>Search Results</h2>
+            <h2>{{ t('rag.modals.search_results.title') }}</h2>
             <button class="rag-modal-close" onclick="hideSearchResults()">
                 <i class="ti ti-x"></i>
             </button>
@@ -202,7 +221,62 @@
     window.RAG_CONFIG = {
         currentProvider: '{{ current_provider }}',
         currentNamespace: {% if current_namespace %}'{{ current_namespace }}'{% else %}null{% endif %},
-        apiBase: '/frontend/api/rag'
+        apiBase: '/frontend/api/rag',
+        i18n: {
+            loading: {
+                default: '{{ t("rag.loading.default") }}',
+                namespaces: '{{ t("rag.loading.namespaces") }}',
+                documents: '{{ t("rag.loading.documents") }}',
+                searching: '{{ t("rag.loading.searching") }}',
+                uploading: '{{ t("rag.loading.uploading") }}'
+            },
+            empty: {
+                namespaces: '{{ t("rag.empty.namespaces") }}',
+                namespacesDescription: '{{ t("rag.empty.namespaces_description") }}',
+                documents: '{{ t("rag.empty.documents") }}',
+                documentsDescription: '{{ t("rag.empty.documents_description") }}'
+            },
+            errors: {
+                loadNamespaces: '{{ t("rag.errors.load_namespaces") }}',
+                loadDocuments: '{{ t("rag.errors.load_documents") }}',
+                connection: '{{ t("rag.errors.connection") }}',
+                searchFailed: '{{ t("rag.errors.search_failed") }}'
+            },
+            namespace: {
+                documents: '{{ t("rag.namespace.documents") }}',
+                deleteConfirm: '{{ t("rag.namespace.delete_confirm") }}'
+            },
+            document: {
+                deleteConfirm: '{{ t("rag.document.delete_confirm") }}'
+            },
+            modals: {
+                searchResults: {
+                    noResults: '{{ t("rag.modals.search_results.no_results") }}',
+                    noResultsDescription: '{{ t("rag.modals.search_results.no_results_description") }}',
+                    match: '{{ t("rag.modals.search_results.match") }}'
+                }
+            },
+            actions: {
+                upload: '{{ t("rag.actions.upload") }}',
+                download: '{{ t("rag.actions.download") }}',
+                delete: '{{ t("rag.actions.delete") }}',
+                back: '{{ t("rag.actions.back") }}',
+                createNamespace: '{{ t("rag.actions.create_namespace") }}',
+                uploadDocument: '{{ t("rag.actions.upload_document") }}'
+            },
+            notifications: {
+                namespaceCreated: '{{ t("rag.notifications.namespace_created") }}',
+                namespaceDeleted: '{{ t("rag.notifications.namespace_deleted") }}',
+                documentUploaded: '{{ t("rag.notifications.document_uploaded") }}',
+                documentUploadFailed: '{{ t("rag.notifications.document_upload_failed") }}',
+                documentDeleted: '{{ t("rag.notifications.document_deleted") }}',
+                enterNamespaceName: '{{ t("rag.notifications.enter_namespace_name") }}',
+                selectNamespaceFirst: '{{ t("rag.notifications.select_namespace_first") }}'
+            },
+            nav: {
+                dashboard: '{{ t("rag.nav.dashboard") }}'
+            }
+        }
     };
 </script>
 <script src="/static/rag/js/rag.module.js" type="module"></script>

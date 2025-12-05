@@ -207,3 +207,47 @@ class TaskRepository(BaseCRMRepository[Task]):
             )
             result = await session.execute(stmt)
             return {row[0]: row[1] for row in result.all()}
+    
+    async def get_by_tag(
+        self, 
+        company_id: str, 
+        tag: str,
+        limit: int = 100
+    ) -> List[Task]:
+        """Получает задачи по тегу"""
+        async with self._db.session() as session:
+            stmt = (
+                select(Task)
+                .where(
+                    and_(
+                        Task.company_id == company_id,
+                        Task.tags.contains([tag])
+                    )
+                )
+                .order_by(asc(Task.due_date.is_(None)), asc(Task.due_date))
+                .limit(limit)
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())
+    
+    async def get_by_assignee(
+        self, 
+        company_id: str, 
+        assignee_id: str,
+        limit: int = 100
+    ) -> List[Task]:
+        """Получает задачи по соучастнику"""
+        async with self._db.session() as session:
+            stmt = (
+                select(Task)
+                .where(
+                    and_(
+                        Task.company_id == company_id,
+                        Task.assignees.contains([assignee_id])
+                    )
+                )
+                .order_by(asc(Task.due_date.is_(None)), asc(Task.due_date))
+                .limit(limit)
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())

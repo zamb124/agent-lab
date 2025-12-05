@@ -35,6 +35,14 @@
   "search": {
     "placeholder": "Search..."
   },
+  "filters": {
+    "type": "Type",
+    "date_from": "From date",
+    "date_to": "To date",
+    "author": "Author",
+    "entity": "Entity",
+    "clear": "Clear"
+  },
   "actions": {
     "new_note": "New Note",
     "save": "Save",
@@ -44,7 +52,10 @@
     "create": "Create",
     "analyze": "Analyze",
     "link": "Link",
-    "unlink": "Unlink"
+    "unlink": "Unlink",
+    "export": "Export",
+    "export_pdf": "Export to PDF",
+    "export_html": "Export to HTML"
   },
   "notes": {
     "title": "Notes",
@@ -56,9 +67,24 @@
       "meeting_minutes": "Meeting Minutes",
       "call_log": "Call Log"
     },
+    "template": {
+      "select": "Select template",
+      "none": "No template",
+      "save_as": "Save as template"
+    },
     "empty": "No notes",
     "empty_description": "Create your first note by clicking the button above",
     "analyze_hint": "AI will analyze the note and extract entities",
+    "daily_summary": "Daily Summary",
+    "visibility": {
+      "public": "Public",
+      "private": "Private",
+      "shared": "Shared"
+    },
+    "voice_input": "Voice input",
+    "attach_file": "Attach file",
+    "import_file": "Import from file",
+    "mention_hint": "Mention an entity",
     "analysis": {
       "title": "Analysis Results",
       "review_description": "Entities were created with 'pending' status. You can approve or reject them now or later.",
@@ -110,7 +136,8 @@
     "priority": {
       "high": "High",
       "medium": "Medium",
-      "low": "Low"
+      "low": "Low",
+      "urgent": "Urgent"
     },
     "status": {
       "pending": "Pending",
@@ -118,6 +145,9 @@
       "completed": "Completed",
       "cancelled": "Cancelled"
     },
+    "tags": "Tags",
+    "tags_placeholder": "Type a tag and press Enter",
+    "assignees": "Assignees",
     "complete": "Complete",
     "reopen": "Reopen"
   },
@@ -153,6 +183,57 @@
       "tasks": "Tasks",
       "relationships": "Relationships"
     }
+  },
+  "ai_assistant": {
+    "ask": "Ask AI",
+    "title": "AI Assistant",
+    "placeholder": "Ask a question about your CRM data...",
+    "searching": "Searching...",
+    "no_results": "Nothing found"
+  },
+  "profile": {
+    "title": "Profile",
+    "edit": "Edit Profile",
+    "no_name": "Name not set",
+    "no_position": "Position not set",
+    "notes": "Notes",
+    "tasks_completed": "Tasks completed",
+    "activity": "Activity",
+    "streak": "Streak",
+    "days": "days",
+    "less": "Less",
+    "more": "More",
+    "contact_info": "Contact Information",
+    "phone": "Phone",
+    "member_since": "Member since",
+    "bio": "Bio",
+    "display_name": "Display Name",
+    "display_name_placeholder": "John Doe",
+    "position": "Position",
+    "position_placeholder": "Sales Manager",
+    "avatar_url": "Avatar URL",
+    "bio_placeholder": "Tell us about yourself..."
+  },
+  "access_requests": {
+    "title": "Access Requests",
+    "incoming": "Incoming",
+    "outgoing": "Outgoing",
+    "resource": "Resource",
+    "requester": "Requester",
+    "owner": "Owner",
+    "message": "Message",
+    "status": "Status",
+    "date": "Date",
+    "status_pending": "Pending",
+    "status_approved": "Approved",
+    "status_rejected": "Rejected",
+    "empty": "No requests",
+    "empty_description_incoming": "No incoming access requests to your resources",
+    "empty_description_outgoing": "You haven't sent any access requests yet",
+    "request_access": "Request Access",
+    "message_placeholder": "Explain why you need access...",
+    "message_hint": "The resource owner will see this message",
+    "send_request": "Send Request"
   }
 }
 

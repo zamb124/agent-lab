@@ -1,0 +1,73 @@
+<!-- Edit Profile Modal -->
+<div class="crm-modal-overlay" onclick="if(event.target === this) CRM.closeModal()">
+    <div class="crm-modal crm-modal-md">
+        <div class="crm-modal-header">
+            <h2 class="crm-modal-title">{{ t('crm.profile.edit') }}</h2>
+            <button class="crm-modal-close" onclick="CRM.closeModal()">
+                <i class="ti ti-x"></i>
+            </button>
+        </div>
+        
+        <form hx-put="/crm/api/profile"
+              hx-target="#crm-content"
+              hx-swap="innerHTML"
+              hx-on::after-request="CRM.closeModal()">
+            <div class="crm-modal-body">
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('crm.profile.display_name') }}</label>
+                    <input type="text" 
+                           name="display_name" 
+                           class="crm-input"
+                           value="{{ profile.display_name or '' }}"
+                           placeholder="{{ t('crm.profile.display_name_placeholder') }}">
+                </div>
+                
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('crm.profile.position') }}</label>
+                    <input type="text" 
+                           name="position" 
+                           class="crm-input"
+                           value="{{ profile.position or '' }}"
+                           placeholder="{{ t('crm.profile.position_placeholder') }}">
+                </div>
+                
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('crm.profile.avatar_url') }}</label>
+                    <input type="url" 
+                           name="avatar_url" 
+                           class="crm-input"
+                           value="{{ profile.avatar_url or '' }}"
+                           placeholder="https://...">
+                </div>
+                
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('crm.profile.phone') }}</label>
+                    <input type="tel" 
+                           name="phone" 
+                           class="crm-input"
+                           value="{{ profile.phone or '' }}"
+                           placeholder="+7 (999) 123-45-67">
+                </div>
+                
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('crm.profile.bio') }}</label>
+                    <textarea name="bio" 
+                              class="crm-input crm-textarea"
+                              rows="3"
+                              placeholder="{{ t('crm.profile.bio_placeholder') }}">{{ profile.bio or '' }}</textarea>
+                </div>
+            </div>
+            
+            <div class="crm-modal-footer">
+                <button type="button" class="crm-btn crm-btn-secondary" onclick="CRM.closeModal()">
+                    {{ t('crm.actions.cancel') }}
+                </button>
+                <button type="submit" class="crm-btn crm-btn-primary">
+                    <i class="ti ti-check"></i>
+                    {{ t('crm.actions.save') }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+

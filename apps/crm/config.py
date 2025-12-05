@@ -20,7 +20,8 @@ class CRMSettings(BaseSettings):
     
     agents_service_url: str = Field(
         default="http://localhost:8001",
-        description="URL сервиса агентов для вызова AI"
+        description="URL сервиса агентов для вызова AI",
+        validation_alias="CRM_AGENTS_SERVICE_URL"
     )
     chromadb_namespace_prefix: str = Field(
         default="crm_",

@@ -30,7 +30,7 @@ class ChromaDBRAGProvider(BaseRAGProvider):
     DEFAULT_CHUNK_SIZE = 1000
     DEFAULT_CHUNK_OVERLAP = 100
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], embedding_config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
         
         host = config.get("host", "localhost")
@@ -38,15 +38,45 @@ class ChromaDBRAGProvider(BaseRAGProvider):
         
         self._client = chromadb.HttpClient(host=host, port=port)
         
-        embedding_api_key = config.get("embedding_api_key")
-        if not embedding_api_key:
+        # API ключ для embeddings берётся из провайдера
+        api_key = config.get("embedding_api_key")
+        if not api_key:
             raise ValueError("embedding_api_key обязателен для ChromaDB провайдера")
         
+        timeout = config.get("timeout", 60)
+        
+        # Получаем список моделей для fallback из общей конфигурации embedding
+        emb_cfg = embedding_config or {}
+        models = None
+        dimension = None
+        
+        if "model_groups" in emb_cfg:
+            # Новая структура с группами моделей
+            preferred_dim = emb_cfg.get("preferred_dimension", 1536)
+            models = emb_cfg.get("model_groups", {}).get(str(preferred_dim), [])
+            dimension = preferred_dim
+        
+        if not models:
+            # Legacy: одна модель
+            legacy_model = config.get("embedding_model")
+            if legacy_model:
+                models = [legacy_model]
+        
+        if not models:
+            # Default fallback
+            models = ["openai/text-embedding-3-small", "mistralai/codestral-embed-2505"]
+        
+        # Billing параметры из конфига провайдера
+        cost_per_1m_tokens = config.get("embedding_cost_per_1m_tokens", 5.0)
+        platform_markup = config.get("embedding_platform_markup", 1.1)
+        
         self._embedding_service = EmbeddingService(
-            api_key=embedding_api_key,
-            model=config.get("embedding_model"),
-            base_url=config.get("embedding_base_url"),
-            timeout=config.get("timeout", 60),
+            api_key=api_key,
+            models=models,
+            timeout=timeout,
+            dimension=dimension,
+            cost_per_1m_tokens=cost_per_1m_tokens,
+            platform_markup=platform_markup,
         )
         
         self._parser = DocumentParser()
@@ -56,7 +86,7 @@ class ChromaDBRAGProvider(BaseRAGProvider):
         
         self._tokenizer = tiktoken.get_encoding("cl100k_base")
         
-        logger.info(f"ChromaDB провайдер инициализирован: {host}:{port}")
+        logger.info(f"ChromaDB провайдер инициализирован: {host}:{port}, models={models}")
     
     @property
     def provider_name(self) -> str:
@@ -132,15 +162,20 @@ class ChromaDBRAGProvider(BaseRAGProvider):
         """Список всех namespaces"""
         collections = self._client.list_collections()
         
-        return [
-            RAGNamespace(
+        namespaces = []
+        for col in collections:
+            try:
+                namespaces.append(RAGNamespace(
                 namespace_id=col.name,
                 name=col.name,
                 document_count=col.count(),
                 metadata=col.metadata or {},
-            )
-            for col in collections
-        ]
+                ))
+            except Exception:
+                # Коллекция могла быть удалена между list_collections() и count()
+                pass
+        
+        return namespaces
     
     async def delete_namespace(self, namespace_id: str) -> bool:
         """Удаляет namespace"""

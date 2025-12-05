@@ -7,6 +7,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="{{ static('/crm/js/crm.module.js') }}"></script>
 {% endblock %}
 
@@ -107,6 +108,24 @@
         </nav>
         
         <div class="crm-sidebar-footer">
+            <a href="/crm/profile" 
+               class="crm-nav-item {% if current_page == 'crm_profile' %}active{% endif %}"
+               hx-get="/crm/partials/profile" 
+               hx-target="#crm-content" 
+               hx-push-url="/crm/profile">
+                <i class="ti ti-user"></i>
+                <span>{{ t('crm.profile.title') }}</span>
+            </a>
+            
+            <a href="/crm/access-requests" 
+               class="crm-nav-item {% if current_page == 'crm_access_requests' %}active{% endif %}"
+               hx-get="/crm/partials/access-requests" 
+               hx-target="#crm-content" 
+               hx-push-url="/crm/access-requests">
+                <i class="ti ti-lock-access"></i>
+                <span>{{ t('crm.access_requests.title') }}</span>
+            </a>
+            
             <a href="/crm/settings" 
                class="crm-nav-item {% if current_page == 'crm_settings' %}active{% endif %}"
                hx-get="/crm/partials/settings" 
@@ -147,6 +166,13 @@
                            hx-target="#search-results">
                     <div id="search-results"></div>
                 </div>
+                
+                <button class="crm-btn crm-btn-ghost"
+                        onclick="CRM.askAI()"
+                        title="{{ t('crm.ai_assistant.ask') }}">
+                    <i class="ti ti-sparkles"></i>
+                    {{ t('crm.ai_assistant.ask') }}
+                </button>
                 
                 <button class="crm-btn crm-btn-analyze"
                         hx-get="/crm/partials/note-modal" 
