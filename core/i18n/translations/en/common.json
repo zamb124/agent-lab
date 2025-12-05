@@ -1,5 +1,9 @@
 {
   "app_name": "Humanitec",
+  "title": "Title",
+  "content": "Content",
+  "description": "Description",
+  "name": "Name",
   "save": "Save",
   "cancel": "Cancel",
   "delete": "Delete",

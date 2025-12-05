@@ -691,13 +691,16 @@ async def agents_client(agents_app, test_context, test_user, test_company):
 @pytest_asyncio.fixture(scope="session")
 async def frontend_app(migrated_db):
     """FastAPI приложение для frontend сервиса (порт 8002)"""
-    from apps.frontend.main import create_app
+    from apps.frontend.main import create_app, _mount_static_files
     from apps.frontend.core.plugin_loader import discover_and_load_plugins
     
     app = create_app()
     
     # Загружаем плагины вручную т.к. lifespan не выполняется при ASGITransport
     await discover_and_load_plugins(app)
+    
+    # Монтируем статические файлы
+    _mount_static_files(app)
     
     return app
 
@@ -1311,6 +1314,147 @@ def agents_service(agents_server_process):
     return agents_server_process
 
 
+@pytest_asyncio.fixture(scope="session")
+async def session_test_data(migrated_db):
+    """
+    Session-scoped тестовые данные для межсервисного взаимодействия.
+    Создает user/company в shared БД ДО запуска subprocess сервисов.
+    """
+    from core.models.identity_models import User, UserStatus, AuthProvider
+    from core.models.billing_models import TariffPlan
+    from core.db.repositories.subdomain_repository import SubdomainMapping
+    from core.utils.tokens import get_token_service
+    
+    container = get_agents_container()
+    
+    session_company = Company(
+        company_id="test_session_company",
+        subdomain="test_session",
+        name="Test Session Company",
+        tariff_plan=TariffPlan.ENTERPRISE,
+        balance=100000.0,
+        monthly_budget=50000.0,
+        current_month_spent=0.0,
+        status="active"
+    )
+    
+    session_user = User(
+        user_id="test_session_user",
+        provider=AuthProvider.YANDEX,
+        provider_user_id="session_test",
+        email="session@test.com",
+        name="Session Test User",
+        status=UserStatus.ACTIVE,
+        groups=["admin"],
+        companies={"test_session_company": ["admin"]},
+        active_company_id="test_session_company",
+    )
+    
+    await container.company_repository.set(session_company)
+    await container.user_repository.set(session_user)
+    
+    subdomain_mapping = SubdomainMapping(
+        subdomain=session_company.subdomain,
+        company_id=session_company.company_id
+    )
+    await container.subdomain_repository.set(subdomain_mapping)
+    
+    token_service = get_token_service()
+    token = token_service.create_token(
+        user_id=session_user.user_id,
+        company_id=session_company.company_id,
+        roles=["admin"],
+    )
+    
+    logger.info("✅ Session test data created for cross-service tests")
+    
+    yield {
+        "user": session_user,
+        "company": session_company,
+        "token": token,
+        "headers": {
+            "Authorization": f"Bearer {token}",
+            "X-Company-Id": session_company.company_id,
+        }
+    }
+    
+    # Cleanup
+    try:
+        await container.user_repository.delete(session_user.user_id)
+        await container.subdomain_repository.delete(session_company.subdomain)
+        await container.company_repository.delete(session_company.company_id)
+    except Exception:
+        pass
+
+
+@pytest.fixture(scope="session")
+def crm_server_process(session_test_data):
+    """
+    Запускает CRM сервер через subprocess.
+    Session scope - один сервер на всю сессию тестов.
+    Зависит от session_test_data чтобы данные были в БД до запуска.
+    """
+    port = _get_free_port()
+    host = "127.0.0.1"
+    
+    process = _start_server_subprocess(
+        "apps.crm.main:app",
+        host, port,
+        "CRM сервер"
+    )
+    
+    if not _wait_for_server(host, port, timeout=45, process=process):
+        process.terminate()
+        raise RuntimeError(f"CRM сервер не запустился на {host}:{port}")
+    
+    url = f"http://{host}:{port}"
+    logger.info(f"✅ CRM сервер запущен на {url}")
+    
+    os.environ["TEST_CRM_SERVICE_URL"] = url
+    
+    yield {"host": host, "port": port, "url": url, "test_data": session_test_data}
+    
+    os.environ.pop("TEST_CRM_SERVICE_URL", None)
+    
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+    logger.info("✅ CRM сервер остановлен")
+
+
+@pytest_asyncio.fixture
+async def crm_frontend_client(frontend_app, session_test_data, crm_server_process):
+    """
+    HTTP клиент для тестирования CRM partials через frontend.
+    Использует session_test_data для авторизации (данные уже в shared БД).
+    """
+    import httpx
+    from httpx import ASGITransport
+    
+    user = session_test_data["user"]
+    company = session_test_data["company"]
+    token = session_test_data["token"]
+    
+    transport = ASGITransport(app=frontend_app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url=f"http://{company.subdomain}.localhost:8002",
+        cookies={"auth_token": token},
+        headers={
+            "Host": f"{company.subdomain}.localhost:8002",
+            "Authorization": f"Bearer {token}",
+            "X-Company-Id": company.company_id,
+        }
+    ) as client:
+        client.test_user = user
+        client.test_company = company
+        client.auth_token = token
+        yield client
+
+
+
 @pytest_asyncio.fixture
 async def service_auth_headers(test_user, test_company, user_repo, company_repo):
     """
@@ -1344,6 +1488,100 @@ async def service_auth_headers(test_user, test_company, user_repo, company_repo)
         await company_repo.delete(test_company.company_id)
     except Exception:
         pass
+
+
+# === CRM Service Fixtures ===
+
+@pytest_asyncio.fixture(scope="session")
+async def crm_app(migrated_db):
+    """FastAPI приложение для CRM сервиса (порт 8003)"""
+    from apps.crm.main import create_app
+    app = create_app()
+    
+    # Инициализируем БД и типы
+    container = app.state.container
+    await container.init_db()
+    await container.entity_type_service.init_system_types()
+    
+    return app
+
+
+@pytest_asyncio.fixture
+async def crm_client(crm_app, test_context, test_user, test_company):
+    """
+    HTTP клиент для тестирования CRM API с авторизацией.
+    """
+    import httpx
+    from httpx import ASGITransport
+    from core.utils.tokens import get_token_service
+    
+    container = crm_app.state.container
+    
+    # Сохраняем компанию и пользователя
+    await container.company_repository.set(test_company)
+    await container.user_repository.set(test_user)
+    
+    # Создаем JWT токен
+    unique_session_id = f"test_session_{uuid.uuid4().hex[:8]}"
+    token_service = get_token_service()
+    roles = test_user.companies.get(test_company.company_id, ["admin"])
+    token = token_service.create_token(
+        user_id=test_user.user_id,
+        company_id=test_company.company_id,
+        roles=roles,
+        session_id=unique_session_id,
+    )
+    
+    transport = ASGITransport(app=crm_app)
+    async with httpx.AsyncClient(
+        transport=transport,
+        base_url="http://test",
+        cookies={"auth_token": token},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "X-Company-Id": test_company.company_id,
+        }
+    ) as client:
+        client.test_user = test_user
+        client.test_company = test_company
+        client.test_context = test_context
+        client.auth_token = token
+        yield client
+    
+    # Очистка
+    try:
+        await container.user_repository.delete(test_user.user_id)
+        await container.company_repository.delete(test_company.company_id)
+    except Exception:
+        pass
+
+
+@pytest_asyncio.fixture
+async def crm_note_repo(crm_app, test_context):
+    """NoteRepository с контекстом"""
+    set_context(test_context)
+    return crm_app.state.container.note_repository
+
+
+@pytest_asyncio.fixture
+async def crm_entity_service(crm_app, test_context):
+    """EntityService с контекстом"""
+    set_context(test_context)
+    return crm_app.state.container.entity_service
+
+
+@pytest_asyncio.fixture
+async def crm_task_repo(crm_app, test_context):
+    """TaskRepository с контекстом"""
+    set_context(test_context)
+    return crm_app.state.container.task_repository
+
+
+@pytest_asyncio.fixture
+async def crm_relationship_repo(crm_app, test_context):
+    """RelationshipRepository с контекстом"""
+    set_context(test_context)
+    return crm_app.state.container.relationship_repository
 
 
 @pytest.fixture(scope="session")

@@ -1,5 +1,6 @@
 ---
-alwaysApply: true
+description: "Архитектура моделей в монорепозитории"
+alwaysApply: false
 ---
 
 # Архитектура моделей в монорепозитории

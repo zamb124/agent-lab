@@ -4,6 +4,8 @@
 Расширяет BaseSettings добавляя специфичные для фронтенда поля.
 """
 
+import os
+
 from core.config import BaseSettings
 
 
@@ -14,7 +16,13 @@ class FrontendSettings(BaseSettings):
     Наследуется от BaseSettings, добавляя специфичные для фронтенда поля.
     Все базовые поля (database, auth, logging, etc) доступны из родителя.
     """
-    pass
+    
+    def get_crm_service_url(self) -> str:
+        """Возвращает URL CRM сервиса, с учетом переменной окружения для тестов"""
+        test_url = os.environ.get("TEST_CRM_SERVICE_URL")
+        if test_url:
+            return test_url
+        return getattr(self.server, "crm_service_url", "http://localhost:8003")
 
 
 def get_frontend_settings() -> FrontendSettings:

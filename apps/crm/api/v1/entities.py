@@ -13,6 +13,7 @@ from apps.crm.models.entity_models import (
     EntityResponse,
     EntitySearchRequest,
     EntitySearchResponse,
+    EntityStatus,
 )
 
 router = APIRouter()
@@ -72,6 +73,19 @@ async def delete_entity(
     if not success:
         raise HTTPException(status_code=404, detail="Сущность не найдена")
     return {"status": "deleted"}
+
+
+@router.put("/{entity_id}/status", response_model=EntityResponse)
+async def update_entity_status(
+    entity_id: str,
+    status: EntityStatus,
+    entity_service: EntityServiceDep,
+):
+    """Обновляет статус сущности (pending -> approved/rejected)"""
+    entity = await entity_service.update_entity_status(entity_id, status)
+    if not entity:
+        raise HTTPException(status_code=404, detail="Сущность не найдена")
+    return entity
 
 
 @router.post("/search", response_model=EntitySearchResponse)

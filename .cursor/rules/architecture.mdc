@@ -1,6 +1,6 @@
 ---
 description: "Архитектурные принципы Humanitec"
-alwaysApply: true
+alwaysApply: false
 ---
 # Архитектурные принципы Humanitec
 

@@ -1,5 +1,6 @@
 ---
-alwaysApply: true
+description: "Правила написания комментариев, DDD"
+alwaysApply: false
 ---
 Старайся писать код так, чтобы не пришлось писать комментарии. Используй технику DDD (Domain-Driven Design).
 

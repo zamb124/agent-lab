@@ -1,0 +1,75 @@
+<!-- Notes Database Partial -->
+<div class="crm-notes-database">
+    <div class="crm-notes-filters">
+        <div class="crm-filter-group">
+            <label>{{ t('crm.notes.type.label') if t else 'Type' }}</label>
+            <select class="crm-input" 
+                    hx-get="/crm/partials/notes/database" 
+                    hx-target="#crm-content"
+                    hx-include="[name='search']">
+                <option value="">{{ t('crm.filters.all') if t else 'All' }}</option>
+                <option value="freeform">{{ t('crm.notes.type.freeform') if t else 'Freeform' }}</option>
+                <option value="meeting_minutes">{{ t('crm.notes.type.meeting_minutes') if t else 'Meeting Minutes' }}</option>
+                <option value="call_log">{{ t('crm.notes.type.call_log') if t else 'Call Log' }}</option>
+            </select>
+        </div>
+        <div class="crm-search-group">
+            <input type="text" 
+                   name="search" 
+                   class="crm-input" 
+                   placeholder="{{ t('crm.search.placeholder') if t else 'Search notes...' }}"
+                   hx-get="/crm/partials/notes/database"
+                   hx-trigger="keyup changed delay:300ms"
+                   hx-target="#crm-content">
+        </div>
+    </div>
+    
+    <div class="crm-notes-table">
+        <table class="crm-table">
+            <thead>
+                <tr>
+                    <th>{{ t('crm.notes.date') if t else 'Date' }}</th>
+                    <th>{{ t('crm.notes.content') if t else 'Content' }}</th>
+                    <th>{{ t('crm.notes.type.label') if t else 'Type' }}</th>
+                    <th>{{ t('crm.notes.entities') if t else 'Entities' }}</th>
+                    <th>{{ t('crm.actions.title') if t else 'Actions' }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if notes %}
+                    {% for note in notes %}
+                    <tr class="crm-note-row" 
+                        hx-get="/crm/partials/note-modal?note_id={{ note.note_id or note.id }}"
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML">
+                        <td>{{ note.note_date or note.created_at }}</td>
+                        <td class="crm-note-preview">{{ (note.content or '')[:100] }}...</td>
+                        <td>
+                            <span class="crm-badge crm-badge-{{ note.note_type or 'freeform' }}">
+                                {{ note.note_type or 'freeform' }}
+                            </span>
+                        </td>
+                        <td>{{ (note.entities or [])|length }}</td>
+                        <td>
+                            <button class="crm-btn crm-btn-icon" 
+                                    hx-delete="/frontend/api/crm/notes/{{ note.note_id or note.id }}"
+                                    hx-confirm="{{ t('crm.confirm.delete') if t else 'Are you sure?' }}"
+                                    hx-target="closest tr"
+                                    hx-swap="outerHTML">
+                                <i class="ti ti-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="5" class="crm-empty-cell">
+                            {{ t('crm.notes.empty') if t else 'No notes found' }}
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+

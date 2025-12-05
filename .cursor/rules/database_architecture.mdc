@@ -1,6 +1,6 @@
 ---
 description: "Архитектура БД и репозиториев - ОСНОВНОЙ REFERENCE"
-alwaysApply: true
+alwaysApply: false
 ---
 # Архитектура БД и репозиториев
 

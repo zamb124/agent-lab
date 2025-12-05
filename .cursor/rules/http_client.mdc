@@ -1,5 +1,6 @@
 ---
-alwaysApply: true
+description: "Правила работы с HTTP клиентами"
+alwaysApply: false
 ---
 
 # Правила работы с HTTP клиентами

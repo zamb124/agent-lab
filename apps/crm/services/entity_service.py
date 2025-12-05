@@ -91,13 +91,17 @@ class EntityService:
         
         text_for_embedding = self._build_embedding_text(data)
         
+        status = data.status.value if hasattr(data.status, 'value') else str(data.status)
+        
         metadata = {
-            "document_id": entity_id,  # Для ChromaDB поиска
+            "document_id": entity_id,
             "entity_id": entity_id,
             "company_id": company_id,
             "type": data.type,
             "name": data.name,
             "description": data.description or "",
+            "status": status,
+            "source_note_id": data.source_note_id or "",
             **{f"attr_{k}": str(v) for k, v in data.attributes.items()}
         }
         
@@ -108,7 +112,7 @@ class EntityService:
             metadata=metadata
         )
         
-        logger.info(f"Создана сущность: {entity_id} ({data.type}: {data.name})")
+        logger.info(f"Создана сущность: {entity_id} ({data.type}: {data.name}) [status={status}]")
         
         return EntityResponse(
             entity_id=entity_id,
@@ -117,6 +121,8 @@ class EntityService:
             name=data.name,
             description=data.description,
             attributes=data.attributes,
+            status=status,
+            source_note_id=data.source_note_id,
         )
     
     def _build_embedding_text(self, data: EntityCreate) -> str:
@@ -159,6 +165,8 @@ class EntityService:
             name=metadata.get("name", ""),
             description=metadata.get("description"),
             attributes=attributes,
+            status=metadata.get("status", "pending"),
+            source_note_id=metadata.get("source_note_id") or None,
         )
     
     async def update_entity(
@@ -215,6 +223,66 @@ class EntityService:
             name=new_name,
             description=new_description,
             attributes=new_attributes,
+        )
+    
+    async def update_entity_status(
+        self,
+        entity_id: str,
+        status: str,
+        company_id: Optional[str] = None
+    ) -> Optional[EntityResponse]:
+        """Обновляет статус сущности"""
+        company_id = company_id or self._get_company_id()
+        namespace = self._get_namespace(company_id)
+        
+        existing = await self.get_entity(entity_id, company_id)
+        if not existing:
+            return None
+        
+        status_value = status.value if hasattr(status, 'value') else str(status)
+        
+        await self._rag.delete_document(namespace, entity_id)
+        
+        updated_data = EntityCreate(
+            type=existing.type,
+            name=existing.name,
+            description=existing.description,
+            attributes=existing.attributes,
+            status=status_value,
+            source_note_id=existing.source_note_id,
+        )
+        
+        text_for_embedding = self._build_embedding_text(updated_data)
+        metadata = {
+            "document_id": entity_id,
+            "entity_id": entity_id,
+            "company_id": company_id,
+            "type": existing.type,
+            "name": existing.name,
+            "description": existing.description or "",
+            "status": status_value,
+            "source_note_id": existing.source_note_id or "",
+            **{f"attr_{k}": str(v) for k, v in existing.attributes.items()}
+        }
+        
+        await self._rag.upload_text(
+            namespace_id=namespace,
+            text=text_for_embedding,
+            document_name=entity_id,
+            metadata=metadata
+        )
+        
+        logger.info(f"Статус сущности {entity_id} изменен на {status_value}")
+        
+        return EntityResponse(
+            entity_id=entity_id,
+            company_id=company_id,
+            type=existing.type,
+            name=existing.name,
+            description=existing.description,
+            attributes=existing.attributes,
+            status=status_value,
+            source_note_id=existing.source_note_id,
         )
     
     async def delete_entity(

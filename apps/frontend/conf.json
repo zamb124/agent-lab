@@ -3,7 +3,8 @@
     "name": "frontend",
     "port": 8002,
     "env": "local",
-    "agents_service_url": "http://localhost:8001"
+    "agents_service_url": "http://localhost:8001",
+    "crm_service_url": "http://localhost:8003"
   },
   "database": {
     "url": "postgresql+asyncpg://agent_user:agent_password@localhost:5432/shared_db",

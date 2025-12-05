@@ -1,6 +1,6 @@
 ---
 description: "Правила обработки исключений"
-alwaysApply: true
+alwaysApply: false
 ---
 # Правила обработки исключений
 

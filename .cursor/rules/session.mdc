@@ -1,6 +1,6 @@
 ---
 description: "Правила работы с сессиями и session_id"
-alwaysApply: true
+alwaysApply: false
 ---
 # Правила работы с сессиями (session_id)
 

@@ -1,0 +1,90 @@
+<!-- Notes List Partial -->
+<div class="crm-notes">
+    <!-- Note Editor -->
+    <div class="crm-note-editor" style="margin-bottom: 24px;">
+        <form hx-post="/crm/partials/notes" 
+              hx-target="#crm-content"
+              hx-swap="innerHTML">
+            <input type="hidden" name="note_type" value="freeform">
+            <input type="hidden" name="note_date" value="{{ today }}">
+            <div class="crm-note-header">
+                <input type="text" 
+                       name="title"
+                       class="crm-note-title-input" 
+                       placeholder="{{ t('crm.notes.placeholder') }}"
+                       style="flex: 1;">
+                
+                <div class="crm-note-actions">
+                    <button type="button" class="crm-btn crm-btn-icon crm-btn-ghost">
+                        <i class="ti ti-microphone"></i>
+                    </button>
+                    <button type="button" class="crm-btn crm-btn-icon crm-btn-ghost">
+                        <i class="ti ti-paperclip"></i>
+                    </button>
+                    <button type="submit" class="crm-btn crm-btn-analyze">
+                        <span>{{ t('crm.actions.analyze') }} & {{ t('crm.actions.save') }}</span>
+                        <i class="ti ti-send"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="crm-note-body">
+                <textarea name="content" 
+                          class="crm-note-textarea" 
+                          placeholder="{{ t('crm.notes.placeholder') }}"></textarea>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Notes List -->
+    {% if notes and notes | length > 0 %}
+    <div class="crm-notes-list" style="display: flex; flex-direction: column; gap: 12px;">
+        {% for note in notes %}
+        <div class="crm-card note-card"
+             hx-get="/crm/partials/note-modal?note_id={{ note.note_id or note.id }}"
+             hx-target="#modal-container"
+             hx-swap="innerHTML">
+            <div class="crm-card-body" style="padding: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                    <h4 style="font-size: 15px; font-weight: 600; color: var(--crm-text-primary);">
+                        {{ note.title | default('Без названия') }}
+                    </h4>
+                    <span style="font-size: 12px; color: var(--crm-text-muted);">
+                        {{ note.created_at | default('') }}
+                    </span>
+                </div>
+                
+                <p style="font-size: 14px; color: var(--crm-text-secondary); line-height: 1.5; margin-bottom: 12px;">
+                    {{ note.content | truncate(150) | default('') }}
+                </p>
+                
+                {% if note.entities and note.entities | length > 0 %}
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    {% for entity in note.entities[:5] %}
+                    <span class="crm-entity-badge {{ entity.entity_type | default('person') }}">
+                        <span class="crm-entity-dot {{ entity.entity_type | default('person') }}"></span>
+                        {{ entity.name }}
+                    </span>
+                    {% endfor %}
+                    {% if note.entities | length > 5 %}
+                    <span class="crm-entity-badge" style="background: var(--crm-bg-secondary); color: var(--crm-text-muted);">
+                        +{{ note.entities | length - 5 }}
+                    </span>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="crm-empty-state">
+        <div class="crm-empty-icon">
+            <i class="ti ti-notebook"></i>
+        </div>
+        <h3 class="crm-empty-title">{{ t('crm.notes.empty') }}</h3>
+        <p class="crm-empty-description">{{ t('crm.notes.empty_description') }}</p>
+    </div>
+    {% endif %}
+</div>
+

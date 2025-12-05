@@ -1,0 +1,82 @@
+<!-- Note Create/Edit Modal -->
+<div class="crm-modal-overlay" onclick="if(event.target === this) CRM.closeModal()">
+    <div class="crm-modal crm-modal-lg">
+        <div class="crm-modal-header">
+            <div class="crm-modal-title-group">
+                <h2 class="crm-modal-title">
+                    {% if note %}{{ t('crm.notes.edit') }}{% else %}{{ t('crm.notes.new') }}{% endif %}
+                </h2>
+            </div>
+            <button class="crm-modal-close" onclick="CRM.closeModal()">
+                <i class="ti ti-x"></i>
+            </button>
+        </div>
+        
+        <form hx-post="/crm/partials/notes{% if note %}?note_id={{ note.note_id or note.id }}{% endif %}"
+              hx-target="#crm-content"
+              hx-swap="innerHTML"
+              hx-on::after-request="CRM.closeModal()">
+            <input type="hidden" name="note_date" value="{{ note.note_date if note and note.note_date else today }}">
+            <div class="crm-modal-body">
+                <!-- Title -->
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('common.title') }}</label>
+                    <input type="text" 
+                           name="title" 
+                           class="crm-input"
+                           placeholder="{{ t('crm.notes.placeholder') }}"
+                           value="{{ note.title if note else '' }}"
+                           required>
+                </div>
+                
+                <!-- Type -->
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('crm.entities.type') }}</label>
+                    <select name="note_type" class="crm-input">
+                        <option value="freeform" {% if note and note.note_type == 'freeform' %}selected{% endif %}>
+                            {{ t('crm.notes.type.freeform') }}
+                        </option>
+                        <option value="meeting_minutes" {% if note and note.note_type == 'meeting_minutes' %}selected{% endif %}>
+                            {{ t('crm.notes.type.meeting_minutes') }}
+                        </option>
+                        <option value="call_log" {% if note and note.note_type == 'call_log' %}selected{% endif %}>
+                            {{ t('crm.notes.type.call_log') }}
+                        </option>
+                    </select>
+                </div>
+                
+                <!-- Content -->
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('common.content') }}</label>
+                    <textarea name="content" 
+                              class="crm-input crm-textarea crm-note-textarea"
+                              placeholder="{{ t('crm.notes.placeholder') }}"
+                              style="min-height: 250px;">{{ note.content if note else '' }}</textarea>
+                </div>
+                
+                <!-- AI Hint -->
+                <div class="crm-ai-suggestions" style="margin-top: 16px;">
+                    <div class="crm-ai-header">
+                        <div class="crm-ai-icon">
+                            <i class="ti ti-sparkles"></i>
+                        </div>
+                        <div>
+                            <div class="crm-ai-title">{{ t('crm.notes.analyze_hint') }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="crm-modal-footer">
+                <button type="button" class="crm-btn crm-btn-secondary" onclick="CRM.closeModal()">
+                    {{ t('crm.actions.cancel') }}
+                </button>
+                <button type="submit" class="crm-btn crm-btn-analyze">
+                    <i class="ti ti-sparkles"></i>
+                    {{ t('crm.actions.analyze') }} & {{ t('crm.actions.save') }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+

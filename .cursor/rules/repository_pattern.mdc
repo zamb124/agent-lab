@@ -1,6 +1,6 @@
 ---
 description: "Repository Pattern - чистая архитектура"
-alwaysApply: true
+alwaysApply: false
 ---
 # Repository Pattern - Чистая архитектура
 

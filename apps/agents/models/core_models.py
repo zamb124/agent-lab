@@ -1350,8 +1350,11 @@ class FlowConfig(BuilderEntity):
         if not isinstance(flow_config_orig, cls):
             raise ValueError(f"Объект {flow_id} не является FlowConfig")
         
+        # Определяем реальный flow_id для сохранения
+        resolved_flow_id = flow_config_orig.flow_id if flow_config_orig.flow_id else flow_id
+        
         flow_repo = get_agents_container().flow_repository
-        existing_flow = await flow_repo.get(flow_id)
+        existing_flow = await flow_repo.get(resolved_flow_id)
         
         flow_config = cls.from_flow_config_object(flow_config_orig, flow_id)
         
@@ -1474,22 +1477,24 @@ class FlowConfig(BuilderEntity):
         return f"{company_slug}-{flow_slug}"
     
     @classmethod
-    def from_flow_config_object(cls, obj: "FlowConfig", flow_id: str) -> "FlowConfig":
+    def from_flow_config_object(cls, obj: "FlowConfig", full_path: str) -> "FlowConfig":
         """
         Создает новый FlowConfig из существующего объекта с установкой flow_id.
         
-        Используется в Migrator для преобразования FlowConfig из кода
-        с установкой правильного flow_id (полный путь к переменной).
+        Используется в Migrator для преобразования FlowConfig из кода.
         
         Args:
             obj: Исходный FlowConfig объект из кода
-            flow_id: Полный путь к переменной (например, "apps.agents.flows.weather_flow.weather_flow_config")
+            full_path: Полный путь к переменной (например, "apps.agents.flows.weather_flow.weather_flow_config")
             
         Returns:
             Новый FlowConfig с установленным flow_id
         """
+        # Если flow_id явно указан в объекте - используем его, иначе полный путь
+        resolved_flow_id = obj.flow_id if obj.flow_id else full_path
+        
         return cls(
-            flow_id=flow_id,
+            flow_id=resolved_flow_id,
             name=obj.name,
             description=obj.description,
             entry_point_agent=obj.entry_point_agent,

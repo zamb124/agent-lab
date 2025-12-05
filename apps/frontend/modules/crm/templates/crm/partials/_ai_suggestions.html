@@ -1,0 +1,116 @@
+<!-- AI Analysis Results - Entities already created with pending status -->
+<div class="crm-modal-overlay" onclick="if(event.target === this) CRM.closeModal()">
+    <div class="crm-modal crm-modal-lg">
+        <div class="crm-modal-header">
+            <div class="crm-ai-icon" style="margin-right: 12px;">
+                <i class="ti ti-sparkles"></i>
+            </div>
+            <div class="crm-modal-title-group">
+                <h2 class="crm-modal-title">{{ t('crm.notes.analysis.title') }}</h2>
+                <p style="color: var(--crm-text-muted); font-size: 14px; margin: 4px 0 0 0;">
+                    {{ t('crm.notes.analysis.review_description') }}
+                </p>
+            </div>
+            <button class="crm-modal-close" 
+                    hx-post="/crm/partials/notes/close-modal"
+                    hx-target="#crm-content"
+                    hx-swap="innerHTML"
+                    onclick="CRM.closeModal()">
+                <i class="ti ti-x"></i>
+            </button>
+        </div>
+        
+        <div class="crm-modal-body crm-scrollbar" style="max-height: 60vh;">
+            <!-- Summary -->
+            {% if summary %}
+            <div class="crm-ai-summary" style="margin-bottom: 24px;">
+                <div class="crm-section-title">
+                    <i class="ti ti-file-text"></i>
+                    {{ t('crm.notes.analysis.summary') }}
+                </div>
+                <div class="crm-summary-content">
+                    {{ summary }}
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Created Entities (with pending status) -->
+            {% if entities and entities | length > 0 %}
+            <div class="crm-ai-section" style="margin-bottom: 24px;">
+                <div class="crm-section-header">
+                    <div class="crm-section-title">
+                        <i class="ti ti-users"></i>
+                        {{ t('crm.notes.analysis.entities_created') }}
+                    </div>
+                    <span class="crm-badge crm-badge-primary">{{ entities | length }}</span>
+                </div>
+                
+                <div class="crm-entities-list" id="entities-list">
+                {% for entity in entities %}
+                    {% include "crm/partials/_entity_badge.html" %}
+                {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Created Tasks -->
+            {% if tasks and tasks | length > 0 %}
+            <div class="crm-ai-section">
+                <div class="crm-section-header">
+                    <div class="crm-section-title">
+                        <i class="ti ti-checklist"></i>
+                        {{ t('crm.notes.analysis.tasks_created') }}
+                    </div>
+                    <span class="crm-badge crm-badge-primary">{{ tasks | length }}</span>
+                </div>
+                
+                <div class="crm-tasks-list">
+                {% for task in tasks %}
+                <div class="crm-task-item">
+                    <div class="crm-task-checkbox">
+                        <i class="ti ti-checkbox"></i>
+                    </div>
+                    <div class="crm-task-content">
+                        <div class="crm-task-title">{{ task.title }}</div>
+                        <div class="crm-task-meta">
+                            {% if task.priority %}
+                            <span class="crm-priority-badge {{ task.priority }}">{{ task.priority | upper }}</span>
+                            {% endif %}
+                            {% if task.due_date %}
+                            <span class="crm-task-due">
+                                <i class="ti ti-calendar"></i>
+                                {{ task.due_date }}
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Empty state -->
+            {% if not summary and (not entities or entities | length == 0) and (not tasks or tasks | length == 0) %}
+            <div class="crm-empty-state">
+                <div class="crm-empty-icon">
+                    <i class="ti ti-sparkles-off"></i>
+                </div>
+                <h3 class="crm-empty-title">{{ t('crm.notes.analysis.no_results') }}</h3>
+                <p class="crm-empty-description">{{ t('crm.notes.analysis.no_results_desc') }}</p>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="crm-modal-footer">
+            <button type="button" 
+                    class="crm-btn crm-btn-secondary"
+                    hx-post="/crm/partials/notes/close-modal"
+                    hx-target="#crm-content"
+                    hx-swap="innerHTML"
+                    onclick="CRM.closeModal()">
+                {{ t('common.close') }}
+            </button>
+        </div>
+    </div>
+</div>

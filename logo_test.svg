@@ -1,0 +1,65 @@
+<svg width="200" height="220" viewBox="0 0 200 220" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Градиент для левого лепестка (фиолетовый -> синий) -->
+    <linearGradient id="petal1" x1="50%" y1="100%" x2="50%" y2="0%">
+      <stop offset="0%" stop-color="#7B5BA6"/>
+      <stop offset="100%" stop-color="#5B7BB5"/>
+    </linearGradient>
+    
+    <!-- Градиент для правого верхнего лепестка (синий -> бирюзовый) -->
+    <linearGradient id="petal2" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4A8CB8"/>
+      <stop offset="100%" stop-color="#4CC4C0"/>
+    </linearGradient>
+    
+    <!-- Градиент для нижнего лепестка (бирюзовый -> зелёный) -->
+    <linearGradient id="petal3" x1="0%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#4ABCB5"/>
+      <stop offset="100%" stop-color="#5CC9A0"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Лепесток 1: левый вертикальный (фиолетовый-синий) - ЗАДНИЙ -->
+  <ellipse cx="70" cy="100" rx="18" ry="52" 
+           stroke="url(#petal1)" 
+           stroke-width="12" 
+           fill="none"
+           transform="rotate(-25, 70, 100)"/>
+  
+  <!-- Лепесток 2: правый верхний (синий-бирюзовый) -->
+  <ellipse cx="115" cy="75" rx="18" ry="55" 
+           stroke="url(#petal2)" 
+           stroke-width="12" 
+           fill="none"
+           transform="rotate(55, 115, 75)"/>
+  
+  <!-- Часть левого лепестка поверх правого верхнего (переплетение) -->
+  <path d="M 58 65 Q 65 80, 72 95" 
+        stroke="url(#petal1)" 
+        stroke-width="12" 
+        fill="none"
+        stroke-linecap="round"/>
+  
+  <!-- Лепесток 3: нижний правый (бирюзовый-зелёный) -->
+  <ellipse cx="105" cy="145" rx="18" ry="50" 
+           stroke="url(#petal3)" 
+           stroke-width="12" 
+           fill="none"
+           transform="rotate(-60, 105, 145)"/>
+  
+  <!-- Часть правого верхнего лепестка поверх нижнего (переплетение) -->
+  <path d="M 95 95 Q 105 110, 115 125" 
+        stroke="url(#petal2)" 
+        stroke-width="12" 
+        fill="none"
+        stroke-linecap="round"/>
+  
+  <!-- Фиолетовый круг слева -->
+  <circle cx="30" cy="115" r="12" fill="#7B5BA6"/>
+  
+  <!-- Большой бирюзовый круг справа вверху -->
+  <circle cx="158" cy="28" r="22" fill="#4AA8BA"/>
+  
+  <!-- Зелёный круг внизу -->
+  <circle cx="118" cy="198" r="14" fill="#7DC462"/>
+</svg>

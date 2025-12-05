@@ -52,6 +52,7 @@ class FlowMessageRequest(BaseModel):
     session_id: Optional[str] = None  # Если не указан, создается новый
     files: List[MessageFile] = Field(default_factory=list)
     history: List[HistoryMessage] = Field(default_factory=list)  # Опциональная история
+    wait_timeout: Optional[float] = Field(default=None, description="Если указан - ждём результат синхронно (секунды)")
 
 
 class FlowMessageResponse(BaseModel):
@@ -61,6 +62,7 @@ class FlowMessageResponse(BaseModel):
     session_id: str
     status: str = "pending"
     message: str = "Сообщение принято в обработку"
+    result: Optional[Dict[str, Any]] = None  # Результат если wait_timeout указан
 
 
 class TaskResponse(BaseModel):
@@ -133,12 +135,29 @@ async def send_message_to_flow(flow_id: str, request: FlowMessageRequest, flow_r
         raise HTTPException(status_code=400, detail="Не удалось обработать сообщение")
 
     # Создаем задачу через TaskIQ
-    task_id = await api_interface.create_task(message, flow_id)
+    # Если wait_timeout указан - ждём результат синхронно
+    task_result = await api_interface.create_task(
+        message, 
+        flow_id, 
+        wait_timeout=request.wait_timeout
+    )
 
-    logger.info(f"Создана API задача {task_id} для флоу {flow_id}")
+    # Синхронный режим - результат уже получен
+    if request.wait_timeout is not None:
+        logger.info(f"Синхронный запрос к флоу {flow_id} завершён")
+        return FlowMessageResponse(
+            task_id="sync",
+            session_id=message.session_id,
+            status="completed",
+            message="Выполнено",
+            result=task_result if isinstance(task_result, dict) else {"response": str(task_result)},
+        )
+
+    # Асинхронный режим - возвращаем task_id для polling
+    logger.info(f"Создана API задача {task_result} для флоу {flow_id}")
 
     return FlowMessageResponse(
-        task_id=task_id,
+        task_id=task_result,
         session_id=message.session_id,
         status="pending",
         message="Сообщение принято в обработку",

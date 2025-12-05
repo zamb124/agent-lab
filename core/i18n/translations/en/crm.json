@@ -1,0 +1,158 @@
+{
+  "title": "CRM",
+  "nav": {
+    "dashboard": "Dashboard",
+    "daily_notes": "Daily Notes",
+    "note_database": "Note Database",
+    "notes": "Notes",
+    "entities": "Entities",
+    "tasks": "Tasks",
+    "graph": "Knowledge Graph",
+    "settings": "Settings"
+  },
+  "pages": {
+    "dashboard": "Dashboard",
+    "notes": "Notes",
+    "note_database": "Note Database",
+    "entities": "Entities",
+    "tasks": "Tasks",
+    "graph": "Knowledge Graph",
+    "entity_detail": "Entity Details",
+    "settings": "Settings"
+  },
+  "entity_types": {
+    "title": "Entity Types",
+    "people": "People",
+    "companies": "Companies",
+    "projects": "Projects"
+  },
+  "theme": {
+    "light": "Light theme",
+    "dark": "Dark theme",
+    "toggle": "Toggle theme"
+  },
+  "back_to_dashboard": "Back to Dashboard",
+  "search": {
+    "placeholder": "Search..."
+  },
+  "actions": {
+    "new_note": "New Note",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "analyze": "Analyze",
+    "link": "Link",
+    "unlink": "Unlink"
+  },
+  "notes": {
+    "title": "Notes",
+    "new": "New Note",
+    "edit": "Edit Note",
+    "placeholder": "Start writing a note...",
+    "type": {
+      "freeform": "Freeform",
+      "meeting_minutes": "Meeting Minutes",
+      "call_log": "Call Log"
+    },
+    "empty": "No notes",
+    "empty_description": "Create your first note by clicking the button above",
+    "analyze_hint": "AI will analyze the note and extract entities",
+    "analysis": {
+      "title": "Analysis Results",
+      "review_description": "Entities were created with 'pending' status. You can approve or reject them now or later.",
+      "summary": "Summary",
+      "entities_found": "Found Entities",
+      "entities_created": "Created Entities",
+      "tasks_found": "Found Tasks",
+      "tasks_created": "Created Tasks",
+      "accept_all": "Accept All",
+      "accept": "Accept",
+      "reject": "Reject",
+      "no_results": "Nothing found",
+      "no_results_desc": "AI could not extract entities or tasks from this note"
+    }
+  },
+  "entities": {
+    "title": "Entities",
+    "new": "New Entity",
+    "edit": "Edit Entity",
+    "empty": "No entities",
+    "empty_description": "Entities are created from notes",
+    "search_placeholder": "Semantic entity search...",
+    "name": "Name",
+    "type": "Type",
+    "attributes": "Attributes",
+    "relationships": "Relationships",
+    "notes": "Notes",
+    "status": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected"
+    },
+    "duplicates": {
+      "title": "Possible Duplicates",
+      "merge": "Merge",
+      "ignore": "Ignore"
+    }
+  },
+  "tasks": {
+    "title": "Tasks",
+    "new": "New Task",
+    "edit": "Edit Task",
+    "empty": "No tasks",
+    "empty_description": "Tasks are created from notes or manually",
+    "overdue": "Overdue",
+    "today": "Today",
+    "upcoming": "Upcoming",
+    "completed": "Completed",
+    "priority": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "status": {
+      "pending": "Pending",
+      "in_progress": "In Progress",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "complete": "Complete",
+    "reopen": "Reopen"
+  },
+  "graph": {
+    "title": "Knowledge Graph",
+    "zoom_in": "Zoom In",
+    "zoom_out": "Zoom Out",
+    "fit": "Fit",
+    "reset": "Reset",
+    "filter": "Filter",
+    "legend": "Legend",
+    "empty": "Graph is empty",
+    "empty_description": "Add entities and relationships",
+    "node_types": "Node Types",
+    "relationship_types": "Relationship Types"
+  },
+  "relationships": {
+    "works_for": "Works for",
+    "connected_to": "Connected to",
+    "owns": "Owns",
+    "manages": "Manages",
+    "member_of": "Member of"
+  },
+  "dashboard": {
+    "welcome": "Welcome to CRM",
+    "welcome_description": "Manage contacts, notes, and tasks",
+    "quick_actions": "Quick Actions",
+    "recent_notes": "Recent Notes",
+    "upcoming_tasks": "Upcoming Tasks",
+    "stats": {
+      "entities": "Entities",
+      "notes": "Notes",
+      "tasks": "Tasks",
+      "relationships": "Relationships"
+    }
+  }
+}
+

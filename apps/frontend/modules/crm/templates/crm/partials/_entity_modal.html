@@ -1,0 +1,184 @@
+<!-- Entity Detail Modal -->
+<div class="crm-modal-overlay" onclick="if(event.target === this) CRM.closeModal()">
+    <div class="crm-modal crm-modal-lg">
+        {% if entity %}
+        <div class="crm-modal-header">
+            <div class="crm-modal-avatar {{ entity.entity_type | default('person') }}">
+                {{ entity.name[:2] | upper }}
+            </div>
+            <div class="crm-modal-title-group">
+                <h2 class="crm-modal-title">{{ entity.name }}</h2>
+                <span class="crm-modal-subtitle">
+                    {{ entity.attributes.role | default('') }}
+                </span>
+            </div>
+            <button class="crm-btn crm-btn-secondary crm-btn-sm" style="margin-left: auto; margin-right: 12px;">
+                <i class="ti ti-pencil"></i>
+                {{ t('crm.actions.save') }}
+            </button>
+            <button class="crm-modal-close" onclick="CRM.closeModal()">
+                <i class="ti ti-x"></i>
+            </button>
+        </div>
+        
+        <div class="crm-modal-body" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+            <!-- Left Column -->
+            <div>
+                <!-- Contact Information -->
+                <div class="crm-modal-section">
+                    <div class="crm-modal-section-title">
+                        <i class="ti ti-address-book"></i>
+                        Contact Information
+                    </div>
+                    
+                    <div class="crm-form-group">
+                        <div class="crm-form-icon-input">
+                            <i class="ti ti-mail"></i>
+                            <input type="email" class="crm-input" placeholder="Email"
+                                   value="{{ entity.attributes.email | default('') }}">
+                        </div>
+                    </div>
+                    
+                    <div class="crm-form-group">
+                        <div class="crm-form-icon-input">
+                            <i class="ti ti-phone"></i>
+                            <input type="tel" class="crm-input" placeholder="Phone"
+                                   value="{{ entity.attributes.phone | default('') }}">
+                        </div>
+                    </div>
+                    
+                    <div class="crm-form-group">
+                        <div class="crm-form-icon-input">
+                            <i class="ti ti-map-pin"></i>
+                            <input type="text" class="crm-input" placeholder="Location"
+                                   value="{{ entity.attributes.location | default('') }}">
+                        </div>
+                    </div>
+                    
+                    <div class="crm-form-group">
+                        <div class="crm-form-icon-input">
+                            <i class="ti ti-brand-linkedin"></i>
+                            <input type="url" class="crm-input" placeholder="LinkedIn URL"
+                                   value="{{ entity.attributes.linkedin | default('') }}">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- CRM Settings -->
+                <div class="crm-modal-section">
+                    <div class="crm-modal-section-title">
+                        <i class="ti ti-settings"></i>
+                        CRM Settings
+                    </div>
+                    
+                    <div class="crm-form-row">
+                        <div class="crm-form-group">
+                            <label class="crm-form-label">VIP Score (1-10)</label>
+                            <input type="number" class="crm-input" min="1" max="10"
+                                   value="{{ entity.attributes.vip_score | default(5) }}">
+                        </div>
+                        <div class="crm-form-group">
+                            <label class="crm-form-label">Reconnect (Weeks)</label>
+                            <input type="number" class="crm-input" min="1"
+                                   value="{{ entity.attributes.reconnect_weeks | default(4) }}">
+                        </div>
+                    </div>
+                </div>
+                
+                <button class="crm-btn crm-btn-ghost" style="color: var(--crm-danger);">
+                    <i class="ti ti-trash"></i>
+                    Delete {{ entity.entity_type | capitalize }}
+                </button>
+            </div>
+            
+            <!-- Right Column -->
+            <div>
+                <!-- Name Editing -->
+                <div class="crm-modal-section">
+                    <div class="crm-modal-section-title">
+                        <i class="ti ti-edit"></i>
+                        Name Editing
+                    </div>
+                    
+                    <div class="crm-form-row">
+                        <div class="crm-form-group">
+                            <label class="crm-form-label">First Name</label>
+                            <input type="text" class="crm-input"
+                                   value="{{ entity.name.split()[0] if entity.name else '' }}">
+                        </div>
+                        <div class="crm-form-group">
+                            <label class="crm-form-label">Last Name</label>
+                            <input type="text" class="crm-input"
+                                   value="{{ entity.name.split()[1] if entity.name and ' ' in entity.name else '' }}">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Career Journey -->
+                <div class="crm-modal-section">
+                    <div class="crm-modal-section-title">
+                        <i class="ti ti-briefcase"></i>
+                        Career Journey
+                    </div>
+                    
+                    <div class="crm-form-group">
+                        <div class="crm-form-icon-input">
+                            <i class="ti ti-building"></i>
+                            <input type="text" class="crm-input" placeholder="Current Role"
+                                   value="{{ entity.attributes.role | default('') }}">
+                        </div>
+                    </div>
+                    
+                    <div class="crm-form-group">
+                        <select class="crm-input">
+                            <option>No Company Linked</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Network Connections -->
+                <div class="crm-modal-section">
+                    <div class="crm-modal-section-title">
+                        <i class="ti ti-users"></i>
+                        Network Connections
+                    </div>
+                    
+                    {% if relationships and relationships | length > 0 %}
+                    <div class="crm-connections-grid">
+                        {% for rel in relationships[:4] %}
+                        <div class="crm-connection-item"
+                             hx-get="/crm/partials/entity-modal/{{ rel.target_entity_id if rel.source_entity_id == entity.id else rel.source_entity_id }}"
+                             hx-target="#modal-container">
+                            <div class="crm-connection-avatar">
+                                {{ (rel.target_name if rel.source_entity_id == entity.id else rel.source_name)[:2] | upper }}
+                            </div>
+                            <div class="crm-connection-info">
+                                <div class="crm-connection-name">
+                                    {{ rel.target_name if rel.source_entity_id == entity.id else rel.source_name }}
+                                </div>
+                                <div class="crm-connection-role">
+                                    {{ rel.relationship_type | replace('_', ' ') | capitalize }}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p style="color: var(--crm-text-muted); font-size: 13px;">No connections yet</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="crm-modal-body">
+            <div class="crm-empty-state">
+                <div class="crm-empty-icon">
+                    <i class="ti ti-user-off"></i>
+                </div>
+                <h3 class="crm-empty-title">Entity not found</h3>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+

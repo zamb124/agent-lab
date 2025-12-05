@@ -1,5 +1,6 @@
 ---
-alwaysApply: true
+description: "Контейнер зависимостей и Dependency Injection"
+alwaysApply: false
 ---
 # Контейнер зависимостей (`core/container/base.py` и `apps/agents/container.py`)
 

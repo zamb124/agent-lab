@@ -1,0 +1,106 @@
+<!-- Entities List Partial -->
+<div class="crm-entities">
+    <!-- Filters -->
+    <div style="display: flex; gap: 12px; margin-bottom: 24px;">
+        <a href="/crm/entities" 
+           class="crm-btn {% if not current_type %}crm-btn-primary{% else %}crm-btn-secondary{% endif %}"
+           hx-get="/crm/partials/entities"
+           hx-target="#crm-content"
+           hx-push-url="/crm/entities">
+            {{ t('common.all') }}
+        </a>
+        <a href="/crm/entities?type=person" 
+           class="crm-btn {% if current_type == 'person' %}crm-btn-primary{% else %}crm-btn-secondary{% endif %}"
+           hx-get="/crm/partials/entities?type=person"
+           hx-target="#crm-content"
+           hx-push-url="/crm/entities?type=person">
+            <span class="crm-entity-dot person" style="margin-right: 6px;"></span>
+            {{ t('crm.entity_types.people') }}
+        </a>
+        <a href="/crm/entities?type=company" 
+           class="crm-btn {% if current_type == 'company' %}crm-btn-primary{% else %}crm-btn-secondary{% endif %}"
+           hx-get="/crm/partials/entities?type=company"
+           hx-target="#crm-content"
+           hx-push-url="/crm/entities?type=company">
+            <span class="crm-entity-dot company" style="margin-right: 6px;"></span>
+            {{ t('crm.entity_types.companies') }}
+        </a>
+        <a href="/crm/entities?type=project" 
+           class="crm-btn {% if current_type == 'project' %}crm-btn-primary{% else %}crm-btn-secondary{% endif %}"
+           hx-get="/crm/partials/entities?type=project"
+           hx-target="#crm-content"
+           hx-push-url="/crm/entities?type=project">
+            <span class="crm-entity-dot project" style="margin-right: 6px;"></span>
+            {{ t('crm.entity_types.projects') }}
+        </a>
+    </div>
+    
+    <!-- Search -->
+    <div class="crm-search" style="margin-bottom: 24px;">
+        <i class="ti ti-search crm-search-icon"></i>
+        <input type="text" 
+               class="crm-input crm-search-input" 
+               placeholder="{{ t('crm.entities.search_placeholder') }}"
+               name="q"
+               hx-post="/frontend/api/crm/entities/search"
+               hx-trigger="keyup changed delay:300ms"
+               hx-target="#entities-list"
+               hx-swap="innerHTML">
+    </div>
+    
+    <!-- Table -->
+    {% if entities and entities | length > 0 %}
+    <div class="crm-card">
+        <table class="crm-table" id="entities-list">
+            <thead>
+                <tr>
+                    <th>{{ t('crm.entities.name') }}</th>
+                    <th>{{ t('crm.entities.type') }}</th>
+                    <th>{{ t('common.details') }}</th>
+                    <th>{{ t('common.last_updated') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entity in entities %}
+                <tr hx-get="/crm/partials/entity-modal/{{ entity.id }}"
+                    hx-target="#modal-container"
+                    hx-swap="innerHTML">
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div class="crm-connection-avatar" style="background: var(--crm-entity-{{ entity.entity_type | default('person') }});">
+                                {{ entity.name[:2] | upper }}
+                            </div>
+                            <span style="font-weight: 500;">{{ entity.name }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="crm-entity-badge {{ entity.entity_type | default('person') }}">
+                            {{ entity.entity_type | default('person') | capitalize }}
+                        </span>
+                    </td>
+                    <td style="color: var(--crm-text-secondary);">
+                        {% if entity.attributes %}
+                            {% set attrs = entity.attributes %}
+                            {% if attrs.role %}{{ attrs.role }}{% endif %}
+                            {% if attrs.email %}<br>{{ attrs.email }}{% endif %}
+                        {% endif %}
+                    </td>
+                    <td style="color: var(--crm-text-muted);">
+                        {{ entity.updated_at | default('') }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="crm-empty-state">
+        <div class="crm-empty-icon">
+            <i class="ti ti-users"></i>
+        </div>
+        <h3 class="crm-empty-title">{{ t('crm.entities.empty') }}</h3>
+        <p class="crm-empty-description">{{ t('crm.entities.empty_description') }}</p>
+    </div>
+    {% endif %}
+</div>
+

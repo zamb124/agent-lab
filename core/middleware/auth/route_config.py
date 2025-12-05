@@ -65,9 +65,10 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/agents/api/v1/files/download/*", context_type="api", auth_required=False),
     RouteRule("/agents/api/v1/*", context_type="api", auth_required=True),
     
-    # CRM API
+    # CRM UI - отдельный интерфейс, требует авторизации
     RouteRule("/crm/api/v1/*", context_type="api", auth_required=True),
-    RouteRule("/crm/health", auth_required=False, context_type="anonymous"),
+    RouteRule("/crm/*", context_type="frontend", auth_required=True),
+    RouteRule("/crm", context_type="frontend", auth_required=True),
     
     # AmoCRM integration
     RouteRule("/api/amocrm*", context_type="amocrm", auth_required=False),

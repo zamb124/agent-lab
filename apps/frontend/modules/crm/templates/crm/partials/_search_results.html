@@ -1,0 +1,40 @@
+<!-- Search Results Dropdown -->
+{% if results and results | length > 0 %}
+<div class="crm-card" style="position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; z-index: 50; max-height: 400px; overflow-y: auto;">
+    {% for entity in results[:10] %}
+    <div class="crm-connection-item" style="border-bottom: 1px solid var(--crm-border-light);"
+         hx-get="/crm/partials/entity-modal/{{ entity.id }}"
+         hx-target="#modal-container"
+         hx-swap="innerHTML"
+         onclick="document.querySelector('#search-results').innerHTML = ''">
+        <div class="crm-connection-avatar" style="background: var(--crm-entity-{{ entity.entity_type | default('person') }});">
+            {{ entity.name[:2] | upper }}
+        </div>
+        <div class="crm-connection-info">
+            <div class="crm-connection-name">{{ entity.name }}</div>
+            <div class="crm-connection-role">
+                <span class="crm-entity-badge {{ entity.entity_type | default('person') }}" style="font-size: 10px; padding: 2px 6px;">
+                    {{ entity.entity_type | default('person') | capitalize }}
+                </span>
+                {% if entity.attributes and entity.attributes.role %}
+                <span style="margin-left: 8px;">{{ entity.attributes.role }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    
+    {% if results | length > 10 %}
+    <div style="padding: 12px; text-align: center; color: var(--crm-text-muted); font-size: 13px;">
+        +{{ results | length - 10 }} more results
+    </div>
+    {% endif %}
+</div>
+{% elif query %}
+<div class="crm-card" style="position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; z-index: 50;">
+    <div style="padding: 20px; text-align: center; color: var(--crm-text-muted);">
+        No results for "{{ query }}"
+    </div>
+</div>
+{% endif %}
+

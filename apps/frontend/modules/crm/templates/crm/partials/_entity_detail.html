@@ -1,0 +1,95 @@
+<!-- Entity Detail Partial (for page view) -->
+{% if entity %}
+<div class="crm-entity-detail">
+    <!-- Header -->
+    <div class="crm-card" style="margin-bottom: 24px;">
+        <div class="crm-card-body" style="padding: 24px;">
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <div class="crm-modal-avatar {{ entity.entity_type | default('person') }}" 
+                     style="width: 72px; height: 72px; font-size: 24px;">
+                    {{ entity.name[:2] | upper }}
+                </div>
+                <div>
+                    <h2 style="font-size: 24px; font-weight: 600; margin-bottom: 4px;">{{ entity.name }}</h2>
+                    <span class="crm-entity-badge {{ entity.entity_type | default('person') }}">
+                        {{ entity.entity_type | default('person') | capitalize }}
+                    </span>
+                </div>
+                <div style="margin-left: auto;">
+                    <button class="crm-btn crm-btn-secondary"
+                            hx-get="/crm/partials/entity-modal/{{ entity.id }}"
+                            hx-target="#modal-container">
+                        <i class="ti ti-edit"></i>
+                        {{ t('crm.actions.edit') }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+        <!-- Attributes -->
+        <div class="crm-card">
+            <div class="crm-card-header">
+                <h3 class="crm-card-title">{{ t('crm.entities.attributes') }}</h3>
+            </div>
+            <div class="crm-card-body">
+                {% if entity.attributes %}
+                <dl style="display: grid; gap: 12px;">
+                    {% for key, value in entity.attributes.items() %}
+                    <div>
+                        <dt style="font-size: 12px; color: var(--crm-text-muted); text-transform: uppercase; margin-bottom: 4px;">
+                            {{ key | replace('_', ' ') | capitalize }}
+                        </dt>
+                        <dd style="font-size: 14px; color: var(--crm-text-primary);">{{ value }}</dd>
+                    </div>
+                    {% endfor %}
+                </dl>
+                {% else %}
+                <p style="color: var(--crm-text-muted);">{{ t('common.no_data') }}</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Relationships -->
+        <div class="crm-card">
+            <div class="crm-card-header">
+                <h3 class="crm-card-title">{{ t('crm.entities.relationships') }}</h3>
+            </div>
+            <div class="crm-card-body">
+                {% if relationships and relationships | length > 0 %}
+                <div class="crm-connections-grid" style="grid-template-columns: 1fr;">
+                    {% for rel in relationships %}
+                    <div class="crm-connection-item"
+                         hx-get="/crm/partials/entity-modal/{{ rel.target_entity_id if rel.source_entity_id == entity.id else rel.source_entity_id }}"
+                         hx-target="#modal-container">
+                        <div class="crm-connection-avatar">
+                            {{ rel.target_name[:2] if rel.source_entity_id == entity.id else rel.source_name[:2] | upper }}
+                        </div>
+                        <div class="crm-connection-info">
+                            <div class="crm-connection-name">
+                                {{ rel.target_name if rel.source_entity_id == entity.id else rel.source_name }}
+                            </div>
+                            <div class="crm-connection-role">
+                                {{ t('crm.relationships.' + rel.relationship_type) | default(rel.relationship_type) }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p style="color: var(--crm-text-muted);">{{ t('common.no_data') }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="crm-empty-state">
+    <div class="crm-empty-icon">
+        <i class="ti ti-user-off"></i>
+    </div>
+    <h3 class="crm-empty-title">{{ t('common.not_found') }}</h3>
+</div>
+{% endif %}
+

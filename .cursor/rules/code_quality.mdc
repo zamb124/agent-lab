@@ -1,6 +1,6 @@
 ---
 description: "Правила качества кода и лаконичности"
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Правила качества кода и лаконичности

@@ -1,0 +1,48 @@
+<!-- Entity Badge with Status -->
+<div class="crm-entity-item {% if entity.status == 'approved' %}approved{% elif entity.status == 'rejected' %}rejected{% else %}pending{% endif %}"
+     id="entity-{{ entity.entity_id or entity.id }}">
+    <div class="crm-entity-info">
+        <span class="crm-entity-badge {{ entity.type }}">
+            <span class="crm-entity-dot {{ entity.type }}"></span>
+            {{ entity.type | capitalize }}
+        </span>
+        <span class="crm-entity-name">{{ entity.name }}</span>
+        {% if entity.attributes and entity.attributes.role %}
+        <span class="crm-entity-role">{{ entity.attributes.role }}</span>
+        {% endif %}
+    </div>
+    
+    <div class="crm-entity-status">
+        {% if entity.status == 'pending' %}
+        <span class="crm-status-badge pending">{{ t('crm.entities.status.pending') }}</span>
+        {% elif entity.status == 'approved' %}
+        <span class="crm-status-badge approved">
+            <i class="ti ti-check"></i>
+            {{ t('crm.entities.status.approved') }}
+        </span>
+        {% elif entity.status == 'rejected' %}
+        <span class="crm-status-badge rejected">
+            <i class="ti ti-x"></i>
+            {{ t('crm.entities.status.rejected') }}
+        </span>
+        {% endif %}
+    </div>
+    
+    {% if entity.status == 'pending' %}
+    <div class="crm-entity-actions">
+        <button class="crm-btn crm-btn-sm crm-btn-success"
+                hx-post="/crm/partials/entities/{{ entity.entity_id or entity.id }}/approve"
+                hx-target="#entity-{{ entity.entity_id or entity.id }}"
+                hx-swap="outerHTML">
+            <i class="ti ti-check"></i>
+        </button>
+        <button class="crm-btn crm-btn-sm crm-btn-danger"
+                hx-post="/crm/partials/entities/{{ entity.entity_id or entity.id }}/reject"
+                hx-target="#entity-{{ entity.entity_id or entity.id }}"
+                hx-swap="outerHTML">
+            <i class="ti ti-x"></i>
+        </button>
+    </div>
+    {% endif %}
+</div>
+

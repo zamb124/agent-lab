@@ -1,6 +1,6 @@
 ---
 description: "Правила работы с автоматическими CRUD роутерами"
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Автоматические CRUD роутеры

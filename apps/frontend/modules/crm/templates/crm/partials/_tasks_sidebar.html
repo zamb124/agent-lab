@@ -1,0 +1,96 @@
+<!-- Tasks Sidebar Widget -->
+{% if overdue and overdue | length > 0 %}
+<div class="crm-tasks-section">
+    <div class="crm-tasks-section-title overdue">
+        <i class="ti ti-alert-circle"></i> {{ t('crm.tasks.overdue') | upper }}
+    </div>
+    {% for task in overdue[:5] %}
+    <div class="crm-task-item">
+        <div class="crm-task-checkbox"
+             hx-post="/frontend/api/crm/tasks/{{ task.id }}/complete"
+             hx-trigger="click"
+             hx-swap="none"></div>
+        <div class="crm-task-info">
+            <div class="crm-task-text">{{ task.title | truncate(30) }}</div>
+            <div class="crm-task-meta">
+                <span class="crm-task-date overdue">
+                    <i class="ti ti-calendar"></i>
+                    {{ task.due_date | default('') }}
+                </span>
+                {% if task.priority == 'high' %}
+                <span class="crm-task-priority high">HIGH</span>
+                {% endif %}
+            </div>
+        </div>
+        {% if task.entity %}
+        <div class="crm-task-avatar">{{ task.entity.name[:2] | upper }}</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if today and today | length > 0 %}
+<div class="crm-tasks-section">
+    <div class="crm-tasks-section-title today">{{ t('crm.tasks.today') | upper }}</div>
+    {% for task in today[:5] %}
+    <div class="crm-task-item">
+        <div class="crm-task-checkbox"
+             hx-post="/frontend/api/crm/tasks/{{ task.id }}/complete"
+             hx-trigger="click"
+             hx-swap="none"></div>
+        <div class="crm-task-info">
+            <div class="crm-task-text">{{ task.title | truncate(30) }}</div>
+            <div class="crm-task-meta">
+                <span class="crm-task-date">
+                    <i class="ti ti-calendar"></i>
+                    {{ task.due_date | default('') }}
+                </span>
+            </div>
+        </div>
+        {% if task.entity %}
+        <div class="crm-task-avatar">{{ task.entity.name[:2] | upper }}</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if upcoming and upcoming | length > 0 %}
+<div class="crm-tasks-section">
+    <div class="crm-tasks-section-title upcoming">{{ t('crm.tasks.upcoming') | upper }}</div>
+    {% for task in upcoming[:5] %}
+    <div class="crm-task-item">
+        <div class="crm-task-checkbox"
+             hx-post="/frontend/api/crm/tasks/{{ task.id }}/complete"
+             hx-trigger="click"
+             hx-swap="none"></div>
+        <div class="crm-task-info">
+            <div class="crm-task-text">{{ task.title | truncate(30) }}</div>
+            <div class="crm-task-meta">
+                <span class="crm-task-date">
+                    <i class="ti ti-calendar"></i>
+                    {{ task.due_date | default('') }}
+                </span>
+                {% if task.priority == 'high' %}
+                <span class="crm-task-priority high">HIGH</span>
+                {% endif %}
+            </div>
+        </div>
+        {% if task.entity %}
+        <div class="crm-task-avatar">{{ task.entity.name[:2] | upper }}</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if not overdue and not today and not upcoming %}
+<div class="crm-empty-state" style="padding: 32px;">
+    <div class="crm-empty-icon" style="width: 48px; height: 48px;">
+        <i class="ti ti-check" style="font-size: 20px;"></i>
+    </div>
+    <p style="font-size: 13px; color: var(--crm-text-muted);">{{ t('crm.tasks.empty') }}</p>
+</div>
+{% endif %}
+

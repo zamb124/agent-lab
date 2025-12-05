@@ -1,0 +1,50 @@
+<!-- Knowledge Graph Partial -->
+<div class="crm-knowledge-graph" style="position: relative;">
+    <div class="crm-graph-container">
+        <div class="crm-graph-canvas" id="graph-canvas"></div>
+        
+        <!-- Controls -->
+        <div class="crm-graph-controls">
+            <button class="graph-control-btn" onclick="CRM.zoomGraph('in')" title="{{ t('crm.graph.zoom_in') }}">
+                <i class="ti ti-plus"></i>
+            </button>
+            <button class="graph-control-btn" onclick="CRM.zoomGraph('out')" title="{{ t('crm.graph.zoom_out') }}">
+                <i class="ti ti-minus"></i>
+            </button>
+            <button class="graph-control-btn" onclick="CRM.fitGraph()" title="{{ t('crm.graph.fit') }}">
+                <i class="ti ti-arrows-maximize"></i>
+            </button>
+        </div>
+        
+        <!-- Legend -->
+        <div class="crm-graph-legend">
+            <div class="crm-graph-legend-item">
+                <span class="crm-entity-dot person"></span>
+                <span>{{ t('crm.entity_types.people') }}</span>
+            </div>
+            <div class="crm-graph-legend-item">
+                <span class="crm-entity-dot company"></span>
+                <span>{{ t('crm.entity_types.companies') }}</span>
+            </div>
+            <div class="crm-graph-legend-item">
+                <span class="crm-entity-dot project"></span>
+                <span>{{ t('crm.entity_types.projects') }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Initialize graph when this partial loads
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.crmModule) {
+        window.crmModule.initGraph();
+    }
+});
+
+// Also init on HTMX swap
+if (window.crmModule) {
+    window.crmModule.initGraph();
+}
+</script>
+

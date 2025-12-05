@@ -1,0 +1,89 @@
+<!-- Tasks List Partial -->
+<div class="crm-tasks-page">
+    <!-- Stats -->
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;">
+        <div class="crm-card">
+            <div class="crm-card-body" style="padding: 16px; text-align: center;">
+                <div style="font-size: 24px; font-weight: 700; color: var(--crm-danger);">
+                    {{ stats.overdue | default(0) }}
+                </div>
+                <div style="font-size: 13px; color: var(--crm-text-muted);">{{ t('crm.tasks.overdue') }}</div>
+            </div>
+        </div>
+        <div class="crm-card">
+            <div class="crm-card-body" style="padding: 16px; text-align: center;">
+                <div style="font-size: 24px; font-weight: 700; color: var(--crm-warning);">
+                    {{ stats.due_today | default(0) }}
+                </div>
+                <div style="font-size: 13px; color: var(--crm-text-muted);">{{ t('crm.tasks.today') }}</div>
+            </div>
+        </div>
+        <div class="crm-card">
+            <div class="crm-card-body" style="padding: 16px; text-align: center;">
+                <div style="font-size: 24px; font-weight: 700; color: var(--crm-blue);">
+                    {{ stats.pending | default(0) }}
+                </div>
+                <div style="font-size: 13px; color: var(--crm-text-muted);">{{ t('crm.tasks.upcoming') }}</div>
+            </div>
+        </div>
+        <div class="crm-card">
+            <div class="crm-card-body" style="padding: 16px; text-align: center;">
+                <div style="font-size: 24px; font-weight: 700; color: var(--crm-green);">
+                    {{ stats.completed | default(0) }}
+                </div>
+                <div style="font-size: 13px; color: var(--crm-text-muted);">{{ t('crm.tasks.completed') }}</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tasks List -->
+    {% if tasks and tasks | length > 0 %}
+    <div class="crm-card">
+        <div class="crm-card-header">
+            <h3 class="crm-card-title">{{ t('crm.tasks.title') }}</h3>
+        </div>
+        <div class="crm-card-body" style="padding: 0;">
+            {% for task in tasks %}
+            <div class="crm-task-item {% if task.is_overdue %}overdue{% endif %} {% if task.status == 'completed' %}completed{% endif %}"
+                 style="padding: 16px 20px; border-bottom: 1px solid var(--crm-border-light);">
+                <div class="crm-task-checkbox"
+                     hx-post="/frontend/api/crm/tasks/{{ task.id }}/complete"
+                     hx-target="#crm-content"
+                     hx-swap="innerHTML"></div>
+                
+                <div class="crm-task-info">
+                    <div class="crm-task-text">{{ task.title }}</div>
+                    <div class="crm-task-meta">
+                        <span class="crm-task-date {% if task.is_overdue %}overdue{% endif %}">
+                            <i class="ti ti-calendar"></i>
+                            {{ task.due_date | default('') }}
+                        </span>
+                        {% if task.priority == 'high' %}
+                        <span class="crm-task-priority high">HIGH</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                {% if task.entity %}
+                <div class="crm-task-avatar" 
+                     style="background: var(--crm-entity-{{ task.entity.entity_type | default('person') }});"
+                     hx-get="/crm/partials/entity-modal/{{ task.entity.id }}"
+                     hx-target="#modal-container">
+                    {{ task.entity.name[:2] | upper }}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <div class="crm-empty-state">
+        <div class="crm-empty-icon">
+            <i class="ti ti-checklist"></i>
+        </div>
+        <h3 class="crm-empty-title">{{ t('crm.tasks.empty') }}</h3>
+        <p class="crm-empty-description">{{ t('crm.tasks.empty_description') }}</p>
+    </div>
+    {% endif %}
+</div>
+

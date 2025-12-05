@@ -1,0 +1,158 @@
+{
+  "title": "CRM",
+  "nav": {
+    "dashboard": "Дашборд",
+    "daily_notes": "Заметки",
+    "note_database": "База заметок",
+    "notes": "Заметки",
+    "entities": "Сущности",
+    "tasks": "Задачи",
+    "graph": "Граф знаний",
+    "settings": "Настройки"
+  },
+  "pages": {
+    "dashboard": "Дашборд",
+    "notes": "Заметки",
+    "note_database": "База заметок",
+    "entities": "Сущности",
+    "tasks": "Задачи",
+    "graph": "Граф знаний",
+    "entity_detail": "Детали сущности",
+    "settings": "Настройки"
+  },
+  "entity_types": {
+    "title": "Типы сущностей",
+    "people": "Люди",
+    "companies": "Компании",
+    "projects": "Проекты"
+  },
+  "theme": {
+    "light": "Светлая тема",
+    "dark": "Темная тема",
+    "toggle": "Сменить тему"
+  },
+  "back_to_dashboard": "Назад к дашборду",
+  "search": {
+    "placeholder": "Поиск..."
+  },
+  "actions": {
+    "new_note": "Новая заметка",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "delete": "Удалить",
+    "edit": "Редактировать",
+    "create": "Создать",
+    "analyze": "Анализировать",
+    "link": "Связать",
+    "unlink": "Отвязать"
+  },
+  "notes": {
+    "title": "Заметки",
+    "new": "Новая заметка",
+    "edit": "Редактирование заметки",
+    "placeholder": "Начните писать заметку...",
+    "type": {
+      "freeform": "Свободная форма",
+      "meeting_minutes": "Протокол встречи",
+      "call_log": "Журнал звонков"
+    },
+    "empty": "Нет заметок",
+    "empty_description": "Создайте первую заметку нажав кнопку выше",
+    "analyze_hint": "AI проанализирует заметку и извлечет сущности",
+    "analysis": {
+      "title": "Результаты анализа",
+      "review_description": "Сущности созданы со статусом 'ожидает'. Вы можете подтвердить или отклонить их сейчас или позже.",
+      "summary": "Резюме",
+      "entities_found": "Найденные сущности",
+      "entities_created": "Созданные сущности",
+      "tasks_found": "Найденные задачи",
+      "tasks_created": "Созданные задачи",
+      "accept_all": "Принять все",
+      "accept": "Принять",
+      "reject": "Отклонить",
+      "no_results": "Ничего не найдено",
+      "no_results_desc": "AI не смог извлечь сущности или задачи из этой заметки"
+    }
+  },
+  "entities": {
+    "title": "Сущности",
+    "new": "Новая сущность",
+    "edit": "Редактирование сущности",
+    "empty": "Нет сущностей",
+    "empty_description": "Сущности создаются из заметок",
+    "search_placeholder": "Семантический поиск сущностей...",
+    "name": "Название",
+    "type": "Тип",
+    "attributes": "Атрибуты",
+    "relationships": "Связи",
+    "notes": "Заметки",
+    "status": {
+      "pending": "Ожидает",
+      "approved": "Подтверждено",
+      "rejected": "Отклонено"
+    },
+    "duplicates": {
+      "title": "Возможные дубликаты",
+      "merge": "Объединить",
+      "ignore": "Игнорировать"
+    }
+  },
+  "tasks": {
+    "title": "Задачи",
+    "new": "Новая задача",
+    "edit": "Редактирование задачи",
+    "empty": "Нет задач",
+    "empty_description": "Задачи создаются из заметок или вручную",
+    "overdue": "Просроченные",
+    "today": "Сегодня",
+    "upcoming": "Предстоящие",
+    "completed": "Завершенные",
+    "priority": {
+      "high": "Высокий",
+      "medium": "Средний",
+      "low": "Низкий"
+    },
+    "status": {
+      "pending": "Ожидает",
+      "in_progress": "В работе",
+      "completed": "Завершена",
+      "cancelled": "Отменена"
+    },
+    "complete": "Завершить",
+    "reopen": "Возобновить"
+  },
+  "graph": {
+    "title": "Граф знаний",
+    "zoom_in": "Приблизить",
+    "zoom_out": "Отдалить",
+    "fit": "Вместить",
+    "reset": "Сбросить",
+    "filter": "Фильтр",
+    "legend": "Легенда",
+    "empty": "Граф пуст",
+    "empty_description": "Добавьте сущности и связи",
+    "node_types": "Типы узлов",
+    "relationship_types": "Типы связей"
+  },
+  "relationships": {
+    "works_for": "Работает в",
+    "connected_to": "Связан с",
+    "owns": "Владеет",
+    "manages": "Управляет",
+    "member_of": "Участник"
+  },
+  "dashboard": {
+    "welcome": "Добро пожаловать в CRM",
+    "welcome_description": "Управляйте контактами, заметками и задачами",
+    "quick_actions": "Быстрые действия",
+    "recent_notes": "Последние заметки",
+    "upcoming_tasks": "Предстоящие задачи",
+    "stats": {
+      "entities": "Сущности",
+      "notes": "Заметки",
+      "tasks": "Задачи",
+      "relationships": "Связи"
+    }
+  }
+}
+

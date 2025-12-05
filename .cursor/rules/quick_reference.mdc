@@ -1,6 +1,6 @@
 ---
 description: "Быстрая шпаргалка по архитектуре БД"
-alwaysApply: true
+alwaysApply: false
 ---
 # Quick Reference - Архитектура БД
 

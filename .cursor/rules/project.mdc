@@ -1,6 +1,6 @@
 ---
 description: "Правила проекта Humanitec"
-alwaysApply: true
+alwaysApply: false
 ---
 # Правила проекта Humanitec
 

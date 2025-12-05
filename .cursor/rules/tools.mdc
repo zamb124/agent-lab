@@ -1,6 +1,6 @@
 ---
 description: "Правила создания инструментов (Tools)"
-alwaysApply: true
+alwaysApply: false
 ---
 # Правила создания инструментов (Tools)
 

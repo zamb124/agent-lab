@@ -1,6 +1,6 @@
 ---
-description: "Архитектурные принципы Humanitec"
-alwaysApply: true
+description: "Архитектура монорепозитория Humanitec"
+alwaysApply: false
 ---
 
 # Архитектура монорепозитория Humanitec

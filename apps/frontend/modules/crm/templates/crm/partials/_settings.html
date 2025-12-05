@@ -1,0 +1,79 @@
+<!-- Settings Partial -->
+<div class="crm-settings">
+    <div style="max-width: 800px;">
+        <!-- Entity Types -->
+        <div class="crm-card" style="margin-bottom: 24px;">
+            <div class="crm-card-header">
+                <h3 class="crm-card-title">{{ t('crm.entity_types.title') }}</h3>
+            </div>
+            <div class="crm-card-body">
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <div style="display: flex; align-items: center; gap: 16px; padding: 12px; background: var(--crm-bg-primary); border-radius: 8px;">
+                        <span class="crm-entity-dot person" style="width: 12px; height: 12px;"></span>
+                        <span style="flex: 1; font-weight: 500;">{{ t('crm.entity_types.people') }}</span>
+                        <span style="color: var(--crm-text-muted);">person</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 16px; padding: 12px; background: var(--crm-bg-primary); border-radius: 8px;">
+                        <span class="crm-entity-dot company" style="width: 12px; height: 12px;"></span>
+                        <span style="flex: 1; font-weight: 500;">{{ t('crm.entity_types.companies') }}</span>
+                        <span style="color: var(--crm-text-muted);">company</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 16px; padding: 12px; background: var(--crm-bg-primary); border-radius: 8px;">
+                        <span class="crm-entity-dot project" style="width: 12px; height: 12px;"></span>
+                        <span style="flex: 1; font-weight: 500;">{{ t('crm.entity_types.projects') }}</span>
+                        <span style="color: var(--crm-text-muted);">project</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- AI Settings -->
+        <div class="crm-card" style="margin-bottom: 24px;">
+            <div class="crm-card-header">
+                <h3 class="crm-card-title">AI Settings</h3>
+            </div>
+            <div class="crm-card-body">
+                <div class="crm-form-group">
+                    <label class="crm-form-label">Entity Extraction Model</label>
+                    <select class="crm-input">
+                        <option>Claude 3.5 Sonnet</option>
+                        <option>GPT-4</option>
+                    </select>
+                </div>
+                
+                <div class="crm-form-group">
+                    <label class="crm-form-label">Auto-analyze notes</label>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <input type="checkbox" id="auto-analyze" checked>
+                        <label for="auto-analyze" style="color: var(--crm-text-secondary);">
+                            Automatically extract entities when saving notes
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Export -->
+        <div class="crm-card">
+            <div class="crm-card-header">
+                <h3 class="crm-card-title">Data Export</h3>
+            </div>
+            <div class="crm-card-body">
+                <p style="color: var(--crm-text-secondary); margin-bottom: 16px;">
+                    Export all your CRM data including entities, notes, tasks, and relationships.
+                </p>
+                <div style="display: flex; gap: 12px;">
+                    <button class="crm-btn crm-btn-secondary">
+                        <i class="ti ti-download"></i>
+                        Export as JSON
+                    </button>
+                    <button class="crm-btn crm-btn-secondary">
+                        <i class="ti ti-file-spreadsheet"></i>
+                        Export as CSV
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+

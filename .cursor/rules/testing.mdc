@@ -1,5 +1,6 @@
 ---
-alwaysApply: true
+description: "Правила тестирования и фикстуры"
+alwaysApply: false
 ---
 # Правила тестирования
 

@@ -22,6 +22,7 @@ import apps.frontend.api.history as frontend_history
 import apps.frontend.api.knowledge_base as frontend_knowledge_base
 import apps.frontend.api.admin as frontend_admin
 import apps.frontend.api.rag as frontend_rag
+import apps.frontend.api.crm as frontend_crm
 
 # Создание главного frontend API роутера с prefix /api
 router = APIRouter(prefix="/api", tags=["frontend-api"])
@@ -40,3 +41,4 @@ router.include_router(frontend_checkpoints.router, tags=["frontend-checkpoints"]
 router.include_router(frontend_knowledge_base.router, tags=["knowledge-base"], include_in_schema=False)
 router.include_router(frontend_admin.router, tags=["frontend-admin"])
 router.include_router(frontend_rag.router, tags=["rag-api"])
+router.include_router(frontend_crm.router, tags=["crm-api"])

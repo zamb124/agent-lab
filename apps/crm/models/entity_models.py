@@ -6,10 +6,18 @@ Pydantic модели для сущностей CRM.
 
 from datetime import datetime
 from typing import Optional, Dict, Any, List
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict
 
 from core.fields import Field
+
+
+class EntityStatus(str, Enum):
+    """Статусы сущности"""
+    PENDING = "pending"      # Ожидает review
+    APPROVED = "approved"    # Подтверждена
+    REJECTED = "rejected"    # Отклонена
 
 
 class EntityCreate(BaseModel):
@@ -34,6 +42,16 @@ class EntityCreate(BaseModel):
         default_factory=dict,
         title="Атрибуты",
         description="Дополнительные атрибуты (email, phone, etc.)"
+    )
+    status: EntityStatus = Field(
+        default=EntityStatus.PENDING,
+        title="Статус",
+        description="Статус сущности (pending, approved, rejected)"
+    )
+    source_note_id: Optional[str] = Field(
+        default=None,
+        title="ID исходной заметки",
+        description="Заметка из которой была извлечена сущность"
     )
 
 
@@ -82,6 +100,14 @@ class EntityResponse(BaseModel):
     attributes: Dict[str, Any] = Field(
         default_factory=dict,
         title="Атрибуты"
+    )
+    status: str = Field(
+        default="pending",
+        title="Статус"
+    )
+    source_note_id: Optional[str] = Field(
+        default=None,
+        title="ID исходной заметки"
     )
     created_at: Optional[datetime] = Field(
         default=None,

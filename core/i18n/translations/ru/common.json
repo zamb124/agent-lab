@@ -1,5 +1,9 @@
 {
   "app_name": "Humanitec",
+  "title": "Заголовок",
+  "content": "Содержимое",
+  "description": "Описание",
+  "name": "Название",
   "save": "Сохранить",
   "cancel": "Отмена",
   "delete": "Удалить",

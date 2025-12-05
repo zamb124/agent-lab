@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('crm.title') }} - {{ t('crm.pages.' + current_page | replace('crm_', '')) }}{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ static('/crm/css/crm.css') }}">
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ static('/crm/js/crm.module.js') }}"></script>
+{% endblock %}
+
+{% block content %}
+<div class="crm-app">
+    <!-- Sidebar -->
+    <aside class="crm-sidebar">
+        <div class="crm-sidebar-header">
+            <a href="/crm/" class="crm-sidebar-logo" hx-get="/crm/partials/dashboard" hx-target="#crm-content" hx-push-url="/crm/">
+                <img src="{{ static('/crm/img/logo_networkle.svg') }}" alt="Networkle">
+                <span>Networkle</span>
+            </a>
+        </div>
+        
+        <nav class="crm-sidebar-nav crm-scrollbar">
+            <div class="crm-sidebar-section">
+                <a href="/crm/" 
+                   class="crm-nav-item {% if current_page == 'crm_dashboard' %}active{% endif %}"
+                   hx-get="/crm/partials/dashboard" 
+                   hx-target="#crm-content" 
+                   hx-push-url="/crm/">
+                    <i class="ti ti-layout-dashboard"></i>
+                    <span>{{ t('crm.nav.dashboard') }}</span>
+                </a>
+                
+                <a href="/crm/notes" 
+                   class="crm-nav-item {% if current_page == 'crm_notes' %}active{% endif %}"
+                   hx-get="/crm/partials/notes" 
+                   hx-target="#crm-content" 
+                   hx-push-url="/crm/notes">
+                    <i class="ti ti-notebook"></i>
+                    <span>{{ t('crm.nav.daily_notes') }}</span>
+                </a>
+                
+                <a href="/crm/notes/database" 
+                   class="crm-nav-item {% if current_page == 'crm_note_database' %}active{% endif %}"
+                   hx-get="/crm/partials/notes?all=true" 
+                   hx-target="#crm-content" 
+                   hx-push-url="/crm/notes/database">
+                    <i class="ti ti-database"></i>
+                    <span>{{ t('crm.nav.note_database') }}</span>
+                </a>
+            </div>
+            
+            <div class="crm-sidebar-section">
+                <div class="crm-sidebar-section-title">{{ t('crm.entity_types.title') }}</div>
+                
+                <a href="/crm/entities?type=person" 
+                   class="crm-nav-item" 
+                   data-type="person"
+                   hx-get="/crm/partials/entities?type=person" 
+                   hx-target="#crm-content" 
+                   hx-push-url="/crm/entities?type=person">
+                    <i class="ti ti-user"></i>
+                    <span>{{ t('crm.entity_types.people') }}</span>
+                </a>
+                
+                <a href="/crm/entities?type=company" 
+                   class="crm-nav-item" 
+                   data-type="company"
+                   hx-get="/crm/partials/entities?type=company" 
+                   hx-target="#crm-content" 
+                   hx-push-url="/crm/entities?type=company">
+                    <i class="ti ti-building"></i>
+                    <span>{{ t('crm.entity_types.companies') }}</span>
+                </a>
+                
+                <a href="/crm/entities?type=project" 
+                   class="crm-nav-item" 
+                   data-type="project"
+                   hx-get="/crm/partials/entities?type=project" 
+                   hx-target="#crm-content" 
+                   hx-push-url="/crm/entities?type=project">
+                    <i class="ti ti-folder"></i>
+                    <span>{{ t('crm.entity_types.projects') }}</span>
+                </a>
+            </div>
+            
+            <div class="crm-sidebar-section">
+                <a href="/crm/tasks" 
+                   class="crm-nav-item {% if current_page == 'crm_tasks' %}active{% endif %}"
+                   hx-get="/crm/partials/tasks" 
+                   hx-target="#crm-content" 
+                   hx-push-url="/crm/tasks">
+                    <i class="ti ti-checklist"></i>
+                    <span>{{ t('crm.nav.tasks') }}</span>
+                </a>
+                
+                <a href="/crm/graph" 
+                   class="crm-nav-item {% if current_page == 'crm_graph' %}active{% endif %}"
+                   hx-get="/crm/partials/graph" 
+                   hx-target="#crm-content" 
+                   hx-push-url="/crm/graph">
+                    <i class="ti ti-git-fork"></i>
+                    <span>{{ t('crm.nav.graph') }}</span>
+                </a>
+            </div>
+        </nav>
+        
+        <div class="crm-sidebar-footer">
+            <a href="/crm/settings" 
+               class="crm-nav-item {% if current_page == 'crm_settings' %}active{% endif %}"
+               hx-get="/crm/partials/settings" 
+               hx-target="#crm-content" 
+               hx-push-url="/crm/settings">
+                <i class="ti ti-settings"></i>
+                <span>{{ t('crm.nav.settings') }}</span>
+            </a>
+            
+            <button class="crm-nav-item" data-theme-toggle style="width: 100%; border: none; cursor: pointer;">
+                <i class="ti ti-sun-moon"></i>
+                <span>{{ t('crm.theme.toggle') }}</span>
+            </button>
+            
+            <a href="/frontend/" class="crm-nav-item">
+                <i class="ti ti-arrow-left"></i>
+                <span>{{ t('crm.back_to_dashboard') }}</span>
+            </a>
+        </div>
+    </aside>
+    
+    <!-- Main Content -->
+    <main class="crm-main">
+        <header class="crm-header">
+            <h1 class="crm-header-title" id="page-title">
+                {{ t('crm.pages.' + current_page | replace('crm_', '')) }}
+            </h1>
+            
+            <div class="crm-header-actions">
+                <div class="crm-search">
+                    <i class="ti ti-search crm-search-icon"></i>
+                    <input type="text" 
+                           class="crm-input crm-search-input" 
+                           placeholder="{{ t('crm.search.placeholder') }}"
+                           name="q"
+                           hx-get="/crm/partials/search"
+                           hx-trigger="keyup changed delay:300ms"
+                           hx-target="#search-results">
+                    <div id="search-results"></div>
+                </div>
+                
+                <button class="crm-btn crm-btn-analyze"
+                        hx-get="/crm/partials/note-modal" 
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML">
+                    <i class="ti ti-plus"></i>
+                    {{ t('crm.actions.new_note') }}
+                </button>
+            </div>
+        </header>
+        
+        <div class="crm-content crm-scrollbar" id="crm-content">
+            {% if current_page == 'crm_dashboard' %}
+            <div hx-get="/crm/partials/dashboard" hx-trigger="load" hx-swap="innerHTML">
+                <div class="crm-empty-state">
+                    <i class="ti ti-loader crm-spinner" style="font-size: 32px; color: var(--crm-blue);"></i>
+                </div>
+            </div>
+            
+            {% elif current_page == 'crm_notes' %}
+            <div hx-get="/crm/partials/notes" hx-trigger="load" hx-swap="innerHTML">
+                <div class="crm-empty-state">
+                    <i class="ti ti-loader crm-spinner" style="font-size: 32px; color: var(--crm-blue);"></i>
+                </div>
+            </div>
+            
+            {% elif current_page == 'crm_entities' %}
+            <div hx-get="/crm/partials/entities{% if request.query_params.get('type') %}?type={{ request.query_params.get('type') }}{% endif %}" 
+                 hx-trigger="load" hx-swap="innerHTML">
+                <div class="crm-empty-state">
+                    <i class="ti ti-loader crm-spinner" style="font-size: 32px; color: var(--crm-blue);"></i>
+                </div>
+            </div>
+            
+            {% elif current_page == 'crm_entity_detail' %}
+            <div hx-get="/crm/partials/entity/{{ entity_id }}" hx-trigger="load" hx-swap="innerHTML">
+                <div class="crm-empty-state">
+                    <i class="ti ti-loader crm-spinner" style="font-size: 32px; color: var(--crm-blue);"></i>
+                </div>
+            </div>
+            
+            {% elif current_page == 'crm_tasks' %}
+            <div hx-get="/crm/partials/tasks" hx-trigger="load" hx-swap="innerHTML">
+                <div class="crm-empty-state">
+                    <i class="ti ti-loader crm-spinner" style="font-size: 32px; color: var(--crm-blue);"></i>
+                </div>
+            </div>
+            
+            {% elif current_page == 'crm_graph' %}
+            <div hx-get="/crm/partials/graph" hx-trigger="load" hx-swap="innerHTML">
+                <div class="crm-empty-state">
+                    <i class="ti ti-loader crm-spinner" style="font-size: 32px; color: var(--crm-blue);"></i>
+                </div>
+            </div>
+            
+            {% elif current_page == 'crm_settings' %}
+            <div hx-get="/crm/partials/settings" hx-trigger="load" hx-swap="innerHTML">
+                <div class="crm-empty-state">
+                    <i class="ti ti-loader crm-spinner" style="font-size: 32px; color: var(--crm-blue);"></i>
+                </div>
+            </div>
+            
+            {% elif current_page == 'crm_note_database' %}
+            <div hx-get="/crm/partials/notes?all=true" hx-trigger="load" hx-swap="innerHTML">
+                <div class="crm-empty-state">
+                    <i class="ti ti-loader crm-spinner" style="font-size: 32px; color: var(--crm-blue);"></i>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </main>
+    
+    <!-- Tasks Panel -->
+    <aside class="crm-tasks-panel">
+        <div class="crm-tasks-header">
+            <div class="crm-tasks-title">
+                <i class="ti ti-checkbox"></i>
+                <span>{{ t('crm.tasks.title') }}</span>
+                <span class="crm-tasks-badge" 
+                      hx-get="/crm/partials/tasks-count" 
+                      hx-trigger="load, every 60s"
+                      hx-swap="innerHTML">0</span>
+            </div>
+        </div>
+        
+        <div class="crm-tasks-content crm-scrollbar"
+             hx-get="/crm/partials/tasks-sidebar" 
+             hx-trigger="load, taskUpdated from:body"
+             hx-swap="innerHTML">
+        </div>
+    </aside>
+</div>
+
+<!-- Modal Container -->
+<div id="modal-container"></div>
+{% endblock %}
