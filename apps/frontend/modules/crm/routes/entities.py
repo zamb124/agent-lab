@@ -217,6 +217,17 @@ async def reject_entity(request: Request, entity_id: str):
 
 # === API ===
 
+@router.get("/api/v1/entities/autocomplete")
+async def autocomplete_entities(
+    request: Request, 
+    q: str = Query(..., min_length=1), 
+    limit: int = Query(10, ge=1, le=50)
+):
+    """Autocomplete entities for @mentions"""
+    result = await fetch_crm_data(f"/entities/autocomplete?q={q}&limit={limit}", request)
+    return result if isinstance(result, list) else []
+
+
 @router.put("/api/entities/{entity_id}", response_class=HTMLResponse)
 async def update_entity(request: Request, entity_id: str):
     """Update entity via API"""

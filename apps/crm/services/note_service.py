@@ -487,6 +487,19 @@ class NoteService:
                 # Получаем информацию об авторе
                 author_info = await self._get_author_info(note.user_id, company_id)
                 
+                # Получаем существующие сущности (упомянутые через @mention)
+                existing_entities = []
+                if request.mentioned_entity_ids:
+                    for eid in request.mentioned_entity_ids:
+                        entity = await self._entity_service.get_entity(eid)
+                        if entity:
+                            existing_entities.append({
+                                "entity_id": entity.entity_id,
+                                "name": entity.name,
+                                "type": entity.type,
+                                "description": entity.description,
+                            })
+                
                 # Контекст заметки
                 note_context = {
                     "note_type": note.note_type,
@@ -500,6 +513,7 @@ class NoteService:
                     generate_summary=request.generate_summary,
                     author_info=author_info,
                     note_context=note_context,
+                    existing_entities=existing_entities,
                 )
                 
                 if request.generate_summary and ai_result.get("summary"):

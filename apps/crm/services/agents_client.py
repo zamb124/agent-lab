@@ -107,6 +107,7 @@ class AgentsClient:
         generate_summary: bool = False,
         author_info: Optional[Dict[str, Any]] = None,
         note_context: Optional[Dict[str, Any]] = None,
+        existing_entities: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Извлекает сущности из текста через Flow API.
@@ -117,6 +118,7 @@ class AgentsClient:
             generate_summary: Генерировать резюме текста
             author_info: Информация об авторе заметки (name, user_id)
             note_context: Контекст заметки (note_type, title, date)
+            existing_entities: Список уже существующих сущностей (упомянутых через @)
             
         Returns:
             {
@@ -131,6 +133,11 @@ class AgentsClient:
         if note_context:
             context_info = self._format_note_context(note_context, author_info, entity_types)
             message_parts.append(context_info)
+        
+        # Информация о существующих сущностях (упомянутых через @mention)
+        if existing_entities:
+            existing_info = self._format_existing_entities(existing_entities)
+            message_parts.append(existing_info)
         
         # Основной текст
         message_parts.append(f"\n## Текст для анализа:\n{text}")
@@ -238,6 +245,28 @@ class AgentsClient:
                 if is_event_note:
                     parts.append(f"\nАвтор '{author_name}' является организатором этого события.")
                     parts.append("Учти это при создании связей (organized_by).")
+        
+        return "\n".join(parts)
+    
+    def _format_existing_entities(self, existing_entities: List[Dict[str, Any]]) -> str:
+        """Форматирует информацию о существующих сущностях для AI."""
+        if not existing_entities:
+            return ""
+        
+        parts = ["\n## Уже существующие сущности (упомянуты автором через @):"]
+        parts.append("Эти сущности уже есть в системе. НЕ создавай их как новые!")
+        parts.append("Используй их для создания связей (relationships) с другими сущностями.")
+        parts.append("Рассчитай их relevance на основе контекста упоминания в тексте.\n")
+        
+        for entity in existing_entities:
+            entity_id = entity.get("entity_id", "")
+            name = entity.get("name", "")
+            entity_type = entity.get("type", "")
+            description = entity.get("description", "")
+            
+            parts.append(f"- **{name}** (ID: {entity_id}, тип: {entity_type})")
+            if description:
+                parts.append(f"  Описание: {description}")
         
         return "\n".join(parts)
     

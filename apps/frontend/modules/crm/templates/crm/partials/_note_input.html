@@ -160,20 +160,23 @@ Variables:
         </div>
         
         <div class="crm-note-input-editor">
-            <textarea name="content" 
-                      form="{{ form_id }}"
-                      id="{{ form_id }}-content"
-                      class="crm-note-input-textarea" 
-                      placeholder="{{ t('crm.notes.placeholder') }}"
-                      oninput="CRM.handleMentions(this)">{{ note.content if note else '' }}</textarea>
+            <div class="crm-textarea-wrapper">
+                <div id="{{ form_id }}-highlights" class="crm-textarea-highlights"></div>
+                <textarea name="content" 
+                          form="{{ form_id }}"
+                          id="{{ form_id }}-content"
+                          class="crm-note-input-textarea" 
+                          placeholder="{{ t('crm.notes.placeholder') }}"
+                          oninput="CRM.handleMentions(this); CRM.highlightMentions(this);"
+                          onscroll="CRM.syncHighlightsScroll(this)">{{ note.content if note else '' }}</textarea>
+            </div>
             <div id="{{ form_id }}-preview" 
                  class="crm-note-input-preview crm-prose" 
                  style="display: none;">
             </div>
+            <!-- Mentions dropdown -->
+            <div id="{{ form_id }}-mentions" class="crm-mentions-dropdown" style="display: none;"></div>
         </div>
-        
-        <!-- Mentions dropdown -->
-        <div id="{{ form_id }}-mentions" class="crm-mentions-dropdown" style="display: none;"></div>
     </div>
     
     <!-- Footer: Hints -->

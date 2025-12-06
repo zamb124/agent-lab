@@ -176,6 +176,14 @@ async def create_note(request: Request, note_id: Optional[str] = Query(None)):
         except (json.JSONDecodeError, TypeError):
             shared_with = []
     
+    # Обработка упомянутых сущностей через @mention
+    mentioned_entity_ids = data.get("mentioned_entity_ids", [])
+    if isinstance(mentioned_entity_ids, str):
+        try:
+            mentioned_entity_ids = json.loads(mentioned_entity_ids)
+        except (json.JSONDecodeError, TypeError):
+            mentioned_entity_ids = []
+    
     note_data = {
         "title": data.get("title", ""),
         "content": data.get("content", ""),
@@ -184,8 +192,12 @@ async def create_note(request: Request, note_id: Optional[str] = Query(None)):
         "is_template": is_template,
         "status": "published",
         "visibility": data.get("visibility", "private"),
-        "shared_with": shared_with if isinstance(shared_with, list) else []
+        "shared_with": shared_with if isinstance(shared_with, list) else [],
+        "linked_entity_ids": mentioned_entity_ids if isinstance(mentioned_entity_ids, list) else []
     }
+    
+    is_new_note = not note_id
+    is_from_modal = request.headers.get("HX-Target") == "#modal-container"
     
     if note_id:
         note = await fetch_crm_data(f"/notes/{note_id}", request, method="PUT", json_data=note_data)
@@ -194,6 +206,13 @@ async def create_note(request: Request, note_id: Optional[str] = Query(None)):
     
     created_note_id = note.get("note_id") or note.get("id")
     logger.info(f"Note created/updated: id={created_note_id}, title={note.get('title')}")
+    
+    # При создании новой заметки из модалки - редирект на полноэкранный режим
+    if is_new_note and is_from_modal and created_note_id:
+        from starlette.responses import Response
+        response = Response(status_code=200)
+        response.headers["HX-Redirect"] = f"/crm/notes/{created_note_id}"
+        return response
     
     return templates.TemplateResponse(
         "crm/partials/_note_view.html",
@@ -220,18 +239,22 @@ async def analyze_note_async(request: Request, note_id: str):
     
     note = await fetch_crm_data(f"/notes/{note_id}", request)
     linked_entities = note.get("linked_entities") or []
-    if not linked_entities and note.get("linked_entity_ids"):
-        for eid in note["linked_entity_ids"]:
+    linked_entity_ids = note.get("linked_entity_ids") or []
+    
+    if not linked_entities and linked_entity_ids:
+        for eid in linked_entity_ids:
             entity = await fetch_crm_data(f"/entities/{eid}", request)
             if entity:
                 linked_entities.append(entity)
     
     linked_names = {e.get("name", "").lower().strip() for e in linked_entities}
     
+    # Передаём ID упомянутых сущностей в AI для создания связей
     analysis = await fetch_crm_data(f"/notes/{note_id}/analyze", request, method="POST", json_data={
         "extract_entities": True,
         "generate_summary": True,
-        "create_tasks": True
+        "create_tasks": True,
+        "mentioned_entity_ids": linked_entity_ids
     })
 
     if not analysis:
@@ -366,7 +389,7 @@ async def approve_all_suggestions(request: Request, note_id: str):
             }
             result = await fetch_crm_data("/tasks", request, method="POST", json_data=task_create)
             if result:
-            created_tasks += 1
+                created_tasks += 1
             else:
                 logger.warning(f"Failed to create task: {task_data.get('title')}")
             

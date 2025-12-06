@@ -27,6 +27,7 @@ FROM base-core AS base-rag
 RUN apt-get update && apt-get install -y \
     poppler-utils \
     tesseract-ocr \
+    tesseract-ocr-rus \
     && rm -rf /var/lib/apt/lists/*
 
 # Сначала ставим CPU-only PyTorch (без CUDA, экономит ~2-3 GB)

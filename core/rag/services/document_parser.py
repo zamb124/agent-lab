@@ -47,7 +47,7 @@ class DocumentParser:
         if ext not in self.SUPPORTED_EXTENSIONS:
             logger.warning(f"Формат {ext} может не поддерживаться полностью")
         
-        elements = partition(filename=str(path))
+        elements = partition(filename=str(path), languages=["rus", "eng"])
         text = self._elements_to_text(elements)
         
         logger.info(f"Распарсен файл {path.name}: {len(text)} символов")
@@ -71,7 +71,7 @@ class DocumentParser:
             logger.warning(f"Формат {ext} может не поддерживаться полностью")
         
         file_obj = BytesIO(data)
-        elements = partition(file=file_obj, metadata_filename=filename)
+        elements = partition(file=file_obj, metadata_filename=filename, languages=["rus", "eng"])
         text = self._elements_to_text(elements)
         
         logger.info(f"Распарсен файл {filename}: {len(text)} символов")

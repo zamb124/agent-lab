@@ -142,6 +142,10 @@ class NoteAnalyzeRequest(BaseModel):
         default=False,
         title="Создать задачи"
     )
+    mentioned_entity_ids: List[str] = Field(
+        default_factory=list,
+        title="ID сущностей упомянутых через @mention"
+    )
 
 
 class NoteAnalyzeResponse(BaseModel):

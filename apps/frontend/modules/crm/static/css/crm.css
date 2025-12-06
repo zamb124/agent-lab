@@ -3759,6 +3759,35 @@ select.crm-input:focus {
     display: flex;
     flex-direction: column;
     height: 100%;
+    position: relative;
+}
+
+.crm-textarea-wrapper {
+    position: relative;
+    flex: 1;
+}
+
+.crm-textarea-highlights {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 16px 20px;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: transparent;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.crm-textarea-highlights .mention {
+    background: rgba(59, 130, 246, 0.15);
+    border-radius: 3px;
+    color: transparent;
 }
 
 .crm-note-input-textarea {
@@ -3770,10 +3799,12 @@ select.crm-input:focus {
     background: transparent;
     font-family: inherit;
     font-size: 14px;
-    line-height: 1.7;
+    line-height: 1.6;
     color: var(--crm-text-primary);
     resize: vertical;
     outline: none;
+    position: relative;
+    z-index: 1;
 }
 
 .crm-note-input-textarea::placeholder {
@@ -3886,56 +3917,58 @@ select.crm-input:focus {
     letter-spacing: 0.01em;
 }
 
-/* Mentions Dropdown */
+/* Mentions Dropdown - минималистичный */
 .crm-mentions-dropdown {
     position: absolute;
-    top: 100%;
-    left: 20px;
-    right: 20px;
+    z-index: 9999;
     max-height: 200px;
     overflow-y: auto;
-    background: var(--crm-bg-card);
-    border: 1px solid var(--crm-border);
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-    z-index: 100;
+    overflow-x: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
 }
 
 .crm-mentions-item {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
+    gap: 5px;
+    padding: 4px 8px;
     cursor: pointer;
-    transition: background 0.1s;
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.97);
+    backdrop-filter: blur(4px);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
-.crm-mentions-item:hover,
-.crm-mentions-item.selected {
-    background: var(--crm-bg-secondary);
+.crm-mentions-item:first-child {
+    border-radius: 4px 4px 0 0;
+}
+
+.crm-mentions-item:last-child {
+    border-radius: 0 0 4px 4px;
+    border-bottom: none;
+}
+
+.crm-mentions-item:only-child {
+    border-radius: 4px;
+}
+
+.crm-mentions-item:hover {
+    background: rgba(240, 240, 240, 0.98);
 }
 
 .crm-mentions-item-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: var(--crm-primary-light);
-    color: var(--crm-primary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
+    color: #999;
+    font-size: 11px;
 }
 
 .crm-mentions-item-name {
-    font-weight: 500;
-    color: var(--crm-text-primary);
-    font-size: 13px;
+    color: #444;
 }
 
 .crm-mentions-item-type {
-    font-size: 11px;
-    color: var(--crm-text-muted);
+    font-size: 9px;
+    color: #bbb;
     margin-left: auto;
 }
 

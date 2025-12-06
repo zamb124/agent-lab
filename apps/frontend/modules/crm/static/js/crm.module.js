@@ -757,17 +757,88 @@ class CRMModule {
         const text = textarea.value;
         const cursorPos = textarea.selectionStart;
         const textBeforeCursor = text.substring(0, cursorPos);
-        const mentionMatch = textBeforeCursor.match(/@(\w*)$/);
+        const mentionMatch = textBeforeCursor.match(/@([\wа-яА-ЯёЁ]*)$/i);
         
         const dropdownId = textarea.id.replace('-content', '-mentions');
         const dropdown = document.getElementById(dropdownId);
         
+        // Добавляем обработчик Tab если ещё не добавлен
+        if (!textarea._mentionKeyHandler) {
+            textarea._mentionKeyHandler = (e) => this.handleMentionKeydown(e, textarea, dropdown);
+            textarea.addEventListener('keydown', textarea._mentionKeyHandler);
+        }
+        
         if (mentionMatch && dropdown) {
             const query = mentionMatch[1];
-            this.searchMentions(query, dropdown, textarea);
+            this.positionMentionsDropdown(textarea, dropdown);
+            this.debouncedSearchMentions(query, dropdown, textarea);
         } else if (dropdown) {
             dropdown.style.display = 'none';
         }
+    }
+    
+    handleMentionKeydown(e, textarea, dropdown) {
+        if (!dropdown || dropdown.style.display === 'none') return;
+        
+        // Tab или Enter - выбрать первый элемент
+        if (e.key === 'Tab' || e.key === 'Enter') {
+            const firstItem = dropdown.querySelector('.crm-mentions-item');
+            if (firstItem) {
+                e.preventDefault();
+                this.insertMention(textarea, firstItem.dataset.name, firstItem.dataset.id, dropdown);
+            }
+        }
+        // Escape - закрыть dropdown
+        if (e.key === 'Escape') {
+            dropdown.style.display = 'none';
+        }
+    }
+    
+    debouncedSearchMentions(query, dropdown, textarea) {
+        // Debounce 400ms
+        if (this._mentionTimeout) {
+            clearTimeout(this._mentionTimeout);
+        }
+        this._mentionTimeout = setTimeout(() => {
+            this.searchMentions(query, dropdown, textarea);
+        }, 400);
+    }
+    
+    positionMentionsDropdown(textarea, dropdown) {
+        // Создаём временный элемент для измерения позиции курсора
+        const text = textarea.value.substring(0, textarea.selectionStart);
+        const styles = getComputedStyle(textarea);
+        
+        const mirror = document.createElement('div');
+        mirror.style.cssText = `
+            position: absolute;
+            visibility: hidden;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: ${styles.fontFamily};
+            font-size: ${styles.fontSize};
+            line-height: ${styles.lineHeight};
+            padding: ${styles.padding};
+            width: ${textarea.offsetWidth}px;
+        `;
+        mirror.textContent = text;
+        
+        const marker = document.createElement('span');
+        marker.textContent = '|';
+        mirror.appendChild(marker);
+        
+        document.body.appendChild(mirror);
+        
+        const markerRect = marker.getBoundingClientRect();
+        const mirrorRect = mirror.getBoundingClientRect();
+        
+        document.body.removeChild(mirror);
+        
+        const top = markerRect.top - mirrorRect.top - textarea.scrollTop;
+        const left = markerRect.left - mirrorRect.left;
+        
+        dropdown.style.top = Math.min(top + 20, textarea.offsetHeight - 100) + 'px';
+        dropdown.style.left = Math.min(left, textarea.offsetWidth - 200) + 'px';
     }
     
     async searchMentions(query, dropdown, textarea) {
@@ -777,15 +848,13 @@ class CRMModule {
         }
         
         try {
-            const response = await fetch(`/crm/api/v1/entities?q=${encodeURIComponent(query)}&limit=5`);
+            const response = await fetch(`/crm/api/v1/entities/autocomplete?q=${encodeURIComponent(query)}&limit=10`);
             const entities = await response.json();
             
             if (entities && entities.length > 0) {
                 dropdown.innerHTML = entities.map(e => `
-                    <div class="crm-mentions-item" data-id="${e.entity_id}" data-name="${e.name}">
-                        <div class="crm-mentions-item-icon">
-                            <i class="ti ti-${this.getEntityIcon(e.type)}"></i>
-                        </div>
+                    <div class="crm-mentions-item" data-id="${e.entity_id}" data-name="${e.name}" data-type="${e.type}">
+                        <i class="ti ti-${this.getEntityIcon(e.type)} crm-mentions-item-icon"></i>
                         <span class="crm-mentions-item-name">${e.name}</span>
                         <span class="crm-mentions-item-type">${e.type}</span>
                     </div>
@@ -793,7 +862,7 @@ class CRMModule {
                 dropdown.style.display = 'block';
                 
                 dropdown.querySelectorAll('.crm-mentions-item').forEach(item => {
-                    item.onclick = () => this.insertMention(textarea, item.dataset.name, dropdown);
+                    item.onclick = () => this.insertMention(textarea, item.dataset.name, item.dataset.id, dropdown);
                 });
             } else {
                 dropdown.style.display = 'none';
@@ -803,7 +872,7 @@ class CRMModule {
         }
     }
     
-    insertMention(textarea, name, dropdown) {
+    insertMention(textarea, name, entityId, dropdown) {
         const text = textarea.value;
         const cursorPos = textarea.selectionStart;
         const textBeforeCursor = text.substring(0, cursorPos);
@@ -817,6 +886,56 @@ class CRMModule {
         textarea.setSelectionRange(newPos, newPos);
         
         dropdown.style.display = 'none';
+        
+        // Сохранить entity_id в hidden input для связывания при сохранении
+        this.addMentionedEntity(textarea, entityId);
+        
+        // Обновить подсветку
+        this.highlightMentions(textarea);
+    }
+    
+    addMentionedEntity(textarea, entityId) {
+        const formId = textarea.form?.id || textarea.getAttribute('form');
+        if (!formId) return;
+        
+        let input = document.querySelector(`input[name="mentioned_entity_ids"][form="${formId}"]`);
+        if (!input) {
+            input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'mentioned_entity_ids';
+            input.setAttribute('form', formId);
+            input.value = '[]';
+            textarea.closest('.crm-note-input')?.appendChild(input);
+        }
+        
+        const ids = JSON.parse(input.value || '[]');
+        if (!ids.includes(entityId)) {
+            ids.push(entityId);
+            input.value = JSON.stringify(ids);
+        }
+    }
+    
+    highlightMentions(textarea) {
+        const highlightsId = textarea.id.replace('-content', '-highlights');
+        const highlights = document.getElementById(highlightsId);
+        if (!highlights) return;
+        
+        // Заменяем @mentions на span с подсветкой
+        const text = textarea.value
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/@[\wа-яА-ЯёЁ]+(?:\s[\wа-яА-ЯёЁ]+)?/g, '<span class="mention">$&</span>');
+        
+        highlights.innerHTML = text + '\n';
+    }
+    
+    syncHighlightsScroll(textarea) {
+        const highlightsId = textarea.id.replace('-content', '-highlights');
+        const highlights = document.getElementById(highlightsId);
+        if (highlights) {
+            highlights.scrollTop = textarea.scrollTop;
+        }
     }
     
     getEntityIcon(type) {
@@ -1629,6 +1748,8 @@ window.CRM = {
     switchInputTab: (formId, tab) => window.crmModule?.switchInputTab(formId, tab),
     triggerFileUpload: (formId) => window.crmModule?.triggerFileUpload(formId),
     handleMentions: (textarea) => window.crmModule?.handleMentions(textarea),
+    highlightMentions: (textarea) => window.crmModule?.highlightMentions(textarea),
+    syncHighlightsScroll: (textarea) => window.crmModule?.syncHighlightsScroll(textarea),
     handleVisibilityChange: (value) => {
         const container = document.getElementById('shared-with-container');
         if (container) {
