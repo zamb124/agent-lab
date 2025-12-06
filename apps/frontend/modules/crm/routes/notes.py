@@ -212,6 +212,7 @@ async def analyze_note_async(request: Request, note_id: str):
     """Run AI analysis on note"""
     suggested_entities = []
     suggested_tasks = []
+    suggested_relationships = []
     ai_error = None
     summary = ""
     
@@ -231,10 +232,17 @@ async def analyze_note_async(request: Request, note_id: str):
         "create_tasks": True
     })
 
-    if analysis.get("error"):
+    if not analysis:
+        ai_error = "Analysis failed"
+    elif analysis.get("error"):
         ai_error = analysis["error"]
     else:
         summary = analysis.get("summary", "")
+        
+        # Log what we received
+        logger.info(f"Analysis result keys: {list(analysis.keys())}")
+        logger.info(f"Extracted entities: {len(analysis.get('extracted_entities', []))}")
+        logger.info(f"Extracted relationships: {len(analysis.get('extracted_relationships', []))}")
         
         for entity_data in analysis.get("extracted_entities", []):
             name = entity_data.get("name", "")
@@ -257,10 +265,15 @@ async def analyze_note_async(request: Request, note_id: str):
                     "description": entity_data.get("description"),
                     "ai_description": entity_data.get("ai_description", ""),
                     "attributes": entity_data.get("attributes", {}),
+                    "relevance": entity_data.get("relevance", 0.5),
                 })
 
         for task_data in analysis.get("created_tasks", []):
             suggested_tasks.append(task_data)
+        
+        # Relationships from AI
+        suggested_relationships = analysis.get("extracted_relationships", [])
+        logger.info(f"Relationships from analysis: {suggested_relationships}")
     
     entity_types = await fetch_crm_data("/entity-types", request)
     return templates.TemplateResponse(
@@ -270,6 +283,7 @@ async def analyze_note_async(request: Request, note_id: str):
             "note_id": note_id,
             "entities": suggested_entities,
             "tasks": suggested_tasks,
+            "relationships": suggested_relationships,
             "summary": summary,
             "ai_error": ai_error,
             "entity_types": entity_types if isinstance(entity_types, list) else []
@@ -282,12 +296,20 @@ async def approve_all_suggestions(request: Request, note_id: str):
     """Approve and import all suggestions"""
     created_entities = 0
     created_tasks = 0
+    created_relationships = 0
+    
+    # Маппинг имя -> entity_id для создания связей
+    name_to_id: dict[str, str] = {}
     
     try:
         data = await request.json()
         entities = data.get("entities", [])
         tasks = data.get("tasks", [])
+        relationships = data.get("relationships", [])
         
+        logger.info(f"Approve: {len(entities)} entities, {len(relationships)} relationships, {len(tasks)} tasks")
+        
+        # 1. Создаем entities и собираем маппинг name -> id
         for entity_data in entities:
             entity_create = {
                 "name": entity_data.get("name"),
@@ -301,12 +323,39 @@ async def approve_all_suggestions(request: Request, note_id: str):
             
             if created_entity:
                 entity_id = created_entity.get("entity_id") or created_entity.get("id")
+                entity_name = entity_data.get("name", "").lower().strip()
             if entity_id:
+                name_to_id[entity_name] = entity_id
                 await fetch_crm_data(f"/notes/{note_id}/link/{entity_id}", request, method="POST")
                 created_entities += 1
             else:
                 logger.warning(f"Failed to create entity: {entity_data.get('name')}")
         
+        # 2. Создаем relationships
+        for rel_data in relationships:
+            source_name = rel_data.get("source", "").lower().strip()
+            target_name = rel_data.get("target", "").lower().strip()
+            
+            source_id = name_to_id.get(source_name)
+            target_id = name_to_id.get(target_name)
+            
+            if source_id and target_id:
+                rel_create = {
+                    "source_entity_id": source_id,
+                    "target_entity_id": target_id,
+                    "relationship_type": rel_data.get("type", "related_to"),
+                    "weight": rel_data.get("weight", 1.0),
+                    "attributes": rel_data.get("attributes", {}),
+                }
+                result = await fetch_crm_data("/relationships", request, method="POST", json_data=rel_create)
+                if result:
+                    created_relationships += 1
+                else:
+                    logger.warning(f"Failed to create relationship: {source_name} -> {target_name}")
+            else:
+                logger.warning(f"Cannot create relationship - missing entities: {source_name} ({source_id}) -> {target_name} ({target_id})")
+        
+        # 3. Создаем tasks
         for task_data in tasks:
             task_create = {
                 "title": task_data.get("title"),
@@ -338,6 +387,8 @@ async def approve_all_suggestions(request: Request, note_id: str):
     messages = []
     if created_entities > 0:
         messages.append(f"Создано {created_entities} сущностей")
+    if created_relationships > 0:
+        messages.append(f"Создано {created_relationships} связей")
     if created_tasks > 0:
         messages.append(f"Создано {created_tasks} задач")
     
@@ -639,16 +690,16 @@ async def get_attachments(request: Request, note_id: str):
                  onclick="CRM.downloadAttachment('{note_id}', '{file_id}')">
                 <div class="crm-file-icon-box" style="background: {color};">
                     <span class="crm-file-ext">{ext.upper()}</span>
-                    <button type="button" class="crm-file-del" 
-                            onclick="event.preventDefault(); event.stopPropagation(); CRM.deleteAttachment('{note_id}', '{file_id}'); return false;"
-                            title="Delete">
-                        <i class="ti ti-x"></i>
-                    </button>
-                    <button type="button" class="crm-file-info-btn" 
+                <button type="button" class="crm-file-del" 
+                        onclick="event.preventDefault(); event.stopPropagation(); CRM.deleteAttachment('{note_id}', '{file_id}'); return false;"
+                        title="Delete">
+                    <i class="ti ti-x"></i>
+                </button>
+                <button type="button" class="crm-file-info-btn" 
                             onclick="event.preventDefault(); event.stopPropagation(); CRM.showFileContent('{note_id}', '{file_id}', this); return false;"
                             title="Content">
                         <i class="ti ti-file-text"></i>
-                    </button>
+                </button>
                 </div>
                 <span class="crm-file-name" title="{filename}">{display_name}</span>
                 <span class="crm-file-size">{size_str}</span>

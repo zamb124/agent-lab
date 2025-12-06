@@ -95,6 +95,45 @@
                 <span>{{ entity.attributes.position or entity.attributes.role or entity.entity_type | capitalize }}</span>
             </div>
             
+            <!-- Visibility Toggle -->
+            {% set entity_visibility = entity.visibility | default('private') %}
+            <div class="crm-visibility-wrapper">
+                <div class="crm-toggle-group" data-toggle="visibility" data-form="entity-edit-form" data-no-auto-save="true">
+                    <button type="button" 
+                            class="crm-toggle-btn {% if entity_visibility == 'private' %}active{% endif %}"
+                            data-value="private"
+                            title="Private"
+                            onclick="CRM.setEntityVisibility('private')">
+                        <i class="ti ti-lock"></i>
+                    </button>
+                    <button type="button" 
+                            class="crm-toggle-btn crm-shared-btn {% if entity_visibility == 'shared' %}active{% endif %}"
+                            data-value="shared"
+                            title="Shared"
+                            onclick="CRM.setEntityVisibility('shared'); CRM.toggleSharingPopup('entity-sharing')">
+                        <i class="ti ti-share"></i>
+                        {% set shared_count = (entity.shared_with | length) if entity and entity.shared_with else 0 %}
+                        <span class="crm-sharing-badge {% if shared_count == 0 %}hidden{% endif %}" 
+                              id="entity-sharing-badge">{{ shared_count }}</span>
+                    </button>
+                    <button type="button" 
+                            class="crm-toggle-btn {% if entity_visibility == 'public' %}active{% endif %}"
+                            data-value="public"
+                            title="Public"
+                            onclick="CRM.setEntityVisibility('public')">
+                        <i class="ti ti-world"></i>
+                    </button>
+                </div>
+                
+                {% set popup_id = 'entity-sharing' %}
+                {% set form_id = 'entity-edit-form' %}
+                {% set shared_with = entity.shared_with if entity else [] %}
+                {% set resource_type = 'entity' %}
+                {% set resource_id = entity.entity_id %}
+                {% include "crm/partials/_sharing_popup.html" %}
+            </div>
+            <input type="hidden" name="visibility" form="entity-edit-form" value="{{ entity_visibility }}">
+            
             <div class="crm-entity-modal-actions">
                 <button class="crm-btn crm-btn-secondary crm-btn-sm" 
                         onclick="CRM.toggleEntityEdit()" 
@@ -107,7 +146,7 @@
                         style="display: none;"
                         hx-put="/crm/api/entities/{{ entity.entity_id }}"
                         hx-ext="json-enc"
-                        hx-include="#entity-edit-form"
+                        hx-include="#entity-edit-form, [name='visibility'][form='entity-edit-form'], [name='shared_with'][form='entity-edit-form']"
                         hx-target="#modal-container">
                     <i class="ti ti-check"></i>
                     Save

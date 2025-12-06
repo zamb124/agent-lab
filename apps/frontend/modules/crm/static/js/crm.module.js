@@ -706,6 +706,10 @@ class CRMModule {
     
     initToggleGroups() {
         document.querySelectorAll('.crm-toggle-group').forEach(group => {
+            // Skip if already initialized
+            if (group.dataset.initialized) return;
+            group.dataset.initialized = 'true';
+            
             group.addEventListener('click', (e) => {
                 const btn = e.target.closest('.crm-toggle-btn');
                 if (!btn) return;
@@ -722,6 +726,15 @@ class CRMModule {
                 const hiddenInput = document.querySelector(`input[name="${toggleName}"][form="${formId}"]`);
                 if (hiddenInput) {
                     hiddenInput.value = value;
+                }
+                
+                // Auto-save visibility changes (skip if handled by onclick)
+                if (toggleName === 'visibility' && !group.dataset.noAutoSave) {
+                    const wrapper = group.closest('.crm-visibility-wrapper');
+                    const popupWrapper = wrapper?.querySelector('.crm-sharing-popup-wrapper');
+                    if (popupWrapper?.dataset.popupId) {
+                        CRM.saveSharing(popupWrapper.dataset.popupId);
+                    }
                 }
             });
         });
@@ -879,7 +892,7 @@ class CRMModule {
             color: node.color || this.getEntityColor(node.type),
             shape: 'dot',
             size: node.size || 20,
-            title: `${node.name}\nТип: ${node.type}\nСвязей: ${node.degree || 0}\nScore: ${node.score || 0}`,
+            title: this.createNodeTooltip(node),
             font: { color: '#2D3A4F', size: 12 }
         })));
         
@@ -1113,6 +1126,64 @@ class CRMModule {
             project: '#7BC96F'    // Зеленый
         };
         return colors[type] || '#5BA8A8'; // Бирюзовый по умолчанию
+    }
+    
+    createNodeTooltip(node) {
+        const color = node.color || this.getEntityColor(node.type);
+        const typeLabels = {
+            person: 'Person',
+            organization: 'Organization', 
+            company: 'Company',
+            project: 'Project',
+            meeting: 'Meeting',
+            call: 'Call',
+            email: 'Email',
+            task: 'Task'
+        };
+        const typeLabel = typeLabels[node.type] || node.type;
+        
+        const div = document.createElement('div');
+        div.style.cssText = `
+            background: white;
+            border-radius: 12px;
+            padding: 12px 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            min-width: 180px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        `;
+        div.innerHTML = `
+            <div style="
+                font-size: 14px;
+                font-weight: 600;
+                color: #1f2937;
+                margin-bottom: 8px;
+                padding-bottom: 8px;
+                border-bottom: 1px solid #e5e7eb;
+            ">${node.name}</div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="
+                        display: inline-block;
+                        width: 8px;
+                        height: 8px;
+                        border-radius: 50%;
+                        background: ${color};
+                    "></span>
+                    <span style="font-size: 12px; color: #6b7280;">${typeLabel}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                    <span style="color: #9ca3af;">Connections</span>
+                    <span style="color: #374151; font-weight: 500;">${node.degree || 0}</span>
+                </div>
+                ${node.score ? `
+                <div style="display: flex; justify-content: space-between; font-size: 12px;">
+                    <span style="color: #9ca3af;">Score</span>
+                    <span style="color: #374151; font-weight: 500;">${node.score}</span>
+                </div>
+                ` : ''}
+            </div>
+        `;
+        return div;
     }
     
     zoomGraph(direction) {
@@ -1564,6 +1635,253 @@ window.CRM = {
             container.style.display = value === 'shared' ? 'block' : 'none';
         }
     },
+    
+    // Sharing Popup methods
+    toggleSharingPopup: (popupId) => {
+        const popup = document.getElementById(popupId);
+        if (!popup) return;
+        
+        const isVisible = popup.style.display !== 'none';
+        
+        // Close all other popups
+        document.querySelectorAll('.crm-sharing-popup').forEach(p => {
+            if (p.id !== popupId) p.style.display = 'none';
+        });
+        
+        popup.style.display = isVisible ? 'none' : 'block';
+        
+        if (!isVisible) {
+            const input = document.getElementById(`${popupId}-input`);
+            if (input) input.focus();
+            
+            // Close on click outside
+            setTimeout(() => {
+                const closeHandler = (e) => {
+                    const wrapper = document.getElementById(`${popupId}-wrapper`);
+                    const toggleBtn = document.querySelector('.crm-shared-btn');
+                    if (wrapper && !wrapper.contains(e.target) && !toggleBtn?.contains(e.target)) {
+                        popup.style.display = 'none';
+                        document.removeEventListener('click', closeHandler);
+                    }
+                };
+                document.addEventListener('click', closeHandler);
+            }, 100);
+        }
+    },
+    
+    closeSharingPopup: (popupId) => {
+        const popup = document.getElementById(popupId);
+        if (popup) popup.style.display = 'none';
+    },
+    
+    searchShareablePopup: (popupId, query) => {
+        clearTimeout(CRM._sharingPopupTimeout);
+        const dropdown = document.getElementById(`${popupId}-dropdown`);
+        
+        if (!query || query.length < 2) {
+            if (dropdown) dropdown.style.display = 'none';
+            return;
+        }
+        
+        CRM._sharingPopupTimeout = setTimeout(async () => {
+            try {
+                const response = await fetch(`/crm/api/sharing/search?q=${encodeURIComponent(query)}`, {
+                    credentials: 'include'
+                });
+                if (response.ok) {
+                    const results = await response.json();
+                    CRM.renderShareablePopupDropdown(popupId, results);
+                }
+            } catch (e) {
+                console.error('Sharing search error:', e);
+            }
+        }, 300);
+    },
+    
+    renderShareablePopupDropdown: (popupId, results) => {
+        const dropdown = document.getElementById(`${popupId}-dropdown`);
+        if (!dropdown) return;
+        
+        if (results.length === 0) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        
+        dropdown.innerHTML = results.map(item => {
+            const icon = item.type === 'company' ? 'ti-building' : 'ti-user';
+            const name = item.name || item.email;
+            const sub = item.type === 'company' 
+                ? `${item.members_count || 0} members` 
+                : (item.company_name || '');
+            return `
+                <div class="crm-sharing-popup-dropdown-item" 
+                     onclick="CRM.addShareableToPopup('${popupId}', ${JSON.stringify(item).replace(/"/g, '&quot;')})">
+                    <i class="ti ${icon}"></i>
+                    <div class="crm-sharing-popup-dropdown-item-info">
+                        <div class="crm-sharing-popup-dropdown-item-name">${name}</div>
+                        ${sub ? `<div class="crm-sharing-popup-dropdown-item-sub">${sub}</div>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        dropdown.style.display = 'block';
+    },
+    
+    addShareableToPopup: (popupId, item) => {
+        const tagsContainer = document.getElementById(`${popupId}-tags`);
+        const hiddenInput = document.getElementById(`${popupId}-hidden`);
+        const dropdown = document.getElementById(`${popupId}-dropdown`);
+        const input = document.getElementById(`${popupId}-input`);
+        
+        if (!tagsContainer || !hiddenInput) return;
+        
+        // Get current values
+        let values = [];
+        try {
+            values = JSON.parse(hiddenInput.value || '[]');
+        } catch (e) {}
+        
+        // Check if already exists
+        if (values.some(v => v.id === item.id && v.type === item.type)) {
+            if (dropdown) dropdown.style.display = 'none';
+            if (input) input.value = '';
+            return;
+        }
+        
+        // Add to values
+        const newItem = {
+            type: item.type,
+            id: item.id,
+            name: item.name || item.email
+        };
+        values.push(newItem);
+        hiddenInput.value = JSON.stringify(values);
+        
+        // Add tag
+        const icon = item.type === 'company' ? 'ti-building' : 'ti-user';
+        const tag = document.createElement('span');
+        tag.className = 'crm-sharing-tag';
+        tag.dataset.type = item.type;
+        tag.dataset.id = item.id;
+        tag.innerHTML = `
+            <i class="ti ${icon}"></i>
+            <span>${item.name || item.email}</span>
+            <button type="button" onclick="CRM.removeShareableFromPopup('${popupId}', this.parentElement)">
+                <i class="ti ti-x"></i>
+            </button>
+        `;
+        tagsContainer.appendChild(tag);
+        
+        // Clear input and dropdown
+        if (dropdown) dropdown.style.display = 'none';
+        if (input) input.value = '';
+        
+        // Update badge and auto-save
+        CRM.updateSharingBadge(popupId, values.length);
+        CRM.saveSharing(popupId);
+    },
+    
+    removeShareableFromPopup: (popupId, tagElement) => {
+        const hiddenInput = document.getElementById(`${popupId}-hidden`);
+        if (!hiddenInput || !tagElement) return;
+        
+        const type = tagElement.dataset.type;
+        const id = tagElement.dataset.id;
+        
+        // Remove from values
+        let values = [];
+        try {
+            values = JSON.parse(hiddenInput.value || '[]');
+        } catch (e) {}
+        
+        values = values.filter(v => !(v.id === id && v.type === type));
+        hiddenInput.value = JSON.stringify(values);
+        
+        // Remove tag
+        tagElement.remove();
+        
+        // Update badge and auto-save
+        CRM.updateSharingBadge(popupId, values.length);
+        CRM.saveSharing(popupId);
+    },
+    
+    updateSharingBadge: (popupId, count) => {
+        const badge = document.getElementById(`${popupId}-badge`);
+        if (!badge) return;
+        
+        badge.textContent = count;
+        badge.classList.toggle('hidden', count === 0);
+    },
+    
+    // Set entity visibility and auto-save
+    setEntityVisibility: (value) => {
+        const input = document.querySelector('input[name="visibility"][form="entity-edit-form"]');
+        if (input) {
+            input.value = value;
+        }
+        // Update toggle UI
+        const group = document.querySelector('.crm-toggle-group[data-form="entity-edit-form"]');
+        if (group) {
+            group.querySelectorAll('.crm-toggle-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.value === value);
+            });
+        }
+        // Auto-save
+        CRM.saveSharing('entity-sharing');
+    },
+    
+    // Auto-save sharing settings
+    saveSharing: async (popupId) => {
+        const wrapper = document.getElementById(`${popupId}-wrapper`);
+        if (!wrapper) return;
+        
+        const resourceType = wrapper.dataset.resourceType;
+        const resourceId = wrapper.dataset.resourceId;
+        
+        // Skip if no resource (new note/entity)
+        if (!resourceType || !resourceId) return;
+        
+        const hiddenInput = document.getElementById(`${popupId}-hidden`);
+        
+        // Find visibility input by form attribute or near wrapper
+        const formId = hiddenInput?.form?.id;
+        let visibilityInput = formId 
+            ? document.querySelector(`input[name="visibility"][form="${formId}"]`)
+            : null;
+        
+        if (!visibilityInput) {
+            const visibilityWrapper = wrapper.closest('.crm-visibility-wrapper');
+            visibilityInput = visibilityWrapper?.nextElementSibling?.name === 'visibility'
+                ? visibilityWrapper.nextElementSibling
+                : visibilityWrapper?.parentElement?.querySelector('input[name="visibility"]');
+        }
+        
+        let sharedWith = [];
+        try {
+            sharedWith = JSON.parse(hiddenInput?.value || '[]');
+        } catch (e) {}
+        
+        const visibility = visibilityInput?.value || 'private';
+        
+        const response = await fetch(`/crm/api/sharing/${resourceType}/${resourceId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ visibility, shared_with: sharedWith })
+        });
+        
+        if (!response.ok) {
+            CRM.showNotification('Failed to save sharing settings', 'error');
+            return;
+        }
+        
+        const data = await response.json();
+        if (!data.success) {
+            CRM.showNotification('Failed to save sharing settings', 'error');
+        }
+    },
+    
     toggleSharedWith: (select) => {
         const container = document.getElementById('shared-with-container');
         if (container) {

@@ -3502,6 +3502,202 @@ select.crm-input:focus {
     display: inline;
 }
 
+/* Visibility Wrapper with Sharing Popup */
+.crm-visibility-wrapper {
+    position: relative;
+}
+
+.crm-shared-btn {
+    position: relative;
+}
+
+.crm-sharing-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 4px;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 14px;
+    text-align: center;
+    color: #fff;
+    background: #3B82F6;
+    border-radius: 7px;
+}
+
+.crm-sharing-badge.hidden {
+    display: none;
+}
+
+/* Sharing Popup */
+.crm-sharing-popup-wrapper {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
+    margin-top: 8px;
+}
+
+.crm-sharing-popup {
+    width: 280px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+}
+
+.crm-sharing-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.crm-sharing-popup-close {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: #94a3b8;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.crm-sharing-popup-close:hover {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+.crm-sharing-popup-body {
+    padding: 10px 12px;
+}
+
+.crm-sharing-popup-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+.crm-sharing-popup-input-wrapper i {
+    color: #94a3b8;
+    font-size: 14px;
+}
+
+.crm-sharing-popup-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    outline: none;
+}
+
+.crm-sharing-popup-input::placeholder {
+    color: #94a3b8;
+}
+
+.crm-sharing-popup-dropdown {
+    margin-top: 8px;
+    max-height: 150px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+.crm-sharing-popup-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.crm-sharing-popup-dropdown-item:hover {
+    background: #f8fafc;
+}
+
+.crm-sharing-popup-dropdown-item i {
+    font-size: 16px;
+    color: #64748b;
+}
+
+.crm-sharing-popup-dropdown-item-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.crm-sharing-popup-dropdown-item-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #1e293b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.crm-sharing-popup-dropdown-item-sub {
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+.crm-sharing-popup-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.crm-sharing-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px 4px 8px;
+    background: #eff6ff;
+    color: #3b82f6;
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+.crm-sharing-tag i {
+    font-size: 12px;
+}
+
+.crm-sharing-tag button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border: none;
+    background: transparent;
+    color: #93c5fd;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.crm-sharing-tag button:hover {
+    background: #dbeafe;
+    color: #3b82f6;
+}
+
+.crm-sharing-tag button i {
+    font-size: 10px;
+}
+
 /* Action Buttons */
 .crm-note-input-btn {
     display: flex;
@@ -3923,4 +4119,15 @@ select.crm-input:focus {
 @keyframes pulse {
     0%, 100% { opacity: 0.7; }
     50% { opacity: 1; }
+}
+
+/* Vis-network graph tooltip override */
+.vis-tooltip {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    color: inherit !important;
+    white-space: normal !important;
 }

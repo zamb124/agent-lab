@@ -11,9 +11,46 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from apps.agents.container import get_agents_container
+from ._base import fetch_crm_data
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["crm-sharing"])
+
+
+@router.put("/api/sharing/{resource_type}/{resource_id}", response_class=JSONResponse)
+async def update_sharing(
+    request: Request,
+    resource_type: str,  # "note" или "entity"
+    resource_id: str,
+):
+    """Обновить visibility и shared_with для note или entity."""
+    if resource_type not in ("note", "entity"):
+        return JSONResponse(content={"success": False}, status_code=400)
+    
+    body = await request.json()
+    endpoint = f"/{'notes' if resource_type == 'note' else 'entities'}/{resource_id}"
+    
+    # Получаем текущий объект
+    current = await fetch_crm_data(endpoint, request)
+    if not current:
+        return JSONResponse(content={"success": False}, status_code=404)
+    
+    # Конвертируем shared_with из [{type, id, name}] в [id] для CRM backend
+    shared_with_raw = body.get("shared_with", [])
+    shared_with_ids = []
+    for item in shared_with_raw:
+        if isinstance(item, dict):
+            shared_with_ids.append(item.get("id", ""))
+        else:
+            shared_with_ids.append(item)
+    
+    # Обновляем только sharing поля
+    current["visibility"] = body.get("visibility", "private")
+    current["shared_with"] = shared_with_ids
+    
+    result = await fetch_crm_data(endpoint, request, method="PUT", json_data=current)
+    
+    return JSONResponse(content={"success": bool(result)})
 
 
 @router.get("/api/sharing/search", response_class=JSONResponse)

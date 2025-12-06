@@ -165,6 +165,10 @@ class EntityService:
         relevance_raw = metadata.get("relevance", 0.5)
         relevance = float(relevance_raw) if relevance_raw is not None else 0.5
         
+        # Parse shared_with from comma-separated string
+        shared_with_str = metadata.get("shared_with", "")
+        shared_with = shared_with_str.split(",") if shared_with_str else []
+        
         return EntityResponse(
             entity_id=metadata.get("entity_id", doc.document_id),
             company_id=metadata.get("company_id", ""),
@@ -176,6 +180,8 @@ class EntityService:
             status=metadata.get("status", "pending"),
             source_note_id=metadata.get("source_note_id") or None,
             relevance=relevance,
+            visibility=metadata.get("visibility", "private"),
+            shared_with=shared_with,
         )
     
     async def update_entity(
@@ -196,6 +202,8 @@ class EntityService:
         new_description = data.description if data.description is not None else existing.description
         new_ai_description = data.ai_description if data.ai_description is not None else existing.ai_description
         new_attributes = data.attributes if data.attributes is not None else existing.attributes
+        new_visibility = data.visibility if data.visibility is not None else getattr(existing, 'visibility', 'private')
+        new_shared_with = data.shared_with if data.shared_with is not None else getattr(existing, 'shared_with', [])
         
         updated_data = EntityCreate(
             type=existing.type,
@@ -215,6 +223,8 @@ class EntityService:
             "type": existing.type,
             "name": new_name,
             "description": new_description or "",
+            "visibility": new_visibility,
+            "shared_with": ",".join(new_shared_with) if new_shared_with else "",
             **{f"attr_{k}": str(v) for k, v in new_attributes.items()}
         }
         
@@ -234,6 +244,8 @@ class EntityService:
             name=new_name,
             description=new_description,
             attributes=new_attributes,
+            visibility=new_visibility,
+            shared_with=new_shared_with or [],
         )
     
     async def update_entity_status(
@@ -311,6 +323,58 @@ class EntityService:
         if success:
             logger.info(f"Удалена сущность: {entity_id}")
         return success
+    
+    async def create_relationship(
+        self,
+        source_entity_id: str,
+        target_entity_id: str,
+        relationship_type: str,
+        weight: float = 1.0,
+        attributes: Optional[Dict[str, Any]] = None,
+        company_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Создает связь между двумя сущностями"""
+        import uuid
+        company_id = company_id or self._get_company_id()
+        
+        # Проверяем что связь не существует
+        existing = await self._relationship_repo.find_exact(
+            company_id, source_entity_id, target_entity_id, relationship_type
+        )
+        if existing:
+            logger.info(f"Связь уже существует: {source_entity_id} -> {target_entity_id}")
+            return {
+                "relationship_id": existing.relationship_id,
+                "source_entity_id": existing.source_entity_id,
+                "target_entity_id": existing.target_entity_id,
+                "relationship_type": existing.relationship_type,
+                "weight": existing.weight,
+                "attributes": existing.attributes or {},
+            }
+        
+        from apps.crm.db.models import Relationship
+        
+        relationship = Relationship(
+            relationship_id=f"rel_{uuid.uuid4().hex[:16]}",
+            company_id=company_id,
+            source_entity_id=source_entity_id,
+            target_entity_id=target_entity_id,
+            relationship_type=relationship_type,
+            weight=weight,
+            attributes=attributes or {},
+        )
+        
+        created = await self._relationship_repo.create(relationship)
+        logger.info(f"Создана связь: {source_entity_id} --[{relationship_type}]--> {target_entity_id}")
+        
+        return {
+            "relationship_id": created.relationship_id,
+            "source_entity_id": created.source_entity_id,
+            "target_entity_id": created.target_entity_id,
+            "relationship_type": created.relationship_type,
+            "weight": created.weight,
+            "attributes": created.attributes or {},
+        }
     
     async def list_entities(
         self,

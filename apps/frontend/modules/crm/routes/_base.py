@@ -48,7 +48,7 @@ async def fetch_crm_data(
     logger.debug(f"CRM request: {url}, headers: {list(headers.keys())}, token: {'yes' if auth_token else 'no'}, company: {company_id}")
     
     try:
-        async with get_httpx_client(timeout=30.0, use_proxy_from_config=False) as client:
+        async with get_httpx_client(timeout=180.0, use_proxy_from_config=False) as client:
             if method == "POST":
                 response = await client.post(url, headers=headers, json=json_data or {})
             elif method == "PUT":

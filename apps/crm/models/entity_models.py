@@ -94,6 +94,14 @@ class EntityUpdate(BaseModel):
         le=1.0,
         title="Релевантность"
     )
+    visibility: Optional[str] = Field(
+        default=None,
+        title="Видимость (private, shared, public)"
+    )
+    shared_with: Optional[List[str]] = Field(
+        default=None,
+        title="Список ID пользователей/компаний для sharing"
+    )
 
 
 class EntityResponse(BaseModel):
@@ -142,6 +150,14 @@ class EntityResponse(BaseModel):
         le=1.0,
         title="Релевантность",
         description="Оценка важности сущности от AI (0.0-1.0)"
+    )
+    visibility: str = Field(
+        default="private",
+        title="Видимость (private, shared, public)"
+    )
+    shared_with: List[str] = Field(
+        default_factory=list,
+        title="Список ID пользователей/компаний для sharing"
     )
     created_at: Optional[datetime] = Field(
         default=None,

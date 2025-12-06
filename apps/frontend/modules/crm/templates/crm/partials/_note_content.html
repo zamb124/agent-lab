@@ -10,6 +10,8 @@
       id="note-form"
       class="crm-note-form">
     
+    <!-- Hidden inputs for fields outside form -->
+    <input type="hidden" name="title" id="note-form-title" value="{{ note.title if note else '' }}">
     <input type="hidden" name="note_date" value="{{ note.note_date if note and note.note_date else today }}">
     
     <div class="crm-note-form-body">
@@ -42,44 +44,6 @@
             {% set form_id = 'note-form' %}
             {% include "crm/partials/_note_input.html" %}
             
-            <!-- Shared With (shown when visibility is 'shared') -->
-            <div class="crm-form-group crm-shared-with-container" 
-                 id="shared-with-container"
-                 style="{% if not note or note.visibility != 'shared' %}display: none;{% endif %}">
-                <label class="crm-form-label">{{ t('crm.notes.shared_with') }}</label>
-                <div class="crm-sharing-wrapper">
-                <div class="crm-tags-input" id="shared-with-tags">
-                    {% if note and note.shared_with %}
-                        {% for item in note.shared_with %}
-                        {% if item is mapping %}
-                        <span class="crm-tag crm-{{ item.type }}-tag" data-type="{{ item.type }}" data-id="{{ item.id }}">
-                            <i class="ti ti-{{ 'building' if item.type == 'company' else 'user' }}"></i>
-                            {{ item.name or item.email or item.id }}
-                            <span class="crm-tag-remove" onclick="CRM.removeShareableTag(this)">&times;</span>
-                        </span>
-                        {% else %}
-                        <span class="crm-tag crm-user-tag" data-type="user" data-id="{{ item }}">
-                        <i class="ti ti-user"></i>
-                            {{ item }}
-                            <span class="crm-tag-remove" onclick="CRM.removeShareableTag(this)">&times;</span>
-                    </span>
-                        {% endif %}
-                    {% endfor %}
-                    {% endif %}
-                    <input type="text" 
-                           id="shared-with-input"
-                               class="crm-sharing-input"
-                               placeholder="Search by email or company name..."
-                               oninput="CRM.searchShareable(this.value)"
-                               onfocus="CRM.showShareableDropdown()"
-                               autocomplete="off">
-                    </div>
-                    <div class="crm-sharing-dropdown" id="sharing-dropdown" style="display: none;"></div>
-                </div>
-                <input type="hidden" name="shared_with" id="shared-with-hidden" 
-                       value="{{ note.shared_with | tojson if note and note.shared_with else '[]' }}">
-            </div>
-            
             <!-- Attachments (uploaded via icon in header) -->
             {% if note and (note.note_id or note.id) %}
             <div class="crm-form-group crm-attachments-section">
@@ -98,49 +62,6 @@
             </div>
             {% endif %}
             
-            <!-- Footer -->
-            <div class="crm-note-form-footer">
-                <div class="crm-note-form-footer-left">
-                    <label class="crm-checkbox-label">
-                        <input type="checkbox" name="is_template" value="true"
-                               {% if note and note.is_template %}checked{% endif %}>
-                        {{ t('crm.notes.template.save_as') }}
-                    </label>
-                    
-                    {% if note and (note.note_id or note.id) %}
-                    <div class="crm-export-buttons">
-                        <a href="/crm/api/notes/{{ note.note_id or note.id }}/export/pdf" 
-                           class="crm-btn crm-btn-ghost crm-btn-sm" download>
-                            <i class="ti ti-file-type-pdf"></i> PDF
-                        </a>
-                        <a href="/crm/api/notes/{{ note.note_id or note.id }}/export/html" 
-                           class="crm-btn crm-btn-ghost crm-btn-sm" download>
-                            <i class="ti ti-file-type-html"></i> HTML
-                        </a>
-                    </div>
-                    {% endif %}
-                </div>
-                
-                <div class="crm-note-form-footer-right">
-                    {% if is_modal %}
-                    <button type="button" class="crm-btn crm-btn-secondary" onclick="CRM.closeModal()">
-                        {{ t('crm.actions.cancel') }}
-                    </button>
-                    {% endif %}
-                    
-                    {% if note %}
-                    <button type="submit" class="crm-btn crm-btn-primary">
-                        <i class="ti ti-device-floppy"></i>
-                        {{ t('crm.actions.save') }}
-                    </button>
-                    {% else %}
-                    <button type="submit" class="crm-btn crm-btn-analyze">
-                        <i class="ti ti-sparkles"></i>
-                        {{ t('crm.actions.analyze') }} & {{ t('crm.actions.save') }}
-                    </button>
-                    {% endif %}
-                </div>
-            </div>
         </div>
         
         <!-- Right: Linked Entities & AI Suggestions (only for existing notes) -->
@@ -283,10 +204,6 @@
 
 .crm-note-editor-section > .crm-form-group.crm-attachments-section {
     margin-bottom: 0;
-}
-
-.crm-note-editor-section > .crm-shared-with-container {
-    padding: 0 20px;
 }
 
 /* Footer styling */

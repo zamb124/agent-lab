@@ -11,6 +11,88 @@
 import pytest
 
 
+class TestSharingUpdateAPI:
+    """Тесты обновления sharing для note и entity"""
+    
+    @pytest.mark.asyncio
+    async def test_update_note_visibility(self, crm_frontend_client, crm_server_process, test_note):
+        """Обновление visibility для note"""
+        note_id = test_note.note_id
+        
+        response = await crm_frontend_client.put(
+            f"/crm/api/sharing/note/{note_id}",
+            json={"visibility": "public", "shared_with": []}
+        )
+        
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+    
+    @pytest.mark.asyncio
+    async def test_update_note_shared_with_strings(self, crm_frontend_client, crm_server_process, test_note):
+        """Обновление shared_with для note (список строк)"""
+        note_id = test_note.note_id
+        shared_with = ["test-user-1"]
+        
+        response = await crm_frontend_client.put(
+            f"/crm/api/sharing/note/{note_id}",
+            json={"visibility": "shared", "shared_with": shared_with}
+        )
+        
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+    
+    @pytest.mark.asyncio
+    async def test_update_note_shared_with_objects(self, crm_frontend_client, crm_server_process, test_note):
+        """Обновление shared_with для note (список объектов как из UI)"""
+        note_id = test_note.note_id
+        # Frontend отправляет объекты с type, id, name
+        shared_with = [
+            {"type": "user", "id": "test-user-1", "name": "Test User"},
+            {"type": "company", "id": "test-company-1", "name": "Test Company"}
+        ]
+        
+        response = await crm_frontend_client.put(
+            f"/crm/api/sharing/note/{note_id}",
+            json={"visibility": "shared", "shared_with": shared_with}
+        )
+        
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+    
+    @pytest.mark.asyncio
+    async def test_update_entity_visibility(self, crm_frontend_client, crm_server_process, test_entity):
+        """Обновление visibility для entity"""
+        entity_id = test_entity.entity_id
+        
+        response = await crm_frontend_client.put(
+            f"/crm/api/sharing/entity/{entity_id}",
+            json={"visibility": "public", "shared_with": []}
+        )
+        
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+    
+    @pytest.mark.asyncio
+    async def test_update_invalid_resource_type(self, crm_frontend_client, crm_server_process):
+        """Неверный тип ресурса возвращает 400"""
+        response = await crm_frontend_client.put(
+            "/crm/api/sharing/invalid/some-id",
+            json={"visibility": "public", "shared_with": []}
+        )
+        
+        assert response.status_code == 400
+    
+    @pytest.mark.asyncio
+    async def test_update_nonexistent_note(self, crm_frontend_client, crm_server_process):
+        """Несуществующий note возвращает 404"""
+        response = await crm_frontend_client.put(
+            "/crm/api/sharing/note/nonexistent-note-id",
+            json={"visibility": "public", "shared_with": []}
+        )
+        
+        assert response.status_code == 404
+
+
 class TestSharingSearchAPI:
     """Тесты поиска для shared_with"""
     

@@ -22,11 +22,10 @@ Variables:
     <!-- Header: Title + Type/Visibility Toggles + Actions -->
     <div class="crm-note-input-header">
         <input type="text" 
-               name="title"
-               {% if not standalone %}form="{{ form_id }}"{% endif %}
                class="crm-note-input-title" 
                placeholder="{{ t('crm.notes.placeholder') }}"
-               value="{{ note.title if note else '' }}">
+               value="{{ note.title if note else '' }}"
+               oninput="const hidden = document.getElementById('note-form-title'); if(hidden) hidden.value = this.value;">
         
         <div class="crm-note-input-actions">
             <!-- Type Toggle (dynamic from entity_types) -->
@@ -69,6 +68,7 @@ Variables:
             <div class="crm-note-input-divider"></div>
             
             <!-- Visibility Toggle -->
+            <div class="crm-visibility-wrapper">
             <div class="crm-toggle-group" data-toggle="visibility" data-form="{{ form_id }}">
                 <button type="button" 
                         class="crm-toggle-btn {% if current_visibility == 'private' %}active{% endif %}"
@@ -77,11 +77,14 @@ Variables:
                     <i class="ti ti-lock"></i>
                 </button>
                 <button type="button" 
-                        class="crm-toggle-btn {% if current_visibility == 'shared' %}active{% endif %}"
+                            class="crm-toggle-btn crm-shared-btn {% if current_visibility == 'shared' %}active{% endif %}"
                         data-value="shared"
                         title="{{ t('crm.notes.visibility_shared') }}"
-                        onclick="CRM.handleVisibilityChange('shared')">
+                            onclick="CRM.toggleSharingPopup('{{ form_id }}-sharing')">
                     <i class="ti ti-share"></i>
+                        {% set shared_count = (note.shared_with | length) if note and note.shared_with else 0 %}
+                        <span class="crm-sharing-badge {% if shared_count == 0 %}hidden{% endif %}" 
+                              id="{{ form_id }}-sharing-badge">{{ shared_count }}</span>
                 </button>
                 <button type="button" 
                         class="crm-toggle-btn {% if current_visibility == 'public' %}active{% endif %}"
@@ -89,6 +92,13 @@ Variables:
                         title="{{ t('crm.notes.visibility_public') }}">
                     <i class="ti ti-world"></i>
                 </button>
+                </div>
+                
+                {% set popup_id = form_id ~ '-sharing' %}
+                {% set shared_with = note.shared_with if note else [] %}
+                {% set resource_type = 'note' if note else '' %}
+                {% set resource_id = (note.note_id or note.id) if note else '' %}
+                {% include "crm/partials/_sharing_popup.html" %}
             </div>
             <input type="hidden" name="visibility" {% if not standalone %}form="{{ form_id }}"{% endif %} value="{{ current_visibility }}">
             

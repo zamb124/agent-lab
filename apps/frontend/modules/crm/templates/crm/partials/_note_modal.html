@@ -9,15 +9,41 @@
             
             <div class="crm-note-modal-title">
                     <input type="text" 
-                       form="note-form"
-                           name="title" 
                        class="crm-note-title-input"
                        placeholder="{{ t('crm.notes.placeholder', 'Note title...') }}"
                            value="{{ note.title if note else '' }}"
+                       oninput="document.getElementById('note-form-title').value = this.value"
                            required>
                 {% if note %}
                 <span>{{ note.note_date or (note.created_at[:10] if note.created_at else '') }} · {{ note.note_type | replace('_', ' ') | capitalize if note.note_type else 'Note' }}</span>
                         {% endif %}
+            </div>
+            
+            <!-- Header Controls -->
+            <div class="crm-note-header-controls">
+                <label class="crm-checkbox-label">
+                    <input type="checkbox" name="is_template" form="note-form" value="true"
+                           {% if note and note.is_template %}checked{% endif %}>
+                    {{ t('crm.notes.template.save_as') }}
+                </label>
+                
+                {% if note and (note.note_id or note.id) %}
+                <div class="crm-export-buttons">
+                    <a href="/crm/api/notes/{{ note.note_id or note.id }}/export/pdf" 
+                       class="crm-btn crm-btn-ghost crm-btn-sm" download>
+                        <i class="ti ti-file-type-pdf"></i> PDF
+                    </a>
+                    <a href="/crm/api/notes/{{ note.note_id or note.id }}/export/html" 
+                       class="crm-btn crm-btn-ghost crm-btn-sm" download>
+                        <i class="ti ti-file-type-html"></i> HTML
+                    </a>
+                </div>
+                {% endif %}
+                
+                <button type="submit" form="note-form" class="crm-btn crm-btn-primary">
+                    <i class="ti ti-device-floppy"></i>
+                    {{ t('crm.actions.save') }}
+                </button>
             </div>
             
             <div class="crm-note-modal-actions">
@@ -107,6 +133,22 @@
     display: flex;
     gap: 4px;
     flex-shrink: 0;
+}
+
+.crm-note-modal .crm-note-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+}
+
+.crm-note-modal .crm-note-header-controls .crm-checkbox-label {
+    font-size: 13px;
+}
+
+.crm-note-modal .crm-note-header-controls .crm-export-buttons {
+    display: flex;
+    gap: 8px;
 }
 
 /* Body */

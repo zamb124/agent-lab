@@ -160,7 +160,28 @@ class AgentsClient:
         
         result = await self._call_flow("crm_entity_extractor", message)
         
-        return self._parse_extraction_result(result)
+        parsed = self._parse_extraction_result(result)
+        entities_list = parsed.get('entities', [])
+        logger.info(f"AI extraction result - entities: {len(entities_list)}, relationships: {len(parsed.get('relationships', []))}")
+        if entities_list:
+            first_entity = entities_list[0]
+            logger.info(f"First entity keys: {list(first_entity.keys())}, relevance: {first_entity.get('relevance', 'NOT_SET')}")
+        
+        # Валидация: каждая сущность должна иметь хотя бы одну связь
+        entities = parsed.get("entities", [])
+        relationships = parsed.get("relationships", [])
+        
+        if entities and len(entities) > 1:
+            orphan_entities = self._find_orphan_entities(entities, relationships)
+            
+            if orphan_entities:
+                logger.warning(f"Found {len(orphan_entities)} entities without relationships: {orphan_entities}")
+                # Перезапрос AI для добавления связей
+                parsed = await self._request_missing_relationships(
+                    parsed, orphan_entities, text, note_context
+                )
+        
+        return parsed
     
     def _format_note_context(
         self,
@@ -344,6 +365,83 @@ class AgentsClient:
         # Возвращаем пустой результат
         logger.warning(f"Не удалось распарсить ответ агента: {response_text[:200]}")
         return {"entities": [], "relationships": [], "summary": response_text}
+    
+    def _find_orphan_entities(
+        self,
+        entities: List[Dict[str, Any]],
+        relationships: List[Dict[str, Any]]
+    ) -> List[str]:
+        """Находит сущности без связей."""
+        entity_names = {e.get("name", "").lower().strip() for e in entities}
+        
+        # Собираем имена сущностей участвующих в связях
+        connected_names = set()
+        for rel in relationships:
+            source = rel.get("source", "").lower().strip()
+            target = rel.get("target", "").lower().strip()
+            connected_names.add(source)
+            connected_names.add(target)
+        
+        # Находим сироты
+        orphans = []
+        for entity in entities:
+            name = entity.get("name", "").lower().strip()
+            if name and name not in connected_names:
+                orphans.append(entity.get("name", ""))
+        
+        return orphans
+    
+    async def _request_missing_relationships(
+        self,
+        parsed: Dict[str, Any],
+        orphan_entities: List[str],
+        original_text: str,
+        note_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Запрашивает у AI связи для сущностей-сирот."""
+        entities = parsed.get("entities", [])
+        existing_relationships = parsed.get("relationships", [])
+        
+        entity_names = [e.get("name") for e in entities if e.get("name")]
+        
+        message = f"""У тебя есть список извлеченных сущностей из текста:
+{json.dumps(entity_names, ensure_ascii=False, indent=2)}
+
+Некоторые сущности остались без связей: {orphan_entities}
+
+Исходный текст:
+{original_text[:2000]}
+
+ЗАДАЧА: Добавь связи для КАЖДОЙ сущности из списка сирот. 
+Каждая сущность ОБЯЗАТЕЛЬНО должна быть связана хотя бы с одной другой сущностью.
+
+Верни ТОЛЬКО новые связи в формате JSON:
+```json
+{{
+    "relationships": [
+        {{
+            "source": "Имя источника",
+            "target": "Имя цели",
+            "type": "тип_связи",
+            "weight": 0.8,
+            "attributes": {{"context": "почему эта связь существует"}}
+        }}
+    ]
+}}
+```
+
+Типы связей: works_for, works_at, works_on, knows, manages, owns, related_to, participated_in, assigned_to"""
+
+        result = await self._call_flow("crm_entity_extractor", message, timeout=60.0)
+        new_parsed = self._parse_extraction_result(result)
+        
+        new_relationships = new_parsed.get("relationships", [])
+        logger.info(f"Got {len(new_relationships)} additional relationships for orphans")
+        
+        # Объединяем связи
+        parsed["relationships"] = existing_relationships + new_relationships
+        
+        return parsed
     
     async def compare_entities(
         self,
