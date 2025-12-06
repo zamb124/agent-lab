@@ -73,6 +73,33 @@ async def my_tool(query: str) -> str:
 - Активной компании (`get_context().active_company`)
 - Переменным flow (`get_context().flow_variables`)
 - Текущему state (`get_context().state`)
+- **trace_id** для сквозной трассировки (`get_context().trace_id`)
+
+## Межсервисное взаимодействие
+
+**КРИТИЧНО**: Для взаимодействия между сервисами **ТОЛЬКО** `ServiceClient`!
+
+<good_example>
+from core.clients import get_service_client
+
+# Из любого сервиса вызвать другой
+client = get_service_client()
+response = await client.get("agents", "/agents/api/v1/flows/")
+response = await client.post("crm", "/crm/api/v1/entities/", json=data)
+</good_example>
+
+<bad_example>
+# ЗАПРЕЩЕНО! httpx напрямую между сервисами
+import httpx
+async with httpx.AsyncClient() as client:
+    response = await client.get("http://localhost:8001/...")  # НЕТ!
+</bad_example>
+
+ServiceClient автоматически:
+- Передаёт `X-Trace-Id` для сквозной трассировки
+- Передаёт `Authorization`, `X-Company-Id`, `X-User-Id` из контекста
+- Валидирует запросы по OpenAPI спецификациям
+- Использует URL сервисов из `conf.json` блока `server`
 
 <good_example>
 from core.context import get_context

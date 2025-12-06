@@ -339,6 +339,34 @@ def process(data):
     return do_work(data)
 </good_example>
 
+## Правило 12: Межсервисное взаимодействие
+
+**КРИТИЧНО**: Для взаимодействия между сервисами **ТОЛЬКО** `ServiceClient`!
+
+<good_example>
+from core.clients import get_service_client
+
+# Из CRM вызвать Agents
+client = get_service_client()
+response = await client.get("agents", "/agents/api/v1/flows/")
+
+# Из Frontend вызвать CRM
+response = await client.post("crm", "/crm/api/v1/entities/", json=data)
+</good_example>
+
+<bad_example>
+# ЗАПРЕЩЕНО! httpx напрямую между сервисами
+import httpx
+async with httpx.AsyncClient() as client:
+    response = await client.get("http://localhost:8001/...")  # НЕТ!
+</bad_example>
+
+ServiceClient автоматически:
+- Передаёт `X-Trace-Id` для сквозной трассировки
+- Передаёт `Authorization`, `X-Company-Id`, `X-User-Id` из контекста
+- Валидирует запросы по OpenAPI спецификациям
+- Использует URL сервисов из `conf.json` блока `server`
+
 ## Критичные напоминания
 
 ### ТРИ ГЛАВНЫХ ПРАВИЛА:
@@ -355,3 +383,4 @@ def process(data):
 9. Используй **get_agents_container()** для доступа к зависимостям
 10. Хардкодные строки: `"apps.agents.agents.*"` вместо `"app.agents.*"`
 11. Field переносит UI поля в json_schema_extra (Pydantic v2)
+12. **Межсервисное взаимодействие ТОЛЬКО через `ServiceClient`** из `core.clients`

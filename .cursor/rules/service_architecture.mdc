@@ -302,6 +302,31 @@ def _create_app() -> FastAPI:
 app = _create_app()
 </good_example>
 
+## Межсервисное взаимодействие
+
+**КРИТИЧНО**: Для взаимодействия между сервисами **ТОЛЬКО** `ServiceClient`!
+
+```python
+from core.clients import get_service_client
+
+# В любом сервисе для вызова другого сервиса
+client = get_service_client()
+response = await client.get("agents", "/agents/api/v1/flows/")
+response = await client.post("crm", "/crm/api/v1/entities/", json=data)
+```
+
+ServiceClient автоматически:
+- Передаёт `X-Trace-Id` для сквозной трассировки
+- Передаёт `Authorization`, `X-Company-Id`, `X-User-Id` из контекста
+- Валидирует запросы по OpenAPI спецификациям
+- Использует URL сервисов из `conf.json` блока `server`
+
+<bad_example>
+# ЗАПРЕЩЕНО! Не используй httpx напрямую между сервисами!
+async with httpx.AsyncClient() as client:
+    response = await client.get("http://localhost:8001/...")
+</bad_example>
+
 ## Важные напоминания
 
 1. **service_name** должен совпадать с `server.name` в `conf.json`
@@ -310,3 +335,4 @@ app = _create_app()
 4. **extra_state** - для добавления объектов в `app.state`
 5. **include_broker=False** - для сервисов без очередей (frontend)
 6. **include_crud_routers=False** - для сервисов без автоматических CRUD
+7. **Межсервисное взаимодействие** - ТОЛЬКО через `ServiceClient` из `core.clients`
