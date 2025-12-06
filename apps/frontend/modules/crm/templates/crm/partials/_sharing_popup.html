@@ -1,0 +1,73 @@
+<!-- Sharing Popup Component -->
+<!-- 
+Variables:
+  - popup_id: unique ID for this popup instance (required)
+  - form_id: form ID to attach hidden input to (required)
+  - shared_with: list of current shared items (optional)
+  - resource_type: 'note' or 'entity' (for auto-save)
+  - resource_id: ID of the resource (for auto-save)
+-->
+
+{% set popup_id = popup_id | default('sharing-popup') %}
+{% set shared_with_list = shared_with | default([]) %}
+{% set resource_type = resource_type | default('') %}
+{% set resource_id = resource_id | default('') %}
+
+<div class="crm-sharing-popup-wrapper" 
+     id="{{ popup_id }}-wrapper"
+     data-resource-type="{{ resource_type }}"
+     data-resource-id="{{ resource_id }}"
+     data-popup-id="{{ popup_id }}">
+    <div class="crm-sharing-popup" id="{{ popup_id }}" style="display: none;">
+        <div class="crm-sharing-popup-header">
+            <span>Share with</span>
+            <button type="button" class="crm-sharing-popup-close" onclick="CRM.closeSharingPopup('{{ popup_id }}')">
+                <i class="ti ti-x"></i>
+            </button>
+        </div>
+        
+        <div class="crm-sharing-popup-body">
+            <div class="crm-sharing-popup-input-wrapper">
+                <i class="ti ti-search"></i>
+                <input type="text" 
+                       class="crm-sharing-popup-input"
+                       id="{{ popup_id }}-input"
+                       placeholder="Email or company..."
+                       oninput="CRM.searchShareablePopup('{{ popup_id }}', this.value)"
+                       autocomplete="off">
+            </div>
+            
+            <div class="crm-sharing-popup-dropdown" id="{{ popup_id }}-dropdown" style="display: none;"></div>
+            
+            <div class="crm-sharing-popup-tags" id="{{ popup_id }}-tags">
+                {% for item in shared_with_list %}
+                {% if item is mapping %}
+                <span class="crm-sharing-tag" data-type="{{ item.type }}" data-id="{{ item.id }}">
+                    <i class="ti ti-{{ 'building' if item.type == 'company' else 'user' }}"></i>
+                    <span>{{ item.name or item.email or item.id }}</span>
+                    <button type="button" onclick="CRM.removeShareableFromPopup('{{ popup_id }}', this.parentElement)">
+                        <i class="ti ti-x"></i>
+                    </button>
+                </span>
+                {% else %}
+                {# item is just an id string #}
+                <span class="crm-sharing-tag" data-type="user" data-id="{{ item }}">
+                    <i class="ti ti-user"></i>
+                    <span>{{ item }}</span>
+                    <button type="button" onclick="CRM.removeShareableFromPopup('{{ popup_id }}', this.parentElement)">
+                        <i class="ti ti-x"></i>
+                    </button>
+                </span>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    
+    <input type="hidden" 
+           name="shared_with" 
+           id="{{ popup_id }}-hidden"
+           {% if form_id %}form="{{ form_id }}"{% endif %}
+           value="{{ shared_with_list | tojson if shared_with_list else '[]' }}">
+</div>
+
