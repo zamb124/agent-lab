@@ -245,12 +245,29 @@ await create_delayed_task.invoke({
 })
 ```
 
+## Межсервисное взаимодействие
+
+**ТОЛЬКО через `ServiceClient`!**
+
+```python
+from core.clients import get_service_client
+
+client = get_service_client()
+response = await client.get("agents", "/agents/api/v1/flows/")
+response = await client.post("crm", "/crm/api/v1/entities/", json=data)
+
+# Доступные сервисы: "agents", "crm", "frontend"
+```
+
+❌ **ЗАПРЕЩЕНО**: `httpx.AsyncClient` напрямую между сервисами!
+
 ## 🚨 ЗАПОМНИ
 
 ### Код:
 - **НИКАКИХ локальных импортов** - все импорты в начале файла
 - **НИКАКИХ лишних if-else** - используй early return
 - **try-except ТОЛЬКО для IO/внешних сервисов**
+- **Межсервисное взаимодействие ТОЛЬКО через `ServiceClient`**
 
 ### БД:
 - Storage теперь ПРИВАТНЫЙ

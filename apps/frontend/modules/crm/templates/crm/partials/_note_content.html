@@ -80,27 +80,8 @@
                 </div>
             </div>
             
-            <!-- AI Analysis Section -->
-            <div class="crm-suggestions-header">
-                <i class="ti ti-sparkles"></i>
-                <span>AI ANALYSIS</span>
-                <button type="button" 
-                        class="crm-btn crm-btn-icon crm-btn-ghost crm-btn-sm"
-                        title="Повторить анализ"
-                        hx-post="/crm/partials/notes/{{ note.note_id or note.id }}/analyze"
-                        hx-target="#note-suggestions-content"
-                        hx-swap="innerHTML"
-                        hx-push-url="false"
-                        hx-on::before-request="document.getElementById('note-suggestions-content').innerHTML = '<div class=\'crm-analyzing-state\'><i class=\'ti ti-loader crm-spinner\'></i><span>Analyzing...</span></div>'">
-                    <i class="ti ti-rotate-clockwise"></i>
-                </button>
-            </div>
-            
-            <div id="note-suggestions-content">
-                <div class="crm-suggestions-hint-content">
-                    <span>Click refresh to analyze with AI</span>
-                </div>
-            </div>
+            <!-- AI Suggestions Content -->
+            <div id="note-suggestions-content"></div>
         </div>
         {% else %}
         <!-- Hint for new notes -->

@@ -45,6 +45,7 @@ async def partial_notes(
     
     endpoint = "/notes" + ("?" + "&".join(params) if params else "")
     notes = await fetch_crm_data(endpoint, request)
+    entity_types = await fetch_crm_data("/entity-types", request)
     
     return templates.TemplateResponse(
         "crm/partials/_notes.html",
@@ -52,6 +53,7 @@ async def partial_notes(
             "request": request, 
             "notes": notes if isinstance(notes, list) else [], 
             "today": str(date.today()),
+            "entity_types": entity_types if isinstance(entity_types, list) else [],
             "filters": {
                 "note_type": note_type,
                 "user_id": user_id,
@@ -364,7 +366,7 @@ async def approve_all_suggestions(request: Request, note_id: str):
             }
             result = await fetch_crm_data("/tasks", request, method="POST", json_data=task_create)
             if result:
-                created_tasks += 1
+            created_tasks += 1
             else:
                 logger.warning(f"Failed to create task: {task_data.get('title')}")
             
@@ -412,9 +414,15 @@ async def approve_all_suggestions(request: Request, note_id: str):
 async def close_modal_and_refresh(request: Request):
     """Close modal and refresh notes list"""
     notes = await fetch_crm_data("/notes", request)
+    entity_types = await fetch_crm_data("/entity-types", request)
     return templates.TemplateResponse(
         "crm/partials/_notes.html",
-        {"request": request, "notes": notes if isinstance(notes, list) else [], "today": str(date.today())}
+        {
+            "request": request, 
+            "notes": notes if isinstance(notes, list) else [], 
+            "today": str(date.today()),
+            "entity_types": entity_types if isinstance(entity_types, list) else [],
+        }
     )
 
 

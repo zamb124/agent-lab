@@ -24,7 +24,7 @@ TRACE_ID_HEADER = "X-Trace-Id"
 COMPANY_ID_HEADER = "X-Company-Id"
 USER_ID_HEADER = "X-User-Id"
 
-OPENAPI_REFRESH_INTERVAL = 15  # секунд
+OPENAPI_REFRESH_INTERVAL = 60  # секунд
 
 
 class ServiceClientError(Exception):

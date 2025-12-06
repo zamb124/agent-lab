@@ -146,6 +146,20 @@ except httpx.HTTPStatusError as e:
 - В документации указывай 8001
 - В примерах curl используй 8001
 
+## Межсервисное взаимодействие
+
+**КРИТИЧНО**: Для взаимодействия между сервисами **ТОЛЬКО** `ServiceClient`!
+
+```python
+from core.clients import get_service_client
+
+client = get_service_client()
+response = await client.get("agents", "/agents/api/v1/flows/")
+response = await client.post("crm", "/crm/api/v1/entities/", json=data)
+```
+
+**ЗАПРЕЩЕНО** использовать `httpx.AsyncClient` напрямую для межсервисных запросов!
+
 ## Не генерируй лишнее
 
 НЕ создавай без явного запроса:
@@ -157,5 +171,5 @@ except httpx.HTTPStatusError as e:
 ## Context7 для документации
 
 Используй Context7 для получения актуальной документации библиотек:
-- FastAPI, SQLAlchemy, LangChain и другие библиотеки
+- FastAPI, SQLAlchemy, LangChain, ChromaDB, Taskiq, Redis, и другие библиотеки
 - Всегда проверяй актуальность подхода через документацию, прежде чем использовать устаревшие паттерны.

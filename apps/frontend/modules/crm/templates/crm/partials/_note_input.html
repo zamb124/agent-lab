@@ -22,6 +22,8 @@ Variables:
     <!-- Header: Title + Type/Visibility Toggles + Actions -->
     <div class="crm-note-input-header">
         <input type="text" 
+               name="title"
+               form="{{ form_id }}"
                class="crm-note-input-title" 
                placeholder="{{ t('crm.notes.placeholder') }}"
                value="{{ note.title if note else '' }}"
@@ -63,7 +65,7 @@ Variables:
                 </button>
                 {% endfor %}
             </div>
-            <input type="hidden" name="note_type" {% if not standalone %}form="{{ form_id }}"{% endif %} value="{{ current_type }}">
+            <input type="hidden" name="note_type" form="{{ form_id }}" value="{{ current_type }}">
             
             <div class="crm-note-input-divider"></div>
             
@@ -92,7 +94,7 @@ Variables:
                         title="{{ t('crm.notes.visibility_public') }}">
                     <i class="ti ti-world"></i>
                 </button>
-                </div>
+            </div>
                 
                 {% set popup_id = form_id ~ '-sharing' %}
                 {% set shared_with = note.shared_with if note else [] %}
@@ -100,7 +102,7 @@ Variables:
                 {% set resource_id = (note.note_id or note.id) if note else '' %}
                 {% include "crm/partials/_sharing_popup.html" %}
             </div>
-            <input type="hidden" name="visibility" {% if not standalone %}form="{{ form_id }}"{% endif %} value="{{ current_visibility }}">
+            <input type="hidden" name="visibility" form="{{ form_id }}" value="{{ current_visibility }}">
             
             <div class="crm-note-input-divider"></div>
             
@@ -121,7 +123,7 @@ Variables:
             {% if show_submit %}
             <!-- Submit -->
             <button type="submit" 
-                    {% if not standalone %}form="{{ form_id }}"{% endif %}
+                    form="{{ form_id }}"
                     class="crm-note-input-submit">
                 {% if submit_text %}
                     {{ submit_text }}
@@ -159,7 +161,7 @@ Variables:
         
         <div class="crm-note-input-editor">
             <textarea name="content" 
-                      {% if not standalone %}form="{{ form_id }}"{% endif %}
+                      form="{{ form_id }}"
                       id="{{ form_id }}-content"
                       class="crm-note-input-textarea" 
                       placeholder="{{ t('crm.notes.placeholder') }}"

@@ -510,10 +510,44 @@ def calculate(a: int, b: int) -> int:
     return a + b
 </good_example>
 
+## Сквозной trace_id для межсервисного взаимодействия
+
+`trace_id` автоматически генерируется в `AuthMiddleware` и передаётся через контекст.
+
+Формат: `{service_name}:{uuid}` (например: `agents:ed20eab1-5e29-4e87-9ec0-a95cad4ad6bb`)
+
+**КРИТИЧНО**: Для межсервисного взаимодействия **ТОЛЬКО** `ServiceClient`!
+
+<good_example>
+from core.clients import get_service_client
+
+# ServiceClient автоматически передаёт X-Trace-Id из контекста
+client = get_service_client()
+response = await client.get("agents", "/agents/api/v1/flows/")
+response = await client.post("crm", "/crm/api/v1/entities/", json=data)
+</good_example>
+
+<bad_example>
+# ЗАПРЕЩЕНО! trace_id не передастся!
+import httpx
+async with httpx.AsyncClient() as client:
+    response = await client.get("http://localhost:8001/...")  # НЕТ!
+</bad_example>
+
+### Доступ к trace_id:
+
+```python
+from core.context import get_context
+
+context = get_context()
+trace_id = context.trace_id  # "agents:ed20eab1-..."
+```
+
 ## ВАЖНО
 
 - **ВСЕГДА** используй `json.dumps()` для сложных типов
 - **ВСЕГДА** указывай `span_type`
 - **ВСЕГДА** оборачивай в try-except и используй `record_exception()`
+- **ВСЕГДА** используй `ServiceClient` для межсервисных запросов (автоматически передаёт trace_id)
 - **НЕ** добавляй spans для тривиальных операций
 - **НЕ** забывай добавлять `output_data` после выполнения

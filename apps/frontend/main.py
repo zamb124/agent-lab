@@ -120,9 +120,9 @@ def _create_app() -> FastAPI:
         },
         on_startup=on_startup,
         cors_origins=["*"],  # Debug mode
-        docs_url="/api/docs",
-        redoc_url="/api/redoc",
-        openapi_url="/api/openapi.json",
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
         include_crud_routers=False,
         include_broker=True,
         title="Frontend Service",

@@ -6,6 +6,23 @@
         {% if entities and entities | length > 0 %}
         <span class="crm-linked-count">{{ entities | length }}</span>
         {% endif %}
+        <span style="margin-left: auto; position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+            <i class="ti ti-sparkles"
+               id="ai-btn-{{ note_id }}"
+               style="cursor: pointer; font-size: 44px; color: var(--crm-blue); background: none !important; border: none !important; box-shadow: none !important; transition: all 0.2s;"
+               title="AI Analysis"
+               hx-post="/crm/partials/notes/{{ note_id }}/analyze"
+               hx-target="#note-suggestions-content"
+               hx-swap="innerHTML"
+               hx-push-url="false"
+               onclick="this.style.display='none'; document.getElementById('ai-spin-{{ note_id }}').style.display='inline-block';"
+               hx-on::after-request="this.style.display='inline-block'; document.getElementById('ai-spin-{{ note_id }}').style.display='none';"
+               onmouseover="this.style.color='var(--crm-blue-dark)'; this.style.transform='scale(1.1)';"
+               onmouseout="this.style.color='var(--crm-blue)'; this.style.transform='scale(1)';"></i>
+            <i class="ti ti-loader-2" 
+               id="ai-spin-{{ note_id }}" 
+               style="display: none; position: absolute; font-size: 44px; color: var(--crm-blue); animation: spin 1s linear infinite;"></i>
+        </span>
     </div>
     
     {% if entities and entities | length > 0 %}
@@ -85,7 +102,31 @@
     font-size: 10px;
     padding: 2px 6px;
     border-radius: 10px;
+}
+
+.crm-ai-icon {
     margin-left: auto;
+    cursor: pointer;
+    font-size: 22px;
+    color: #A855F7;
+    transition: all 0.2s ease;
+}
+
+.crm-ai-icon:hover {
+    color: #C084FC;
+    transform: scale(1.15);
+}
+
+.crm-ai-spinner {
+    display: none;
+    font-size: 22px;
+    color: #A855F7;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 .crm-linked-entities-list {

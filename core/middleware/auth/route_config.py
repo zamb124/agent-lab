@@ -41,6 +41,7 @@ ROUTE_RULES: List[RouteRule] = [
     RouteRule("/frontend/chat/embed*", auth_required=False, context_type="anonymous"),
     RouteRule("/auth/*", auth_required=False, context_type="anonymous"),
     RouteRule("/docs*", auth_required=False, context_type="anonymous"),
+    RouteRule("/redoc", auth_required=False, context_type="anonymous"),
     RouteRule("/openapi.json", auth_required=False, context_type="anonymous"),
     RouteRule("/api/docs", auth_required=False, context_type="anonymous"),
     RouteRule("/api/redoc", auth_required=False, context_type="anonymous"),
