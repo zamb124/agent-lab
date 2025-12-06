@@ -636,20 +636,19 @@ async def get_attachments(request: Request, note_id: str):
         
         html_parts.append(f'''
             <div class="crm-file-icon" data-file-id="{file_id}" 
-                 onclick="CRM.downloadAttachment('{note_id}', '{file_id}')"
-                <button type="button" class="crm-file-del" 
-                        onclick="event.preventDefault(); event.stopPropagation(); CRM.deleteAttachment('{note_id}', '{file_id}'); return false;"
-                        title="Delete">
-                    <i class="ti ti-x"></i>
-                </button>
-                <button type="button" class="crm-file-info-btn" 
-                        onclick="event.preventDefault(); event.stopPropagation(); CRM.showFileContent('{note_id}', '{file_id}', this); return false;"
-                        title="Content">
-                    <i class="ti ti-file-text"></i>
-                </button>
-                
+                 onclick="CRM.downloadAttachment('{note_id}', '{file_id}')">
                 <div class="crm-file-icon-box" style="background: {color};">
                     <span class="crm-file-ext">{ext.upper()}</span>
+                    <button type="button" class="crm-file-del" 
+                            onclick="event.preventDefault(); event.stopPropagation(); CRM.deleteAttachment('{note_id}', '{file_id}'); return false;"
+                            title="Delete">
+                        <i class="ti ti-x"></i>
+                    </button>
+                    <button type="button" class="crm-file-info-btn" 
+                            onclick="event.preventDefault(); event.stopPropagation(); CRM.showFileContent('{note_id}', '{file_id}', this); return false;"
+                            title="Content">
+                        <i class="ti ti-file-text"></i>
+                    </button>
                 </div>
                 <span class="crm-file-name" title="{filename}">{display_name}</span>
                 <span class="crm-file-size">{size_str}</span>
