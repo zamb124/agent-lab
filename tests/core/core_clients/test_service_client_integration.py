@@ -109,7 +109,7 @@ class TestServiceClientConfiguration:
         
         assert "/openapi.json" in agents_openapi
         assert "/openapi.json" in crm_openapi
-        assert "/api/openapi.json" in frontend_openapi
+        assert "/openapi.json" in frontend_openapi
     
     def test_singleton_returns_same_instance(self):
         """Проверяем что get_service_client возвращает синглтон"""

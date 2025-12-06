@@ -44,11 +44,11 @@ class AgentsClient:
             if context.trace_id:
                 headers["X-Trace-Id"] = context.trace_id
             if context.active_company:
-            headers["X-Company-Id"] = context.active_company.company_id
+                headers["X-Company-Id"] = context.active_company.company_id
             if context.user:
-            headers["X-User-Id"] = context.user.user_id
+                headers["X-User-Id"] = context.user.user_id
             if context.auth_token:
-            headers["Authorization"] = f"Bearer {context.auth_token}"
+                headers["Authorization"] = f"Bearer {context.auth_token}"
         
         return headers
     
