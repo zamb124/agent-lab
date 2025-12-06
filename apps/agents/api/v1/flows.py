@@ -120,7 +120,7 @@ async def send_message_to_flow(flow_id: str, request: FlowMessageRequest, flow_r
             logger.info(f"Системный flow {flow_id} создан успешно, config: {flow_config is not None}")
         except ValueError as e:
             logger.error(f"Ошибка создания flow {flow_id}: {e}")
-        raise HTTPException(status_code=404, detail=f"Флоу {flow_id} не найден")
+            raise HTTPException(status_code=404, detail=f"Флоу {flow_id} не найден")
         except Exception as e:
             logger.error(f"Неожиданная ошибка создания flow {flow_id}: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=str(e))
@@ -348,7 +348,7 @@ async def get_flow_info(flow_id: str, flow_repo: FlowRepositoryDep):
                 flow = await flow_factory.get_flow(flow_id)
                 flow_config = flow.config
             except ValueError:
-            raise HTTPException(status_code=404, detail=f"Флоу {flow_id} не найден")
+                raise HTTPException(status_code=404, detail=f"Флоу {flow_id} не найден")
 
         # Проверяем поддержку API
         api_supported = "api" in flow_config.platforms

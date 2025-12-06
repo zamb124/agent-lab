@@ -96,22 +96,42 @@ class LoggingConfig(BaseModel):
 class ServerConfig(BaseModel):
     """Конфигурация сервера"""
 
-    name: str = "core"  # Имя сервиса для маршрутизации репозиториев
+    name: str = "core"
     env: str = "production"
     host: str = "0.0.0.0"
     port: int = 8001
     debug: bool = False
-    agents_service_url: Optional[str] = None  # URL сервиса agents для межсервисного взаимодействия
     
-    def get_service_url(self) -> str:
-        """Возвращает URL сервиса"""
-        return f"http://localhost:{self.port}"
+    # URL сервисов для межсервисного взаимодействия
+    agents_service_url: Optional[str] = None
+    crm_service_url: Optional[str] = None
+    frontend_service_url: Optional[str] = None
+    
+    # Порты по умолчанию для каждого сервиса
+    _default_ports: Dict[str, int] = {"agents": 8001, "crm": 8003, "frontend": 8002}
+    
+    def get_service_url(self, service: Optional[str] = None) -> str:
+        """
+        Возвращает URL сервиса.
+        
+        Args:
+            service: Имя сервиса (agents, crm, frontend). Если None - URL текущего сервиса.
+        """
+        if service is None:
+            return f"http://localhost:{self.port}"
+        
+        url_attr = f"{service}_service_url"
+        url = getattr(self, url_attr, None)
+        if url:
+            return url
+        
+        default_port = self._default_ports.get(service, 8001)
+        return f"http://localhost:{default_port}"
     
     def get_agents_service_url(self) -> str:
-        """URL сервиса agents для HTTP проксирования репозиториев"""
-        if self.agents_service_url:
-            return self.agents_service_url
-        return f"http://localhost:8001"
+        """URL сервиса agents (для обратной совместимости)"""
+        return self.get_service_url("agents")
+    
     workers: int = 4
     worker_class: str = "uvicorn.workers.UvicornWorker"
     worker_connections: int = 1000

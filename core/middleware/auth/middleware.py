@@ -3,12 +3,14 @@
 """
 
 import logging
+import uuid
 from typing import Optional
 from fastapi import Request, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from core.context import set_context, clear_context
+from core.config import get_settings
 from core.models.identity_models import User
 from core.utils.tokens import get_token_service, TokenData
 
@@ -18,6 +20,8 @@ from .context_factory import ContextFactory
 from .platform_handlers import get_platform_handler
 
 logger = logging.getLogger(__name__)
+
+TRACE_ID_HEADER = "X-Trace-Id"
 
 
 class CompanyCreationRequired(Exception):
@@ -35,8 +39,24 @@ class AuthMiddleware(BaseHTTPMiddleware):
     def _get_container(self, request: Request):
         return request.app.state.container
     
+    def _get_or_create_trace_id(self, request: Request) -> str:
+        """
+        Извлекает trace_id из заголовка или генерирует новый.
+        
+        Формат: {service_name}:{uuid4}
+        Если trace_id уже пришел из другого сервиса - используем его как есть.
+        """
+        trace_id = request.headers.get(TRACE_ID_HEADER)
+        if trace_id:
+            return trace_id
+        
+        settings = get_settings()
+        service_name = settings.server.name
+        return f"{service_name}:{uuid.uuid4()}"
+    
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
+        trace_id = self._get_or_create_trace_id(request)
         
         if self.route_matcher.should_skip(path):
             return await call_next(request)
@@ -47,12 +67,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         rule = self.route_matcher.match(path)
         if not rule:
-            logger.warning(f"Неизвестный путь: {path}")
+            logger.warning(f"Неизвестный путь: {path}, trace_id={trace_id}")
             raise HTTPException(status_code=404, detail="Not Found")
         
         try:
             context = await self._create_context(
-                request, rule, container, company_resolver, context_factory
+                request, rule, container, company_resolver, context_factory, trace_id
             )
             
             set_context(context)
@@ -81,12 +101,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
         container,
         company_resolver: CompanyResolver,
         context_factory: ContextFactory,
+        trace_id: str,
     ):
         """Создает контекст на основе правила маршрутизации"""
         
         # Webhook обработка
         if rule.context_type == "webhook" and rule.platform:
-            return await self._handle_webhook(request, rule, container, context_factory)
+            return await self._handle_webhook(request, rule, container, context_factory, trace_id)
         
         # Анонимный контекст (но пробуем загрузить пользователя если токен есть)
         if rule.context_type == "anonymous":
@@ -94,7 +115,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
             token_data, auth_token = self._extract_token(request)
             user = await self._get_user(container, token_data) if token_data else None
             return await context_factory.create(
-                request, "anonymous", company, user, token_data, auth_token=auth_token
+                request, "anonymous", company, user, token_data,
+                auth_token=auth_token, trace_id=trace_id
             )
         
         # Авторизованный контекст
@@ -132,7 +154,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 await self._sync_active_company(container, user, company)
         
         return await context_factory.create(
-            request, rule.context_type, company, user, token_data, rule.platform, auth_token
+            request, rule.context_type, company, user, token_data,
+            rule.platform, auth_token, trace_id
         )
     
     async def _handle_webhook(
@@ -141,6 +164,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         rule: RouteRule,
         container,
         context_factory: ContextFactory,
+        trace_id: str,
     ):
         """Обрабатывает webhook запросы"""
         handler = get_platform_handler(rule.platform, container)
@@ -151,16 +175,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         # GET для WhatsApp верификации - анонимный контекст
         if rule.platform == "whatsapp" and request.method == "GET":
-            return await context_factory.create(request, "anonymous", company)
+            return await context_factory.create(request, "anonymous", company, trace_id=trace_id)
         
         user, metadata = await handler.create_user_from_request(request, company)
         
         context = await context_factory.create(
-            request, "webhook", company, user, platform=rule.platform
+            request, "webhook", company, user, platform=rule.platform, trace_id=trace_id
         )
         context.metadata.update(metadata)
         
-        logger.info(f"{rule.platform.title()} webhook: компания {company.company_id}")
+        logger.info(f"{rule.platform.title()} webhook: компания {company.company_id}, trace_id={trace_id}")
         return context
     
     def _extract_token(self, request: Request) -> tuple[Optional[TokenData], Optional[str]]:

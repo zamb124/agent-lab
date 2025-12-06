@@ -96,6 +96,11 @@ class Context(BaseModel):
         description="JWT токен для межсервисной авторизации (передается в HTTPRepositoryProxy)",
         exclude=True,
     )
+    trace_id: Optional[str] = Field(
+        default=None,
+        title="Trace ID",
+        description="Идентификатор трассировки для межсервисного взаимодействия (формат: service:uuid)",
+    )
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True

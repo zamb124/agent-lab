@@ -57,22 +57,24 @@ class HTTPRepositoryProxy(Generic[T]):
     ) -> Any:
         """
         Выполняет HTTP запрос к API сервиса-владельца.
-        Передает контекст (company_id, user_id) в заголовках.
+        Передает контекст (trace_id, company_id, user_id) в заголовках.
         """
         context = get_context()
         headers = kwargs.pop("headers", {})
         
         if context:
-            if hasattr(context, 'auth_token') and context.auth_token:
+            if context.trace_id:
+                headers["X-Trace-Id"] = context.trace_id
+            if context.auth_token:
                 headers["Authorization"] = f"Bearer {context.auth_token}"
-            if hasattr(context, 'active_company') and context.active_company:
+            if context.active_company:
                 headers["X-Company-Id"] = context.active_company.company_id
-            if hasattr(context, 'user') and context.user:
+            if context.user:
                 headers["X-User-Id"] = context.user.user_id
         
         url = f"{self._get_base_url()}{path}"
         
-        logger.info(f"HTTPRepositoryProxy request: {method} {url}, headers={headers}")
+        logger.info(f"HTTPRepositoryProxy request: {method} {url}, trace_id={headers.get('X-Trace-Id')}")
         
         async with get_httpx_client(timeout=30.0, use_proxy_from_config=False) as client:
             response = await client.request(method, url, headers=headers, **kwargs)

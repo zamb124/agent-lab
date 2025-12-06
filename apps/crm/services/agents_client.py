@@ -40,11 +40,14 @@ class AgentsClient:
         headers = {"Content-Type": "application/json"}
         
         context = get_context()
-        if context and context.active_company:
+        if context:
+            if context.trace_id:
+                headers["X-Trace-Id"] = context.trace_id
+            if context.active_company:
             headers["X-Company-Id"] = context.active_company.company_id
-        if context and context.user:
+            if context.user:
             headers["X-User-Id"] = context.user.user_id
-        if context and context.auth_token:
+            if context.auth_token:
             headers["Authorization"] = f"Bearer {context.auth_token}"
         
         return headers
