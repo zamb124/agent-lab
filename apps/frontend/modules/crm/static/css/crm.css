@@ -3765,6 +3765,9 @@ select.crm-input:focus {
 .crm-textarea-wrapper {
     position: relative;
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 180px;
 }
 
 .crm-textarea-highlights {
@@ -3792,6 +3795,7 @@ select.crm-input:focus {
 
 .crm-note-input-textarea {
     width: 100%;
+    flex: 1;
     min-height: 180px;
     max-height: 400px;
     padding: 16px 20px;

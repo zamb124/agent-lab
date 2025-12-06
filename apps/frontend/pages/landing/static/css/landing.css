@@ -1633,6 +1633,13 @@
     text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
+.app-launcher-item-desc {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.7rem;
+    text-align: center;
+    margin-top: 2px;
+}
+
 @media (max-width: 768px) {
     .app-launcher-grid {
         grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
