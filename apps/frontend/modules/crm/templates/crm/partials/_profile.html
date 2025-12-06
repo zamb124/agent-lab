@@ -125,7 +125,7 @@
                     <div style="font-size: 12px; color: var(--crm-text-muted); margin-bottom: 4px;">
                         <i class="ti ti-calendar"></i> {{ t('crm.profile.member_since') }}
                     </div>
-                    <div style="font-size: 14px;">{{ profile.created_at.strftime('%d.%m.%Y') if profile.created_at else '-' }}</div>
+                    <div style="font-size: 14px;">{{ profile.created_at[:10] if profile.created_at else '-' }}</div>
                 </div>
                 <div>
                     <div style="font-size: 12px; color: var(--crm-text-muted); margin-bottom: 4px;">
@@ -134,6 +134,89 @@
                     <div style="font-size: 14px;">{{ profile.bio or '-' }}</div>
                 </div>
             </div>
+        </div>
+    </div>
+    
+    <!-- Telegram Integration -->
+    <div class="crm-card" style="margin-top: 24px;">
+        <div class="crm-card-header">
+            <h3 class="crm-card-title">
+                <i class="ti ti-brand-telegram"></i>
+                {{ t('crm.profile.telegram_integration') }}
+            </h3>
+        </div>
+        <div class="crm-card-body">
+            {% if profile.telegram_id %}
+            <div class="crm-telegram-linked">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div class="crm-telegram-icon" style="width: 48px; height: 48px; background: #0088cc; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                        <i class="ti ti-brand-telegram" style="font-size: 24px; color: white;"></i>
+                    </div>
+                    <div>
+                        <div style="font-weight: 500;">{{ t('crm.profile.telegram_connected') }}</div>
+                        <div style="font-size: 13px; color: var(--crm-text-muted);">
+                            Telegram ID: {{ profile.telegram_id }}
+                            {% if profile.telegram_username %}
+                            <br>@{{ profile.telegram_username }}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <button class="crm-btn crm-btn-ghost" style="color: var(--crm-danger); margin-top: 16px;"
+                        hx-delete="/crm/api/profile/telegram"
+                        hx-target="#crm-content"
+                        hx-confirm="{{ t('crm.profile.telegram_unlink_confirm') }}">
+                    <i class="ti ti-unlink"></i>
+                    {{ t('crm.profile.telegram_unlink') }}
+                </button>
+            </div>
+            {% else %}
+            <div class="crm-telegram-unlinked">
+                <p style="color: var(--crm-text-secondary); margin-bottom: 16px;">
+                    {{ t('crm.profile.telegram_description') }}
+                </p>
+                
+                <div class="crm-telegram-features" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+                    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+                        <i class="ti ti-check" style="color: var(--crm-green);"></i>
+                        {{ t('crm.profile.telegram_feature_notes') }}
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+                        <i class="ti ti-check" style="color: var(--crm-green);"></i>
+                        {{ t('crm.profile.telegram_feature_notifications') }}
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+                        <i class="ti ti-check" style="color: var(--crm-green);"></i>
+                        {{ t('crm.profile.telegram_feature_voice') }}
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px;">
+                        <i class="ti ti-check" style="color: var(--crm-green);"></i>
+                        {{ t('crm.profile.telegram_feature_quick') }}
+                    </div>
+                </div>
+                
+                <div id="telegram-link-form">
+                    <div class="crm-form-group">
+                        <label class="crm-form-label">{{ t('crm.profile.telegram_id_label') }}</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" 
+                                   id="telegram-id-input"
+                                   class="crm-input" 
+                                   placeholder="{{ t('crm.profile.telegram_id_placeholder') }}"
+                                   style="flex: 1;">
+                            <button class="crm-btn crm-btn-primary"
+                                    onclick="CRM.linkTelegram()">
+                                <i class="ti ti-link"></i>
+                                {{ t('crm.profile.telegram_link') }}
+                            </button>
+                        </div>
+                        <div style="font-size: 12px; color: var(--crm-text-muted); margin-top: 8px;">
+                            {{ t('crm.profile.telegram_hint') }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
     

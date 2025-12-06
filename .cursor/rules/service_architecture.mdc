@@ -251,6 +251,32 @@ def _create_app() -> FastAPI:
 app = _create_app()
 ```
 
+## Пример crm/main.py
+
+```python
+from core.app import create_service_app
+from apps.crm.config import CRMSettings
+from apps.crm.container import get_crm_container
+
+async def on_startup(app: FastAPI, container: CRMContainer, settings: CRMSettings):
+    initialize_default_processors(...)
+    await init_system_entity_types(container)
+
+def create_app() -> FastAPI:
+    return create_service_app(
+        service_name="crm",
+        settings_class=CRMSettings,
+        get_container=get_crm_container,
+        routers=[main_router],                       # REST API
+        on_startup=on_startup,
+        api_version="v1",                            # /crm/api/v1/...
+        include_crud_routers=False,
+        include_broker=True,                         # TaskIQ для attachments
+    )
+
+app = create_app()
+```
+
 ## Создание нового сервиса
 
 1. Создать директорию `apps/{service_name}/`

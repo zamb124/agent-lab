@@ -1,0 +1,200 @@
+<!-- Note Full Page View -->
+<script>
+(function() {
+    const noteId = '{{ note.note_id or note.id }}';
+    const expectedUrl = '/crm/notes/' + noteId;
+    if (noteId && window.history && window.location.pathname !== expectedUrl) {
+        window.history.pushState({}, '', expectedUrl);
+    }
+})();
+</script>
+
+<div class="crm-note-page">
+    <!-- Header -->
+    <div class="crm-note-page-header">
+        <button type="button" 
+                class="crm-btn crm-btn-icon crm-btn-ghost"
+                hx-get="/crm/partials/notes"
+                hx-target="#crm-content"
+                hx-push-url="/crm/notes">
+            <i class="ti ti-arrow-left"></i>
+        </button>
+        
+        <div class="crm-note-page-title">
+            <input type="text" 
+                   form="note-form"
+                   name="title" 
+                   class="crm-note-title-input"
+                   placeholder="{{ t('crm.notes.placeholder', 'Note title...') }}"
+                   value="{{ note.title if note else '' }}"
+                   required>
+            <span class="crm-note-page-meta">
+                {{ note.note_date or (note.created_at[:10] if note.created_at else '') }}
+                {% if note.note_type %}
+                · {{ note.note_type | replace('_', ' ') | capitalize }}
+                {% endif %}
+            </span>
+        </div>
+        
+        <div class="crm-note-page-actions">
+            {% if note and (note.note_id or note.id) %}
+            <div class="crm-dropdown">
+                <button class="crm-btn crm-btn-ghost" onclick="this.parentElement.classList.toggle('open')">
+                    <i class="ti ti-dots-vertical"></i>
+                </button>
+                <div class="crm-dropdown-menu">
+                    <a href="/crm/api/notes/{{ note.note_id or note.id }}/export/pdf" 
+                       class="crm-dropdown-item" download>
+                        <i class="ti ti-file-type-pdf"></i> Export PDF
+                    </a>
+                    <a href="/crm/api/notes/{{ note.note_id or note.id }}/export/html" 
+                       class="crm-dropdown-item" download>
+                        <i class="ti ti-file-type-html"></i> Export HTML
+                    </a>
+                    <hr class="crm-dropdown-divider">
+                    <button class="crm-dropdown-item crm-dropdown-item-danger"
+                            hx-delete="/crm/api/notes/{{ note.note_id or note.id }}"
+                            hx-confirm="Delete this note?"
+                            hx-target="#crm-content"
+                            hx-push-url="/crm/notes">
+                        <i class="ti ti-trash"></i> Delete
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Content -->
+    <div class="crm-note-page-content">
+        {% set is_modal = false %}
+        {% include "crm/partials/_note_content.html" %}
+    </div>
+</div>
+
+<style>
+.crm-note-page {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 80px);
+}
+
+.crm-note-page-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--crm-border, #e5e7eb);
+}
+
+.crm-note-page-title {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.crm-note-title-input {
+    width: 100%;
+    border: none;
+    background: transparent;
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--crm-text, #1f2937);
+    padding: 4px 0;
+    outline: none;
+}
+
+.crm-note-title-input::placeholder {
+    color: var(--crm-text-secondary, #9ca3af);
+    font-weight: 400;
+}
+
+.crm-note-title-input:focus {
+    border-bottom: 2px solid var(--crm-primary, #6366f1);
+    margin-bottom: -2px;
+}
+
+.crm-note-page-meta {
+    font-size: 14px;
+    color: var(--crm-text-secondary, #6b7280);
+}
+
+.crm-note-page-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.crm-note-page-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.crm-note-page-content .crm-note-form-body {
+    min-height: calc(100vh - 200px);
+}
+
+/* Dropdown */
+.crm-dropdown {
+    position: relative;
+}
+
+.crm-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    min-width: 180px;
+    background: var(--crm-surface, #ffffff);
+    border: 1px solid var(--crm-border, #e5e7eb);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+    padding: 4px;
+}
+
+.crm-dropdown.open .crm-dropdown-menu {
+    display: block;
+}
+
+.crm-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 12px;
+    border: none;
+    background: none;
+    color: var(--crm-text, #374151);
+    font-size: 14px;
+    text-decoration: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.crm-dropdown-item:hover {
+    background: var(--crm-bg, #f3f4f6);
+}
+
+.crm-dropdown-item-danger {
+    color: #dc2626;
+}
+
+.crm-dropdown-item-danger:hover {
+    background: #fee2e2;
+}
+
+.crm-dropdown-divider {
+    margin: 4px 0;
+    border: none;
+    border-top: 1px solid var(--crm-border, #e5e7eb);
+}
+</style>

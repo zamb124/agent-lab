@@ -1,7 +1,7 @@
 <!-- Entities List Partial -->
 <div class="crm-entities">
     <!-- Filters -->
-    <div style="display: flex; gap: 12px; margin-bottom: 24px;">
+    <div class="crm-entity-filters" style="display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
         <a href="/crm/entities" 
            class="crm-btn {% if not current_type %}crm-btn-primary{% else %}crm-btn-secondary{% endif %}"
            hx-get="/crm/partials/entities"
@@ -9,30 +9,18 @@
            hx-push-url="/crm/entities">
             {{ t('common.all') }}
         </a>
-        <a href="/crm/entities?type=person" 
-           class="crm-btn {% if current_type == 'person' %}crm-btn-primary{% else %}crm-btn-secondary{% endif %}"
-           hx-get="/crm/partials/entities?type=person"
+        {% for entity_type in entity_types %}
+            {% if not entity_type.is_filtered %}
+            <a href="/crm/entities?type={{ entity_type.type_id }}" 
+               class="crm-btn {% if current_type == entity_type.type_id %}crm-btn-primary{% else %}crm-btn-secondary{% endif %}"
+               hx-get="/crm/partials/entities?type={{ entity_type.type_id }}"
            hx-target="#crm-content"
-           hx-push-url="/crm/entities?type=person">
-            <span class="crm-entity-dot person" style="margin-right: 6px;"></span>
-            {{ t('crm.entity_types.people') }}
+               hx-push-url="/crm/entities?type={{ entity_type.type_id }}">
+                <span class="crm-entity-dot-color" style="width: 8px; height: 8px; border-radius: 50%; background: {{ entity_type.color or '#6366f1' }}; margin-right: 6px;"></span>
+                {{ entity_type.name }}
         </a>
-        <a href="/crm/entities?type=company" 
-           class="crm-btn {% if current_type == 'company' %}crm-btn-primary{% else %}crm-btn-secondary{% endif %}"
-           hx-get="/crm/partials/entities?type=company"
-           hx-target="#crm-content"
-           hx-push-url="/crm/entities?type=company">
-            <span class="crm-entity-dot company" style="margin-right: 6px;"></span>
-            {{ t('crm.entity_types.companies') }}
-        </a>
-        <a href="/crm/entities?type=project" 
-           class="crm-btn {% if current_type == 'project' %}crm-btn-primary{% else %}crm-btn-secondary{% endif %}"
-           hx-get="/crm/partials/entities?type=project"
-           hx-target="#crm-content"
-           hx-push-url="/crm/entities?type=project">
-            <span class="crm-entity-dot project" style="margin-right: 6px;"></span>
-            {{ t('crm.entity_types.projects') }}
-        </a>
+            {% endif %}
+        {% endfor %}
     </div>
     
     <!-- Search -->
@@ -62,24 +50,32 @@
             </thead>
             <tbody>
                 {% for entity in entities %}
-                <tr hx-get="/crm/partials/entity-modal/{{ entity.id }}"
+                {% set entity_type_info = None %}
+                {% for et in entity_types %}
+                    {% if et.type_id == entity.entity_type %}
+                        {% set entity_type_info = et %}
+                    {% endif %}
+                {% endfor %}
+                <tr hx-get="/crm/partials/entity/{{ entity.entity_id }}"
                     hx-target="#modal-container"
                     hx-swap="innerHTML">
                     <td>
                         <div style="display: flex; align-items: center; gap: 12px;">
-                            <div class="crm-connection-avatar" style="background: var(--crm-entity-{{ entity.entity_type | default('person') }});">
+                            <div class="crm-connection-avatar" style="background: {{ entity_type_info.color if entity_type_info else '#6366f1' }};">
                                 {{ entity.name[:2] | upper }}
                             </div>
                             <span style="font-weight: 500;">{{ entity.name }}</span>
                         </div>
                     </td>
                     <td>
-                        <span class="crm-entity-badge {{ entity.entity_type | default('person') }}">
-                            {{ entity.entity_type | default('person') | capitalize }}
+                        <span class="crm-entity-badge" style="background: {{ entity_type_info.color if entity_type_info else '#6366f1' }}20; color: {{ entity_type_info.color if entity_type_info else '#6366f1' }};">
+                            {{ entity_type_info.name if entity_type_info else entity.entity_type | capitalize }}
                         </span>
                     </td>
                     <td style="color: var(--crm-text-secondary);">
-                        {% if entity.attributes %}
+                        {% if entity.ai_description %}
+                            {{ entity.ai_description[:50] }}{% if entity.ai_description | length > 50 %}...{% endif %}
+                        {% elif entity.attributes %}
                             {% set attrs = entity.attributes %}
                             {% if attrs.role %}{{ attrs.role }}{% endif %}
                             {% if attrs.email %}<br>{{ attrs.email }}{% endif %}
@@ -103,4 +99,3 @@
     </div>
     {% endif %}
 </div>
-

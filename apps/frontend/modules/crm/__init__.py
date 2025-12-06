@@ -7,3 +7,4 @@ from apps.frontend.modules.crm.plugin import CRMPlugin
 
 __all__ = ["CRMPlugin"]
 
+

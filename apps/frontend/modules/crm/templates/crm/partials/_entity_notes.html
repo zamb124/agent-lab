@@ -1,0 +1,35 @@
+<!-- Entity Notes List -->
+{% if notes and notes | length > 0 %}
+<div class="crm-entity-notes-list">
+    {% for note in notes %}
+    <div class="crm-note-card"
+         hx-get="/crm/partials/note-modal?note_id={{ note.note_id }}"
+         hx-target="#modal-container"
+         style="cursor: pointer; margin-bottom: 12px;">
+        <div class="crm-note-header">
+            <span class="crm-note-type">{{ note.note_type | replace('_', ' ') | capitalize }}</span>
+            <span class="crm-note-date">{{ note.note_date }}</span>
+        </div>
+        <h4 style="margin: 8px 0 4px;">{{ note.title }}</h4>
+        <p style="color: var(--crm-text-muted); font-size: 13px; margin: 0;">
+            {{ note.content | truncate(150) }}
+        </p>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="crm-empty-state" style="padding: 40px;">
+    <div class="crm-empty-icon">
+        <i class="ti ti-notes-off"></i>
+    </div>
+    <h3 class="crm-empty-title">{{ t('crm.entities.no_notes') }}</h3>
+    <p class="crm-empty-description">{{ t('crm.entities.no_notes_description') }}</p>
+    <button class="crm-btn crm-btn-primary"
+            hx-get="/crm/partials/note-modal"
+            hx-target="#modal-container">
+        <i class="ti ti-plus"></i>
+        {{ t('crm.notes.new') }}
+    </button>
+</div>
+{% endif %}
+

@@ -16,6 +16,9 @@
     <!-- Sidebar -->
     <aside class="crm-sidebar">
         <div class="crm-sidebar-header">
+            <a href="/frontend/dashboard" class="crm-back-btn" title="{{ t('crm.back_to_dashboard') }}">
+                <i class="ti ti-arrow-left"></i>
+            </a>
             <a href="/crm/" class="crm-sidebar-logo" hx-get="/crm/partials/dashboard" hx-target="#crm-content" hx-push-url="/crm/">
                 <img src="{{ static('/crm/img/logo_networkle.svg') }}" alt="Networkle">
                 <span>Networkle</span>
@@ -44,7 +47,7 @@
                 
                 <a href="/crm/notes/database" 
                    class="crm-nav-item {% if current_page == 'crm_note_database' %}active{% endif %}"
-                   hx-get="/crm/partials/notes?all=true" 
+                   hx-get="/crm/partials/notes/database" 
                    hx-target="#crm-content" 
                    hx-push-url="/crm/notes/database">
                     <i class="ti ti-database"></i>
@@ -124,31 +127,22 @@
                hx-push-url="/crm/access-requests">
                 <i class="ti ti-lock-access"></i>
                 <span>{{ t('crm.access_requests.title') }}</span>
-            </a>
-            
-            <a href="/crm/settings" 
-               class="crm-nav-item {% if current_page == 'crm_settings' %}active{% endif %}"
-               hx-get="/crm/partials/settings" 
-               hx-target="#crm-content" 
-               hx-push-url="/crm/settings">
-                <i class="ti ti-settings"></i>
-                <span>{{ t('crm.nav.settings') }}</span>
-            </a>
-            
-            <button class="crm-nav-item" data-theme-toggle style="width: 100%; border: none; cursor: pointer;">
-                <i class="ti ti-sun-moon"></i>
-                <span>{{ t('crm.theme.toggle') }}</span>
-            </button>
-            
-            <a href="/frontend/" class="crm-nav-item">
-                <i class="ti ti-arrow-left"></i>
-                <span>{{ t('crm.back_to_dashboard') }}</span>
+                <span class="crm-nav-badge" 
+                      id="access-requests-badge"
+                      hx-get="/crm/api/access-requests/pending-count" 
+                      hx-trigger="load, accessRequestUpdated from:body"
+                      hx-swap="innerHTML"
+                      hx-push-url="false"
+                      style="display: none;"></span>
             </a>
         </div>
     </aside>
     
-    <!-- Main Content -->
+    <!-- Main Content Area -->
     <main class="crm-main">
+        <!-- Island Container -->
+        <div class="crm-island">
+            <!-- Header inside island -->
         <header class="crm-header">
             <h1 class="crm-header-title" id="page-title">
                 {{ t('crm.pages.' + current_page | replace('crm_', '')) }}
@@ -158,12 +152,13 @@
                 <div class="crm-search">
                     <i class="ti ti-search crm-search-icon"></i>
                     <input type="text" 
-                           class="crm-input crm-search-input" 
+                               class="crm-search-input" 
                            placeholder="{{ t('crm.search.placeholder') }}"
                            name="q"
                            hx-get="/crm/partials/search"
                            hx-trigger="keyup changed delay:300ms"
                            hx-target="#search-results">
+                        <kbd class="crm-search-kbd">Enter</kbd>
                     <div id="search-results"></div>
                 </div>
                 
@@ -174,79 +169,101 @@
                     {{ t('crm.ai_assistant.ask') }}
                 </button>
                 
-                <button class="crm-btn crm-btn-analyze"
+                    <button class="crm-btn crm-btn-primary"
                         hx-get="/crm/partials/note-modal" 
                         hx-target="#modal-container"
                         hx-swap="innerHTML">
                     <i class="ti ti-plus"></i>
                     {{ t('crm.actions.new_note') }}
                 </button>
+                    
+                    <!-- Language Toggle -->
+                    <button class="crm-btn crm-btn-ghost crm-btn-lang">
+                        EN
+                    </button>
+                    
+                    <!-- Theme Toggle -->
+                    <button class="crm-btn crm-btn-icon crm-btn-ghost" data-theme-toggle title="{{ t('crm.theme.toggle') }}">
+                        <i class="ti ti-sun-moon"></i>
+                    </button>
+                    
+                    <!-- Settings -->
+                    <button class="crm-btn crm-btn-icon crm-btn-ghost"
+                            hx-get="/crm/partials/settings" 
+                            hx-target="#crm-content"
+                            hx-push-url="/crm/settings">
+                        <i class="ti ti-settings"></i>
+                    </button>
             </div>
         </header>
         
+            <!-- Content -->
         <div class="crm-content crm-scrollbar" id="crm-content">
             {% if current_page == 'crm_dashboard' %}
-            <div hx-get="/crm/partials/dashboard" hx-trigger="load" hx-swap="innerHTML">
-                <div class="crm-empty-state">
-                    <i class="ti ti-loader crm-spinner" style="font-size: 32px; color: var(--crm-blue);"></i>
-                </div>
+            <div hx-get="/crm/partials/dashboard" hx-trigger="load" hx-swap="innerHTML" hx-target="closest #crm-content">
+                    <div class="crm-loading"><i class="ti ti-loader crm-spinner"></i></div>
             </div>
             
             {% elif current_page == 'crm_notes' %}
-            <div hx-get="/crm/partials/notes" hx-trigger="load" hx-swap="innerHTML">
-                <div class="crm-empty-state">
-                    <i class="ti ti-loader crm-spinner" style="font-size: 32px; color: var(--crm-blue);"></i>
+            <div hx-get="/crm/partials/notes" hx-trigger="load" hx-swap="innerHTML" hx-target="closest #crm-content">
+                    <div class="crm-loading"><i class="ti ti-loader crm-spinner"></i></div>
+                </div>
+                
+                {% elif current_page == 'crm_note_detail' %}
+            <!-- DEBUG: note_id={{ note_id }} -->
+            <div hx-get="/crm/partials/notes/{{ note_id }}" hx-trigger="load" hx-swap="innerHTML" hx-target="closest #crm-content">
+                <div class="crm-loading">
+                    <i class="ti ti-loader crm-spinner"></i>
+                    <p style="margin-top: 10px; color: #666;">Loading note {{ note_id }}...</p>
                 </div>
             </div>
             
             {% elif current_page == 'crm_entities' %}
             <div hx-get="/crm/partials/entities{% if request.query_params.get('type') %}?type={{ request.query_params.get('type') }}{% endif %}" 
-                 hx-trigger="load" hx-swap="innerHTML">
-                <div class="crm-empty-state">
-                    <i class="ti ti-loader crm-spinner" style="font-size: 32px; color: var(--crm-blue);"></i>
-                </div>
+                 hx-trigger="load" hx-swap="innerHTML" hx-target="closest #crm-content">
+                    <div class="crm-loading"><i class="ti ti-loader crm-spinner"></i></div>
             </div>
             
             {% elif current_page == 'crm_entity_detail' %}
-            <div hx-get="/crm/partials/entity/{{ entity_id }}" hx-trigger="load" hx-swap="innerHTML">
-                <div class="crm-empty-state">
-                    <i class="ti ti-loader crm-spinner" style="font-size: 32px; color: var(--crm-blue);"></i>
-                </div>
+            <div hx-get="/crm/partials/entity/{{ entity_id }}" hx-trigger="load" hx-swap="innerHTML" hx-target="closest #crm-content">
+                    <div class="crm-loading"><i class="ti ti-loader crm-spinner"></i></div>
             </div>
             
             {% elif current_page == 'crm_tasks' %}
-            <div hx-get="/crm/partials/tasks" hx-trigger="load" hx-swap="innerHTML">
-                <div class="crm-empty-state">
-                    <i class="ti ti-loader crm-spinner" style="font-size: 32px; color: var(--crm-blue);"></i>
-                </div>
+            <div hx-get="/crm/partials/tasks" hx-trigger="load" hx-swap="innerHTML" hx-target="closest #crm-content">
+                    <div class="crm-loading"><i class="ti ti-loader crm-spinner"></i></div>
             </div>
             
             {% elif current_page == 'crm_graph' %}
-            <div hx-get="/crm/partials/graph" hx-trigger="load" hx-swap="innerHTML">
-                <div class="crm-empty-state">
-                    <i class="ti ti-loader crm-spinner" style="font-size: 32px; color: var(--crm-blue);"></i>
-                </div>
+            <div hx-get="/crm/partials/graph" hx-trigger="load" hx-swap="innerHTML" hx-target="closest #crm-content">
+                    <div class="crm-loading"><i class="ti ti-loader crm-spinner"></i></div>
             </div>
             
             {% elif current_page == 'crm_settings' %}
-            <div hx-get="/crm/partials/settings" hx-trigger="load" hx-swap="innerHTML">
-                <div class="crm-empty-state">
-                    <i class="ti ti-loader crm-spinner" style="font-size: 32px; color: var(--crm-blue);"></i>
-                </div>
+            <div hx-get="/crm/partials/settings" hx-trigger="load" hx-swap="innerHTML" hx-target="closest #crm-content">
+                    <div class="crm-loading"><i class="ti ti-loader crm-spinner"></i></div>
             </div>
             
             {% elif current_page == 'crm_note_database' %}
-            <div hx-get="/crm/partials/notes?all=true" hx-trigger="load" hx-swap="innerHTML">
-                <div class="crm-empty-state">
-                    <i class="ti ti-loader crm-spinner" style="font-size: 32px; color: var(--crm-blue);"></i>
+            <div hx-get="/crm/partials/notes/database" hx-trigger="load" hx-swap="innerHTML" hx-target="closest #crm-content">
+                    <div class="crm-loading"><i class="ti ti-loader crm-spinner"></i></div>
                 </div>
+                {% endif %}
             </div>
-            {% endif %}
         </div>
     </main>
     
+    <!-- Tasks Panel Toggle -->
+    <button class="crm-tasks-toggle" 
+            id="tasks-panel-toggle"
+            onclick="CRM.toggleTasksPanel()"
+            title="{{ t('crm.tasks.toggle') }}">
+        <i class="ti ti-layout-sidebar-right"></i>
+    </button>
+    
     <!-- Tasks Panel -->
-    <aside class="crm-tasks-panel">
+    <aside class="crm-tasks-panel" id="tasks-panel">
+        <div class="crm-tasks-panel-inner">
         <div class="crm-tasks-header">
             <div class="crm-tasks-title">
                 <i class="ti ti-checkbox"></i>
@@ -256,15 +273,31 @@
                       hx-trigger="load, every 60s"
                       hx-swap="innerHTML">0</span>
             </div>
+                <button class="crm-btn crm-btn-icon crm-btn-ghost crm-btn-sm"
+                        onclick="CRM.toggleTasksPanel()"
+                        title="{{ t('crm.tasks.hide') }}">
+                    <i class="ti ti-x"></i>
+                </button>
         </div>
         
         <div class="crm-tasks-content crm-scrollbar"
              hx-get="/crm/partials/tasks-sidebar" 
              hx-trigger="load, taskUpdated from:body"
              hx-swap="innerHTML">
+            </div>
         </div>
     </aside>
 </div>
+
+<script>
+(function() {
+    // Restore tasks panel state from cookie
+    const isHidden = document.cookie.split('; ').find(row => row.startsWith('crm_tasks_hidden='))?.split('=')[1] === 'true';
+    if (isHidden) {
+        document.querySelector('.crm-app').classList.add('tasks-panel-hidden');
+    }
+})();
+</script>
 
 <!-- Modal Container -->
 <div id="modal-container"></div>

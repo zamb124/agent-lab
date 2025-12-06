@@ -175,6 +175,44 @@ class TestCRMNavigation:
         assert "/frontend/" in html
 
 
+class TestCRMAdditionalPages:
+    """Тесты дополнительных страниц CRM"""
+
+    @pytest.mark.asyncio
+    async def test_crm_note_detail_page(self, frontend_client, unique_id):
+        """Страница детальной информации о заметке"""
+        note_id = unique_id("note")
+        response = await frontend_client.get(f"/crm/notes/{note_id}")
+        
+        assert response.status_code == 200
+        assert "text/html" in response.headers.get("content-type", "")
+        
+        html = response.text
+        assert "crm-app" in html
+
+    @pytest.mark.asyncio
+    async def test_crm_access_requests_page(self, frontend_client):
+        """Страница запросов на доступ"""
+        response = await frontend_client.get("/crm/access-requests")
+        
+        assert response.status_code == 200
+        assert "text/html" in response.headers.get("content-type", "")
+        
+        html = response.text
+        assert "crm-app" in html
+
+    @pytest.mark.asyncio
+    async def test_crm_profile_page(self, frontend_client):
+        """Страница профиля пользователя"""
+        response = await frontend_client.get("/crm/profile")
+        
+        assert response.status_code == 200
+        assert "text/html" in response.headers.get("content-type", "")
+        
+        html = response.text
+        assert "crm-app" in html
+
+
 class TestCRMAuthentication:
     """Тесты авторизации CRM страниц"""
 

@@ -17,7 +17,7 @@
                 </div>
                 <div style="margin-left: auto;">
                     <button class="crm-btn crm-btn-secondary"
-                            hx-get="/crm/partials/entity-modal/{{ entity.id }}"
+                            hx-get="/crm/partials/entity/{{ entity.entity_id or entity.id }}"
                             hx-target="#modal-container">
                         <i class="ti ti-edit"></i>
                         {{ t('crm.actions.edit') }}
@@ -61,14 +61,14 @@
                 <div class="crm-connections-grid" style="grid-template-columns: 1fr;">
                     {% for rel in relationships %}
                     <div class="crm-connection-item"
-                         hx-get="/crm/partials/entity-modal/{{ rel.target_entity_id if rel.source_entity_id == entity.id else rel.source_entity_id }}"
+                         hx-get="/crm/partials/entity/{{ rel.target_entity_id if rel.source_entity_id == (entity.entity_id or entity.id) else rel.source_entity_id }}"
                          hx-target="#modal-container">
                         <div class="crm-connection-avatar">
-                            {{ rel.target_name[:2] if rel.source_entity_id == entity.id else rel.source_name[:2] | upper }}
+                            {{ rel.target_name[:2] if rel.source_entity_id == (entity.entity_id or entity.id) else rel.source_name[:2] | upper }}
                         </div>
                         <div class="crm-connection-info">
                             <div class="crm-connection-name">
-                                {{ rel.target_name if rel.source_entity_id == entity.id else rel.source_name }}
+                                {{ rel.target_name if rel.source_entity_id == (entity.entity_id or entity.id) else rel.source_name }}
                             </div>
                             <div class="crm-connection-role">
                                 {{ t('crm.relationships.' + rel.relationship_type) | default(rel.relationship_type) }}

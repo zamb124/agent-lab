@@ -63,8 +63,8 @@ def event_loop_policy():
 def event_loop(event_loop_policy):
     """Общий event loop для всей сессии тестов.
     
-    Необходимо для корректной работы PostgreSQL broker в TaskIQ -
-    все соединения asyncpg должны быть в одном event loop.
+    Необходимо для корректной работы Redis broker в TaskIQ -
+    все соединения должны быть в одном event loop.
     """
     loop = event_loop_policy.new_event_loop()
     asyncio.set_event_loop(loop)
@@ -1030,21 +1030,21 @@ async def test_helpers():
 
 @pytest_asyncio.fixture(scope="session")
 async def taskiq_broker(migrated_db):
-    """Инициализирует PostgreSQL TaskIQ broker для всей сессии тестов"""
+    """Инициализирует Redis TaskIQ broker для всей сессии тестов"""
     from core.tasks.broker import broker
     
     await broker.startup()
-    logger.info("TaskIQ PostgreSQL broker запущен для сессии тестов")
+    logger.info("TaskIQ Redis broker запущен для сессии тестов")
     
     yield broker
     
     await broker.shutdown()
-    logger.info("TaskIQ PostgreSQL broker остановлен")
+    logger.info("TaskIQ Redis broker остановлен")
 
 
 @pytest_asyncio.fixture(scope="session")
 async def taskiq_schedule_source(migrated_db):
-    """Инициализирует PostgreSQL TaskIQ schedule source для отложенных задач"""
+    """Инициализирует Redis TaskIQ schedule source для отложенных задач"""
     from core.tasks.broker import schedule_source
     
     await schedule_source.startup()
@@ -1359,6 +1359,38 @@ async def session_test_data(migrated_db):
     )
     await container.subdomain_repository.set(subdomain_mapping)
     
+    # Создаем sharing users для тестов API
+    import json
+    sharing_users_data = [
+        ("sharing_user_alice", "Alice Sharing", "alice.sharing@testmail.com"),
+        ("sharing_user_bob", "Bob Sharing", "bob.sharing@testmail.com"),
+        ("sharing_user_charlie", "Charlie Sharing", "charlie.sharing@testmail.com"),
+    ]
+    for user_id, name, email in sharing_users_data:
+        sharing_user = User(
+            user_id=user_id,
+            provider=AuthProvider.GOOGLE,
+            provider_user_id=f"provider_{user_id}",
+            email=email,
+            name=name,
+            status=UserStatus.ACTIVE,
+            groups=["user"],
+            companies={session_company.company_id: ["member"]},
+            active_company_id=session_company.company_id,
+        )
+        await container.user_repository.set(sharing_user)
+        
+        providers_key = f"user_providers:{user_id}"
+        providers_data = {
+            f"provider_{user_id}": {
+                "provider_name": "google",
+                "email": email,
+                "avatar_url": None,
+                "metadata": {}
+            }
+        }
+        await container.shared_storage.set(providers_key, json.dumps(providers_data), force_global=True)
+    
     token_service = get_token_service()
     token = token_service.create_token(
         user_id=session_user.user_id,
@@ -1496,12 +1528,16 @@ async def service_auth_headers(test_user, test_company, user_repo, company_repo)
 async def crm_app(migrated_db):
     """FastAPI приложение для CRM сервиса (порт 8003)"""
     from apps.crm.main import create_app
+    
     app = create_app()
     
-    # Инициализируем БД и типы
+    # Инициализируем через on_startup (включает file_processors)
     container = app.state.container
-    await container.init_db()
-    await container.entity_type_service.init_system_types()
+    settings = app.state.settings
+    
+    # Вызываем on_startup вручную (lifespan не выполняется с ASGITransport)
+    from apps.crm.main import on_startup
+    await on_startup(app, container, settings)
     
     return app
 

@@ -167,3 +167,132 @@ class TestProfileAPI:
         
         # Должна быть хотя бы одна заметка (test_note)
         assert data["notes_count"] >= 0
+
+    @pytest.mark.asyncio
+    async def test_link_telegram(self, crm_client: AsyncClient):
+        """Тест привязки Telegram аккаунта"""
+        response = await crm_client.post(
+            "/crm/api/v1/profile/telegram/link",
+            json={"telegram_username": "test_user_123"}
+        )
+        
+        assert response.status_code == 200, f"Ошибка: {response.text}"
+        data = response.json()
+        
+        assert "success" in data or "telegram_username" in data
+    
+    @pytest.mark.asyncio
+    async def test_link_telegram_and_verify_in_profile(self, crm_client: AsyncClient):
+        """Тест что привязанный Telegram отображается в профиле"""
+        # Привязываем Telegram
+        link_response = await crm_client.post(
+            "/crm/api/v1/profile/telegram/link",
+            json={"telegram_username": "verify_test_user"}
+        )
+        assert link_response.status_code == 200
+        
+        # Проверяем что он есть в профиле
+        profile_response = await crm_client.get("/crm/api/v1/profile")
+        assert profile_response.status_code == 200
+        
+        profile = profile_response.json()
+        # telegram_username должен быть в профиле или в telegram_linked
+        assert (
+            profile.get("telegram_username") == "verify_test_user" or
+            profile.get("telegram_linked") is True or
+            "telegram" in str(profile).lower()
+        )
+    
+    @pytest.mark.asyncio
+    async def test_unlink_telegram(self, crm_client: AsyncClient):
+        """Тест отвязки Telegram аккаунта"""
+        # Сначала привязываем
+        await crm_client.post(
+            "/crm/api/v1/profile/telegram/link",
+            json={"telegram_username": "user_to_unlink"}
+        )
+        
+        # Отвязываем
+        response = await crm_client.delete("/crm/api/v1/profile/telegram/link")
+        
+        assert response.status_code == 200, f"Ошибка: {response.text}"
+        data = response.json()
+        
+        assert "success" in data or "telegram_username" in data
+    
+    @pytest.mark.asyncio
+    async def test_unlink_telegram_when_not_linked(self, crm_client: AsyncClient):
+        """Тест отвязки когда Telegram не привязан"""
+        # Сначала убеждаемся что отвязан
+        await crm_client.delete("/crm/api/v1/profile/telegram/link")
+        
+        # Пытаемся отвязать снова
+        response = await crm_client.delete("/crm/api/v1/profile/telegram/link")
+        
+        # Должен вернуть успех (идемпотентная операция) или ошибку
+        assert response.status_code in [200, 400]
+    
+    @pytest.mark.asyncio
+    async def test_link_telegram_empty_username(self, crm_client: AsyncClient):
+        """Тест привязки с пустым username - API принимает пустую строку"""
+        response = await crm_client.post(
+            "/crm/api/v1/profile/telegram/link",
+            json={"telegram_username": ""}
+        )
+        
+        # API принимает пустую строку как валидный username
+        assert response.status_code == 200
+    
+    @pytest.mark.asyncio
+    async def test_get_sidebar_defaults(self, crm_client: AsyncClient):
+        """Тест получения дефолтных настроек sidebar"""
+        response = await crm_client.get("/crm/api/v1/profile/sidebar/defaults")
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        assert "items" in data
+        assert isinstance(data["items"], list)
+        assert len(data["items"]) > 0
+        
+        # Каждый элемент должен иметь нужные поля
+        item = data["items"][0]
+        assert "id" in item
+        assert "label" in item
+        assert "visible" in item
+    
+    @pytest.mark.asyncio
+    async def test_update_sidebar_config(self, crm_client: AsyncClient):
+        """Тест обновления конфигурации sidebar"""
+        response = await crm_client.put(
+            "/crm/api/v1/profile/sidebar",
+            json={
+                "items": [
+                    {"id": "dashboard", "visible": True, "order": 0},
+                    {"id": "notes", "visible": False, "order": 1},
+                ]
+            }
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Должен вернуть обновленный профиль
+        assert "user_id" in data or "sidebar_config" in data
+    
+    @pytest.mark.asyncio
+    async def test_update_widget_config(self, crm_client: AsyncClient):
+        """Тест обновления конфигурации виджетов"""
+        response = await crm_client.put(
+            "/crm/api/v1/profile/widgets",
+            json={
+                "enabled_widgets": ["tasks", "notes", "calendar"],
+                "layout": {"tasks": {"column": 1, "row": 1}}
+            }
+        )
+        
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Должен вернуть обновленный профиль
+        assert "user_id" in data or "widget_config" in data

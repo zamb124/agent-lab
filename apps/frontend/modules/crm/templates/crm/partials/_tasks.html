@@ -1,5 +1,53 @@
 <!-- Tasks List Partial -->
 <div class="crm-tasks-page">
+    <!-- Header with filters and create button -->
+    <div class="crm-tasks-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div class="crm-tasks-filters" style="display: flex; gap: 12px; align-items: center;">
+            <select class="crm-input crm-input-sm" 
+                    id="task-status-filter"
+                    hx-get="/crm/partials/tasks"
+                    hx-target="#crm-content"
+                    hx-include="[id^='task-']"
+                    style="width: 140px;">
+                <option value="">{{ t('crm.tasks.all_status') }}</option>
+                <option value="pending" {% if filter_status == 'pending' %}selected{% endif %}>{{ t('crm.tasks.status_pending') }}</option>
+                <option value="in_progress" {% if filter_status == 'in_progress' %}selected{% endif %}>{{ t('crm.tasks.status_in_progress') }}</option>
+                <option value="completed" {% if filter_status == 'completed' %}selected{% endif %}>{{ t('crm.tasks.status_completed') }}</option>
+            </select>
+            
+            <select class="crm-input crm-input-sm"
+                    id="task-priority-filter"
+                    hx-get="/crm/partials/tasks"
+                    hx-target="#crm-content"
+                    hx-include="[id^='task-']"
+                    style="width: 140px;">
+                <option value="">{{ t('crm.tasks.all_priority') }}</option>
+                <option value="urgent" {% if filter_priority == 'urgent' %}selected{% endif %}>{{ t('crm.tasks.priority_urgent') }}</option>
+                <option value="high" {% if filter_priority == 'high' %}selected{% endif %}>{{ t('crm.tasks.priority_high') }}</option>
+                <option value="medium" {% if filter_priority == 'medium' %}selected{% endif %}>{{ t('crm.tasks.priority_medium') }}</option>
+                <option value="low" {% if filter_priority == 'low' %}selected{% endif %}>{{ t('crm.tasks.priority_low') }}</option>
+            </select>
+            
+            <input type="text" 
+                   class="crm-input crm-input-sm"
+                   id="task-search"
+                   placeholder="{{ t('crm.tasks.search') }}"
+                   hx-get="/crm/partials/tasks"
+                   hx-target="#crm-content"
+                   hx-include="[id^='task-']"
+                   hx-trigger="keyup changed delay:300ms"
+                   value="{{ search_query | default('') }}"
+                   style="width: 200px;">
+        </div>
+        
+        <button class="crm-btn crm-btn-primary"
+                hx-get="/crm/partials/task-modal"
+                hx-target="#modal-container">
+            <i class="ti ti-plus"></i>
+            {{ t('crm.tasks.new') }}
+        </button>
+    </div>
+    
     <!-- Stats -->
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px;">
         <div class="crm-card">
@@ -36,30 +84,73 @@
         </div>
     </div>
     
+    <!-- Progress Bar -->
+    {% set total_tasks = (stats.pending | default(0)) + (stats.completed | default(0)) + (stats.overdue | default(0)) %}
+    {% if total_tasks > 0 %}
+    <div class="crm-card" style="margin-bottom: 24px;">
+        <div class="crm-card-body" style="padding: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 14px; font-weight: 500;">{{ t('crm.tasks.daily_progress') }}</span>
+                <span style="font-size: 14px; color: var(--crm-text-muted);">
+                    {{ stats.completed | default(0) }} / {{ total_tasks }}
+                </span>
+            </div>
+            <div class="crm-progress-bar">
+                <div class="crm-progress-fill" style="width: {{ ((stats.completed | default(0)) / total_tasks * 100) | round(1) }}%;"></div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
     <!-- Tasks List -->
     {% if tasks and tasks | length > 0 %}
     <div class="crm-card">
-        <div class="crm-card-header">
+        <div class="crm-card-header" style="display: flex; justify-content: space-between; align-items: center;">
             <h3 class="crm-card-title">{{ t('crm.tasks.title') }}</h3>
+            <span class="crm-badge">{{ tasks | length }}</span>
         </div>
         <div class="crm-card-body" style="padding: 0;">
             {% for task in tasks %}
             <div class="crm-task-item {% if task.is_overdue %}overdue{% endif %} {% if task.status == 'completed' %}completed{% endif %}"
-                 style="padding: 16px 20px; border-bottom: 1px solid var(--crm-border-light);">
-                <div class="crm-task-checkbox"
-                     hx-post="/frontend/api/crm/tasks/{{ task.id }}/complete"
-                     hx-target="#crm-content"
-                     hx-swap="innerHTML"></div>
+                 style="padding: 16px 20px; border-bottom: 1px solid var(--crm-border-light); cursor: pointer;"
+                 hx-get="/crm/partials/task-modal?task_id={{ task.task_id }}"
+                 hx-target="#modal-container"
+                 hx-trigger="click"
+                 hx-swap="innerHTML">
                 
-                <div class="crm-task-info">
-                    <div class="crm-task-text">{{ task.title }}</div>
+                <div class="crm-task-checkbox {% if task.status == 'completed' %}checked{% endif %}"
+                     hx-post="/crm/api/tasks/{{ task.task_id }}/complete"
+                     hx-trigger="click consume"
+                     hx-target="#crm-content"
+                     hx-swap="innerHTML"
+                     hx-push-url="false"
+                     onclick="event.stopPropagation()">
+                    {% if task.status == 'completed' %}
+                    <i class="ti ti-check"></i>
+                    {% endif %}
+                </div>
+                
+                <div class="crm-task-info" style="flex: 1;">
+                    <div class="crm-task-text" style="{% if task.status == 'completed' %}text-decoration: line-through; opacity: 0.6;{% endif %}">
+                        {{ task.title }}
+                    </div>
+                    {% if task.description %}
+                    <div class="crm-task-description" style="font-size: 12px; color: var(--crm-text-muted); margin-top: 2px;">
+                        {{ task.description | truncate(80) }}
+                    </div>
+                    {% endif %}
                     <div class="crm-task-meta">
                         <span class="crm-task-date {% if task.is_overdue %}overdue{% endif %}">
                             <i class="ti ti-calendar"></i>
                             {{ task.due_date | default('') }}
                         </span>
                         {% if task.priority == 'high' or task.priority == 'urgent' %}
-                        <span class="crm-task-priority high">{{ task.priority | upper }}</span>
+                        <span class="crm-task-priority {{ task.priority }}">{{ task.priority | upper }}</span>
+                        {% endif %}
+                        {% if task.status == 'in_progress' %}
+                        <span class="crm-task-status in-progress">
+                            <i class="ti ti-loader"></i> {{ t('crm.tasks.in_progress') }}
+                        </span>
                         {% endif %}
                     </div>
                     {% if task.tags and task.tags | length > 0 %}
@@ -74,14 +165,33 @@
                     {% endif %}
                 </div>
                 
-                {% if task.entity %}
-                <div class="crm-task-avatar" 
-                     style="background: var(--crm-entity-{{ task.entity.entity_type | default('person') }});"
-                     hx-get="/crm/partials/entity-modal/{{ task.entity.id }}"
-                     hx-target="#modal-container">
-                    {{ task.entity.name[:2] | upper }}
+                {% if task.assignees and task.assignees | length > 0 %}
+                <div class="crm-task-assignees" style="display: flex; margin-right: 12px;">
+                    {% for assignee in task.assignees[:3] %}
+                    <div class="crm-assignee-mini" title="{{ assignee }}">
+                        {{ assignee[:2] | upper }}
+                    </div>
+                    {% endfor %}
+                    {% if task.assignees | length > 3 %}
+                    <div class="crm-assignee-mini crm-assignee-more">+{{ task.assignees | length - 3 }}</div>
+                    {% endif %}
                 </div>
                 {% endif %}
+                
+                {% if task.linked_entity %}
+                <div class="crm-task-avatar" 
+                     style="background: var(--crm-entity-{{ task.linked_entity.entity_type | default('person') }});">
+                    {{ task.linked_entity.name[:2] | upper }}
+                </div>
+                {% endif %}
+                
+                <button class="crm-btn crm-btn-icon crm-btn-ghost crm-btn-sm"
+                        hx-delete="/crm/api/tasks/{{ task.task_id }}"
+                        hx-target="#crm-content"
+                        hx-confirm="{{ t('crm.tasks.delete_confirm') }}"
+                        onclick="event.stopPropagation()">
+                    <i class="ti ti-trash"></i>
+                </button>
             </div>
             {% endfor %}
         </div>
@@ -93,7 +203,12 @@
         </div>
         <h3 class="crm-empty-title">{{ t('crm.tasks.empty') }}</h3>
         <p class="crm-empty-description">{{ t('crm.tasks.empty_description') }}</p>
+        <button class="crm-btn crm-btn-primary"
+                hx-get="/crm/partials/task-modal"
+                hx-target="#modal-container">
+            <i class="ti ti-plus"></i>
+            {{ t('crm.tasks.create_first') }}
+        </button>
     </div>
     {% endif %}
 </div>
-

@@ -75,6 +75,37 @@ class RelationshipService:
         
         return self._to_response(relationship)
     
+    async def get_or_create_relationship(
+        self,
+        data: RelationshipCreate,
+        company_id: Optional[str] = None
+    ) -> tuple[RelationshipResponse, bool]:
+        """
+        Получает существующую связь или создает новую.
+        
+        Returns:
+            (relationship, created) - связь и флаг была ли создана
+        """
+        company_id = company_id or self._get_company_id()
+        
+        # Проверяем существует ли уже такая связь
+        existing = await self._repo.find_exact(
+            company_id=company_id,
+            source_entity_id=data.source_entity_id,
+            target_entity_id=data.target_entity_id,
+            relationship_type=data.relationship_type,
+        )
+        
+        if existing:
+            logger.debug(
+                f"Связь уже существует: {data.source_entity_id} --{data.relationship_type}--> {data.target_entity_id}"
+            )
+            return self._to_response(existing), False
+        
+        # Создаем новую
+        created = await self.create_relationship(data, company_id)
+        return created, True
+    
     async def get_relationship(
         self, 
         relationship_id: str,
@@ -174,5 +205,6 @@ class RelationshipService:
             attributes=relationship.attributes or {},
             created_at=relationship.created_at,
         )
+
 
 

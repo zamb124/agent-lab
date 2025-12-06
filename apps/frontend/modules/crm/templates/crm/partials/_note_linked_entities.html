@@ -1,0 +1,225 @@
+<!-- Linked Entities for Note -->
+<div class="crm-linked-entities">
+    <div class="crm-linked-entities-header">
+        <i class="ti ti-link"></i>
+        <span>LINKED ENTITIES</span>
+        {% if entities and entities | length > 0 %}
+        <span class="crm-linked-count">{{ entities | length }}</span>
+        {% endif %}
+    </div>
+    
+    {% if entities and entities | length > 0 %}
+    <div class="crm-linked-entities-list">
+        {% for entity in entities %}
+        <a href="#" 
+           class="crm-linked-entity-item"
+           hx-get="/crm/partials/entity/{{ entity.entity_id or entity.id }}"
+           hx-target="#modal-container"
+           hx-swap="innerHTML"
+           onclick="event.preventDefault()">
+            <div class="crm-linked-entity-icon crm-entity-icon-{{ (entity.type or 'default') | lower }}">
+                {% if entity.type | lower == 'person' %}
+                <i class="ti ti-user"></i>
+                {% elif entity.type | lower == 'organization' or entity.type | lower == 'company' %}
+                <i class="ti ti-building"></i>
+                {% elif entity.type | lower == 'project' %}
+                <i class="ti ti-folder"></i>
+                {% elif entity.type | lower == 'meeting' %}
+                <i class="ti ti-calendar-event"></i>
+                {% elif entity.type | lower == 'task' %}
+                <i class="ti ti-checklist"></i>
+                {% else %}
+                <i class="ti ti-bookmark"></i>
+                {% endif %}
+            </div>
+            <div class="crm-linked-entity-info">
+                <span class="crm-linked-entity-name">{{ entity.name }}</span>
+                <span class="crm-linked-entity-type">{{ entity.type | default('entity') | capitalize }}</span>
+            </div>
+            <button type="button" 
+                    class="crm-btn crm-btn-icon crm-btn-ghost crm-btn-sm crm-unlink-btn"
+                    hx-delete="/crm/partials/notes/{{ note_id }}/unlink/{{ entity.entity_id or entity.id }}"
+                    hx-target="#note-linked-entities"
+                    hx-swap="innerHTML"
+                    hx-confirm="Unlink this entity from note?"
+                    onclick="event.stopPropagation()">
+                <i class="ti ti-unlink"></i>
+            </button>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="crm-linked-entities-empty-content">
+        <span>No entities linked</span>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.crm-linked-entities {
+    padding: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--crm-border-light, #e5e7eb);
+}
+
+.crm-linked-entities-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--crm-text-secondary, #6b7280);
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+    padding: 0 4px;
+}
+
+.crm-linked-entities-header i:first-child {
+    font-size: 14px;
+    color: var(--crm-blue, #5B8EC2);
+}
+
+.crm-linked-count {
+    background: var(--crm-blue, #5B8EC2);
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    margin-left: auto;
+}
+
+.crm-linked-entities-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+a.crm-linked-entity-item,
+.crm-linked-entity-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-decoration: none;
+    color: inherit;
+}
+
+a.crm-linked-entity-item:hover,
+.crm-linked-entity-item:hover {
+    background: var(--crm-bg-secondary, #f0f4f4);
+    text-decoration: none;
+}
+
+.crm-linked-entity-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.crm-linked-entity-icon i {
+    font-size: 16px;
+    color: white;
+}
+
+.crm-entity-icon-person {
+    background: linear-gradient(135deg, #5B8EC2, #4A7AAD);
+}
+
+.crm-entity-icon-organization,
+.crm-entity-icon-company {
+    background: linear-gradient(135deg, #6B5B95, #554878);
+}
+
+.crm-entity-icon-project {
+    background: linear-gradient(135deg, #7BC96F, #5FAF52);
+}
+
+.crm-entity-icon-task {
+    background: linear-gradient(135deg, #F59E0B, #D97706);
+}
+
+.crm-entity-icon-meeting {
+    background: linear-gradient(135deg, #FF6B6B, #E55555);
+}
+
+.crm-entity-icon-default {
+    background: linear-gradient(135deg, #5BA8A8, #4A9090);
+}
+
+.crm-linked-entity-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.crm-linked-entity-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--crm-text-primary, #1f2937);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.crm-linked-entity-type {
+    font-size: 11px;
+    color: var(--crm-text-muted, #9ca3af);
+    text-transform: capitalize;
+}
+
+.crm-unlink-btn {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.crm-linked-entity-item:hover .crm-unlink-btn {
+    opacity: 1;
+}
+
+.crm-unlink-btn:hover {
+    color: var(--crm-danger, #ef4444) !important;
+}
+
+.crm-linked-entities-empty {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    color: var(--crm-text-muted, #9ca3af);
+    font-size: 13px;
+    font-style: italic;
+    border-bottom: 1px solid var(--crm-border-light, #e5e7eb);
+}
+
+.crm-linked-entities-empty i {
+    font-size: 16px;
+    opacity: 0.5;
+}
+
+.crm-linked-entities-empty-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 4px;
+    color: var(--crm-text-muted, #9ca3af);
+    font-size: 13px;
+    font-style: italic;
+}
+
+.crm-loading-sm {
+    display: flex;
+    justify-content: center;
+    padding: 16px;
+}
+</style>
+

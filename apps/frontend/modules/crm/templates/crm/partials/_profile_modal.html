@@ -1,5 +1,5 @@
 <!-- Edit Profile Modal -->
-<div class="crm-modal-overlay" onclick="if(event.target === this) CRM.closeModal()">
+<div class="modal-overlay" onclick="if(event.target === this) CRM.closeModal()">
     <div class="crm-modal crm-modal-md">
         <div class="crm-modal-header">
             <h2 class="crm-modal-title">{{ t('crm.profile.edit') }}</h2>
@@ -11,6 +11,7 @@
         <form hx-put="/crm/api/profile"
               hx-target="#crm-content"
               hx-swap="innerHTML"
+              hx-ext="json-enc"
               hx-on::after-request="CRM.closeModal()">
             <div class="crm-modal-body">
                 <div class="crm-form-group">

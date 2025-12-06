@@ -1,184 +1,952 @@
-<!-- Entity Detail Modal -->
-<div class="crm-modal-overlay" onclick="if(event.target === this) CRM.closeModal()">
-    <div class="crm-modal crm-modal-lg">
+<!-- Entity Detail Modal - Full Layout -->
+{% set current_entity_type = None %}
+{% if entity and entity_types %}
+    {% for et in entity_types %}
+        {% if et.type_id == entity.entity_type %}
+            {% set current_entity_type = et %}
+        {% endif %}
+    {% endfor %}
+{% endif %}
+
+{# Macro for generating input field based on field type #}
+{% macro render_field_input(field_id, field_def, value, is_required=False) %}
+    {% set field_type = field_def.type | default('str') %}
+    {% set placeholder = field_def.placeholder | default('') %}
+    {% set required_attr = 'required' if is_required else '' %}
+    
+    {% if field_type == 'textarea' %}
+    <textarea name="{{ field_id }}" 
+              class="crm-entity-edit-input crm-entity-edit-mode" 
+              placeholder="{{ placeholder }}"
+              rows="3"
+              {{ required_attr }}>{{ value | default('') }}</textarea>
+    {% elif field_type == 'email' %}
+    <input type="email" name="{{ field_id }}" 
+           class="crm-entity-edit-input crm-entity-edit-mode" 
+           value="{{ value | default('') }}" 
+           placeholder="{{ placeholder or 'email@example.com' }}"
+           {{ required_attr }}>
+    {% elif field_type == 'phone' %}
+    <input type="tel" name="{{ field_id }}" 
+           class="crm-entity-edit-input crm-entity-edit-mode" 
+           value="{{ value | default('') }}" 
+           placeholder="{{ placeholder or '+7 999 123-45-67' }}"
+           {{ required_attr }}>
+    {% elif field_type == 'link' %}
+    <input type="url" name="{{ field_id }}" 
+           class="crm-entity-edit-input crm-entity-edit-mode" 
+           value="{{ value | default('') }}" 
+           placeholder="{{ placeholder or 'https://' }}"
+           {{ required_attr }}>
+    {% elif field_type == 'date' %}
+    <input type="date" name="{{ field_id }}" 
+           class="crm-entity-edit-input crm-entity-edit-mode" 
+           value="{{ value | default('') }}"
+           {{ required_attr }}>
+    {% elif field_type == 'int' %}
+    <input type="number" name="{{ field_id }}" 
+           class="crm-entity-edit-input crm-entity-edit-mode" 
+           value="{{ value | default('') }}" 
+           placeholder="{{ placeholder }}"
+           {{ required_attr }}>
+    {% else %}
+    <input type="text" name="{{ field_id }}" 
+           class="crm-entity-edit-input crm-entity-edit-mode" 
+           value="{{ value | default('') }}" 
+           placeholder="{{ placeholder }}"
+           {{ required_attr }}>
+    {% endif %}
+{% endmacro %}
+
+{# Macro for displaying field value in view mode #}
+{% macro render_field_value(field_id, field_def, value) %}
+    {% set field_type = field_def.type | default('str') %}
+    
+    {% if value %}
+        {% if field_type == 'email' %}
+        <a href="mailto:{{ value }}" class="crm-entity-contact-value">{{ value }}</a>
+        {% elif field_type == 'phone' %}
+        <a href="tel:{{ value }}" class="crm-entity-contact-value">{{ value }}</a>
+        {% elif field_type == 'link' %}
+        <a href="{{ value }}" target="_blank" class="crm-entity-contact-value">{{ value }}</a>
+        {% else %}
+        <span class="crm-entity-contact-value">{{ value }}</span>
+        {% endif %}
+    {% else %}
+    <span class="crm-entity-contact-empty">Not set</span>
+    {% endif %}
+{% endmacro %}
+
+<div class="modal-overlay" onclick="if(event.target === this) CRM.closeModal()">
+    <div class="crm-entity-modal">
         {% if entity %}
-        <div class="crm-modal-header">
-            <div class="crm-modal-avatar {{ entity.entity_type | default('person') }}">
+        <!-- Header -->
+        <div class="crm-entity-modal-header">
+            <button class="crm-btn crm-btn-icon crm-btn-ghost" onclick="CRM.closeModal()">
+                <i class="ti ti-arrow-left"></i>
+            </button>
+            
+            <div class="crm-entity-modal-avatar {{ entity.entity_type | default('person') }}">
                 {{ entity.name[:2] | upper }}
             </div>
-            <div class="crm-modal-title-group">
-                <h2 class="crm-modal-title">{{ entity.name }}</h2>
-                <span class="crm-modal-subtitle">
-                    {{ entity.attributes.role | default('') }}
-                </span>
-            </div>
-            <button class="crm-btn crm-btn-secondary crm-btn-sm" style="margin-left: auto; margin-right: 12px;">
-                <i class="ti ti-pencil"></i>
-                {{ t('crm.actions.save') }}
-            </button>
-            <button class="crm-modal-close" onclick="CRM.closeModal()">
-                <i class="ti ti-x"></i>
-            </button>
-        </div>
-        
-        <div class="crm-modal-body" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-            <!-- Left Column -->
-            <div>
-                <!-- Contact Information -->
-                <div class="crm-modal-section">
-                    <div class="crm-modal-section-title">
-                        <i class="ti ti-address-book"></i>
-                        Contact Information
-                    </div>
-                    
-                    <div class="crm-form-group">
-                        <div class="crm-form-icon-input">
-                            <i class="ti ti-mail"></i>
-                            <input type="email" class="crm-input" placeholder="Email"
-                                   value="{{ entity.attributes.email | default('') }}">
-                        </div>
-                    </div>
-                    
-                    <div class="crm-form-group">
-                        <div class="crm-form-icon-input">
-                            <i class="ti ti-phone"></i>
-                            <input type="tel" class="crm-input" placeholder="Phone"
-                                   value="{{ entity.attributes.phone | default('') }}">
-                        </div>
-                    </div>
-                    
-                    <div class="crm-form-group">
-                        <div class="crm-form-icon-input">
-                            <i class="ti ti-map-pin"></i>
-                            <input type="text" class="crm-input" placeholder="Location"
-                                   value="{{ entity.attributes.location | default('') }}">
-                        </div>
-                    </div>
-                    
-                    <div class="crm-form-group">
-                        <div class="crm-form-icon-input">
-                            <i class="ti ti-brand-linkedin"></i>
-                            <input type="url" class="crm-input" placeholder="LinkedIn URL"
-                                   value="{{ entity.attributes.linkedin | default('') }}">
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- CRM Settings -->
-                <div class="crm-modal-section">
-                    <div class="crm-modal-section-title">
-                        <i class="ti ti-settings"></i>
-                        CRM Settings
-                    </div>
-                    
-                    <div class="crm-form-row">
-                        <div class="crm-form-group">
-                            <label class="crm-form-label">VIP Score (1-10)</label>
-                            <input type="number" class="crm-input" min="1" max="10"
-                                   value="{{ entity.attributes.vip_score | default(5) }}">
-                        </div>
-                        <div class="crm-form-group">
-                            <label class="crm-form-label">Reconnect (Weeks)</label>
-                            <input type="number" class="crm-input" min="1"
-                                   value="{{ entity.attributes.reconnect_weeks | default(4) }}">
-                        </div>
-                    </div>
-                </div>
-                
-                <button class="crm-btn crm-btn-ghost" style="color: var(--crm-danger);">
-                    <i class="ti ti-trash"></i>
-                    Delete {{ entity.entity_type | capitalize }}
-                </button>
+            
+            <div class="crm-entity-modal-title">
+                <h2>{{ entity.name }}</h2>
+                <span>{{ entity.attributes.position or entity.attributes.role or entity.entity_type | capitalize }}</span>
             </div>
             
-            <!-- Right Column -->
-            <div>
-                <!-- Name Editing -->
-                <div class="crm-modal-section">
-                    <div class="crm-modal-section-title">
-                        <i class="ti ti-edit"></i>
-                        Name Editing
+            <div class="crm-entity-modal-actions">
+                <button class="crm-btn crm-btn-secondary crm-btn-sm" 
+                        onclick="CRM.toggleEntityEdit()" 
+                        id="entity-edit-btn">
+                    <i class="ti ti-pencil"></i>
+                    <span>Edit Profile</span>
+                </button>
+                <button class="crm-btn crm-btn-primary crm-btn-sm" 
+                        id="entity-save-btn"
+                        style="display: none;"
+                        hx-put="/crm/api/entities/{{ entity.entity_id }}"
+                        hx-ext="json-enc"
+                        hx-include="#entity-edit-form"
+                        hx-target="#modal-container">
+                    <i class="ti ti-check"></i>
+                    Save
+                </button>
+                <button class="crm-btn crm-btn-icon crm-btn-ghost" onclick="CRM.toggleEntityFullscreen()">
+                    <i class="ti ti-arrows-maximize"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Body -->
+        <div class="crm-entity-modal-body">
+            <!-- Left Sidebar -->
+            <div class="crm-entity-sidebar">
+                <form id="entity-edit-form">
+                    <input type="hidden" name="entity_id" value="{{ entity.entity_id }}">
+                    <input type="hidden" name="entity_type" value="{{ entity.entity_type }}">
+                    
+                    <!-- Main Fields Section (category=main) -->
+                    <div class="crm-entity-section">
+                        <div class="crm-entity-section-title">{{ current_entity_type.name | default('DETAILS') | upper }}</div>
+                        
+                        {% if current_entity_type %}
+                            {# Required fields #}
+                            {% for field_id, field_def in (current_entity_type.required_fields or {}).items() %}
+                                {% if field_def.category == 'main' or field_id == 'name' %}
+                                {% set value = entity.attributes[field_id] if entity.attributes else '' %}
+                        <div class="crm-entity-contact-item">
+                            <div class="crm-entity-contact-icon">
+                                        <i class="ti {{ field_def.icon | default('ti-info-circle') }}"></i>
+                            </div>
+                            <div class="crm-entity-contact-content">
+                                        <span class="crm-entity-contact-label">{{ field_def.label | upper }}</span>
+                                <span class="crm-entity-view-mode">
+                                            {{ render_field_value(field_id, field_def, value) }}
+                                </span>
+                                        {{ render_field_input(field_id, field_def, value, True) }}
+                            </div>
+                        </div>
+                                {% endif %}
+                            {% endfor %}
+                        
+                            {# Optional fields with category=main #}
+                            {% for field_id, field_def in (current_entity_type.optional_fields or {}).items() %}
+                                {% if field_def.category == 'main' %}
+                                {% set value = entity.attributes[field_id] if entity.attributes else '' %}
+                        <div class="crm-entity-contact-item">
+                            <div class="crm-entity-contact-icon">
+                                        <i class="ti {{ field_def.icon | default('ti-info-circle') }}"></i>
+                            </div>
+                            <div class="crm-entity-contact-content">
+                                        <span class="crm-entity-contact-label">{{ field_def.label | upper }}</span>
+                                <span class="crm-entity-view-mode">
+                                            {{ render_field_value(field_id, field_def, value) }}
+                                </span>
+                                        {{ render_field_input(field_id, field_def, value, False) }}
+                            </div>
+                        </div>
+                                {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            {# Fallback for unknown entity types #}
+                            {% for key, value in (entity.attributes or {}).items() %}
+                        <div class="crm-entity-contact-item">
+                            <div class="crm-entity-contact-icon">
+                                    <i class="ti ti-info-circle"></i>
+                            </div>
+                            <div class="crm-entity-contact-content">
+                                    <span class="crm-entity-contact-label">{{ key | upper }}</span>
+                                <span class="crm-entity-view-mode">
+                                        <span class="crm-entity-contact-value">{{ value }}</span>
+                                </span>
+                                    <input type="text" name="{{ key }}" 
+                                           class="crm-entity-edit-input crm-entity-edit-mode" 
+                                           value="{{ value | default('') }}">
+                            </div>
+                        </div>
+                            {% endfor %}
+                            {% endif %}
                     </div>
                     
-                    <div class="crm-form-row">
-                        <div class="crm-form-group">
-                            <label class="crm-form-label">First Name</label>
-                            <input type="text" class="crm-input"
-                                   value="{{ entity.name.split()[0] if entity.name else '' }}">
+                    <!-- Optional Fields Section (category=optional) - Edit Mode Only -->
+                    {% if current_entity_type %}
+                        {% set has_optional = False %}
+                        {% for field_id, field_def in (current_entity_type.optional_fields or {}).items() %}
+                            {% if field_def.category == 'optional' %}
+                                {% set has_optional = True %}
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if has_optional %}
+                    <div class="crm-entity-section crm-entity-edit-mode">
+                            <div class="crm-entity-section-title">ADDITIONAL INFO</div>
+                            {% for field_id, field_def in (current_entity_type.optional_fields or {}).items() %}
+                                {% if field_def.category == 'optional' %}
+                                {% set value = entity.attributes[field_id] if entity.attributes else '' %}
+                        <div class="crm-entity-contact-item">
+                            <div class="crm-entity-contact-icon">
+                                        <i class="ti {{ field_def.icon | default('ti-info-circle') }}"></i>
+                            </div>
+                            <div class="crm-entity-contact-content">
+                                        <span class="crm-entity-contact-label">{{ field_def.label | upper }}</span>
+                                        {{ render_field_input(field_id, field_def, value, False) }}
+                            </div>
                         </div>
-                        <div class="crm-form-group">
-                            <label class="crm-form-label">Last Name</label>
-                            <input type="text" class="crm-input"
-                                   value="{{ entity.name.split()[1] if entity.name and ' ' in entity.name else '' }}">
+                                {% endif %}
+                            {% endfor %}
+                    </div>
+                        {% endif %}
+                    {% endif %}
+                </form>
+                
+                <!-- CRM Settings (read-only) -->
+                <div class="crm-entity-section">
+                    <div class="crm-entity-section-title">CRM SETTINGS</div>
+                    
+                    <div class="crm-entity-meta-row">
+                        <span class="crm-entity-meta-label">Owner</span>
+                        <div class="crm-entity-meta-value">
+                            <span class="crm-entity-owner-avatar">{{ (entity.owner_name or 'System')[:2] | upper }}</span>
+                            {{ entity.owner_name or 'System' }}
                         </div>
+                    </div>
+                    
+                    <div class="crm-entity-meta-row">
+                        <span class="crm-entity-meta-label">Created</span>
+                        <span class="crm-entity-meta-value">{{ entity.created_at[:10] if entity.created_at else 'N/A' }}</span>
+                    </div>
+                    
+                    <div class="crm-entity-meta-row">
+                        <span class="crm-entity-meta-label">VIP Score</span>
+                        <span class="crm-entity-meta-value crm-entity-vip">
+                            <span class="crm-entity-view-mode">{{ entity.attributes.vip_score or 0 }}</span>
+                            <select name="vip_score" class="crm-entity-edit-input crm-entity-edit-mode" style="width: 60px;">
+                                {% for i in range(6) %}
+                                <option value="{{ i }}" {% if (entity.attributes.vip_score or 0) == i %}selected{% endif %}>{{ i }}</option>
+                                {% endfor %}
+                            </select>
+                            <i class="ti ti-star-filled"></i>
+                        </span>
                     </div>
                 </div>
                 
-                <!-- Career Journey -->
-                <div class="crm-modal-section">
-                    <div class="crm-modal-section-title">
-                        <i class="ti ti-briefcase"></i>
-                        Career Journey
+                <!-- Delete Button (edit mode only) -->
+                <div class="crm-entity-edit-mode" style="margin-top: 24px;">
+                    <button type="button" class="crm-btn crm-btn-ghost crm-btn-danger-text"
+                            hx-delete="/crm/api/entities/{{ entity.entity_id }}"
+                            hx-confirm="Delete this {{ entity.entity_type }}? This cannot be undone."
+                            hx-target="#crm-content"
+                            onclick="CRM.closeModal()">
+                        <i class="ti ti-trash"></i>
+                        Delete {{ entity.entity_type | capitalize }}
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Main Content -->
+            <div class="crm-entity-content">
+                <!-- AI Intelligence Card -->
+                <div class="crm-entity-intelligence">
+                    <div class="crm-entity-intelligence-header">
+                        <i class="ti ti-sparkles"></i>
+                        <span>NEURONOTE INTELLIGENCE</span>
                     </div>
-                    
-                    <div class="crm-form-group">
-                        <div class="crm-form-icon-input">
-                            <i class="ti ti-building"></i>
-                            <input type="text" class="crm-input" placeholder="Current Role"
-                                   value="{{ entity.attributes.role | default('') }}">
+                    <div class="crm-entity-intelligence-body"
+                         hx-get="/crm/partials/entity-intelligence/{{ entity.entity_id }}"
+                         hx-trigger="load"
+                         hx-swap="innerHTML"
+                         hx-push-url="false">
+                        <div class="crm-entity-intelligence-loading">
+                            <i class="ti ti-loader crm-spinner"></i>
+                            Analyzing...
                         </div>
                     </div>
-                    
-                    <div class="crm-form-group">
-                        <select class="crm-input">
-                            <option>No Company Linked</option>
-                        </select>
+                    <div class="crm-entity-intelligence-action">
+                        <i class="ti ti-plus"></i>
                     </div>
                 </div>
+                
+                <!-- Optional fields display (category=optional) in view mode -->
+                {% if current_entity_type %}
+                    {% set optional_with_values = [] %}
+                    {% for field_id, field_def in (current_entity_type.optional_fields or {}).items() %}
+                        {% if field_def.category == 'optional' and entity.attributes and entity.attributes[field_id] %}
+                            {% set _ = optional_with_values.append({'id': field_id, 'def': field_def, 'value': entity.attributes[field_id]}) %}
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if optional_with_values %}
+                    <div class="crm-entity-card crm-entity-view-mode">
+                    <div class="crm-entity-card-header">
+                            <i class="ti ti-info-circle"></i>
+                            ADDITIONAL INFO
+                    </div>
+                    <div class="crm-entity-card-body">
+                            <div class="crm-entity-optional-fields">
+                                {% for item in optional_with_values %}
+                                <div class="crm-entity-optional-field">
+                                    <span class="crm-entity-optional-label">{{ item.def.label }}</span>
+                                    <span class="crm-entity-optional-value">{{ item.value }}</span>
+                            </div>
+                                {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                    {% endif %}
+                {% endif %}
                 
                 <!-- Network Connections -->
-                <div class="crm-modal-section">
-                    <div class="crm-modal-section-title">
+                <div class="crm-entity-card">
+                    <div class="crm-entity-card-header">
                         <i class="ti ti-users"></i>
-                        Network Connections
+                        NETWORK CONNECTIONS
                     </div>
-                    
-                    {% if relationships and relationships | length > 0 %}
-                    <div class="crm-connections-grid">
-                        {% for rel in relationships[:4] %}
-                        <div class="crm-connection-item"
-                             hx-get="/crm/partials/entity-modal/{{ rel.target_entity_id if rel.source_entity_id == entity.id else rel.source_entity_id }}"
-                             hx-target="#modal-container">
-                            <div class="crm-connection-avatar">
-                                {{ (rel.target_name if rel.source_entity_id == entity.id else rel.source_name)[:2] | upper }}
-                            </div>
-                            <div class="crm-connection-info">
-                                <div class="crm-connection-name">
-                                    {{ rel.target_name if rel.source_entity_id == entity.id else rel.source_name }}
+                    <div class="crm-entity-card-body">
+                        {% if relationships and relationships | length > 0 %}
+                        <div class="crm-entity-connections-grid">
+                            {% for rel in relationships[:6] %}
+                            {% set other_entity = rel.target_entity if rel.source_entity_id == entity.entity_id else rel.source_entity %}
+                            {% set other_name = other_entity.name if other_entity else 'Unknown' %}
+                            {% set other_id = rel.target_entity_id if rel.source_entity_id == entity.entity_id else rel.source_entity_id %}
+                            <div class="crm-entity-connection"
+                                 hx-get="/crm/partials/entity/{{ other_id }}"
+                                 hx-target="#modal-container"
+                                 hx-push-url="false">
+                                <div class="crm-entity-connection-avatar">
+                                    {{ other_name[:2] | upper }}
                                 </div>
-                                <div class="crm-connection-role">
-                                    {{ rel.relationship_type | replace('_', ' ') | capitalize }}
+                                <div class="crm-entity-connection-info">
+                                    <div class="crm-entity-connection-name">{{ other_name }}</div>
+                                    <div class="crm-entity-connection-role">{{ rel.relationship_type | replace('_', ' ') | capitalize }}</div>
                                 </div>
                             </div>
+                            {% endfor %}
                         </div>
-                        {% endfor %}
+                        {% if relationships | length > 6 %}
+                        <button class="crm-btn crm-btn-ghost crm-btn-sm" style="margin-top: 12px;">
+                            Show all {{ relationships | length }} connections
+                        </button>
+                        {% endif %}
+                        {% else %}
+                        <div class="crm-entity-empty-small">
+                            <i class="ti ti-users-minus"></i>
+                            No connections yet
+                        </div>
+                        {% endif %}
                     </div>
-                    {% else %}
-                    <p style="color: var(--crm-text-muted); font-size: 13px;">No connections yet</p>
-                    {% endif %}
+                </div>
+                
+                <!-- Interaction History -->
+                <div class="crm-entity-card">
+                    <div class="crm-entity-card-header">
+                        <i class="ti ti-history"></i>
+                        INTERACTION HISTORY
+                    </div>
+                    <div class="crm-entity-card-body"
+                         hx-get="/crm/partials/entity-history/{{ entity.entity_id }}"
+                         hx-trigger="load"
+                         hx-swap="innerHTML"
+                         hx-push-url="false">
+                        <div class="crm-entity-intelligence-loading">
+                            <i class="ti ti-loader crm-spinner"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Quick Note -->
+                <div class="crm-entity-quick-note">
+                    <i class="ti ti-pencil"></i>
+                    <input type="text" 
+                           placeholder="Add a quick private note about {{ entity.name }}..."
+                           class="crm-entity-quick-note-input"
+                           hx-post="/crm/api/notes"
+                           hx-ext="json-enc"
+                           hx-vals='{"linked_entities": ["{{ entity.entity_id }}"], "visibility": "private"}'
+                           hx-trigger="keydown[key=='Enter']"
+                           hx-push-url="false"
+                           hx-target="#modal-container"
+                           name="content">
                 </div>
             </div>
         </div>
+        
         {% else %}
-        <div class="crm-modal-body">
-            <div class="crm-empty-state">
-                <div class="crm-empty-icon">
-                    <i class="ti ti-user-off"></i>
-                </div>
-                <h3 class="crm-empty-title">Entity not found</h3>
-            </div>
+        <div class="crm-entity-modal-empty">
+            <i class="ti ti-user-off"></i>
+            <h3>Entity not found</h3>
         </div>
         {% endif %}
     </div>
 </div>
 
+<style>
+.crm-entity-modal {
+    background: var(--crm-bg, #f8fafc);
+    border-radius: 16px;
+    width: 95%;
+    max-width: 1100px;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.crm-entity-modal.fullscreen {
+    width: 100%;
+    max-width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+}
+
+/* Header */
+.crm-entity-modal-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 20px 24px;
+    background: var(--crm-surface, #ffffff);
+    border-bottom: 1px solid var(--crm-border, #e5e7eb);
+}
+
+.crm-entity-modal-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 16px;
+    color: white;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+}
+
+.crm-entity-modal-avatar.person {
+    background: linear-gradient(135deg, #10b981, #059669);
+}
+
+.crm-entity-modal-avatar.organization,
+.crm-entity-modal-avatar.company {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+}
+
+.crm-entity-modal-avatar.project {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+.crm-entity-modal-avatar.task {
+    background: linear-gradient(135deg, #f97316, #ea580c);
+}
+
+.crm-entity-modal-title {
+    flex: 1;
+}
+
+.crm-entity-modal-title h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--crm-text, #1f2937);
+}
+
+.crm-entity-modal-title span {
+    font-size: 14px;
+    color: var(--crm-text-secondary, #6b7280);
+}
+
+.crm-entity-modal-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* Body */
+.crm-entity-modal-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Sidebar */
+.crm-entity-sidebar {
+    width: 280px;
+    background: var(--crm-surface, #ffffff);
+    border-right: 1px solid var(--crm-border, #e5e7eb);
+    padding: 24px;
+    overflow-y: auto;
+}
+
+.crm-entity-section {
+    margin-bottom: 28px;
+}
+
+.crm-entity-section:last-child {
+    margin-bottom: 0;
+}
+
+.crm-entity-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--crm-text-secondary, #6b7280);
+    margin-bottom: 16px;
+    text-transform: uppercase;
+}
+
+.crm-entity-contact-item {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.crm-entity-contact-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--crm-bg, #f3f4f6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--crm-primary, #6366f1);
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.crm-entity-contact-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    flex: 1;
+    min-width: 0;
+}
+
+.crm-entity-contact-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: var(--crm-text-secondary, #9ca3af);
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+
+.crm-entity-contact-value {
+    color: var(--crm-text, #1f2937);
+    font-size: 14px;
+    text-decoration: none;
+    word-break: break-word;
+}
+
+.crm-entity-contact-value:hover {
+    color: var(--crm-primary, #6366f1);
+}
+
+.crm-entity-contact-empty {
+    color: var(--crm-text-secondary, #9ca3af);
+    font-size: 14px;
+    font-style: italic;
+}
+
+.crm-entity-meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--crm-border, #f3f4f6);
+}
+
+.crm-entity-meta-row:last-child {
+    border-bottom: none;
+}
+
+.crm-entity-meta-label {
+    font-size: 13px;
+    color: var(--crm-text-secondary, #6b7280);
+}
+
+.crm-entity-meta-value {
+    font-size: 13px;
+    color: var(--crm-text, #1f2937);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.crm-entity-owner-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--crm-primary-light, #e0e7ff);
+    color: var(--crm-primary, #6366f1);
+    font-size: 9px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.crm-entity-vip {
+    color: #f59e0b;
+    font-weight: 600;
+}
+
+.crm-entity-vip i {
+    font-size: 14px;
+}
+
+/* Main Content */
+.crm-entity-content {
+    flex: 1;
+    padding: 24px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* Intelligence Card */
+.crm-entity-intelligence {
+    background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+    border: 1px solid #c7d2fe;
+    border-radius: 12px;
+    position: relative;
+    overflow: hidden;
+}
+
+.crm-entity-intelligence-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 20px 0;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: #6366f1;
+}
+
+.crm-entity-intelligence-header i {
+    font-size: 16px;
+}
+
+.crm-entity-intelligence-body {
+    padding: 12px 20px 20px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--crm-text, #374151);
+}
+
+.crm-entity-intelligence-loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--crm-primary, #6366f1);
+}
+
+.crm-entity-intelligence-action {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(99, 102, 241, 0.1);
+    color: #6366f1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.crm-entity-intelligence-action:hover {
+    background: rgba(99, 102, 241, 0.2);
+}
+
+/* Cards */
+.crm-entity-card {
+    background: var(--crm-surface, #ffffff);
+    border: 1px solid var(--crm-border, #e5e7eb);
+    border-radius: 12px;
+}
+
+.crm-entity-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 20px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--crm-text-secondary, #6b7280);
+    border-bottom: 1px solid var(--crm-border, #f3f4f6);
+}
+
+.crm-entity-card-header i {
+    font-size: 16px;
+    color: var(--crm-primary, #6366f1);
+}
+
+.crm-entity-card-body {
+    padding: 16px 20px;
+}
+
+/* Optional fields */
+.crm-entity-optional-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.crm-entity-optional-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.crm-entity-optional-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--crm-text-secondary, #6b7280);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.crm-entity-optional-value {
+    font-size: 14px;
+    color: var(--crm-text, #1f2937);
+}
+
+/* Connections Grid */
+.crm-entity-connections-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.crm-entity-connection {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.crm-entity-connection:hover {
+    background: var(--crm-bg, #f3f4f6);
+}
+
+.crm-entity-connection-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #a78bfa, #8b5cf6);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.crm-entity-connection-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.crm-entity-connection-name {
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--crm-text, #1f2937);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.crm-entity-connection-role {
+    font-size: 12px;
+    color: var(--crm-text-secondary, #6b7280);
+}
+
+.crm-entity-empty-small {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px;
+    color: var(--crm-text-secondary, #9ca3af);
+    font-size: 14px;
+}
+
+.crm-entity-empty-small i {
+    font-size: 20px;
+    opacity: 0.5;
+}
+
+/* Quick Note */
+.crm-entity-quick-note {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: var(--crm-surface, #ffffff);
+    border: 1px solid var(--crm-border, #e5e7eb);
+    border-radius: 12px;
+    margin-top: auto;
+}
+
+.crm-entity-quick-note i {
+    color: var(--crm-text-secondary, #9ca3af);
+    font-size: 18px;
+}
+
+.crm-entity-quick-note-input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    color: var(--crm-text, #1f2937);
+    outline: none;
+}
+
+.crm-entity-quick-note-input::placeholder {
+    color: var(--crm-text-secondary, #9ca3af);
+}
+
+/* Empty State */
+.crm-entity-modal-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px;
+    color: var(--crm-text-secondary, #9ca3af);
+}
+
+.crm-entity-modal-empty i {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.crm-entity-modal-empty h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 500;
+}
+
+/* Badge */
+.crm-badge-success {
+    background: #dcfce7;
+    color: #16a34a;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+/* Edit Mode */
+.crm-entity-edit-mode {
+    display: none;
+}
+
+.crm-entity-modal.editing .crm-entity-edit-mode {
+    display: block;
+}
+
+.crm-entity-modal.editing .crm-entity-view-mode {
+    display: none;
+}
+
+.crm-entity-edit-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--crm-border, #d1d5db);
+    border-radius: 6px;
+    font-size: 14px;
+    color: var(--crm-text, #1f2937);
+    background: var(--crm-surface, #ffffff);
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.crm-entity-edit-input:focus {
+    outline: none;
+    border-color: var(--crm-primary, #6366f1);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.crm-entity-edit-input::placeholder {
+    color: var(--crm-text-secondary, #9ca3af);
+}
+
+textarea.crm-entity-edit-input {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.crm-btn-danger-text {
+    color: #dc2626 !important;
+}
+
+.crm-btn-danger-text:hover {
+    background: #fee2e2 !important;
+}
+
+.crm-entity-modal.editing #entity-edit-btn {
+    display: none;
+}
+
+.crm-entity-modal.editing #entity-save-btn {
+    display: inline-flex !important;
+}
+</style>
+
+<script>
+window.CRM.toggleEntityEdit = function() {
+    const modal = document.querySelector('.crm-entity-modal');
+    if (modal) {
+        modal.classList.toggle('editing');
+        
+        if (modal.classList.contains('editing')) {
+            const firstInput = modal.querySelector('.crm-entity-edit-input');
+            if (firstInput) {
+                setTimeout(() => firstInput.focus(), 100);
+            }
+        }
+    }
+};
+
+window.CRM.toggleEntityFullscreen = function() {
+    const modal = document.querySelector('.crm-entity-modal');
+    if (modal) {
+        modal.classList.toggle('fullscreen');
+        const icon = document.querySelector('.crm-entity-modal-actions .ti-arrows-maximize, .crm-entity-modal-actions .ti-arrows-minimize');
+        if (icon) {
+            icon.classList.toggle('ti-arrows-maximize');
+            icon.classList.toggle('ti-arrows-minimize');
+        }
+    }
+};
+</script>

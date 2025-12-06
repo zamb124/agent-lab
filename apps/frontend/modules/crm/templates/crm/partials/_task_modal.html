@@ -1,0 +1,289 @@
+<!-- Task Create/Edit Modal -->
+<div class="modal-overlay" onclick="if(event.target === this) CRM.closeModal()">
+    <div class="crm-modal crm-modal-lg">
+        <div class="crm-modal-header">
+            <div class="crm-modal-title-group">
+                <h2 class="crm-modal-title">
+                    {% if task %}{{ t('crm.tasks.edit') }}{% else %}{{ t('crm.tasks.new') }}{% endif %}
+                </h2>
+            </div>
+            <button class="crm-modal-close" onclick="CRM.closeModal()">
+                <i class="ti ti-x"></i>
+            </button>
+        </div>
+        
+        <form id="task-form"
+              hx-post="/crm/api/tasks{% if task %}?task_id={{ task.task_id }}{% endif %}"
+              hx-target="#crm-content"
+              hx-swap="innerHTML"
+              hx-ext="json-enc"
+              hx-push-url="false"
+              hx-on::after-request="CRM.closeModal(); htmx.trigger(document.body, 'taskUpdated')">
+            <div class="crm-modal-body">
+                <!-- Title -->
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('crm.tasks.title') }} *</label>
+                    <input type="text" 
+                           name="title" 
+                           class="crm-input"
+                           placeholder="{{ t('crm.tasks.title_placeholder') }}"
+                           value="{{ task.title if task else '' }}"
+                           required>
+                </div>
+                
+                <!-- Description -->
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('crm.tasks.description') }}</label>
+                    <textarea name="description" 
+                              class="crm-input crm-textarea"
+                              placeholder="{{ t('crm.tasks.description_placeholder') }}"
+                              style="min-height: 100px;">{{ task.description if task else '' }}</textarea>
+                </div>
+                
+                <!-- Priority & Due Date -->
+                <div class="crm-form-row">
+                    <div class="crm-form-group">
+                        <label class="crm-form-label">{{ t('crm.tasks.priority') }}</label>
+                        <select name="priority" class="crm-input">
+                            <option value="low" {% if task and task.priority == 'low' %}selected{% endif %}>
+                                {{ t('crm.tasks.priority_low') }}
+                            </option>
+                            <option value="medium" {% if not task or task.priority == 'medium' %}selected{% endif %}>
+                                {{ t('crm.tasks.priority_medium') }}
+                            </option>
+                            <option value="high" {% if task and task.priority == 'high' %}selected{% endif %}>
+                                {{ t('crm.tasks.priority_high') }}
+                            </option>
+                            <option value="urgent" {% if task and task.priority == 'urgent' %}selected{% endif %}>
+                                {{ t('crm.tasks.priority_urgent') }}
+                            </option>
+                        </select>
+                    </div>
+                    
+                    <div class="crm-form-group">
+                        <label class="crm-form-label">{{ t('crm.tasks.due_date') }}</label>
+                        <input type="date" 
+                               name="due_date" 
+                               class="crm-input"
+                               value="{{ task.due_date if task and task.due_date else today }}">
+                    </div>
+                </div>
+                
+                <!-- Status (only for edit) -->
+                {% if task %}
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('crm.tasks.status') }}</label>
+                    <select name="status" class="crm-input">
+                        <option value="pending" {% if task.status == 'pending' %}selected{% endif %}>
+                            {{ t('crm.tasks.status_pending') }}
+                        </option>
+                        <option value="in_progress" {% if task.status == 'in_progress' %}selected{% endif %}>
+                            {{ t('crm.tasks.status_in_progress') }}
+                        </option>
+                        <option value="completed" {% if task.status == 'completed' %}selected{% endif %}>
+                            {{ t('crm.tasks.status_completed') }}
+                        </option>
+                        <option value="cancelled" {% if task.status == 'cancelled' %}selected{% endif %}>
+                            {{ t('crm.tasks.status_cancelled') }}
+                        </option>
+                    </select>
+                </div>
+                {% endif %}
+                
+                <!-- Linked Entity -->
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('crm.tasks.linked_entity') }}</label>
+                    <div class="crm-entity-search-container" style="position: relative;">
+                        <input type="hidden" name="linked_entity_id" id="linked_entity_id" 
+                               value="{{ task.linked_entity_id if task else '' }}">
+                        <input type="text" 
+                               class="crm-input"
+                               id="entity-search-input"
+                               placeholder="{{ t('crm.tasks.search_entity') }}"
+                               value="{{ linked_entity.name if linked_entity else '' }}"
+                               autocomplete="off">
+                        <div id="entity-search-dropdown" class="crm-mention-dropdown" style="display: none;"></div>
+                        {% if task and task.linked_entity_id %}
+                        <button type="button" 
+                                class="crm-btn crm-btn-ghost crm-btn-sm"
+                                style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%);"
+                                onclick="CRM.clearLinkedEntity()">
+                            <i class="ti ti-x"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Tags -->
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('crm.tasks.tags') }}</label>
+                    <div class="crm-tags-input" id="tags-container">
+                        {% if task and task.tags %}
+                        {% for tag in task.tags %}
+                        <span class="crm-tag" data-tag="{{ tag }}">
+                            {{ tag }}
+                            <span class="crm-tag-remove" onclick="CRM.removeTag(this, '{{ tag }}')">&times;</span>
+                        </span>
+                        {% endfor %}
+                        {% endif %}
+                        <input type="text" 
+                               id="tag-input"
+                               placeholder="{{ t('crm.tasks.add_tag') }}"
+                               onkeydown="CRM.handleTagInput(event)">
+                    </div>
+                    <input type="hidden" name="tags" id="tags-hidden" value="{{ task.tags | tojson if task and task.tags else '[]' }}">
+                </div>
+                
+                <!-- Assignees -->
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('crm.tasks.assignees') }}</label>
+                    <div class="crm-assignees-container">
+                        <div id="assignees-list" class="crm-assignees-list">
+                            {% if task and task.assignees %}
+                            {% for assignee_id in task.assignees %}
+                            <span class="crm-assignee-badge" data-id="{{ assignee_id }}">
+                                <span class="crm-assignee-avatar">{{ assignee_id[:2] | upper }}</span>
+                                <span class="crm-assignee-name">{{ assignee_id }}</span>
+                                <span class="crm-tag-remove" onclick="CRM.removeAssignee(this, '{{ assignee_id }}')">&times;</span>
+                            </span>
+                            {% endfor %}
+                            {% endif %}
+                        </div>
+                        <input type="text" 
+                               class="crm-input crm-input-sm"
+                               id="assignee-input"
+                               placeholder="{{ t('crm.tasks.add_assignee') }}"
+                               style="margin-top: 8px;">
+                    </div>
+                    <input type="hidden" name="assignees" id="assignees-hidden" value="{{ task.assignees | tojson if task and task.assignees else '[]' }}">
+                </div>
+            </div>
+            
+            <div class="crm-modal-footer">
+                <button type="button" class="crm-btn crm-btn-secondary" onclick="CRM.closeModal()">
+                    {{ t('crm.actions.cancel') }}
+                </button>
+                <button type="submit" class="crm-btn crm-btn-primary">
+                    <i class="ti ti-check"></i>
+                    {% if task %}{{ t('crm.actions.save') }}{% else %}{{ t('crm.tasks.create') }}{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function() {
+    // Entity search autocomplete
+    const entityInput = document.getElementById('entity-search-input');
+    const entityDropdown = document.getElementById('entity-search-dropdown');
+    const entityHidden = document.getElementById('linked_entity_id');
+    
+    if (entityInput) {
+        let searchTimeout;
+        
+        entityInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            const query = this.value.trim();
+            
+            if (query.length < 2) {
+                entityDropdown.style.display = 'none';
+                return;
+            }
+            
+            searchTimeout = setTimeout(async () => {
+                try {
+                    const response = await fetch(`/frontend/api/crm/entities/autocomplete?q=${encodeURIComponent(query)}&limit=8`);
+                    const results = await response.json();
+                    
+                    if (results.length > 0) {
+                        entityDropdown.innerHTML = results.map(entity => `
+                            <div class="crm-mention-item" 
+                                 data-id="${entity.entity_id}" 
+                                 data-name="${entity.name}"
+                                 onclick="CRM.selectEntity('${entity.entity_id}', '${entity.name.replace(/'/g, "\\'")}')">
+                                <div class="crm-mention-icon" style="color: var(--crm-entity-${entity.type || 'person'})">
+                                    <i class="ti ti-${entity.type === 'company' ? 'building' : entity.type === 'project' ? 'folder' : 'user'}"></i>
+                                </div>
+                                <div class="crm-mention-info">
+                                    <div class="crm-mention-name">${entity.name}</div>
+                                    <div class="crm-mention-type">${entity.type}</div>
+                                </div>
+                            </div>
+                        `).join('');
+                        entityDropdown.style.display = 'block';
+                    } else {
+                        entityDropdown.style.display = 'none';
+                    }
+                } catch (e) {
+                    console.error('Entity search error:', e);
+                }
+            }, 300);
+        });
+        
+        entityInput.addEventListener('blur', function() {
+            setTimeout(() => entityDropdown.style.display = 'none', 200);
+        });
+    }
+    
+    // Extend CRM object with task-specific functions
+    window.CRM.selectEntity = function(id, name) {
+        document.getElementById('linked_entity_id').value = id;
+        document.getElementById('entity-search-input').value = name;
+        document.getElementById('entity-search-dropdown').style.display = 'none';
+    };
+    
+    window.CRM.clearLinkedEntity = function() {
+        document.getElementById('linked_entity_id').value = '';
+        document.getElementById('entity-search-input').value = '';
+    };
+    
+    window.CRM.handleTagInput = function(event) {
+        if (event.key === 'Enter' || event.key === ',') {
+            event.preventDefault();
+            const input = event.target;
+            const tag = input.value.trim().replace(',', '');
+            
+            if (tag) {
+                CRM.addTag(tag);
+                input.value = '';
+            }
+        }
+    };
+    
+    window.CRM.addTag = function(tag) {
+        const container = document.getElementById('tags-container');
+        const input = document.getElementById('tag-input');
+        const hidden = document.getElementById('tags-hidden');
+        
+        let tags = JSON.parse(hidden.value || '[]');
+        if (tags.includes(tag)) return;
+        
+        tags.push(tag);
+        hidden.value = JSON.stringify(tags);
+        
+        const tagEl = document.createElement('span');
+        tagEl.className = 'crm-tag';
+        tagEl.dataset.tag = tag;
+        tagEl.innerHTML = `${tag}<span class="crm-tag-remove" onclick="CRM.removeTag(this, '${tag}')">&times;</span>`;
+        container.insertBefore(tagEl, input);
+    };
+    
+    window.CRM.removeTag = function(el, tag) {
+        const hidden = document.getElementById('tags-hidden');
+        let tags = JSON.parse(hidden.value || '[]');
+        tags = tags.filter(t => t !== tag);
+        hidden.value = JSON.stringify(tags);
+        el.parentElement.remove();
+    };
+    
+    window.CRM.removeAssignee = function(el, assigneeId) {
+        const hidden = document.getElementById('assignees-hidden');
+        let assignees = JSON.parse(hidden.value || '[]');
+        assignees = assignees.filter(a => a !== assigneeId);
+        hidden.value = JSON.stringify(assignees);
+        el.parentElement.remove();
+    };
+})();
+</script>
+

@@ -229,15 +229,23 @@ def get_llm(model_name: Optional[str] = None, temperature: Optional[float] = Non
     model = model_name or settings.llm.default_model
     
     # В тестах всегда используем mock, если модель не начинается с "mock-"
-    is_testing = os.environ.get("PYTEST_CURRENT_TEST") is not None or os.environ.get("_PYTEST_RAISE") is not None
+    pytest_current = os.environ.get("PYTEST_CURRENT_TEST")
+    pytest_raise = os.environ.get("_PYTEST_RAISE")
+    is_testing = pytest_current is not None or pytest_raise is not None
+    
+    logger.warning(f"🔍 get_llm: model={model}, PYTEST_CURRENT_TEST={pytest_current}, _PYTEST_RAISE={pytest_raise}, is_testing={is_testing}")
+    
     if is_testing and model and not model.startswith("mock-"):
-        logger.debug(f"Тестовое окружение: заменяем модель '{model}' на 'mock-gpt-4'")
+        logger.warning(f"⚠️ PYTEST detected! Replacing model '{model}' with mock-gpt-4")
         model = "mock-gpt-4"
     
     if model.startswith("mock-"):
+        logger.info(f"🔵 Returning MockLLM for model={model}")
         if model not in _global_mock_registry:
             _global_mock_registry[model] = MockLLM(model_name=model)
         return _global_mock_registry[model]
+    
+    logger.info(f"✅ Creating real LLM for model={model}")
 
     if not settings.llm.openrouter or not settings.llm.openrouter.enabled:
         raise ValueError("OpenRouter не настроен в конфигурации")

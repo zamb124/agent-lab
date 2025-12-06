@@ -19,6 +19,7 @@ import apps.agents.tasks.message_tasks  # noqa: F401
 import apps.agents.tasks.company_tasks  # noqa: F401
 import apps.frontend.tasks.notification_tasks  # noqa: F401
 import apps.agents.services.migration.migrator  # noqa: F401 - migrate_company_defaults
+import apps.crm.tasks.attachment_tasks  # noqa: F401 - CRM attachments RAG
 
 # Экспортируем для taskiq CLI
 __all__ = ["broker", "scheduler", "schedule_source"]

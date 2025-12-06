@@ -58,3 +58,4 @@ async def get_relationship_types(
     return await graph_service.get_relationship_types()
 
 
+

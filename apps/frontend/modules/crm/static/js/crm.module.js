@@ -7,6 +7,7 @@ class CRMModule {
     constructor() {
         this.apiBase = '/crm/api/v1';
         this.graph = null;
+        this.pendingFiles = []; // Файлы ожидающие загрузки после создания заметки
         this.init();
     }
     
@@ -14,9 +15,41 @@ class CRMModule {
         console.log('CRM Module initialized');
         this.setupMarked();
         this.setupEventListeners();
+        this.setupNotificationHandlers();
+        this.initToggleGroups();
         
         // Initial render for existing content
         this.renderMarkdownContent(document);
+        
+        // Re-init toggle groups after HTMX content load
+        document.body.addEventListener('htmx:afterSettle', () => {
+            this.initToggleGroups();
+        });
+    }
+    
+    setupNotificationHandlers() {
+        // Listen to HTMX WebSocket messages (connection managed by base.html)
+        document.body.addEventListener('htmx:wsAfterMessage', (event) => {
+            try {
+                const data = JSON.parse(event.detail.message);
+                this.handleNotification(data);
+            } catch (e) {
+                // Not a JSON message, ignore
+            }
+        });
+    }
+    
+    handleNotification(data) {
+        if (data.type === 'access_request') {
+            // Trigger HTMX event to reload access requests badge
+            htmx.trigger(document.body, 'accessRequestUpdated');
+            
+            // Show notification
+            this.showNotification(data.message || 'New access request', 'info');
+        } else if (data.type === 'task_assigned') {
+            htmx.trigger(document.body, 'taskUpdated');
+            this.showNotification(data.message || 'Task assigned to you', 'info');
+        }
     }
     
     setupMarked() {
@@ -45,7 +78,7 @@ class CRMModule {
         
         // Закрытие модалки по клику на overlay
         document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('crm-modal-overlay')) {
+            if (e.target.classList.contains('modal-overlay')) {
                 this.closeModal();
             }
         });
@@ -62,6 +95,11 @@ class CRMModule {
         // Инициализация редактора заметок
         if (target.querySelector('.crm-note-textarea')) {
             this.initNoteEditor();
+        }
+        
+        // Инициализация dropzone
+        if (target.querySelector('.crm-dropzone')) {
+            this.initDropzone();
         }
         
         // Рендеринг markdown контента
@@ -340,6 +378,211 @@ class CRMModule {
         });
     }
     
+    // === File Dropzone ===
+    
+    initDropzone() {
+        const dropzone = document.getElementById('note-dropzone');
+        const fileInput = document.getElementById('file-input');
+        
+        if (!dropzone || !fileInput) return;
+        
+        // Click to select files
+        dropzone.addEventListener('click', () => fileInput.click());
+        
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                this.uploadFiles(e.target.files);
+            }
+        });
+        
+        // Drag and drop events
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+        
+        dropzone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+        });
+        
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            
+            if (e.dataTransfer.files.length > 0) {
+                this.uploadFiles(e.dataTransfer.files);
+            }
+        });
+    }
+    
+    async uploadFiles(files) {
+        // Get noteId from multiple sources
+        const noteInput = document.querySelector('.crm-note-input');
+        const noteId = noteInput?.dataset.noteId || 
+                       document.querySelector('[data-note-id]')?.dataset.noteId ||
+                       window.location.pathname.match(/\/notes\/([^\/]+)/)?.[1];
+        
+        const attachmentsList = document.getElementById('attachments-list');
+        const progressContainer = document.getElementById('upload-progress');
+        const progressFill = progressContainer?.querySelector('.crm-progress-fill');
+        const progressText = progressContainer?.querySelector('.crm-progress-text');
+        
+        // Если заметка еще не создана - добавляем файлы в очередь
+        if (!noteId) {
+            for (const file of files) {
+                this.pendingFiles.push(file);
+                this.renderPendingFile(file, attachmentsList);
+            }
+            this.showNotification('Файлы будут загружены после сохранения заметки', 'info');
+            return;
+        }
+        
+        for (const file of files) {
+            // Show progress
+            if (progressContainer) {
+                progressContainer.style.display = 'block';
+                if (progressFill) progressFill.style.width = '0%';
+                if (progressText) progressText.textContent = `Загрузка ${file.name}...`;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const response = await fetch(`/crm/api/notes/${noteId}/attachments`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (progressFill) progressFill.style.width = '100%';
+                
+                if (response.ok) {
+                    // Reload full attachments list
+                    if (attachmentsList) {
+                        const refreshUrl = attachmentsList.getAttribute('hx-get');
+                        if (refreshUrl) {
+                            const listResponse = await fetch(refreshUrl, { credentials: 'same-origin' });
+                            attachmentsList.innerHTML = await listResponse.text();
+                        } else {
+                            // Fallback: insert HTML directly
+                            const html = await response.text();
+                        attachmentsList.insertAdjacentHTML('beforeend', html);
+                        }
+                    }
+                    this.showNotification(`Файл ${file.name} загружен`, 'success');
+                } else {
+                    this.showNotification(`Ошибка загрузки ${file.name}`, 'error');
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                this.showNotification(`Ошибка загрузки ${file.name}`, 'error');
+            }
+        }
+        
+        // Hide progress
+        if (progressContainer) {
+            setTimeout(() => {
+                progressContainer.style.display = 'none';
+            }, 1000);
+        }
+    }
+    
+    renderPendingFile(file, container) {
+        if (!container) return;
+        
+        const fileId = `pending-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const ext = file.name.split('.').pop().toLowerCase();
+        const size = this.formatFileSize(file.size);
+        const color = this.getFileColor(ext);
+        const displayName = file.name.length > 12 ? file.name.substring(0, 12) + '...' : file.name;
+        
+        const html = `
+            <div class="crm-file-icon crm-file-pending" data-pending-id="${fileId}">
+                <button class="crm-file-del" onclick="event.stopPropagation(); CRM.removePendingFile('${fileId}')" title="Remove">
+                    <i class="ti ti-x"></i>
+                </button>
+                <div class="crm-file-icon-box" style="background: ${color}; opacity: 0.7;">
+                    <span class="crm-file-ext">${ext.toUpperCase()}</span>
+                </div>
+                <span class="crm-file-name">${displayName}</span>
+                <span class="crm-file-size">${size}</span>
+                <span class="crm-file-status">Pending</span>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', html);
+        
+        file._pendingId = fileId;
+    }
+    
+    getFileColor(ext) {
+        const colors = {
+            'pdf': '#dc2626', 'doc': '#2563eb', 'docx': '#2563eb',
+            'txt': '#6b7280', 'png': '#10b981', 'jpg': '#10b981', 
+            'jpeg': '#10b981', 'gif': '#8b5cf6', 'xls': '#16a34a',
+            'xlsx': '#16a34a', 'csv': '#16a34a'
+        };
+        return colors[ext] || '#6b7280';
+    }
+    
+    removePendingFile(fileId) {
+        this.pendingFiles = this.pendingFiles.filter(f => f._pendingId !== fileId);
+        const el = document.querySelector(`[data-pending-id="${fileId}"]`);
+        if (el) el.remove();
+    }
+    
+    getFileIcon(filename) {
+        const ext = filename.split('.').pop().toLowerCase();
+        const icons = {
+            'pdf': 'ti-file-type-pdf',
+            'doc': 'ti-file-type-doc',
+            'docx': 'ti-file-type-docx',
+            'xls': 'ti-file-spreadsheet',
+            'xlsx': 'ti-file-spreadsheet',
+            'png': 'ti-photo',
+            'jpg': 'ti-photo',
+            'jpeg': 'ti-photo',
+            'gif': 'ti-photo',
+            'txt': 'ti-file-text',
+            'md': 'ti-markdown'
+        };
+        return icons[ext] || 'ti-file';
+    }
+    
+    formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+    
+    async uploadPendingFiles(noteId) {
+        if (this.pendingFiles.length === 0) return;
+        
+        for (const file of this.pendingFiles) {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                await fetch(`/crm/api/notes/${noteId}/attachments`, {
+                    method: 'POST',
+                    body: formData
+                });
+            } catch (error) {
+                console.error('Upload pending file error:', error);
+            }
+            
+            // Убираем pending элемент из UI
+            if (file._pendingId) {
+                const el = document.querySelector(`[data-pending-id="${file._pendingId}"]`);
+                if (el) el.remove();
+            }
+        }
+        
+        this.pendingFiles = [];
+        this.showNotification('Файлы загружены', 'success');
+    }
+    
     // === Voice Input ===
     
     initVoiceInput() {
@@ -427,6 +670,155 @@ class CRMModule {
         }
     }
     
+    // Note Input Component methods
+    switchInputTab(formId, tab) {
+        const container = document.querySelector(`[data-note-id]`)?.closest('.crm-note-input') 
+            || document.querySelector('.crm-note-input');
+        if (!container) return;
+        
+        // Update toggle buttons state (floating or inline)
+        const toggle = container.querySelector('.crm-mode-toggle-floating') 
+            || container.querySelector('.crm-mode-toggle');
+        if (toggle) {
+            toggle.dataset.active = tab;
+            const btns = toggle.querySelectorAll('.crm-mode-toggle-btn');
+            btns.forEach(btn => btn.classList.toggle('active', btn.dataset.mode === tab));
+        }
+        
+        const textarea = document.getElementById(`${formId}-content`);
+        const preview = document.getElementById(`${formId}-preview`);
+        
+        if (tab === 'edit') {
+            if (textarea) textarea.style.display = 'block';
+            if (preview) preview.style.display = 'none';
+        } else {
+            if (textarea) textarea.style.display = 'none';
+            if (preview) {
+                preview.style.display = 'block';
+                if (typeof marked !== 'undefined') {
+                    preview.innerHTML = marked.parse(textarea?.value || '');
+                } else {
+                    preview.textContent = textarea?.value || '';
+                }
+            }
+        }
+    }
+    
+    initToggleGroups() {
+        document.querySelectorAll('.crm-toggle-group').forEach(group => {
+            group.addEventListener('click', (e) => {
+                const btn = e.target.closest('.crm-toggle-btn');
+                if (!btn) return;
+                
+                const toggleName = group.dataset.toggle;
+                const formId = group.dataset.form;
+                const value = btn.dataset.value;
+                
+                // Update active state
+                group.querySelectorAll('.crm-toggle-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                // Update hidden input
+                const hiddenInput = document.querySelector(`input[name="${toggleName}"][form="${formId}"]`);
+                if (hiddenInput) {
+                    hiddenInput.value = value;
+                }
+            });
+        });
+    }
+    
+    triggerFileUpload(formId) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.multiple = true;
+        input.accept = '.pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.gif';
+        input.onchange = (e) => {
+            if (e.target.files.length > 0) {
+                this.uploadFiles(e.target.files);
+            }
+        };
+        input.click();
+    }
+    
+    handleMentions(textarea) {
+        const text = textarea.value;
+        const cursorPos = textarea.selectionStart;
+        const textBeforeCursor = text.substring(0, cursorPos);
+        const mentionMatch = textBeforeCursor.match(/@(\w*)$/);
+        
+        const dropdownId = textarea.id.replace('-content', '-mentions');
+        const dropdown = document.getElementById(dropdownId);
+        
+        if (mentionMatch && dropdown) {
+            const query = mentionMatch[1];
+            this.searchMentions(query, dropdown, textarea);
+        } else if (dropdown) {
+            dropdown.style.display = 'none';
+        }
+    }
+    
+    async searchMentions(query, dropdown, textarea) {
+        if (query.length < 1) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/crm/api/v1/entities?q=${encodeURIComponent(query)}&limit=5`);
+            const entities = await response.json();
+            
+            if (entities && entities.length > 0) {
+                dropdown.innerHTML = entities.map(e => `
+                    <div class="crm-mentions-item" data-id="${e.entity_id}" data-name="${e.name}">
+                        <div class="crm-mentions-item-icon">
+                            <i class="ti ti-${this.getEntityIcon(e.type)}"></i>
+                        </div>
+                        <span class="crm-mentions-item-name">${e.name}</span>
+                        <span class="crm-mentions-item-type">${e.type}</span>
+                    </div>
+                `).join('');
+                dropdown.style.display = 'block';
+                
+                dropdown.querySelectorAll('.crm-mentions-item').forEach(item => {
+                    item.onclick = () => this.insertMention(textarea, item.dataset.name, dropdown);
+                });
+            } else {
+                dropdown.style.display = 'none';
+            }
+        } catch (e) {
+            dropdown.style.display = 'none';
+        }
+    }
+    
+    insertMention(textarea, name, dropdown) {
+        const text = textarea.value;
+        const cursorPos = textarea.selectionStart;
+        const textBeforeCursor = text.substring(0, cursorPos);
+        const textAfterCursor = text.substring(cursorPos);
+        const mentionStart = textBeforeCursor.lastIndexOf('@');
+        
+        const newText = textBeforeCursor.substring(0, mentionStart) + `@${name} ` + textAfterCursor;
+        textarea.value = newText;
+        textarea.focus();
+        const newPos = mentionStart + name.length + 2;
+        textarea.setSelectionRange(newPos, newPos);
+        
+        dropdown.style.display = 'none';
+    }
+    
+    getEntityIcon(type) {
+        const icons = {
+            'person': 'user',
+            'organization': 'building',
+            'project': 'folder',
+            'task': 'checkbox',
+            'meeting': 'calendar-event',
+            'call': 'phone',
+            'email': 'mail'
+        };
+        return icons[type] || 'tag';
+    }
+    
     async analyzeNote(noteId) {
         try {
             const result = await this.apiRequest(`/notes/${noteId}/analyze`, {
@@ -480,23 +872,29 @@ class CRMModule {
     }
     
     renderGraph(container, data) {
-        const nodes = new vis.DataSet(data.nodes.map(node => ({
+        // Сохраняем данные для редактирования
+        this.graphNodes = new vis.DataSet(data.nodes.map(node => ({
             id: node.id,
             label: node.name,
-            color: this.getEntityColor(node.type),
+            color: node.color || this.getEntityColor(node.type),
             shape: 'dot',
-            size: 20,
+            size: node.size || 20,
+            title: `${node.name}\nТип: ${node.type}\nСвязей: ${node.degree || 0}\nScore: ${node.score || 0}`,
             font: { color: '#2D3A4F', size: 12 }
         })));
         
-        const edges = new vis.DataSet(data.relationships.map(rel => ({
-            from: rel.source_entity_id,
-            to: rel.target_entity_id,
-            label: rel.relationship_type,
+        this.graphEdges = new vis.DataSet(data.edges.map(rel => ({
+            id: rel.relationship_id,
+            from: rel.source || rel.source_entity_id,
+            to: rel.target || rel.target_entity_id,
+            label: rel.type || rel.relationship_type,
+            relationshipId: rel.relationship_id,
             arrows: 'to',
             color: { color: '#8A9AAD', opacity: 0.6 },
             font: { size: 10, color: '#8A9AAD' }
         })));
+        
+        const self = this;
         
         const options = {
             nodes: {
@@ -519,10 +917,21 @@ class CRMModule {
             interaction: {
                 hover: true,
                 tooltipDelay: 200
+            },
+            manipulation: {
+                enabled: false,
+                addEdge: function(edgeData, callback) {
+                    if (edgeData.from === edgeData.to) {
+                        self.showNotification('Нельзя создать связь с самим собой', 'warning');
+                        callback(null);
+                        return;
+                    }
+                    self.showRelationshipTypeModal(edgeData, callback);
+                }
             }
         };
         
-        this.graph = new vis.Network(container, { nodes, edges }, options);
+        this.graph = new vis.Network(container, { nodes: this.graphNodes, edges: this.graphEdges }, options);
         
         // Клик на ноду - открываем детали
         this.graph.on('click', (params) => {
@@ -531,6 +940,170 @@ class CRMModule {
                 this.openEntityDetail(nodeId);
             }
         });
+        
+        // Правый клик - контекстное меню
+        this.graph.on('oncontext', (params) => {
+            params.event.preventDefault();
+            
+            // Сначала проверяем клик на ноде - если да, игнорируем
+            const nodeId = this.graph.getNodeAt(params.pointer.DOM);
+            if (nodeId) {
+                return; // Клик на ноде - не показываем меню связи
+            }
+            
+            // Проверяем клик на связи
+            const edgeId = this.graph.getEdgeAt(params.pointer.DOM);
+            if (edgeId) {
+                this.showEdgeContextMenu(params.event, edgeId);
+            }
+        });
+    }
+    
+    toggleGraphEditMode() {
+        if (!this.graph) return;
+        
+        this.graphEditMode = !this.graphEditMode;
+        this.graph.setOptions({ manipulation: { enabled: this.graphEditMode } });
+        
+        const btn = document.querySelector('.graph-edit-btn');
+        if (btn) {
+            btn.classList.toggle('active', this.graphEditMode);
+            btn.title = this.graphEditMode ? 'Выйти из режима редактирования' : 'Режим редактирования';
+        }
+        
+        this.showNotification(
+            this.graphEditMode ? 'Режим редактирования: протяните связь между сущностями' : 'Режим просмотра',
+            'info'
+        );
+    }
+    
+    async showRelationshipTypeModal(edgeData, callback) {
+        // Получаем типы связей
+        let types = ['works_for', 'knows', 'related_to', 'participates_in', 'owns', 'assigned_to'];
+        try {
+            const response = await fetch('/crm/api/v1/relationship-types');
+            if (response.ok) {
+                const data = await response.json();
+                if (data.length > 0) types = data;
+            }
+        } catch (e) {}
+        
+        // Создаём модалку
+        const modal = document.createElement('div');
+        modal.className = 'crm-graph-modal-overlay';
+        modal.innerHTML = `
+            <div class="crm-graph-modal">
+                <div class="crm-graph-modal-header">
+                    <span>Новая связь</span>
+                    <button class="crm-graph-modal-close" onclick="this.closest('.crm-graph-modal-overlay').remove()">×</button>
+                </div>
+                <div class="crm-graph-modal-body">
+                    <label>Тип связи</label>
+                    <select id="relationship-type-select" class="crm-input">
+                        ${types.map(t => `<option value="${t}">${t.replace(/_/g, ' ')}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="crm-graph-modal-footer">
+                    <button class="crm-btn crm-btn-ghost" onclick="this.closest('.crm-graph-modal-overlay').remove()">Отмена</button>
+                    <button class="crm-btn crm-btn-primary" id="create-relationship-btn">Создать</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        const createBtn = modal.querySelector('#create-relationship-btn');
+        createBtn.onclick = async () => {
+            const type = modal.querySelector('#relationship-type-select').value;
+            
+            try {
+                const response = await fetch('/crm/api/v1/relationships', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        source_entity_id: edgeData.from,
+                        target_entity_id: edgeData.to,
+                        relationship_type: type,
+                        weight: 1.0,
+                        attributes: {}
+                    })
+                });
+                
+                if (response.ok) {
+                    const rel = await response.json();
+                    edgeData.label = type;
+                    edgeData.relationshipId = rel.relationship_id;
+                    callback(edgeData);
+                    this.showNotification('Связь создана', 'success');
+                } else {
+                    this.showNotification('Ошибка создания связи', 'error');
+                    callback(null);
+                }
+            } catch (e) {
+                this.showNotification('Ошибка: ' + e.message, 'error');
+                callback(null);
+            }
+            
+            modal.remove();
+        };
+    }
+    
+    showEdgeContextMenu(event, edgeId) {
+        // Удаляем старое меню
+        document.querySelectorAll('.crm-context-menu').forEach(m => m.remove());
+        
+        const edge = this.graphEdges.get(edgeId);
+        if (!edge) return;
+        
+        const menu = document.createElement('div');
+        menu.className = 'crm-context-menu';
+        menu.innerHTML = `
+            <div class="crm-context-menu-item" data-action="delete">
+                <i class="ti ti-trash"></i>
+                <span>Удалить связь</span>
+            </div>
+        `;
+        
+        menu.style.left = event.clientX + 'px';
+        menu.style.top = event.clientY + 'px';
+        document.body.appendChild(menu);
+        
+        menu.querySelector('[data-action="delete"]').onclick = () => {
+            this.deleteEdge(edge);
+            menu.remove();
+        };
+        
+        // Закрытие по клику вне
+        setTimeout(() => {
+            document.addEventListener('click', function handler() {
+                menu.remove();
+                document.removeEventListener('click', handler);
+            });
+        }, 10);
+    }
+    
+    async deleteEdge(edge) {
+        if (!edge.relationshipId) {
+            this.showNotification('Невозможно удалить связь без ID', 'warning');
+            return;
+        }
+        
+        if (!confirm('Удалить эту связь?')) return;
+        
+        try {
+            const response = await fetch(`/crm/api/v1/relationships/${edge.relationshipId}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                this.graphEdges.remove(edge.id);
+                this.showNotification('Связь удалена', 'success');
+            } else {
+                this.showNotification('Ошибка удаления', 'error');
+            }
+        } catch (e) {
+            this.showNotification('Ошибка: ' + e.message, 'error');
+        }
     }
     
     getEntityColor(type) {
@@ -557,7 +1130,7 @@ class CRMModule {
     // === Entities ===
     
     openEntityDetail(entityId) {
-        htmx.ajax('GET', `/crm/partials/entity-modal/${entityId}`, {
+        htmx.ajax('GET', `/crm/partials/entity/${entityId}`, {
             target: '#modal-container',
             swap: 'innerHTML'
         });
@@ -566,10 +1139,15 @@ class CRMModule {
     // === Modal ===
     
     closeModal() {
-        const modal = document.querySelector('.crm-modal-overlay');
+        console.log('🔴 CRM closeModal вызван, stack:', new Error().stack);
+        const modal = document.querySelector('.modal-overlay');
         if (modal) {
             modal.remove();
         }
+        // Разблокируем скролл body
+        document.body.style.overflow = '';
+        // Очищаем pending файлы при закрытии модалки
+        this.pendingFiles = [];
     }
     
     // === Notifications ===
@@ -605,6 +1183,362 @@ class CRMModule {
             }
         }
     }
+    
+    // === AI Suggestions ===
+    
+    toggleSuggestionEdit(button) {
+        const item = button.closest('.crm-suggestion-item');
+        const editForm = item.querySelector('.crm-suggestion-edit');
+        const isExpanded = editForm.style.display !== 'none';
+        
+        editForm.style.display = isExpanded ? 'none' : 'block';
+        button.classList.toggle('expanded', !isExpanded);
+        item.classList.toggle('expanded', !isExpanded);
+    }
+    
+    discardSuggestion(button) {
+        const item = button.closest('.crm-suggestion-item');
+        item.style.opacity = '0.5';
+        item.style.pointerEvents = 'none';
+        
+        // Анимация удаления
+        item.style.transition = 'all 0.3s ease';
+        item.style.transform = 'translateX(20px)';
+        
+        setTimeout(() => {
+            item.remove();
+            this.updateSuggestionCounts();
+        }, 300);
+    }
+    
+    discardAllSuggestions() {
+        const items = document.querySelectorAll('.crm-suggestion-item');
+        items.forEach((item, index) => {
+            setTimeout(() => {
+                item.style.opacity = '0';
+                item.style.transform = 'translateX(20px)';
+                setTimeout(() => item.remove(), 200);
+            }, index * 50);
+        });
+        
+        setTimeout(() => {
+            this.updateSuggestionCounts();
+            this.showNotification('Все предложения отклонены', 'info');
+        }, items.length * 50 + 200);
+    }
+    
+    async approveAllSuggestions(noteId) {
+        // Собираем все видимые (не удаленные) entities
+        const entities = [];
+        document.querySelectorAll('#suggestions-entities .crm-suggestion-item').forEach(item => {
+            const form = item.querySelector('.crm-sug-form');
+            const nameInput = form?.querySelector('input[name="name"]');
+            const typeSelect = form?.querySelector('select[name="type"]');
+            
+            if (nameInput && typeSelect) {
+                // Собираем атрибуты из формы
+                const attributes = {};
+                form.querySelectorAll('.crm-sug-attr-row').forEach(row => {
+                    const keyInput = row.querySelector('.crm-sug-attr-key');
+                    const valInput = row.querySelector('.crm-sug-attr-val');
+                    if (keyInput && valInput && keyInput.value && valInput.value) {
+                        attributes[keyInput.value] = valInput.value;
+                    }
+                });
+                
+                // Если форма не заполнена, берем из data-attribute
+                if (Object.keys(attributes).length === 0) {
+                    try {
+                        Object.assign(attributes, JSON.parse(item.dataset.attributes || '{}'));
+                    } catch (e) {}
+                }
+                
+                // AI description
+                const aiDescInput = form.querySelector('input[name="ai_description"]');
+                const aiDescription = aiDescInput?.value || item.dataset.aiDescription || 'Сущность извлечена AI';
+                
+                entities.push({
+                    name: nameInput.value,
+                    type: typeSelect.value,
+                    ai_description: aiDescription,
+                    attributes: attributes
+                });
+            }
+        });
+        
+        // Собираем все видимые relationships
+        const relationships = [];
+        document.querySelectorAll('#suggestions-relationships .crm-suggestion-item').forEach(item => {
+            relationships.push({
+                source: item.dataset.source,
+                target: item.dataset.target,
+                type: item.dataset.relType,
+                weight: parseFloat(item.dataset.weight) || 1.0
+            });
+        });
+        
+        // Собираем все видимые tasks
+        const tasks = [];
+        document.querySelectorAll('#suggestions-tasks .crm-suggestion-item').forEach(item => {
+            const titleInput = item.querySelector('input[name="title"]');
+            const prioritySelect = item.querySelector('select[name="priority"]');
+            if (titleInput) {
+                tasks.push({
+                    title: titleInput.value,
+                    priority: prioritySelect ? prioritySelect.value : 'medium'
+                });
+            }
+        });
+        
+        if (entities.length === 0 && tasks.length === 0 && relationships.length === 0) {
+            this.showNotification('Нет предложений для подтверждения', 'warning');
+            return;
+        }
+        
+        // Показываем спиннер
+        const contentEl = document.getElementById('note-suggestions-content');
+        if (contentEl) {
+            contentEl.innerHTML = '<div class="crm-analyzing-state"><i class="ti ti-loader crm-spinner"></i><span>Importing...</span></div>';
+        }
+        
+        try {
+            const response = await fetch(`/crm/partials/notes/${noteId}/approve-suggestions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'HX-Request': 'true'
+                },
+                body: JSON.stringify({ 
+                    entities, 
+                    relationships,
+                    tasks,
+                    create_event: true,
+                    link_author: true
+                })
+            });
+            
+            if (response.ok) {
+                const html = await response.text();
+                if (contentEl) {
+                    contentEl.innerHTML = html;
+                }
+                // Trigger update of linked entities
+                document.body.dispatchEvent(new CustomEvent('entitiesUpdated'));
+            } else {
+                throw new Error('Failed to approve suggestions');
+            }
+        } catch (error) {
+            console.error('Error approving suggestions:', error);
+            this.showNotification('Ошибка при подтверждении предложений', 'error');
+            if (contentEl) {
+                contentEl.innerHTML = '<div class="crm-alert crm-alert-warning"><i class="ti ti-alert-triangle"></i><span>Ошибка при подтверждении</span></div>';
+            }
+        }
+    }
+    
+    approveSuggestion(button, action) {
+        const item = button.closest('.crm-suggestion-item');
+        const entityType = item.dataset.entityType;
+        
+        // Собираем данные из формы
+        const form = item.querySelector('.crm-sug-form');
+        const data = { attributes: {} };
+        
+        if (form) {
+            const nameInput = form.querySelector('input[name="name"]');
+            const typeSelect = form.querySelector('select[name="type"]');
+            const aiDescInput = form.querySelector('input[name="ai_description"]');
+            const relevanceInput = form.querySelector('input[name="relevance"]');
+            
+            data.name = nameInput?.value || item.querySelector('.crm-suggestion-name')?.textContent;
+            data.type = typeSelect?.value || entityType;
+            data.ai_description = aiDescInput?.value || item.dataset.aiDescription || 'Сущность извлечена AI';
+            data.relevance = relevanceInput ? parseFloat(relevanceInput.value) / 100 : parseFloat(item.dataset.relevance || 0.5);
+            
+            // Собираем атрибуты
+            form.querySelectorAll('.crm-sug-attr-row').forEach(row => {
+                const keyInput = row.querySelector('.crm-sug-attr-key');
+                const valInput = row.querySelector('.crm-sug-attr-val');
+                if (keyInput && valInput && keyInput.value && valInput.value) {
+                    data.attributes[keyInput.value] = valInput.value;
+                }
+            });
+        } else {
+            data.name = item.querySelector('.crm-suggestion-name')?.textContent;
+            data.type = entityType;
+            data.ai_description = item.dataset.aiDescription || 'Сущность извлечена AI';
+            data.relevance = parseFloat(item.dataset.relevance || 0.5);
+            try {
+                data.attributes = JSON.parse(item.dataset.attributes || '{}');
+            } catch (e) {
+                data.attributes = {};
+            }
+        }
+        
+        // Визуальная обратная связь
+        button.disabled = true;
+        button.innerHTML = '<i class="ti ti-loader crm-spinner"></i>';
+        
+        // Отправляем на сервер
+        const isTask = item.dataset.suggestionId?.startsWith('task-');
+        const endpoint = isTask 
+            ? '/crm/api/v1/tasks' 
+            : '/crm/api/v1/entities';
+        
+        fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        })
+        .then(response => {
+            if (response.ok) {
+                item.classList.add('approved');
+                item.style.borderColor = 'var(--crm-success)';
+                button.innerHTML = '<i class="ti ti-check"></i> DONE';
+                button.classList.remove('crm-suggestion-btn-create', 'crm-suggestion-btn-update');
+                button.style.background = '#dcfce7';
+                button.style.color = '#16a34a';
+                
+                this.showNotification(
+                    isTask ? 'Задача создана' : `Сущность ${action === 'create' ? 'создана' : 'обновлена'}`,
+                    'success'
+                );
+            } else {
+                throw new Error('Failed to save');
+            }
+        })
+        .catch(error => {
+            console.error('Error approving suggestion:', error);
+            button.disabled = false;
+            button.textContent = action.toUpperCase();
+            this.showNotification('Ошибка сохранения', 'error');
+        });
+    }
+    
+    saveSuggestionEdit(button) {
+        const item = button.closest('.crm-suggestion-item');
+        const form = item.querySelector('.crm-sug-form');
+        if (!form) return;
+        
+        // Обновляем отображаемое имя
+        const nameInput = form.querySelector('input[name="name"]');
+        if (nameInput) {
+            const nameDisplay = item.querySelector('.crm-suggestion-name');
+            if (nameDisplay) {
+                nameDisplay.textContent = nameInput.value;
+            }
+        }
+        
+        // Обновляем тип если есть
+        const typeSelect = form.querySelector('select[name="type"]');
+        if (typeSelect) {
+            item.dataset.entityType = typeSelect.value;
+            
+            // Обновляем отображение типа
+            const typeDisplay = item.querySelector('.crm-suggestion-type');
+            if (typeDisplay) {
+                const selectedOption = typeSelect.options[typeSelect.selectedIndex];
+                typeDisplay.textContent = selectedOption?.textContent || typeSelect.value;
+            }
+        }
+        
+        // Собираем и сохраняем атрибуты
+        const attributes = {};
+        form.querySelectorAll('.crm-sug-attr-row').forEach(row => {
+            const keyInput = row.querySelector('.crm-sug-attr-key');
+            const valInput = row.querySelector('.crm-sug-attr-val');
+            if (keyInput && valInput && keyInput.value && valInput.value) {
+                attributes[keyInput.value] = valInput.value;
+            }
+        });
+        item.dataset.attributes = JSON.stringify(attributes);
+        
+        // Сохраняем ai_description
+        const aiDescInput = form.querySelector('input[name="ai_description"]');
+        if (aiDescInput) {
+            item.dataset.aiDescription = aiDescInput.value;
+        }
+        
+        // Обновляем отображение атрибутов в основном блоке
+        const attrsDisplay = item.querySelector('.crm-suggestion-attrs');
+        if (attrsDisplay) {
+            attrsDisplay.innerHTML = Object.entries(attributes)
+                .filter(([k, v]) => v && k !== 'name')
+                .map(([k, v]) => `<span class="crm-suggestion-attr">${k}: ${v}</span>`)
+                .join('');
+        }
+        
+        // Сворачиваем форму
+        const toggleBtn = item.querySelector('.crm-suggestion-btn-icon');
+        if (toggleBtn) {
+            this.toggleSuggestionEdit(toggleBtn);
+        }
+        
+        this.showNotification('Изменения применены', 'success');
+    }
+    
+    updateSuggestionFields(selectEl) {
+        // При смене типа сущности - обновляем UI
+        const item = selectEl.closest('.crm-suggestion-item');
+        if (item) {
+            item.dataset.entityType = selectEl.value;
+            
+            // Обновляем отображение типа
+            const typeDisplay = item.querySelector('.crm-suggestion-type');
+            if (typeDisplay) {
+                const selectedOption = selectEl.options[selectEl.selectedIndex];
+                typeDisplay.textContent = selectedOption?.textContent || selectEl.value;
+            }
+            
+            // Обновляем иконку
+            const iconEl = item.querySelector('.crm-suggestion-icon');
+            if (iconEl) {
+                const icons = { 
+                    person: 'ti-user', 
+                    organization: 'ti-building', 
+                    project: 'ti-folder',
+                    task: 'ti-checklist'
+                };
+                const iconClass = icons[selectEl.value] || 'ti-bookmark';
+                iconEl.innerHTML = `<i class="ti ${iconClass}"></i>`;
+                iconEl.className = `crm-suggestion-icon crm-suggestion-icon-${selectEl.value || 'default'}`;
+            }
+        }
+    }
+    
+    addSuggestionAttr(button) {
+        const form = button.closest('.crm-sug-form');
+        const attrsContainer = form.querySelector('.crm-sug-attrs');
+        
+        const row = document.createElement('div');
+        row.className = 'crm-sug-attr-row';
+        row.innerHTML = `
+            <input type="text" class="crm-sug-input crm-sug-attr-key" placeholder="Ключ" onchange="this.name = 'attr_' + this.value">
+            <input type="text" class="crm-sug-input crm-sug-attr-val" placeholder="Значение">
+            <button type="button" class="crm-sug-attr-del" onclick="this.parentElement.remove()">×</button>
+        `;
+        
+        attrsContainer.appendChild(row);
+        row.querySelector('.crm-sug-attr-key').focus();
+    }
+    
+    updateSuggestionCounts() {
+        const entitiesCount = document.querySelectorAll('#suggestions-entities .crm-suggestion-item').length;
+        const relationshipsCount = document.querySelectorAll('#suggestions-relationships .crm-suggestion-item').length;
+        const tasksCount = document.querySelectorAll('#suggestions-tasks .crm-suggestion-item').length;
+        
+        const counters = document.querySelectorAll('.crm-suggestion-count');
+        counters.forEach(counter => {
+            const section = counter.closest('.crm-suggestion-section');
+            if (section?.querySelector('#suggestions-entities')) {
+                counter.textContent = entitiesCount;
+            } else if (section?.querySelector('#suggestions-relationships')) {
+                counter.textContent = relationshipsCount;
+            } else if (section?.querySelector('#suggestions-tasks')) {
+                counter.textContent = tasksCount;
+            }
+        });
+    }
 }
 
 // Инициализация при загрузке
@@ -617,11 +1551,31 @@ window.CRM = {
     analyzeNote: (noteId) => window.crmModule?.analyzeNote(noteId),
     zoomGraph: (dir) => window.crmModule?.zoomGraph(dir),
     fitGraph: () => window.crmModule?.fitGraph(),
+    toggleGraphEditMode: () => window.crmModule?.toggleGraphEditMode(),
     closeModal: () => window.crmModule?.closeModal(),
     openEntity: (id) => window.crmModule?.openEntityDetail(id),
     toggleVoice: () => window.crmModule?.toggleVoiceInput(),
+    switchInputTab: (formId, tab) => window.crmModule?.switchInputTab(formId, tab),
+    triggerFileUpload: (formId) => window.crmModule?.triggerFileUpload(formId),
+    handleMentions: (textarea) => window.crmModule?.handleMentions(textarea),
+    handleVisibilityChange: (value) => {
+        const container = document.getElementById('shared-with-container');
+        if (container) {
+            container.style.display = value === 'shared' ? 'block' : 'none';
+        }
+    },
+    toggleSharedWith: (select) => {
+        const container = document.getElementById('shared-with-container');
+        if (container) {
+            container.style.display = select.value === 'shared' ? 'block' : 'none';
+        }
+    },
     askAI: () => window.crmModule?.askAI(),
     showNotification: (msg, type) => window.crmModule?.showNotification(msg, type),
+    uploadFiles: (files) => window.crmModule?.uploadFiles(files),
+    removePendingFile: (fileId) => window.crmModule?.removePendingFile(fileId),
+    uploadPendingFiles: (noteId) => window.crmModule?.uploadPendingFiles(noteId),
+    get pendingFiles() { return window.crmModule?.pendingFiles || []; },
     
     // Sidebar settings
     saveSidebarSettings: async () => {
@@ -681,6 +1635,360 @@ window.CRM = {
             }
         } catch (e) {
             window.crmModule?.showNotification('Ошибка сохранения настроек', 'error');
+        }
+    },
+    
+    // Visibility toggle for shared_with
+    toggleSharedWith: (select) => {
+        const container = document.getElementById('shared-with-container');
+        if (container) {
+            container.style.display = select.value === 'shared' ? 'block' : 'none';
+        }
+    },
+    
+    // Sharing search state
+    _sharingSearchTimeout: null,
+    _sharingResults: [],
+    
+    // Search shareable users/companies with debounce
+    searchShareable: (query) => {
+        clearTimeout(CRM._sharingSearchTimeout);
+        const dropdown = document.getElementById('sharing-dropdown');
+        
+        if (!query || query.length < 2) {
+            if (dropdown) dropdown.style.display = 'none';
+            return;
+        }
+        
+        CRM._sharingSearchTimeout = setTimeout(async () => {
+            try {
+                const response = await fetch(`/crm/api/sharing/search?q=${encodeURIComponent(query)}`, {
+                    credentials: 'include'
+                });
+                if (response.ok) {
+                    const results = await response.json();
+                    CRM._sharingResults = results;
+                    CRM.renderShareableDropdown(results);
+                }
+            } catch (e) {
+                console.error('Sharing search error:', e);
+            }
+        }, 300);
+    },
+    
+    // Show dropdown
+    showShareableDropdown: () => {
+        const dropdown = document.getElementById('sharing-dropdown');
+        if (dropdown && CRM._sharingResults.length > 0) {
+            dropdown.style.display = 'block';
+        }
+    },
+    
+    // Hide dropdown
+    hideShareableDropdown: () => {
+        setTimeout(() => {
+            const dropdown = document.getElementById('sharing-dropdown');
+            if (dropdown) dropdown.style.display = 'none';
+        }, 200);
+    },
+    
+    // Render dropdown with results
+    renderShareableDropdown: (results) => {
+        const dropdown = document.getElementById('sharing-dropdown');
+        if (!dropdown) return;
+        
+        if (results.length === 0) {
+            dropdown.innerHTML = '<div class="crm-sharing-empty">No results found</div>';
+            dropdown.style.display = 'block';
+            return;
+        }
+        
+        const html = results.map(item => {
+            if (item.type === 'user') {
+                return `
+                    <div class="crm-sharing-item" onclick="CRM.addShareableTag(${JSON.stringify(item).replace(/"/g, '&quot;')})">
+                        <i class="ti ti-user crm-sharing-icon"></i>
+                        <div class="crm-sharing-info">
+                            <span class="crm-sharing-primary">${item.email}</span>
+                            <span class="crm-sharing-secondary">${item.name}${item.company_name ? ' · ' + item.company_name : ''}</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="crm-sharing-item" onclick="CRM.addShareableTag(${JSON.stringify(item).replace(/"/g, '&quot;')})">
+                        <i class="ti ti-building crm-sharing-icon crm-sharing-icon-company"></i>
+                        <div class="crm-sharing-info">
+                            <span class="crm-sharing-primary">${item.name}</span>
+                            <span class="crm-sharing-secondary">${item.members_count || 0} members</span>
+                        </div>
+                    </div>
+                `;
+            }
+        }).join('');
+        
+        dropdown.innerHTML = html;
+        dropdown.style.display = 'block';
+    },
+    
+    // Add tag to shared list
+    addShareableTag: (item) => {
+        const container = document.getElementById('shared-with-tags');
+        const input = document.getElementById('shared-with-input');
+        const hidden = document.getElementById('shared-with-hidden');
+        const dropdown = document.getElementById('sharing-dropdown');
+        
+        let items = JSON.parse(hidden.value || '[]');
+        
+        // Check if already exists
+        const exists = items.some(i => {
+            if (typeof i === 'object') return i.type === item.type && i.id === item.id;
+            return i === item.id;
+        });
+        if (exists) {
+            if (dropdown) dropdown.style.display = 'none';
+            if (input) input.value = '';
+            return;
+        }
+        
+        // Add to list
+        items.push({
+            type: item.type,
+            id: item.id,
+            name: item.name || item.email,
+            email: item.email || ''
+        });
+        hidden.value = JSON.stringify(items);
+        
+        // Create tag element
+        const tag = document.createElement('span');
+        tag.className = `crm-tag crm-${item.type}-tag`;
+        tag.dataset.type = item.type;
+        tag.dataset.id = item.id;
+        
+        const icon = item.type === 'company' ? 'building' : 'user';
+        const label = item.type === 'user' ? item.email : item.name;
+        tag.innerHTML = `<i class="ti ti-${icon}"></i> ${label} <span class="crm-tag-remove" onclick="CRM.removeShareableTag(this)">&times;</span>`;
+        
+        container.insertBefore(tag, input);
+        
+        // Clear input and hide dropdown
+        if (input) input.value = '';
+        if (dropdown) dropdown.style.display = 'none';
+        CRM._sharingResults = [];
+    },
+    
+    // Remove tag from shared list
+    removeShareableTag: (el) => {
+        const tag = el.parentElement;
+        const hidden = document.getElementById('shared-with-hidden');
+        
+        const type = tag.dataset.type;
+        const id = tag.dataset.id;
+        
+        let items = JSON.parse(hidden.value || '[]');
+        items = items.filter(i => {
+            if (typeof i === 'object') return !(i.type === type && i.id === id);
+            return i !== id;
+        });
+        hidden.value = JSON.stringify(items);
+        
+        tag.remove();
+    },
+    
+    // Legacy support
+    handleSharedWithInput: (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+        }
+    },
+    removeSharedUser: (el, userId) => CRM.removeShareableTag(el),
+    
+    // Link Telegram account
+    linkTelegram: async () => {
+        const input = document.getElementById('telegram-id-input');
+        const telegramId = input?.value?.trim();
+        
+        if (!telegramId) {
+            CRM.showNotification('Введите Telegram ID', 'error');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('telegram_id', telegramId);
+        
+        try {
+            const response = await fetch('/crm/api/profile/telegram', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (response.ok) {
+                const html = await response.text();
+                document.getElementById('crm-content').innerHTML = html;
+                CRM.showNotification('Telegram успешно привязан', 'success');
+            } else {
+                CRM.showNotification('Ошибка привязки Telegram', 'error');
+            }
+        } catch (e) {
+            console.error('Telegram link error:', e);
+            CRM.showNotification('Ошибка привязки Telegram', 'error');
+        }
+    },
+    
+    // Toggle tasks panel visibility
+    toggleTasksPanel: () => {
+        const app = document.querySelector('.crm-app');
+        const isHidden = app.classList.toggle('tasks-panel-hidden');
+        
+        // Save state to cookie (expires in 365 days)
+        const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString();
+        document.cookie = `crm_tasks_hidden=${isHidden}; path=/; expires=${expires}; SameSite=Lax`;
+    },
+    
+    // AI Suggestions
+    toggleSuggestionEdit: (btn) => window.crmModule?.toggleSuggestionEdit(btn),
+    discardSuggestion: (btn) => window.crmModule?.discardSuggestion(btn),
+    discardAllSuggestions: () => window.crmModule?.discardAllSuggestions(),
+    approveSuggestion: (btn, action) => window.crmModule?.approveSuggestion(btn, action),
+    saveSuggestionEdit: (btn) => window.crmModule?.saveSuggestionEdit(btn),
+    updateSuggestionFields: (select) => window.crmModule?.updateSuggestionFields(select),
+    addSuggestionAttr: (btn) => window.crmModule?.addSuggestionAttr(btn),
+    approveAllSuggestions: (noteId) => window.crmModule?.approveAllSuggestions(noteId),
+    
+    // AI Tooltip
+    showAiTooltip(button) {
+        // Remove any existing tooltips
+        document.querySelectorAll('.crm-ai-tooltip').forEach(t => t.remove());
+        
+        const description = button.dataset.aiDescription;
+        if (!description) return;
+        
+        // Create tooltip
+        const tooltip = document.createElement('div');
+        tooltip.className = 'crm-ai-tooltip';
+        tooltip.innerHTML = `
+            <div class="crm-ai-tooltip-header">
+                <i class="ti ti-robot"></i>
+                AI Context
+            </div>
+            <div class="crm-ai-tooltip-content">${description}</div>
+        `;
+        
+        // Position below button
+        document.body.appendChild(tooltip);
+        const rect = button.getBoundingClientRect();
+        tooltip.style.top = `${rect.bottom + 8 + window.scrollY}px`;
+        tooltip.style.left = `${Math.max(10, rect.left - 20 + window.scrollX)}px`;
+        
+        // Close on click outside
+        const closeHandler = (e) => {
+            if (!tooltip.contains(e.target) && e.target !== button) {
+                tooltip.remove();
+                document.removeEventListener('click', closeHandler);
+            }
+        };
+        setTimeout(() => document.addEventListener('click', closeHandler), 10);
+    },
+    
+    // File operations
+    async downloadFile(noteId, fileId) {
+        try {
+            const response = await fetch(`/crm/api/notes/${noteId}/attachments/${fileId}/download`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.download_url) {
+                    window.open(data.download_url, '_blank');
+                }
+            } else {
+                CRM.showNotification('Ошибка скачивания файла', 'error');
+            }
+        } catch (e) {
+            console.error('Download error:', e);
+            CRM.showNotification('Ошибка скачивания', 'error');
+        }
+    },
+    
+    async downloadAttachment(noteId, fileId) {
+        try {
+            const response = await fetch(`/crm/api/notes/${noteId}/attachments/${fileId}/download`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.download_url) {
+                    window.open(data.download_url, '_blank');
+                }
+            }
+        } catch (e) {
+            console.error('Download error:', e);
+        }
+    },
+    
+    async deleteAttachment(noteId, fileId) {
+        if (!confirm('Удалить файл?')) return;
+        
+        try {
+            const response = await fetch(`/crm/api/notes/${noteId}/attachments/${fileId}`, {
+                method: 'DELETE'
+            });
+            if (response.ok) {
+                // Refresh attachments list
+                const list = document.getElementById('attachments-list');
+                if (list) {
+                    const res = await fetch(`/crm/api/notes/${noteId}/attachments`);
+                    list.innerHTML = await res.text();
+                }
+                window.crmModule?.showNotification('Файл удален', 'success');
+            }
+        } catch (e) {
+            console.error('Delete error:', e);
+            window.crmModule?.showNotification('Ошибка удаления', 'error');
+        }
+    },
+    
+    async showFileContent(noteId, fileId, button) {
+        // Remove existing tooltip
+        document.querySelectorAll('.crm-file-content-tooltip').forEach(t => t.remove());
+        
+        // Create tooltip
+        const tooltip = document.createElement('div');
+        tooltip.className = 'crm-file-content-tooltip';
+        tooltip.innerHTML = '<div class="loading"><i class="ti ti-loader crm-spinner"></i> Загрузка...</div>';
+        
+        // Position near button (above it)
+        const rect = button.getBoundingClientRect();
+        tooltip.style.position = 'fixed';
+        tooltip.style.left = `${rect.right + 10}px`;
+        tooltip.style.top = `${Math.max(10, rect.top - 100)}px`;
+        
+        document.body.appendChild(tooltip);
+        
+        // Close on click outside
+        const closeHandler = (e) => {
+            if (!tooltip.contains(e.target) && e.target !== button) {
+                tooltip.remove();
+                document.removeEventListener('click', closeHandler);
+            }
+        };
+        setTimeout(() => document.addEventListener('click', closeHandler), 100);
+        
+        try {
+            const response = await fetch(`/crm/api/notes/${noteId}/attachments/${fileId}/content`);
+            if (response.ok) {
+                const data = await response.json();
+                if (data.content) {
+                    const preview = data.content.length > 1000 
+                        ? data.content.substring(0, 1000) + '...' 
+                        : data.content;
+                    tooltip.innerHTML = `<div class="content">${preview}</div>`;
+                } else {
+                    tooltip.innerHTML = '<div class="error">Контент еще не проиндексирован</div>';
+                }
+            } else {
+                tooltip.innerHTML = '<div class="error">Контент недоступен</div>';
+            }
+        } catch (e) {
+            console.error('Content error:', e);
+            tooltip.innerHTML = '<div class="error">Ошибка загрузки</div>';
         }
     }
 };

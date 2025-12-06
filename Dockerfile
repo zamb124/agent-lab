@@ -23,6 +23,12 @@ RUN uv pip install --system -e .
 # RAG образ с ML зависимостями (для worker)
 FROM base-core AS base-rag
 
+# Системные зависимости для PDF парсинга и OCR
+RUN apt-get update && apt-get install -y \
+    poppler-utils \
+    tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
+
 # Сначала ставим CPU-only PyTorch (без CUDA, экономит ~2-3 GB)
 RUN uv pip install --system \
     torch torchvision \

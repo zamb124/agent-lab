@@ -1,0 +1,39 @@
+<!-- Recent Entities Widget -->
+{% if entities and entities | length > 0 %}
+<div class="crm-recent-entities-list" style="padding: 0;">
+    {% for entity in entities %}
+    <div class="crm-entity-item"
+         style="padding: 12px 16px; border-bottom: 1px solid var(--crm-border-light); cursor: pointer; display: flex; align-items: center; gap: 12px;"
+         hx-get="/crm/partials/entity/{{ entity.entity_id }}"
+         hx-target="#modal-container">
+        
+        <div class="crm-entity-avatar" 
+             style="width: 36px; height: 36px; border-radius: 50%; background: var(--crm-entity-{{ entity.entity_type | default('person') }}); display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; font-weight: 600; flex-shrink: 0;">
+            {{ entity.name[:2] | upper }}
+        </div>
+        
+        <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 14px; font-weight: 500; color: var(--crm-text-primary);">
+                {{ entity.name | truncate(30) }}
+            </div>
+            <div style="font-size: 12px; color: var(--crm-text-muted);">
+                {{ entity.entity_type | capitalize }}
+                {% if entity.properties and entity.properties.position %}
+                - {{ entity.properties.position }}
+                {% endif %}
+            </div>
+        </div>
+        
+        <i class="ti ti-chevron-right" style="color: var(--crm-text-muted); font-size: 16px;"></i>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="crm-empty-state" style="padding: 24px;">
+    <i class="ti ti-users" style="font-size: 24px; color: var(--crm-text-muted);"></i>
+    <p style="font-size: 14px; color: var(--crm-text-muted); margin-top: 8px;">
+        {{ t('crm.entities.empty') }}
+    </p>
+</div>
+{% endif %}
+

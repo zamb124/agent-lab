@@ -107,15 +107,32 @@ async def send_message_to_flow(flow_id: str, request: FlowMessageRequest, flow_r
     """
     # Проверяем что флоу существует и поддерживает API
     flow_config = await flow_repo.get(flow_id)
+    logger.info(f"Flow {flow_id} из репозитория: {flow_config is not None}")
 
+    # Если не найден - пробуем создать системный flow
     if not flow_config:
+        logger.info(f"Flow {flow_id} не найден, пробуем создать системный...")
+        flow_factory = get_agents_container().flow_factory
+        try:
+            # get_flow автоматически создаст системный flow если нужно
+            flow = await flow_factory.get_flow(flow_id)
+            flow_config = flow.config
+            logger.info(f"Системный flow {flow_id} создан успешно, config: {flow_config is not None}")
+        except ValueError as e:
+            logger.error(f"Ошибка создания flow {flow_id}: {e}")
         raise HTTPException(status_code=404, detail=f"Флоу {flow_id} не найден")
+        except Exception as e:
+            logger.error(f"Неожиданная ошибка создания flow {flow_id}: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=str(e))
 
     # Проверяем что флоу поддерживает API платформу
     if "api" not in flow_config.platforms:
+        logger.error(f"Flow {flow_id} не поддерживает API. Platforms: {flow_config.platforms}")
         raise HTTPException(
             status_code=400, detail=f"Флоу {flow_id} не поддерживает API платформу"
         )
+    
+    logger.info(f"Flow {flow_id} готов, продолжаем обработку сообщения")
 
     # Подготавливаем данные для API интерфейса
     api_data = {
@@ -324,7 +341,13 @@ async def get_flow_info(flow_id: str, flow_repo: FlowRepositoryDep):
     try:
         flow_config = await flow_repo.get(flow_id)
 
+        # Если не найден - пробуем создать системный flow
         if not flow_config:
+            flow_factory = get_agents_container().flow_factory
+            try:
+                flow = await flow_factory.get_flow(flow_id)
+                flow_config = flow.config
+            except ValueError:
             raise HTTPException(status_code=404, detail=f"Флоу {flow_id} не найден")
 
         # Проверяем поддержку API

@@ -1,12 +1,15 @@
 """
 API для типов сущностей CRM.
+
+Управление типами доступно только администраторам (POST/PUT/DELETE).
+GET доступен всем авторизованным пользователям.
 """
 
 from typing import List
 
 from fastapi import APIRouter, HTTPException
 
-from apps.crm.dependencies import EntityTypeServiceDep
+from apps.crm.dependencies import EntityTypeServiceDep, RequireAdminDep
 from apps.crm.models.entity_type_models import (
     EntityTypeCreate,
     EntityTypeUpdate,
@@ -40,8 +43,9 @@ async def get_entity_type(
 async def create_entity_type(
     data: EntityTypeCreate,
     entity_type_service: EntityTypeServiceDep,
+    _admin: RequireAdminDep,
 ):
-    """Создает кастомный тип сущности"""
+    """Создает кастомный тип сущности. Требуются права администратора."""
     return await entity_type_service.create_type(data)
 
 
@@ -50,8 +54,12 @@ async def update_entity_type(
     type_id: str,
     data: EntityTypeUpdate,
     entity_type_service: EntityTypeServiceDep,
+    _admin: RequireAdminDep,
 ):
-    """Обновляет тип сущности (только кастомные)"""
+    """
+    Обновляет тип сущности. Требуются права администратора.
+    Системные типы можно редактировать (промпты, поля).
+    """
     entity_type = await entity_type_service.update_type(type_id, data)
     if not entity_type:
         raise HTTPException(status_code=404, detail="Тип не найден")
@@ -62,11 +70,10 @@ async def update_entity_type(
 async def delete_entity_type(
     type_id: str,
     entity_type_service: EntityTypeServiceDep,
+    _admin: RequireAdminDep,
 ):
-    """Удаляет кастомный тип сущности"""
+    """Удаляет кастомный тип сущности. Системные типы удалить нельзя."""
     success = await entity_type_service.delete_type(type_id)
     if not success:
         raise HTTPException(status_code=404, detail="Тип не найден")
     return {"status": "deleted"}
-
-

@@ -44,7 +44,24 @@ agent-lab/
 │   │   ├── clients/               # External clients (AmoCRM, etc)
 │   │   └── middleware/            # Middleware
 │   │
-│   └── frontend/                  # Сервис фронтенда (порт 8002, TODO)
+│   ├── frontend/                  # Сервис фронтенда (порт 8002)
+│   │   ├── main.py                # FastAPI app с плагинами
+│   │   ├── container.py           # FrontendContainer
+│   │   ├── config.py              # FrontendSettings
+│   │   ├── core/                  # Плагинная система, template loader
+│   │   ├── api/                   # JSON API эндпоинты
+│   │   ├── modules/               # Плагины (builder, bots, history, crm, rag)
+│   │   ├── shared/                # Общие компоненты (templates, static)
+│   │   └── i18n/                  # Переводы
+│   │
+│   └── crm/                       # Сервис CRM (порт 8003)
+│       ├── main.py                # FastAPI app
+│       ├── container.py           # CRMContainer
+│       ├── config.py              # CRMSettings
+│       ├── api/v1/                # REST API (entities, notes, tasks, graph)
+│       ├── db/                    # CRMDatabase + репозитории
+│       ├── services/              # EntityService, NoteService, TaskService
+│       └── tasks/                 # TaskIQ задачи (attachment_tasks)
 │
 └── config.json                    # Базовая конфигурация
 ```
@@ -170,6 +187,11 @@ container = AgentsContainer(
 - SessionConfig (сессии)
 - ToolReference (инструменты)
 - Billing, Payment модели (бизнес-логика)
+
+**CRM модели** (в apps/crm/db/models.py и apps/crm/models/):
+- Entity, EntityType (сущности с embeddings в ChromaDB)
+- Note, Task, Relationship (в PostgreSQL)
+- AccessRequest, UserProfile
 
 <bad_example>
 # НЕТ дубликатов!

@@ -3,7 +3,8 @@ API тесты для Notes.
 """
 
 import pytest
-from datetime import date
+import io
+from datetime import date, timedelta
 
 
 @pytest.mark.asyncio
@@ -193,4 +194,176 @@ async def test_search_notes(crm_client, unique_crm_id):
     
     await crm_client.delete(f"/crm/api/v1/notes/{note_id}")
 
+
+@pytest.mark.asyncio
+async def test_get_notes_in_range(crm_client, unique_crm_id):
+    """Тест получения заметок за диапазон дат"""
+    today = date.today()
+    start_date = today - timedelta(days=1)
+    end_date = today + timedelta(days=1)
+    
+    payload = {
+        "title": f"Range Test Note {unique_crm_id('range')}",
+        "content": "Note for range test",
+        "note_type": "freeform",
+        "note_date": str(today),
+    }
+    
+    create_response = await crm_client.post("/crm/api/v1/notes", json=payload)
+    note_id = create_response.json()["note_id"]
+    
+    response = await crm_client.get(
+        f"/crm/api/v1/notes/range?start_date={start_date}&end_date={end_date}"
+    )
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    
+    note_ids = [n["note_id"] for n in data]
+    assert note_id in note_ids
+    
+    await crm_client.delete(f"/crm/api/v1/notes/{note_id}")
+
+
+@pytest.mark.asyncio
+async def test_get_notes_in_range_empty(crm_client):
+    """Тест получения заметок за пустой диапазон"""
+    # Даты в далеком будущем - заметок быть не должно
+    start_date = date(2099, 1, 1)
+    end_date = date(2099, 1, 2)
+    
+    response = await crm_client.get(
+        f"/crm/api/v1/notes/range?start_date={start_date}&end_date={end_date}"
+    )
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_notes_by_entity(crm_client, unique_crm_id):
+    """Тест получения заметок по связанной сущности"""
+    entity_id = unique_crm_id("entity")
+    
+    payload = {
+        "title": f"Entity Note {unique_crm_id('entity_note')}",
+        "content": "Note linked to entity",
+        "note_type": "freeform",
+        "note_date": str(date.today()),
+        "linked_entity_ids": [entity_id],
+    }
+    
+    create_response = await crm_client.post("/crm/api/v1/notes", json=payload)
+    note_id = create_response.json()["note_id"]
+    
+    response = await crm_client.get(f"/crm/api/v1/notes/entity/{entity_id}")
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    
+    note_ids = [n["note_id"] for n in data]
+    assert note_id in note_ids
+    
+    await crm_client.delete(f"/crm/api/v1/notes/{note_id}")
+
+
+@pytest.mark.asyncio
+async def test_get_notes_by_entity_empty(crm_client, unique_crm_id):
+    """Тест получения заметок для несуществующей сущности"""
+    fake_entity_id = unique_crm_id("fake_entity")
+    
+    response = await crm_client.get(f"/crm/api/v1/notes/entity/{fake_entity_id}")
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) == 0
+
+
+@pytest.mark.asyncio
+async def test_import_note_from_file(crm_client, unique_crm_id):
+    """Тест импорта заметки из файла"""
+    file_content = b"This is the content of imported note.\n\nMultiple paragraphs."
+    files = {
+        "file": ("imported_note.txt", io.BytesIO(file_content), "text/plain")
+    }
+    data = {
+        "title": f"Imported Note {unique_crm_id('import')}",
+        "note_type": "freeform",
+        "note_date": str(date.today()),
+    }
+    
+    response = await crm_client.post(
+        "/crm/api/v1/notes/import",
+        files=files,
+        data=data
+    )
+    
+    assert response.status_code == 200
+    note = response.json()
+    assert "note_id" in note
+    assert note["note_type"] == "freeform"
+    
+    # Контент должен содержать текст из файла
+    assert "content" in note or "title" in note
+    
+    await crm_client.delete(f"/crm/api/v1/notes/{note['note_id']}")
+
+
+@pytest.mark.asyncio
+async def test_import_note_from_file_without_title(crm_client, unique_crm_id):
+    """Тест импорта заметки без указания title (используется имя файла)"""
+    file_content = b"Content for auto-title test"
+    filename = f"auto_title_{unique_crm_id('auto')}.txt"
+    files = {
+        "file": (filename, io.BytesIO(file_content), "text/plain")
+    }
+    data = {
+        "note_type": "meeting_minutes",
+        "note_date": str(date.today()),
+    }
+    
+    response = await crm_client.post(
+        "/crm/api/v1/notes/import",
+        files=files,
+        data=data
+    )
+    
+    assert response.status_code == 200
+    note = response.json()
+    # title должен быть именем файла
+    assert filename in note.get("title", "")
+    
+    await crm_client.delete(f"/crm/api/v1/notes/{note['note_id']}")
+
+
+@pytest.mark.asyncio
+async def test_get_daily_summary(crm_client, unique_crm_id):
+    """Тест получения AI саммари за день"""
+    today = str(date.today())
+    
+    # Создаем заметку на сегодня
+    payload = {
+        "title": f"Summary Test {unique_crm_id('summary')}",
+        "content": "Important meeting about project planning and timeline",
+        "note_type": "meeting_minutes",
+        "note_date": today,
+    }
+    
+    create_response = await crm_client.post("/crm/api/v1/notes", json=payload)
+    note_id = create_response.json()["note_id"]
+    
+    response = await crm_client.get(f"/crm/api/v1/notes/daily-summary/{today}")
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert "date" in data
+    assert "summary" in data
+    assert data["date"] == today
+    
+    await crm_client.delete(f"/crm/api/v1/notes/{note_id}")
 

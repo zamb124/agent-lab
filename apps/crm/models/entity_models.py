@@ -38,6 +38,11 @@ class EntityCreate(BaseModel):
         title="Описание",
         description="Описание сущности"
     )
+    ai_description: Optional[str] = Field(
+        default=None,
+        title="AI описание",
+        description="Контекстное описание от AI: откуда сущность, на какой встрече, из какой компании"
+    )
     attributes: Dict[str, Any] = Field(
         default_factory=dict,
         title="Атрибуты",
@@ -52,6 +57,13 @@ class EntityCreate(BaseModel):
         default=None,
         title="ID исходной заметки",
         description="Заметка из которой была извлечена сущность"
+    )
+    relevance: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        title="Релевантность",
+        description="Оценка важности сущности от AI (0.0-1.0)"
     )
 
 
@@ -68,9 +80,19 @@ class EntityUpdate(BaseModel):
         default=None,
         title="Описание"
     )
+    ai_description: Optional[str] = Field(
+        default=None,
+        title="AI описание"
+    )
     attributes: Optional[Dict[str, Any]] = Field(
         default=None,
         title="Атрибуты"
+    )
+    relevance: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        title="Релевантность"
     )
 
 
@@ -97,6 +119,11 @@ class EntityResponse(BaseModel):
         default=None,
         title="Описание"
     )
+    ai_description: Optional[str] = Field(
+        default=None,
+        title="AI описание",
+        description="Контекстное описание от AI для поиска"
+    )
     attributes: Dict[str, Any] = Field(
         default_factory=dict,
         title="Атрибуты"
@@ -108,6 +135,13 @@ class EntityResponse(BaseModel):
     source_note_id: Optional[str] = Field(
         default=None,
         title="ID исходной заметки"
+    )
+    relevance: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        title="Релевантность",
+        description="Оценка важности сущности от AI (0.0-1.0)"
     )
     created_at: Optional[datetime] = Field(
         default=None,

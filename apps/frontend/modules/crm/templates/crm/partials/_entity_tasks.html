@@ -1,0 +1,53 @@
+<!-- Entity Tasks List -->
+{% if tasks and tasks | length > 0 %}
+<div class="crm-entity-tasks-list">
+    {% for task in tasks %}
+    <div class="crm-task-item {% if task.is_overdue %}overdue{% endif %} {% if task.status == 'completed' %}completed{% endif %}"
+         style="padding: 12px 16px; border: 1px solid var(--crm-border-light); border-radius: 8px; margin-bottom: 8px; cursor: pointer;"
+         hx-get="/crm/partials/task-modal?task_id={{ task.task_id }}"
+         hx-target="#modal-container">
+        
+        <div class="crm-task-checkbox {% if task.status == 'completed' %}checked{% endif %}"
+             hx-post="/crm/api/tasks/{{ task.task_id }}/complete"
+             hx-trigger="click consume"
+             hx-swap="none"
+             hx-push-url="false"
+             onclick="event.stopPropagation()">
+            {% if task.status == 'completed' %}
+            <i class="ti ti-check"></i>
+            {% endif %}
+        </div>
+        
+        <div class="crm-task-info" style="flex: 1;">
+            <div class="crm-task-text" style="{% if task.status == 'completed' %}text-decoration: line-through; opacity: 0.6;{% endif %}">
+                {{ task.title }}
+            </div>
+            <div class="crm-task-meta">
+                <span class="crm-task-date {% if task.is_overdue %}overdue{% endif %}">
+                    <i class="ti ti-calendar"></i>
+                    {{ task.due_date | default('') }}
+                </span>
+                {% if task.priority == 'high' or task.priority == 'urgent' %}
+                <span class="crm-task-priority {{ task.priority }}">{{ task.priority | upper }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="crm-empty-state" style="padding: 40px;">
+    <div class="crm-empty-icon">
+        <i class="ti ti-checklist"></i>
+    </div>
+    <h3 class="crm-empty-title">{{ t('crm.entities.no_tasks') }}</h3>
+    <p class="crm-empty-description">{{ t('crm.entities.no_tasks_description') }}</p>
+    <button class="crm-btn crm-btn-primary"
+            hx-get="/crm/partials/task-modal"
+            hx-target="#modal-container">
+        <i class="ti ti-plus"></i>
+        {{ t('crm.tasks.new') }}
+    </button>
+</div>
+{% endif %}
+

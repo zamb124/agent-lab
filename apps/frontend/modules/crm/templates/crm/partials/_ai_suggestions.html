@@ -1,14 +1,24 @@
 <!-- AI Analysis Results - Entities already created with pending status -->
-<div class="crm-modal-overlay" onclick="if(event.target === this) CRM.closeModal()">
+<div class="modal-overlay" onclick="if(event.target === this) CRM.closeModal()">
     <div class="crm-modal crm-modal-lg">
         <div class="crm-modal-header">
             <div class="crm-ai-icon" style="margin-right: 12px;">
                 <i class="ti ti-sparkles"></i>
             </div>
             <div class="crm-modal-title-group">
-                <h2 class="crm-modal-title">{{ t('crm.notes.analysis.title') }}</h2>
+                <h2 class="crm-modal-title">
+                    {% if ai_error %}
+                    {{ t('crm.notes.saved') }}
+                    {% else %}
+                    {{ t('crm.notes.analysis.title') }}
+                    {% endif %}
+                </h2>
                 <p style="color: var(--crm-text-muted); font-size: 14px; margin: 4px 0 0 0;">
+                    {% if ai_error %}
+                    {{ t('crm.notes.analysis.ai_unavailable') }}
+                    {% else %}
                     {{ t('crm.notes.analysis.review_description') }}
+                    {% endif %}
                 </p>
             </div>
             <button class="crm-modal-close" 
@@ -21,6 +31,16 @@
         </div>
         
         <div class="crm-modal-body crm-scrollbar" style="max-height: 60vh;">
+            {% if ai_error %}
+            <div class="crm-alert crm-alert-warning" style="margin-bottom: 16px;">
+                <i class="ti ti-alert-triangle"></i>
+                <div>
+                    <strong>AI анализ недоступен</strong>
+                    <p style="margin: 4px 0 0 0; font-size: 13px;">Заметка сохранена. Вы можете добавить сущности вручную.</p>
+                    <p style="margin: 4px 0 0 0; font-size: 12px; color: var(--crm-text-muted);">{{ ai_error }}</p>
+                </div>
+            </div>
+            {% endif %}
             <!-- Summary -->
             {% if summary %}
             <div class="crm-ai-summary" style="margin-bottom: 24px;">
@@ -90,8 +110,8 @@
             </div>
             {% endif %}
             
-            <!-- Empty state -->
-            {% if not summary and (not entities or entities | length == 0) and (not tasks or tasks | length == 0) %}
+            <!-- Empty state (только если нет ошибки) -->
+            {% if not ai_error and not summary and (not entities or entities | length == 0) and (not tasks or tasks | length == 0) %}
             <div class="crm-empty-state">
                 <div class="crm-empty-icon">
                     <i class="ti ti-sparkles-off"></i>
@@ -102,15 +122,30 @@
             {% endif %}
         </div>
         
-        <div class="crm-modal-footer">
+        <div class="crm-modal-footer" style="justify-content: space-between;">
             <button type="button" 
                     class="crm-btn crm-btn-secondary"
-                    hx-post="/crm/partials/notes/close-modal"
-                    hx-target="#crm-content"
-                    hx-swap="innerHTML"
                     onclick="CRM.closeModal()">
                 {{ t('common.close') }}
             </button>
+            
+            {% if note and (note.note_id or note.id) %}
+            <a href="/crm/notes?highlight={{ note.note_id or note.id }}" 
+               class="crm-btn crm-btn-primary"
+               onclick="CRM.closeModal()">
+                <i class="ti ti-arrow-right"></i>
+                {{ t('crm.notes.go_to_note') }}
+            </a>
+            {% endif %}
         </div>
     </div>
 </div>
+
+{% if note and (note.note_id or note.id) %}
+<script>
+    // Загрузка pending файлов после создания заметки
+    if (typeof CRM !== 'undefined' && CRM.pendingFiles && CRM.pendingFiles.length > 0) {
+        CRM.uploadPendingFiles('{{ note.note_id or note.id }}');
+    }
+</script>
+{% endif %}

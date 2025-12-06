@@ -4,8 +4,9 @@ FastAPI Dependencies для CRM сервиса.
 
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 
+from core.context import get_context
 from apps.crm.container import get_crm_container, CRMContainer
 from apps.crm.db.repositories.entity_type_repository import EntityTypeRepository
 from apps.crm.db.repositories.relationship_repository import RelationshipRepository
@@ -104,4 +105,40 @@ TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
 GraphServiceDep = Annotated[GraphService, Depends(get_graph_service)]
 AccessRequestServiceDep = Annotated[AccessRequestService, Depends(get_access_request_service)]
 ProfileServiceDep = Annotated[ProfileService, Depends(get_profile_service)]
+
+
+# === Admin Check ===
+
+def require_admin() -> None:
+    """
+    Проверяет, что текущий пользователь имеет права admin.
+    Права определяются по:
+    1. Глобальной группе "admin" в user.groups
+    2. Роли "admin" или "owner" в активной компании
+    """
+    context = get_context()
+    if not context or not context.user:
+        raise HTTPException(status_code=401, detail="Не авторизован")
+    
+    user = context.user
+    company = context.active_company
+    
+    # Проверяем глобальную группу admin
+    if "admin" in user.groups:
+        return
+    
+    # Проверяем роль в текущей компании
+    if company:
+        user_roles = company.members.get(user.user_id, [])
+        if "admin" in user_roles or "owner" in user_roles:
+            return
+        
+        # Проверяем владельца компании
+        if company.owner_user_id == user.user_id:
+            return
+    
+    raise HTTPException(status_code=403, detail="Требуются права администратора")
+
+
+RequireAdminDep = Annotated[None, Depends(require_admin)]
 

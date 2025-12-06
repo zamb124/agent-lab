@@ -175,8 +175,8 @@ async def sample_entity_type(test_context, entity_type_repo, unique_crm_id) -> E
         name="Test Entity Type",
         description="Test description",
         prompt="Test extraction prompt",
-        required_attributes=["name"],
-        optional_attributes=["email", "phone"],
+        required_fields={"name": {"label": "Name", "type": "text"}},
+        optional_fields={"email": {"label": "Email", "type": "email"}, "phone": {"label": "Phone", "type": "phone"}},
         icon="ti-test",
         color="#FF0000",
         is_system=False,
@@ -283,26 +283,30 @@ async def crm_api_user_company(migrated_db):
     user_repo = UserRepository(storage=storage)
     
     unique_suffix = uuid.uuid4().hex[:8]
+    user_id = f"crm_api_user_{unique_suffix}"
+    company_id = f"crm_api_company_{unique_suffix}"
     
     company = Company(
-        company_id=f"crm_api_company_{unique_suffix}",
+        company_id=company_id,
         subdomain=f"crm_api_{unique_suffix}",
         name="CRM API Test Company",
         tariff_plan=TariffPlan.ENTERPRISE,
         balance=100000.0,
-        status="active"
+        status="active",
+        owner_user_id=user_id,
+        members={user_id: ["admin", "owner"]}
     )
     
     user = User(
-        user_id=f"crm_api_user_{unique_suffix}",
+        user_id=user_id,
         provider="test",
         provider_user_id=f"crm_api_{unique_suffix}",
         email=f"crm_api_{unique_suffix}@example.com",
         name="CRM API Test User",
         status="active",
         groups=["user"],
-        companies={company.company_id: ["admin"]},
-        active_company_id=company.company_id
+        companies={company_id: ["admin"]},
+        active_company_id=company_id
     )
     
     await company_repo.set(company)

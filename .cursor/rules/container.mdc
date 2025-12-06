@@ -202,15 +202,35 @@ class AuthMiddleware(BaseHTTPMiddleware):
         ...
 </good_example>
 
+## CRMContainer
+
+CRM сервис имеет собственный контейнер:
+
+<good_example>
+from apps.crm.container import get_crm_container
+
+container = get_crm_container()
+
+# CRM репозитории (crm_db)
+note_repo = container.note_repository
+task_repo = container.task_repository
+relationship_repo = container.relationship_repository
+
+# CRM сервисы
+entity_service = container.entity_service      # Работа с ChromaDB
+note_service = container.note_service          # Заметки + AI анализ
+graph_service = container.graph_service        # Knowledge Graph
+</good_example>
+
 ## Файловые процессоры
 
 Инициализация при старте приложения:
 
 <good_example>
-# apps/agents/main.py или apps/frontend/main.py
+# apps/agents/main.py, apps/frontend/main.py или apps/crm/main.py
 from core.files import initialize_default_processors
 
-container = AgentsContainer(...)
+container = AgentsContainer(...)  # или CRMContainer
 set_agents_container(container)
 
 initialize_default_processors(

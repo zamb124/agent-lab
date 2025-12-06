@@ -141,6 +141,26 @@ class RelationshipRepository(BaseCRMRepository[Relationship]):
             result = await session.execute(stmt)
             return list(result.scalars().all())
     
+    async def find_exact(
+        self,
+        company_id: str,
+        source_entity_id: str,
+        target_entity_id: str,
+        relationship_type: str,
+    ) -> Relationship | None:
+        """Находит точную связь по source, target и типу"""
+        async with self._db.session() as session:
+            stmt = select(Relationship).where(
+                and_(
+                    Relationship.company_id == company_id,
+                    Relationship.source_entity_id == source_entity_id,
+                    Relationship.target_entity_id == target_entity_id,
+                    Relationship.relationship_type == relationship_type,
+                )
+            )
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none()
+    
     async def delete_by_entity(self, company_id: str, entity_id: str) -> int:
         """Удаляет все связи сущности"""
         from sqlalchemy import delete as sql_delete

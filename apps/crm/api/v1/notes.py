@@ -14,6 +14,8 @@ from apps.crm.models.note_models import (
     NoteResponse,
     NoteAnalyzeRequest,
     NoteAnalyzeResponse,
+    ConfirmEntitiesRequest,
+    ConfirmEntitiesResponse,
 )
 
 router = APIRouter()
@@ -202,6 +204,24 @@ async def analyze_note(
     return await note_service.analyze_note(note_id, request)
 
 
+@router.post("/{note_id}/confirm-entities", response_model=ConfirmEntitiesResponse)
+async def confirm_entities(
+    note_id: str,
+    request: ConfirmEntitiesRequest,
+    note_service: NoteServiceDep,
+):
+    """
+    Подтверждает извлечённые сущности и создаёт их в БД.
+    
+    Создаёт:
+    - Event сущность (meeting/call/email) если create_event=True
+    - Все подтверждённые сущности
+    - Связи между сущностями
+    - Связь автора с событием если link_author=True
+    """
+    return await note_service.confirm_entities(note_id, request)
+
+
 @router.post("/{note_id}/link/{entity_id}", response_model=NoteResponse)
 async def link_entity_to_note(
     note_id: str,
@@ -221,4 +241,70 @@ async def unlink_entity_from_note(
     """Убирает связь сущности с заметкой"""
     return await note_service.unlink_entity_from_note(note_id, entity_id)
 
+
+@router.post("/{note_id}/attachments")
+async def upload_attachment(
+    note_id: str,
+    note_service: NoteServiceDep,
+    file: UploadFile = File(...),
+):
+    """
+    Загружает файл и добавляет его к заметке.
+    Возвращает информацию о загруженном файле.
+    """
+    result = await note_service.add_attachment(note_id, file)
+    if not result:
+        raise HTTPException(status_code=404, detail="Заметка не найдена")
+    return result
+
+
+@router.delete("/{note_id}/attachments/{file_id}")
+async def remove_attachment(
+    note_id: str,
+    file_id: str,
+    note_service: NoteServiceDep,
+):
+    """Удаляет файл из заметки"""
+    success = await note_service.remove_attachment(note_id, file_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Заметка или файл не найден")
+    return {"status": "deleted"}
+
+
+@router.get("/{note_id}/attachments")
+async def get_attachments(
+    note_id: str,
+    note_service: NoteServiceDep,
+):
+    """Получает список файлов заметки"""
+    attachments = await note_service.get_attachments(note_id)
+    if attachments is None:
+        raise HTTPException(status_code=404, detail="Заметка не найдена")
+    return attachments
+
+
+@router.get("/{note_id}/attachments/{file_id}/download")
+async def download_attachment(
+    note_id: str,
+    file_id: str,
+    note_service: NoteServiceDep,
+):
+    """Получает URL для скачивания файла"""
+    download_url = await note_service.get_attachment_download_url(note_id, file_id)
+    if not download_url:
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    return {"download_url": download_url}
+
+
+@router.get("/{note_id}/attachments/{file_id}/content")
+async def get_attachment_content(
+    note_id: str,
+    file_id: str,
+    note_service: NoteServiceDep,
+):
+    """Получает распаршенный контент файла из RAG"""
+    content = await note_service.get_attachment_content(note_id, file_id)
+    if content is None:
+        raise HTTPException(status_code=404, detail="Контент не найден")
+    return {"content": content}
 

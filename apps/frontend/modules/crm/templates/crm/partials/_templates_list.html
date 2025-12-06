@@ -1,0 +1,47 @@
+<!-- Templates List -->
+{% if templates and templates | length > 0 %}
+<div class="crm-templates-list">
+    {% for template in templates %}
+    <div class="crm-template-item" 
+         hx-get="/crm/partials/template-modal?template_id={{ template.note_id or template.id }}"
+         hx-target="#modal-container"
+         hx-swap="innerHTML">
+        <div class="crm-template-icon">
+            {% if template.note_type == 'meeting_minutes' %}
+            <i class="ti ti-users"></i>
+            {% elif template.note_type == 'call_log' %}
+            <i class="ti ti-phone"></i>
+            {% else %}
+            <i class="ti ti-file-text"></i>
+            {% endif %}
+        </div>
+        <div class="crm-template-info">
+            <div class="crm-template-title">{{ template.title }}</div>
+            <div class="crm-template-meta">
+                <span class="crm-template-type">{{ template.note_type | replace('_', ' ') | capitalize }}</span>
+                <span class="crm-template-date">{{ template.created_at | default('') }}</span>
+            </div>
+        </div>
+        <div class="crm-template-actions">
+            <button type="button" 
+                    class="crm-btn crm-btn-icon crm-btn-ghost crm-btn-sm"
+                    onclick="event.stopPropagation()"
+                    hx-post="/crm/partials/notes?from_template={{ template.note_id or template.id }}"
+                    hx-target="#crm-content"
+                    title="{{ t('crm.settings.use_template') }}">
+                <i class="ti ti-copy"></i>
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="crm-empty-state" style="padding: 40px;">
+    <div class="crm-empty-icon">
+        <i class="ti ti-template"></i>
+    </div>
+    <h3 class="crm-empty-title">{{ t('crm.settings.no_templates') }}</h3>
+    <p class="crm-empty-description">{{ t('crm.settings.no_templates_desc') }}</p>
+</div>
+{% endif %}
+

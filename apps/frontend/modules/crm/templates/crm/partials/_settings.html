@@ -1,54 +1,82 @@
 <!-- Settings Partial -->
 <div class="crm-settings">
     <div style="max-width: 800px;">
-        <!-- Entity Types -->
+        <!-- Note Templates -->
         <div class="crm-card" style="margin-bottom: 24px;">
             <div class="crm-card-header">
-                <h3 class="crm-card-title">{{ t('crm.entity_types.title') }}</h3>
+                <h3 class="crm-card-title">
+                    <i class="ti ti-template"></i>
+                    {{ t('crm.settings.templates') }}
+                </h3>
+                <button class="crm-btn crm-btn-primary crm-btn-sm"
+                        hx-get="/crm/partials/template-modal"
+                        hx-target="#modal-container">
+                    <i class="ti ti-plus"></i>
+                    {{ t('crm.settings.new_template') }}
+                </button>
             </div>
-            <div class="crm-card-body">
-                <div style="display: flex; flex-direction: column; gap: 12px;">
-                    <div style="display: flex; align-items: center; gap: 16px; padding: 12px; background: var(--crm-bg-primary); border-radius: 8px;">
-                        <span class="crm-entity-dot person" style="width: 12px; height: 12px;"></span>
-                        <span style="flex: 1; font-weight: 500;">{{ t('crm.entity_types.people') }}</span>
-                        <span style="color: var(--crm-text-muted);">person</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 16px; padding: 12px; background: var(--crm-bg-primary); border-radius: 8px;">
-                        <span class="crm-entity-dot company" style="width: 12px; height: 12px;"></span>
-                        <span style="flex: 1; font-weight: 500;">{{ t('crm.entity_types.companies') }}</span>
-                        <span style="color: var(--crm-text-muted);">company</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 16px; padding: 12px; background: var(--crm-bg-primary); border-radius: 8px;">
-                        <span class="crm-entity-dot project" style="width: 12px; height: 12px;"></span>
-                        <span style="flex: 1; font-weight: 500;">{{ t('crm.entity_types.projects') }}</span>
-                        <span style="color: var(--crm-text-muted);">project</span>
-                    </div>
+            <div class="crm-card-body" 
+                 id="templates-list"
+                 hx-get="/crm/partials/templates-list"
+                 hx-trigger="load"
+                 hx-swap="innerHTML"
+                 hx-push-url="false">
+                <div class="crm-empty-state" style="padding: 40px;">
+                    <i class="ti ti-loader crm-spinner" style="font-size: 24px; color: var(--crm-blue);"></i>
                 </div>
             </div>
         </div>
         
-        <!-- AI Settings -->
+        <!-- Entity Types -->
         <div class="crm-card" style="margin-bottom: 24px;">
             <div class="crm-card-header">
-                <h3 class="crm-card-title">AI Settings</h3>
+                <h3 class="crm-card-title">
+                    <i class="ti ti-category"></i>
+                    {{ t('crm.entity_types.title') }}
+                </h3>
+                {% if is_admin %}
+                <button class="crm-btn crm-btn-primary crm-btn-sm"
+                        hx-get="/crm/partials/entity-type-modal"
+                        hx-target="#modal-container">
+                    <i class="ti ti-plus"></i>
+                    Add Type
+                </button>
+                {% endif %}
             </div>
             <div class="crm-card-body">
-                <div class="crm-form-group">
-                    <label class="crm-form-label">Entity Extraction Model</label>
-                    <select class="crm-input">
-                        <option>Claude 3.5 Sonnet</option>
-                        <option>GPT-4</option>
-                    </select>
-                </div>
-                
-                <div class="crm-form-group">
-                    <label class="crm-form-label">Auto-analyze notes</label>
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <input type="checkbox" id="auto-analyze" checked>
-                        <label for="auto-analyze" style="color: var(--crm-text-secondary);">
-                            Automatically extract entities when saving notes
-                        </label>
+                <div class="crm-entity-types-list">
+                    {% for entity_type in entity_types %}
+                    <div class="crm-entity-type-item {% if entity_type.is_system %}is-system{% endif %}"
+                         {% if is_admin %}
+                         hx-get="/crm/partials/entity-type-modal/{{ entity_type.type_id }}"
+                         hx-target="#modal-container"
+                         style="cursor: pointer;"
+                         {% endif %}>
+                        <div class="crm-entity-type-icon" style="background: {{ entity_type.color or '#6366f1' }}20; color: {{ entity_type.color or '#6366f1' }};">
+                            <i class="ti {{ entity_type.icon or 'ti-box' }}"></i>
+                        </div>
+                        <div class="crm-entity-type-info">
+                            <span class="crm-entity-type-name">{{ entity_type.name }}</span>
+                            <span class="crm-entity-type-id">{{ entity_type.type_id }}</span>
+                        </div>
+                        <div class="crm-entity-type-meta">
+                            {% set required_count = (entity_type.required_fields or {}).keys() | list | length %}
+                            {% set optional_count = (entity_type.optional_fields or {}).keys() | list | length %}
+                            <span class="crm-entity-type-fields">{{ required_count + optional_count }} fields</span>
+                            {% if entity_type.is_system %}
+                            <span class="crm-badge crm-badge-secondary">System</span>
+                            {% endif %}
                     </div>
+                        {% if is_admin %}
+                        <i class="ti ti-chevron-right" style="color: var(--crm-text-muted);"></i>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="crm-empty-state" style="padding: 40px;">
+                        <i class="ti ti-category-off" style="font-size: 32px; opacity: 0.5;"></i>
+                        <p>No entity types configured</p>
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
         </div>
@@ -56,7 +84,10 @@
         <!-- Export -->
         <div class="crm-card">
             <div class="crm-card-header">
-                <h3 class="crm-card-title">Data Export</h3>
+                <h3 class="crm-card-title">
+                    <i class="ti ti-download"></i>
+                    Data Export
+                </h3>
             </div>
             <div class="crm-card-body">
                 <p style="color: var(--crm-text-secondary); margin-bottom: 16px;">
@@ -77,3 +108,73 @@
     </div>
 </div>
 
+<style>
+.crm-entity-types-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.crm-entity-type-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 16px;
+    background: var(--crm-bg-primary, #f9fafb);
+    border-radius: 8px;
+    transition: background 0.15s;
+}
+
+.crm-entity-type-item:hover {
+    background: var(--crm-bg-hover, #f3f4f6);
+}
+
+.crm-entity-type-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.crm-entity-type-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.crm-entity-type-name {
+    font-weight: 500;
+    color: var(--crm-text, #1f2937);
+}
+
+.crm-entity-type-id {
+    font-size: 12px;
+    color: var(--crm-text-muted, #9ca3af);
+    font-family: monospace;
+}
+
+.crm-entity-type-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.crm-entity-type-fields {
+    font-size: 13px;
+    color: var(--crm-text-secondary, #6b7280);
+}
+
+.crm-badge-secondary {
+    background: var(--crm-bg-secondary, #e5e7eb);
+    color: var(--crm-text-secondary, #6b7280);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+</style>

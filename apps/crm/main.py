@@ -18,11 +18,21 @@ logger = logging.getLogger(__name__)
 
 async def on_startup(app: FastAPI, container, settings):
     """Кастомная логика при старте"""
+    from core.files import initialize_default_processors
+    from apps.agents.container import get_agents_container
+    
     # Инициализация CRM БД (создание таблиц)
     await container.init_db()
     
     # Инициализация системных типов сущностей
     await container.entity_type_service.init_system_types()
+    
+    # Инициализация файловых процессоров (через agents container)
+    agents_container = get_agents_container()
+    initialize_default_processors(
+        file_repository=agents_container.file_repository,
+        storage=agents_container.storage
+    )
     
     logger.info("CRM системные типы инициализированы")
 
@@ -46,7 +56,7 @@ def create_app() -> FastAPI:
         title="CRM Service",
         description="API для управления CRM: сущности, заметки, задачи, связи",
         include_crud_routers=False,  # CRM не использует автоматические CRUD роутеры
-        include_broker=False,  # CRM пока не использует TaskIQ
+        include_broker=True,  # CRM использует TaskIQ для attachments
     )
 
 

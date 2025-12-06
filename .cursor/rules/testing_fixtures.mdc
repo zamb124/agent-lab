@@ -17,13 +17,19 @@ tests/
 ├── agents/                  # Тесты apps/agents
 │   ├── arch/               # Архитектурные тесты
 │   ├── billing/            # Биллинг
+│   ├── broker/             # TaskIQ broker тесты
 │   ├── clients/            # AmoCRM и др.
 │   ├── crud/               # CRUD операции
 │   ├── integration/        # Интеграционные
 │   ├── interfaces/         # Telegram, WhatsApp
 │   ├── mcp/                # MCP серверы
 │   ├── payments/           # Платежи
-│   └── rag/                # RAG
+│   └── rag/                # RAG провайдеры
+├── crm/                     # Тесты apps/crm
+│   ├── conftest.py         # CRM-специфичные фикстуры (note_service, etc.)
+│   ├── api/                # API endpoint тесты
+│   ├── services/           # Тесты сервисов
+│   └── tasks/              # TaskIQ задачи (attachments, import)
 └── frontend/               # Тесты apps/frontend
     ├── conftest.py         # Пустой (фикстуры наследуются из tests/conftest.py)
     ├── api/                # API тесты
@@ -32,6 +38,7 @@ tests/
     ├── i18n/               # Интернационализация
     ├── modules/            # Модули
     ├── pages/              # Страницы
+    ├── rag/                # RAG UI тесты
     └── services/           # Сервисы
 ```
 
@@ -59,7 +66,7 @@ taskiq_worker_process  # → subprocess.Popen
 
 ## Основные фикстуры
 
-### Репозитории
+### Репозитории (agents)
 
 ```python
 async def test_example(
@@ -79,6 +86,55 @@ async def test_example(
     # Работа через репозитории
     agent = await agent_repo.get("agent_id")
     await agent_repo.set(agent_config)
+```
+
+### TaskIQ фикстуры
+
+```python
+async def test_with_taskiq(
+    taskiq_broker,           # RedisStreamBroker (session scope)
+    taskiq_schedule_source,  # ListRedisScheduleSource для отложенных задач
+    taskiq_scheduler,        # TaskIQ scheduler
+    taskiq_environment,      # Всё вместе: broker + schedule + scheduler
+):
+    # Для E2E тестов с реальным воркером
+    from apps.agents.tasks import process_agent_task
+    
+    task = await process_agent_task.kiq(...)
+    result = await task.wait_result(timeout=30)
+
+async def test_with_worker(
+    taskiq_worker_process,   # subprocess с TaskIQ worker (session scope)
+    taskiq_broker,
+):
+    # Worker выполнит задачу в отдельном процессе
+    # Используй polling вместо wait_result для E2E
+    pass
+```
+
+### CRM фикстуры
+
+```python
+async def test_crm(
+    crm_app,             # FastAPI CRM приложение (session scope)
+    crm_client,          # HTTP клиент с авторизацией
+    note_service,        # NoteService для работы с заметками
+    entity_service,      # EntityService для работы с сущностями (ChromaDB)
+    task_service,        # TaskService для работы с задачами
+    crm_note_repo,       # NoteRepository с контекстом
+    crm_task_repo,       # TaskRepository с контекстом
+    crm_entity_service,  # EntityService с контекстом
+    crm_relationship_repo,  # RelationshipRepository с контекстом
+):
+    # crm_client имеет атрибуты: test_user, test_company, test_context
+    note = await note_service.create_note(
+        data,
+        company_id=crm_client.test_company.company_id,
+        user_id=crm_client.test_user.user_id
+    )
+    
+    # API через crm_client
+    response = await crm_client.post("/crm/api/v1/notes", json={...})
 ```
 
 ### Фабрики
@@ -256,8 +312,112 @@ Cleanup выполняется автоматически:
 3. **ВСЕГДА** используй правильные API пути (`/frontend/api/` для JSON, `/frontend/` для HTML)
 4. **ВСЕГДА** используй репозитории для работы с данными
 5. **frontend_client** имеет атрибуты: `test_user`, `test_company`, `test_context`
+6. **crm_client** имеет атрибуты: `test_user`, `test_company`, `test_context`, `auth_token`
 
 **Нарушение приведет к падению тестов!**
+
+## TaskIQ тесты
+
+### Прямой вызов задачи (без воркера)
+
+```python
+@pytest.mark.asyncio
+async def test_task_direct(taskiq_broker, note_service):
+    """Вызов задачи напрямую (синхронно в тесте)"""
+    from apps.crm.tasks import process_crm_attachment_task
+    
+    result = await process_crm_attachment_task(
+        company_id="test",
+        note_id="note_123",
+        file_id="file_456",
+        s3_key="files/test.txt",
+        document_name="test.txt",
+        content_type="text/plain",
+    )
+    assert result["status"] == "completed"
+```
+
+### E2E с воркером (subprocess)
+
+```python
+@pytest.mark.asyncio
+async def test_e2e_with_worker(
+    crm_client,
+    note_service,
+    taskiq_worker_process,  # Запускает воркер в subprocess
+    taskiq_broker,
+):
+    """E2E тест - задача выполняется в отдельном процессе"""
+    
+    # Вызов через API (task.kiq() внутри сервиса)
+    response = await crm_client.post(f"/crm/api/v1/notes/{note_id}/attachments", ...)
+    
+    # Polling вместо sleep!
+    async def check_indexed():
+        results = await provider.search(namespace, query)
+        return results if len(results) > 0 else None
+    
+    result = await wait_for_condition(check_indexed, timeout=30.0, interval=2.0)
+    assert result is not None
+```
+
+### wait_for_condition helper
+
+```python
+async def wait_for_condition(condition_fn, timeout: float = 30.0, interval: float = 0.5):
+    """Polling вместо sleep для E2E тестов"""
+    import time
+    start = time.time()
+    while time.time() - start < timeout:
+        result = await condition_fn()
+        if result:
+            return result
+        await asyncio.sleep(interval)
+    return None
+```
+
+## CRM тесты
+
+### Важно: company_id
+
+В CRM тестах через API используй `crm_client.test_company.company_id`:
+
+```python
+@pytest.mark.asyncio
+async def test_crm_with_api(crm_client, note_service):
+    # Создание через сервис с правильным company_id
+    note = await note_service.create_note(
+        data,
+        company_id=crm_client.test_company.company_id,  # НЕ test_context!
+        user_id=crm_client.test_user.user_id
+    )
+    
+    # API вызов
+    response = await crm_client.post("/crm/api/v1/notes/...")
+    
+    # Получение/удаление с company_id
+    await note_service.get_note(note_id, company_id=crm_client.test_company.company_id)
+    await note_service.delete_note(note_id, company_id=crm_client.test_company.company_id)
+```
+
+### tests/crm/conftest.py
+
+CRM имеет собственный conftest.py с дополнительными фикстурами:
+
+```python
+# tests/crm/conftest.py
+@pytest_asyncio.fixture
+async def note_service(crm_container):
+    return crm_container.note_service
+
+@pytest_asyncio.fixture
+async def entity_service(crm_container):
+    return crm_container.entity_service
+
+@pytest_asyncio.fixture
+async def task_service(crm_container):
+    return crm_container.task_service
+```
 
 ## 🚨🚨🚨 НЕ ДУБЛИРУЙ ФИКСТУРЫ!
 

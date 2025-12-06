@@ -5,6 +5,9 @@
         
         <!-- Controls -->
         <div class="crm-graph-controls">
+            <button class="graph-control-btn graph-edit-btn" onclick="CRM.toggleGraphEditMode()" title="Режим редактирования">
+                <i class="ti ti-pencil"></i>
+            </button>
             <button class="graph-control-btn" onclick="CRM.zoomGraph('in')" title="{{ t('crm.graph.zoom_in') }}">
                 <i class="ti ti-plus"></i>
             </button>
@@ -16,20 +19,31 @@
             </button>
         </div>
         
-        <!-- Legend -->
-        <div class="crm-graph-legend">
+        <!-- Legend - dynamic from entity_types -->
+        <div class="crm-graph-legend" id="graph-legend">
+            {% if entity_types %}
+                {% for et in entity_types %}
+                    {% if not et.is_filtered %}
+                    <div class="crm-graph-legend-item">
+                        <span class="crm-entity-dot" style="background: {{ et.color or '#999999' }}"></span>
+                        <span>{{ et.name }}</span>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            {% else %}
             <div class="crm-graph-legend-item">
-                <span class="crm-entity-dot person"></span>
-                <span>{{ t('crm.entity_types.people') }}</span>
+                <span class="crm-entity-dot" style="background: #5B8EC2"></span>
+                <span>People</span>
             </div>
             <div class="crm-graph-legend-item">
-                <span class="crm-entity-dot company"></span>
-                <span>{{ t('crm.entity_types.companies') }}</span>
+                <span class="crm-entity-dot" style="background: #6B5B95"></span>
+                <span>Companies</span>
             </div>
             <div class="crm-graph-legend-item">
-                <span class="crm-entity-dot project"></span>
-                <span>{{ t('crm.entity_types.projects') }}</span>
+                <span class="crm-entity-dot" style="background: #7BC96F"></span>
+                <span>Projects</span>
             </div>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -47,4 +61,5 @@ if (window.crmModule) {
     window.crmModule.initGraph();
 }
 </script>
+
 

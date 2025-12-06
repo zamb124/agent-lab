@@ -97,6 +97,24 @@ class BaseRepository(ABC, Generic[T]):
 | SessionRepository | False | storage | company:X:session: |
 | MCPServerRepository | False | storage | company:X:mcp_server: |
 
+### CRM репозитории (crm_db):
+
+CRM использует собственную БД (`apps/crm/db/`) с SQLAlchemy моделями:
+
+| Репозиторий | Модель | Изоляция |
+|-------------|--------|----------|
+| NoteRepository | Note | company_id |
+| TaskRepository | Task | company_id |
+| RelationshipRepository | Relationship | company_id |
+| EntityTypeRepository | EntityType | company_id (NULL для системных) |
+| AccessRequestRepository | AccessRequest | company_id |
+| UserProfileRepository | UserProfile | company_id + user_id |
+
+**CRM сущности в ChromaDB:**
+- Сущности (Entity) хранятся в ChromaDB через `EntityService`
+- Namespace: `crm_entities_{company_id}`
+- Attachments: `crm_attachments_{company_id}`
+
 ## Использование репозиториев
 
 <good_example>

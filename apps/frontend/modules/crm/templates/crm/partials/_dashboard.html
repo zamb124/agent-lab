@@ -1,8 +1,66 @@
 <!-- Dashboard Partial -->
 <div class="crm-dashboard">
+    <!-- Daily Progress -->
+    {% set total_today = (stats.due_today | default(0)) + (stats.overdue | default(0)) %}
+    {% set completed_today = stats.completed_today | default(0) %}
+    {% if total_today > 0 %}
+    <div class="crm-card crm-daily-summary" style="margin-bottom: 24px; background: linear-gradient(135deg, var(--crm-blue), var(--crm-teal)); color: white;">
+        <div class="crm-card-body" style="padding: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h3 style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">
+                        {{ t('crm.dashboard.daily_focus') }}
+                    </h3>
+                    <p style="opacity: 0.9; font-size: 14px;">
+                        {{ completed_today }} {{ t('crm.dashboard.of') }} {{ total_today }} {{ t('crm.dashboard.tasks_completed') }}
+                    </p>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 48px; font-weight: 700;">
+                        {{ ((completed_today / total_today) * 100) | round(0) if total_today > 0 else 0 }}%
+                    </div>
+                </div>
+            </div>
+            <div class="crm-progress-bar" style="margin-top: 16px; background: rgba(255,255,255,0.3);">
+                <div class="crm-progress-fill" style="width: {{ ((completed_today / total_today) * 100) | round(1) if total_today > 0 else 0 }}%; background: white;"></div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Priority Tasks (Overdue + Today) -->
+    {% if (stats.overdue | default(0)) > 0 or (stats.due_today | default(0)) > 0 %}
+    <div class="crm-card crm-priority-tasks" style="margin-bottom: 24px; border-left: 4px solid var(--crm-danger);">
+        <div class="crm-card-header">
+            <h3 class="crm-card-title">
+                <i class="ti ti-alert-triangle" style="color: var(--crm-danger);"></i>
+                {{ t('crm.dashboard.priority_tasks') }}
+            </h3>
+            <button class="crm-btn crm-btn-primary crm-btn-sm"
+                    hx-get="/crm/partials/task-modal"
+                    hx-target="#modal-container">
+                <i class="ti ti-plus"></i>
+            </button>
+        </div>
+        <div class="crm-card-body" style="padding: 0;"
+             hx-get="/crm/partials/priority-tasks"
+             hx-trigger="load"
+             hx-swap="innerHTML"
+             hx-push-url="false">
+            <div style="padding: 24px; text-align: center;">
+                <i class="ti ti-loader crm-spinner" style="font-size: 24px; color: var(--crm-blue);"></i>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
     <!-- Stats Cards -->
     <div class="crm-stats-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 32px;">
-        <div class="crm-card">
+        <div class="crm-card crm-stat-card" 
+             hx-get="/crm/partials/entities" 
+             hx-target="#crm-content"
+             hx-push-url="/crm/entities"
+             style="cursor: pointer;">
             <div class="crm-card-body" style="text-align: center; padding: 24px;">
                 <div style="font-size: 32px; font-weight: 700; color: var(--crm-blue);">
                     {{ stats.total_entities | default(0) }}
@@ -13,7 +71,11 @@
             </div>
         </div>
         
-        <div class="crm-card">
+        <div class="crm-card crm-stat-card"
+             hx-get="/crm/partials/notes" 
+             hx-target="#crm-content"
+             hx-push-url="/crm/notes"
+             style="cursor: pointer;">
             <div class="crm-card-body" style="text-align: center; padding: 24px;">
                 <div style="font-size: 32px; font-weight: 700; color: var(--crm-teal);">
                     {{ stats.total_notes | default(0) }}
@@ -24,7 +86,11 @@
             </div>
         </div>
         
-        <div class="crm-card">
+        <div class="crm-card crm-stat-card"
+             hx-get="/crm/partials/tasks" 
+             hx-target="#crm-content"
+             hx-push-url="/crm/tasks"
+             style="cursor: pointer;">
             <div class="crm-card-body" style="text-align: center; padding: 24px;">
                 <div style="font-size: 32px; font-weight: 700; color: var(--crm-purple);">
                     {{ stats.pending | default(0) }}
@@ -35,7 +101,11 @@
             </div>
         </div>
         
-        <div class="crm-card">
+        <div class="crm-card crm-stat-card"
+             hx-get="/crm/partials/graph" 
+             hx-target="#crm-content"
+             hx-push-url="/crm/graph"
+             style="cursor: pointer;">
             <div class="crm-card-body" style="text-align: center; padding: 24px;">
                 <div style="font-size: 32px; font-weight: 700; color: var(--crm-green);">
                     {{ stats.total_relationships | default(0) }}
@@ -61,29 +131,35 @@
                     {{ t('crm.notes.new') }}
                 </button>
                 
-                <a href="/crm/graph" class="crm-btn crm-btn-secondary"
+                <button class="crm-btn crm-btn-secondary"
+                        hx-get="/crm/partials/task-modal" 
+                        hx-target="#modal-container">
+                    <i class="ti ti-checkbox"></i>
+                    {{ t('crm.tasks.new') }}
+                </button>
+                
+                <button class="crm-btn crm-btn-secondary"
+                        hx-get="/crm/partials/import-modal" 
+                        hx-target="#modal-container">
+                    <i class="ti ti-upload"></i>
+                    {{ t('crm.notes.import') }}
+                </button>
+                
+                <a href="/crm/graph" class="crm-btn crm-btn-ghost"
                    hx-get="/crm/partials/graph" 
                    hx-target="#crm-content"
                    hx-push-url="/crm/graph">
                     <i class="ti ti-git-fork"></i>
                     {{ t('crm.nav.graph') }}
                 </a>
-                
-                <a href="/crm/entities?type=person" class="crm-btn crm-btn-secondary"
-                   hx-get="/crm/partials/entities?type=person" 
-                   hx-target="#crm-content"
-                   hx-push-url="/crm/entities?type=person">
-                    <i class="ti ti-user"></i>
-                    {{ t('crm.entity_types.people') }}
-                </a>
             </div>
         </div>
     </div>
     
-    <!-- Two Column Layout -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-        <!-- Recent Notes -->
-        <div class="crm-card">
+    <!-- Widgets Grid -->
+    <div class="crm-widgets-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+        <!-- Recent Notes Widget -->
+        <div class="crm-card crm-widget" data-widget="recent_notes">
             <div class="crm-card-header">
                 <h3 class="crm-card-title">{{ t('crm.dashboard.recent_notes') }}</h3>
                 <a href="/crm/notes" class="crm-btn crm-btn-ghost crm-btn-sm"
@@ -94,17 +170,18 @@
                 </a>
             </div>
             <div class="crm-card-body"
-                 hx-get="/crm/partials/notes?limit=5"
+                 hx-get="/crm/partials/recent-notes?limit=5"
                  hx-trigger="load"
-                 hx-swap="innerHTML">
+                 hx-swap="innerHTML"
+                 hx-push-url="false">
                 <div class="crm-empty-state" style="padding: 40px;">
                     <i class="ti ti-loader crm-spinner" style="font-size: 24px; color: var(--crm-blue);"></i>
                 </div>
             </div>
         </div>
         
-        <!-- Upcoming Tasks -->
-        <div class="crm-card">
+        <!-- Upcoming Tasks Widget -->
+        <div class="crm-card crm-widget" data-widget="upcoming_tasks">
             <div class="crm-card-header">
                 <h3 class="crm-card-title">{{ t('crm.dashboard.upcoming_tasks') }}</h3>
                 <a href="/crm/tasks" class="crm-btn crm-btn-ghost crm-btn-sm"
@@ -117,12 +194,85 @@
             <div class="crm-card-body"
                  hx-get="/crm/partials/tasks-sidebar"
                  hx-trigger="load"
-                 hx-swap="innerHTML">
+                 hx-swap="innerHTML"
+                 hx-push-url="false">
                 <div class="crm-empty-state" style="padding: 40px;">
                     <i class="ti ti-loader crm-spinner" style="font-size: 24px; color: var(--crm-blue);"></i>
                 </div>
             </div>
         </div>
+        
+        <!-- Recent Entities Widget -->
+        <div class="crm-card crm-widget" data-widget="recent_entities">
+            <div class="crm-card-header">
+                <h3 class="crm-card-title">{{ t('crm.dashboard.recent_entities') }}</h3>
+                <a href="/crm/entities" class="crm-btn crm-btn-ghost crm-btn-sm"
+                   hx-get="/crm/partials/entities" 
+                   hx-target="#crm-content"
+                   hx-push-url="/crm/entities">
+                    {{ t('common.view_all') }}
+                </a>
+            </div>
+            <div class="crm-card-body"
+                 hx-get="/crm/partials/recent-entities?limit=5"
+                 hx-trigger="load"
+                 hx-swap="innerHTML"
+                 hx-push-url="false">
+                <div class="crm-empty-state" style="padding: 40px;">
+                    <i class="ti ti-loader crm-spinner" style="font-size: 24px; color: var(--crm-blue);"></i>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Access Requests Widget (if has pending) -->
+        {% if pending_requests > 0 %}
+        <div class="crm-card crm-widget" data-widget="access_requests">
+            <div class="crm-card-header">
+                <h3 class="crm-card-title">
+                    {{ t('crm.dashboard.access_requests') }}
+                    <span class="crm-badge" style="background: var(--crm-danger); color: white; margin-left: 8px;">
+                        {{ pending_requests }}
+                    </span>
+                </h3>
+                <a href="/crm/access-requests" class="crm-btn crm-btn-ghost crm-btn-sm"
+                   hx-get="/crm/partials/access-requests" 
+                   hx-target="#crm-content"
+                   hx-push-url="/crm/access-requests">
+                    {{ t('common.view_all') }}
+                </a>
+            </div>
+            <div class="crm-card-body"
+                 hx-get="/crm/partials/pending-access-requests"
+                 hx-trigger="load"
+                 hx-swap="innerHTML"
+                 hx-push-url="false">
+                <div class="crm-empty-state" style="padding: 40px;">
+                    <i class="ti ti-loader crm-spinner" style="font-size: 24px; color: var(--crm-blue);"></i>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <!-- Daily Summary Widget -->
+        <div class="crm-card crm-widget" data-widget="daily_summary">
+            <div class="crm-card-header">
+                <h3 class="crm-card-title">{{ t('crm.dashboard.daily_summary') }}</h3>
+                <button class="crm-btn crm-btn-ghost crm-btn-sm"
+                        hx-get="/crm/partials/daily-summary"
+                        hx-target="closest .crm-card-body"
+                        hx-swap="innerHTML">
+                    <i class="ti ti-refresh"></i>
+                </button>
+            </div>
+            <div class="crm-card-body"
+                 hx-get="/crm/partials/daily-summary"
+                 hx-trigger="load"
+                 hx-swap="innerHTML"
+                 hx-push-url="false">
+                <div class="crm-empty-state" style="padding: 40px;">
+                    <i class="ti ti-loader crm-spinner" style="font-size: 24px; color: var(--crm-blue);"></i>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
-

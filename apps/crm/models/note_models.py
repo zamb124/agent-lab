@@ -165,5 +165,82 @@ class NoteAnalyzeResponse(BaseModel):
         default_factory=list,
         title="Созданные задачи"
     )
+    error: Optional[str] = Field(
+        default=None,
+        title="Ошибка AI анализа"
+    )
+
+
+class EntityConfirmItem(BaseModel):
+    """Одна сущность для подтверждения"""
+    
+    model_config = ConfigDict(from_attributes=True)
+    
+    type: str = Field(title="Тип сущности")
+    name: str = Field(title="Название")
+    description: Optional[str] = Field(default=None, title="Описание")
+    ai_description: Optional[str] = Field(default=None, title="AI описание")
+    attributes: Dict[str, Any] = Field(default_factory=dict, title="Атрибуты")
+
+
+class RelationshipConfirmItem(BaseModel):
+    """Одна связь для подтверждения"""
+    
+    model_config = ConfigDict(from_attributes=True)
+    
+    source_index: int = Field(title="Индекс исходной сущности в списке entities")
+    target_index: int = Field(title="Индекс целевой сущности в списке entities")
+    relationship_type: str = Field(title="Тип связи")
+    weight: float = Field(default=1.0, ge=0.0, le=1.0, title="Вес связи")
+    attributes: Dict[str, Any] = Field(default_factory=dict, title="Атрибуты связи")
+
+
+class ConfirmEntitiesRequest(BaseModel):
+    """Запрос на подтверждение извлечённых сущностей"""
+    
+    model_config = ConfigDict(from_attributes=True)
+    
+    entities: List[EntityConfirmItem] = Field(
+        title="Сущности для создания",
+        description="Список сущностей выбранных пользователем"
+    )
+    relationships: List[RelationshipConfirmItem] = Field(
+        default_factory=list,
+        title="Связи для создания",
+        description="Связи между сущностями (индексы ссылаются на entities)"
+    )
+    create_event: bool = Field(
+        default=True,
+        title="Создать событие",
+        description="Создать event сущность из заметки (meeting/call/email)"
+    )
+    link_author: bool = Field(
+        default=True,
+        title="Связать автора",
+        description="Связать автора заметки с созданным событием"
+    )
+
+
+class ConfirmEntitiesResponse(BaseModel):
+    """Ответ на подтверждение сущностей"""
+    
+    model_config = ConfigDict(from_attributes=True)
+    
+    created_entities: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        title="Созданные сущности"
+    )
+    created_relationships: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        title="Созданные связи"
+    )
+    event_entity: Optional[Dict[str, Any]] = Field(
+        default=None,
+        title="Созданное событие"
+    )
+    linked_entity_ids: List[str] = Field(
+        default_factory=list,
+        title="ID связанных с заметкой сущностей"
+    )
 
 

@@ -77,21 +77,14 @@ class GraphService:
             if r.source_entity_id in entity_ids and r.target_entity_id in entity_ids
         ]
         
-        type_colors = await self._get_type_colors(company_id)
+        type_info = await self._get_type_info(company_id)
+        degree_count = self._count_degrees(relationships)
         
-        nodes = [
-            {
-                "id": e.entity_id,
-                "type": e.type,
-                "name": e.name,
-                "color": type_colors.get(e.type, "#999999"),
-                "attributes": e.attributes,
-            }
-            for e in entities
-        ]
+        nodes = [self._build_node(e, type_info, degree_count) for e in entities]
         
         edges = [
             {
+                "relationship_id": r.relationship_id,
                 "source": r.source_entity_id,
                 "target": r.target_entity_id,
                 "type": r.relationship_type,
@@ -166,22 +159,17 @@ class GraphService:
                 seen_rels.add(r.relationship_id)
                 unique_relationships.append(r)
         
-        type_colors = await self._get_type_colors(company_id)
+        type_info = await self._get_type_info(company_id)
+        degree_count = self._count_degrees(unique_relationships)
         
         nodes = [
-            {
-                "id": e.entity_id,
-                "type": e.type,
-                "name": e.name,
-                "color": type_colors.get(e.type, "#999999"),
-                "attributes": e.attributes,
-                "is_center": e.entity_id == entity_id,
-            }
+            self._build_node(e, type_info, degree_count, is_center=(e.entity_id == entity_id))
             for e in entities
         ]
         
         edges = [
             {
+                "relationship_id": r.relationship_id,
                 "source": r.source_entity_id,
                 "target": r.target_entity_id,
                 "type": r.relationship_type,
@@ -216,12 +204,84 @@ class GraphService:
         types = set(r.relationship_type for r in relationships)
         return sorted(types)
     
-    async def _get_type_colors(self, company_id: str) -> Dict[str, str]:
-        """Получает цвета для типов сущностей"""
+    async def _get_type_info(self, company_id: str) -> Dict[str, Dict[str, Any]]:
+        """Получает информацию о типах сущностей (цвет, коэффициент)"""
         from apps.crm.container import get_crm_container
         
         container = get_crm_container()
         types = await container.entity_type_service.get_all_types(company_id)
         
-        return {t.type_id: t.color or "#999999" for t in types}
+        return {
+            t.type_id: {
+                "color": t.color or "#999999",
+                "weight_coefficient": t.weight_coefficient if hasattr(t, 'weight_coefficient') else 1.0,
+            }
+            for t in types
+        }
+    
+    def _count_degrees(self, relationships: List) -> Dict[str, int]:
+        """Подсчитывает количество связей для каждой сущности"""
+        degree_count = {}
+        for r in relationships:
+            degree_count[r.source_entity_id] = degree_count.get(r.source_entity_id, 0) + 1
+            degree_count[r.target_entity_id] = degree_count.get(r.target_entity_id, 0) + 1
+        return degree_count
+    
+    def _calculate_entity_score(
+        self,
+        relevance: float,
+        degree: int,
+        type_coefficient: float
+    ) -> tuple[float, float]:
+        """
+        Рассчитывает score и size для сущности.
+        
+        Формула: score = relevance * (1 + degree) * type_coefficient
+        
+        Args:
+            relevance: AI-оценка важности (0.0-1.0)
+            degree: Количество связей
+            type_coefficient: Коэффициент типа сущности
+            
+        Returns:
+            (score, size) - округленные значения
+        """
+        score = relevance * (1 + degree) * type_coefficient
+        size = min(50, max(15, 15 + score * 10))
+        return round(score, 2), round(size, 1)
+    
+    def _build_node(
+        self,
+        entity,
+        type_info: Dict[str, Dict[str, Any]],
+        degree_count: Dict[str, int],
+        is_center: bool = False
+    ) -> Dict[str, Any]:
+        """Строит данные ноды для графа"""
+        entity_type = entity.type
+        type_data = type_info.get(entity_type, {})
+        
+        relevance = getattr(entity, "relevance", 0.5) or 0.5
+        degree = degree_count.get(entity.entity_id, 0)
+        type_coefficient = type_data.get("weight_coefficient", 1.0)
+        color = type_data.get("color", "#999999")
+        
+        score, size = self._calculate_entity_score(relevance, degree, type_coefficient)
+        
+        node = {
+            "id": entity.entity_id,
+            "type": entity_type,
+            "name": entity.name,
+            "color": color,
+            "attributes": entity.attributes,
+            "relevance": relevance,
+            "degree": degree,
+            "score": score,
+            "size": size,
+        }
+        
+        if is_center:
+            node["is_center"] = True
+        
+        return node
 

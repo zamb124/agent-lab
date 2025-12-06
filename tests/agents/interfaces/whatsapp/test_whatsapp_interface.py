@@ -711,8 +711,7 @@ class TestWhatsAppInterfaceRegistration:
 
         with patch('httpx.AsyncClient') as mock_client:
             mock_client.return_value.__aenter__.return_value.get = AsyncMock(return_value=mock_phone_response)
-
-                result = await WhatsAppInterface.register(flow_id, username, platform_config)
+            result = await WhatsAppInterface.register(flow_id, username, platform_config)
 
         assert result["success"] is True
         assert result["platform"] == "whatsapp"

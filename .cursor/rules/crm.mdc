@@ -1,0 +1,524 @@
+---
+description: "CRM Networkle - управление контактами, заметками и Knowledge Graph"
+alwaysApply: false
+globs:
+  - "apps/crm/**/*"
+  - "apps/frontend/modules/crm/**/*"
+  - "tests/crm/**/*"
+---
+# CRM Networkle
+
+## Обзор
+
+CRM Networkle - standalone модуль для управления контактами, заметками, задачами и визуализации связей через Knowledge Graph.
+
+**Ключевые особенности:**
+- Multi-tenant изоляция через company_id
+- Сущности с embeddings в ChromaDB (семантический поиск)
+- Daily Notes с AI-анализом и извлечением сущностей
+- Knowledge Graph для визуализации связей
+- Асинхронная обработка файлов через TaskIQ
+
+## Архитектура
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Frontend (HTMX)                          │
+│           apps/frontend/modules/crm/                             │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────────────┐│
+│  │Dashboard │ │  Notes   │ │ Entities │ │  Knowledge Graph     ││
+│  └──────────┘ └──────────┘ └──────────┘ └──────────────────────┘│
+└────────────────────────────┬────────────────────────────────────┘
+                             │ HTTP/REST
+┌────────────────────────────▼────────────────────────────────────┐
+│                    CRM Service (FastAPI)                         │
+│                    apps/crm/ - порт 8003                         │
+│  ┌──────────────────────────────────────────────────────────────┐│
+│  │ API: /crm/api/v1/                                            ││
+│  │  entities | notes | tasks | graph | relationships | profile  ││
+│  └──────────────────────────────────────────────────────────────┘│
+│  ┌──────────────────────────────────────────────────────────────┐│
+│  │ Services: EntityService, NoteService, TaskService, etc.      ││
+│  └──────────────────────────────────────────────────────────────┘│
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                    │
+        ▼                    ▼                    ▼
+┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+│   crm_db      │   │   ChromaDB    │   │   TaskIQ      │
+│  PostgreSQL   │   │  (embeddings) │   │   (async)     │
+│  relationships│   │  entities     │   │  attachments  │
+│  notes, tasks │   │  attachments  │   │  import       │
+└───────────────┘   └───────────────┘   └───────────────┘
+```
+
+## Структура директорий
+
+### Backend (`apps/crm/`)
+
+```
+apps/crm/
+├── main.py                 # FastAPI app, порт 8003
+├── config.py               # CRMSettings
+├── container.py            # DI контейнер (CRMContainer)
+├── dependencies.py         # FastAPI dependencies
+├── api/v1/                 # REST API
+│   ├── router.py           # Главный роутер
+│   ├── entities.py         # CRUD сущностей
+│   ├── entity_types.py     # Типы сущностей
+│   ├── relationships.py    # Связи между сущностями
+│   ├── notes.py            # Заметки + attachments
+│   ├── tasks.py            # Задачи
+│   ├── graph.py            # Knowledge Graph
+│   ├── access_requests.py  # Запросы доступа
+│   ├── profile.py          # Профиль пользователя
+│   └── export.py           # Экспорт данных (PDF)
+├── db/
+│   ├── base.py             # CRMDatabase (async SQLAlchemy)
+│   ├── models.py           # SQLAlchemy модели
+│   └── repositories/       # Репозитории
+├── models/                 # Pydantic модели (request/response)
+├── services/               # Бизнес-логика
+│   ├── entity_service.py   # Работа с сущностями (ChromaDB)
+│   ├── note_service.py     # Заметки + AI анализ
+│   ├── task_service.py     # Задачи
+│   ├── graph_service.py    # Knowledge Graph
+│   └── agents_client.py    # HTTP клиент к agents service
+├── tasks/                  # TaskIQ задачи
+│   └── attachment_tasks.py # Обработка файлов
+└── migrations/             # Системные миграции
+```
+
+### Frontend (`apps/frontend/modules/crm/`)
+
+```
+apps/frontend/modules/crm/
+├── plugin.py               # CRMPlugin (standalone)
+├── router.py               # FastAPI роутер для UI
+├── templates/crm/
+│   ├── crm_base.html       # Базовый layout
+│   └── partials/           # HTMX partials
+│       ├── _dashboard.html
+│       ├── _notes.html
+│       ├── _note_modal.html
+│       ├── _entities.html
+│       ├── _entity_modal.html
+│       ├── _graph.html
+│       ├── _tasks.html
+│       └── ...
+└── static/
+    ├── css/crm.css         # Стили
+    └── js/
+        ├── crm.module.js   # Главный JS модуль
+        └── vis-network.min.js  # Graph library
+```
+
+## Модели данных
+
+### crm_db (PostgreSQL)
+
+```python
+# apps/crm/db/models.py
+
+class EntityType(Base):
+    """Типы сущностей (person, organization, project + кастомные)"""
+    type_id: str              # primary key
+    company_id: Optional[str] # NULL для системных
+    name: str
+    required_attributes: List[str]
+    optional_attributes: List[str]
+    is_system: bool           # True для встроенных типов
+    icon: str                 # Tabler icon name
+    color: str                # Цвет для UI
+
+class Relationship(Base):
+    """Связи между сущностями"""
+    relationship_id: str
+    company_id: str
+    source_entity_id: str     # ID в ChromaDB
+    target_entity_id: str     # ID в ChromaDB
+    relationship_type: str    # works_for, connected_to, etc.
+    weight: float             # 0.0 - 1.0
+
+class Note(Base):
+    """Заметки (Daily Notes)"""
+    note_id: str
+    company_id: str
+    user_id: str
+    title: str
+    content: str              # Markdown
+    note_type: str            # freeform, meeting_minutes, call_log
+    note_date: date
+    ai_summary: Optional[str]
+    linked_entity_ids: List[str]  # ID сущностей в ChromaDB
+    attachment_ids: List[str]     # ID файлов в S3
+    status: str               # draft, published, importing
+    visibility: str           # public, private
+
+class Task(Base):
+    """Задачи"""
+    task_id: str
+    company_id: str
+    user_id: str
+    title: str
+    priority: str             # low, medium, high, urgent
+    status: str               # pending, in_progress, completed, cancelled
+    due_date: Optional[date]
+    linked_entity_id: Optional[str]
+    source_note_id: Optional[str]
+    assignees: List[str]      # user_ids соучастников
+
+class AccessRequest(Base):
+    """Запросы на доступ к скрытым ресурсам"""
+    request_id: str
+    requester_id: str
+    owner_id: str
+    resource_type: str        # note, entity
+    resource_id: str
+    status: str               # pending, approved, rejected
+
+class UserProfile(Base):
+    """Профиль пользователя в CRM"""
+    profile_id: str
+    user_id: str
+    company_id: str
+    display_name: str
+    position: str
+    avatar_url: str
+    sidebar_config: Dict      # Настройки sidebar
+    widget_config: Dict       # Настройки dashboard виджетов
+```
+
+### ChromaDB (Сущности с embeddings)
+
+```python
+# Namespace для сущностей компании
+namespace = f"crm_entities_{company_id}"
+
+# Namespace для attachments заметок
+attachments_namespace = f"crm_attachments_{company_id}"
+
+# Структура документа в ChromaDB
+{
+    "id": "entity_uuid",
+    "document": "Иван Петров - менеджер в компании ABC...",  # текст для поиска
+    "metadata": {
+        "entity_type": "person",
+        "name": "Иван Петров",
+        "company_id": "company_123",
+        "attributes": {"email": "ivan@abc.com", "phone": "+7..."},
+        "created_at": "2024-01-15T10:00:00Z"
+    }
+}
+```
+
+## API Endpoints
+
+### Entities (`/crm/api/v1/entities`)
+
+```
+POST   /                    # Создать сущность
+GET    /{entity_id}         # Получить сущность
+PUT    /{entity_id}         # Обновить сущность
+DELETE /{entity_id}         # Удалить сущность
+GET    /type/{entity_type}  # Список по типу
+GET    /search              # Семантический поиск
+POST   /duplicates          # Поиск дубликатов
+GET    /autocomplete        # Автодополнение для @mentions
+```
+
+### Notes (`/crm/api/v1/notes`)
+
+```
+POST   /                    # Создать заметку
+GET    /{note_id}           # Получить заметку
+PUT    /{note_id}           # Обновить заметку
+DELETE /{note_id}           # Удалить заметку
+GET    /                    # Список заметок (с фильтрами)
+GET    /range               # Заметки за период
+POST   /{note_id}/attachments   # Загрузить файл
+DELETE /{note_id}/attachments/{file_id}  # Удалить файл
+POST   /{note_id}/analyze   # AI анализ заметки
+POST   /import              # Импорт из файла
+GET    /templates           # Список шаблонов
+```
+
+### Tasks (`/crm/api/v1/tasks`)
+
+```
+POST   /                    # Создать задачу
+GET    /{task_id}           # Получить задачу
+PUT    /{task_id}           # Обновить задачу
+DELETE /{task_id}           # Удалить задачу
+GET    /                    # Список задач (с фильтрами)
+GET    /today               # Задачи на сегодня
+PUT    /{task_id}/status    # Изменить статус
+```
+
+### Graph (`/crm/api/v1/graph`)
+
+```
+GET    /                    # Данные для визуализации
+GET    /entity/{entity_id}  # Связи сущности
+POST   /search              # Поиск в графе
+```
+
+## TaskIQ задачи
+
+```python
+# apps/crm/tasks/attachment_tasks.py
+
+@broker.task(retry_on_error=True, max_retries=3)
+async def process_crm_attachment_task(
+    company_id: str,
+    note_id: str,
+    file_id: str,
+    s3_key: str,
+    document_name: str,
+    ...
+):
+    """
+    Асинхронная индексация attachment в RAG.
+    1. Проверяет формат файла (поддерживаемые индексируются)
+    2. Скачивает из S3
+    3. Парсит через DocumentParser
+    4. Индексирует в ChromaDB
+    5. Отправляет WebSocket уведомление
+    """
+    pass
+
+@broker.task(retry_on_error=True, max_retries=3)
+async def delete_crm_attachment_task(...):
+    """Удаляет файл из RAG и S3"""
+    pass
+
+@broker.task(retry_on_error=True, max_retries=3)
+async def import_note_from_file_task(
+    note_id: str,
+    file_id: str,
+    s3_key: str,
+    filename: str,
+    ...
+):
+    """
+    Асинхронный импорт заметки из файла.
+    1. Скачивает файл из S3
+    2. Парсит через DocumentParser
+    3. Обновляет content заметки
+    4. Меняет status на 'draft'
+    """
+    pass
+```
+
+**Регистрация задач:**
+```python
+# core/tasks/worker.py
+import apps.crm.tasks.attachment_tasks  # noqa: F401
+```
+
+## Потоки данных
+
+### Создание заметки с файлами
+
+```
+1. UI: Пользователь создает заметку + прикрепляет файлы
+2. Frontend Router: POST /crm/partials/save-note
+   ├── Загружает файлы в S3 (синхронно)
+   └── Создает заметку через CRM API
+3. CRM API: POST /crm/api/v1/notes
+   ├── Сохраняет заметку в crm_db
+   └── Для каждого файла вызывает process_crm_attachment_task.kiq()
+4. TaskIQ Worker:
+   ├── Скачивает файл из S3
+   ├── Парсит содержимое
+   ├── Индексирует в ChromaDB (namespace: crm_attachments_{company_id})
+   └── Отправляет WebSocket: CRM_ATTACHMENT_INDEXED
+5. Frontend: Получает уведомление, обновляет UI
+```
+
+### AI анализ заметки
+
+```
+1. UI: Нажатие "Analyze with AI"
+2. CRM API: POST /crm/api/v1/notes/{id}/analyze
+3. NoteService.analyze_note():
+   ├── Вызывает AgentsClient → agents service LLM
+   ├── Извлекает сущности (people, projects, organizations)
+   ├── Извлекает задачи
+   └── Возвращает NoteAnalyzeResponse
+4. UI: Показывает suggestions для подтверждения
+5. Пользователь подтверждает → создаются сущности/задачи
+```
+
+### Поиск в Knowledge Graph
+
+```
+1. UI: Ввод поискового запроса
+2. GraphService.search():
+   ├── EntityService.search() → ChromaDB семантический поиск
+   ├── RelationshipRepository.get_by_entity() → связи
+   └── Формирует nodes + edges для vis.js
+3. UI: Отрисовка графа с найденными сущностями
+```
+
+## DI Container
+
+```python
+# apps/crm/container.py
+
+class CRMContainer(BaseContainer):
+    """
+    Наследуется от BaseContainer:
+    - user_repository, company_repository (shared_db)
+    - auth_service, variables_service
+    
+    Добавляет CRM-специфичные:
+    - crm_db: CRMDatabase (PostgreSQL)
+    - rag_repository: RAGRepository (ChromaDB)
+    """
+    
+    @lazy
+    def entity_service(self):
+        return EntityService(
+            rag_repository=self.rag_repository,
+            entity_type_repository=self.entity_type_repository,
+            relationship_repository=self.relationship_repository,
+        )
+    
+    @lazy
+    def note_service(self):
+        return NoteService(
+            note_repository=self.note_repository,
+            entity_service=self.entity_service,
+            agents_client=self.agents_client,  # для AI анализа
+        )
+```
+
+## Frontend Plugin
+
+```python
+# apps/frontend/modules/crm/plugin.py
+
+class CRMPlugin(Plugin):
+    name = "crm"
+    display_name = "Networkle CRM"
+    requires_auth = True
+    
+    static_css = ["crm.css"]
+    static_js = ["crm.module.js"]
+    
+    sidebar_items = [{"id": "crm", "url": "/crm/", ...}]
+    dashboard_widgets = [{"id": "crm_widget", ...}]
+```
+
+**JavaScript API:**
+```javascript
+// window.CRM доступен глобально
+CRM.showNotification(message, type)
+CRM.initDropzone(element)
+CRM.initMentions(input, endpoint)
+CRM.saveNote(form)
+CRM.analyzeNote(noteId)
+```
+
+## Правила масштабирования
+
+### Добавление нового типа сущности
+
+1. Системный тип - добавить в `EntityTypeService.init_system_types()`
+2. Кастомный тип - через API `/entity-types` (привязан к company_id)
+
+### Добавление нового типа заметки
+
+```python
+# apps/crm/models/note_models.py
+class NoteType(str, Enum):
+    FREEFORM = "freeform"
+    MEETING_MINUTES = "meeting_minutes"
+    CALL_LOG = "call_log"
+    NEW_TYPE = "new_type"  # добавить сюда
+```
+
+### Добавление нового API endpoint
+
+1. Создать файл `apps/crm/api/v1/new_endpoint.py`
+2. Зарегистрировать в `apps/crm/api/v1/router.py`:
+   ```python
+   router.include_router(new_endpoint.router, prefix="/new", tags=["New"])
+   ```
+
+### Добавление новой TaskIQ задачи
+
+1. Создать задачу в `apps/crm/tasks/`
+2. Зарегистрировать в `core/tasks/worker.py`:
+   ```python
+   import apps.crm.tasks.new_tasks  # noqa: F401
+   ```
+3. Добавить WebSocket handler в `htmx-manager.js` если нужны уведомления
+
+### Добавление frontend partial
+
+1. Создать template в `templates/crm/partials/_new_partial.html`
+2. Добавить роут в `router.py`:
+   ```python
+   @router.get("/partials/new-partial", response_class=HTMLResponse)
+   async def get_new_partial(request: Request):
+       return templates.TemplateResponse(...)
+   ```
+
+## Типичные ошибки
+
+### Не используй EntityService без company_id
+
+<bad_example>
+entities = await entity_service.search("query")
+</bad_example>
+
+<good_example>
+entities = await entity_service.search("query", company_id=company_id)
+</good_example>
+
+### Не забывай регистрировать TaskIQ задачи
+
+<bad_example>
+# Создал задачу, но забыл зарегистрировать в worker.py
+@broker.task
+async def my_new_task(): ...
+</bad_example>
+
+<good_example>
+# core/tasks/worker.py
+import apps.crm.tasks.my_new_tasks  # noqa: F401
+</good_example>
+
+### Не смешивай crm_db и ChromaDB
+
+<bad_example>
+# Сущности хранятся в ChromaDB, не в crm_db
+await crm_db.session.execute(select(Entity).where(...))
+</bad_example>
+
+<good_example>
+# Используй EntityService для работы с сущностями
+entity = await entity_service.get_entity(entity_id, company_id)
+</good_example>
+
+## Тестирование
+
+```bash
+# Все CRM тесты
+uv run pytest tests/crm/ -v
+
+# API тесты
+uv run pytest tests/crm/api/ -v
+
+# TaskIQ тесты (требуют worker)
+uv run pytest tests/crm/tasks/ -v
+```
+
+**Ключевые фикстуры:**
+- `crm_client` - HTTP клиент с авторизацией
+- `crm_app` - FastAPI приложение
+- `note_service`, `entity_service` - сервисы с контекстом
+- `taskiq_worker_process` - subprocess для E2E тестов

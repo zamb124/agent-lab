@@ -1,0 +1,38 @@
+<!-- Recent Notes Widget -->
+{% if notes and notes | length > 0 %}
+<div class="crm-recent-notes-list" style="padding: 0;">
+    {% for note in notes %}
+    <div class="crm-note-item"
+         style="padding: 12px 16px; border-bottom: 1px solid var(--crm-border-light); cursor: pointer;"
+         hx-get="/crm/partials/note-modal?note_id={{ note.note_id }}"
+         hx-target="#modal-container">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+            <div style="flex: 1; min-width: 0;">
+                <div style="font-size: 14px; font-weight: 500; color: var(--crm-text-primary); margin-bottom: 4px;">
+                    {{ note.title | truncate(40) }}
+                </div>
+                <div style="font-size: 12px; color: var(--crm-text-muted);">
+                    {{ note.created_at[:10] if note.created_at else '' }}
+                    {% if note.note_type %}
+                    <span class="crm-tag" style="margin-left: 8px;">{{ note.note_type }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% if note.attachments_count and note.attachments_count > 0 %}
+            <span class="crm-note-attachment-badge">
+                <i class="ti ti-paperclip"></i> {{ note.attachments_count }}
+            </span>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="crm-empty-state" style="padding: 24px;">
+    <i class="ti ti-note" style="font-size: 24px; color: var(--crm-text-muted);"></i>
+    <p style="font-size: 14px; color: var(--crm-text-muted); margin-top: 8px;">
+        {{ t('crm.notes.empty') }}
+    </p>
+</div>
+{% endif %}
+

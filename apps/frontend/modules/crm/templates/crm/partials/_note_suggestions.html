@@ -1,0 +1,915 @@
+<!-- AI Suggestions Content -->
+{% if success_message %}
+<!-- Success State -->
+<div class="crm-alert crm-alert-success">
+    <i class="ti ti-check"></i>
+    <span>{{ success_message }}</span>
+</div>
+{% elif ai_error %}
+<!-- Error State -->
+<div class="crm-alert crm-alert-warning">
+    <i class="ti ti-alert-triangle"></i>
+    <span>{{ ai_error }}</span>
+</div>
+{% else %}
+
+<!-- Summary -->
+{% if summary %}
+<div class="crm-suggestion-section">
+    <div class="crm-suggestion-section-header">
+        <span class="crm-suggestion-section-label">SUMMARY</span>
+    </div>
+    <div class="crm-suggestion-summary">
+        {{ summary }}
+    </div>
+</div>
+{% endif %}
+
+<!-- Detected Entities -->
+<div class="crm-suggestion-section">
+    <div class="crm-suggestion-section-header">
+        <span class="crm-suggestion-section-label">DETECTED ENTITIES</span>
+        <span class="crm-suggestion-count">{{ entities | length if entities else 0 }}</span>
+    </div>
+    
+    {% if entities %}
+    <div class="crm-suggestions-list" id="suggestions-entities">
+        {% for entity in entities %}
+        <div class="crm-suggestion-item" data-suggestion-id="{{ loop.index }}" data-entity-type="{{ entity.type }}" data-ai-description="{{ entity.ai_description | default('Сущность извлечена AI') }}" data-relevance="{{ entity.relevance | default(0.5) }}" data-attributes="{{ entity.attributes | tojson | e if entity.attributes else '{}' }}">
+            <div class="crm-suggestion-item-main">
+                <!-- Type Icon -->
+                <div class="crm-suggestion-icon crm-suggestion-icon-{{ entity.type or 'default' }}">
+                    {% if entity.type == 'person' %}<i class="ti ti-user"></i>
+                    {% elif entity.type == 'organization' %}<i class="ti ti-building"></i>
+                    {% elif entity.type == 'project' %}<i class="ti ti-folder"></i>
+                    {% elif entity.type == 'meeting' %}<i class="ti ti-calendar-event"></i>
+                    {% elif entity.type == 'call' %}<i class="ti ti-phone"></i>
+                    {% elif entity.type == 'email' %}<i class="ti ti-mail"></i>
+                    {% elif entity.type == 'task' %}<i class="ti ti-checkbox"></i>
+                    {% else %}<i class="ti ti-bookmark"></i>{% endif %}
+                </div>
+                
+                <!-- Entity Info -->
+                <div class="crm-suggestion-info">
+                    <div class="crm-suggestion-name-row">
+                    <span class="crm-suggestion-name">{{ entity.name }}</span>
+                        {% if entity.ai_description %}
+                        <button type="button" 
+                                class="crm-ai-info-btn"
+                                onclick="CRM.showAiTooltip(this)"
+                                data-ai-description="{{ entity.ai_description }}">
+                            <i class="ti ti-info-circle"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                    <span class="crm-suggestion-type">{{ entity.type | default('entity') | capitalize }}</span>
+                </div>
+                
+                <!-- Actions with Relevance -->
+                <div class="crm-suggestion-actions-wrap">
+                <div class="crm-suggestion-actions">
+                    {% if entity.existing_id or entity.match_id %}
+                    <button type="button" 
+                            class="crm-suggestion-btn crm-suggestion-btn-update"
+                            onclick="CRM.approveSuggestion(this, 'update')">
+                        UPDATE
+                    </button>
+                    {% else %}
+                    <button type="button" 
+                            class="crm-suggestion-btn crm-suggestion-btn-create"
+                            onclick="CRM.approveSuggestion(this, 'create')">
+                        CREATE
+                    </button>
+                    {% endif %}
+                    
+                    <!-- Expand Button -->
+                    <button type="button" 
+                            class="crm-suggestion-btn-icon"
+                            onclick="CRM.toggleSuggestionEdit(this)"
+                            title="Редактировать">
+                        <i class="ti ti-chevron-down"></i>
+                    </button>
+                    </div>
+                    {% set rel_value = entity.relevance | default(0.5) %}
+                    <span class="crm-relevance-badge {% if rel_value >= 0.8 %}high{% elif rel_value >= 0.5 %}medium{% else %}low{% endif %}" 
+                          title="Важность: {{ (rel_value * 100) | int }}%">
+                        <i class="ti ti-flame"></i>
+                        {{ (rel_value * 100) | int }}%
+                    </span>
+                </div>
+                    
+                <!-- Discard - fixed top right -->
+                    <button type="button" 
+                        class="crm-suggestion-btn-discard-fixed"
+                            onclick="CRM.discardSuggestion(this)"
+                            title="Отклонить">
+                        <i class="ti ti-x"></i>
+                    </button>
+            </div>
+            
+            <!-- Expandable Edit Form -->
+            <div class="crm-suggestion-edit" style="display: none;">
+                <div class="crm-sug-form">
+                    <div class="crm-sug-field">
+                        <label>Название</label>
+                        <input type="text" class="crm-sug-input" name="name" value="{{ entity.name }}" required>
+                    </div>
+                    <div class="crm-sug-field">
+                        <label>Тип</label>
+                        <select class="crm-sug-select" name="type" onchange="CRM.updateSuggestionFields(this)">
+                            {% for et in entity_types %}
+                            <option value="{{ et.type_id }}" {% if entity.type == et.type_id %}selected{% endif %}>{{ et.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="crm-sug-field">
+                        <label>Контекст</label>
+                        <input type="text" class="crm-sug-input" name="ai_description" 
+                               value="{{ entity.ai_description | default('') }}" 
+                               placeholder="Откуда сущность, на какой встрече">
+                    </div>
+                    <div class="crm-sug-field crm-sug-field-relevance">
+                        <label>Важность</label>
+                        <div class="crm-relevance-slider-wrap">
+                            <input type="range" 
+                                   class="crm-relevance-slider" 
+                                   name="relevance" 
+                                   min="0" max="100" step="5"
+                                   value="{{ ((entity.relevance | default(0.5)) * 100) | int }}"
+                                   oninput="this.nextElementSibling.textContent = this.value + '%'">
+                            <span class="crm-relevance-value">{{ ((entity.relevance | default(0.5)) * 100) | int }}%</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Attributes -->
+                    <div class="crm-sug-attrs-section">
+                        <span class="crm-sug-attrs-title">Атрибуты</span>
+                        <div class="crm-sug-attrs">
+                            {% if entity.attributes %}
+                                {% for key, value in entity.attributes.items() %}
+                                    {% if value and key not in ['name', 'relevance', 'ai_description'] %}
+                                    <div class="crm-sug-attr-row">
+                                        <span class="crm-sug-attr-label">{{ key }}</span>
+                                        <input type="text" class="crm-sug-input" name="attr_{{ key }}" value="{{ value }}">
+                                        <button type="button" class="crm-sug-attr-del" onclick="this.parentElement.remove()">×</button>
+                                    </div>
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                        <button type="button" class="crm-sug-add-btn" onclick="CRM.addSuggestionAttr(this)">
+                            <i class="ti ti-plus"></i> Добавить
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="crm-suggestion-empty">
+        <i class="ti ti-mood-smile"></i>
+        Сущности не найдены
+    </div>
+    {% endif %}
+</div>
+
+<!-- Detected Relationships -->
+{% if relationships %}
+<div class="crm-suggestion-section">
+    <div class="crm-suggestion-section-header">
+        <span class="crm-suggestion-section-label">DETECTED RELATIONSHIPS</span>
+        <span class="crm-suggestion-count">{{ relationships | length }}</span>
+    </div>
+    
+    <div class="crm-suggestions-list" id="suggestions-relationships">
+        {% for rel in relationships %}
+        <div class="crm-suggestion-item crm-relationship-item" 
+             data-suggestion-id="rel-{{ loop.index0 }}"
+             data-source="{{ rel.source }}"
+             data-target="{{ rel.target }}"
+             data-rel-type="{{ rel.type }}"
+             data-weight="{{ rel.weight | default(1.0) }}">
+            <div class="crm-suggestion-item-main">
+                <div class="crm-suggestion-icon crm-suggestion-icon-relationship">
+                    <i class="ti ti-arrows-right-left"></i>
+                </div>
+                
+                <div class="crm-suggestion-info">
+                    <span class="crm-suggestion-name">
+                        <span class="crm-rel-source">{{ rel.source }}</span>
+                        <i class="ti ti-arrow-right crm-rel-arrow"></i>
+                        <span class="crm-rel-target">{{ rel.target }}</span>
+                    </span>
+                    <span class="crm-suggestion-type">{{ rel.type | replace('_', ' ') | capitalize }}</span>
+                    {% if rel.weight and rel.weight < 1.0 %}
+                    <span class="crm-rel-weight" title="Confidence">{{ (rel.weight * 100) | int }}%</span>
+                    {% endif %}
+                </div>
+                
+                <!-- Discard - fixed top right -->
+                <button type="button" 
+                        class="crm-suggestion-btn-discard-fixed"
+                        onclick="CRM.discardSuggestion(this)"
+                        title="Remove relationship">
+                    <i class="ti ti-x"></i>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Suggested Tasks -->
+<div class="crm-suggestion-section">
+    <div class="crm-suggestion-section-header">
+        <span class="crm-suggestion-section-label">SUGGESTED TASKS</span>
+        <span class="crm-suggestion-count">{{ tasks | length if tasks else 0 }}</span>
+    </div>
+    
+    {% if tasks %}
+    <div class="crm-suggestions-list" id="suggestions-tasks">
+        {% for task in tasks %}
+        <div class="crm-suggestion-item" data-suggestion-id="task-{{ loop.index }}">
+            <div class="crm-suggestion-item-main">
+                <div class="crm-suggestion-icon crm-suggestion-icon-task">
+                    <i class="ti ti-checkbox"></i>
+                </div>
+                <div class="crm-suggestion-info">
+                    <span class="crm-suggestion-name">{{ task.title or task.description or task }}</span>
+                    <span class="crm-suggestion-type">Task</span>
+                </div>
+                <div class="crm-suggestion-actions">
+                    <button type="button" 
+                            class="crm-suggestion-btn crm-suggestion-btn-create"
+                            onclick="CRM.approveSuggestion(this, 'create')">
+                        CREATE
+                    </button>
+                    <button type="button" 
+                            class="crm-suggestion-btn-icon"
+                            onclick="CRM.toggleSuggestionEdit(this)"
+                            title="Редактировать">
+                        <i class="ti ti-chevron-down"></i>
+                    </button>
+                </div>
+                
+                <!-- Discard - fixed top right -->
+                    <button type="button" 
+                        class="crm-suggestion-btn-discard-fixed"
+                            onclick="CRM.discardSuggestion(this)"
+                            title="Отклонить">
+                        <i class="ti ti-x"></i>
+                    </button>
+            </div>
+            
+            <!-- Expandable Edit Form -->
+            <div class="crm-suggestion-edit" style="display: none;">
+                <div class="crm-sug-form">
+                    <div class="crm-sug-field">
+                        <label>Название</label>
+                        <input type="text" class="crm-sug-input" name="title" value="{{ task.title or task.description or task }}">
+                    </div>
+                    <div class="crm-sug-field">
+                        <label>Описание</label>
+                        <input type="text" class="crm-sug-input" name="description" value="{{ task.description if task.description else '' }}" placeholder="Описание задачи">
+                    </div>
+                    <div class="crm-sug-field">
+                        <label>Приоритет</label>
+                        <select class="crm-sug-select" name="priority">
+                            <option value="low" {% if task.priority == 'low' %}selected{% endif %}>Низкий</option>
+                            <option value="medium" {% if not task.priority or task.priority == 'medium' %}selected{% endif %}>Средний</option>
+                            <option value="high" {% if task.priority == 'high' %}selected{% endif %}>Высокий</option>
+                        </select>
+                    </div>
+                    {% if task.deadline or task.due_date %}
+                    <div class="crm-sug-field">
+                        <label>Дедлайн</label>
+                        <input type="text" class="crm-sug-input" name="deadline" value="{{ task.deadline or task.due_date }}" readonly>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="crm-suggestion-empty">
+        <i class="ti ti-checkbox"></i>
+        No tasks detected.
+    </div>
+    {% endif %}
+</div>
+
+<!-- Action Buttons -->
+{% set current_note_id = note_id or (note.note_id if note else none) or (note.id if note else none) %}
+{% if current_note_id and (entities or tasks) %}
+<div class="crm-suggestions-footer">
+    <button type="button" 
+            class="crm-btn crm-btn-ghost"
+            onclick="CRM.discardAllSuggestions()">
+        Discard All
+    </button>
+    <button type="button" 
+            class="crm-btn crm-btn-primary"
+            onclick="CRM.approveAllSuggestions('{{ current_note_id }}')">
+        <i class="ti ti-check"></i>
+        Approve & Import
+    </button>
+</div>
+{% endif %}
+
+{% endif %}
+
+<style>
+.crm-suggestion-section {
+    margin-bottom: 24px;
+}
+
+.crm-suggestion-section:last-of-type {
+    margin-bottom: 32px;
+}
+
+.crm-suggestion-section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.crm-suggestion-section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--crm-text-secondary, #6b7280);
+    text-transform: uppercase;
+}
+
+.crm-suggestion-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    background: var(--crm-primary-light, #e0e7ff);
+    color: var(--crm-primary, #4f46e5);
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 10px;
+}
+
+.crm-suggestion-summary {
+    padding: 16px;
+    background: var(--crm-bg-secondary, #f9fafb);
+    border-radius: 8px;
+    color: var(--crm-text, #374151);
+    line-height: 1.6;
+}
+
+.crm-suggestions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.crm-suggestion-item {
+    position: relative;
+    background: transparent;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: background 0.15s;
+}
+
+.crm-suggestion-item:hover {
+    background: var(--crm-bg-secondary, #f0f4f4);
+}
+
+.crm-suggestion-item-main {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 40px 10px 12px;
+}
+
+/* Discard button - always top right */
+.crm-suggestion-btn-discard-fixed {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--crm-text-muted, #9ca3af);
+    cursor: pointer;
+    transition: all 0.15s;
+    z-index: 1;
+}
+
+.crm-suggestion-btn-discard-fixed:hover {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.crm-suggestion-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    flex-shrink: 0;
+    margin-top: 2px;
+}
+
+.crm-suggestion-icon i {
+    font-size: 16px;
+    color: white;
+}
+
+.crm-suggestion-icon-person {
+    background: linear-gradient(135deg, #5B8EC2, #4A7AAD);
+}
+
+.crm-suggestion-icon-organization {
+    background: linear-gradient(135deg, #6B5B95, #554878);
+}
+
+.crm-suggestion-icon-project {
+    background: linear-gradient(135deg, #7BC96F, #5FAF52);
+}
+
+.crm-suggestion-icon-default {
+    background: linear-gradient(135deg, #5BA8A8, #4A9090);
+}
+
+.crm-suggestion-icon-task {
+    background: linear-gradient(135deg, #5B8EC2, #4A7AAD);
+}
+
+.crm-suggestion-icon-meeting {
+    background: linear-gradient(135deg, #FF6B6B, #E55555);
+}
+
+.crm-suggestion-icon-call {
+    background: linear-gradient(135deg, #4ECDC4, #3DBDB5);
+}
+
+.crm-suggestion-icon-email {
+    background: linear-gradient(135deg, #FFB347, #E5A03D);
+}
+
+.crm-suggestion-icon-relationship {
+    background: linear-gradient(135deg, #9B59B6, #8247A3);
+}
+
+.crm-suggestion-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.crm-suggestion-name-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.crm-suggestion-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--crm-text, #1f2937);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.crm-ai-info-btn {
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--crm-text-muted, #9ca3af);
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+    border-radius: 50%;
+    transition: all 0.15s;
+}
+
+.crm-ai-info-btn:hover {
+    color: var(--crm-primary, #4f46e5);
+    background: var(--crm-primary-light, #e0e7ff);
+}
+
+.crm-ai-info-btn i {
+    font-size: 14px;
+}
+
+/* AI Tooltip */
+.crm-ai-tooltip {
+    position: absolute;
+    z-index: 1000;
+    max-width: 300px;
+    padding: 12px 14px;
+    background: var(--crm-bg, #fff);
+    border: 1px solid var(--crm-border, #e5e7eb);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--crm-text-secondary, #6b7280);
+}
+
+.crm-ai-tooltip::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    left: 20px;
+    width: 10px;
+    height: 10px;
+    background: var(--crm-bg, #fff);
+    border-left: 1px solid var(--crm-border, #e5e7eb);
+    border-top: 1px solid var(--crm-border, #e5e7eb);
+    transform: rotate(45deg);
+}
+
+.crm-ai-tooltip-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--crm-primary, #4f46e5);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.crm-ai-tooltip-header i {
+    font-size: 12px;
+}
+
+.crm-suggestion-type {
+    font-size: 11px;
+    color: var(--crm-text-muted, #9ca3af);
+    text-transform: capitalize;
+}
+
+.crm-suggestion-attrs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.crm-suggestion-attr {
+    font-size: 11px;
+    color: var(--crm-text-secondary, #6b7280);
+    background: var(--crm-bg-secondary, #f3f4f6);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+/* Expanded state */
+.crm-suggestion-item.expanded {
+    background: #e8f5f3;
+    border-radius: 10px;
+    margin: -8px -12px;
+    padding: 8px 12px;
+}
+
+/* Suggestion edit form */
+.crm-sug-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+    margin-top: 8px;
+    background: rgba(255,255,255,0.5);
+    border-radius: 8px;
+}
+
+.crm-sug-field {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.crm-sug-field label {
+    flex: 0 0 65px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--crm-text-secondary, #6b7280);
+}
+
+.crm-sug-input {
+    flex: 1;
+    padding: 4px 0;
+    font-size: 13px;
+    border: none;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+    border-radius: 0;
+    background: transparent;
+    outline: none;
+    transition: border-color 0.15s;
+    color: var(--crm-text, #1f2937);
+}
+
+.crm-sug-input::placeholder {
+    color: var(--crm-text-muted, #9ca3af);
+}
+
+.crm-sug-input:focus {
+    border-bottom-color: var(--crm-blue, #5B8EC2);
+}
+
+.crm-sug-select {
+    flex: 1;
+    padding: 4px 0;
+    font-size: 13px;
+    border: none;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+    border-radius: 0;
+    background: transparent;
+    cursor: pointer;
+    color: var(--crm-text, #1f2937);
+}
+
+.crm-sug-select:focus {
+    border-bottom-color: var(--crm-blue, #5B8EC2);
+    outline: none;
+}
+
+.crm-sug-attrs-section {
+    margin-top: 6px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(0,0,0,0.05);
+}
+
+.crm-sug-attrs-title {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--crm-text-muted, #9ca3af);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: block;
+    margin-bottom: 6px;
+}
+
+.crm-sug-add-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+    padding: 4px 8px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--crm-text-muted, #9ca3af);
+    cursor: pointer;
+    font-size: 11px;
+    transition: all 0.15s;
+}
+
+.crm-sug-add-btn:hover {
+    background: rgba(0,0,0,0.05);
+    color: var(--crm-text-secondary, #6b7280);
+}
+
+.crm-sug-attrs {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.crm-sug-attr-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.crm-sug-attr-label {
+    flex: 0 0 70px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--crm-text-secondary, #6b7280);
+}
+
+.crm-sug-attr-row .crm-sug-input {
+    flex: 1;
+}
+
+.crm-sug-attr-del {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: transparent;
+    cursor: pointer;
+    font-size: 12px;
+    border-radius: 3px;
+    transition: all 0.15s;
+}
+
+.crm-sug-attr-row:hover .crm-sug-attr-del {
+    color: var(--crm-text-muted, #9ca3af);
+}
+
+.crm-sug-attr-del:hover {
+    background: rgba(220, 38, 38, 0.1);
+    color: #dc2626;
+}
+
+.crm-suggestion-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.crm-suggestion-btn {
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.crm-suggestion-btn-update {
+    background: #dbeafe;
+    color: #2563eb;
+}
+
+.crm-suggestion-btn-update:hover {
+    background: #bfdbfe;
+}
+
+.crm-suggestion-btn-create {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.crm-suggestion-btn-create:hover {
+    background: #bbf7d0;
+}
+
+.crm-suggestion-btn-icon {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--crm-text-secondary, #6b7280);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.crm-suggestion-btn-icon:hover {
+    background: var(--crm-bg-secondary, #f3f4f6);
+    color: var(--crm-text, #1f2937);
+}
+
+.crm-suggestion-btn-icon.expanded i {
+    transform: rotate(180deg);
+}
+
+.crm-suggestion-btn-discard:hover {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.crm-suggestion-edit {
+    border-top: 1px solid var(--crm-border, #e5e7eb);
+    background: var(--crm-bg-secondary, #f9fafb);
+}
+
+.crm-suggestion-edit-form {
+    padding: 16px;
+}
+
+.crm-suggestion-edit-form .crm-form-row {
+    margin-bottom: 12px;
+}
+
+.crm-suggestion-edit-form .crm-form-row:last-child {
+    margin-bottom: 0;
+}
+
+.crm-suggestion-edit-form label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--crm-text-secondary, #6b7280);
+    margin-bottom: 4px;
+}
+
+.crm-suggestion-edit-form .crm-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--crm-border, #d1d5db);
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.15s;
+}
+
+.crm-suggestion-edit-form .crm-input:focus {
+    outline: none;
+    border-color: var(--crm-primary, #4f46e5);
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.crm-suggestion-edit-form .crm-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--crm-border, #e5e7eb);
+}
+
+.crm-suggestion-empty {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 20px;
+    color: var(--crm-text-secondary, #9ca3af);
+    font-style: italic;
+}
+
+.crm-suggestion-empty i {
+    font-size: 18px;
+    opacity: 0.5;
+}
+
+.crm-suggestions-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding-top: 20px;
+    border-top: 1px solid var(--crm-border, #e5e7eb);
+}
+
+.crm-alert {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    border-radius: 8px;
+}
+
+.crm-alert-warning {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #f59e0b;
+}
+
+.crm-alert-success {
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #22c55e;
+}
+
+/* Relationship styles */
+.crm-relationship-item .crm-suggestion-name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.crm-rel-source, .crm-rel-target {
+    font-weight: 500;
+    color: var(--crm-text, #1f2937);
+}
+
+.crm-rel-arrow {
+    font-size: 12px;
+    color: var(--crm-text-muted, #9ca3af);
+}
+
+.crm-rel-weight {
+    font-size: 10px;
+    background: var(--crm-bg-secondary, #f3f4f6);
+    color: var(--crm-text-secondary, #6b7280);
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: 8px;
+}
+</style>

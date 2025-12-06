@@ -25,6 +25,12 @@ from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 
+# Системные flows которые мигрируются автоматически при первом обращении
+SYSTEM_FLOWS = {
+    "crm_entity_extractor": "apps.agents.flows.crm_entity_extractor_flow.crm_entity_extractor_flow_config",
+    "crm_entity_comparison": "apps.agents.flows.crm_entity_extractor_flow.crm_entity_comparison_flow_config",
+}
+
 
 class FlowFactory:
     """Фабрика для Flow и управления историей выполнения"""
@@ -52,6 +58,7 @@ class FlowFactory:
     async def get_flow(self, flow_id: str) -> Flow:
         """
         Получает Flow по ID из БД и создает экземпляр.
+        Если flow не найден но это системный flow - создает его автоматически.
 
         Args:
             flow_id: Идентификатор flow
@@ -60,6 +67,20 @@ class FlowFactory:
             Экземпляр Flow
         """
         config = await self.flow_repository.get(flow_id)
+        
+        # Системные flows - мигрируем если flow или агент отсутствует
+        if flow_id in SYSTEM_FLOWS:
+            need_migration = not config
+            if config and not need_migration:
+                # Проверяем что агент тоже есть
+                agent_exists = await self.agent_repository.get(config.entry_point_agent)
+                need_migration = not agent_exists
+            
+            if need_migration:
+                logger.info(f"Миграция системного flow {flow_id}...")
+                await self._migrate_system_flow(flow_id)
+                config = await self.flow_repository.get(flow_id)
+        
         if not config:
             raise ValueError(f"Flow {flow_id} не найден в БД")
 
@@ -68,6 +89,29 @@ class FlowFactory:
 
         logger.debug(f"Flow {flow_id} создан")
         return flow
+    
+    async def _migrate_system_flow(self, flow_id: str) -> None:
+        """
+        Мигрирует системный flow через стандартный механизм миграции.
+        Мигрирует flow вместе со всеми зависимостями (агентами, tools).
+        
+        Args:
+            flow_id: ID системного flow
+        """
+        if flow_id not in SYSTEM_FLOWS:
+            raise ValueError(f"Flow {flow_id} не является системным")
+        
+        config_path = SYSTEM_FLOWS[flow_id]
+        
+        # Миграция flow с зависимостями (агенты, tools)
+        migrator = get_agents_container().migrator
+        await FlowConfig.migrate(
+            flow_id=config_path,
+            migrator=migrator,
+            with_dependencies=True
+        )
+        
+        logger.info(f"Системный flow {flow_id} успешно мигрирован")
 
     async def get_flow_history(
         self, 

@@ -296,3 +296,71 @@ async def test_list_entities_pagination(crm_client):
     data = response.json()
     assert len(data) <= 5
 
+
+@pytest.mark.asyncio
+async def test_update_entity_status_to_approved(crm_client, unique_crm_id):
+    """Тест обновления статуса сущности на approved"""
+    # Создаем сущность со статусом pending
+    payload = {
+        "type": "person",
+        "name": f"Status Test {unique_crm_id('status')}",
+        "description": "Entity for status test",
+        "attributes": {},
+        "status": "pending",
+    }
+    create_response = await crm_client.post("/crm/api/v1/entities", json=payload)
+    assert create_response.status_code == 200
+    created = create_response.json()
+    entity_id = created["entity_id"]
+    
+    # Обновляем статус на approved
+    response = await crm_client.put(
+        f"/crm/api/v1/entities/{entity_id}/status?status=approved"
+    )
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "approved"
+    
+    # Cleanup
+    await crm_client.delete(f"/crm/api/v1/entities/{entity_id}")
+
+
+@pytest.mark.asyncio
+async def test_update_entity_status_to_rejected(crm_client, unique_crm_id):
+    """Тест обновления статуса сущности на rejected"""
+    # Создаем сущность
+    payload = {
+        "type": "person",
+        "name": f"Reject Test {unique_crm_id('reject')}",
+        "description": "Entity to reject",
+        "attributes": {},
+        "status": "pending",
+    }
+    create_response = await crm_client.post("/crm/api/v1/entities", json=payload)
+    created = create_response.json()
+    entity_id = created["entity_id"]
+    
+    # Обновляем статус на rejected
+    response = await crm_client.put(
+        f"/crm/api/v1/entities/{entity_id}/status?status=rejected"
+    )
+    
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "rejected"
+    
+    # Cleanup
+    await crm_client.delete(f"/crm/api/v1/entities/{entity_id}")
+
+
+@pytest.mark.asyncio
+async def test_update_entity_status_nonexistent(crm_client, unique_crm_id):
+    """Тест обновления статуса несуществующей сущности"""
+    fake_id = unique_crm_id("fake")
+    
+    response = await crm_client.put(
+        f"/crm/api/v1/entities/{fake_id}/status?status=approved"
+    )
+    
+    assert response.status_code == 404

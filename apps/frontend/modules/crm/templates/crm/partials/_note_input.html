@@ -1,0 +1,186 @@
+<!-- Note Input Component -->
+<!-- 
+Variables:
+  - note: existing note object (optional, for editing)
+  - entity_types: list of EntityType objects (for dynamic type toggles)
+  - form_id: form ID to attach inputs to (default: note-input-form)
+  - standalone: boolean - if true, creates own form; if false, uses form attribute
+  - show_submit: boolean - show submit button (default: true)
+  - submit_text: custom submit button text
+-->
+
+{% set current_type = note.note_type if note else (note_type | default('freeform')) %}
+{% set current_visibility = note.visibility if note else (visibility | default('private')) %}
+{% set form_id = form_id | default('note-input-form') %}
+{% set standalone = standalone | default(true) %}
+{% set show_submit = show_submit | default(true) %}
+
+{# Filter event types from entity_types #}
+{% set event_types = entity_types | selectattr('is_event', 'equalto', true) | list if entity_types else [] %}
+
+<div class="crm-note-input" data-note-id="{{ note.note_id or note.id if note else '' }}">
+    <!-- Header: Title + Type/Visibility Toggles + Actions -->
+    <div class="crm-note-input-header">
+        <input type="text" 
+               name="title"
+               {% if not standalone %}form="{{ form_id }}"{% endif %}
+               class="crm-note-input-title" 
+               placeholder="{{ t('crm.notes.placeholder') }}"
+               value="{{ note.title if note else '' }}">
+        
+        <div class="crm-note-input-actions">
+            <!-- Type Toggle (dynamic from entity_types) -->
+            <div class="crm-toggle-group" data-toggle="note_type" data-form="{{ form_id }}">
+                <!-- Base freeform type -->
+                <button type="button" 
+                        class="crm-toggle-btn {% if current_type == 'freeform' %}active{% endif %}"
+                        data-value="freeform"
+                        title="{{ t('crm.notes.type.freeform') }}">
+                    <i class="ti ti-note"></i>
+                </button>
+                
+                <!-- Dynamic event types -->
+                {% for et in event_types %}
+                <button type="button" 
+                        class="crm-toggle-btn {% if current_type == et.type_id %}active{% endif %}"
+                        data-value="{{ et.type_id }}"
+                        title="{{ et.name }}"
+                        {% if et.color %}style="--toggle-active-color: {{ et.color }};"{% endif %}>
+                    <i class="ti {{ et.icon | default('ti-calendar-event') }}"></i>
+                </button>
+                {% else %}
+                <!-- Fallback if no event types loaded -->
+                <button type="button" 
+                        class="crm-toggle-btn {% if current_type == 'meeting_minutes' %}active{% endif %}"
+                        data-value="meeting_minutes"
+                        title="{{ t('crm.notes.type.meeting_minutes') }}">
+                    <i class="ti ti-users"></i>
+                </button>
+                <button type="button" 
+                        class="crm-toggle-btn {% if current_type == 'call_log' %}active{% endif %}"
+                        data-value="call_log"
+                        title="{{ t('crm.notes.type.call_log') }}">
+                    <i class="ti ti-phone"></i>
+                </button>
+                {% endfor %}
+            </div>
+            <input type="hidden" name="note_type" {% if not standalone %}form="{{ form_id }}"{% endif %} value="{{ current_type }}">
+            
+            <div class="crm-note-input-divider"></div>
+            
+            <!-- Visibility Toggle -->
+            <div class="crm-toggle-group" data-toggle="visibility" data-form="{{ form_id }}">
+                <button type="button" 
+                        class="crm-toggle-btn {% if current_visibility == 'private' %}active{% endif %}"
+                        data-value="private"
+                        title="{{ t('crm.notes.visibility_private') }}">
+                    <i class="ti ti-lock"></i>
+                </button>
+                <button type="button" 
+                        class="crm-toggle-btn {% if current_visibility == 'shared' %}active{% endif %}"
+                        data-value="shared"
+                        title="{{ t('crm.notes.visibility_shared') }}"
+                        onclick="CRM.handleVisibilityChange('shared')">
+                    <i class="ti ti-share"></i>
+                </button>
+                <button type="button" 
+                        class="crm-toggle-btn {% if current_visibility == 'public' %}active{% endif %}"
+                        data-value="public"
+                        title="{{ t('crm.notes.visibility_public') }}">
+                    <i class="ti ti-world"></i>
+                </button>
+            </div>
+            <input type="hidden" name="visibility" {% if not standalone %}form="{{ form_id }}"{% endif %} value="{{ current_visibility }}">
+            
+            <div class="crm-note-input-divider"></div>
+            
+            <!-- Tools -->
+            <button type="button" 
+                    class="crm-note-input-btn"
+                    onclick="CRM.toggleVoice()"
+                    title="{{ t('crm.notes.voice_input') }}">
+                <i class="ti ti-microphone"></i>
+            </button>
+            <button type="button" 
+                    class="crm-note-input-btn"
+                    onclick="CRM.triggerFileUpload('{{ form_id }}')"
+                    title="{{ t('crm.notes.attach_file') }}">
+                <i class="ti ti-paperclip"></i>
+            </button>
+            
+            {% if show_submit %}
+            <!-- Submit -->
+            <button type="submit" 
+                    {% if not standalone %}form="{{ form_id }}"{% endif %}
+                    class="crm-note-input-submit">
+                {% if submit_text %}
+                    {{ submit_text }}
+                {% elif note %}
+                    {{ t('crm.actions.save') }}
+                {% else %}
+                    {{ t('crm.actions.analyze') }} & {{ t('crm.actions.save') }}
+                {% endif %}
+                <i class="ti ti-send"></i>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Content: Textarea with Preview -->
+    <div class="crm-note-input-body">
+        <!-- Floating Edit/Preview Toggle -->
+        <div class="crm-mode-toggle-floating" data-form="{{ form_id }}" data-active="edit">
+            <div class="crm-mode-toggle-slider"></div>
+            <button type="button" 
+                    class="crm-mode-toggle-btn active" 
+                    data-mode="edit"
+                    onclick="CRM.switchInputTab('{{ form_id }}', 'edit')">
+                <i class="ti ti-pencil"></i>
+                <span>Edit</span>
+            </button>
+            <button type="button" 
+                    class="crm-mode-toggle-btn"
+                    data-mode="preview"
+                    onclick="CRM.switchInputTab('{{ form_id }}', 'preview')">
+                <i class="ti ti-eye"></i>
+                <span>Preview</span>
+            </button>
+        </div>
+        
+        <div class="crm-note-input-editor">
+            <textarea name="content" 
+                      {% if not standalone %}form="{{ form_id }}"{% endif %}
+                      id="{{ form_id }}-content"
+                      class="crm-note-input-textarea" 
+                      placeholder="{{ t('crm.notes.placeholder') }}"
+                      oninput="CRM.handleMentions(this)">{{ note.content if note else '' }}</textarea>
+            <div id="{{ form_id }}-preview" 
+                 class="crm-note-input-preview crm-prose" 
+                 style="display: none;">
+            </div>
+        </div>
+        
+        <!-- Mentions dropdown -->
+        <div id="{{ form_id }}-mentions" class="crm-mentions-dropdown" style="display: none;"></div>
+    </div>
+    
+    <!-- Footer: Hints -->
+    <div class="crm-note-input-footer">
+        <div class="crm-note-input-hints">
+            <span><i class="ti ti-markdown"></i> Markdown</span>
+            <span><i class="ti ti-at"></i> mention</span>
+        </div>
+    </div>
+    
+    {% if standalone %}
+    <!-- Hidden form for HTMX (only in standalone mode) -->
+    <form id="{{ form_id }}"
+          hx-post="{{ hx_post | default('/crm/partials/notes') }}{% if note %}?note_id={{ note.note_id or note.id }}{% endif %}"
+          hx-target="{{ hx_target | default('#crm-content') }}"
+          hx-swap="innerHTML"
+          hx-ext="json-enc"
+          style="display: none;">
+        <input type="hidden" name="note_date" value="{{ note.note_date if note else today }}">
+    </form>
+    {% endif %}
+</div>

@@ -1,5 +1,20 @@
 <!-- Notes List Partial -->
 <div class="crm-notes">
+    <!-- Header Actions -->
+    <div class="crm-notes-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0; font-size: 18px; font-weight: 600; color: var(--crm-text-primary);">
+            {{ t('crm.nav.daily_notes') }}
+        </h2>
+        <div style="display: flex; gap: 8px;">
+            <button class="crm-btn crm-btn-secondary crm-btn-sm"
+                    hx-get="/crm/partials/import-modal"
+                    hx-target="#modal-container">
+                <i class="ti ti-file-import"></i>
+                {{ t('crm.notes.import') }}
+            </button>
+        </div>
+    </div>
+    
     <!-- Filters -->
     <div class="crm-filters" style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; padding: 16px; background: var(--crm-bg-card); border-radius: 12px; border: 1px solid var(--crm-border);">
         <div class="crm-filter-group" style="flex: 1; min-width: 150px;">
@@ -78,43 +93,8 @@
     <div id="daily-summary-container"></div>
     
     <!-- Note Editor -->
-    <div class="crm-note-editor" style="margin-bottom: 24px;">
-        <form hx-post="/crm/partials/notes" 
-              hx-target="#crm-content"
-              hx-swap="innerHTML">
-            <input type="hidden" name="note_type" value="freeform">
-            <input type="hidden" name="note_date" value="{{ today }}">
-            <div class="crm-note-header">
-                <input type="text" 
-                       name="title"
-                       class="crm-note-title-input" 
-                       placeholder="{{ t('crm.notes.placeholder') }}"
-                       style="flex: 1;">
-                
-                <div class="crm-note-actions">
-                    <button type="button" 
-                            class="crm-btn crm-btn-icon crm-btn-ghost"
-                            data-voice-input
-                            onclick="CRM.toggleVoice()"
-                            title="{{ t('crm.notes.voice_input') }}">
-                        <i class="ti ti-microphone"></i>
-                    </button>
-                    <button type="button" class="crm-btn crm-btn-icon crm-btn-ghost" title="{{ t('crm.notes.attach_file') }}">
-                        <i class="ti ti-paperclip"></i>
-                    </button>
-                    <button type="submit" class="crm-btn crm-btn-analyze">
-                        <span>{{ t('crm.actions.analyze') }} & {{ t('crm.actions.save') }}</span>
-                        <i class="ti ti-send"></i>
-                    </button>
-                </div>
-            </div>
-            
-            <div class="crm-note-body">
-                <textarea name="content" 
-                          class="crm-note-textarea" 
-                          placeholder="{{ t('crm.notes.placeholder') }}"></textarea>
-            </div>
-        </form>
+    <div style="margin-bottom: 24px;">
+        {% include "crm/partials/_note_input.html" %}
     </div>
     
     <!-- Notes List -->
@@ -127,8 +107,17 @@
              hx-swap="innerHTML">
             <div class="crm-card-body" style="padding: 16px;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
-                    <h4 style="font-size: 15px; font-weight: 600; color: var(--crm-text-primary);">
+                    <h4 style="font-size: 15px; font-weight: 600; color: var(--crm-text-primary); display: flex; align-items: center; gap: 8px;">
                         {{ note.title | default('Без названия') }}
+                        {% if note.attachment_ids and note.attachment_ids | length > 0 %}
+                        <span class="crm-note-attachment-badge" title="{{ note.attachment_ids | length }} файлов">
+                            <i class="ti ti-paperclip"></i>
+                            {{ note.attachment_ids | length }}
+                        </span>
+                        {% endif %}
+                        {% if note.visibility == 'private' %}
+                        <i class="ti ti-lock" style="font-size: 14px; color: var(--crm-text-muted);" title="Приватная заметка"></i>
+                        {% endif %}
                     </h4>
                     <span style="font-size: 12px; color: var(--crm-text-muted);">
                         {{ note.created_at | default('') }}

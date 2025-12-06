@@ -1,0 +1,46 @@
+<!-- Priority Tasks Widget -->
+{% if tasks and tasks | length > 0 %}
+<div class="crm-priority-tasks-list" style="padding: 0;">
+    {% for task in tasks %}
+    <div class="crm-task-item {% if task.is_overdue %}overdue{% endif %}"
+         style="padding: 12px 16px; border-bottom: 1px solid var(--crm-border-light); cursor: pointer;"
+         hx-get="/crm/partials/task-modal?task_id={{ task.task_id }}"
+         hx-target="#modal-container">
+        
+        <div class="crm-task-checkbox"
+             hx-post="/crm/api/tasks/{{ task.task_id }}/complete"
+             hx-trigger="click consume"
+             hx-swap="none"
+             onclick="event.stopPropagation(); htmx.trigger(document.body, 'taskUpdated')"></div>
+        
+        <div class="crm-task-info" style="flex: 1;">
+            <div class="crm-task-text">{{ task.title }}</div>
+            <div class="crm-task-meta">
+                {% if task.is_overdue %}
+                <span class="crm-task-date overdue">
+                    <i class="ti ti-alert-circle"></i>
+                    {{ t('crm.tasks.overdue') }}
+                </span>
+                {% else %}
+                <span class="crm-task-date">
+                    <i class="ti ti-calendar"></i>
+                    {{ task.due_date | default(t('crm.tasks.today')) }}
+                </span>
+                {% endif %}
+                {% if task.priority == 'urgent' or task.priority == 'high' %}
+                <span class="crm-task-priority {{ task.priority }}">{{ task.priority | upper }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="crm-empty-state" style="padding: 24px;">
+    <i class="ti ti-check" style="font-size: 24px; color: var(--crm-green);"></i>
+    <p style="font-size: 14px; color: var(--crm-text-muted); margin-top: 8px;">
+        {{ t('crm.tasks.no_priority') }}
+    </p>
+</div>
+{% endif %}
+

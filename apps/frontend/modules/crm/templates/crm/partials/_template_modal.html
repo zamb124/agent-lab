@@ -1,0 +1,100 @@
+<!-- Template Create/Edit Modal -->
+<div class="modal-overlay" onclick="if(event.target === this) CRM.closeModal()">
+    <div class="crm-modal crm-modal-lg">
+        <div class="crm-modal-header">
+            <div class="crm-modal-title-group">
+                <h2 class="crm-modal-title">
+                    {% if template %}{{ t('crm.settings.edit_template') }}{% else %}{{ t('crm.settings.new_template') }}{% endif %}
+                </h2>
+            </div>
+            <button class="crm-modal-close" onclick="CRM.closeModal()">
+                <i class="ti ti-x"></i>
+            </button>
+        </div>
+        
+        <form hx-post="/crm/api/templates{% if template %}?template_id={{ template.note_id or template.id }}{% endif %}"
+              hx-target="#templates-list"
+              hx-swap="innerHTML"
+              hx-ext="json-enc"
+              hx-push-url="false"
+              hx-on::after-request="CRM.closeModal(); CRM.showNotification('{{ t('crm.settings.template_saved') }}', 'success')">
+            <div class="crm-modal-body">
+                <!-- Title -->
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('common.title') }} *</label>
+                    <input type="text" 
+                           name="title" 
+                           class="crm-input"
+                           placeholder="{{ t('crm.settings.template_title_placeholder') }}"
+                           value="{{ template.title if template else '' }}"
+                           required>
+                </div>
+                
+                <!-- Type -->
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('crm.entities.type') }}</label>
+                    <select name="note_type" class="crm-input">
+                        <option value="freeform" {% if template and template.note_type == 'freeform' %}selected{% endif %}>
+                            {{ t('crm.notes.type.freeform') }}
+                        </option>
+                        <option value="meeting_minutes" {% if template and template.note_type == 'meeting_minutes' %}selected{% endif %}>
+                            {{ t('crm.notes.type.meeting_minutes') }}
+                        </option>
+                        <option value="call_log" {% if template and template.note_type == 'call_log' %}selected{% endif %}>
+                            {{ t('crm.notes.type.call_log') }}
+                        </option>
+                    </select>
+                </div>
+                
+                <!-- Content -->
+                <div class="crm-form-group">
+                    <label class="crm-form-label">{{ t('common.content') }}</label>
+                    <textarea name="content" 
+                              class="crm-input crm-textarea"
+                              placeholder="{{ t('crm.settings.template_content_placeholder') }}"
+                              style="min-height: 200px;">{{ template.content if template else '' }}</textarea>
+                    <div style="margin-top: 8px; font-size: 12px; color: var(--crm-text-muted);">
+                        <i class="ti ti-markdown"></i> Markdown supported
+                    </div>
+                </div>
+                
+                <!-- Template hints -->
+                <div class="crm-info-box">
+                    <i class="ti ti-bulb"></i>
+                    <div>
+                        <p style="margin: 0 0 8px; font-size: 13px; color: var(--crm-text-secondary);">
+                            {{ t('crm.settings.template_hint') }}
+                        </p>
+                        <code style="font-size: 12px; background: var(--crm-bg-tertiary); padding: 2px 6px; border-radius: 4px;">
+                            ## Meeting: [Topic]
+                        </code>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="crm-modal-footer">
+                {% if template %}
+                <button type="button" 
+                        class="crm-btn crm-btn-ghost" 
+                        style="color: var(--crm-danger); margin-right: auto;"
+                        hx-delete="/crm/api/templates/{{ template.note_id or template.id }}"
+                        hx-target="#templates-list"
+                        hx-swap="innerHTML"
+                        hx-confirm="{{ t('crm.settings.delete_template_confirm') }}"
+                        onclick="CRM.closeModal()">
+                    <i class="ti ti-trash"></i>
+                    {{ t('common.delete') }}
+                </button>
+                {% endif %}
+                <button type="button" class="crm-btn crm-btn-secondary" onclick="CRM.closeModal()">
+                    {{ t('crm.actions.cancel') }}
+                </button>
+                <button type="submit" class="crm-btn crm-btn-primary">
+                    <i class="ti ti-device-floppy"></i>
+                    {{ t('crm.actions.save') }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+

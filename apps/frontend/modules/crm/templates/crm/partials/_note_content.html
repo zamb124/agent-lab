@@ -1,0 +1,487 @@
+<!-- Note Content - Shared between modal and full page -->
+<!-- Variables: note (optional), templates (list), today (date string), is_modal (bool) -->
+
+<form hx-post="/crm/partials/notes{% if note %}?note_id={{ note.note_id or note.id }}{% endif %}"
+      hx-target="{{ '#modal-container' if is_modal else '#crm-content' }}"
+      hx-swap="innerHTML"
+      hx-push-url="{{ 'false' if is_modal else 'true' }}"
+      hx-ext="json-enc"
+      {% if is_modal %}hx-on::after-swap="if(event.detail.elt === this) CRM.closeModal()"{% endif %}
+      id="note-form"
+      class="crm-note-form">
+    
+    <input type="hidden" name="note_date" value="{{ note.note_date if note and note.note_date else today }}">
+    
+    <div class="crm-note-form-body">
+        <!-- Left: Editor -->
+        <div class="crm-note-editor-section">
+            {% if not note and templates and templates | length > 0 %}
+            <!-- Template Selection -->
+            <div class="crm-form-group crm-template-select">
+                <select class="crm-input" 
+                        id="template-select"
+                        hx-get="/crm/partials/note-modal"
+                        hx-trigger="change"
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML"
+                        hx-push-url="false"
+                        hx-include="this">
+                    <option value="">{{ t('crm.notes.template.none') }}</option>
+                    {% for tpl in templates %}
+                    <option value="{{ tpl.note_id }}" data-content="{{ tpl.content | e }}" data-title="{{ tpl.title | e }}">
+                        {{ tpl.title }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            
+            <!-- Note Input Component -->
+            {% set standalone = false %}
+            {% set show_submit = false %}
+            {% set form_id = 'note-form' %}
+            {% include "crm/partials/_note_input.html" %}
+            
+            <!-- Shared With (shown when visibility is 'shared') -->
+            <div class="crm-form-group crm-shared-with-container" 
+                 id="shared-with-container"
+                 style="{% if not note or note.visibility != 'shared' %}display: none;{% endif %}">
+                <label class="crm-form-label">{{ t('crm.notes.shared_with') }}</label>
+                <div class="crm-sharing-wrapper">
+                <div class="crm-tags-input" id="shared-with-tags">
+                    {% if note and note.shared_with %}
+                        {% for item in note.shared_with %}
+                        {% if item is mapping %}
+                        <span class="crm-tag crm-{{ item.type }}-tag" data-type="{{ item.type }}" data-id="{{ item.id }}">
+                            <i class="ti ti-{{ 'building' if item.type == 'company' else 'user' }}"></i>
+                            {{ item.name or item.email or item.id }}
+                            <span class="crm-tag-remove" onclick="CRM.removeShareableTag(this)">&times;</span>
+                        </span>
+                        {% else %}
+                        <span class="crm-tag crm-user-tag" data-type="user" data-id="{{ item }}">
+                        <i class="ti ti-user"></i>
+                            {{ item }}
+                            <span class="crm-tag-remove" onclick="CRM.removeShareableTag(this)">&times;</span>
+                    </span>
+                        {% endif %}
+                    {% endfor %}
+                    {% endif %}
+                    <input type="text" 
+                           id="shared-with-input"
+                               class="crm-sharing-input"
+                               placeholder="Search by email or company name..."
+                               oninput="CRM.searchShareable(this.value)"
+                               onfocus="CRM.showShareableDropdown()"
+                               autocomplete="off">
+                    </div>
+                    <div class="crm-sharing-dropdown" id="sharing-dropdown" style="display: none;"></div>
+                </div>
+                <input type="hidden" name="shared_with" id="shared-with-hidden" 
+                       value="{{ note.shared_with | tojson if note and note.shared_with else '[]' }}">
+            </div>
+            
+            <!-- Attachments (uploaded via icon in header) -->
+            {% if note and (note.note_id or note.id) %}
+            <div class="crm-form-group crm-attachments-section">
+                <div id="upload-progress" class="crm-upload-progress" style="display: none;">
+                    <div class="crm-progress-bar"><div class="crm-progress-fill"></div></div>
+                    <span class="crm-progress-text">Uploading...</span>
+                </div>
+                
+                <div id="attachments-list" class="crm-attachments-list"
+                     hx-get="/crm/api/notes/{{ note.note_id or note.id }}/attachments"
+                     hx-trigger="load"
+                     hx-target="this"
+                     hx-swap="innerHTML"
+                     hx-push-url="false">
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Footer -->
+            <div class="crm-note-form-footer">
+                <div class="crm-note-form-footer-left">
+                    <label class="crm-checkbox-label">
+                        <input type="checkbox" name="is_template" value="true"
+                               {% if note and note.is_template %}checked{% endif %}>
+                        {{ t('crm.notes.template.save_as') }}
+                    </label>
+                    
+                    {% if note and (note.note_id or note.id) %}
+                    <div class="crm-export-buttons">
+                        <a href="/crm/api/notes/{{ note.note_id or note.id }}/export/pdf" 
+                           class="crm-btn crm-btn-ghost crm-btn-sm" download>
+                            <i class="ti ti-file-type-pdf"></i> PDF
+                        </a>
+                        <a href="/crm/api/notes/{{ note.note_id or note.id }}/export/html" 
+                           class="crm-btn crm-btn-ghost crm-btn-sm" download>
+                            <i class="ti ti-file-type-html"></i> HTML
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="crm-note-form-footer-right">
+                    {% if is_modal %}
+                    <button type="button" class="crm-btn crm-btn-secondary" onclick="CRM.closeModal()">
+                        {{ t('crm.actions.cancel') }}
+                    </button>
+                    {% endif %}
+                    
+                    {% if note %}
+                    <button type="submit" class="crm-btn crm-btn-primary">
+                        <i class="ti ti-device-floppy"></i>
+                        {{ t('crm.actions.save') }}
+                    </button>
+                    {% else %}
+                    <button type="submit" class="crm-btn crm-btn-analyze">
+                        <i class="ti ti-sparkles"></i>
+                        {{ t('crm.actions.analyze') }} & {{ t('crm.actions.save') }}
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Right: Linked Entities & AI Suggestions (only for existing notes) -->
+        {% if note and (note.note_id or note.id) %}
+        <div class="crm-note-suggestions-section">
+            <!-- Linked Entities Section -->
+            <div class="crm-linked-entities-section"
+                 id="note-linked-entities"
+                 hx-get="/crm/partials/notes/{{ note.note_id or note.id }}/linked-entities"
+                 hx-trigger="load, entitiesUpdated from:body"
+                 hx-target="this"
+                 hx-swap="innerHTML"
+                 hx-push-url="false">
+                <div class="crm-loading-sm">
+                    <i class="ti ti-loader crm-spinner"></i>
+                </div>
+            </div>
+            
+            <!-- AI Analysis Section -->
+            <div class="crm-suggestions-header">
+                <i class="ti ti-sparkles"></i>
+                <span>AI ANALYSIS</span>
+                <button type="button" 
+                        class="crm-btn crm-btn-icon crm-btn-ghost crm-btn-sm"
+                        title="Повторить анализ"
+                        hx-post="/crm/partials/notes/{{ note.note_id or note.id }}/analyze"
+                        hx-target="#note-suggestions-content"
+                        hx-swap="innerHTML"
+                        hx-push-url="false"
+                        hx-on::before-request="document.getElementById('note-suggestions-content').innerHTML = '<div class=\'crm-analyzing-state\'><i class=\'ti ti-loader crm-spinner\'></i><span>Analyzing...</span></div>'">
+                    <i class="ti ti-rotate-clockwise"></i>
+                </button>
+            </div>
+            
+            <div id="note-suggestions-content">
+                <div class="crm-suggestions-hint-content">
+                    <span>Click refresh to analyze with AI</span>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <!-- Hint for new notes -->
+        <div class="crm-note-suggestions-section crm-note-suggestions-hint">
+            <div class="crm-suggestions-hint-content">
+                <i class="ti ti-brain"></i>
+                <p>After saving, AI will extract entities from your note</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</form>
+
+<style>
+.crm-note-form {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.crm-note-form-body {
+    display: flex;
+    gap: 0;
+    flex: 1;
+    min-height: 0;
+    background: var(--crm-bg, #f8fafc);
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--crm-border, #e5e7eb);
+}
+
+@media (max-width: 900px) {
+    .crm-note-form-body {
+        flex-direction: column;
+    }
+    
+    .crm-note-suggestions-section {
+        order: -1;
+    }
+}
+
+/* Editor Section */
+.crm-note-editor-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow-y: auto;
+    padding: 0;
+    background: var(--crm-surface, #ffffff);
+    border-right: 1px solid var(--crm-border, #e5e7eb);
+}
+
+/* Note Input Component inside form - remove borders for seamless look */
+.crm-note-editor-section > .crm-note-input {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.crm-note-editor-section > .crm-note-input .crm-note-input-body {
+    flex: 1;
+    min-height: 250px;
+}
+
+.crm-note-editor-section > .crm-note-input .crm-note-input-textarea {
+    min-height: 100%;
+    height: 100%;
+}
+
+/* Attachments - compact */
+.crm-note-editor-section .crm-attachments-section {
+    padding: 8px 20px;
+    border-top: 1px solid var(--crm-border-light, #f1f5f9);
+    flex-shrink: 0;
+}
+
+.crm-note-editor-section .crm-attachments-section .crm-attachments-list {
+    margin: 0;
+    gap: 8px;
+}
+
+.crm-note-editor-section > .crm-note-input:focus-within {
+    box-shadow: none;
+}
+
+/* Template select styling */
+.crm-template-select {
+    padding: 12px 16px 0;
+    border-bottom: 1px solid var(--crm-border-light);
+}
+
+/* Shared with padding */
+.crm-note-editor-section > .crm-form-group {
+    padding: 0 20px;
+    flex-shrink: 0;
+}
+
+.crm-note-editor-section > .crm-form-group.crm-attachments-section {
+    margin-bottom: 0;
+}
+
+.crm-note-editor-section > .crm-shared-with-container {
+    padding: 0 20px;
+}
+
+/* Footer styling */
+.crm-note-form-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-top: 1px solid var(--crm-border, #e5e7eb);
+    margin-top: auto;
+    flex-shrink: 0;
+    background: var(--crm-bg-secondary);
+}
+
+.crm-note-form-footer-left,
+.crm-note-form-footer-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.crm-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--crm-text-secondary, #6b7280);
+    cursor: pointer;
+}
+
+.crm-checkbox-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--crm-primary, #6366f1);
+}
+
+.crm-export-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+/* Button styles */
+.crm-btn-analyze {
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white;
+    border: none;
+}
+
+.crm-btn-analyze:hover {
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+}
+
+/* Suggestions Section */
+.crm-note-suggestions-section {
+    width: 340px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--crm-bg, #f8fafc);
+}
+
+.crm-suggestions-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+    border-bottom: 1px solid #c7d2fe;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: #6366f1;
+    flex-shrink: 0;
+}
+
+.crm-suggestions-header i:first-child {
+    font-size: 16px;
+}
+
+.crm-suggestions-header span {
+    flex: 1;
+}
+
+#note-suggestions-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+@media (max-width: 900px) {
+    .crm-note-suggestions-section {
+        width: 100%;
+        max-height: 300px;
+    }
+}
+
+/* Hint for new notes */
+.crm-note-suggestions-hint {
+    background: var(--crm-bg, #f9fafb);
+}
+
+.crm-suggestions-hint-content {
+    padding: 32px 20px;
+    text-align: center;
+    color: var(--crm-text-secondary, #6b7280);
+}
+
+.crm-suggestions-hint-content i {
+    font-size: 40px;
+    color: var(--crm-primary, #6366f1);
+    opacity: 0.3;
+    margin-bottom: 16px;
+    display: block;
+}
+
+.crm-suggestions-hint-content p {
+    margin: 0 0 16px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--crm-text, #374151);
+}
+
+/* States */
+.crm-analyzing-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 48px 24px;
+    color: var(--crm-primary, #6366f1);
+    font-size: 14px;
+}
+
+.crm-analyzing-state .crm-spinner {
+    font-size: 24px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Tags Input */
+.crm-tags-input {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 12px;
+    border: 1px solid var(--crm-border);
+    border-radius: 8px;
+    background: var(--crm-bg-primary);
+    min-height: 42px;
+    align-items: center;
+}
+
+.crm-tags-input input {
+    border: none;
+    background: transparent;
+    outline: none;
+    flex: 1;
+    min-width: 100px;
+    font-size: 13px;
+}
+
+.crm-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: var(--crm-primary-light);
+    color: var(--crm-primary);
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.crm-tag-remove {
+    cursor: pointer;
+    opacity: 0.7;
+    margin-left: 2px;
+}
+
+.crm-tag-remove:hover {
+    opacity: 1;
+}
+
+.crm-form-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--crm-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+</style>

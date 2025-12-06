@@ -89,9 +89,12 @@ class BaseRAGProvider(ABC):
         if public:
             public_url = f"{s3_client.endpoint_url}/{s3_client.bucket_name}/{s3_key}"
         
+        bucket_name = s3_client.bucket_name
+        await s3_client.close()
+        
         logger.info(f"Файл загружен в S3: {s3_key} (public={public})")
         
-        return s3_key, s3_client.bucket_name, path.name, public_url
+        return s3_key, bucket_name, path.name, public_url
     
     async def _download_file_from_s3(self, s3_key: str) -> tuple[bytes, str, str]:
         """
@@ -105,8 +108,10 @@ class BaseRAGProvider(ABC):
         
         file_data = await s3_client.download_bytes(s3_key)
         filename = Path(s3_key).name
+        bucket_name = s3_client.bucket_name
+        await s3_client.close()
         
-        return file_data, s3_client.bucket_name, filename
+        return file_data, bucket_name, filename
     
     async def _generate_signed_url(self, s3_key: str, expiration: int = 3600) -> str:
         """
@@ -124,6 +129,8 @@ class BaseRAGProvider(ABC):
             raise ValueError("S3 клиент не настроен")
         
         signed_url = await s3_client.generate_presigned_url(key=s3_key, expiration=expiration)
+        await s3_client.close()
+        
         if not signed_url:
             raise ValueError(f"Не удалось создать signed URL для файла: {s3_key}")
         
@@ -163,9 +170,12 @@ class BaseRAGProvider(ABC):
             content_type="text/plain",
         )
         
+        bucket_name = s3_client.bucket_name
+        await s3_client.close()
+        
         logger.info(f"Текст загружен в S3: {s3_key}")
         
-        return s3_key, s3_client.bucket_name
+        return s3_key, bucket_name
     
     async def generate_download_url(
         self,
@@ -196,7 +206,9 @@ class BaseRAGProvider(ABC):
         if not s3_client:
             return None
         
-        return await s3_client.generate_presigned_url(key=s3_key, expiration=expiration)
+        url = await s3_client.generate_presigned_url(key=s3_key, expiration=expiration)
+        await s3_client.close()
+        return url
     
     @property
     @abstractmethod

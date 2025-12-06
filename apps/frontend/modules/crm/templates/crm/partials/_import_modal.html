@@ -1,0 +1,230 @@
+<!-- Import Note Modal -->
+<div class="modal-overlay" onclick="if(event.target === this) CRM.closeModal()">
+    <div class="crm-modal">
+        <div class="crm-modal-header">
+            <h2 class="crm-modal-title">
+                <i class="ti ti-upload"></i>
+                {{ t('crm.notes.import') }}
+            </h2>
+            <button class="crm-modal-close" onclick="CRM.closeModal()">
+                <i class="ti ti-x"></i>
+            </button>
+        </div>
+        
+        <div class="crm-modal-body">
+            <p style="color: var(--crm-text-secondary); margin-bottom: 20px;">
+                {{ t('crm.notes.import_description') }}
+            </p>
+            
+            <!-- Supported formats -->
+            <div style="display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap;">
+                <div class="crm-import-format">
+                    <i class="ti ti-file-text" style="color: var(--crm-blue);"></i>
+                    <span>.txt</span>
+                </div>
+                <div class="crm-import-format">
+                    <i class="ti ti-file-type-docx" style="color: var(--crm-blue);"></i>
+                    <span>.docx</span>
+                </div>
+                <div class="crm-import-format">
+                    <i class="ti ti-file-type-pdf" style="color: var(--crm-danger);"></i>
+                    <span>.pdf</span>
+                </div>
+                <div class="crm-import-format">
+                    <i class="ti ti-markdown" style="color: var(--crm-text-primary);"></i>
+                    <span>.md</span>
+                </div>
+            </div>
+            
+            <!-- Dropzone -->
+            <div class="crm-dropzone crm-dropzone-lg" id="import-dropzone">
+                <div class="crm-dropzone-content">
+                    <i class="ti ti-cloud-upload" style="font-size: 48px; color: var(--crm-blue);"></i>
+                    <p style="font-size: 16px; font-weight: 500; margin-top: 12px;">
+                        {{ t('crm.notes.drop_to_import') }}
+                    </p>
+                    <span style="color: var(--crm-text-muted);">{{ t('crm.notes.or_click') }}</span>
+                </div>
+                <input type="file" 
+                       id="import-file-input"
+                       style="display: none;"
+                       accept=".txt,.docx,.pdf,.md">
+            </div>
+            
+            <!-- Upload progress -->
+            <div id="import-progress" style="display: none; margin-top: 16px;">
+                <div class="crm-progress-bar">
+                    <div class="crm-progress-fill" id="import-progress-fill" style="width: 0%;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-top: 8px;">
+                    <span id="import-status" style="font-size: 13px; color: var(--crm-text-secondary);">
+                        {{ t('crm.notes.uploading') }}...
+                    </span>
+                    <span id="import-percent" style="font-size: 13px; font-weight: 500;">0%</span>
+                </div>
+            </div>
+            
+            <!-- Result -->
+            <div id="import-result" style="display: none; margin-top: 16px;"></div>
+            
+            <!-- AI hint -->
+            <div class="crm-ai-suggestions" style="margin-top: 20px;">
+                <div class="crm-ai-header">
+                    <div class="crm-ai-icon">
+                        <i class="ti ti-sparkles"></i>
+                    </div>
+                    <div>
+                        <div class="crm-ai-title">{{ t('crm.notes.import_ai_hint') }}</div>
+                        <div class="crm-ai-description">{{ t('crm.notes.import_ai_description') }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="crm-modal-footer">
+            <button type="button" class="crm-btn crm-btn-secondary" onclick="CRM.closeModal()">
+                {{ t('crm.actions.cancel') }}
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    const dropzone = document.getElementById('import-dropzone');
+    const fileInput = document.getElementById('import-file-input');
+    const progress = document.getElementById('import-progress');
+    const progressFill = document.getElementById('import-progress-fill');
+    const progressPercent = document.getElementById('import-percent');
+    const importStatus = document.getElementById('import-status');
+    const importResult = document.getElementById('import-result');
+    
+    dropzone.addEventListener('click', () => fileInput.click());
+    
+    dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.classList.add('dragover');
+    });
+    
+    dropzone.addEventListener('dragleave', () => {
+        dropzone.classList.remove('dragover');
+    });
+    
+    dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) {
+            handleFile(e.dataTransfer.files[0]);
+        }
+    });
+    
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length) {
+            handleFile(e.target.files[0]);
+        }
+    });
+    
+    async function handleFile(file) {
+        const validTypes = ['.txt', '.docx', '.pdf', '.md'];
+        const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
+        
+        if (!validTypes.includes(ext)) {
+            showResult('error', '{{ t("crm.notes.import_invalid_format") }}');
+            return;
+        }
+        
+        progress.style.display = 'block';
+        importResult.style.display = 'none';
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        try {
+            const xhr = new XMLHttpRequest();
+            
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    const percent = Math.round((e.loaded / e.total) * 100);
+                    progressFill.style.width = percent + '%';
+                    progressPercent.textContent = percent + '%';
+                }
+            };
+            
+            xhr.onload = () => {
+                if (xhr.status === 200) {
+                    const result = JSON.parse(xhr.responseText);
+                    progressFill.style.width = '100%';
+                    progressPercent.textContent = '100%';
+                    importStatus.textContent = '{{ t("crm.notes.import_processing") }}';
+                    
+                    showResult('success', '{{ t("crm.notes.import_success") }}', result.note_id);
+                } else {
+                    showResult('error', '{{ t("crm.notes.import_failed") }}');
+                }
+            };
+            
+            xhr.onerror = () => {
+                showResult('error', '{{ t("crm.notes.import_failed") }}');
+            };
+            
+            xhr.open('POST', '/crm/api/notes/import');
+            xhr.send(formData);
+            
+        } catch (error) {
+            showResult('error', error.message);
+        }
+    }
+    
+    function showResult(type, message, noteId) {
+        importResult.style.display = 'block';
+        if (type === 'success') {
+            importResult.innerHTML = `
+                <div class="crm-alert crm-alert-success">
+                    <i class="ti ti-check"></i>
+                    <span>${message}</span>
+                </div>
+                ${noteId ? `
+                <button class="crm-btn crm-btn-primary" style="margin-top: 12px;"
+                        hx-get="/crm/partials/note-modal?note_id=${noteId}"
+                        hx-target="#modal-container"
+                        hx-swap="innerHTML">
+                    <i class="ti ti-external-link"></i>
+                    {{ t('crm.notes.open_imported') }}
+                </button>
+                ` : ''}
+            `;
+            htmx.process(importResult);
+        } else {
+            importResult.innerHTML = `
+                <div class="crm-alert crm-alert-error">
+                    <i class="ti ti-alert-circle"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+        }
+    }
+})();
+</script>
+
+<style>
+.crm-import-format {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: var(--crm-bg-secondary);
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.crm-dropzone-lg {
+    padding: 48px;
+}
+
+.crm-dropzone.dragover {
+    border-color: var(--crm-blue);
+    background: var(--crm-bg-blue-subtle);
+}
+</style>
+

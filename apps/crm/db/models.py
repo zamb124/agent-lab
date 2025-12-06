@@ -33,6 +33,17 @@ class EntityType(Base):
     - task: задачи
     
     Кастомные типы создаются пользователями (company_id != NULL).
+    
+    required_fields и optional_fields содержат Dict[str, FieldDefinition]:
+    {
+        "email": {
+            "label": "Email",
+            "type": "email",
+            "category": "main",
+            "prompt": "Извлекай email адреса",
+            "icon": "ti-mail"
+        }
+    }
     """
     
     __tablename__ = "entity_types"
@@ -42,11 +53,13 @@ class EntityType(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    required_attributes: Mapped[List[str]] = mapped_column(ARRAY(String), default=list)
-    optional_attributes: Mapped[List[str]] = mapped_column(ARRAY(String), default=list)
+    required_fields: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
+    optional_fields: Mapped[Dict[str, Any]] = mapped_column(JSONB, default=dict)
     icon: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     is_system: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_event: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    weight_coefficient: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
     check_duplicates: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_filtered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

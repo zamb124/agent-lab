@@ -1,5 +1,5 @@
 <!-- Request Access Modal -->
-<div class="crm-modal-overlay" onclick="if(event.target === this) CRM.closeModal()">
+<div class="modal-overlay" onclick="if(event.target === this) CRM.closeModal()">
     <div class="crm-modal crm-modal-sm">
         <div class="crm-modal-header">
             <div class="crm-modal-title-group">
@@ -12,7 +12,8 @@
         
         <form hx-post="/crm/api/access-requests"
               hx-target="#modal-container"
-              hx-swap="innerHTML">
+              hx-swap="innerHTML"
+              hx-ext="json-enc">
             <input type="hidden" name="resource_type" value="{{ resource_type }}">
             <input type="hidden" name="resource_id" value="{{ resource_id }}">
             

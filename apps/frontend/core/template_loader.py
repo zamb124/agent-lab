@@ -117,14 +117,23 @@ class TemplateLoader:
             
             return []
         
-        def t(key: str, **kwargs) -> str:
-            """Функция перевода для шаблонов"""
+        def t(key: str, default: str = None, **kwargs) -> str:
+            """Функция перевода для шаблонов
+            
+            Args:
+                key: Ключ перевода (например 'crm.notes.title')
+                default: Значение по умолчанию если перевод не найден
+                **kwargs: Параметры для подстановки в строку
+            """
             try:
                 manager = get_translation_manager()
-                return manager.t(key, **kwargs)
+                result = manager.t(key, **kwargs)
+                # Если перевод вернул сам ключ и есть default - используем default
+                if result == key and default:
+                    return default
+                return result
             except Exception:
-                # Если что-то пошло не так, возвращаем ключ
-                return key
+                return default if default else key
         
         def t_field(field_info: dict, attr: str = "title") -> str:
             """Перевод атрибутов поля с поддержкой i18n ключей"""

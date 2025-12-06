@@ -1,0 +1,49 @@
+<!-- Pending Access Requests Widget -->
+{% if requests and requests | length > 0 %}
+<div class="crm-access-requests-list" style="padding: 0;">
+    {% for req in requests %}
+    <div class="crm-access-request-item"
+         style="padding: 12px 16px; border-bottom: 1px solid var(--crm-border-light);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;">
+            <div style="flex: 1;">
+                <div style="font-size: 14px; font-weight: 500; color: var(--crm-text-primary); margin-bottom: 4px;">
+                    {{ req.requester_id }}
+                </div>
+                <div style="font-size: 12px; color: var(--crm-text-muted);">
+                    {{ t('crm.access.requests_access_to') }} {{ req.resource_type }}
+                </div>
+                {% if req.message %}
+                <div style="font-size: 12px; color: var(--crm-text-secondary); margin-top: 4px; font-style: italic;">
+                    "{{ req.message | truncate(50) }}"
+                </div>
+                {% endif %}
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button class="crm-btn crm-btn-sm crm-btn-success"
+                        hx-post="/crm/api/access-requests/{{ req.request_id }}/approve"
+                        hx-swap="outerHTML"
+                        hx-target="closest .crm-access-request-item"
+                        hx-push-url="false">
+                    <i class="ti ti-check"></i>
+                </button>
+                <button class="crm-btn crm-btn-sm crm-btn-danger"
+                        hx-post="/crm/api/access-requests/{{ req.request_id }}/reject"
+                        hx-swap="outerHTML"
+                        hx-target="closest .crm-access-request-item"
+                        hx-push-url="false">
+                    <i class="ti ti-x"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="crm-empty-state" style="padding: 24px;">
+    <i class="ti ti-check" style="font-size: 24px; color: var(--crm-green);"></i>
+    <p style="font-size: 14px; color: var(--crm-text-muted); margin-top: 8px;">
+        {{ t('crm.access.no_pending') }}
+    </p>
+</div>
+{% endif %}
+

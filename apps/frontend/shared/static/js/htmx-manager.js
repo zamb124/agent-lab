@@ -13,14 +13,17 @@ export default class HTMXManager {
     setupHTMXEvents() {
         console.log('🔧 Настройка HTMX событий...');
         
-        // Обработка модальных окон после загрузки
-        document.addEventListener('htmx:afterSwap', (e) => {
-            console.log('📥 HTMX afterSwap:', e.detail.target);
-            
+        // Обработка модальных окон после загрузки (используем afterSettle чтобы контент был в DOM)
+        document.addEventListener('htmx:afterSettle', (e) => {
             // Если это модальное окно - показываем его
             if (e.detail.target.id === 'modal-container') {
-                this.showModal();
+                // Небольшая задержка чтобы DOM точно обновился
+                requestAnimationFrame(() => this.showModal());
             }
+        });
+        
+        document.addEventListener('htmx:afterSwap', (e) => {
+            console.log('📥 HTMX afterSwap:', e.detail.target);
             
             // Инициализируем Ace Editor после любого HTMX swap
             this.initAceEditors(e.detail.target);
@@ -104,6 +107,18 @@ export default class HTMXManager {
                 break;
             case 'RAG_DOCUMENT_ERROR':
                 this.handleRAGDocumentError(data);
+                break;
+            case 'CRM_ATTACHMENT_INDEXED':
+                this.handleCRMAttachmentIndexed(data);
+                break;
+            case 'CRM_ATTACHMENT_ERROR':
+                this.handleCRMAttachmentError(data);
+                break;
+            case 'CRM_ATTACHMENT_DELETED':
+                this.handleCRMAttachmentDeleted(data);
+                break;
+            case 'CRM_NOTE_IMPORTED':
+                this.handleCRMNoteImported(data);
                 break;
             default:
                 console.warn('⚠️ Неизвестный тип WebSocket сообщения:', type);
@@ -197,6 +212,69 @@ export default class HTMXManager {
         showNotification(`Ошибка обработки "${document_name}": ${error}`, 'danger');
     }
     
+    handleCRMAttachmentIndexed(data) {
+        console.log('✅ CRM attachment проиндексирован:', data);
+        
+        const { document_name, note_id } = data;
+        
+        showNotification(`Файл "${document_name}" проиндексирован`, 'success');
+        
+        // Обновляем UI если открыта модалка с этой заметкой
+        const noteModal = document.querySelector(`[data-note-id="${note_id}"]`);
+        if (noteModal) {
+            const statusEl = noteModal.querySelector('.attachment-status');
+            if (statusEl) {
+                statusEl.textContent = 'Готово';
+                statusEl.classList.remove('indexing');
+                statusEl.classList.add('ready');
+            }
+        }
+    }
+    
+    handleCRMAttachmentError(data) {
+        console.log('❌ CRM attachment ошибка:', data);
+        
+        const { document_name, error } = data;
+        
+        showNotification(`Ошибка индексации "${document_name}": ${error}`, 'danger');
+    }
+    
+    handleCRMAttachmentDeleted(data) {
+        console.log('🗑️ CRM attachment удален:', data);
+        
+        const { file_id } = data;
+        
+        // Удаляем элемент из UI если он еще есть
+        const attachmentEl = document.querySelector(`[data-file-id="${file_id}"]`);
+        if (attachmentEl) {
+            attachmentEl.remove();
+        }
+    }
+    
+    handleCRMNoteImported(data) {
+        console.log('📄 CRM заметка импортирована:', data);
+        
+        const { note_id, title, filename } = data;
+        
+        showNotification(`Заметка "${title}" импортирована из ${filename}`, 'success');
+        
+        // Обновляем список заметок если открыт
+        const notesList = document.getElementById('crm-content');
+        if (notesList) {
+            htmx.trigger(notesList, 'refresh');
+        }
+        
+        // Обновляем карточку заметки если она есть
+        const noteCard = document.querySelector(`[data-note-id="${note_id}"]`);
+        if (noteCard) {
+            const statusEl = noteCard.querySelector('.note-status');
+            if (statusEl) {
+                statusEl.textContent = 'Готово';
+                statusEl.classList.remove('importing');
+            }
+        }
+    }
+    
     showModal() {
         console.log('🔍 Показываем модальное окно...');
         
@@ -210,38 +288,13 @@ export default class HTMXManager {
         if (modalOverlay) {
             console.log('✅ Модальное окно найдено, показываем...');
             
-            // Принудительно устанавливаем стили
-            modalOverlay.style.cssText = `
-                position: fixed !important;
-                top: 0 !important;
-                left: 0 !important;
-                right: 0 !important;
-                bottom: 0 !important;
-                z-index: 99999 !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                background: rgba(0,0,0,0.8) !important;
-                margin: 0 !important;
-                padding: 20px !important;
-                width: 100vw !important;
-                height: 100vh !important;
-                opacity: 1 !important;
-                visibility: visible !important;
-                pointer-events: auto !important;
-            `;
-            
             // Блокируем скролл body
             document.body.style.overflow = 'hidden';
             
-            // Принудительно перемещаем модалку в body (на случай если она где-то глубоко)
-            document.body.appendChild(modalOverlay);
-            
             console.log('✅ Модальное окно показано');
-            console.log('Позиция модалки:', modalOverlay.getBoundingClientRect());
         } else {
             console.error('❌ modal-overlay не найден в modal-container');
-            console.log('modalContainer содержимое:', modalContainer.innerHTML);
+            console.log('modalContainer содержимое:', modalContainer.innerHTML.substring(0, 200));
         }
     }
     

@@ -100,8 +100,10 @@ class EntityService:
             "type": data.type,
             "name": data.name,
             "description": data.description or "",
+            "ai_description": data.ai_description or "",
             "status": status,
             "source_note_id": data.source_note_id or "",
+            "relevance": data.relevance,
             **{f"attr_{k}": str(v) for k, v in data.attributes.items()}
         }
         
@@ -120,9 +122,11 @@ class EntityService:
             type=data.type,
             name=data.name,
             description=data.description,
+            ai_description=data.ai_description,
             attributes=data.attributes,
             status=status,
             source_note_id=data.source_note_id,
+            relevance=data.relevance,
         )
     
     def _build_embedding_text(self, data: EntityCreate) -> str:
@@ -158,15 +162,20 @@ class EntityService:
             if key.startswith("attr_"):
                 attributes[key[5:]] = value
         
+        relevance_raw = metadata.get("relevance", 0.5)
+        relevance = float(relevance_raw) if relevance_raw is not None else 0.5
+        
         return EntityResponse(
             entity_id=metadata.get("entity_id", doc.document_id),
             company_id=metadata.get("company_id", ""),
             type=metadata.get("type", ""),
             name=metadata.get("name", ""),
             description=metadata.get("description"),
+            ai_description=metadata.get("ai_description") or None,
             attributes=attributes,
             status=metadata.get("status", "pending"),
             source_note_id=metadata.get("source_note_id") or None,
+            relevance=relevance,
         )
     
     async def update_entity(
@@ -185,12 +194,14 @@ class EntityService:
         
         new_name = data.name if data.name is not None else existing.name
         new_description = data.description if data.description is not None else existing.description
+        new_ai_description = data.ai_description if data.ai_description is not None else existing.ai_description
         new_attributes = data.attributes if data.attributes is not None else existing.attributes
         
         updated_data = EntityCreate(
             type=existing.type,
             name=new_name,
             description=new_description,
+            ai_description=new_ai_description,
             attributes=new_attributes,
         )
         
