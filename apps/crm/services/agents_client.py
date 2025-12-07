@@ -94,7 +94,7 @@ class AgentsClient:
                 response.raise_for_status()
                 result = response.json()
         except Exception as e:
-            logger.warning(f"Agents service unavailable for flow {flow_id}: {e}")
+            logger.warning(f"Agents service unavailable for flow {flow_id}: {type(e).__name__}: {e}", exc_info=True)
             raise AgentsUnavailableError(f"AI сервис недоступен: {e}")
         
         if result.get("status") != "completed":
