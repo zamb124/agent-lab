@@ -89,6 +89,7 @@ class AgentsClient:
         }
         
         try:
+            logger.info(f"Calling agents: URL={url}, timeout={timeout + 10}")
             async with get_httpx_client(timeout=timeout + 10, use_proxy_from_config=False) as client:
                 response = await client.post(url, json=payload, headers=headers)
                 response.raise_for_status()
