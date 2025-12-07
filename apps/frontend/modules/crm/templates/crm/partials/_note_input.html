@@ -162,10 +162,10 @@ Variables:
         <div class="crm-note-input-editor">
             <div class="crm-textarea-wrapper">
                 <div id="{{ form_id }}-highlights" class="crm-textarea-highlights"></div>
-                <textarea name="content" 
+                <textarea name="content"
                           form="{{ form_id }}"
                           id="{{ form_id }}-content"
-                          class="crm-note-input-textarea" 
+                          class="crm-note-input-textarea"
                           placeholder="{{ t('crm.notes.placeholder') }}"
                           oninput="CRM.handleMentions(this); CRM.highlightMentions(this);"
                           onscroll="CRM.syncHighlightsScroll(this)">{{ note.content if note else '' }}</textarea>

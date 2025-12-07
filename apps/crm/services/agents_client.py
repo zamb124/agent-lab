@@ -40,6 +40,7 @@ class AgentsClient:
         headers = {"Content-Type": "application/json"}
         
         context = get_context()
+        logger.info(f"AgentsClient context: {context is not None}, auth_token: {bool(context.auth_token) if context else False}")
         if context:
             if context.trace_id:
                 headers["X-Trace-Id"] = context.trace_id
@@ -50,6 +51,7 @@ class AgentsClient:
             if context.auth_token:
                 headers["Authorization"] = f"Bearer {context.auth_token}"
         
+        logger.info(f"AgentsClient headers: {list(headers.keys())}")
         return headers
     
     async def _call_flow(
