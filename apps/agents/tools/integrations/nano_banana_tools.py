@@ -7,7 +7,8 @@ from typing import Optional
 from apps.agents.services.tool_decorator import tool
 
 from core.files.processors import get_default_file_processor
-from core.clients.nano_banana import get_default_nano_banana_client
+from core.clients.nano_banana import NanoBananaClientFactory
+from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,8 @@ async def generate_images(
         Список сгенерированных изображений в формате [FILE]...[/FILE]
     """
     try:
-        client = await get_default_nano_banana_client()
+        container = get_agents_container()
+        client = NanoBananaClientFactory.create_client(container.storage)
         if not client:
             return "❌ Nano Banana не настроен"
             

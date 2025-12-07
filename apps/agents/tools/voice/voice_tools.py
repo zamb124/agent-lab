@@ -9,7 +9,8 @@ from pathlib import Path
 from apps.agents.services.tool_decorator import tool
 
 from core.files.processors import get_default_audio_processor
-from core.clients.cloud_voice import get_default_cloud_voice_client
+from core.clients.cloud_voice import CloudVoiceClientFactory
+from apps.agents.container import get_agents_container
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,8 @@ async def recognize_speech_from_file(
         Распознанный текст
     """
     try:
-        client = await get_default_cloud_voice_client()
+        container = get_agents_container()
+        client = CloudVoiceClientFactory.create_client(container.storage)
         if not client:
             return "❌ Cloud Voice не настроен"
             
@@ -69,7 +71,8 @@ async def recognize_speech_from_bytes(
         # Конвертируем hex в bytes
         audio_data = bytes.fromhex(audio_data_hex)
         
-        client = await get_default_cloud_voice_client()
+        container = get_agents_container()
+        client = CloudVoiceClientFactory.create_client(container.storage)
         if not client:
             return "❌ Cloud Voice не настроен"
             
@@ -109,7 +112,8 @@ async def synthesize_speech(
         Форматированное сообщение с информацией об аудио и ссылкой для скачивания
     """
     try:
-        client = await get_default_cloud_voice_client()
+        container = get_agents_container()
+        client = CloudVoiceClientFactory.create_client(container.storage)
         if not client:
             return "❌ Cloud Voice не настроен"
             
@@ -184,7 +188,8 @@ async def synthesize_speech_to_file(
         Результат операции
     """
     try:
-        client = await get_default_cloud_voice_client()
+        container = get_agents_container()
+        client = CloudVoiceClientFactory.create_client(container.storage)
         if not client:
             return "❌ Cloud Voice не настроен"
             
@@ -216,7 +221,8 @@ async def create_speech_recognition_stream() -> str:
         task_id и task_token для потокового распознавания
     """
     try:
-        client = await get_default_cloud_voice_client()
+        container = get_agents_container()
+        client = CloudVoiceClientFactory.create_client(container.storage)
         if not client:
             return "❌ Cloud Voice не настроен"
             

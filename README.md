@@ -49,6 +49,9 @@ uv sync
 
 # Запуск локально
 uv run python run.py
+
+# Запуск воркера локально
+uv run taskiq worker apps.worker:broker
 ```
 
 Подробнее о командах: [docs/makefile.md](docs/makefile.md)
@@ -113,135 +116,25 @@ uv run python run.py
 │   ├── integration/    # Интеграционные тесты
 │   └── conftest.py     # Фикстуры pytest
 │
-└── app/                # Основной Python пакет
-    ├── __init__.py
-    ├── main.py            # FastAPI точка входа
-    ├── exceptions.py      # Кастомные исключения
-    ├── fields.py          # Расширения полей Pydantic
+    ├── core/                 # Ядро системы (Framework-agnostic)
+    │   ├── clients/           # Клиенты внешних сервисов (S3, CloudVoice)
+    │   ├── config/            # Модуль конфигурации
+    │   ├── container/         # DI контейнеры
+    │   ├── db/                # Работа с БД
+    │   ├── files/             # Обработка файлов
+    │   ├── tasks/             # Базовые задачи (broker, scheduler)
+    │   └── ...
     │
-    ├── api/               # HTTP API Layer
-    │   ├── __init__.py
-    │   └── v1/
-    │       ├── admin.py   # REST API агентов/флоу
-    │       ├── auth.py    # API авторизации
-    │       ├── fashn.py   # API виртуальной примерки
-    │       ├── files.py   # API файлов
-    │       ├── flows.py   # API выполнения флоу
-    │       ├── leads.py   # API лидов AmoCRM
-    │       ├── telegram.py # Telegram webhooks
-    │       ├── tokens.py  # Токены ботов
-    │       └── webhooks.py # Универсальные webhooks
-    │
-    ├── agents/            # Агенты
-    │   ├── base.py        # BaseAgent
-    │   ├── calculator/
-    │   │   └── agent.py   # CalculatorAgent
-    │   ├── explainer/
-    │   │   └── agent.py   # ExplainerAgent
-    │   └── weather/
-    │       └── agent.py   # WeatherAgent
-    │
-    ├── clients/           # Клиенты внешних API
-    │   ├── fashn_client.py
-    │   └── amo_crm_integration/
-    │       ├── client.py
-    │       └── chat_client.py
-    │
-    ├── core/              # Ядро системы
-    │   ├── agent_factory.py  # Фабрика агентов
-    │   ├── audio_processor.py # Обработка аудио
-    │   ├── checkpointer.py   # LangGraph checkpointer
-    │   ├── config.py         # Конфигурация
-    │   ├── config_utils.py   # Утилиты конфигурации
-    │   ├── container.py      # DI контейнер
-    │   ├── context.py        # Глобальный контекст
-    │   ├── file_processor.py # Обработка файлов
-    │   ├── flow_factory.py   # Фабрика flows
-    │   ├── graph_builder.py  # Построитель графов
-    │   ├── llm_billing_wrapper.py # LLM с биллингом
-    │   ├── llm_factory.py    # Фабрика LLM
-    │   ├── migrator.py       # Миграция код→БД
-    │   ├── storage.py        # Key-Value Storage
-    │   ├── tool_decorator.py # Декоратор @tool
-    │   ├── tool_factory.py   # Фабрика tools
-    │   └── core_clients/
-    │       ├── s3_client.py
-    │       ├── cloud_voice_client.py
-    │       └── nano_banana_client.py
-    │
-    ├── custom_flows/      # Кастомные flows
-    │   └── fashn_buyer/
-    │       ├── agent.py
-    │       ├── flow.py
-    │       ├── tools.py
-    │       └── models.py
-    │
-    ├── db/                # База данных
-    │   ├── database.py    # SQLAlchemy настройка
-    │   └── models.py      # SQLAlchemy модели
-    │
-    ├── flows/             # Flow Templates
-    │   ├── flow.py        # Flow обертка
-    │   ├── smart_flow.py  # SmartFlowAgent
-    │   ├── test_flow.py
-    │   └── weather_flow.py
-    │
-    ├── frontend/          # Веб-интерфейс
-    │   ├── api/          # Frontend API
-    │   ├── core/         # Template loader, WebSocket manager
-    │   ├── modules/      # Модули (builder, chat, billing, admin)
-    │   ├── pages/        # Страницы
-    │   ├── websockets/   # WebSocket endpoints
-    │   ├── shared/       # Статика и шаблоны
-    │   ├── environment.py
-    │   ├── field_extensions.py
-    │   ├── model_registry.py
-    │   └── wrappers.py
-    │
-    ├── identity/          # Авторизация
-    │   ├── auth_service.py
-    │   ├── base_provider.py
-    │   ├── models.py
-    │   └── providers/
-    │       └── yandex.py
-    │
-    ├── interfaces/        # Platform Adapters
-    │   ├── base.py
-    │   ├── factory.py
-    │   ├── api_interface.py
-    │   ├── telegram_interface.py
-    │   └── web_interface.py
-    │
-    ├── llms/             # Кастомные LLM
-    │   └── gemini_chat.py
-    │
-    ├── middleware/        # FastAPI Middleware
-    │   └── auth.py
-    │
-    ├── models/            # Pydantic модели
-    │   ├── billing_models.py
-    │   ├── context_models.py
-    │   ├── core_models.py
-    │   └── fashn_models.py
-    │
-    ├── services/          # Сервисы
-    │   ├── billing_service.py
-    │   ├── cleanup_service.py
-    │   └── telegram_poller.py
-    │
-    ├── tools/             # Инструменты
-    │   ├── standard.py
-    │   ├── calc_tools.py
-    │   ├── weather_tools.py
-    │   ├── fashn_tools.py
-    │   ├── file_tools.py
-    │   ├── voice_tools.py
-    │   ├── amocrm_tools.py
-    │   └── nano_banana_tools.py
-    │
-    └── workers/           # Background Workers
-        └── task_processor.py
-```
+    ├── apps/                 # Приложение (Бизнес-логика)
+    │   ├── agents/            # Сервис агентов
+    │   │   ├── api/           # API Endpoints
+    │   │   ├── agents/        # Реализации агентов
+    │   │   ├── services/      # Сервисы (Factory, Builder)
+    │   │   └── container.py   # DI контейнер приложения
+    │   │
+    │   ├── frontend/          # Веб-интерфейс
+    │   └── worker.py          # Точка входа Worker (регистрирует все задачи)
+
 
 
 ## Ключевые компоненты
@@ -288,127 +181,28 @@ uv run python run.py
 
 Подробнее: [docs/clients.md](docs/clients.md)
 
-### Core System (app/core/)
+### Core System (core/)
+Базовые компоненты, не зависящие от бизнес-логики:
+- **clients/** - Клиенты внешних сервисов (S3, CloudVoice, etc).
+- **tasks/** - Брокер и планировщик задач (TaskIQ).
+- **db/** - Базовые классы для работы с БД.
 
-**storage.py** - Key-Value Storage на PostgreSQL с префиксами ключей.
+### Apps (apps/)
+Бизнес-логика приложения:
+- **apps/agents/** - Управление агентами, флоу и инструментами.
+- **apps/frontend/** - Веб-интерфейс.
+- **apps/worker.py** - Точка входа для фоновых задач.
 
-**migrator.py** - Автоматическая миграция код→БД.
+### API Layer (apps/agents/api/v1/)
+REST API endpoints для управления системой.
 
-**agent_factory.py** - Фабрика создания агентов из БД.
+### Services (apps/agents/services/)
+Бизнес-логика:
+- **agent_factory.py** - Создание агентов.
+- **flow_factory.py** - Создание флоу.
+- **graph_builder.py** - Построение графов LangGraph.
+- **migrator.py** - Миграция конфигурации.
 
-**flow_factory.py** - Фабрика Flow экземпляров.
-
-**graph_builder.py** - Построитель StateGraph графов из JSON-описания.
-
-**tool_factory.py** - Создание tools из ToolReference.
-
-**llm_factory.py** - Создание LLM (OpenAI, Gemini, Yandex).
-
-**llm_billing_wrapper.py** - Обертка LLM с автоматическим биллингом.
-
-**tool_decorator.py** - Декоратор @tool с биллинг метаданными.
-
-**context.py** - Глобальный контекст (user, company, session).
-
-**container.py** - DI контейнер для фабрик.
-
-Подробнее: [docs/architecture.md](docs/architecture.md)
-
-### Agents (app/agents/)
-
-**base.py** - BaseAgent. Поддерживает ReAct и StateGraph. Загружает tools из БД. Метод as_tool() для вложенности.
-
-**calculator/agent.py** - Агент для математики.
-
-**explainer/agent.py** - Агент для резюме результатов.
-
-**weather/agent.py** - Агент для погоды и путешествий.
-
-### Flows (app/flows/)
-
-**flow.py** - Flow обертка над entry_point_agent.
-
-**smart_flow.py** - StateGraph с роутингом между агентами.
-
-### Models (app/models/)
-
-**core_models.py** - AgentConfig, FlowConfig, TaskConfig, SessionConfig, ToolReference, GraphDefinition.
-
-**context_models.py** - Context модель (без циклических зависимостей).
-
-**billing_models.py** - TariffPlan, UsageRecord, TARIFF_PRICES.
-
-**fashn_models.py** - Модели для FASHN интеграции.
-
-### Identity (app/identity/)
-
-**auth_service.py** - Сервис авторизации и управление сессиями.
-
-**models.py** - User, Company, AuthSession, AuthProvider.
-
-**providers/yandex.py** - Yandex OAuth провайдер.
-
-### Tools (app/tools/)
-
-**standard.py** - ask_user() для запроса данных через GraphInterrupt.
-
-**calc_tools.py** - calculate(), get_math_help().
-
-**weather_tools.py** - suggest_travel(), get_weather().
-
-**fashn_tools.py** - virtual_try_on(), upload_image_for_try_on().
-
-**file_tools.py** - Работа с файлами и S3.
-
-**voice_tools.py** - Обработка голоса.
-
-**amocrm_tools.py** - Инструменты для AmoCRM.
-
-### Interfaces (app/interfaces/)
-
-**base.py** - BaseInterface с унифицированным Message.
-
-**factory.py** - InterfaceFactory для создания адаптеров платформ.
-
-**telegram_interface.py** - Адаптер Telegram (webhook/polling).
-
-**whatsapp_interface.py** - Адаптер WhatsApp Business Cloud API.
-
-**api_interface.py** - Адаптер REST API.
-
-**web_interface.py** - Адаптер веб-интерфейса.
-
-### Workers (app/workers/)
-
-**task_processor.py** - Воркер задач. Обрабатывает задачи из БД, поддерживает GraphInterrupt.
-
-### Services (app/services/)
-
-**billing_service.py** - Биллинг и учет стоимости. Подробнее: [docs/billing.md](docs/billing.md)
-
-**telegram_poller.py** - Long polling для локальной разработки.
-
-**cleanup_service.py** - Очистка истекших данных.
-
-### Database (app/db/)
-
-**database.py** - Асинхронный SQLAlchemy движок и сессии.
-
-**models.py** - SQLAlchemy модели (Storage table).
-
-### Frontend (app/frontend/)
-
-Веб-интерфейс с Builder, Chat, Billing, Admin модулями.
-
-Подробнее: [docs/frontend.md](docs/frontend.md)
-
-### Main Application
-
-**main.py** - FastAPI приложение с lifecycle (инициализация БД, миграции, воркер).
-
-**run.py** - Запуск uvicorn сервера.
-
-**run_worker.py** - Запуск воркера задач.
 
 ## Принципы архитектуры:
 

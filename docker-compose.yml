@@ -129,7 +129,7 @@ services:
         condition: service_healthy
         required: false
     restart: unless-stopped
-    command: taskiq worker core.tasks.worker:broker --workers 4
+    command: taskiq worker apps.worker:broker --workers 4
 
   # TaskIQ Scheduler (для отложенных задач)
   # ВАЖНО: Запускать только один экземпляр scheduler
@@ -150,7 +150,7 @@ services:
         condition: service_healthy
         required: false
     restart: unless-stopped
-    command: taskiq scheduler core.tasks.worker:scheduler
+    command: taskiq scheduler apps.worker:scheduler
 
   # Генератор API документации
   # Запуск: docker-compose run --rm docs-generator

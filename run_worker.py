@@ -13,6 +13,6 @@ if __name__ == "__main__":
     # Запуск taskiq worker
     os.execvp(
         "taskiq",
-        ["taskiq", "worker", "core.tasks.worker:broker", "--workers", "1"]
+        ["taskiq", "worker", "apps.worker:broker", "--workers", "4"]
     )
 

@@ -224,15 +224,5 @@ class CloudVoiceClientFactory:
         )
 
 
-def get_default_cloud_voice_client() -> CloudVoiceClient:
-    """
-    Создает клиент CloudVoice с дефолтным storage из контейнера.
-    
-    Returns:
-        CloudVoiceClient: Настроенный клиент для работы с голосом
-    """
-    from apps.agents.container import get_agents_container
-    
-    container = get_agents_container()
-    return CloudVoiceClientFactory.create_client(container.storage)
+
 
