@@ -29,11 +29,15 @@ class CompanyResolver:
         """
         Определяет компанию для запроса.
         
-        Приоритет:
-        1. X-Company-Id header (с проверкой доступа пользователя)
-        2. Токен (для API запросов)
-        3. Субдомен (для frontend)
-        4. Системная компания (для anonymous)
+        Приоритет для FRONTEND (ggg.humanitec.ru):
+        1. Субдомен (пользователь явно зашел на этот домен)
+        2. X-Company-Id header
+        3. Токен
+        
+        Приоритет для API (service-to-service):
+        1. X-Company-Id header (сервис указывает компанию)
+        2. Токен
+        3. Субдомен
         
         X-Company-Id позволяет переключить активную компанию:
         - В local env - без проверок (для разработки)
@@ -43,7 +47,19 @@ class CompanyResolver:
         subdomain_repo = self.container.subdomain_repository
         host = request.headers.get("host", "")
         
-        # 1. X-Company-Id header - переключение активной компании
+        # Для FRONTEND - субдомен имеет приоритет
+        if context_type == "frontend":
+            subdomain = self._extract_subdomain(host)
+            if subdomain:
+                company_id = await subdomain_repo.get_company_id(subdomain)
+                if company_id:
+                    company = await company_repo.get(company_id)
+                    if company:
+                        logger.debug(f"Компания из субдомена {subdomain}: {company_id}")
+                        return company
+                raise HTTPException(status_code=404, detail=f"Company not found for subdomain: {subdomain}")
+        
+        # X-Company-Id header - переключение активной компании
         override_company_id = request.headers.get("X-Company-Id")
         if override_company_id:
             # В local env разрешаем без проверок
@@ -76,7 +92,7 @@ class CompanyResolver:
                     return company
                 logger.warning(f"Компания {override_company_id} из X-Company-Id не найдена")
         
-        # 2. Токен ч- fallback если X-Company-Id не указан
+        # Токен - fallback если X-Company-Id не указан
         if token_data and token_data.company_id:
             company = await company_repo.get(token_data.company_id)
             if company:
@@ -84,7 +100,7 @@ class CompanyResolver:
                 return company
             raise HTTPException(status_code=403, detail=f"Company {token_data.company_id} not found")
         
-        # 3. Субдомен
+        # Субдомен для НЕ-frontend контекста
         subdomain = self._extract_subdomain(host)
         if subdomain:
             company_id = await subdomain_repo.get_company_id(subdomain)
@@ -95,7 +111,7 @@ class CompanyResolver:
                     return company
             raise HTTPException(status_code=404, detail=f"Company not found for subdomain: {subdomain}")
         
-        # 4. Системная компания (для anonymous)
+        # Системная компания (для anonymous)
         if context_type == "anonymous":
             return await self._get_system_company()
         

@@ -114,11 +114,11 @@ class TestCompanyResolverTokenOnly:
     """Тесты: только токен без X-Company-Id"""
     
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("context_type", ["api", "frontend", "webhook"])
-    async def test_request_with_token_returns_company_from_token(
+    @pytest.mark.parametrize("context_type", ["api", "webhook"])
+    async def test_api_request_with_token_returns_company_from_token(
         self, mock_container, company_zzz, token_data_zzz, context_type
     ):
-        """Запрос с токеном -> компания из токена (для любого context_type)"""
+        """API запрос с токеном -> компания из токена"""
         mock_container.company_repository.get.return_value = company_zzz
         
         resolver = CompanyResolver(mock_container)
@@ -137,11 +137,10 @@ class TestCompanyResolverTokenOnly:
         mock_container.company_repository.get.assert_called_once_with("zzz")
     
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("context_type", ["api", "frontend"])
-    async def test_token_company_not_found_raises_403(
-        self, mock_container, token_data_zzz, context_type
+    async def test_api_token_company_not_found_raises_403(
+        self, mock_container, token_data_zzz
     ):
-        """Токен с несуществующей компанией -> 403 (для любого context_type)"""
+        """API токен с несуществующей компанией -> 403"""
         mock_container.company_repository.get.return_value = None
         
         resolver = CompanyResolver(mock_container)
@@ -154,21 +153,21 @@ class TestCompanyResolverTokenOnly:
                 await resolver.resolve(
                     request=request,
                     token_data=token_data_zzz,
-                    context_type=context_type,
+                    context_type="api",
                 )
         
         assert exc_info.value.status_code == 403
 
 
 class TestCompanyResolverWithOverride:
-    """Тесты: токен + X-Company-Id (переключение компании)"""
+    """Тесты: API + X-Company-Id (переключение компании)"""
     
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("context_type", ["api", "frontend", "webhook"])
-    async def test_override_to_allowed_company_succeeds(
+    @pytest.mark.parametrize("context_type", ["api", "webhook"])
+    async def test_api_override_to_allowed_company_succeeds(
         self, mock_container, company_ggg, user_with_both_companies, token_data_zzz, context_type
     ):
-        """Переключение на компанию с доступом -> успех (для любого context_type)"""
+        """API: переключение на компанию с доступом -> успех"""
         mock_container.user_repository.get.return_value = user_with_both_companies
         mock_container.company_repository.get.return_value = company_ggg
         
@@ -189,11 +188,10 @@ class TestCompanyResolverWithOverride:
         mock_container.company_repository.get.assert_called_once_with("ggg")
     
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("context_type", ["api", "frontend"])
-    async def test_override_to_forbidden_company_raises_403(
-        self, mock_container, user_with_only_zzz, context_type
+    async def test_api_override_to_forbidden_company_raises_403(
+        self, mock_container, user_with_only_zzz
     ):
-        """Переключение на компанию без доступа -> 403 (для любого context_type)"""
+        """API: переключение на компанию без доступа -> 403"""
         mock_container.user_repository.get.return_value = user_with_only_zzz
         
         resolver = CompanyResolver(mock_container)
@@ -208,17 +206,17 @@ class TestCompanyResolverWithOverride:
                 await resolver.resolve(
                     request=request,
                     token_data=token_data,
-                    context_type=context_type,
+                    context_type="api",
                 )
         
         assert exc_info.value.status_code == 403
         assert "нет доступа" in exc_info.value.detail.lower()
     
     @pytest.mark.asyncio
-    async def test_override_same_company_as_token_succeeds(
+    async def test_api_override_same_company_as_token_succeeds(
         self, mock_container, company_zzz, user_with_both_companies, token_data_zzz
     ):
-        """X-Company-Id совпадает с токеном -> успех"""
+        """API: X-Company-Id совпадает с токеном -> успех"""
         mock_container.user_repository.get.return_value = user_with_both_companies
         mock_container.company_repository.get.return_value = company_zzz
         
@@ -231,14 +229,14 @@ class TestCompanyResolverWithOverride:
             result = await resolver.resolve(
                 request=request,
                 token_data=token_data_zzz,
-                context_type="frontend",
+                context_type="api",
             )
         
         assert result == company_zzz
     
     @pytest.mark.asyncio
-    async def test_override_user_not_found_raises_403(self, mock_container, token_data_zzz):
-        """X-Company-Id с несуществующим пользователем -> 403"""
+    async def test_api_override_user_not_found_raises_403(self, mock_container, token_data_zzz):
+        """API: X-Company-Id с несуществующим пользователем -> 403"""
         mock_container.user_repository.get.return_value = None
         
         resolver = CompanyResolver(mock_container)
@@ -251,7 +249,7 @@ class TestCompanyResolverWithOverride:
                 await resolver.resolve(
                     request=request,
                     token_data=token_data_zzz,
-                    context_type="frontend",
+                    context_type="api",
                 )
         
         assert exc_info.value.status_code == 403
@@ -355,57 +353,60 @@ class TestCompanyResolverSubdomain:
         assert exc_info.value.status_code == 404
 
 
-class TestCompanyResolverFrontendWithOverride:
-    """Тесты: frontend запрос с X-Company-Id"""
+class TestCompanyResolverFrontendSubdomainPriority:
+    """Тесты: frontend - субдомен имеет приоритет"""
     
     @pytest.mark.asyncio
-    async def test_frontend_override_with_valid_token(
-        self, mock_container, company_ggg, user_with_both_companies, token_data_zzz
+    async def test_frontend_subdomain_has_priority_over_token(
+        self, mock_container, company_ggg, token_data_zzz
     ):
-        """Frontend запрос с X-Company-Id и токеном -> переключение работает"""
-        mock_container.user_repository.get.return_value = user_with_both_companies
+        """Frontend: субдомен ggg имеет приоритет над токеном zzz"""
+        mock_container.subdomain_repository.get_company_id.return_value = "ggg"
         mock_container.company_repository.get.return_value = company_ggg
         
         resolver = CompanyResolver(mock_container)
-        request = make_request(headers={"X-Company-Id": "ggg"}, host="zzz.humanitec.ru")
-        
-        with patch("core.middleware.auth.company_resolver.settings") as mock_settings:
-            mock_settings.server.env = "production"
-            
-            result = await resolver.resolve(
-                request=request,
-                token_data=token_data_zzz,
-                context_type="frontend",
-            )
-        
-        # X-Company-Id имеет приоритет над субдоменом
-        assert result == company_ggg
-    
-    @pytest.mark.asyncio
-    async def test_frontend_override_without_token_uses_subdomain(
-        self, mock_container, company_zzz
-    ):
-        """Frontend без токена с X-Company-Id -> субдомен имеет приоритет"""
-        mock_container.subdomain_repository.get_company_id.return_value = "zzz"
-        mock_container.company_repository.get.return_value = company_zzz
-        
-        resolver = CompanyResolver(mock_container)
-        request = make_request(headers={"X-Company-Id": "ggg"}, host="zzz.humanitec.ru")
+        request = make_request(host="ggg.humanitec.ru")
         
         with patch("core.middleware.auth.company_resolver.settings") as mock_settings:
             mock_settings.server.env = "production"
             
             with patch("core.middleware.auth.company_resolver.extract_subdomain") as mock_extract:
-                mock_extract.return_value = "zzz"
+                mock_extract.return_value = "ggg"
                 
                 result = await resolver.resolve(
                     request=request,
-                    token_data=None,  # нет токена
+                    token_data=token_data_zzz,  # токен с zzz
                     context_type="frontend",
                 )
         
-        # Без токена X-Company-Id игнорируется на проде
-        assert result == company_zzz
+        # Субдомен имеет приоритет для frontend
+        assert result == company_ggg
+        mock_container.subdomain_repository.get_company_id.assert_called_once_with("ggg")
+    
+    @pytest.mark.asyncio
+    async def test_frontend_subdomain_without_token(
+        self, mock_container, company_ggg
+    ):
+        """Frontend: субдомен работает без токена"""
+        mock_container.subdomain_repository.get_company_id.return_value = "ggg"
+        mock_container.company_repository.get.return_value = company_ggg
+        
+        resolver = CompanyResolver(mock_container)
+        request = make_request(host="ggg.humanitec.ru")
+        
+        with patch("core.middleware.auth.company_resolver.settings") as mock_settings:
+            mock_settings.server.env = "production"
+            
+            with patch("core.middleware.auth.company_resolver.extract_subdomain") as mock_extract:
+                mock_extract.return_value = "ggg"
+                
+                result = await resolver.resolve(
+                    request=request,
+                    token_data=None,
+                    context_type="frontend",
+                )
+        
+        assert result == company_ggg
 
 
 class TestCompanyResolverAnonymous:

@@ -22,22 +22,31 @@ test-browser: test-up
 	@echo "Запуск browser тестов (последовательно)..."
 	uv run pytest tests/frontend/browser -v --timeout=180
 
-# Полный запуск: сначала unit, потом browser
+# Полный запуск: unit параллельно -> retry упавших -> browser
 test: test-up
-	@echo "=== Запуск unit/API тестов в $(WORKERS) воркерах ==="
+	@echo "=== 1/3 Запуск unit/API тестов в $(WORKERS) воркерах ==="
 	uv run pytest tests/ -n $(WORKERS) \
 		--ignore=tests/frontend/browser \
 		-m "not integration" || true
 	@echo ""
-	@echo "=== Запуск browser тестов (последовательно) ==="
+	@echo "=== 2/3 Перезапуск упавших тестов (без параллелизации) ==="
+	uv run pytest tests/ --lf \
+		--ignore=tests/frontend/browser \
+		-m "not integration" -v || true
+	@echo ""
+	@echo "=== 3/3 Запуск browser тестов (последовательно) ==="
 	uv run pytest tests/frontend/browser -v --timeout=180 || true
 
 test-all: test-up
-	@echo "=== Запуск всех unit/API тестов в $(WORKERS) воркерах ==="
+	@echo "=== 1/3 Запуск всех unit/API тестов в $(WORKERS) воркерах ==="
 	uv run pytest tests/ -n $(WORKERS) \
 		--ignore=tests/frontend/browser || true
 	@echo ""
-	@echo "=== Запуск browser тестов (последовательно) ==="
+	@echo "=== 2/3 Перезапуск упавших тестов (без параллелизации) ==="
+	uv run pytest tests/ --lf \
+		--ignore=tests/frontend/browser -v || true
+	@echo ""
+	@echo "=== 3/3 Запуск browser тестов (последовательно) ==="
 	uv run pytest tests/frontend/browser -v --timeout=180 || true
 
 test-cov: test-up

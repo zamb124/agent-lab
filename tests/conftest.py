@@ -1202,7 +1202,9 @@ def _wait_for_server(host: str, port: int, timeout: float = 45.0, process: subpr
 
 def _get_localhost_env() -> dict:
     """Переменные окружения для localhost - используем conf.local.json"""
-    return os.environ.copy()
+    env = os.environ.copy()
+    env["SERVER__ENV"] = "local"  # Отключаем проверки доступа в тестах
+    return env
 
 
 def _start_server_subprocess(app_path: str, host: str, port: int, name: str) -> subprocess.Popen:

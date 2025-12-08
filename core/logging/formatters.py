@@ -16,6 +16,9 @@ class JSONFormatter(logging.Formatter):
     """
 
     def format(self, record):
+        context = get_context()
+        trace_id = context.trace_id if context else None
+
         log_entry = {
             "timestamp": datetime.fromtimestamp(record.created).isoformat(),
             "level": record.levelname,
@@ -26,9 +29,8 @@ class JSONFormatter(logging.Formatter):
             "line": record.lineno,
             "process": record.process,
             "thread": record.thread,
+            "trace_id": trace_id,
         }
-
-        context = get_context()
 
         if context:
             context_info = {}
@@ -49,6 +51,9 @@ class JSONFormatter(logging.Formatter):
 
             if context.session_id:
                 context_info["session_id"] = context.session_id
+
+            if context.trace_id:
+                context_info["trace_id"] = context.trace_id
 
             context_info["platform"] = context.platform
 
@@ -122,6 +127,9 @@ class StructuredConsoleFormatter(logging.Formatter):
         ctx = get_context()
 
         if ctx:
+            if ctx.trace_id:
+                ctx_parts.append(f"[TRACE:{ctx.trace_id}]")
+
             if ctx.active_company:
                 ctx_parts.append(f"[COMP:{ctx.active_company.company_id}]")
 

@@ -153,7 +153,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         
         # Синхронизация активной компании (для всех типов контекста)
         if user and company:
-            await self._sync_active_company(container, user, company)
+                await self._sync_active_company(container, user, company)
         
         return await context_factory.create(
             request, rule.context_type, company, user, token_data,
