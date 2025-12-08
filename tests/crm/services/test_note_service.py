@@ -9,7 +9,7 @@ from apps.crm.models.note_models import NoteCreate, NoteUpdate, NoteType
 
 
 @pytest.mark.asyncio
-async def test_create_note(note_service, test_context, unique_crm_id):
+async def test_create_note(note_service, test_context, unique_id):
     """Тест создания заметки через сервис"""
     data = NoteCreate(
         title="Service Test Note",
@@ -32,7 +32,7 @@ async def test_create_note(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_note(note_service, test_context, unique_crm_id):
+async def test_get_note(note_service, test_context, unique_id):
     """Тест получения заметки"""
     data = NoteCreate(
         title="Get Test Note",
@@ -57,7 +57,7 @@ async def test_get_note(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_update_note(note_service, test_context, unique_crm_id):
+async def test_update_note(note_service, test_context, unique_id):
     """Тест обновления заметки"""
     data = NoteCreate(
         title="Update Test Note",
@@ -86,7 +86,7 @@ async def test_update_note(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_delete_note(note_service, test_context, unique_crm_id):
+async def test_delete_note(note_service, test_context, unique_id):
     """Тест удаления заметки"""
     data = NoteCreate(
         title="Delete Test Note",
@@ -109,7 +109,7 @@ async def test_delete_note(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_daily_notes(note_service, test_context, unique_crm_id):
+async def test_get_daily_notes(note_service, test_context, unique_id):
     """Тест получения заметок за день"""
     today = date.today()
     created_ids = []
@@ -140,7 +140,7 @@ async def test_get_daily_notes(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_notes_in_range(note_service, test_context, unique_crm_id):
+async def test_get_notes_in_range(note_service, test_context, unique_id):
     """Тест получения заметок за диапазон дат"""
     today = date.today()
     created_ids = []
@@ -175,7 +175,7 @@ async def test_get_notes_in_range(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_list_notes(note_service, test_context, unique_crm_id):
+async def test_list_notes(note_service, test_context, unique_id):
     """Тест получения списка заметок"""
     created_ids = []
     
@@ -205,7 +205,7 @@ async def test_list_notes(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_list_notes_by_type(note_service, test_context, unique_crm_id):
+async def test_list_notes_by_type(note_service, test_context, unique_id):
     """Тест фильтрации заметок по типу"""
     data = NoteCreate(
         title="Call Log Note",
@@ -232,9 +232,9 @@ async def test_list_notes_by_type(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_search_notes(note_service, test_context, unique_crm_id):
+async def test_search_notes(note_service, test_context, unique_id):
     """Тест поиска заметок"""
-    unique_text = f"unique_search_{unique_crm_id('text')}"
+    unique_text = f"unique_search_{unique_id('text')}"
     
     data = NoteCreate(
         title="Search Test",
@@ -261,7 +261,7 @@ async def test_search_notes(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_link_entity_to_note(note_service, test_context, unique_crm_id):
+async def test_link_entity_to_note(note_service, test_context, unique_id):
     """Тест связывания сущности с заметкой"""
     data = NoteCreate(
         title="Link Test Note",
@@ -276,7 +276,7 @@ async def test_link_entity_to_note(note_service, test_context, unique_crm_id):
         user_id=test_context.user.user_id
     )
     
-    entity_id = unique_crm_id("entity")
+    entity_id = unique_id("entity")
     
     updated = await note_service.link_entity_to_note(note.note_id, entity_id)
     
@@ -286,9 +286,9 @@ async def test_link_entity_to_note(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_unlink_entity_from_note(note_service, test_context, unique_crm_id):
+async def test_unlink_entity_from_note(note_service, test_context, unique_id):
     """Тест удаления связи сущности с заметкой"""
-    entity_id = unique_crm_id("entity")
+    entity_id = unique_id("entity")
     
     data = NoteCreate(
         title="Unlink Test Note",
@@ -312,9 +312,9 @@ async def test_unlink_entity_from_note(note_service, test_context, unique_crm_id
 
 
 @pytest.mark.asyncio
-async def test_get_notes_by_entity(note_service, test_context, unique_crm_id):
+async def test_get_notes_by_entity(note_service, test_context, unique_id):
     """Тест получения заметок по связанной сущности"""
-    entity_id = unique_crm_id("entity")
+    entity_id = unique_id("entity")
     
     data = NoteCreate(
         title="Entity Note",

@@ -13,13 +13,13 @@ from apps.crm.db.models import Note
 
 
 @pytest_asyncio.fixture
-async def api_meeting_note(crm_container, crm_api_user_company):
+async def api_meeting_note(crm_container, session_test_data):
     """Создает meeting_minutes заметку для API тестов"""
     import uuid
     from datetime import datetime, timezone
     
-    user = crm_api_user_company["user"]
-    company = crm_api_user_company["company"]
+    user = session_test_data["user"]
+    company = session_test_data["company"]
     
     note = Note(
         note_id=f"api_meeting_{uuid.uuid4().hex[:8]}",
@@ -45,13 +45,13 @@ async def api_meeting_note(crm_container, crm_api_user_company):
 
 
 @pytest_asyncio.fixture
-async def api_freeform_note(crm_container, crm_api_user_company):
+async def api_freeform_note(crm_container, session_test_data):
     """Создает freeform заметку для API тестов"""
     import uuid
     from datetime import datetime, timezone
     
-    user = crm_api_user_company["user"]
-    company = crm_api_user_company["company"]
+    user = session_test_data["user"]
+    company = session_test_data["company"]
     
     note = Note(
         note_id=f"api_freeform_{uuid.uuid4().hex[:8]}",

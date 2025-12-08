@@ -302,3 +302,17 @@ async def get_relationship_types(request: Request):
     """Типы связей в графе"""
     return await proxy_request(request, "GET", "/graph/relationship-types")
 
+
+# === Export ===
+
+@router.get("/export/entity/{entity_id}")
+async def export_entity(request: Request, entity_id: str, format: str = Query("pdf")):
+    """Экспорт сущности в PDF или HTML"""
+    return await proxy_request(request, "GET", f"/export/entity/{entity_id}?format={format}")
+
+
+@router.get("/export/note/{note_id}")
+async def export_note(request: Request, note_id: str, format: str = Query("pdf")):
+    """Экспорт заметки в PDF или HTML"""
+    return await proxy_request(request, "GET", f"/export/note/{note_id}?format={format}")
+

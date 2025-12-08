@@ -16,13 +16,9 @@ class CRMSettings(BaseSettings):
     
     Наследуется от BaseSettings, добавляя специфичные для CRM поля.
     Все базовые поля (database, auth, logging, etc) доступны из родителя.
+    URL agents сервиса берется из server.agents_service_url (SERVER__AGENTS_SERVICE_URL).
     """
     
-    agents_service_url: str = Field(
-        default="http://localhost:8001",
-        description="URL сервиса агентов для вызова AI",
-        validation_alias="CRM_AGENTS_SERVICE_URL"
-    )
     chromadb_namespace_prefix: str = Field(
         default="crm_",
         description="Префикс namespace в ChromaDB для CRM сущностей"

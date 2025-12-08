@@ -16,13 +16,13 @@ class TestAccessRequestsAPI:
     """Тесты API для запросов на доступ"""
     
     @pytest.mark.asyncio
-    async def test_create_access_request(self, crm_client: AsyncClient, api_test_note):
+    async def test_create_access_request(self, crm_client: AsyncClient, test_note):
         """Тест создания запроса на доступ"""
         response = await crm_client.post(
             "/crm/api/v1/access-requests",
             json={
                 "resource_type": "note",
-                "resource_id": api_test_note.note_id,
+                "resource_id": test_note.note_id,
                 "message": "Мне нужен доступ для работы над проектом"
             },
         )
@@ -74,18 +74,18 @@ class TestAccessRequestsAPI:
         assert data["count"] >= 0
     
     @pytest.mark.asyncio
-    async def test_approve_request(self, crm_client: AsyncClient, crm_container, api_test_note):
+    async def test_approve_request(self, crm_client: AsyncClient, crm_container, test_note):
         """Тест одобрения запроса на доступ"""
         # owner_id = текущий пользователь из crm_client
         owner_id = crm_client.test_user.user_id
         
         request = AccessRequest(
             request_id=str(uuid.uuid4()),
-            company_id=api_test_note.company_id,
+            company_id=test_note.company_id,
             requester_id="requester_for_approve",
             owner_id=owner_id,
             resource_type="note",
-            resource_id=api_test_note.note_id,
+            resource_id=test_note.note_id,
             message="Тестовый запрос",
             status="pending"
         )
@@ -100,17 +100,17 @@ class TestAccessRequestsAPI:
         assert data["status"] == "approved"
     
     @pytest.mark.asyncio
-    async def test_reject_request(self, crm_client: AsyncClient, crm_container, api_test_note):
+    async def test_reject_request(self, crm_client: AsyncClient, crm_container, test_note):
         """Тест отклонения запроса на доступ"""
         owner_id = crm_client.test_user.user_id
         
         request = AccessRequest(
             request_id=str(uuid.uuid4()),
-            company_id=api_test_note.company_id,
+            company_id=test_note.company_id,
             requester_id="requester_for_reject",
             owner_id=owner_id,
             resource_type="note",
-            resource_id=api_test_note.note_id,
+            resource_id=test_note.note_id,
             message="Запрос который отклоним",
             status="pending"
         )
@@ -135,18 +135,18 @@ class TestAccessRequestsAPI:
     
     @pytest.mark.asyncio
     async def test_approve_already_processed_request(
-        self, crm_client: AsyncClient, crm_container, api_test_note
+        self, crm_client: AsyncClient, crm_container, test_note
     ):
         """Тест повторного одобрения уже обработанного запроса"""
         owner_id = crm_client.test_user.user_id
         
         request = AccessRequest(
             request_id=str(uuid.uuid4()),
-            company_id=api_test_note.company_id,
+            company_id=test_note.company_id,
             requester_id="requester_already_processed",
             owner_id=owner_id,
             resource_type="note",
-            resource_id=api_test_note.note_id,
+            resource_id=test_note.note_id,
             status="approved"
         )
         created = await crm_container.access_request_repository.create(request)

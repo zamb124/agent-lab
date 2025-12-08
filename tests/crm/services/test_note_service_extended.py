@@ -12,7 +12,7 @@ from apps.crm.models.note_models import (
 
 
 @pytest.mark.asyncio
-async def test_filter_notes_by_date_range(note_service, test_context, unique_crm_id):
+async def test_filter_notes_by_date_range(note_service, test_context, unique_id):
     """Тест фильтрации заметок по диапазону дат"""
     today = date.today()
     yesterday = today - timedelta(days=1)
@@ -43,7 +43,7 @@ async def test_filter_notes_by_date_range(note_service, test_context, unique_crm
 
 
 @pytest.mark.asyncio
-async def test_filter_notes_by_user(note_service, test_context, unique_crm_id):
+async def test_filter_notes_by_user(note_service, test_context, unique_id):
     """Тест фильтрации заметок по пользователю"""
     user_id = test_context.user.user_id
     
@@ -72,10 +72,10 @@ async def test_filter_notes_by_user(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_filter_notes_combined(note_service, test_context, unique_crm_id):
+async def test_filter_notes_combined(note_service, test_context, unique_id):
     """Тест комбинированной фильтрации"""
     today = date.today()
-    unique_text = unique_crm_id("search_text")
+    unique_text = unique_id("search_text")
     
     data = NoteCreate(
         title="Combined Filter",
@@ -104,7 +104,7 @@ async def test_filter_notes_combined(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_create_template(note_service, test_context, unique_crm_id):
+async def test_create_template(note_service, test_context, unique_id):
     """Тест создания шаблона заметки"""
     data = NoteCreate(
         title="Meeting Template",
@@ -127,7 +127,7 @@ async def test_create_template(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_templates(note_service, test_context, unique_crm_id):
+async def test_get_templates(note_service, test_context, unique_id):
     """Тест получения списка шаблонов"""
     created_ids = []
     
@@ -159,7 +159,7 @@ async def test_get_templates(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_templates_by_type(note_service, test_context, unique_crm_id):
+async def test_get_templates_by_type(note_service, test_context, unique_id):
     """Тест получения шаблонов по типу"""
     data = NoteCreate(
         title="Call Template",
@@ -187,7 +187,7 @@ async def test_get_templates_by_type(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_create_from_template(note_service, test_context, unique_crm_id):
+async def test_create_from_template(note_service, test_context, unique_id):
     """Тест создания заметки из шаблона"""
     # Создаем шаблон
     template_data = NoteCreate(
@@ -223,7 +223,7 @@ async def test_create_from_template(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_create_note_with_draft_status(note_service, test_context, unique_crm_id):
+async def test_create_note_with_draft_status(note_service, test_context, unique_id):
     """Тест создания заметки со статусом draft"""
     data = NoteCreate(
         title="Draft Note",
@@ -245,7 +245,7 @@ async def test_create_note_with_draft_status(note_service, test_context, unique_
 
 
 @pytest.mark.asyncio
-async def test_update_note_status(note_service, test_context, unique_crm_id):
+async def test_update_note_status(note_service, test_context, unique_id):
     """Тест обновления статуса заметки"""
     data = NoteCreate(
         title="Status Test",
@@ -270,9 +270,9 @@ async def test_update_note_status(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_create_note_with_visibility(note_service, test_context, unique_crm_id):
+async def test_create_note_with_visibility(note_service, test_context, unique_id):
     """Тест создания заметки с visibility"""
-    shared_user = unique_crm_id("user")
+    shared_user = unique_id("user")
     
     data = NoteCreate(
         title="Private Note",
@@ -296,7 +296,7 @@ async def test_create_note_with_visibility(note_service, test_context, unique_cr
 
 
 @pytest.mark.asyncio
-async def test_update_visibility(note_service, test_context, unique_crm_id):
+async def test_update_visibility(note_service, test_context, unique_id):
     """Тест обновления visibility заметки"""
     data = NoteCreate(
         title="Public Note",
@@ -321,10 +321,10 @@ async def test_update_visibility(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_create_note_with_attachments(note_service, test_context, unique_crm_id):
+async def test_create_note_with_attachments(note_service, test_context, unique_id):
     """Тест создания заметки с прикрепленными файлами"""
-    file_id_1 = unique_crm_id("file1")
-    file_id_2 = unique_crm_id("file2")
+    file_id_1 = unique_id("file1")
+    file_id_2 = unique_id("file2")
     
     data = NoteCreate(
         title="Note with Attachments",
@@ -347,10 +347,10 @@ async def test_create_note_with_attachments(note_service, test_context, unique_c
 
 
 @pytest.mark.asyncio
-async def test_update_attachments(note_service, test_context, unique_crm_id):
+async def test_update_attachments(note_service, test_context, unique_id):
     """Тест обновления прикрепленных файлов"""
-    old_file = unique_crm_id("old_file")
-    new_file = unique_crm_id("new_file")
+    old_file = unique_id("old_file")
+    new_file = unique_id("new_file")
     
     data = NoteCreate(
         title="Attachment Update",
@@ -376,7 +376,7 @@ async def test_update_attachments(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_filter_templates_only(note_service, test_context, unique_crm_id):
+async def test_filter_templates_only(note_service, test_context, unique_id):
     """Тест фильтрации только шаблонов через filter_notes"""
     created_ids = []
     
@@ -424,7 +424,7 @@ async def test_filter_templates_only(note_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_filter_by_status(note_service, test_context, unique_crm_id):
+async def test_filter_by_status(note_service, test_context, unique_id):
     """Тест фильтрации по статусу через filter_notes"""
     # Создаем draft
     draft_data = NoteCreate(

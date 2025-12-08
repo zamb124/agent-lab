@@ -18,9 +18,9 @@ async def entity_service(crm_container, test_context):
 
 
 @pytest.mark.asyncio
-async def test_create_entity(entity_service, test_context, unique_crm_id):
+async def test_create_entity(entity_service, test_context, unique_id):
     """Тест создания сущности"""
-    entity_id = unique_crm_id("entity")
+    entity_id = unique_id("entity")
     
     data = EntityCreate(
         type="person",
@@ -42,11 +42,11 @@ async def test_create_entity(entity_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_entity(entity_service, test_context, unique_crm_id):
+async def test_get_entity(entity_service, test_context, unique_id):
     """Тест получения сущности по ID"""
     data = EntityCreate(
         type="person",
-        name=f"Test Person {unique_crm_id('entity')}",
+        name=f"Test Person {unique_id('entity')}",
         description="Test",
         attributes={},
     )
@@ -72,11 +72,11 @@ async def test_get_nonexistent_entity(entity_service, test_context):
 
 
 @pytest.mark.asyncio
-async def test_update_entity(entity_service, test_context, unique_crm_id):
+async def test_update_entity(entity_service, test_context, unique_id):
     """Тест обновления сущности"""
     data = EntityCreate(
         type="person",
-        name=f"Test Person {unique_crm_id('entity')}",
+        name=f"Test Person {unique_id('entity')}",
         description="Original description",
         attributes={"role": "developer"},
     )
@@ -110,11 +110,11 @@ async def test_update_nonexistent_entity(entity_service, test_context):
 
 
 @pytest.mark.asyncio
-async def test_delete_entity(entity_service, test_context, unique_crm_id):
+async def test_delete_entity(entity_service, test_context, unique_id):
     """Тест удаления сущности"""
     data = EntityCreate(
         type="person",
-        name=f"Test Person {unique_crm_id('entity')}",
+        name=f"Test Person {unique_id('entity')}",
         description="To be deleted",
         attributes={},
     )
@@ -140,14 +140,14 @@ async def test_delete_nonexistent_entity(entity_service, test_context):
 
 
 @pytest.mark.asyncio
-async def test_list_entities(entity_service, test_context, unique_crm_id):
+async def test_list_entities(entity_service, test_context, unique_id):
     """Тест получения списка сущностей"""
     # Создаем несколько сущностей
     created_ids = []
     for i in range(3):
         data = EntityCreate(
             type="person",
-            name=f"Test Person {unique_crm_id('entity')}_{i}",
+            name=f"Test Person {unique_id('entity')}_{i}",
             description=f"Description {i}",
             attributes={},
         )
@@ -168,18 +168,18 @@ async def test_list_entities(entity_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_list_entities_by_type(entity_service, test_context, unique_crm_id):
+async def test_list_entities_by_type(entity_service, test_context, unique_id):
     """Тест фильтрации по типу"""
     # Создаем сущности разных типов
     person_data = EntityCreate(
         type="person",
-        name=f"Test Person {unique_crm_id('entity')}",
+        name=f"Test Person {unique_id('entity')}",
         description="Person",
         attributes={},
     )
     org_data = EntityCreate(
         type="organization",
-        name=f"Test Org {unique_crm_id('entity')}",
+        name=f"Test Org {unique_id('entity')}",
         description="Org",
         attributes={},
     )
@@ -199,10 +199,10 @@ async def test_list_entities_by_type(entity_service, test_context, unique_crm_id
 
 
 @pytest.mark.asyncio
-async def test_search_entities(entity_service, test_context, unique_crm_id):
+async def test_search_entities(entity_service, test_context, unique_id):
     """Тест семантического поиска"""
     # Создаем сущность с уникальным именем
-    unique_name = f"UniqueSearchableCompany_{unique_crm_id('entity')}"
+    unique_name = f"UniqueSearchableCompany_{unique_id('entity')}"
     data = EntityCreate(
         type="organization",
         name=unique_name,
@@ -229,11 +229,11 @@ async def test_search_entities(entity_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_search_entities_by_type(entity_service, test_context, unique_crm_id):
+async def test_search_entities_by_type(entity_service, test_context, unique_id):
     """Тест поиска с фильтром по типу"""
     data = EntityCreate(
         type="project",
-        name=f"Test Project {unique_crm_id('entity')}",
+        name=f"Test Project {unique_id('entity')}",
         description="Unique project for search test",
         attributes={},
     )
@@ -257,10 +257,10 @@ async def test_search_entities_by_type(entity_service, test_context, unique_crm_
 
 
 @pytest.mark.asyncio
-async def test_find_duplicates(entity_service, test_context, unique_crm_id):
+async def test_find_duplicates(entity_service, test_context, unique_id):
     """Тест поиска дубликатов"""
     # Создаем сущность
-    original_name = f"John Smith Developer {unique_crm_id('entity')}"
+    original_name = f"John Smith Developer {unique_id('entity')}"
     original_data = EntityCreate(
         type="person",
         name=original_name,
@@ -298,11 +298,11 @@ async def test_ensure_namespace(entity_service, test_context):
 
 
 @pytest.mark.asyncio
-async def test_create_entity_invalid_type(entity_service, test_context, unique_crm_id):
+async def test_create_entity_invalid_type(entity_service, test_context, unique_id):
     """Тест создания сущности с невалидным типом"""
     data = EntityCreate(
         type="nonexistent_type",
-        name=f"Test {unique_crm_id('entity')}",
+        name=f"Test {unique_id('entity')}",
         description="Invalid",
         attributes={},
     )

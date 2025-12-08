@@ -25,10 +25,10 @@ async def test_init_system_types(entity_type_service, test_context):
 
 
 @pytest.mark.asyncio
-async def test_create_custom_type(entity_type_service, test_context, unique_crm_id):
+async def test_create_custom_type(entity_type_service, test_context, unique_id):
     """Тест создания кастомного типа"""
     data = EntityTypeCreate(
-        type_id=unique_crm_id("custom"),
+        type_id=unique_id("custom"),
         name="Custom Entity",
         description="Custom entity type for testing",
         prompt="Extract custom entities",
@@ -55,9 +55,9 @@ async def test_create_custom_type(entity_type_service, test_context, unique_crm_
 
 
 @pytest.mark.asyncio
-async def test_get_type(entity_type_service, test_context, unique_crm_id):
+async def test_get_type(entity_type_service, test_context, unique_id):
     """Тест получения типа по ID"""
-    type_id = unique_crm_id("type")
+    type_id = unique_id("type")
     data = EntityTypeCreate(
         type_id=type_id,
         name="Test Type",
@@ -85,9 +85,9 @@ async def test_get_type(entity_type_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_update_type(entity_type_service, test_context, unique_crm_id):
+async def test_update_type(entity_type_service, test_context, unique_id):
     """Тест обновления типа"""
-    type_id = unique_crm_id("type")
+    type_id = unique_id("type")
     data = EntityTypeCreate(
         type_id=type_id,
         name="Original Name",
@@ -115,9 +115,9 @@ async def test_update_type(entity_type_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_delete_type(entity_type_service, test_context, unique_crm_id):
+async def test_delete_type(entity_type_service, test_context, unique_id):
     """Тест удаления типа"""
-    type_id = unique_crm_id("type")
+    type_id = unique_id("type")
     data = EntityTypeCreate(
         type_id=type_id,
         name="To Delete",
@@ -153,11 +153,11 @@ async def test_cannot_delete_system_type(entity_type_service, test_context):
 
 
 @pytest.mark.asyncio
-async def test_get_all_types(entity_type_service, test_context, unique_crm_id):
+async def test_get_all_types(entity_type_service, test_context, unique_id):
     """Тест получения всех типов (системные + кастомные)"""
     await entity_type_service.init_system_types()
     
-    type_id = unique_crm_id("custom")
+    type_id = unique_id("custom")
     data = EntityTypeCreate(
         type_id=type_id,
         name="Custom Type",

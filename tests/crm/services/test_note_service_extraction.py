@@ -15,9 +15,9 @@ from apps.crm.models.entity_models import EntityCreate
 
 
 @pytest_asyncio.fixture
-async def test_note(test_context, note_repo, unique_crm_id) -> Note:
+async def test_note(test_context, note_repo, unique_id) -> Note:
     """Создает тестовую заметку"""
-    note_id = unique_crm_id("note")
+    note_id = unique_id("note")
     note = Note(
         note_id=note_id,
         company_id=test_context.active_company.company_id,
@@ -40,7 +40,7 @@ async def test_note(test_context, note_repo, unique_crm_id) -> Note:
 
 
 @pytest_asyncio.fixture
-async def user_person_entity(test_context, crm_container, unique_crm_id):
+async def user_person_entity(test_context, crm_container, unique_id):
     """Создает person сущность связанную с user"""
     entity_service = crm_container.entity_service
     

@@ -176,10 +176,16 @@ class NoteService:
         if attachment_ids:
             file_processor = await get_default_file_processor()
             for file_id in attachment_ids:
-                file_record = await file_processor.get_file_record(file_id)
+                try:
+                    file_record = await file_processor.get_file_record(file_id)
+                    s3_key = file_record.s3_key if file_record else ""
+                except ValueError:
+                    # FileRepository требует контекст - используем пустой s3_key,
+                    # cleanup task найдет файл по file_id
+                    s3_key = ""
                 attachments.append({
                     "file_id": file_id,
-                    "s3_key": file_record.s3_key if file_record else "",
+                    "s3_key": s3_key,
                 })
         
         # 2. Удаляем заметку из БД

@@ -10,7 +10,7 @@ from apps.crm.models.task_models import TaskCreate, TaskUpdate, TaskPriority
 
 
 @pytest.mark.asyncio
-async def test_create_task_with_tags(task_service, test_context, unique_crm_id):
+async def test_create_task_with_tags(task_service, test_context, unique_id):
     """Тест создания задачи с тегами"""
     data = TaskCreate(
         title="Tagged Task",
@@ -34,10 +34,10 @@ async def test_create_task_with_tags(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_create_task_with_assignees(task_service, test_context, unique_crm_id):
+async def test_create_task_with_assignees(task_service, test_context, unique_id):
     """Тест создания задачи с соучастниками"""
-    assignee_1 = unique_crm_id("user1")
-    assignee_2 = unique_crm_id("user2")
+    assignee_1 = unique_id("user1")
+    assignee_2 = unique_id("user2")
     
     data = TaskCreate(
         title="Shared Task",
@@ -60,7 +60,7 @@ async def test_create_task_with_assignees(task_service, test_context, unique_crm
 
 
 @pytest.mark.asyncio
-async def test_update_task_tags(task_service, test_context, unique_crm_id):
+async def test_update_task_tags(task_service, test_context, unique_id):
     """Тест обновления тегов задачи"""
     data = TaskCreate(
         title="Update Tags",
@@ -87,10 +87,10 @@ async def test_update_task_tags(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_update_task_assignees(task_service, test_context, unique_crm_id):
+async def test_update_task_assignees(task_service, test_context, unique_id):
     """Тест обновления соучастников задачи"""
-    old_assignee = unique_crm_id("old_user")
-    new_assignee = unique_crm_id("new_user")
+    old_assignee = unique_id("old_user")
+    new_assignee = unique_id("new_user")
     
     data = TaskCreate(
         title="Update Assignees",
@@ -116,7 +116,7 @@ async def test_update_task_assignees(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_add_tag_to_task(task_service, test_context, unique_crm_id):
+async def test_add_tag_to_task(task_service, test_context, unique_id):
     """Тест добавления тега к задаче через add_tag"""
     data = TaskCreate(
         title="Add Tag",
@@ -141,7 +141,7 @@ async def test_add_tag_to_task(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_add_tag_idempotent(task_service, test_context, unique_crm_id):
+async def test_add_tag_idempotent(task_service, test_context, unique_id):
     """Тест что add_tag идемпотентен - не дублирует тег"""
     data = TaskCreate(
         title="Idempotent Tag",
@@ -167,7 +167,7 @@ async def test_add_tag_idempotent(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_remove_tag_from_task(task_service, test_context, unique_crm_id):
+async def test_remove_tag_from_task(task_service, test_context, unique_id):
     """Тест удаления тега из задачи через remove_tag"""
     data = TaskCreate(
         title="Remove Tag",
@@ -192,7 +192,7 @@ async def test_remove_tag_from_task(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_remove_nonexistent_tag(task_service, test_context, unique_crm_id):
+async def test_remove_nonexistent_tag(task_service, test_context, unique_id):
     """Тест удаления несуществующего тега - не должно ломаться"""
     data = TaskCreate(
         title="Remove Nonexistent",
@@ -217,10 +217,10 @@ async def test_remove_nonexistent_tag(task_service, test_context, unique_crm_id)
 
 
 @pytest.mark.asyncio
-async def test_add_assignee_to_task(task_service, test_context, unique_crm_id):
+async def test_add_assignee_to_task(task_service, test_context, unique_id):
     """Тест добавления соучастника через add_assignee"""
-    existing_assignee = unique_crm_id("existing")
-    new_assignee = unique_crm_id("new")
+    existing_assignee = unique_id("existing")
+    new_assignee = unique_id("new")
     
     data = TaskCreate(
         title="Add Assignee",
@@ -245,9 +245,9 @@ async def test_add_assignee_to_task(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_add_assignee_idempotent(task_service, test_context, unique_crm_id):
+async def test_add_assignee_idempotent(task_service, test_context, unique_id):
     """Тест что add_assignee идемпотентен"""
-    assignee = unique_crm_id("assignee")
+    assignee = unique_id("assignee")
     
     data = TaskCreate(
         title="Idempotent Assignee",
@@ -272,10 +272,10 @@ async def test_add_assignee_idempotent(task_service, test_context, unique_crm_id
 
 
 @pytest.mark.asyncio
-async def test_remove_assignee_from_task(task_service, test_context, unique_crm_id):
+async def test_remove_assignee_from_task(task_service, test_context, unique_id):
     """Тест удаления соучастника через remove_assignee"""
-    keep_assignee = unique_crm_id("keep")
-    remove_assignee = unique_crm_id("remove")
+    keep_assignee = unique_id("keep")
+    remove_assignee = unique_id("remove")
     
     data = TaskCreate(
         title="Remove Assignee",
@@ -300,9 +300,9 @@ async def test_remove_assignee_from_task(task_service, test_context, unique_crm_
 
 
 @pytest.mark.asyncio
-async def test_get_tasks_by_tag(task_service, test_context, unique_crm_id):
+async def test_get_tasks_by_tag(task_service, test_context, unique_id):
     """Тест получения задач по тегу"""
-    unique_tag = unique_crm_id("tag")
+    unique_tag = unique_id("tag")
     created_ids = []
     
     for i in range(2):
@@ -334,9 +334,9 @@ async def test_get_tasks_by_tag(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_tasks_by_assignee(task_service, test_context, unique_crm_id):
+async def test_get_tasks_by_assignee(task_service, test_context, unique_id):
     """Тест получения задач по соучастнику"""
-    assignee = unique_crm_id("assignee")
+    assignee = unique_id("assignee")
     created_ids = []
     
     for i in range(2):
@@ -368,9 +368,9 @@ async def test_get_tasks_by_assignee(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_task_with_both_tags_and_assignees(task_service, test_context, unique_crm_id):
+async def test_task_with_both_tags_and_assignees(task_service, test_context, unique_id):
     """Тест создания задачи с тегами и соучастниками"""
-    assignee = unique_crm_id("assignee")
+    assignee = unique_id("assignee")
     
     data = TaskCreate(
         title="Full Task",
@@ -395,7 +395,7 @@ async def test_task_with_both_tags_and_assignees(task_service, test_context, uni
 
 
 @pytest.mark.asyncio
-async def test_empty_tags_default(task_service, test_context, unique_crm_id):
+async def test_empty_tags_default(task_service, test_context, unique_id):
     """Тест что tags по умолчанию пустой список"""
     data = TaskCreate(
         title="No Tags Task",
@@ -416,7 +416,7 @@ async def test_empty_tags_default(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_empty_assignees_default(task_service, test_context, unique_crm_id):
+async def test_empty_assignees_default(task_service, test_context, unique_id):
     """Тест что assignees по умолчанию пустой список"""
     data = TaskCreate(
         title="No Assignees Task",
@@ -437,9 +437,9 @@ async def test_empty_assignees_default(task_service, test_context, unique_crm_id
 
 
 @pytest.mark.asyncio
-async def test_update_preserves_other_fields(task_service, test_context, unique_crm_id):
+async def test_update_preserves_other_fields(task_service, test_context, unique_id):
     """Тест что обновление tags/assignees не влияет на другие поля"""
-    assignee = unique_crm_id("assignee")
+    assignee = unique_id("assignee")
     
     data = TaskCreate(
         title="Preserve Fields",

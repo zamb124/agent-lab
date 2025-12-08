@@ -18,7 +18,7 @@ async def test_list_relationships(crm_client):
 
 
 @pytest.mark.asyncio
-async def test_create_relationship(crm_client, unique_crm_id):
+async def test_create_relationship(crm_client, unique_id):
     """
     Тест создания связи.
     
@@ -31,7 +31,7 @@ async def test_create_relationship(crm_client, unique_crm_id):
     # 1. Создаем source сущность
     source_payload = {
         "type": "person",
-        "name": f"Source Person {unique_crm_id('src')}",
+        "name": f"Source Person {unique_id('src')}",
         "description": "Source entity for relationship test",
         "attributes": {},
     }
@@ -42,7 +42,7 @@ async def test_create_relationship(crm_client, unique_crm_id):
     # 2. Создаем target сущность
     target_payload = {
         "type": "organization",
-        "name": f"Target Org {unique_crm_id('tgt')}",
+        "name": f"Target Org {unique_id('tgt')}",
         "description": "Target entity for relationship test",
         "attributes": {},
     }
@@ -91,9 +91,9 @@ async def test_get_relationship(crm_client, sample_relationship):
 
 
 @pytest.mark.asyncio
-async def test_get_nonexistent_relationship(crm_client, unique_crm_id):
+async def test_get_nonexistent_relationship(crm_client, unique_id):
     """Тест получения несуществующей связи"""
-    fake_id = unique_crm_id("fake")
+    fake_id = unique_id("fake")
     
     response = await crm_client.get(f"/crm/api/v1/relationships/{fake_id}")
     
@@ -101,17 +101,17 @@ async def test_get_nonexistent_relationship(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_delete_relationship(crm_client, relationship_repo, test_context, unique_crm_id):
+async def test_delete_relationship(crm_client, relationship_repo, test_context, unique_id):
     """Тест удаления связи"""
     from datetime import datetime, timezone
     from apps.crm.db.models import Relationship
     
-    rel_id = unique_crm_id("rel")
+    rel_id = unique_id("rel")
     relationship = Relationship(
         relationship_id=rel_id,
         company_id=test_context.active_company.company_id,
-        source_entity_id=unique_crm_id("src"),
-        target_entity_id=unique_crm_id("tgt"),
+        source_entity_id=unique_id("src"),
+        target_entity_id=unique_id("tgt"),
         relationship_type="connected_to",
         weight=1.0,
         attributes={},

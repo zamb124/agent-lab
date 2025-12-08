@@ -29,9 +29,9 @@ ENTITY_COMPARISON_FLOW_ID = "crm_entity_comparison"
 
 
 @pytest_asyncio.fixture
-async def migrated_entity_flows(migrated_db, migrator, crm_api_user_company, flow_repo, agent_repo):
+async def migrated_entity_flows(migrated_db, migrator, session_test_data, flow_repo, agent_repo):
     """Мигрирует Entity Extractor и Entity Comparison flows."""
-    company = crm_api_user_company["company"]
+    company = session_test_data["company"]
     
     await migrator.migrate_for_company(
         company=company,
@@ -49,15 +49,15 @@ async def migrated_entity_flows(migrated_db, migrator, crm_api_user_company, flo
         "extractor_flow": extractor_flow,
         "comparison_flow": comparison_flow,
         "company": company,
-        "user": crm_api_user_company["user"],
+        "user": session_test_data["user"],
     }
 
 
 @pytest_asyncio.fixture
-async def test_note_for_analysis(crm_container, crm_api_user_company):
+async def test_note_for_analysis(crm_container, session_test_data):
     """Создает заметку для анализа."""
-    user = crm_api_user_company["user"]
-    company = crm_api_user_company["company"]
+    user = session_test_data["user"]
+    company = session_test_data["company"]
     suffix = uuid.uuid4().hex[:6]
     
     note = Note(
@@ -447,7 +447,7 @@ class TestCRMToAgentsIntegration:
     async def test_full_e2e_entity_comparison_via_agents_client(
         self,
         migrated_entity_flows,
-        crm_api_user_company,
+        session_test_data,
         agents_service,
     ):
         """
@@ -457,8 +457,8 @@ class TestCRMToAgentsIntegration:
         from apps.crm.services.agents_client import AgentsClient
         from core.utils.tokens import get_token_service
         
-        user = crm_api_user_company["user"]
-        company = crm_api_user_company["company"]
+        user = session_test_data["user"]
+        company = session_test_data["company"]
         
         # Получаем auth token
         token_service = get_token_service()
@@ -507,7 +507,7 @@ class TestCRMToAgentsIntegration:
     async def test_full_e2e_extract_entities_via_agents_client(
         self,
         migrated_entity_flows,
-        crm_api_user_company,
+        session_test_data,
         agents_service,
     ):
         """
@@ -517,8 +517,8 @@ class TestCRMToAgentsIntegration:
         from apps.crm.services.agents_client import AgentsClient
         from core.utils.tokens import get_token_service
         
-        user = crm_api_user_company["user"]
-        company = crm_api_user_company["company"]
+        user = session_test_data["user"]
+        company = session_test_data["company"]
         
         token_service = get_token_service()
         auth_token = token_service.create_api_token(user.user_id, company.company_id)
@@ -592,7 +592,7 @@ class TestCRMNoteAnalysis:
     async def test_create_and_get_note(
         self,
         crm_client: AsyncClient,
-        crm_api_user_company,
+        session_test_data,
     ):
         """Тест создания и получения заметки через API"""
         from datetime import date

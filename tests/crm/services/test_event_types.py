@@ -178,9 +178,9 @@ async def test_email_type_has_correct_fields(entity_type_service, test_context):
 
 
 @pytest.mark.asyncio
-async def test_create_custom_event_type(entity_type_service, test_context, unique_crm_id):
+async def test_create_custom_event_type(entity_type_service, test_context, unique_id):
     """Тест: можно создать кастомный event тип"""
-    type_id = unique_crm_id("event")
+    type_id = unique_id("event")
     
     data = EntityTypeCreate(
         type_id=type_id,
@@ -210,9 +210,9 @@ async def test_create_custom_event_type(entity_type_service, test_context, uniqu
 
 
 @pytest.mark.asyncio
-async def test_update_is_event_field(entity_type_service, test_context, unique_crm_id):
+async def test_update_is_event_field(entity_type_service, test_context, unique_id):
     """Тест: можно обновить поле is_event"""
-    type_id = unique_crm_id("type")
+    type_id = unique_id("type")
     
     data = EntityTypeCreate(
         type_id=type_id,

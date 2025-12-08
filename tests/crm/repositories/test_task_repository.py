@@ -9,9 +9,9 @@ from apps.crm.db.models import Task
 
 
 @pytest.mark.asyncio
-async def test_create_task(task_repo, test_context, unique_crm_id):
+async def test_create_task(task_repo, test_context, unique_id):
     """Тест создания задачи"""
-    task_id = unique_crm_id("task")
+    task_id = unique_id("task")
     
     task = Task(
         task_id=task_id,
@@ -61,9 +61,9 @@ async def test_update_task(task_repo, sample_task):
 
 
 @pytest.mark.asyncio
-async def test_delete_task(task_repo, test_context, unique_crm_id):
+async def test_delete_task(task_repo, test_context, unique_id):
     """Тест удаления задачи"""
-    task_id = unique_crm_id("task")
+    task_id = unique_id("task")
     
     task = Task(
         task_id=task_id,
@@ -85,9 +85,9 @@ async def test_delete_task(task_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_by_status(task_repo, test_context, unique_crm_id):
+async def test_get_by_status(task_repo, test_context, unique_id):
     """Тест получения задач по статусу"""
-    task_id = unique_crm_id("task")
+    task_id = unique_id("task")
     
     task = Task(
         task_id=task_id,
@@ -113,9 +113,9 @@ async def test_get_by_status(task_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_by_priority(task_repo, test_context, unique_crm_id):
+async def test_get_by_priority(task_repo, test_context, unique_id):
     """Тест получения задач по приоритету"""
-    task_id = unique_crm_id("task")
+    task_id = unique_id("task")
     
     task = Task(
         task_id=task_id,
@@ -141,9 +141,9 @@ async def test_get_by_priority(task_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_by_user(task_repo, test_context, unique_crm_id):
+async def test_get_by_user(task_repo, test_context, unique_id):
     """Тест получения задач пользователя"""
-    task_id = unique_crm_id("task")
+    task_id = unique_id("task")
     
     task = Task(
         task_id=task_id,
@@ -169,9 +169,9 @@ async def test_get_by_user(task_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_overdue(task_repo, test_context, unique_crm_id):
+async def test_get_overdue(task_repo, test_context, unique_id):
     """Тест получения просроченных задач"""
-    task_id = unique_crm_id("task")
+    task_id = unique_id("task")
     
     task = Task(
         task_id=task_id,
@@ -195,9 +195,9 @@ async def test_get_overdue(task_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_due_this_week(task_repo, test_context, unique_crm_id):
+async def test_get_due_this_week(task_repo, test_context, unique_id):
     """Тест получения задач с дедлайном на этой неделе"""
-    task_id = unique_crm_id("task")
+    task_id = unique_id("task")
     
     task = Task(
         task_id=task_id,
@@ -223,10 +223,10 @@ async def test_get_due_this_week(task_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_by_entity(task_repo, test_context, unique_crm_id):
+async def test_get_by_entity(task_repo, test_context, unique_id):
     """Тест получения задач, связанных с сущностью"""
-    task_id = unique_crm_id("task")
-    entity_id = unique_crm_id("entity")
+    task_id = unique_id("task")
+    entity_id = unique_id("entity")
     
     task = Task(
         task_id=task_id,

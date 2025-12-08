@@ -138,10 +138,13 @@ class TestRAGSetupScenario:
             ".rag-provider-cards"
         )
         
-        # Создаём новый неймспейс
+        # Создаём новый неймспейс (кнопка в header)
+        create_ns_btn = page.locator(".rag-header .rag-btn-primary")
+        await create_ns_btn.wait_for(state="visible", timeout=10000)
+        
         await doc.click(
             page,
-            "button:has-text('New Namespace'), .rag-btn-primary:has-text('New Namespace')",
+            ".rag-header .rag-btn-primary",
             "Создание неймспейса",
             "Нажмите кнопку **New Namespace** для создания новой коллекции документов. "
             "Неймспейс - это изолированное хранилище для группы связанных документов."
@@ -392,10 +395,13 @@ class TestRAGNamespaceScenario:
             )
             await page.wait_for_timeout(500)
         
-        # Открываем модалку создания
+        # Открываем модалку создания (кнопка в header)
+        create_ns_btn = page.locator(".rag-header .rag-btn-primary")
+        await create_ns_btn.wait_for(state="visible", timeout=10000)
+        
         await doc.click(
             page,
-            ".rag-btn-primary",
+            ".rag-header .rag-btn-primary",
             "Начало создания namespace",
             "Нажмите кнопку **New Namespace** в правом верхнем углу."
         )
@@ -481,8 +487,8 @@ class TestRAGNamespaceScenario:
             await chromadb_card.click()
             await page.wait_for_timeout(500)
         
-        # Создаём namespace для теста
-        new_ns_btn = page.locator("button:has-text('New Namespace')")
+        # Создаём namespace для теста (кнопка в header)
+        new_ns_btn = page.locator(".rag-header .rag-btn-primary")
         await new_ns_btn.wait_for(state="visible", timeout=10000)
         await new_ns_btn.click()
         await page.wait_for_selector("#create-namespace-modal.active", timeout=5000)
@@ -671,7 +677,7 @@ class TestRAGQuickScenario:
         await page.goto(f"{e2e_base_url}/rag/")
         await page.wait_for_load_state("domcontentloaded")
         
-        new_btn = page.locator("button:has-text('New Namespace')")
+        new_btn = page.locator(".rag-header .rag-btn-primary")
         if await new_btn.count() > 0:
             await new_btn.click()
             await page.wait_for_timeout(500)

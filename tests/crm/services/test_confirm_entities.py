@@ -22,9 +22,9 @@ from apps.crm.models.note_models import (
 
 
 @pytest_asyncio.fixture
-async def meeting_note(test_context, note_repo, unique_crm_id) -> Note:
+async def meeting_note(test_context, note_repo, unique_id) -> Note:
     """Создает заметку типа meeting_minutes"""
-    note_id = unique_crm_id("meeting_note")
+    note_id = unique_id("meeting_note")
     note = Note(
         note_id=note_id,
         company_id=test_context.active_company.company_id,
@@ -49,9 +49,9 @@ async def meeting_note(test_context, note_repo, unique_crm_id) -> Note:
 
 
 @pytest_asyncio.fixture
-async def call_note(test_context, note_repo, unique_crm_id) -> Note:
+async def call_note(test_context, note_repo, unique_id) -> Note:
     """Создает заметку типа call_log"""
-    note_id = unique_crm_id("call_note")
+    note_id = unique_id("call_note")
     note = Note(
         note_id=note_id,
         company_id=test_context.active_company.company_id,
@@ -76,9 +76,9 @@ async def call_note(test_context, note_repo, unique_crm_id) -> Note:
 
 
 @pytest_asyncio.fixture
-async def freeform_note(test_context, note_repo, unique_crm_id) -> Note:
+async def freeform_note(test_context, note_repo, unique_id) -> Note:
     """Создает заметку типа freeform"""
-    note_id = unique_crm_id("freeform_note")
+    note_id = unique_id("freeform_note")
     note = Note(
         note_id=note_id,
         company_id=test_context.active_company.company_id,

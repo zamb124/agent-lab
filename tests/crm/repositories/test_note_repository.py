@@ -9,9 +9,9 @@ from apps.crm.db.models import Note
 
 
 @pytest.mark.asyncio
-async def test_create_note(note_repo, test_context, unique_crm_id):
+async def test_create_note(note_repo, test_context, unique_id):
     """Тест создания заметки"""
-    note_id = unique_crm_id("note")
+    note_id = unique_id("note")
     
     note = Note(
         note_id=note_id,
@@ -60,9 +60,9 @@ async def test_update_note(note_repo, sample_note):
 
 
 @pytest.mark.asyncio
-async def test_delete_note(note_repo, test_context, unique_crm_id):
+async def test_delete_note(note_repo, test_context, unique_id):
     """Тест удаления заметки"""
-    note_id = unique_crm_id("note")
+    note_id = unique_id("note")
     
     note = Note(
         note_id=note_id,
@@ -85,13 +85,13 @@ async def test_delete_note(note_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_by_date(note_repo, test_context, unique_crm_id):
+async def test_get_by_date(note_repo, test_context, unique_id):
     """Тест получения заметок по дате"""
     today = date.today()
     created_ids = []
     
     for i in range(3):
-        note_id = unique_crm_id(f"note_{i}")
+        note_id = unique_id(f"note_{i}")
         note = Note(
             note_id=note_id,
             company_id=test_context.active_company.company_id,
@@ -118,13 +118,13 @@ async def test_get_by_date(note_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_by_date_range(note_repo, test_context, unique_crm_id):
+async def test_get_by_date_range(note_repo, test_context, unique_id):
     """Тест получения заметок за диапазон дат"""
     today = date.today()
     yesterday = today - timedelta(days=1)
     tomorrow = today + timedelta(days=1)
     
-    note_id = unique_crm_id("note")
+    note_id = unique_id("note")
     note = Note(
         note_id=note_id,
         company_id=test_context.active_company.company_id,
@@ -151,9 +151,9 @@ async def test_get_by_date_range(note_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_by_type(note_repo, test_context, unique_crm_id):
+async def test_get_by_type(note_repo, test_context, unique_id):
     """Тест получения заметок по типу"""
-    note_id = unique_crm_id("note")
+    note_id = unique_id("note")
     
     note = Note(
         note_id=note_id,
@@ -180,10 +180,10 @@ async def test_get_by_type(note_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_search_by_content(note_repo, test_context, unique_crm_id):
+async def test_search_by_content(note_repo, test_context, unique_id):
     """Тест поиска по содержимому"""
-    note_id = unique_crm_id("note")
-    unique_text = f"unique_search_text_{unique_crm_id('text')}"
+    note_id = unique_id("note")
+    unique_text = f"unique_search_text_{unique_id('text')}"
     
     note = Note(
         note_id=note_id,
@@ -210,10 +210,10 @@ async def test_search_by_content(note_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_linked_to_entity(note_repo, test_context, unique_crm_id):
+async def test_get_linked_to_entity(note_repo, test_context, unique_id):
     """Тест получения заметок, связанных с сущностью"""
-    note_id = unique_crm_id("note")
-    entity_id = unique_crm_id("entity")
+    note_id = unique_id("note")
+    entity_id = unique_id("entity")
     
     note = Note(
         note_id=note_id,
@@ -241,12 +241,12 @@ async def test_get_linked_to_entity(note_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_by_company(note_repo, test_context, unique_crm_id):
+async def test_get_by_company(note_repo, test_context, unique_id):
     """Тест получения заметок по компании"""
     created_ids = []
     
     for i in range(3):
-        note_id = unique_crm_id(f"note_{i}")
+        note_id = unique_id(f"note_{i}")
         note = Note(
             note_id=note_id,
             company_id=test_context.active_company.company_id,

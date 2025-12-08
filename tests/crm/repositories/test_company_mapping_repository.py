@@ -9,9 +9,9 @@ from apps.crm.db.models import CompanyMapping
 
 
 @pytest.mark.asyncio
-async def test_create_company_mapping(company_mapping_repo, test_context, unique_crm_id):
+async def test_create_company_mapping(company_mapping_repo, test_context, unique_id):
     """Тест создания связи company-entity"""
-    entity_id = unique_crm_id("entity")
+    entity_id = unique_id("entity")
     
     mapping = CompanyMapping(
         company_id=test_context.active_company.company_id,
@@ -32,9 +32,9 @@ async def test_create_company_mapping(company_mapping_repo, test_context, unique
 
 
 @pytest.mark.asyncio
-async def test_get_company_mapping(company_mapping_repo, test_context, unique_crm_id):
+async def test_get_company_mapping(company_mapping_repo, test_context, unique_id):
     """Тест получения mapping по company_id"""
-    entity_id = unique_crm_id("entity")
+    entity_id = unique_id("entity")
     
     mapping = CompanyMapping(
         company_id=test_context.active_company.company_id,
@@ -54,9 +54,9 @@ async def test_get_company_mapping(company_mapping_repo, test_context, unique_cr
 
 
 @pytest.mark.asyncio
-async def test_get_by_entity(company_mapping_repo, test_context, unique_crm_id):
+async def test_get_by_entity(company_mapping_repo, test_context, unique_id):
     """Тест получения mapping по entity_id"""
-    entity_id = unique_crm_id("entity")
+    entity_id = unique_id("entity")
     
     mapping = CompanyMapping(
         company_id=test_context.active_company.company_id,
@@ -77,9 +77,9 @@ async def test_get_by_entity(company_mapping_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_delete_company_mapping(company_mapping_repo, test_context, unique_crm_id):
+async def test_delete_company_mapping(company_mapping_repo, test_context, unique_id):
     """Тест удаления mapping"""
-    entity_id = unique_crm_id("entity")
+    entity_id = unique_id("entity")
     
     mapping = CompanyMapping(
         company_id=test_context.active_company.company_id,
@@ -98,10 +98,10 @@ async def test_delete_company_mapping(company_mapping_repo, test_context, unique
 
 
 @pytest.mark.asyncio
-async def test_update_company_mapping(company_mapping_repo, test_context, unique_crm_id):
+async def test_update_company_mapping(company_mapping_repo, test_context, unique_id):
     """Тест обновления mapping"""
-    entity_id = unique_crm_id("entity")
-    new_entity_id = unique_crm_id("new_entity")
+    entity_id = unique_id("entity")
+    new_entity_id = unique_id("new_entity")
     
     mapping = CompanyMapping(
         company_id=test_context.active_company.company_id,
@@ -126,9 +126,9 @@ async def test_update_company_mapping(company_mapping_repo, test_context, unique
 
 
 @pytest.mark.asyncio
-async def test_get_nonexistent_mapping(company_mapping_repo, unique_crm_id):
+async def test_get_nonexistent_mapping(company_mapping_repo, unique_id):
     """Тест получения несуществующего mapping"""
-    fake_company_id = unique_crm_id("fake_company")
+    fake_company_id = unique_id("fake_company")
     
     mapping = await company_mapping_repo.get(fake_company_id)
     
@@ -136,9 +136,9 @@ async def test_get_nonexistent_mapping(company_mapping_repo, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_by_nonexistent_entity(company_mapping_repo, unique_crm_id):
+async def test_get_by_nonexistent_entity(company_mapping_repo, unique_id):
     """Тест получения mapping по несуществующему entity_id"""
-    fake_entity_id = unique_crm_id("fake_entity")
+    fake_entity_id = unique_id("fake_entity")
     
     mapping = await company_mapping_repo.get_by_entity(fake_entity_id)
     

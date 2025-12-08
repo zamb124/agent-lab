@@ -132,7 +132,7 @@ class CRMContainer(BaseContainer):
         from apps.crm.services.agents_client import AgentsClient
         from apps.crm.config import get_crm_settings
         settings = get_crm_settings()
-        return AgentsClient(agents_base_url=settings.agents_service_url)
+        return AgentsClient(agents_base_url=settings.server.get_agents_service_url())
     
     @lazy
     def graph_service(self):

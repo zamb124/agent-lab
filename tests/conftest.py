@@ -1268,10 +1268,11 @@ def taskiq_worker_process(migrated_db):
 
 
 @pytest.fixture(scope="session")
-def agents_server_process(migrated_db):
+def agents_server_process(session_test_data):
     """
     Запускает agents сервер через subprocess.
     Session scope - один сервер на всю сессию тестов.
+    Зависит от session_test_data чтобы данные были в БД до запуска.
     """
     port = _get_free_port()
     host = "127.0.0.1"
@@ -1421,12 +1422,16 @@ async def session_test_data(migrated_db):
 
 
 @pytest.fixture(scope="session")
-def crm_server_process(session_test_data):
+def crm_server_process(session_test_data, agents_server_process):
     """
     Запускает CRM сервер через subprocess.
     Session scope - один сервер на всю сессию тестов.
     Зависит от session_test_data чтобы данные были в БД до запуска.
+    Зависит от agents_server_process для AI вызовов.
     """
+    # Устанавливаем URL Agents сервиса (server.agents_service_url)
+    os.environ["SERVER__AGENTS_SERVICE_URL"] = agents_server_process["url"]
+    
     port = _get_free_port()
     host = "127.0.0.1"
     
@@ -1448,6 +1453,7 @@ def crm_server_process(session_test_data):
     yield {"host": host, "port": port, "url": url, "test_data": session_test_data}
     
     os.environ.pop("TEST_CRM_SERVICE_URL", None)
+    os.environ.pop("SERVER__AGENTS_SERVICE_URL", None)
     
     process.terminate()
     try:
@@ -1533,7 +1539,7 @@ async def crm_app(migrated_db, agents_server_process):
     Зависит от agents_server_process чтобы CRM мог вызывать AI сервис.
     """
     # Устанавливаем URL agents сервиса ДО создания приложения
-    os.environ["CRM__AGENTS_SERVICE_URL"] = agents_server_process["url"]
+    os.environ["SERVER__AGENTS_SERVICE_URL"] = agents_server_process["url"]
     
     # Сбрасываем кэш CRM settings чтобы подхватить новый URL
     import apps.crm.config as crm_config_module
@@ -1604,34 +1610,6 @@ async def crm_client(crm_app, test_context, test_user, test_company):
         pass
 
 
-@pytest_asyncio.fixture
-async def crm_note_repo(crm_app, test_context):
-    """NoteRepository с контекстом"""
-    set_context(test_context)
-    return crm_app.state.container.note_repository
-
-
-@pytest_asyncio.fixture
-async def crm_entity_service(crm_app, test_context):
-    """EntityService с контекстом"""
-    set_context(test_context)
-    return crm_app.state.container.entity_service
-
-
-@pytest_asyncio.fixture
-async def crm_task_repo(crm_app, test_context):
-    """TaskRepository с контекстом"""
-    set_context(test_context)
-    return crm_app.state.container.task_repository
-
-
-@pytest_asyncio.fixture
-async def crm_relationship_repo(crm_app, test_context):
-    """RelationshipRepository с контекстом"""
-    set_context(test_context)
-    return crm_app.state.container.relationship_repository
-
-
 @pytest.fixture(scope="session")
 def frontend_server_process(migrated_db):
     """
@@ -1651,7 +1629,7 @@ def frontend_server_process(migrated_db):
         process.terminate()
         raise RuntimeError(f"Frontend сервер не запустился на {host}:{port}")
     
-    logger.info(f"✅ Frontend сервер запущен на http://{host}:{port}")
+    logger.info(f"Frontend сервер запущен на http://{host}:{port}")
     
     yield {"host": host, "port": port, "url": f"http://{host}:{port}"}
     
@@ -1660,4 +1638,661 @@ def frontend_server_process(migrated_db):
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:
         process.kill()
-    logger.info("✅ Frontend сервер остановлен")
+    logger.info("Frontend сервер остановлен")
+
+
+# === CRM Database & Container ===
+
+@pytest_asyncio.fixture(scope="session")
+async def crm_db(migrated_db):
+    """
+    CRM Database для тестов.
+    Создает таблицы CRM в отдельной БД crm_db.
+    """
+    from core.config import get_settings
+    from apps.crm.db.base import CRMDatabase
+    
+    settings = get_settings()
+    crm_db_url = settings.database.crm_url or settings.database.url
+    
+    db = CRMDatabase(crm_db_url)
+    await db.create_tables(drop_existing=True)
+    
+    yield db
+    
+    CRMDatabase.reset()
+
+
+@pytest_asyncio.fixture(scope="session")
+async def crm_container(crm_db, migrated_db):
+    """
+    CRM Container для тестов.
+    Session scope - переиспользуется между тестами.
+    """
+    from core.config import get_settings
+    from apps.crm.container import CRMContainer, set_crm_container, reset_crm_container
+    
+    settings = get_settings()
+    crm_db_url = settings.database.crm_url or settings.database.url
+    
+    container = CRMContainer(
+        db_url=crm_db_url,
+        shared_db_url=settings.database.shared_url
+    )
+    set_crm_container(container)
+    
+    await container.entity_type_service.init_system_types()
+    
+    yield container
+    
+    reset_crm_container()
+
+
+# === CRM Repositories ===
+
+@pytest_asyncio.fixture
+async def entity_type_repo(crm_container):
+    """EntityTypeRepository"""
+    return crm_container.entity_type_repository
+
+
+@pytest_asyncio.fixture
+async def relationship_repo(crm_container):
+    """RelationshipRepository"""
+    return crm_container.relationship_repository
+
+
+@pytest_asyncio.fixture
+async def note_repo(crm_container):
+    """NoteRepository"""
+    return crm_container.note_repository
+
+
+@pytest_asyncio.fixture
+async def task_repo(crm_container):
+    """TaskRepository"""
+    return crm_container.task_repository
+
+
+@pytest_asyncio.fixture
+async def company_mapping_repo(crm_container):
+    """CompanyMappingRepository"""
+    return crm_container.company_mapping_repository
+
+
+# === CRM Services ===
+
+@pytest_asyncio.fixture
+async def entity_type_service(crm_container):
+    """EntityTypeService"""
+    return crm_container.entity_type_service
+
+
+@pytest_asyncio.fixture
+async def note_service(crm_container):
+    """NoteService"""
+    return crm_container.note_service
+
+
+@pytest_asyncio.fixture
+async def task_service(crm_container):
+    """TaskService"""
+    return crm_container.task_service
+
+
+@pytest_asyncio.fixture
+async def relationship_service(crm_container):
+    """RelationshipService"""
+    return crm_container.relationship_service
+
+
+@pytest_asyncio.fixture
+async def entity_service(crm_container):
+    """EntityService"""
+    return crm_container.entity_service
+
+
+@pytest_asyncio.fixture
+async def graph_service(crm_container):
+    """GraphService"""
+    return crm_container.graph_service
+
+
+# === CRM Sample Objects ===
+
+@pytest_asyncio.fixture
+async def sample_entity_type(test_context, entity_type_repo, unique_id):
+    """Создает тестовый тип сущности"""
+    from apps.crm.db.models import EntityType
+    
+    type_id = unique_id("type")
+    entity_type = EntityType(
+        type_id=type_id,
+        company_id=test_context.active_company.company_id,
+        name="Test Entity Type",
+        description="Test description",
+        prompt="Test extraction prompt",
+        required_fields={"name": {"label": "Name", "type": "text"}},
+        optional_fields={"email": {"label": "Email", "type": "email"}, "phone": {"label": "Phone", "type": "phone"}},
+        icon="ti-test",
+        color="#FF0000",
+        is_system=False,
+        check_duplicates=True,
+        is_filtered=False,
+    )
+    
+    await entity_type_repo.create(entity_type)
+    yield entity_type
+    
+    await entity_type_repo.delete(type_id)
+
+
+@pytest_asyncio.fixture
+async def sample_note(test_context, note_repo, unique_id):
+    """Создает тестовую заметку"""
+    from datetime import date, datetime, timezone
+    from apps.crm.db.models import Note
+    
+    note_id = unique_id("note")
+    note = Note(
+        note_id=note_id,
+        company_id=test_context.active_company.company_id,
+        user_id=test_context.user.user_id,
+        title="Test Note",
+        content="This is a test note content",
+        note_type="freeform",
+        note_date=date.today(),
+        ai_summary=None,
+        linked_entity_ids=[],
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    
+    await note_repo.create(note)
+    yield note
+    
+    await note_repo.delete(note_id)
+
+
+@pytest_asyncio.fixture
+async def sample_task(test_context, task_repo, unique_id):
+    """Создает тестовую задачу"""
+    from datetime import date, datetime, timezone
+    from apps.crm.db.models import Task
+    
+    task_id = unique_id("task")
+    task = Task(
+        task_id=task_id,
+        company_id=test_context.active_company.company_id,
+        user_id=test_context.user.user_id,
+        title="Test Task",
+        description="Test task description",
+        priority="medium",
+        status="pending",
+        due_date=date.today(),
+        linked_entity_id=None,
+        source_note_id=None,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    
+    await task_repo.create(task)
+    yield task
+    
+    await task_repo.delete(task_id)
+
+
+@pytest_asyncio.fixture
+async def sample_relationship(test_context, relationship_repo, unique_id):
+    """Создает тестовую связь"""
+    from datetime import datetime, timezone
+    from apps.crm.db.models import Relationship
+    
+    rel_id = unique_id("rel")
+    relationship = Relationship(
+        relationship_id=rel_id,
+        company_id=test_context.active_company.company_id,
+        source_entity_id=f"entity_{unique_id('src')}",
+        target_entity_id=f"entity_{unique_id('tgt')}",
+        relationship_type="connected_to",
+        weight=1.0,
+        attributes={},
+        created_at=datetime.now(timezone.utc),
+    )
+    
+    await relationship_repo.create(relationship)
+    yield relationship
+    
+    await relationship_repo.delete(rel_id)
+
+
+# === CRM Test Objects ===
+
+@pytest_asyncio.fixture
+async def test_note(crm_container, test_context):
+    """Тестовая заметка для API тестов"""
+    from datetime import date
+    from apps.crm.db.models import Note
+    
+    user = test_context.user
+    company = test_context.active_company
+    
+    note = Note(
+        note_id=f"test_note_{uuid.uuid4().hex[:8]}",
+        company_id=company.company_id,
+        user_id=user.user_id,
+        title="Test Note for API",
+        content="This is test content",
+        note_type="freeform",
+        note_date=date.today(),
+        visibility="public",
+    )
+    
+    created = await crm_container.note_repository.create(note)
+    yield created
+    
+    try:
+        await crm_container.note_repository.delete(created.note_id)
+    except Exception:
+        pass
+
+
+@pytest_asyncio.fixture
+async def test_meeting_note(crm_container, test_context):
+    """Тестовая заметка meeting_minutes"""
+    from datetime import date
+    from apps.crm.db.models import Note
+    
+    user = test_context.user
+    company = test_context.active_company
+    
+    note = Note(
+        note_id=f"test_meeting_{uuid.uuid4().hex[:8]}",
+        company_id=company.company_id,
+        user_id=user.user_id,
+        title="Test Meeting Note",
+        content="Meeting with John and Jane from ACME Corp",
+        note_type="meeting_minutes",
+        note_date=date.today(),
+        visibility="public",
+    )
+    
+    created = await crm_container.note_repository.create(note)
+    yield created
+    
+    try:
+        await crm_container.note_repository.delete(created.note_id)
+    except Exception:
+        pass
+
+
+@pytest_asyncio.fixture
+async def test_task(crm_container, test_context):
+    """Тестовая задача для API тестов"""
+    from datetime import date
+    from apps.crm.db.models import Task
+    
+    user = test_context.user
+    company = test_context.active_company
+    
+    task = Task(
+        task_id=f"test_task_{uuid.uuid4().hex[:8]}",
+        company_id=company.company_id,
+        user_id=user.user_id,
+        title="Test Task for API",
+        description="Test description",
+        priority="medium",
+        status="pending",
+        due_date=date.today(),
+    )
+    
+    created = await crm_container.task_repository.create(task)
+    yield created
+    
+    try:
+        await crm_container.task_repository.delete(created.task_id)
+    except Exception:
+        pass
+
+
+@pytest_asyncio.fixture
+async def test_entity(crm_container, test_context):
+    """Тестовая сущность для API тестов"""
+    from apps.crm.models.entity_models import EntityCreate
+    
+    company = test_context.active_company
+    
+    entity_data = EntityCreate(
+        name=f"Test Entity {uuid.uuid4().hex[:6]}",
+        type="person",
+        attributes={"email": "test@example.com"},
+    )
+    
+    entity = await crm_container.entity_service.create_entity(
+        entity_data, 
+        company_id=company.company_id
+    )
+    yield entity
+    
+    try:
+        await crm_container.entity_service.delete_entity(
+            entity.entity_id, 
+            company_id=company.company_id
+        )
+    except Exception:
+        pass
+
+
+# === CRM API Fixtures ===
+
+@pytest.fixture
+def test_user_id(session_test_data):
+    """ID тестового пользователя для API тестов"""
+    return session_test_data["user"].user_id
+
+
+@pytest.fixture
+def test_company_id(session_test_data):
+    """ID тестовой компании для API тестов"""
+    return session_test_data["company"].company_id
+
+
+# === E2E Browser Fixtures ===
+
+FRONTEND_PORT = int(os.getenv("FRONTEND_PORT", "8002"))
+E2E_USER_ID = "e2e_browser_test_user"
+E2E_COMPANY_ID = "e2e_browser_test_company"
+E2E_SESSION_ID = "e2e_browser_test_session"
+E2E_SUBDOMAIN = "e2ebrowser"
+
+
+def pytest_collection_modifyitems(items):
+    """Группирует все browser тесты в один xdist worker."""
+    for item in items:
+        if "/browser/" in str(item.fspath):
+            item.add_marker(pytest.mark.xdist_group("browser"))
+
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Сохраняем результат теста для использования в фикстурах"""
+    outcome = yield
+    rep = outcome.get_result()
+    setattr(item, f"rep_{rep.when}", rep)
+
+
+@pytest.fixture(scope="session")
+def e2e_test_data(migrated_db):
+    """Данные тестового пользователя для E2E тестов."""
+    return {
+        "user_id": E2E_USER_ID,
+        "company_id": E2E_COMPANY_ID,
+        "session_id": E2E_SESSION_ID,
+        "subdomain": E2E_SUBDOMAIN,
+    }
+
+
+@pytest.fixture(scope="session")
+def live_server(migrated_db, e2e_test_data, taskiq_worker_process, agents_service, frontend_server_process):
+    """Frontend сервер для E2E тестов."""
+    return frontend_server_process
+
+
+@pytest.fixture(scope="session")
+def e2e_auth_token(e2e_test_data):
+    """JWT токен для e2e тестов"""
+    from core.utils.tokens import get_token_service
+    
+    token_service = get_token_service()
+    token = token_service.create_token(
+        user_id=e2e_test_data["user_id"],
+        company_id=e2e_test_data["company_id"],
+        expires_in=86400
+    )
+    return token
+
+
+@pytest.fixture(scope="session")
+def e2e_base_url(live_server, e2e_test_data):
+    """Базовый URL для E2E тестов с поддоменом компании."""
+    subdomain = e2e_test_data["subdomain"]
+    return f"http://{subdomain}.localhost:{live_server['port']}"
+
+
+@pytest.fixture(scope="session")
+def server_url(live_server):
+    """URL сервера для публичных страниц (без поддомена)."""
+    return f"http://localhost:{live_server['port']}"
+
+
+# === Playwright Fixtures ===
+
+@pytest_asyncio.fixture(scope="session")
+async def browser(playwright):
+    """Запускает браузер один раз на всю сессию"""
+    headless = os.getenv("HEADED", "false").lower() != "true"
+    browser = await playwright.chromium.launch(headless=headless)
+    yield browser
+    await browser.close()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def context(browser, e2e_auth_token, e2e_base_url, e2e_test_data):
+    """Создает новый контекст браузера для каждого теста с авторизацией"""
+    subdomain = e2e_test_data["subdomain"]
+    
+    context = await browser.new_context(
+        base_url=e2e_base_url,
+        viewport={"width": 1280, "height": 720},
+    )
+    
+    await context.add_cookies([{
+        "name": "auth_token",
+        "value": e2e_auth_token,
+        "domain": f"{subdomain}.localhost",  
+        "path": "/",
+    }])
+    
+    yield context
+    await context.close()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def page(context):
+    """Создает новую страницу в контексте"""
+    from playwright.async_api import Page
+    page = await context.new_page()
+    yield page
+    await page.close()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def authenticated_page(page, e2e_base_url):
+    """Страница с проверкой авторизации."""
+    await page.goto(e2e_base_url)
+    await page.wait_for_load_state("networkidle")
+    
+    if "/auth" in page.url:
+        raise AssertionError("Пользователь не авторизован - редирект на /auth")
+    
+    yield page
+
+
+@pytest_asyncio.fixture(scope="function")
+async def public_page(browser, live_server):
+    """Страница БЕЗ авторизации для тестирования публичных страниц."""
+    from playwright.async_api import Page
+    
+    context = await browser.new_context(
+        base_url=f"http://localhost:{live_server['port']}",
+        viewport={"width": 1280, "height": 720},
+    )
+    
+    page = await context.new_page()
+    yield page
+    
+    await page.close()
+    await context.close()
+
+
+# === E2E Screenshot Utilities ===
+
+class ScenarioScreenshots:
+    """Хелпер для сохранения скриншотов в сценарных тестах"""
+    
+    def __init__(self, test_name: str, screenshots_dir: Path):
+        self.test_name = test_name
+        self.screenshots_dir = screenshots_dir
+        self.screenshots_dir.mkdir(parents=True, exist_ok=True)
+        self.counter = 0
+    
+    async def capture(self, name: str, page):
+        """Сохраняет скриншот с именем"""
+        self.counter += 1
+        filename = f"{self.test_name}_{self.counter:02d}_{name}.png"
+        filepath = self.screenshots_dir / filename
+        try:
+            await page.screenshot(path=str(filepath))
+        except Exception:
+            pass
+
+
+@pytest_asyncio.fixture
+async def scenario_screenshots(request):
+    """Фикстура для сохранения скриншотов в сценарных тестах"""
+    test_name = request.node.name.replace("/", "_").replace("::", "_")
+    screenshots_dir = Path(__file__).parent / "frontend" / "browser" / "screenshots" / "scenarios"
+    return ScenarioScreenshots(test_name, screenshots_dir)
+
+
+DOCS_DIR = Path(__file__).parent.parent / "docs" / "user_docs" / "user_scenarios"
+
+
+class ScenarioDocGenerator:
+    """Генератор пользовательской документации из browser тестов."""
+    
+    def __init__(self, scenario_name: str, title: str):
+        self.scenario_name = scenario_name
+        self.title = title
+        self.output_dir = DOCS_DIR / scenario_name
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.steps: list[dict] = []
+        self.counter = 0
+    
+    async def step(self, page, title: str, description: str, selector: str = None):
+        """Записывает шаг сценария."""
+        self.counter += 1
+        screenshot_name = f"{self.counter:02d}.png"
+        screenshot_path = self.output_dir / screenshot_name
+        
+        if selector:
+            await self._highlight_element(page, selector)
+        
+        await page.screenshot(path=str(screenshot_path))
+        
+        if selector:
+            await self._remove_highlight(page, selector)
+        
+        self.steps.append({
+            "number": self.counter,
+            "title": title,
+            "description": description,
+            "screenshot": screenshot_name,
+        })
+    
+    async def click(self, page, selector: str, title: str, description: str):
+        """Подсвечивает элемент, делает скриншот, затем кликает."""
+        await self.step(page, title, description, selector)
+        await page.click(selector)
+    
+    async def fill(self, page, selector: str, value: str, title: str, description: str):
+        """Подсвечивает поле ввода, делает скриншот, затем заполняет."""
+        await self.step(page, title, description, selector)
+        await page.fill(selector, value)
+    
+    async def _highlight_element(self, page, selector: str):
+        """Добавляет красную рамку на элемент"""
+        try:
+            locator = page.locator(selector).first
+            if await locator.count() > 0:
+                await locator.evaluate("""
+                    (el) => {
+                        el.dataset.originalOutline = el.style.outline;
+                        el.dataset.originalBoxShadow = el.style.boxShadow;
+                        el.style.outline = '3px solid #ff0000';
+                        el.style.boxShadow = '0 0 15px 5px rgba(255, 0, 0, 0.5)';
+                    }
+                """)
+            await page.wait_for_timeout(100)
+        except Exception:
+            pass
+    
+    async def _remove_highlight(self, page, selector: str):
+        """Убирает подсветку с элемента"""
+        try:
+            locator = page.locator(selector).first
+            if await locator.count() > 0:
+                await locator.evaluate("""
+                    (el) => {
+                        el.style.outline = el.dataset.originalOutline || '';
+                        el.style.boxShadow = el.dataset.originalBoxShadow || '';
+                        delete el.dataset.originalOutline;
+                        delete el.dataset.originalBoxShadow;
+                    }
+                """)
+        except Exception:
+            pass
+    
+    def generate_markdown(self) -> str:
+        """Генерирует markdown документацию"""
+        lines = [f"# {self.title}", ""]
+        
+        for step in self.steps:
+            lines.extend([
+                f"## {step['number']}. {step['title']}",
+                "",
+                step['description'],
+                "",
+                f"![{step['title']}]({step['screenshot']})",
+                "",
+            ])
+        
+        return "\n".join(lines)
+    
+    def save(self):
+        """Сохраняет index.md файл с документацией"""
+        markdown = self.generate_markdown()
+        index_path = self.output_dir / "index.md"
+        index_path.write_text(markdown, encoding="utf-8")
+        return index_path
+
+
+@pytest_asyncio.fixture
+async def doc_generator():
+    """Фабрика для создания генератора документации."""
+    generators = []
+    
+    def create(scenario_name: str, title: str) -> ScenarioDocGenerator:
+        gen = ScenarioDocGenerator(scenario_name, title)
+        generators.append(gen)
+        return gen
+    
+    yield create
+    
+    for gen in generators:
+        gen.save()
+
+
+@pytest_asyncio.fixture
+async def screenshot_on_failure(request, page):
+    """Делает скриншот при падении теста"""
+    yield
+    
+    if hasattr(request.node, "rep_call") and request.node.rep_call.failed:
+        screenshot_dir = Path(__file__).parent / "frontend" / "browser" / "screenshots"
+        screenshot_dir.mkdir(exist_ok=True)
+        
+        test_name = request.node.name.replace("/", "_").replace("::", "_")
+        screenshot_path = screenshot_dir / f"{test_name}.png"
+        await page.screenshot(path=str(screenshot_path))
+        print(f"Screenshot saved: {screenshot_path}")

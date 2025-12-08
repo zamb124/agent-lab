@@ -20,9 +20,9 @@ async def test_list_entity_types(crm_client):
 
 
 @pytest.mark.asyncio
-async def test_create_entity_type(crm_client, unique_crm_id):
+async def test_create_entity_type(crm_client, unique_id):
     """Тест создания типа сущности"""
-    type_id = unique_crm_id("api_type")
+    type_id = unique_id("api_type")
     
     payload = {
         "type_id": type_id,
@@ -47,9 +47,9 @@ async def test_create_entity_type(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_entity_type(crm_client, unique_crm_id):
+async def test_get_entity_type(crm_client, unique_id):
     """Тест получения типа по ID"""
-    type_id = unique_crm_id("api_type")
+    type_id = unique_id("api_type")
     
     payload = {
         "type_id": type_id,
@@ -70,9 +70,9 @@ async def test_get_entity_type(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_nonexistent_entity_type(crm_client, unique_crm_id):
+async def test_get_nonexistent_entity_type(crm_client, unique_id):
     """Тест получения несуществующего типа"""
-    fake_id = unique_crm_id("fake")
+    fake_id = unique_id("fake")
     
     response = await crm_client.get(f"/crm/api/v1/entity-types/{fake_id}")
     
@@ -80,9 +80,9 @@ async def test_get_nonexistent_entity_type(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_update_entity_type(crm_client, unique_crm_id):
+async def test_update_entity_type(crm_client, unique_id):
     """Тест обновления типа"""
-    type_id = unique_crm_id("api_type")
+    type_id = unique_id("api_type")
     
     payload = {
         "type_id": type_id,
@@ -106,9 +106,9 @@ async def test_update_entity_type(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_delete_entity_type(crm_client, unique_crm_id):
+async def test_delete_entity_type(crm_client, unique_id):
     """Тест удаления типа"""
-    type_id = unique_crm_id("api_type")
+    type_id = unique_id("api_type")
     
     payload = {
         "type_id": type_id,

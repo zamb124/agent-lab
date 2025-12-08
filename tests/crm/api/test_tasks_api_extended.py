@@ -8,7 +8,7 @@ from datetime import date, timedelta
 
 
 @pytest.mark.asyncio
-async def test_create_task_with_tags(crm_client, unique_crm_id):
+async def test_create_task_with_tags(crm_client, unique_id):
     """Тест создания задачи с тегами через API"""
     payload = {
         "title": "Tagged Task",
@@ -30,10 +30,10 @@ async def test_create_task_with_tags(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_create_task_with_assignees(crm_client, unique_crm_id):
+async def test_create_task_with_assignees(crm_client, unique_id):
     """Тест создания задачи с соучастниками через API"""
-    assignee_1 = unique_crm_id("user1")
-    assignee_2 = unique_crm_id("user2")
+    assignee_1 = unique_id("user1")
+    assignee_2 = unique_id("user2")
     
     payload = {
         "title": "Shared Task",
@@ -54,7 +54,7 @@ async def test_create_task_with_assignees(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_update_task_tags(crm_client, unique_crm_id):
+async def test_update_task_tags(crm_client, unique_id):
     """Тест обновления тегов задачи через API"""
     payload = {
         "title": "Update Tags Task",
@@ -78,10 +78,10 @@ async def test_update_task_tags(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_update_task_assignees(crm_client, unique_crm_id):
+async def test_update_task_assignees(crm_client, unique_id):
     """Тест обновления соучастников задачи через API"""
-    old_assignee = unique_crm_id("old")
-    new_assignee = unique_crm_id("new")
+    old_assignee = unique_id("old")
+    new_assignee = unique_id("new")
     
     payload = {
         "title": "Update Assignees Task",
@@ -104,7 +104,7 @@ async def test_update_task_assignees(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_add_tag_to_task(crm_client, unique_crm_id):
+async def test_add_tag_to_task(crm_client, unique_id):
     """Тест добавления тега к задаче через API endpoint"""
     payload = {
         "title": "Add Tag API Test",
@@ -126,7 +126,7 @@ async def test_add_tag_to_task(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_add_tag_idempotent(crm_client, unique_crm_id):
+async def test_add_tag_idempotent(crm_client, unique_id):
     """Тест что добавление тега идемпотентно"""
     payload = {
         "title": "Idempotent Tag Test",
@@ -148,7 +148,7 @@ async def test_add_tag_idempotent(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_remove_tag_from_task(crm_client, unique_crm_id):
+async def test_remove_tag_from_task(crm_client, unique_id):
     """Тест удаления тега из задачи через API endpoint"""
     payload = {
         "title": "Remove Tag API Test",
@@ -170,10 +170,10 @@ async def test_remove_tag_from_task(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_add_assignee_to_task(crm_client, unique_crm_id):
+async def test_add_assignee_to_task(crm_client, unique_id):
     """Тест добавления соучастника через API endpoint"""
-    existing = unique_crm_id("existing")
-    new_user = unique_crm_id("new")
+    existing = unique_id("existing")
+    new_user = unique_id("new")
     
     payload = {
         "title": "Add Assignee API Test",
@@ -195,10 +195,10 @@ async def test_add_assignee_to_task(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_remove_assignee_from_task(crm_client, unique_crm_id):
+async def test_remove_assignee_from_task(crm_client, unique_id):
     """Тест удаления соучастника через API endpoint"""
-    keep_user = unique_crm_id("keep")
-    remove_user = unique_crm_id("remove")
+    keep_user = unique_id("keep")
+    remove_user = unique_id("remove")
     
     payload = {
         "title": "Remove Assignee API Test",
@@ -220,9 +220,9 @@ async def test_remove_assignee_from_task(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_tasks_by_tag(crm_client, unique_crm_id):
+async def test_get_tasks_by_tag(crm_client, unique_id):
     """Тест получения задач по тегу через API"""
-    unique_tag = unique_crm_id("tag")
+    unique_tag = unique_id("tag")
     created_ids = []
     
     for i in range(2):
@@ -248,9 +248,9 @@ async def test_get_tasks_by_tag(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_tasks_by_assignee(crm_client, unique_crm_id):
+async def test_get_tasks_by_assignee(crm_client, unique_id):
     """Тест получения задач по соучастнику через API"""
-    assignee = unique_crm_id("assignee")
+    assignee = unique_id("assignee")
     created_ids = []
     
     for i in range(2):
@@ -276,9 +276,9 @@ async def test_get_tasks_by_assignee(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_task_with_tags_and_assignees(crm_client, unique_crm_id):
+async def test_task_with_tags_and_assignees(crm_client, unique_id):
     """Тест создания задачи с тегами и соучастниками одновременно"""
-    assignee = unique_crm_id("assignee")
+    assignee = unique_id("assignee")
     
     payload = {
         "title": "Full Task",
@@ -300,7 +300,7 @@ async def test_task_with_tags_and_assignees(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_empty_tags_default(crm_client, unique_crm_id):
+async def test_empty_tags_default(crm_client, unique_id):
     """Тест что tags по умолчанию пустой список"""
     payload = {
         "title": "No Tags Task",
@@ -317,7 +317,7 @@ async def test_empty_tags_default(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_empty_assignees_default(crm_client, unique_crm_id):
+async def test_empty_assignees_default(crm_client, unique_id):
     """Тест что assignees по умолчанию пустой список"""
     payload = {
         "title": "No Assignees Task",

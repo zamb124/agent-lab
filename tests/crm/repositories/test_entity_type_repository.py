@@ -8,9 +8,9 @@ from apps.crm.db.models import EntityType
 
 
 @pytest.mark.asyncio
-async def test_create_entity_type(entity_type_repo, test_context, unique_crm_id):
+async def test_create_entity_type(entity_type_repo, test_context, unique_id):
     """Тест создания типа сущности"""
-    type_id = unique_crm_id("type")
+    type_id = unique_id("type")
     
     entity_type = EntityType(
         type_id=type_id,
@@ -69,9 +69,9 @@ async def test_update_entity_type(entity_type_repo, sample_entity_type):
 
 
 @pytest.mark.asyncio
-async def test_delete_entity_type(entity_type_repo, test_context, unique_crm_id):
+async def test_delete_entity_type(entity_type_repo, test_context, unique_id):
     """Тест удаления типа сущности"""
-    type_id = unique_crm_id("type")
+    type_id = unique_id("type")
     
     entity_type = EntityType(
         type_id=type_id,
@@ -89,11 +89,11 @@ async def test_delete_entity_type(entity_type_repo, test_context, unique_crm_id)
 
 
 @pytest.mark.asyncio
-async def test_list_entity_types(entity_type_repo, test_context, unique_crm_id):
+async def test_list_entity_types(entity_type_repo, test_context, unique_id):
     """Тест получения списка типов с пагинацией"""
     created_ids = []
     for i in range(5):
-        type_id = unique_crm_id(f"type_{i}")
+        type_id = unique_id(f"type_{i}")
         entity_type = EntityType(
             type_id=type_id,
             company_id=test_context.active_company.company_id,
@@ -114,9 +114,9 @@ async def test_list_entity_types(entity_type_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_custom_types(entity_type_repo, test_context, unique_crm_id):
+async def test_get_custom_types(entity_type_repo, test_context, unique_id):
     """Тест получения кастомных типов компании"""
-    type_id = unique_crm_id("type")
+    type_id = unique_id("type")
     
     entity_type = EntityType(
         type_id=type_id,
@@ -137,9 +137,9 @@ async def test_get_custom_types(entity_type_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_system_types(entity_type_repo, test_context, unique_crm_id):
+async def test_get_system_types(entity_type_repo, test_context, unique_id):
     """Тест получения системных типов"""
-    type_id = unique_crm_id("sys_type")
+    type_id = unique_id("sys_type")
     
     system_type = EntityType(
         type_id=type_id,
@@ -158,11 +158,11 @@ async def test_get_system_types(entity_type_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_many_entity_types(entity_type_repo, test_context, unique_crm_id):
+async def test_get_many_entity_types(entity_type_repo, test_context, unique_id):
     """Тест получения нескольких типов по ID"""
     created_ids = []
     for i in range(3):
-        type_id = unique_crm_id(f"type_{i}")
+        type_id = unique_id(f"type_{i}")
         entity_type = EntityType(
             type_id=type_id,
             company_id=test_context.active_company.company_id,
@@ -184,11 +184,11 @@ async def test_get_many_entity_types(entity_type_repo, test_context, unique_crm_
 
 
 @pytest.mark.asyncio
-async def test_count_entity_types(entity_type_repo, test_context, unique_crm_id):
+async def test_count_entity_types(entity_type_repo, test_context, unique_id):
     """Тест подсчета типов"""
     initial_count = await entity_type_repo.count()
     
-    type_id = unique_crm_id("type")
+    type_id = unique_id("type")
     entity_type = EntityType(
         type_id=type_id,
         company_id=test_context.active_company.company_id,

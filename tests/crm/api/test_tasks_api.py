@@ -17,7 +17,7 @@ async def test_list_tasks(crm_client):
 
 
 @pytest.mark.asyncio
-async def test_create_task(crm_client, unique_crm_id):
+async def test_create_task(crm_client, unique_id):
     """Тест создания задачи"""
     payload = {
         "title": "API Test Task",
@@ -38,7 +38,7 @@ async def test_create_task(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_task(crm_client, unique_crm_id):
+async def test_get_task(crm_client, unique_id):
     """Тест получения задачи по ID"""
     payload = {
         "title": "Get Test Task",
@@ -59,9 +59,9 @@ async def test_get_task(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_nonexistent_task(crm_client, unique_crm_id):
+async def test_get_nonexistent_task(crm_client, unique_id):
     """Тест получения несуществующей задачи"""
-    fake_id = unique_crm_id("fake")
+    fake_id = unique_id("fake")
     
     response = await crm_client.get(f"/crm/api/v1/tasks/{fake_id}")
     
@@ -69,7 +69,7 @@ async def test_get_nonexistent_task(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_update_task(crm_client, unique_crm_id):
+async def test_update_task(crm_client, unique_id):
     """Тест обновления задачи"""
     payload = {
         "title": "Original Task",
@@ -96,7 +96,7 @@ async def test_update_task(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_delete_task(crm_client, unique_crm_id):
+async def test_delete_task(crm_client, unique_id):
     """Тест удаления задачи"""
     payload = {
         "title": "To Delete",
@@ -115,7 +115,7 @@ async def test_delete_task(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_my_tasks(crm_client, unique_crm_id):
+async def test_get_my_tasks(crm_client, unique_id):
     """Тест получения моих задач"""
     payload = {
         "title": "My Task",
@@ -137,7 +137,7 @@ async def test_get_my_tasks(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_overdue_tasks(crm_client, unique_crm_id):
+async def test_get_overdue_tasks(crm_client, unique_id):
     """Тест получения просроченных задач"""
     payload = {
         "title": "Overdue Task",
@@ -160,7 +160,7 @@ async def test_get_overdue_tasks(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_complete_task(crm_client, unique_crm_id):
+async def test_complete_task(crm_client, unique_id):
     """Тест завершения задачи"""
     payload = {
         "title": "To Complete",
@@ -180,7 +180,7 @@ async def test_complete_task(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_list_tasks_with_status_filter(crm_client, unique_crm_id):
+async def test_list_tasks_with_status_filter(crm_client, unique_id):
     """Тест фильтрации задач по статусу"""
     payload = {
         "title": "Pending Task",
@@ -202,7 +202,7 @@ async def test_list_tasks_with_status_filter(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_list_tasks_with_priority_filter(crm_client, unique_crm_id):
+async def test_list_tasks_with_priority_filter(crm_client, unique_id):
     """Тест фильтрации задач по приоритету"""
     payload = {
         "title": "Urgent Task",
@@ -224,10 +224,10 @@ async def test_list_tasks_with_priority_filter(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_cancel_task(crm_client, unique_crm_id):
+async def test_cancel_task(crm_client, unique_id):
     """Тест отмены задачи"""
     payload = {
-        "title": f"To Cancel {unique_crm_id('cancel')}",
+        "title": f"To Cancel {unique_id('cancel')}",
         "priority": "medium",
         "status": "pending",
     }
@@ -245,9 +245,9 @@ async def test_cancel_task(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_cancel_nonexistent_task(crm_client, unique_crm_id):
+async def test_cancel_nonexistent_task(crm_client, unique_id):
     """Тест отмены несуществующей задачи"""
-    fake_id = unique_crm_id("fake")
+    fake_id = unique_id("fake")
     
     response = await crm_client.post(f"/crm/api/v1/tasks/{fake_id}/cancel")
     
@@ -255,12 +255,12 @@ async def test_cancel_nonexistent_task(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_tasks_by_entity(crm_client, unique_crm_id):
+async def test_get_tasks_by_entity(crm_client, unique_id):
     """Тест получения задач по связанной сущности"""
-    entity_id = unique_crm_id("entity")
+    entity_id = unique_id("entity")
     
     payload = {
-        "title": f"Entity Task {unique_crm_id('task')}",
+        "title": f"Entity Task {unique_id('task')}",
         "description": "Task linked to entity",
         "priority": "high",
         "linked_entity_id": entity_id,
@@ -282,9 +282,9 @@ async def test_get_tasks_by_entity(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_tasks_by_entity_empty(crm_client, unique_crm_id):
+async def test_get_tasks_by_entity_empty(crm_client, unique_id):
     """Тест получения задач для сущности без задач"""
-    fake_entity_id = unique_crm_id("fake_entity")
+    fake_entity_id = unique_id("fake_entity")
     
     response = await crm_client.get(f"/crm/api/v1/tasks/entity/{fake_entity_id}")
     
@@ -295,10 +295,10 @@ async def test_get_tasks_by_entity_empty(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_due_today(crm_client, unique_crm_id):
+async def test_get_due_today(crm_client, unique_id):
     """Тест получения задач с дедлайном сегодня"""
     payload = {
-        "title": f"Today Task {unique_crm_id('today')}",
+        "title": f"Today Task {unique_id('today')}",
         "priority": "high",
         "due_date": str(date.today()),
     }
@@ -319,11 +319,11 @@ async def test_get_due_today(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_due_this_week(crm_client, unique_crm_id):
+async def test_get_due_this_week(crm_client, unique_id):
     """Тест получения задач на эту неделю"""
     # Задача на завтра (в пределах недели)
     payload = {
-        "title": f"Week Task {unique_crm_id('week')}",
+        "title": f"Week Task {unique_id('week')}",
         "priority": "medium",
         "due_date": str(date.today() + timedelta(days=1)),
     }
@@ -341,10 +341,10 @@ async def test_get_due_this_week(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_task_stats(crm_client, unique_crm_id):
+async def test_get_task_stats(crm_client, unique_id):
     """Тест получения статистики задач"""
     payload = {
-        "title": f"Stats Task {unique_crm_id('stats')}",
+        "title": f"Stats Task {unique_id('stats')}",
         "priority": "low",
     }
     

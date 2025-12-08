@@ -38,12 +38,12 @@ def make_crm_context(user, company, crm_client, crm_server_process, session_id: 
 
 
 @pytest_asyncio.fixture
-async def migrated_crm_flow(migrated_db, migrator, crm_api_user_company, flow_repo, agent_repo):
+async def migrated_crm_flow(migrated_db, migrator, session_test_data, flow_repo, agent_repo):
     """
     Мигрирует CRM Assistant Flow для теста.
-    Использует crm_api_user_company чтобы flow был доступен в том же контексте.
+    Использует session_test_data чтобы flow был доступен в том же контексте.
     """
-    company = crm_api_user_company["company"]
+    company = session_test_data["company"]
     
     # Мигрируем flow с зависимостями
     await migrator.migrate_for_company(
@@ -65,13 +65,13 @@ async def migrated_crm_flow(migrated_db, migrator, crm_api_user_company, flow_re
 
 
 @pytest_asyncio.fixture
-async def crm_data_for_agent(crm_container, crm_api_user_company):
+async def crm_data_for_agent(crm_container, session_test_data):
     """
     Создает тестовые данные в CRM для агента.
     Notes, Tasks и Entities.
     """
-    user = crm_api_user_company["user"]
-    company = crm_api_user_company["company"]
+    user = session_test_data["user"]
+    company = session_test_data["company"]
     
     suffix = uuid.uuid4().hex[:6]
     

@@ -25,9 +25,9 @@ async def test_list_entities(crm_client):
 
 
 @pytest.mark.asyncio
-async def test_create_entity(crm_client, unique_crm_id):
+async def test_create_entity(crm_client, unique_id):
     """Тест создания сущности"""
-    entity_name = f"API Test Person {unique_crm_id('api')}"
+    entity_name = f"API Test Person {unique_id('api')}"
     payload = {
         "type": "person",
         "name": entity_name,
@@ -48,12 +48,12 @@ async def test_create_entity(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_entity(crm_client, unique_crm_id):
+async def test_get_entity(crm_client, unique_id):
     """Тест получения сущности по ID"""
     # Создаем сущность
     payload = {
         "type": "person",
-        "name": f"Get Test Person {unique_crm_id('api')}",
+        "name": f"Get Test Person {unique_id('api')}",
         "description": "Test",
         "attributes": {},
     }
@@ -88,12 +88,12 @@ async def test_get_nonexistent_entity(crm_client):
 
 
 @pytest.mark.asyncio
-async def test_update_entity(crm_client, unique_crm_id):
+async def test_update_entity(crm_client, unique_id):
     """Тест обновления сущности"""
     # Создаем
     payload = {
         "type": "person",
-        "name": f"Update Test {unique_crm_id('api')}",
+        "name": f"Update Test {unique_id('api')}",
         "description": "Original",
         "attributes": {"role": "dev"},
     }
@@ -131,12 +131,12 @@ async def test_update_nonexistent_entity(crm_client):
 
 
 @pytest.mark.asyncio
-async def test_delete_entity(crm_client, unique_crm_id):
+async def test_delete_entity(crm_client, unique_id):
     """Тест удаления сущности"""
     # Создаем
     payload = {
         "type": "person",
-        "name": f"Delete Test {unique_crm_id('api')}",
+        "name": f"Delete Test {unique_id('api')}",
         "description": "To be deleted",
         "attributes": {},
     }
@@ -163,12 +163,12 @@ async def test_delete_nonexistent_entity(crm_client):
 
 
 @pytest.mark.asyncio
-async def test_list_entities_by_type(crm_client, unique_crm_id):
+async def test_list_entities_by_type(crm_client, unique_id):
     """Тест фильтрации по типу"""
     # Создаем сущность
     payload = {
         "type": "organization",
-        "name": f"Filter Test Org {unique_crm_id('api')}",
+        "name": f"Filter Test Org {unique_id('api')}",
         "description": "Test",
         "attributes": {},
     }
@@ -190,10 +190,10 @@ async def test_list_entities_by_type(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_search_entities(crm_client, unique_crm_id):
+async def test_search_entities(crm_client, unique_id):
     """Тест семантического поиска"""
     # Создаем сущность
-    unique_name = f"UniqueSearchTerm_{unique_crm_id('api')}"
+    unique_name = f"UniqueSearchTerm_{unique_id('api')}"
     payload = {
         "type": "project",
         "name": unique_name,
@@ -220,7 +220,7 @@ async def test_search_entities(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_search_entities_by_type(crm_client, unique_crm_id):
+async def test_search_entities_by_type(crm_client, unique_id):
     """Тест поиска с фильтром по типу"""
     search_payload = {
         "query": "test",
@@ -238,10 +238,10 @@ async def test_search_entities_by_type(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_find_duplicates(crm_client, unique_crm_id):
+async def test_find_duplicates(crm_client, unique_id):
     """Тест поиска дубликатов"""
     # Создаем сущность
-    original_name = f"Duplicate Test Person {unique_crm_id('api')}"
+    original_name = f"Duplicate Test Person {unique_id('api')}"
     payload = {
         "type": "person",
         "name": original_name,
@@ -272,11 +272,11 @@ async def test_find_duplicates(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_create_entity_invalid_type(crm_client, unique_crm_id):
+async def test_create_entity_invalid_type(crm_client, unique_id):
     """Тест создания сущности с невалидным типом"""
     payload = {
         "type": "invalid_type_xxx",
-        "name": f"Invalid {unique_crm_id('api')}",
+        "name": f"Invalid {unique_id('api')}",
         "description": "Should fail",
         "attributes": {},
     }
@@ -298,12 +298,12 @@ async def test_list_entities_pagination(crm_client):
 
 
 @pytest.mark.asyncio
-async def test_update_entity_status_to_approved(crm_client, unique_crm_id):
+async def test_update_entity_status_to_approved(crm_client, unique_id):
     """Тест обновления статуса сущности на approved"""
     # Создаем сущность со статусом pending
     payload = {
         "type": "person",
-        "name": f"Status Test {unique_crm_id('status')}",
+        "name": f"Status Test {unique_id('status')}",
         "description": "Entity for status test",
         "attributes": {},
         "status": "pending",
@@ -327,12 +327,12 @@ async def test_update_entity_status_to_approved(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_update_entity_status_to_rejected(crm_client, unique_crm_id):
+async def test_update_entity_status_to_rejected(crm_client, unique_id):
     """Тест обновления статуса сущности на rejected"""
     # Создаем сущность
     payload = {
         "type": "person",
-        "name": f"Reject Test {unique_crm_id('reject')}",
+        "name": f"Reject Test {unique_id('reject')}",
         "description": "Entity to reject",
         "attributes": {},
         "status": "pending",
@@ -355,9 +355,9 @@ async def test_update_entity_status_to_rejected(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_update_entity_status_nonexistent(crm_client, unique_crm_id):
+async def test_update_entity_status_nonexistent(crm_client, unique_id):
     """Тест обновления статуса несуществующей сущности"""
-    fake_id = unique_crm_id("fake")
+    fake_id = unique_id("fake")
     
     response = await crm_client.put(
         f"/crm/api/v1/entities/{fake_id}/status?status=approved"

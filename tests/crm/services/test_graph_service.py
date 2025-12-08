@@ -12,13 +12,13 @@ from apps.crm.models.relationship_models import RelationshipCreate
 
 
 @pytest_asyncio.fixture
-async def crm_graph_service(crm_container, test_context):
+async def graph_service(crm_container, test_context):
     """GraphService для тестов"""
     return crm_container.graph_service
 
 
 @pytest_asyncio.fixture
-async def graph_test_data(crm_container, test_context, unique_crm_id):
+async def graph_test_data(crm_container, test_context, unique_id):
     """
     Создает тестовые данные для графа:
     - 3 сущности (person, organization, project)
@@ -30,21 +30,21 @@ async def graph_test_data(crm_container, test_context, unique_crm_id):
     # Создаем сущности
     person = await entity_service.create_entity(EntityCreate(
         type="person",
-        name=f"Graph Test Person {unique_crm_id('graph')}",
+        name=f"Graph Test Person {unique_id('graph')}",
         description="Person for graph test",
         attributes={"role": "developer"},
     ))
     
     org = await entity_service.create_entity(EntityCreate(
         type="organization",
-        name=f"Graph Test Org {unique_crm_id('graph')}",
+        name=f"Graph Test Org {unique_id('graph')}",
         description="Organization for graph test",
         attributes={"industry": "tech"},
     ))
     
     project = await entity_service.create_entity(EntityCreate(
         type="project",
-        name=f"Graph Test Project {unique_crm_id('graph')}",
+        name=f"Graph Test Project {unique_id('graph')}",
         description="Project for graph test",
         attributes={"status": "active"},
     ))
@@ -82,9 +82,9 @@ async def graph_test_data(crm_container, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_full_graph(crm_graph_service, graph_test_data, test_context):
+async def test_get_full_graph(graph_service, graph_test_data, test_context):
     """Тест получения полного графа"""
-    result = await crm_graph_service.get_full_graph(limit=100)
+    result = await graph_service.get_full_graph(limit=100)
     
     assert "nodes" in result
     assert "edges" in result
@@ -109,9 +109,9 @@ async def test_get_full_graph(crm_graph_service, graph_test_data, test_context):
 
 
 @pytest.mark.asyncio
-async def test_get_full_graph_filter_by_type(crm_graph_service, graph_test_data, test_context):
+async def test_get_full_graph_filter_by_type(graph_service, graph_test_data, test_context):
     """Тест фильтрации графа по типу"""
-    result = await crm_graph_service.get_full_graph(
+    result = await graph_service.get_full_graph(
         entity_types=["person"],
         limit=100
     )
@@ -122,11 +122,11 @@ async def test_get_full_graph_filter_by_type(crm_graph_service, graph_test_data,
 
 
 @pytest.mark.asyncio
-async def test_get_entity_graph(crm_graph_service, graph_test_data, test_context):
+async def test_get_entity_graph(graph_service, graph_test_data, test_context):
     """Тест получения графа для конкретной сущности"""
     person_id = graph_test_data["person"].entity_id
     
-    result = await crm_graph_service.get_entity_graph(person_id, depth=1)
+    result = await graph_service.get_entity_graph(person_id, depth=1)
     
     assert "nodes" in result
     assert "edges" in result
@@ -148,24 +148,24 @@ async def test_get_entity_graph(crm_graph_service, graph_test_data, test_context
 
 
 @pytest.mark.asyncio
-async def test_get_entity_graph_with_depth(crm_graph_service, graph_test_data, test_context):
+async def test_get_entity_graph_with_depth(graph_service, graph_test_data, test_context):
     """Тест глубины обхода графа"""
     person_id = graph_test_data["person"].entity_id
     
     # Глубина 1 - только прямые связи
-    result_depth_1 = await crm_graph_service.get_entity_graph(person_id, depth=1)
+    result_depth_1 = await graph_service.get_entity_graph(person_id, depth=1)
     
     # Глубина 2 - включая связи связанных
-    result_depth_2 = await crm_graph_service.get_entity_graph(person_id, depth=2)
+    result_depth_2 = await graph_service.get_entity_graph(person_id, depth=2)
     
     # С большей глубиной должно быть >= узлов
     assert len(result_depth_2["nodes"]) >= len(result_depth_1["nodes"])
 
 
 @pytest.mark.asyncio
-async def test_get_relationship_types(crm_graph_service, graph_test_data, test_context):
+async def test_get_relationship_types(graph_service, graph_test_data, test_context):
     """Тест получения типов связей"""
-    result = await crm_graph_service.get_relationship_types()
+    result = await graph_service.get_relationship_types()
     
     assert isinstance(result, list)
     
@@ -175,10 +175,10 @@ async def test_get_relationship_types(crm_graph_service, graph_test_data, test_c
 
 
 @pytest.mark.asyncio
-async def test_get_full_graph_empty(crm_graph_service, test_context):
+async def test_get_full_graph_empty(graph_service, test_context):
     """Тест пустого графа"""
     # Получаем граф (может быть пустой или с данными от других тестов)
-    result = await crm_graph_service.get_full_graph(limit=1)
+    result = await graph_service.get_full_graph(limit=1)
     
     assert "nodes" in result
     assert "edges" in result
@@ -189,9 +189,9 @@ async def test_get_full_graph_empty(crm_graph_service, test_context):
 
 
 @pytest.mark.asyncio
-async def test_get_entity_graph_nonexistent(crm_graph_service, test_context):
+async def test_get_entity_graph_nonexistent(graph_service, test_context):
     """Тест графа для несуществующей сущности"""
-    result = await crm_graph_service.get_entity_graph("nonexistent_entity_id", depth=1)
+    result = await graph_service.get_entity_graph("nonexistent_entity_id", depth=1)
     
     # Должен вернуть пустой граф
     assert result["nodes"] == []
@@ -200,9 +200,9 @@ async def test_get_entity_graph_nonexistent(crm_graph_service, test_context):
 
 
 @pytest.mark.asyncio
-async def test_graph_node_structure(crm_graph_service, graph_test_data, test_context):
+async def test_graph_node_structure(graph_service, graph_test_data, test_context):
     """Тест структуры узла графа"""
-    result = await crm_graph_service.get_full_graph(limit=10)
+    result = await graph_service.get_full_graph(limit=10)
     
     if result["nodes"]:
         node = result["nodes"][0]
@@ -216,9 +216,9 @@ async def test_graph_node_structure(crm_graph_service, graph_test_data, test_con
 
 
 @pytest.mark.asyncio
-async def test_graph_edge_structure(crm_graph_service, graph_test_data, test_context):
+async def test_graph_edge_structure(graph_service, graph_test_data, test_context):
     """Тест структуры ребра графа"""
-    result = await crm_graph_service.get_full_graph(limit=100)
+    result = await graph_service.get_full_graph(limit=100)
     
     if result["edges"]:
         edge = result["edges"][0]

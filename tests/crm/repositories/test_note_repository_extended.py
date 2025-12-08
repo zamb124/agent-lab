@@ -10,14 +10,14 @@ from apps.crm.db.models import Note
 
 
 @pytest.mark.asyncio
-async def test_filter_notes_by_user(note_repo, test_context, unique_crm_id):
+async def test_filter_notes_by_user(note_repo, test_context, unique_id):
     """Тест фильтрации заметок по пользователю"""
     user_id = test_context.user.user_id
     company_id = test_context.active_company.company_id
     created_ids = []
     
     for i in range(3):
-        note_id = unique_crm_id(f"note_{i}")
+        note_id = unique_id(f"note_{i}")
         note = Note(
             note_id=note_id,
             company_id=company_id,
@@ -46,13 +46,13 @@ async def test_filter_notes_by_user(note_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_filter_notes_by_date_range(note_repo, test_context, unique_crm_id):
+async def test_filter_notes_by_date_range(note_repo, test_context, unique_id):
     """Тест фильтрации заметок по диапазону дат"""
     company_id = test_context.active_company.company_id
     today = date.today()
     yesterday = today - timedelta(days=1)
     
-    note_id = unique_crm_id("note")
+    note_id = unique_id("note")
     note = Note(
         note_id=note_id,
         company_id=company_id,
@@ -79,12 +79,12 @@ async def test_filter_notes_by_date_range(note_repo, test_context, unique_crm_id
 
 
 @pytest.mark.asyncio
-async def test_filter_notes_by_entity(note_repo, test_context, unique_crm_id):
+async def test_filter_notes_by_entity(note_repo, test_context, unique_id):
     """Тест фильтрации заметок по связанной сущности"""
     company_id = test_context.active_company.company_id
-    entity_id = unique_crm_id("entity")
+    entity_id = unique_id("entity")
     
-    note_id = unique_crm_id("note")
+    note_id = unique_id("note")
     note = Note(
         note_id=note_id,
         company_id=company_id,
@@ -111,14 +111,14 @@ async def test_filter_notes_by_entity(note_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_filter_notes_combined(note_repo, test_context, unique_crm_id):
+async def test_filter_notes_combined(note_repo, test_context, unique_id):
     """Тест комбинированной фильтрации заметок"""
     company_id = test_context.active_company.company_id
     user_id = test_context.user.user_id
     today = date.today()
-    unique_text = unique_crm_id("unique_text")
+    unique_text = unique_id("unique_text")
     
-    note_id = unique_crm_id("note")
+    note_id = unique_id("note")
     note = Note(
         note_id=note_id,
         company_id=company_id,
@@ -148,11 +148,11 @@ async def test_filter_notes_combined(note_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_filter_notes_by_template(note_repo, test_context, unique_crm_id):
+async def test_filter_notes_by_template(note_repo, test_context, unique_id):
     """Тест фильтрации шаблонов заметок"""
     company_id = test_context.active_company.company_id
     
-    template_id = unique_crm_id("template")
+    template_id = unique_id("template")
     template = Note(
         note_id=template_id,
         company_id=company_id,
@@ -180,13 +180,13 @@ async def test_filter_notes_by_template(note_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_templates(note_repo, test_context, unique_crm_id):
+async def test_get_templates(note_repo, test_context, unique_id):
     """Тест получения шаблонов заметок"""
     company_id = test_context.active_company.company_id
     created_ids = []
     
     for i in range(2):
-        template_id = unique_crm_id(f"template_{i}")
+        template_id = unique_id(f"template_{i}")
         template = Note(
             note_id=template_id,
             company_id=company_id,
@@ -204,7 +204,7 @@ async def test_get_templates(note_repo, test_context, unique_crm_id):
         created_ids.append(template_id)
     
     # Создаем обычную заметку
-    note_id = unique_crm_id("note")
+    note_id = unique_id("note")
     note = Note(
         note_id=note_id,
         company_id=company_id,
@@ -232,11 +232,11 @@ async def test_get_templates(note_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_filter_notes_by_status(note_repo, test_context, unique_crm_id):
+async def test_filter_notes_by_status(note_repo, test_context, unique_id):
     """Тест фильтрации заметок по статусу (draft/published)"""
     company_id = test_context.active_company.company_id
     
-    draft_id = unique_crm_id("draft")
+    draft_id = unique_id("draft")
     draft = Note(
         note_id=draft_id,
         company_id=company_id,
@@ -251,7 +251,7 @@ async def test_filter_notes_by_status(note_repo, test_context, unique_crm_id):
     )
     await note_repo.create(draft)
     
-    published_id = unique_crm_id("published")
+    published_id = unique_id("published")
     published = Note(
         note_id=published_id,
         company_id=company_id,
@@ -279,10 +279,10 @@ async def test_filter_notes_by_status(note_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_note_with_visibility(note_repo, test_context, unique_crm_id):
+async def test_note_with_visibility(note_repo, test_context, unique_id):
     """Тест создания заметки с visibility"""
-    note_id = unique_crm_id("note")
-    shared_with_user = unique_crm_id("user")
+    note_id = unique_id("note")
+    shared_with_user = unique_id("user")
     
     note = Note(
         note_id=note_id,
@@ -307,11 +307,11 @@ async def test_note_with_visibility(note_repo, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_note_with_attachments(note_repo, test_context, unique_crm_id):
+async def test_note_with_attachments(note_repo, test_context, unique_id):
     """Тест создания заметки с прикрепленными файлами"""
-    note_id = unique_crm_id("note")
-    file_id_1 = unique_crm_id("file1")
-    file_id_2 = unique_crm_id("file2")
+    note_id = unique_id("note")
+    file_id_1 = unique_id("file1")
+    file_id_2 = unique_id("file2")
     
     note = Note(
         note_id=note_id,

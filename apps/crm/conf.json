@@ -9,7 +9,6 @@
     "shared_url": "postgresql+asyncpg://agent_user:agent_password@localhost:5432/shared_db",
     "crm_url": "postgresql+asyncpg://agent_user:agent_password@localhost:5432/crm_db",
     "redis_url": "redis://localhost:8099"
-  },
-  "agents_service_url": "http://localhost:8001"
+  }
 }
 

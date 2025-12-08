@@ -11,14 +11,14 @@ import pytest
 
 
 @pytest.fixture
-async def graph_api_data(crm_client, unique_crm_id):
+async def graph_api_data(crm_client, unique_id):
     """
     Создает тестовые данные для графа через API.
     """
     # Создаем сущности
     person_payload = {
         "type": "person",
-        "name": f"Graph API Person {unique_crm_id('graph_api')}",
+        "name": f"Graph API Person {unique_id('graph_api')}",
         "description": "Person for graph API test",
         "attributes": {"role": "developer"},
     }
@@ -27,7 +27,7 @@ async def graph_api_data(crm_client, unique_crm_id):
     
     org_payload = {
         "type": "organization",
-        "name": f"Graph API Org {unique_crm_id('graph_api')}",
+        "name": f"Graph API Org {unique_id('graph_api')}",
         "description": "Organization for graph API test",
         "attributes": {},
     }

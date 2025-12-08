@@ -35,13 +35,13 @@ class TestCRMTools:
         crm_client: AsyncClient,
         crm_server_process,
         test_note,
-        crm_api_user_company
+        session_test_data
     ):
         """Тест инструмента search_notes"""
         from apps.agents.tools.crm.crm_tools import search_notes
         
-        user = crm_api_user_company["user"]
-        company = crm_api_user_company["company"]
+        user = session_test_data["user"]
+        company = session_test_data["company"]
         
         context = make_crm_context(user, company, crm_client, crm_server_process, "test_search_notes")
         set_context(context)
@@ -63,13 +63,13 @@ class TestCRMTools:
         crm_client: AsyncClient,
         crm_server_process,
         test_note,
-        crm_api_user_company
+        session_test_data
     ):
         """Тест инструмента get_note_by_id"""
         from apps.agents.tools.crm.crm_tools import get_note_by_id
         
-        user = crm_api_user_company["user"]
-        company = crm_api_user_company["company"]
+        user = session_test_data["user"]
+        company = session_test_data["company"]
         
         context = make_crm_context(user, company, crm_client, crm_server_process, "test_get_note")
         set_context(context)
@@ -90,13 +90,13 @@ class TestCRMTools:
         crm_client: AsyncClient,
         crm_server_process,
         test_note,
-        crm_api_user_company
+        session_test_data
     ):
         """Тест инструмента get_today_notes"""
         from apps.agents.tools.crm.crm_tools import get_today_notes
         
-        user = crm_api_user_company["user"]
-        company = crm_api_user_company["company"]
+        user = session_test_data["user"]
+        company = session_test_data["company"]
         
         context = make_crm_context(user, company, crm_client, crm_server_process, "test_today_notes")
         set_context(context)
@@ -115,13 +115,13 @@ class TestCRMTools:
         crm_client: AsyncClient,
         crm_server_process,
         test_task,
-        crm_api_user_company
+        session_test_data
     ):
         """Тест инструмента search_tasks"""
         from apps.agents.tools.crm.crm_tools import search_tasks
         
-        user = crm_api_user_company["user"]
-        company = crm_api_user_company["company"]
+        user = session_test_data["user"]
+        company = session_test_data["company"]
         
         context = make_crm_context(user, company, crm_client, crm_server_process, "test_search_tasks")
         set_context(context)
@@ -143,13 +143,13 @@ class TestCRMTools:
         crm_client: AsyncClient,
         crm_server_process,
         test_task,
-        crm_api_user_company
+        session_test_data
     ):
         """Тест инструмента get_my_tasks"""
         from apps.agents.tools.crm.crm_tools import get_my_tasks
         
-        user = crm_api_user_company["user"]
-        company = crm_api_user_company["company"]
+        user = session_test_data["user"]
+        company = session_test_data["company"]
         
         context = make_crm_context(user, company, crm_client, crm_server_process, "test_my_tasks")
         set_context(context)
@@ -170,14 +170,14 @@ class TestCRMTools:
         crm_client: AsyncClient,
         crm_server_process,
         crm_container,
-        crm_api_user_company
+        session_test_data
     ):
         """Тест инструмента get_overdue_tasks"""
         from apps.agents.tools.crm.crm_tools import get_overdue_tasks
         from apps.crm.db.models import Task
         
-        user = crm_api_user_company["user"]
-        company = crm_api_user_company["company"]
+        user = session_test_data["user"]
+        company = session_test_data["company"]
         
         # Создаем просроченную задачу
         overdue_task = Task(
@@ -210,13 +210,13 @@ class TestCRMTools:
         crm_client: AsyncClient,
         crm_server_process,
         test_task,
-        crm_api_user_company
+        session_test_data
     ):
         """Тест инструмента get_task_stats"""
         from apps.agents.tools.crm.crm_tools import get_task_stats
         
-        user = crm_api_user_company["user"]
-        company = crm_api_user_company["company"]
+        user = session_test_data["user"]
+        company = session_test_data["company"]
         
         context = make_crm_context(user, company, crm_client, crm_server_process, "test_task_stats")
         set_context(context)
@@ -235,13 +235,13 @@ class TestCRMTools:
         crm_client: AsyncClient,
         crm_server_process,
         test_entity,
-        crm_api_user_company
+        session_test_data
     ):
         """Тест инструмента search_entities"""
         from apps.agents.tools.crm.crm_tools import search_entities
         
-        user = crm_api_user_company["user"]
-        company = crm_api_user_company["company"]
+        user = session_test_data["user"]
+        company = session_test_data["company"]
         
         context = make_crm_context(user, company, crm_client, crm_server_process, "test_search_entities")
         set_context(context)
@@ -263,13 +263,13 @@ class TestCRMTools:
         crm_client: AsyncClient,
         crm_server_process,
         test_entity,
-        crm_api_user_company
+        session_test_data
     ):
         """Тест инструмента get_entity_by_id"""
         from apps.agents.tools.crm.crm_tools import get_entity_by_id
         
-        user = crm_api_user_company["user"]
-        company = crm_api_user_company["company"]
+        user = session_test_data["user"]
+        company = session_test_data["company"]
         
         context = make_crm_context(user, company, crm_client, crm_server_process, "test_get_entity")
         set_context(context)
@@ -290,13 +290,13 @@ class TestCRMTools:
         crm_client: AsyncClient,
         crm_server_process,
         test_entity,
-        crm_api_user_company
+        session_test_data
     ):
         """Тест инструмента get_entity_relationships"""
         from apps.agents.tools.crm.crm_tools import get_entity_relationships
         
-        user = crm_api_user_company["user"]
-        company = crm_api_user_company["company"]
+        user = session_test_data["user"]
+        company = session_test_data["company"]
         
         context = make_crm_context(user, company, crm_client, crm_server_process, "test_entity_relationships")
         set_context(context)
@@ -318,13 +318,13 @@ class TestCRMTools:
         crm_client: AsyncClient,
         crm_server_process,
         test_note,
-        crm_api_user_company
+        session_test_data
     ):
         """Тест инструмента get_daily_summary"""
         from apps.agents.tools.crm.crm_tools import get_daily_summary
         
-        user = crm_api_user_company["user"]
-        company = crm_api_user_company["company"]
+        user = session_test_data["user"]
+        company = session_test_data["company"]
         
         context = make_crm_context(user, company, crm_client, crm_server_process, "test_daily_summary")
         set_context(context)

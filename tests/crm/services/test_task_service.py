@@ -9,7 +9,7 @@ from apps.crm.models.task_models import TaskCreate, TaskUpdate, TaskPriority, Ta
 
 
 @pytest.mark.asyncio
-async def test_create_task(task_service, test_context, unique_crm_id):
+async def test_create_task(task_service, test_context, unique_id):
     """Тест создания задачи через сервис"""
     data = TaskCreate(
         title="Service Test Task",
@@ -32,7 +32,7 @@ async def test_create_task(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_task(task_service, test_context, unique_crm_id):
+async def test_get_task(task_service, test_context, unique_id):
     """Тест получения задачи"""
     data = TaskCreate(
         title="Get Test Task",
@@ -56,7 +56,7 @@ async def test_get_task(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_update_task(task_service, test_context, unique_crm_id):
+async def test_update_task(task_service, test_context, unique_id):
     """Тест обновления задачи"""
     data = TaskCreate(
         title="Update Test Task",
@@ -84,7 +84,7 @@ async def test_update_task(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_delete_task(task_service, test_context, unique_crm_id):
+async def test_delete_task(task_service, test_context, unique_id):
     """Тест удаления задачи"""
     data = TaskCreate(
         title="Delete Test Task",
@@ -105,7 +105,7 @@ async def test_delete_task(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_list_tasks(task_service, test_context, unique_crm_id):
+async def test_list_tasks(task_service, test_context, unique_id):
     """Тест получения списка задач"""
     created_ids = []
     
@@ -132,7 +132,7 @@ async def test_list_tasks(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_my_tasks(task_service, test_context, unique_crm_id):
+async def test_get_my_tasks(task_service, test_context, unique_id):
     """Тест получения задач текущего пользователя"""
     data = TaskCreate(
         title="My Task",
@@ -157,7 +157,7 @@ async def test_get_my_tasks(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_overdue_tasks(task_service, test_context, unique_crm_id):
+async def test_get_overdue_tasks(task_service, test_context, unique_id):
     """Тест получения просроченных задач"""
     data = TaskCreate(
         title="Overdue Task",
@@ -182,7 +182,7 @@ async def test_get_overdue_tasks(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_due_this_week(task_service, test_context, unique_crm_id):
+async def test_get_due_this_week(task_service, test_context, unique_id):
     """Тест получения задач на этой неделе"""
     data = TaskCreate(
         title="Due This Week Task",
@@ -207,7 +207,7 @@ async def test_get_due_this_week(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_complete_task(task_service, test_context, unique_crm_id):
+async def test_complete_task(task_service, test_context, unique_id):
     """Тест завершения задачи"""
     data = TaskCreate(
         title="Complete Test Task",
@@ -229,9 +229,9 @@ async def test_complete_task(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_link_task_to_entity(task_service, test_context, unique_crm_id):
+async def test_link_task_to_entity(task_service, test_context, unique_id):
     """Тест связывания задачи с сущностью"""
-    entity_id = unique_crm_id("entity")
+    entity_id = unique_id("entity")
     
     data = TaskCreate(
         title="Entity Task",
@@ -251,9 +251,9 @@ async def test_link_task_to_entity(task_service, test_context, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_tasks_by_entity(task_service, test_context, unique_crm_id):
+async def test_get_tasks_by_entity(task_service, test_context, unique_id):
     """Тест получения задач по связанной сущности"""
-    entity_id = unique_crm_id("entity")
+    entity_id = unique_id("entity")
     
     data = TaskCreate(
         title="Entity Related Task",

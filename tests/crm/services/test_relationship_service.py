@@ -13,15 +13,15 @@ from apps.crm.db.models import Relationship
 
 
 @pytest.mark.asyncio
-async def test_get_relationship(relationship_service, relationship_repo, test_context, unique_crm_id):
+async def test_get_relationship(relationship_service, relationship_repo, test_context, unique_id):
     """Тест получения связи по ID"""
-    rel_id = unique_crm_id("rel")
+    rel_id = unique_id("rel")
     
     relationship = Relationship(
         relationship_id=rel_id,
         company_id=test_context.active_company.company_id,
-        source_entity_id=unique_crm_id("src"),
-        target_entity_id=unique_crm_id("tgt"),
+        source_entity_id=unique_id("src"),
+        target_entity_id=unique_id("tgt"),
         relationship_type="works_for",
         weight=0.8,
         attributes={"role": "engineer"},
@@ -41,15 +41,15 @@ async def test_get_relationship(relationship_service, relationship_repo, test_co
 
 
 @pytest.mark.asyncio
-async def test_delete_relationship(relationship_service, relationship_repo, test_context, unique_crm_id):
+async def test_delete_relationship(relationship_service, relationship_repo, test_context, unique_id):
     """Тест удаления связи"""
-    rel_id = unique_crm_id("rel")
+    rel_id = unique_id("rel")
     
     relationship = Relationship(
         relationship_id=rel_id,
         company_id=test_context.active_company.company_id,
-        source_entity_id=unique_crm_id("src"),
-        target_entity_id=unique_crm_id("tgt"),
+        source_entity_id=unique_id("src"),
+        target_entity_id=unique_id("tgt"),
         relationship_type="connected_to",
         weight=1.0,
         attributes={},
@@ -71,18 +71,18 @@ async def test_get_entity_relationships(
     relationship_service,
     relationship_repo,
     test_context,
-    unique_crm_id
+    unique_id
 ):
     """Тест получения связей для сущности"""
-    entity_id = unique_crm_id("entity")
-    rel1_id = unique_crm_id("rel1")
-    rel2_id = unique_crm_id("rel2")
+    entity_id = unique_id("entity")
+    rel1_id = unique_id("rel1")
+    rel2_id = unique_id("rel2")
     
     rel1 = Relationship(
         relationship_id=rel1_id,
         company_id=test_context.active_company.company_id,
         source_entity_id=entity_id,
-        target_entity_id=unique_crm_id("tgt1"),
+        target_entity_id=unique_id("tgt1"),
         relationship_type="knows",
         weight=1.0,
         attributes={},
@@ -92,7 +92,7 @@ async def test_get_entity_relationships(
     rel2 = Relationship(
         relationship_id=rel2_id,
         company_id=test_context.active_company.company_id,
-        source_entity_id=unique_crm_id("src2"),
+        source_entity_id=unique_id("src2"),
         target_entity_id=entity_id,
         relationship_type="knows",
         weight=1.0,
@@ -121,12 +121,12 @@ async def test_get_relationships_between(
     relationship_service,
     relationship_repo,
     test_context,
-    unique_crm_id
+    unique_id
 ):
     """Тест получения связей между двумя сущностями"""
-    entity1_id = unique_crm_id("entity1")
-    entity2_id = unique_crm_id("entity2")
-    rel_id = unique_crm_id("rel")
+    entity1_id = unique_id("entity1")
+    entity2_id = unique_id("entity2")
+    rel_id = unique_id("rel")
     
     relationship = Relationship(
         relationship_id=rel_id,
@@ -159,16 +159,16 @@ async def test_list_relationships(
     relationship_service,
     relationship_repo,
     test_context,
-    unique_crm_id
+    unique_id
 ):
     """Тест получения списка связей"""
-    rel_id = unique_crm_id("rel")
+    rel_id = unique_id("rel")
     
     relationship = Relationship(
         relationship_id=rel_id,
         company_id=test_context.active_company.company_id,
-        source_entity_id=unique_crm_id("src"),
-        target_entity_id=unique_crm_id("tgt"),
+        source_entity_id=unique_id("src"),
+        target_entity_id=unique_id("tgt"),
         relationship_type="works_at",
         weight=1.0,
         attributes={},
@@ -193,17 +193,17 @@ async def test_list_relationships_by_type(
     relationship_service,
     relationship_repo,
     test_context,
-    unique_crm_id
+    unique_id
 ):
     """Тест фильтрации связей по типу"""
-    rel_id = unique_crm_id("rel")
-    rel_type = f"custom_type_{unique_crm_id('type')}"
+    rel_id = unique_id("rel")
+    rel_type = f"custom_type_{unique_id('type')}"
     
     relationship = Relationship(
         relationship_id=rel_id,
         company_id=test_context.active_company.company_id,
-        source_entity_id=unique_crm_id("src"),
-        target_entity_id=unique_crm_id("tgt"),
+        source_entity_id=unique_id("src"),
+        target_entity_id=unique_id("tgt"),
         relationship_type=rel_type,
         weight=1.0,
         attributes={},
@@ -225,9 +225,9 @@ async def test_list_relationships_by_type(
 
 
 @pytest.mark.asyncio
-async def test_get_nonexistent_relationship(relationship_service, unique_crm_id):
+async def test_get_nonexistent_relationship(relationship_service, unique_id):
     """Тест получения несуществующей связи"""
-    fake_id = unique_crm_id("fake")
+    fake_id = unique_id("fake")
     
     result = await relationship_service.get_relationship(fake_id)
     

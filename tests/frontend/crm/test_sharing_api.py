@@ -60,17 +60,28 @@ class TestSharingUpdateAPI:
         assert response.json()["success"] is True
     
     @pytest.mark.asyncio
-    async def test_update_entity_visibility(self, crm_frontend_client, crm_server_process, test_entity):
+    async def test_update_entity_visibility(self, crm_frontend_client, crm_server_process, unique_id):
         """Обновление visibility для entity"""
-        entity_id = test_entity.entity_id
+        # Создаем entity через API чтобы использовать правильную компанию
+        entity_data = {
+            "name": f"Visibility Test Entity {unique_id('vis')}",
+            "type": "person",
+            "attributes": {"email": "vis@test.com"}
+        }
+        create_resp = await crm_frontend_client.post("/frontend/api/crm/entities", json=entity_data)
+        assert create_resp.status_code == 200, f"Failed to create entity: {create_resp.text}"
+        entity_id = create_resp.json()["entity_id"]
         
-        response = await crm_frontend_client.put(
-            f"/crm/api/sharing/entity/{entity_id}",
-            json={"visibility": "public", "shared_with": []}
-        )
-        
-        assert response.status_code == 200
-        assert response.json()["success"] is True
+        try:
+            response = await crm_frontend_client.put(
+                f"/crm/api/sharing/entity/{entity_id}",
+                json={"visibility": "public", "shared_with": []}
+            )
+            
+            assert response.status_code == 200
+            assert response.json()["success"] is True
+        finally:
+            await crm_frontend_client.delete(f"/frontend/api/crm/entities/{entity_id}")
     
     @pytest.mark.asyncio
     async def test_update_invalid_resource_type(self, crm_frontend_client, crm_server_process):

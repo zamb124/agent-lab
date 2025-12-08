@@ -18,7 +18,7 @@ async def test_list_notes(crm_client):
 
 
 @pytest.mark.asyncio
-async def test_create_note(crm_client, unique_crm_id):
+async def test_create_note(crm_client, unique_id):
     """Тест создания заметки"""
     payload = {
         "title": "API Test Note",
@@ -39,7 +39,7 @@ async def test_create_note(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_note(crm_client, unique_crm_id):
+async def test_get_note(crm_client, unique_id):
     """Тест получения заметки по ID"""
     payload = {
         "title": "Get Test Note",
@@ -61,9 +61,9 @@ async def test_get_note(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_nonexistent_note(crm_client, unique_crm_id):
+async def test_get_nonexistent_note(crm_client, unique_id):
     """Тест получения несуществующей заметки"""
-    fake_id = unique_crm_id("fake")
+    fake_id = unique_id("fake")
     
     response = await crm_client.get(f"/crm/api/v1/notes/{fake_id}")
     
@@ -71,7 +71,7 @@ async def test_get_nonexistent_note(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_update_note(crm_client, unique_crm_id):
+async def test_update_note(crm_client, unique_id):
     """Тест обновления заметки"""
     payload = {
         "title": "Original Title",
@@ -98,7 +98,7 @@ async def test_update_note(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_delete_note(crm_client, unique_crm_id):
+async def test_delete_note(crm_client, unique_id):
     """Тест удаления заметки"""
     payload = {
         "title": "To Delete",
@@ -119,7 +119,7 @@ async def test_delete_note(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_daily_notes(crm_client, unique_crm_id):
+async def test_get_daily_notes(crm_client, unique_id):
     """Тест получения заметок по дате"""
     today = str(date.today())
     
@@ -146,7 +146,7 @@ async def test_get_daily_notes(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_list_notes_by_type(crm_client, unique_crm_id):
+async def test_list_notes_by_type(crm_client, unique_id):
     """Тест фильтрации заметок по типу"""
     payload = {
         "title": "Call Log Note",
@@ -170,9 +170,9 @@ async def test_list_notes_by_type(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_search_notes(crm_client, unique_crm_id):
+async def test_search_notes(crm_client, unique_id):
     """Тест поиска по заметкам"""
-    unique_content = f"unique_search_term_{unique_crm_id('search')}"
+    unique_content = f"unique_search_term_{unique_id('search')}"
     
     payload = {
         "title": "Searchable Note",
@@ -196,14 +196,14 @@ async def test_search_notes(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_notes_in_range(crm_client, unique_crm_id):
+async def test_get_notes_in_range(crm_client, unique_id):
     """Тест получения заметок за диапазон дат"""
     today = date.today()
     start_date = today - timedelta(days=1)
     end_date = today + timedelta(days=1)
     
     payload = {
-        "title": f"Range Test Note {unique_crm_id('range')}",
+        "title": f"Range Test Note {unique_id('range')}",
         "content": "Note for range test",
         "note_type": "freeform",
         "note_date": str(today),
@@ -244,12 +244,12 @@ async def test_get_notes_in_range_empty(crm_client):
 
 
 @pytest.mark.asyncio
-async def test_get_notes_by_entity(crm_client, unique_crm_id):
+async def test_get_notes_by_entity(crm_client, unique_id):
     """Тест получения заметок по связанной сущности"""
-    entity_id = unique_crm_id("entity")
+    entity_id = unique_id("entity")
     
     payload = {
-        "title": f"Entity Note {unique_crm_id('entity_note')}",
+        "title": f"Entity Note {unique_id('entity_note')}",
         "content": "Note linked to entity",
         "note_type": "freeform",
         "note_date": str(date.today()),
@@ -272,9 +272,9 @@ async def test_get_notes_by_entity(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_notes_by_entity_empty(crm_client, unique_crm_id):
+async def test_get_notes_by_entity_empty(crm_client, unique_id):
     """Тест получения заметок для несуществующей сущности"""
-    fake_entity_id = unique_crm_id("fake_entity")
+    fake_entity_id = unique_id("fake_entity")
     
     response = await crm_client.get(f"/crm/api/v1/notes/entity/{fake_entity_id}")
     
@@ -285,14 +285,14 @@ async def test_get_notes_by_entity_empty(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_import_note_from_file(crm_client, unique_crm_id):
+async def test_import_note_from_file(crm_client, unique_id):
     """Тест импорта заметки из файла"""
     file_content = b"This is the content of imported note.\n\nMultiple paragraphs."
     files = {
         "file": ("imported_note.txt", io.BytesIO(file_content), "text/plain")
     }
     data = {
-        "title": f"Imported Note {unique_crm_id('import')}",
+        "title": f"Imported Note {unique_id('import')}",
         "note_type": "freeform",
         "note_date": str(date.today()),
     }
@@ -315,10 +315,10 @@ async def test_import_note_from_file(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_import_note_from_file_without_title(crm_client, unique_crm_id):
+async def test_import_note_from_file_without_title(crm_client, unique_id):
     """Тест импорта заметки без указания title (используется имя файла)"""
     file_content = b"Content for auto-title test"
-    filename = f"auto_title_{unique_crm_id('auto')}.txt"
+    filename = f"auto_title_{unique_id('auto')}.txt"
     files = {
         "file": (filename, io.BytesIO(file_content), "text/plain")
     }
@@ -342,33 +342,34 @@ async def test_import_note_from_file_without_title(crm_client, unique_crm_id):
 
 
 @pytest.mark.asyncio
-async def test_get_daily_summary(crm_client, unique_crm_id):
+async def test_get_daily_summary(crm_client, unique_id):
     """
     Тест получения AI саммари за день.
     
     Требует работающий agents сервис для AI генерации.
-    Если AI недоступен - тест пропускается.
+    crm_client зависит от crm_app который настраивает URL agents сервиса.
     """
     today = str(date.today())
     
     payload = {
-        "title": f"Summary Test {unique_crm_id('summary')}",
+        "title": f"Summary Test {unique_id('summary')}",
         "content": "Important meeting about project planning and timeline",
         "note_type": "meeting_minutes",
         "note_date": today,
     }
     
     create_response = await crm_client.post("/crm/api/v1/notes", json=payload)
+    assert create_response.status_code == 200, f"Failed to create note: {create_response.text}"
     note_id = create_response.json()["note_id"]
     
     try:
-        response = await crm_client.get(f"/crm/api/v1/notes/daily-summary/{today}")
+        # Получаем AI саммари (таймаут увеличен для AI)
+        response = await crm_client.get(
+            f"/crm/api/v1/notes/daily-summary/{today}",
+            timeout=120.0
+        )
         
-        # AI может быть недоступен в тестовом окружении
-        if response.status_code == 503:
-            pytest.skip("AI сервис недоступен")
-        
-        assert response.status_code == 200
+        assert response.status_code == 200, f"Daily summary failed: {response.text}"
         data = response.json()
         assert "date" in data
         assert "summary" in data

@@ -19,11 +19,11 @@ class TestNotesAttachmentsAPI:
     """Тесты API для аттачментов заметок"""
 
     @pytest.fixture
-    async def note_with_attachment(self, crm_client: AsyncClient, unique_crm_id):
+    async def note_with_attachment(self, crm_client: AsyncClient, unique_id):
         """Создает заметку и загружает к ней файл"""
         # Создаем заметку
         note_payload = {
-            "title": f"Note with attachment {unique_crm_id('attach')}",
+            "title": f"Note with attachment {unique_id('attach')}",
             "content": "Test content for attachment",
             "note_type": "freeform",
             "note_date": str(date.today()),
@@ -51,11 +51,11 @@ class TestNotesAttachmentsAPI:
         await crm_client.delete(f"/crm/api/v1/notes/{note_id}")
 
     @pytest.mark.asyncio
-    async def test_upload_attachment(self, crm_client: AsyncClient, unique_crm_id):
+    async def test_upload_attachment(self, crm_client: AsyncClient, unique_id):
         """Тест загрузки файла к заметке"""
         # Создаем заметку
         note_payload = {
-            "title": f"Upload test {unique_crm_id('upload')}",
+            "title": f"Upload test {unique_id('upload')}",
             "content": "Content for upload test",
             "note_type": "freeform",
             "note_date": str(date.today()),
@@ -84,9 +84,9 @@ class TestNotesAttachmentsAPI:
             await crm_client.delete(f"/crm/api/v1/notes/{note_id}")
 
     @pytest.mark.asyncio
-    async def test_upload_attachment_to_nonexistent_note(self, crm_client: AsyncClient, unique_crm_id):
+    async def test_upload_attachment_to_nonexistent_note(self, crm_client: AsyncClient, unique_id):
         """Тест загрузки файла к несуществующей заметке"""
-        fake_note_id = unique_crm_id("fake")
+        fake_note_id = unique_id("fake")
         file_content = b"Test content"
         files = {"file": ("test.txt", io.BytesIO(file_content), "text/plain")}
 
@@ -115,11 +115,11 @@ class TestNotesAttachmentsAPI:
             assert "original_name" in attachment
 
     @pytest.mark.asyncio
-    async def test_get_attachments_empty(self, crm_client: AsyncClient, unique_crm_id):
+    async def test_get_attachments_empty(self, crm_client: AsyncClient, unique_id):
         """Тест получения пустого списка файлов"""
         # Создаем заметку без файлов
         note_payload = {
-            "title": f"Empty attachments {unique_crm_id('empty')}",
+            "title": f"Empty attachments {unique_id('empty')}",
             "content": "No attachments here",
             "note_type": "freeform",
             "note_date": str(date.today()),
@@ -138,20 +138,20 @@ class TestNotesAttachmentsAPI:
             await crm_client.delete(f"/crm/api/v1/notes/{note_id}")
 
     @pytest.mark.asyncio
-    async def test_get_attachments_nonexistent_note(self, crm_client: AsyncClient, unique_crm_id):
+    async def test_get_attachments_nonexistent_note(self, crm_client: AsyncClient, unique_id):
         """Тест получения файлов несуществующей заметки"""
-        fake_note_id = unique_crm_id("fake")
+        fake_note_id = unique_id("fake")
 
         response = await crm_client.get(f"/crm/api/v1/notes/{fake_note_id}/attachments")
 
         assert response.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_remove_attachment(self, crm_client: AsyncClient, unique_crm_id):
+    async def test_remove_attachment(self, crm_client: AsyncClient, unique_id):
         """Тест удаления файла из заметки"""
         # Создаем заметку
         note_payload = {
-            "title": f"Remove attachment {unique_crm_id('remove')}",
+            "title": f"Remove attachment {unique_id('remove')}",
             "content": "Content",
             "note_type": "freeform",
             "note_date": str(date.today()),
@@ -190,11 +190,11 @@ class TestNotesAttachmentsAPI:
             await crm_client.delete(f"/crm/api/v1/notes/{note_id}")
 
     @pytest.mark.asyncio
-    async def test_remove_nonexistent_attachment(self, crm_client: AsyncClient, unique_crm_id):
+    async def test_remove_nonexistent_attachment(self, crm_client: AsyncClient, unique_id):
         """Тест удаления несуществующего файла"""
         # Создаем заметку
         note_payload = {
-            "title": f"Remove nonexistent {unique_crm_id('nonexist')}",
+            "title": f"Remove nonexistent {unique_id('nonexist')}",
             "content": "Content",
             "note_type": "freeform",
             "note_date": str(date.today()),
@@ -203,7 +203,7 @@ class TestNotesAttachmentsAPI:
         note_id = note_response.json()["note_id"]
 
         try:
-            fake_file_id = unique_crm_id("fakefile")
+            fake_file_id = unique_id("fakefile")
             response = await crm_client.delete(
                 f"/crm/api/v1/notes/{note_id}/attachments/{fake_file_id}"
             )
@@ -231,11 +231,11 @@ class TestNotesAttachmentsAPI:
         assert data["download_url"] is not None
 
     @pytest.mark.asyncio
-    async def test_download_nonexistent_attachment(self, crm_client: AsyncClient, unique_crm_id):
+    async def test_download_nonexistent_attachment(self, crm_client: AsyncClient, unique_id):
         """Тест скачивания несуществующего файла"""
         # Создаем заметку
         note_payload = {
-            "title": f"Download nonexistent {unique_crm_id('dl')}",
+            "title": f"Download nonexistent {unique_id('dl')}",
             "content": "Content",
             "note_type": "freeform",
             "note_date": str(date.today()),
@@ -244,7 +244,7 @@ class TestNotesAttachmentsAPI:
         note_id = note_response.json()["note_id"]
 
         try:
-            fake_file_id = unique_crm_id("fakefile")
+            fake_file_id = unique_id("fakefile")
             response = await crm_client.get(
                 f"/crm/api/v1/notes/{note_id}/attachments/{fake_file_id}/download"
             )
@@ -274,11 +274,11 @@ class TestNotesAttachmentsAPI:
             assert "content" in data
 
     @pytest.mark.asyncio
-    async def test_get_content_nonexistent_attachment(self, crm_client: AsyncClient, unique_crm_id):
+    async def test_get_content_nonexistent_attachment(self, crm_client: AsyncClient, unique_id):
         """Тест получения контента несуществующего файла"""
         # Создаем заметку
         note_payload = {
-            "title": f"Content nonexistent {unique_crm_id('cnt')}",
+            "title": f"Content nonexistent {unique_id('cnt')}",
             "content": "Content",
             "note_type": "freeform",
             "note_date": str(date.today()),
@@ -287,7 +287,7 @@ class TestNotesAttachmentsAPI:
         note_id = note_response.json()["note_id"]
 
         try:
-            fake_file_id = unique_crm_id("fakefile")
+            fake_file_id = unique_id("fakefile")
             response = await crm_client.get(
                 f"/crm/api/v1/notes/{note_id}/attachments/{fake_file_id}/content"
             )
@@ -297,11 +297,11 @@ class TestNotesAttachmentsAPI:
             await crm_client.delete(f"/crm/api/v1/notes/{note_id}")
 
     @pytest.mark.asyncio
-    async def test_upload_multiple_attachments(self, crm_client: AsyncClient, unique_crm_id):
+    async def test_upload_multiple_attachments(self, crm_client: AsyncClient, unique_id):
         """Тест загрузки нескольких файлов к одной заметке"""
         # Создаем заметку
         note_payload = {
-            "title": f"Multiple attachments {unique_crm_id('multi')}",
+            "title": f"Multiple attachments {unique_id('multi')}",
             "content": "Content with multiple files",
             "note_type": "meeting_minutes",
             "note_date": str(date.today()),
@@ -335,11 +335,11 @@ class TestNotesAttachmentsAPI:
             await crm_client.delete(f"/crm/api/v1/notes/{note_id}")
 
     @pytest.mark.asyncio
-    async def test_upload_different_file_types(self, crm_client: AsyncClient, unique_crm_id):
+    async def test_upload_different_file_types(self, crm_client: AsyncClient, unique_id):
         """Тест загрузки файлов разных типов"""
         # Создаем заметку
         note_payload = {
-            "title": f"Different types {unique_crm_id('types')}",
+            "title": f"Different types {unique_id('types')}",
             "content": "Content",
             "note_type": "freeform",
             "note_date": str(date.today()),

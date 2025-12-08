@@ -286,9 +286,9 @@ class TestModalPartials:
     """Тесты partials для модальных окон"""
 
     @pytest.mark.asyncio
-    async def test_partial_note_modal(self, frontend_client):
+    async def test_partial_note_modal(self, crm_frontend_client):
         """Partial для модалки создания заметки"""
-        response = await frontend_client.get("/crm/partials/note-modal")
+        response = await crm_frontend_client.get("/crm/partials/note-modal")
         
         assert response.status_code == 200
         assert "text/html" in response.headers.get("content-type", "")
@@ -297,18 +297,18 @@ class TestModalPartials:
         assert "modal" in html.lower()
 
     @pytest.mark.asyncio
-    async def test_partial_note_modal_contains_visibility(self, frontend_client):
+    async def test_partial_note_modal_contains_visibility(self, crm_frontend_client):
         """Модалка заметки содержит выбор visibility"""
-        response = await frontend_client.get("/crm/partials/note-modal")
+        response = await crm_frontend_client.get("/crm/partials/note-modal")
         
         html = response.text
         assert "visibility" in html.lower()
         assert "private" in html.lower()
 
     @pytest.mark.asyncio
-    async def test_partial_note_modal_contains_shared_with(self, frontend_client):
+    async def test_partial_note_modal_contains_shared_with(self, crm_frontend_client):
         """Модалка заметки содержит shared_with"""
-        response = await frontend_client.get("/crm/partials/note-modal")
+        response = await crm_frontend_client.get("/crm/partials/note-modal")
         
         html = response.text
         assert "shared-with" in html or "shared_with" in html
@@ -336,9 +336,9 @@ class TestModalPartials:
         assert "modal" in html.lower()
 
     @pytest.mark.asyncio
-    async def test_partial_ai_suggestions_modal(self, frontend_client):
+    async def test_partial_ai_suggestions_modal(self, crm_frontend_client):
         """Partial для модалки AI предложений"""
-        response = await frontend_client.get("/crm/partials/ai-suggestions-modal")
+        response = await crm_frontend_client.get("/crm/partials/ai-suggestions-modal")
         
         assert response.status_code == 200
         assert "text/html" in response.headers.get("content-type", "")
@@ -376,9 +376,9 @@ class TestSearchPartials:
     """Тесты partials для поиска"""
 
     @pytest.mark.asyncio
-    async def test_partial_search_empty(self, frontend_client):
+    async def test_partial_search_empty(self, crm_frontend_client):
         """Partial поиска без запроса"""
-        response = await frontend_client.get("/crm/partials/search")
+        response = await crm_frontend_client.get("/crm/partials/search")
         
         assert response.status_code == 200
         assert "text/html" in response.headers.get("content-type", "")
@@ -571,14 +571,27 @@ class TestEntityActionsPartials:
         assert "text/html" in response.headers.get("content-type", "")
 
     @pytest.mark.asyncio
-    async def test_partial_entity_intelligence(self, crm_frontend_client, test_entity):
+    async def test_partial_entity_intelligence(self, crm_frontend_client, unique_id):
         """Partial для AI intelligence summary сущности"""
-        response = await crm_frontend_client.get(
-            f"/crm/partials/entity-intelligence/{test_entity.entity_id}"
-        )
+        # Создаем entity через API чтобы использовать правильную компанию
+        entity_data = {
+            "name": f"Intelligence Test Entity {unique_id('intel')}",
+            "type": "person",
+            "attributes": {"email": "intel@test.com"}
+        }
+        create_resp = await crm_frontend_client.post("/frontend/api/crm/entities", json=entity_data)
+        assert create_resp.status_code == 200, f"Failed to create entity: {create_resp.text}"
+        entity_id = create_resp.json()["entity_id"]
         
-        assert response.status_code == 200
-        assert "text/html" in response.headers.get("content-type", "")
+        try:
+            response = await crm_frontend_client.get(
+                f"/crm/partials/entity-intelligence/{entity_id}"
+            )
+            
+            assert response.status_code == 200
+            assert "text/html" in response.headers.get("content-type", "")
+        finally:
+            await crm_frontend_client.delete(f"/frontend/api/crm/entities/{entity_id}")
 
     @pytest.mark.asyncio
     async def test_partial_entity_history(self, crm_frontend_client, test_entity):

@@ -41,7 +41,7 @@ class TestTelegramProfileIntegration:
     async def test_link_telegram_via_api(
         self,
         crm_client,
-        crm_api_user_company,
+        session_test_data,
     ):
         """Тест привязки Telegram через POST /telegram/link"""
         unique_suffix = uuid.uuid4().hex[:8]
@@ -63,7 +63,7 @@ class TestTelegramProfileIntegration:
     async def test_unlink_telegram_via_api(
         self,
         crm_client,
-        crm_api_user_company,
+        session_test_data,
     ):
         """Тест отвязки Telegram через DELETE /telegram/link"""
         unique_suffix = uuid.uuid4().hex[:8]
@@ -88,7 +88,7 @@ class TestTelegramProfileIntegration:
     async def test_telegram_username_in_profile(
         self,
         crm_client,
-        crm_api_user_company,
+        session_test_data,
     ):
         """Тест что telegram_username отображается в профиле после привязки"""
         unique_suffix = uuid.uuid4().hex[:8]
@@ -112,11 +112,11 @@ class TestTelegramProfileIntegration:
     async def test_get_profile_by_telegram_username(
         self,
         crm_container,
-        crm_api_user_company,
+        session_test_data,
     ):
         """Тест получения профиля по telegram_username через репозиторий"""
-        user = crm_api_user_company["user"]
-        company = crm_api_user_company["company"]
+        user = session_test_data["user"]
+        company = session_test_data["company"]
         unique_suffix = uuid.uuid4().hex[:8]
         telegram_username = f"tg_test_{unique_suffix}"
         
@@ -153,7 +153,7 @@ class TestCreateNoteTool:
     async def test_create_draft_note_via_api(
         self,
         crm_client,
-        crm_api_user_company,
+        session_test_data,
     ):
         """Тест создания черновика заметки через API"""
         unique_suffix = uuid.uuid4().hex[:8]
@@ -185,7 +185,7 @@ class TestCreateNoteTool:
         self,
         migrated_db,
         migrator,
-        crm_api_user_company,
+        session_test_data,
         flow_repo,
         crm_client,
         crm_server_process,
@@ -198,8 +198,8 @@ class TestCreateNoteTool:
         
         Симулирует сценарий Telegram: пользователь просит создать черновик заметки.
         """
-        company = crm_api_user_company["company"]
-        user = crm_api_user_company["user"]
+        company = session_test_data["company"]
+        user = session_test_data["user"]
         unique_suffix = uuid.uuid4().hex[:8]
         
         # Мигрируем flow
@@ -268,11 +268,11 @@ class TestTelegramFlowConfiguration:
         self,
         migrated_db,
         migrator,
-        crm_api_user_company,
+        session_test_data,
         flow_repo,
     ):
         """Тест что CRM Assistant Flow имеет Telegram платформу"""
-        company = crm_api_user_company["company"]
+        company = session_test_data["company"]
         
         await migrator.migrate_for_company(
             company=company,
