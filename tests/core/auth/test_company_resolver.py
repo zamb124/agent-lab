@@ -435,6 +435,29 @@ class TestCompanyResolverFrontendSubdomainPriority:
                 )
         
         assert result == company_ggg
+    
+    @pytest.mark.asyncio
+    async def test_frontend_without_subdomain_returns_none(
+        self, mock_container, token_data_zzz
+    ):
+        """Frontend: без субдомена -> None (для редиректа на select-company)"""
+        resolver = CompanyResolver(mock_container)
+        request = make_request(host="humanitec.ru")  # без субдомена
+        
+        with patch("core.middleware.auth.company_resolver.settings") as mock_settings:
+            mock_settings.server.env = "production"
+            
+            with patch("core.middleware.auth.company_resolver.extract_subdomain") as mock_extract:
+                mock_extract.return_value = None  # нет субдомена
+                
+                result = await resolver.resolve(
+                    request=request,
+                    token_data=token_data_zzz,  # токен есть, но игнорируется
+                    context_type="frontend",
+                )
+        
+        # Без субдомена для frontend возвращаем None -> редирект
+        assert result is None
 
 
 class TestCompanyResolverAnonymous:
