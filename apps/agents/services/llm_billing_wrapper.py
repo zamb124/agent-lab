@@ -48,8 +48,11 @@ class ChatOpenAIWithBilling(BaseChatModel):
         try:
             container = get_agents_container()
             self._billing_service = container.billing_service
-        except RuntimeError:
-            self._billing_service = None
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"Не удалось инициализировать LLM с биллингом: контейнер недоступен. "
+                f"Ошибка: {e}"
+            )
         
         self._bound_tools = []
         
@@ -309,9 +312,11 @@ class ChatOpenAIWithBilling(BaseChatModel):
             if context and context.interface and context.session_id:
                 try:
                     from apps.agents.interfaces.base import Message
+                    if not context.user or not context.flow_config:
+                        raise ValueError("Нет user или flow_config в контексте для отправки промежуточного сообщения")
                     intermediate_msg = Message(
-                        user_id=context.user.user_id if context.user else "system",
-                        flow_id=context.flow_config.flow_id if context.flow_config else "unknown",
+                        user_id=context.user.user_id,
+                        flow_id=context.flow_config.flow_id,
                         session_id=context.session_id,
                         content=content,
                         platform=context.platform or "web",
@@ -552,9 +557,15 @@ class ChatOpenAIWithBilling(BaseChatModel):
         is_mock = self._billing_model.startswith("mock-")
         
         if not is_mock:
+            if not self._billing_service:
+                raise BillingError(
+                    "BillingService не инициализирован. "
+                    "Невозможно выполнить запрос к LLM без биллинга."
+                )
+            
             context = get_context()
             if not context or not context.user or not context.active_company:
-                raise Exception("Нет контекста для биллинга LLM")
+                raise BillingError("Нет контекста для биллинга LLM (user или company отсутствуют)")
             
             user = context.user
             company = context.active_company
@@ -601,24 +612,34 @@ class ChatOpenAIWithBilling(BaseChatModel):
         cost = input_cost + output_cost
         
         # Записываем использование (только для не-mock моделей)
+        logger.info(f"💰 Биллинг: is_mock={is_mock}, user={user.user_id if user else None}, company={company.company_id if company else None}")
+        
         if not is_mock and user and company:
-            await self._billing_service.record_usage(
-                user=user,
-                company=company,
-                resource_name=resource_name,
-                cost=cost,
-                usage_type=UsageType.LLM_REQUEST,
-                metadata={
-                    "model": self._billing_model,
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "total_tokens": total_tokens,
-                    "input_cost": input_cost,
-                    "output_cost": output_cost,
-                    "input_cost_per_token": input_cost_per_token,
-                    "output_cost_per_token": output_cost_per_token,
-                }
-            )
+            try:
+                logger.info(f"💰 Записываем usage: resource={resource_name}, cost={cost:.4f}₽")
+                await self._billing_service.record_usage(
+                    user=user,
+                    company=company,
+                    resource_name=resource_name,
+                    cost=cost,
+                    usage_type=UsageType.LLM_REQUEST,
+                    metadata={
+                        "model": self._billing_model,
+                        "input_tokens": input_tokens,
+                        "output_tokens": output_tokens,
+                        "total_tokens": total_tokens,
+                        "input_cost": input_cost,
+                        "output_cost": output_cost,
+                        "input_cost_per_token": input_cost_per_token,
+                        "output_cost_per_token": output_cost_per_token,
+                    }
+                )
+                logger.info("💰 Usage записан успешно!")
+            except Exception as e:
+                logger.error(f"💰 ОШИБКА записи usage: {e}", exc_info=True)
+                raise
+        else:
+            logger.warning(f"💰 Usage НЕ записан: is_mock={is_mock}, has_user={user is not None}, has_company={company is not None}")
         
         if is_mock:
             logger.debug(f"Mock LLM запрос выполнен: {self._billing_model}")

@@ -4,7 +4,6 @@
 """
 import pytest
 import pytest_asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
 from httpx import AsyncClient, ASGITransport
 
 from core.utils.tokens import get_token_service
@@ -315,7 +314,6 @@ class TestCreateCompanyMiddlewarePath:
     async def test_middleware_allows_no_company_for_create_endpoint(self, migrated_db):
         """Проверяет что middleware разрешает доступ к /frontend/api/admin/create-my-company
         даже если у пользователя нет компаний"""
-        from core.middleware.auth import AuthMiddleware
         
         path = "/frontend/api/admin/create-my-company"
         

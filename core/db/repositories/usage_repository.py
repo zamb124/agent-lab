@@ -1,6 +1,7 @@
 """
 Репозиторий для работы с UsageRecord.
-Использует service БД, is_global=False (изолирован по компаниям).
+Использует shared БД, is_global=False (изолирован по компаниям).
+Хранит данные в отдельной таблице usage.
 """
 
 import logging
@@ -17,6 +18,7 @@ class UsageRepository(BaseRepository[UsageRecord]):
     """
     Репозиторий для работы с записями использования.
     is_global=False - записи изолированы по компаниям.
+    Хранит данные в таблице usage в shared_db.
     """
     
     is_global = False
@@ -34,7 +36,7 @@ class UsageRepository(BaseRepository[UsageRecord]):
         return "usage:"
 
     def _get_table_name(self) -> str:
-        return "storage"
+        return "usage"
 
     def _extract_entity_id(self, entity: UsageRecord) -> str:
         return entity.usage_id

@@ -2436,7 +2436,7 @@ export default class CRMModule {
             tooltip.innerHTML = '<div class="error">Ошибка загрузки</div>';
         }
     }
-        };
+};
     }
 }
 

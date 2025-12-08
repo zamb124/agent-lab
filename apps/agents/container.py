@@ -188,15 +188,6 @@ class AgentsContainer(BaseContainer):
     # === Сервисы ===
     
     @lazy
-    def billing_service(self):
-        from core.billing import BillingService
-        return BillingService(
-            company_repository=self.company_repository,
-            user_repository=self.user_repository,
-            usage_repository=self.usage_repository
-        )
-    
-    @lazy
     def payment_service(self):
         from core.payments import PaymentService
         return PaymentService(company_repository=self.company_repository)

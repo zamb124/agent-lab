@@ -23,7 +23,7 @@ async def second_company_for_delete(migrated_db, e2e_test_data):
     После теста очищает данные.
     """
     from apps.agents.container import get_agents_container
-    from core.models import Company, User
+    from core.models import Company
     from core.db.repositories.subdomain_repository import SubdomainMapping
     
     container = get_agents_container()

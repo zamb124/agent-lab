@@ -1056,7 +1056,7 @@ async def test_accumulated_with_interrupt(
     parent_agent = await agent_factory.get_agent(parent_agent_id)
     parent_session_id = f"test_session_accumulated_interrupt_{unique_id()}"
     
-    from apps.agents.services.state_manager import get_state_manager, StoreProxy
+    from apps.agents.services.state_manager import get_state_manager
     state_manager = await get_state_manager()
     
     # Настраиваем мок ДО создания агента

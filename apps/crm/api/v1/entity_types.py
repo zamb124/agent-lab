@@ -73,7 +73,10 @@ async def delete_entity_type(
     _admin: RequireAdminDep,
 ):
     """Удаляет кастомный тип сущности. Системные типы удалить нельзя."""
-    success = await entity_type_service.delete_type(type_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Тип не найден")
-    return {"status": "deleted"}
+    try:
+        success = await entity_type_service.delete_type(type_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Тип не найден")
+        return {"status": "deleted"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

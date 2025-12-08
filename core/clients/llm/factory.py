@@ -10,10 +10,8 @@ from typing import Optional, Dict
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage, AIMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langchain_openai import ChatOpenAI
 
 from core.config import get_settings
-from core.http import get_httpx_client, get_proxy_url
 
 logger = logging.getLogger(__name__)
 
@@ -263,29 +261,22 @@ def get_llm(model_name: Optional[str] = None, temperature: Optional[float] = Non
         temp = temperature if temperature is not None else 0.2
         max_tokens = None
 
-    proxy_url = get_proxy_url()
-    logger.debug(f"Создаем LLM клиент: model={model}, temperature={temp}, max_tokens={max_tokens}, proxy={proxy_url is not None}")
+    logger.debug(f"Создаем LLM клиент с биллингом: model={model}, temperature={temp}, max_tokens={max_tokens}")
 
-    llm_kwargs = {
-        "model": model,
-        "temperature": temp,
-        "max_tokens": max_tokens,
-        "openai_api_key": settings.llm.openrouter.api_key,
-        "openai_api_base": settings.llm.openrouter.base_url,
-        "default_headers": {
+    # Ленивый импорт для избежания циклических зависимостей
+    from apps.agents.services.llm_billing_wrapper import ChatOpenAIWithBilling
+    
+    llm = ChatOpenAIWithBilling(
+        model=model,
+        api_key=settings.llm.openrouter.api_key,
+        base_url=settings.llm.openrouter.base_url,
+        temperature=temp,
+        max_tokens=max_tokens,
+        default_headers={
             "HTTP-Referer": settings.llm.openrouter.site_url,
             "X-Title": settings.llm.openrouter.site_name,
         },
-    }
-    
-    if proxy_url:
-        http_client = get_httpx_client(
-            timeout=settings.llm.openrouter.timeout,
-            use_proxy_from_config=True
-        )
-        llm_kwargs["http_async_client"] = http_client
-
-    llm = ChatOpenAI(**llm_kwargs)
+    )
 
     return llm
 

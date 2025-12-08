@@ -360,10 +360,13 @@ class PaymentService:
         prefix = "payment_notification:"
         keys = await self._storage.list_by_prefix(prefix, force_global=True)
         
+        logger.debug(f"_is_notification_duplicate: checking {len(keys)} notifications for {external_payment_id}")
+        
         for key in keys:
             data = await self._storage.get(key, force_global=True)
             if data:
                 notification = PaymentNotification.model_validate_json(data)
+                logger.debug(f"Checking: {notification.external_payment_id} == {external_payment_id}, processed={notification.processed}")
                 if notification.external_payment_id == external_payment_id and notification.processed:
                     return True
         

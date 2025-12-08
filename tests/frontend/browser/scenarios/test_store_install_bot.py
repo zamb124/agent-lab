@@ -5,7 +5,7 @@
 """
 
 import pytest
-from playwright.async_api import Page, expect
+from playwright.async_api import Page
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -19,12 +19,12 @@ class TestDatabaseDiagnostics:
         response = await page.request.get(f"{server_url}/debug/check-user/{user_id}")
         data = await response.json()
         
-        print(f"\n=== Database Diagnostics ===")
+        print("\n=== Database Diagnostics ===")
         print(f"User ID: {user_id}")
         print(f"Server response: {data}")
         print(f"User exists in server DB: {data.get('exists')}")
         print(f"Server shared_db_url: {data.get('shared_db_url')}")
-        print(f"===========================\n")
+        print("===========================\n")
         
         assert data.get("exists"), f"Сервер не может найти пользователя {user_id}! Response: {data}"
 
@@ -36,13 +36,13 @@ class TestDatabaseDiagnostics:
         container = get_agents_container()
         user = await container.user_repository.get(user_id)
         
-        print(f"\n=== Pytest Database Check ===")
+        print("\n=== Pytest Database Check ===")
         print(f"User ID: {user_id}")
         print(f"User found: {user is not None}")
         if user:
             print(f"User name: {user.name}")
             print(f"User companies: {user.companies}")
-        print(f"=============================\n")
+        print("=============================\n")
         
         assert user is not None, f"pytest не может найти пользователя {user_id}"
 

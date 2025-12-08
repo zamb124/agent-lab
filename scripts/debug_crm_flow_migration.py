@@ -16,7 +16,7 @@ print(f"  _PYTEST_RAISE = {os.environ.get('_PYTEST_RAISE', 'NOT SET')}")
 
 async def main():
     from apps.agents.container import get_agents_container
-    from apps.agents.models import FlowConfig, AgentConfig
+    from apps.agents.models import FlowConfig
     from core.context import Context, set_context
     from core.models import User, Company
     

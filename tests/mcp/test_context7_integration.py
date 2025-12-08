@@ -323,7 +323,6 @@ async def test_context7_in_agent(setup_mcp_servers, test_company, agent_repo, to
     """
     from apps.agents.services.mcp_sync import sync_mcp_server_tools
     from apps.agents.models import AgentConfig
-    import httpx
     
     tools = []
     try:

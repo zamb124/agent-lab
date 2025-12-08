@@ -384,7 +384,7 @@ class StateGraphRunner(BaseAgentRunner):
                     logger.warning(f"ROUTER {current_node}: condition_func не найдена, используем обычные ребра")
             
             elif cond_info["type"] == "EXPRESSION":
-                from simpleeval import simple_eval, SimpleEval
+                from simpleeval import SimpleEval
                 
                 def safe_get(obj, key, default=None):
                     """Безопасное получение значения из словаря"""

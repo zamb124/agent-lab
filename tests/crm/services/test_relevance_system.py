@@ -10,7 +10,6 @@
 import pytest
 import pytest_asyncio
 
-from apps.crm.services.graph_service import GraphService
 from apps.crm.models.entity_models import EntityCreate
 from apps.crm.models.relationship_models import RelationshipCreate
 

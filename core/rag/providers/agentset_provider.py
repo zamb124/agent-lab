@@ -6,7 +6,6 @@ RAG провайдер на базе Agentset.ai.
 
 import httpx
 import logging
-import uuid
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from urllib.parse import urlparse, unquote

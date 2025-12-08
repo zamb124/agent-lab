@@ -7,20 +7,14 @@
 
 import pytest
 import pytest_asyncio
-import asyncio
-import uuid
-import json
 
 from apps.agents.container import get_agents_container
-from apps.agents.models import FlowConfig, AgentConfig, AgentType, SessionConfig, SessionStatus
+from apps.agents.models import FlowConfig, AgentConfig, AgentType
 from apps.agents.tasks.agent_tasks import process_agent_task
 from apps.agents.tasks.message_tasks import send_message_task
 from apps.agents.interfaces.base import Message
 from apps.agents.interfaces.web_interface import WebInterface
 from apps.agents.interfaces.api_interface import APIInterface
-from apps.agents.interfaces.telegram_interface import TelegramInterface
-from core.context import set_context, clear_context, get_context
-from core.models import User, Company, Context
 
 
 @pytest_asyncio.fixture

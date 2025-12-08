@@ -8,8 +8,6 @@ from typing import Optional, Tuple
 from fastapi import Request, HTTPException
 
 from core.models.identity_models import User, Company, UserStatus, AuthProvider
-from core.models.context_models import Context
-from core.models.i18n_models import Language
 
 logger = logging.getLogger(__name__)
 

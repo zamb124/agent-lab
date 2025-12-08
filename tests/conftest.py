@@ -36,7 +36,7 @@ os.environ.setdefault("S3__DEFAULT_BUCKET", "vkbucket")
 
 # Теперь можно импортировать модули
 from core.db import Storage
-from core.context import set_context, clear_context, get_context
+from core.context import set_context, clear_context
 from core.models import User, Company, Context
 from core.clients import get_llm
 
@@ -235,7 +235,6 @@ async def migrated_db():
 
         # Создаем таблицы и мигрируем
         from core.db.database import create_tables, get_session_factory
-        from core.db.models import Stores, AgentStates  # Явный импорт для регистрации в Base.metadata
         from sqlalchemy import text
         # Service БД (agents_db): storage, stores, agent_states, otel_spans
         await create_tables(
@@ -253,11 +252,11 @@ async def migrated_db():
                 logger.error(f"⚠️  Таблицы не созданы! Ожидались: stores, agent_states. Созданы: {created_tables}")
                 raise RuntimeError(f"Таблицы stores и agent_states не созданы в БД {settings.database.url}")
             logger.info(f"✅ Таблицы проверены: {created_tables}")
-        # Shared БД (shared_db): users, storage, variables
+        # Shared БД (shared_db): users, storage, variables, usage
         if settings.database.shared_url:
             await create_tables(
                 db_url=settings.database.shared_url,
-                table_names=["users", "storage", "variables"]
+                table_names=["users", "storage", "variables", "usage"]
             )
 
         migrator = get_agents_container().migrator
@@ -403,7 +402,8 @@ async def system_context(migrated_db):
             subdomain="system",
             name="System Company",
             status="active"
-        )
+        ),
+        container=get_agents_container()
     )
     set_context(system_context)
     return system_context
@@ -445,7 +445,7 @@ async def test_user(test_company: Company) -> User:
         email=f"test_{unique_suffix}@example.com",
         name="Test User",
         status="active",
-        groups=["user"],
+        groups=["admin"],
         companies={test_company.company_id: ["admin"]},
         active_company_id=test_company.company_id
     )
@@ -487,6 +487,7 @@ async def test_context(test_user: User, test_company: Company, migrated_db, comp
         user_companies=[test_company],
         metadata={},
         auth_token=auth_token,
+        container=get_agents_container(),
     )
 
     set_context(context)
@@ -1241,9 +1242,9 @@ def taskiq_worker_process(migrated_db):
     project_root = Path(__file__).parent.parent
     env = _get_localhost_env()
     
-    # Запускаем воркер без перехвата stdout/stderr для отладки
+    # Запускаем воркер с apps.worker:broker чтобы все задачи были зарегистрированы
     process = subprocess.Popen(
-        [sys.executable, "-m", "taskiq", "worker", "core.tasks.worker:broker", "--workers", "1"],
+        [sys.executable, "-m", "taskiq", "worker", "apps.worker:broker", "--workers", "1"],
         cwd=str(project_root),
         env=env
     )
@@ -1525,8 +1526,19 @@ async def service_auth_headers(test_user, test_company, user_repo, company_repo)
 # === CRM Service Fixtures ===
 
 @pytest_asyncio.fixture(scope="session")
-async def crm_app(migrated_db):
-    """FastAPI приложение для CRM сервиса (порт 8003)"""
+async def crm_app(migrated_db, agents_server_process):
+    """
+    FastAPI приложение для CRM сервиса (порт 8003).
+    
+    Зависит от agents_server_process чтобы CRM мог вызывать AI сервис.
+    """
+    # Устанавливаем URL agents сервиса ДО создания приложения
+    os.environ["CRM__AGENTS_SERVICE_URL"] = agents_server_process["url"]
+    
+    # Сбрасываем кэш CRM settings чтобы подхватить новый URL
+    import apps.crm.config as crm_config_module
+    crm_config_module._crm_settings = None
+    
     from apps.crm.main import create_app
     
     app = create_app()

@@ -13,8 +13,6 @@
 
 import pytest
 import pytest_asyncio
-import asyncio
-import json
 
 from apps.agents.container import get_agents_container
 from apps.agents.models import FlowConfig, AgentConfig, AgentType
@@ -218,7 +216,7 @@ class TestWebNotifications:
         keys = await storage.list_by_prefix(pattern, limit=10, force_global=True)
         
         assert len(keys) > 0, "AGENT_MESSAGE notification не найден"
-        print(f"✅ Уведомление агента сохранено")
+        print("✅ Уведомление агента сохранено")
         
         # Очистка
         for key in keys:

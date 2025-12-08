@@ -70,6 +70,7 @@ async def test_enterprise_discount(billing_service, unique_id):
 async def test_balance_check(billing_service, test_user, unique_id):
     """Тест: проверка баланса работает"""
     
+    # Компании должны быть сохранены в БД, т.к. can_use_resource загружает их из репозитория
     no_balance_company = Company(
         company_id=unique_id("no_balance"),
         subdomain=unique_id("no_balance"),
@@ -77,6 +78,7 @@ async def test_balance_check(billing_service, test_user, unique_id):
         tariff_plan=TariffPlan.FREE,
         balance=0.0
     )
+    await billing_service.company_repository.set(no_balance_company)
     
     can_use, reason = await billing_service.can_use_resource(test_user, no_balance_company, "llm:gpt-4")
     assert not can_use, "Без баланса должно блокироваться"
@@ -89,6 +91,7 @@ async def test_balance_check(billing_service, test_user, unique_id):
         tariff_plan=TariffPlan.FREE,
         balance=1000.0
     )
+    await billing_service.company_repository.set(with_balance_company)
     
     can_use, reason = await billing_service.can_use_resource(test_user, with_balance_company, "llm:gpt-4")
     assert can_use, f"С балансом должно быть доступно: {reason}"
@@ -107,6 +110,8 @@ async def test_monthly_limit(billing_service, test_user, unique_id):
         monthly_budget=100.0,
         current_month_spent=95.0
     )
+    # Сохраняем в БД т.к. can_use_resource загружает компанию из репозитория
+    await billing_service.company_repository.set(limited_company)
     
     cost = await billing_service.get_resource_cost_for_company(limited_company, "llm:gpt-4")
     can_use, reason = await billing_service.can_use_resource(test_user, limited_company, "llm:gpt-4")

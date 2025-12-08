@@ -11,11 +11,10 @@
 
 import pytest
 import uuid
-import asyncio
 
 from core.rag.providers.chromadb_provider import ChromaDBRAGProvider
 from core.rag.models import RAGDocument, RAGSearchResult, RAGNamespace
-from core.rag.factory import RAG_PROVIDERS, get_rag_provider
+from core.rag.factory import RAG_PROVIDERS
 from core.config import get_settings
 
 
@@ -45,8 +44,12 @@ def unique_namespace():
 
 
 @pytest.fixture
-async def chromadb_provider():
-    """Создает реальный ChromaDB провайдер для тестов"""
+async def chromadb_provider(test_context):
+    """Создает реальный ChromaDB провайдер для тестов.
+    
+    Зависит от test_context чтобы контекст с container был установлен
+    для корректной работы billing в EmbeddingService.
+    """
     settings = get_settings()
     chromadb_config = settings.rag.providers.get("chromadb")
     

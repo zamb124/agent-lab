@@ -69,7 +69,10 @@ async def create_entity(
     entity_service: EntityServiceDep,
 ):
     """Создает новую сущность"""
-    return await entity_service.create_entity(data)
+    try:
+        return await entity_service.create_entity(data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.put("/{entity_id}", response_model=EntityResponse)

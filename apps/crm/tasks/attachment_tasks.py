@@ -6,7 +6,7 @@ Attachments загружаются в S3 синхронно, затем асин
 """
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List
 
 from core.tasks.broker import broker

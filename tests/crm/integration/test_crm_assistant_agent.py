@@ -83,7 +83,7 @@ async def crm_data_for_agent(crm_container, crm_api_user_company):
             company_id=company.company_id,
             user_id=user.user_id,
             title=f"Meeting Note {i+1}",
-            content=f"Discussed project Alpha with team. Action items: review design, prepare demo. Participant: John Smith.",
+            content="Discussed project Alpha with team. Action items: review design, prepare demo. Participant: John Smith.",
             note_type="meeting_minutes",
             note_date=date.today() - timedelta(days=i),
             visibility="public",

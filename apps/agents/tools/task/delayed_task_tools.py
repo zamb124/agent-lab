@@ -105,11 +105,17 @@ async def create_delayed_task(
     if not context.flow_config:
         raise ValueError("flow_config не найден в контексте")
     
+    if not context.user:
+        raise ValueError("Нет пользователя в контексте - авторизация обязательна")
+    
+    if not context.active_company:
+        raise ValueError("Нет активной компании в контексте")
+    
     flow_id = context.flow_config.flow_id
     session_id = context.session_id
     platform = context.platform or "api"
-    user_id = context.user.user_id if context.user else "system"
-    company_id = context.active_company.company_id if context.active_company else "default"
+    user_id = context.user.user_id
+    company_id = context.active_company.company_id
     
     task_id = f"task_{uuid.uuid4().hex[:8]}"
     execute_at = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)

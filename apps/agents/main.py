@@ -83,7 +83,7 @@ def _create_app() -> FastAPI:
     on_startup=on_startup,
     create_tables_config={
         "service": ["storage", "stores", "agent_states", "otel_spans"],
-        "shared": ["users", "storage", "variables"],
+        "shared": ["users", "storage", "variables", "usage"],
     },
     title="Agents Service",
     description="Сервис для управления агентами, flows и tools",

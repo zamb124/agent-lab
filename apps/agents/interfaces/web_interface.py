@@ -97,7 +97,9 @@ class WebInterface(BaseInterface):
 
         # Формируем правильный session_id
         context = get_context()
-        real_user_id = context.user.user_id if context else user_id
+        if not context or not context.user:
+            raise ValueError("Нет контекста или пользователя в web_interface")
+        real_user_id = context.user.user_id
 
         # Получаем email пользователя (если доступен в контексте)
         user_email = context.user.email if context and hasattr(context.user, 'email') else None

@@ -555,7 +555,7 @@ async def test_research_agents_sequential(migrated_db, agent_factory, unique_id,
     print(f"   DEBUG: store1 content={store1}")
     
     if "sub_queries" not in store1:
-        print(f"   ⚠️  Агент не сохранил sub_queries в store")
+        print("   ⚠️  Агент не сохранил sub_queries в store")
         print(f"   Store keys: {list(store1.keys())}")
         print(f"   Store content: {store1}")
         raise AssertionError(f"Агент не сохранил sub_queries в store. Store: {store1}")

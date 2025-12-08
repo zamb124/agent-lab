@@ -21,7 +21,8 @@ from core.db.models import (
     Storage as StorageModel,
     Users as UsersModel,
     Variables as VariablesModel,
-    OtelSpans as OtelSpansModel
+    OtelSpans as OtelSpansModel,
+    Usage as UsageModel
 )
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ TABLE_MODELS = {
     "users": UsersModel,
     "variables": VariablesModel,
     "otel_spans": OtelSpansModel,
+    "usage": UsageModel,
 }
 
 TABLE_ROUTING = {
@@ -40,6 +42,7 @@ TABLE_ROUTING = {
     "auth_state:": {"table": "users", "company_specific": False},
     "var:": {"table": "variables", "company_specific": False},
     "otel:": {"table": "otel_spans", "company_specific": False},
+    "usage:": {"table": "usage", "company_specific": False},
     "_default": {"table": "storage", "company_specific": False}
 }
 

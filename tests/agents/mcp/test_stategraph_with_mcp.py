@@ -123,7 +123,7 @@ async def test_stategraph_agent_with_mcp_and_regular_tools(setup_mcp_servers, te
                     "mcp_input": "fastapi",
                 }
             },
-            config={"configurable": {"session_id": thread_id}}
+            config={"configurable": {"session_id": session_id}}
         )
         
         print("✅ Граф выполнен")
@@ -250,7 +250,7 @@ async def test_stategraph_with_only_mcp_tools(setup_mcp_servers, test_company, a
                     "topic": "agents"
                 }
             },
-            config={"configurable": {"session_id": thread_id}}
+            config={"configurable": {"session_id": session_id}}
         )
         
         print("✅ Граф с 2 MCP нодами выполнен")
@@ -379,7 +379,7 @@ async def test_stategraph_mixed_tools_complex_graph(setup_mcp_servers, test_comp
                     "topic": "hooks"
                 }
             },
-            config={"configurable": {"session_id": thread_id}}
+            config={"configurable": {"session_id": session_id}}
         )
         
         print("✅ Граф выполнен")

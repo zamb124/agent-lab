@@ -12,9 +12,7 @@
 
 import pytest
 import uuid
-from typing import Optional
 
-from core.rag.base_provider import BaseRAGProvider
 from core.rag.providers.chromadb_provider import ChromaDBRAGProvider
 from core.rag.providers.agentset_provider import AgentsetRAGProvider
 from core.rag.models import RAGDocument, RAGSearchResult, RAGNamespace
@@ -69,8 +67,11 @@ def unique_namespace():
 
 
 @pytest.fixture
-async def chromadb_provider():
-    """ChromaDB провайдер"""
+async def chromadb_provider(test_context):
+    """ChromaDB провайдер.
+    
+    Зависит от test_context для корректной работы billing.
+    """
     settings = get_settings()
     chromadb_config = settings.rag.providers.get("chromadb")
     
@@ -91,8 +92,11 @@ async def chromadb_provider():
 
 
 @pytest.fixture
-async def agentset_provider():
-    """Agentset провайдер"""
+async def agentset_provider(test_context):
+    """Agentset провайдер.
+    
+    Зависит от test_context для корректной работы billing.
+    """
     settings = get_settings()
     agentset_config = settings.rag.providers.get("agentset")
     

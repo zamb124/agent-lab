@@ -2,7 +2,6 @@
 CRM Entities - сущности partials и API
 """
 
-import json
 import logging
 from typing import Optional
 

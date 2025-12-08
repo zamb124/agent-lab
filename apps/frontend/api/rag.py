@@ -10,7 +10,7 @@ import httpx
 
 from core.config import get_settings
 from core.rag.factory import get_rag_provider, RAG_PROVIDERS
-from core.rag.models import RAGDocument, RAGSearchResult, RAGNamespace
+from core.rag.models import RAGDocument, RAGNamespace
 
 logger = logging.getLogger(__name__)
 

@@ -14,7 +14,7 @@ from typing import Optional, List, Dict, Any
 
 from sqlalchemy import String, Text, Boolean, Float, Date, DateTime, Index, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import JSONB, ARRAY
+from sqlalchemy.dialects.postgresql import JSONB
 
 
 class Base(DeclarativeBase):

@@ -219,3 +219,40 @@ class OtelSpans(Base):
     def __repr__(self):
         return f"<OtelSpans(key='{self.key}', updated_at='{self.updated_at}')>"
 
+
+class Usage(Base):
+    """
+    Таблица для записей использования ресурсов (биллинг).
+
+    Ключи имеют формат: company:{company_id}:usage:{resource_name}:{usage_id}
+    Хранится в shared_db для централизованного учета.
+    """
+
+    __tablename__ = "usage"
+
+    key = Column(String, primary_key=True, index=True)
+    value = Column(JSONB, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    expired_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("key", name="uq_usage_key"),
+        Index("ix_usage_key_prefix", "key"),
+        Index("ix_usage_updated_at", "updated_at"),
+        Index("ix_usage_expired_at", "expired_at"),
+        Index("ix_usage_company_id", (text("(value->>'company_id')"))),
+        Index("ix_usage_user_id", (text("(value->>'user_id')"))),
+        Index("ix_usage_timestamp", (text("(value->>'timestamp')"))),
+        Index("ix_usage_resource_name", (text("(value->>'resource_name')"))),
+    )
+
+    def __repr__(self):
+        return f"<Usage(key='{self.key}', updated_at='{self.updated_at}')>"
+

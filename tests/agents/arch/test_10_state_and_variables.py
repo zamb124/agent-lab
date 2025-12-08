@@ -11,8 +11,7 @@
 import pytest
 from langchain_core.messages import HumanMessage
 
-from core.variables import VariableResolver, get_state
-from apps.agents.services.tool_decorator import tool
+from core.variables import VariableResolver
 from apps.agents.models import (
     AgentConfig,
     AgentType,
@@ -21,7 +20,6 @@ from apps.agents.models import (
     GraphEdge,
     NodeType,
     LLMConfig,
-    ToolReference,
     CodeMode,
 )
 

@@ -7,9 +7,7 @@ EntityService работает с ChromaDB через RAGRepository.
 
 import pytest
 import pytest_asyncio
-import uuid
 
-from apps.crm.services.entity_service import EntityService
 from apps.crm.models.entity_models import EntityCreate, EntityUpdate, EntitySearchRequest
 
 

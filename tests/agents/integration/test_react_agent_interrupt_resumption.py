@@ -196,7 +196,7 @@ async def test_react_agent_interrupt_resumption_in_subagent(
             sub_session_id = sub_session_id_from_ctx
         
         if not sub_session_id or ":sub:" not in sub_session_id:
-            print(f"⚠️  WARNING: interrupted_session_id не содержит :sub:, ищем в messages")
+            print("⚠️  WARNING: interrupted_session_id не содержит :sub:, ищем в messages")
             messages = parent_state.get("messages", [])
             for msg in reversed(messages):
                 if hasattr(msg, "tool_calls") and msg.tool_calls:
@@ -214,7 +214,7 @@ async def test_react_agent_interrupt_resumption_in_subagent(
                                         break
         
         if not sub_session_id or ":sub:" not in sub_session_id:
-            print(f"⚠️  WARNING: sub_session_id не найден, генерируем новый")
+            print("⚠️  WARNING: sub_session_id не найден, генерируем новый")
             sub_session_id = f"{session_id}:sub:apps.agents.agents.weather.agent.TravelInfoAgent:{unique_id('sub')}"
         
         assert ":sub:" in sub_session_id, f"sub_session_id должен содержать :sub:: {sub_session_id} (interrupted={interrupted_session_id}, sub={sub_session_id_from_ctx})"

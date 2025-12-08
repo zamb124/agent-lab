@@ -12,7 +12,6 @@ import weakref
 from typing import AsyncGenerator, Optional, List
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine, create_async_engine, async_sessionmaker
-from sqlalchemy.pool import NullPool
 
 from core.config import get_settings
 from core.db.models import (
@@ -177,9 +176,6 @@ async def create_tables(db_url: Optional[str] = None, table_names: Optional[List
         table_names: Список имен таблиц для создания (если None, создаются все)
     """
     # Явный импорт всех моделей для регистрации в Base.metadata
-    from core.db.models import (
-        Storage, Users, Variables, Stores, AgentStates, OtelSpans
-    )
     
     await wait_for_db(db_url=db_url)
 

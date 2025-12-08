@@ -18,16 +18,13 @@ import os
 
 from core.clients.service_client import (
     ServiceClient,
-    ServiceClientError,
     ServiceValidationError,
     get_service_client,
     init_service_client,
     shutdown_service_client,
 )
 from core.context import set_context, clear_context
-from core.models import User, Company, Context
-from core.models.identity_models import UserStatus, AuthProvider
-from core.models.billing_models import TariffPlan
+from core.models import Context
 
 
 @pytest.fixture
@@ -270,7 +267,7 @@ class TestServiceClientWithFrontendService:
         
         import httpx
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(f"{url}/api/openapi.json")
+            response = await client.get(f"{url}/openapi.json")
             assert response.status_code == 200
             spec = response.json()
         
@@ -307,7 +304,6 @@ class TestServiceClientBackgroundRefresh:
         
         try:
             # Сбрасываем глобальный settings чтобы подхватил новые env
-            from core.config.base import set_settings, BaseSettings
             
             client = ServiceClient()
             
@@ -406,11 +402,6 @@ class TestServiceClientSingleton:
     @pytest.mark.asyncio
     async def test_init_and_shutdown(self):
         """Проверяем init_service_client и shutdown_service_client"""
-        from core.clients.service_client import (
-            _service_client,
-            init_service_client,
-            shutdown_service_client,
-        )
         
         # Сбрасываем глобальный клиент
         import core.clients.service_client as sc_module

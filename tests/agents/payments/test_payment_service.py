@@ -3,7 +3,6 @@
 """
 
 import pytest
-from unittest.mock import AsyncMock
 from datetime import datetime, timezone
 
 from core.models.payment_models import Transaction, PaymentStatus, PaymentProviderType, PaymentNotification
@@ -240,22 +239,26 @@ async def test_update_company_balance(company_repo, save_test_company, test_comp
 
 
 @pytest.mark.asyncio
-async def test_is_notification_duplicate(company_repo):
+async def test_is_notification_duplicate(company_repo, unique_id):
     """Тест проверки дубликатов уведомлений"""
     
     payment_service = PaymentService(company_repository=company_repo)
     
+    # Используем уникальный ID для изоляции теста
+    test_notification_id = unique_id("notif")
+    test_external_id = unique_id("ext")
+    
     existing_notification = PaymentNotification(
-        notification_id="existing",
+        notification_id=test_notification_id,
         provider=PaymentProviderType.YOOMONEY,
-        external_payment_id="duplicate_id",
+        external_payment_id=test_external_id,
         processed=True
     )
     
     await payment_service._save_notification(existing_notification)
     
-    is_duplicate = await payment_service._is_notification_duplicate("duplicate_id")
+    is_duplicate = await payment_service._is_notification_duplicate(test_external_id)
     assert is_duplicate is True
     
-    is_duplicate = await payment_service._is_notification_duplicate("new_id")
+    is_duplicate = await payment_service._is_notification_duplicate("completely_new_random_id_12345")
     assert is_duplicate is False

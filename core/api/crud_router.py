@@ -5,7 +5,7 @@
 
 import logging
 import inspect
-from typing import Type, TypeVar, List, Dict, Any, Callable, get_type_hints
+from typing import TypeVar, List, Dict, Any, Callable
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 from typing import Annotated

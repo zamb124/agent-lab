@@ -203,6 +203,16 @@ class BaseContainer:
     # === Сервисы ===
     
     @lazy
+    def billing_service(self):
+        """BillingService для биллинга и учета использования"""
+        from core.billing import BillingService
+        return BillingService(
+            company_repository=self.company_repository,
+            user_repository=self.user_repository,
+            usage_repository=self.usage_repository
+        )
+    
+    @lazy
     def auth_service(self):
         """AuthService для авторизации"""
         from core.identity.auth_service import AuthService

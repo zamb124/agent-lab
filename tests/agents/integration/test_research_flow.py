@@ -481,7 +481,7 @@ async def test_research_flow_quality_loop(migrated_db, flow_factory, unique_id):
     
     result = await research_flow.ainvoke(
         {"messages": [HumanMessage(content=query)]},
-        config={"configurable": {"session_id": thread_id}}
+        config={"configurable": {"session_id": session_id}}
     )
     
     store = result["store"]

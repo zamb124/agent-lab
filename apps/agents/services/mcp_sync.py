@@ -160,7 +160,9 @@ async def sync_all_companies_mcp_servers():
         return
     
     context = get_context()
-    company_id = context.active_company.company_id if context and context.active_company else "unknown"
+    if not context or not context.active_company:
+        raise ValueError("Нет контекста или активной компании для синхронизации MCP")
+    company_id = context.active_company.company_id
     
     logger.info(f"🔌 Синхронизация {len(all_servers)} MCP серверов для компании {company_id}")
     

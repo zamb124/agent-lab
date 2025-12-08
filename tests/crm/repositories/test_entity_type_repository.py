@@ -3,7 +3,6 @@
 """
 
 import pytest
-from datetime import datetime, timezone
 
 from apps.crm.db.models import EntityType
 

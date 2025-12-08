@@ -21,8 +21,6 @@ from apps.crm.services.task_service import TaskService
 from apps.crm.services.graph_service import GraphService
 from apps.crm.services.access_request_service import AccessRequestService
 from apps.crm.services.profile_service import ProfileService
-from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
-from apps.crm.db.repositories.profile_repository import ProfileRepository
 
 
 # === Container ===

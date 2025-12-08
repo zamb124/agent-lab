@@ -4,7 +4,7 @@ TaskService - управление задачами CRM.
 
 import logging
 import uuid
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import List, Optional, Dict
 
 from core.context import get_context

@@ -302,8 +302,10 @@ class ContextWindowManager:
     async def _notify_user_about_summarization(self, config: Dict[str, Any]):
         """Уведомляет пользователя о начале суммаризации"""
         context = get_context()
-        if not context or not context.interface:
-            logger.debug("Нет интерфейса для уведомления о суммаризации")
+        if not context:
+            raise ValueError("Нет контекста для уведомления о суммаризации")
+        if not context.interface:
+            logger.debug("Нет интерфейса для уведомления о суммаризации - пропускаем")
             return
         
         session_id = config.get("configurable", {}).get("session_id")
@@ -311,8 +313,11 @@ class ContextWindowManager:
             logger.debug("Нет session_id для уведомления о суммаризации")
             return
         
+        if not context.user:
+            raise ValueError("Нет пользователя в контексте для уведомления о суммаризации")
+        
         # Извлекаем user_id из session_id (формат: platform:user_id:flow_id:unique_id)
-        user_id = context.user.user_id if context.user else "system"
+        user_id = context.user.user_id
         chat_id = None
         
         if ":" in session_id:

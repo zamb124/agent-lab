@@ -14,8 +14,8 @@ import pytest
 import asyncio
 import io
 from datetime import date
-from pathlib import Path
 
+from core.context import set_context
 from apps.crm.models.note_models import NoteCreate, NoteType
 
 
@@ -59,21 +59,19 @@ async def test_upload_attachment_endpoint(crm_client, note_service, test_context
     Тест загрузки файла через API endpoint.
     Проверяет что файл загружается в S3 и добавляется к заметке.
     """
-    # Создаем заметку
+    company_id = test_context.active_company.company_id
+    user_id = test_context.user.user_id
+    set_context(test_context)
+    
     note_data = NoteCreate(
         title="Note with attachment",
         content="Testing file upload",
         note_type=NoteType.FREEFORM,
         note_date=date.today(),
     )
-    note = await note_service.create_note(
-        note_data,
-        company_id=test_context.active_company.company_id,
-        user_id=test_context.user.user_id
-    )
+    note = await note_service.create_note(note_data, company_id=company_id, user_id=user_id)
     
     try:
-        # Загружаем файл через API
         file_content = b"This is test attachment content for CRM note"
         files = {"file": ("test_attachment.txt", io.BytesIO(file_content), "text/plain")}
         
@@ -90,12 +88,14 @@ async def test_upload_attachment_endpoint(crm_client, note_service, test_context
         assert result["content_type"] == "text/plain"
         assert result["file_size"] == len(file_content)
         
-        # Проверяем что файл добавлен к заметке
-        updated_note = await note_service.get_note(note.note_id)
+        # Восстанавливаем контекст после HTTP запроса
+        set_context(test_context)
+        updated_note = await note_service.get_note(note.note_id, company_id=company_id)
         assert result["file_id"] in updated_note.attachment_ids
         
     finally:
-        await note_service.delete_note(note.note_id)
+        set_context(test_context)
+        await note_service.delete_note(note.note_id, company_id=company_id)
 
 
 @pytest.mark.asyncio
@@ -103,21 +103,19 @@ async def test_get_attachments_endpoint(crm_client, note_service, test_context):
     """
     Тест получения списка attachments через API.
     """
-    # Создаем заметку
+    company_id = test_context.active_company.company_id
+    user_id = test_context.user.user_id
+    set_context(test_context)
+    
     note_data = NoteCreate(
         title="Note for attachments list",
         content="Testing attachments list",
         note_type=NoteType.FREEFORM,
         note_date=date.today(),
     )
-    note = await note_service.create_note(
-        note_data,
-        company_id=test_context.active_company.company_id,
-        user_id=test_context.user.user_id
-    )
+    note = await note_service.create_note(note_data, company_id=company_id, user_id=user_id)
     
     try:
-        # Загружаем 2 файла
         for i in range(2):
             files = {"file": (f"file_{i}.txt", io.BytesIO(f"Content {i}".encode()), "text/plain")}
             response = await crm_client.post(
@@ -126,7 +124,6 @@ async def test_get_attachments_endpoint(crm_client, note_service, test_context):
             )
             assert response.status_code == 200
         
-        # Получаем список attachments
         response = await crm_client.get(f"/crm/api/v1/notes/{note.note_id}/attachments")
         assert response.status_code == 200
         
@@ -134,7 +131,8 @@ async def test_get_attachments_endpoint(crm_client, note_service, test_context):
         assert len(attachments) == 2
         
     finally:
-        await note_service.delete_note(note.note_id)
+        set_context(test_context)
+        await note_service.delete_note(note.note_id, company_id=company_id)
 
 
 @pytest.mark.asyncio
@@ -143,21 +141,19 @@ async def test_delete_attachment_endpoint(crm_client, note_service, test_context
     Тест удаления attachment через API.
     Проверяет что файл удаляется из списка заметки.
     """
-    # Создаем заметку
+    company_id = test_context.active_company.company_id
+    user_id = test_context.user.user_id
+    set_context(test_context)
+    
     note_data = NoteCreate(
         title="Note for delete attachment",
         content="Testing delete",
         note_type=NoteType.FREEFORM,
         note_date=date.today(),
     )
-    note = await note_service.create_note(
-        note_data,
-        company_id=test_context.active_company.company_id,
-        user_id=test_context.user.user_id
-    )
+    note = await note_service.create_note(note_data, company_id=company_id, user_id=user_id)
     
     try:
-        # Загружаем файл
         files = {"file": ("to_delete.txt", io.BytesIO(b"Will be deleted"), "text/plain")}
         upload_response = await crm_client.post(
             f"/crm/api/v1/notes/{note.note_id}/attachments",
@@ -166,18 +162,18 @@ async def test_delete_attachment_endpoint(crm_client, note_service, test_context
         assert upload_response.status_code == 200
         file_id = upload_response.json()["file_id"]
         
-        # Удаляем файл
         delete_response = await crm_client.delete(
             f"/crm/api/v1/notes/{note.note_id}/attachments/{file_id}"
         )
         assert delete_response.status_code == 200
         
-        # Проверяем что файл удален из заметки
-        updated_note = await note_service.get_note(note.note_id)
+        set_context(test_context)
+        updated_note = await note_service.get_note(note.note_id, company_id=company_id)
         assert file_id not in updated_note.attachment_ids
         
     finally:
-        await note_service.delete_note(note.note_id)
+        set_context(test_context)
+        await note_service.delete_note(note.note_id, company_id=company_id)
 
 
 # === Тесты импорта файлов ===
@@ -187,6 +183,9 @@ async def test_import_note_from_txt_endpoint(crm_client, note_service, test_cont
     """
     Тест импорта заметки из TXT файла через API.
     """
+    company_id = test_context.active_company.company_id
+    set_context(test_context)
+    
     file_content = """Meeting Notes - Project Alpha
 
 Participants: John, Mary, Bob
@@ -219,11 +218,10 @@ Action Items:
     result = response.json()
     assert result["title"] == "Imported Meeting Notes"
     assert result["note_type"] == "meeting_minutes"
-    # Статус importing т.к. парсинг асинхронный
     assert result["status"] in ["importing", "draft"]
     
-    # Cleanup
-    await note_service.delete_note(result["note_id"])
+    set_context(test_context)
+    await note_service.delete_note(result["note_id"], company_id=company_id)
 
 
 @pytest.mark.asyncio
@@ -231,6 +229,9 @@ async def test_import_note_from_pdf_endpoint(crm_client, note_service, test_cont
     """
     Тест импорта заметки из PDF файла через API.
     """
+    company_id = test_context.active_company.company_id
+    set_context(test_context)
+    
     pdf_content = create_test_pdf_content()
     
     files = {"file": ("document.pdf", io.BytesIO(pdf_content), "application/pdf")}
@@ -250,10 +251,10 @@ async def test_import_note_from_pdf_endpoint(crm_client, note_service, test_cont
     
     result = response.json()
     assert result["title"] == "Imported PDF Document"
-    assert len(result["attachment_ids"]) == 1  # Исходный файл сохранен как attachment
+    assert len(result["attachment_ids"]) == 1
     
-    # Cleanup
-    await note_service.delete_note(result["note_id"])
+    set_context(test_context)
+    await note_service.delete_note(result["note_id"], company_id=company_id)
 
 
 # === Тесты TaskIQ задач ===
@@ -344,7 +345,6 @@ async def test_attachment_deletion_task(
     """
     from apps.crm.tasks import process_crm_attachment_task, delete_crm_attachment_task
     from core.files import get_default_file_processor
-    from core.rag.factory import get_default_rag_provider
     
     company_id = test_context.active_company.company_id
     user_id = test_context.user.user_id
@@ -449,7 +449,6 @@ async def test_note_with_attachments_deletion(
         file_ids.append(file_record.file_id)
         
         # Добавляем к заметке
-        from apps.crm.db.models import Note
         db_note = await note_service._repo.get(note.note_id)
         db_note.attachment_ids = (db_note.attachment_ids or []) + [file_record.file_id]
         await note_service._repo.update(db_note)
@@ -589,7 +588,8 @@ async def test_attachment_upload_with_worker(
     """
     from core.rag.factory import get_default_rag_provider
     
-    # Создаем заметку с company_id из crm_client (совпадает с API)
+    set_context(test_context)
+    
     note_data = NoteCreate(
         title="E2E Test Note",
         content="Testing full flow with worker",

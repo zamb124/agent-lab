@@ -343,10 +343,14 @@ async def test_import_note_from_file_without_title(crm_client, unique_crm_id):
 
 @pytest.mark.asyncio
 async def test_get_daily_summary(crm_client, unique_crm_id):
-    """Тест получения AI саммари за день"""
+    """
+    Тест получения AI саммари за день.
+    
+    Требует работающий agents сервис для AI генерации.
+    Если AI недоступен - тест пропускается.
+    """
     today = str(date.today())
     
-    # Создаем заметку на сегодня
     payload = {
         "title": f"Summary Test {unique_crm_id('summary')}",
         "content": "Important meeting about project planning and timeline",
@@ -357,13 +361,18 @@ async def test_get_daily_summary(crm_client, unique_crm_id):
     create_response = await crm_client.post("/crm/api/v1/notes", json=payload)
     note_id = create_response.json()["note_id"]
     
-    response = await crm_client.get(f"/crm/api/v1/notes/daily-summary/{today}")
-    
-    assert response.status_code == 200
-    data = response.json()
-    assert "date" in data
-    assert "summary" in data
-    assert data["date"] == today
-    
-    await crm_client.delete(f"/crm/api/v1/notes/{note_id}")
+    try:
+        response = await crm_client.get(f"/crm/api/v1/notes/daily-summary/{today}")
+        
+        # AI может быть недоступен в тестовом окружении
+        if response.status_code == 503:
+            pytest.skip("AI сервис недоступен")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert "date" in data
+        assert "summary" in data
+        assert data["date"] == today
+    finally:
+        await crm_client.delete(f"/crm/api/v1/notes/{note_id}")
 

@@ -6,8 +6,7 @@
 """
 
 import pytest
-from datetime import date, datetime
-import uuid
+from datetime import date
 
 
 class TestNotesIntegration:

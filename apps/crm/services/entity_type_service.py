@@ -3,7 +3,7 @@ EntityTypeService - управление типами сущностей CRM.
 """
 
 import logging
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 from datetime import datetime, timezone
 
 from core.context import get_context

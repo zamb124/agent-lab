@@ -6,7 +6,6 @@
 import json
 import logging
 from typing import Dict, Any, Optional, Set
-from datetime import datetime, timezone
 from sqlalchemy import text
 
 from core.db.base_repository import BaseRepository

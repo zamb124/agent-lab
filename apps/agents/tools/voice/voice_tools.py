@@ -261,7 +261,8 @@ async def add_audio_chunk_to_stream(
         # Конвертируем hex в bytes
         chunk_data = bytes.fromhex(chunk_data_hex)
         
-        client = await get_default_cloud_voice_client()
+        container = get_agents_container()
+        client = CloudVoiceClientFactory.create_client(container.storage)
         if not client:
             return "❌ Cloud Voice не настроен"
             
@@ -291,7 +292,8 @@ async def get_stream_recognition_result(task_id: str, task_token: str) -> str:
         Финальный результат распознавания
     """
     try:
-        client = await get_default_cloud_voice_client()
+        container = get_agents_container()
+        client = CloudVoiceClientFactory.create_client(container.storage)
         if not client:
             return "❌ Cloud Voice не настроен"
             

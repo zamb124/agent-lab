@@ -17,6 +17,7 @@ from apps.crm.models.profile_models import (
     UserProfileCreate,
     UserProfileResponse,
     UserStatsResponse,
+    TelegramLinkResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -215,9 +216,8 @@ class ProfileService:
             entities_created=0,
         )
     
-    async def link_telegram(self, telegram_username: str) -> "TelegramLinkResponse":
+    async def link_telegram(self, telegram_username: str) -> TelegramLinkResponse:
         """Привязывает Telegram username к профилю пользователя"""
-        from apps.crm.models.profile_models import TelegramLinkResponse
         
         user_id = self._get_user_id()
         company_id = self._get_company_id()
@@ -239,9 +239,8 @@ class ProfileService:
             telegram_username=username
         )
     
-    async def unlink_telegram(self) -> "TelegramLinkResponse":
+    async def unlink_telegram(self) -> TelegramLinkResponse:
         """Отвязывает Telegram от профиля"""
-        from apps.crm.models.profile_models import TelegramLinkResponse
         
         user_id = self._get_user_id()
         company_id = self._get_company_id()

@@ -29,10 +29,17 @@ class BillingService:
         self, 
         company_repository: "CompanyRepository",
         user_repository: "UserRepository",
-        usage_repository: "UsageRepository" = None,
+        usage_repository: "UsageRepository",
         tariff_prices: Optional[Dict[TariffPlan, Dict[str, Dict[str, float]]]] = None,
         resource_base_prices: Optional[Dict[str, Dict[str, float]]] = None
     ):
+        if not company_repository:
+            raise ValueError("company_repository обязателен для BillingService")
+        if not user_repository:
+            raise ValueError("user_repository обязателен для BillingService")
+        if not usage_repository:
+            raise ValueError("usage_repository обязателен для BillingService")
+        
         self.company_repository = company_repository
         self.user_repository = user_repository
         self.usage_repository = usage_repository
@@ -61,21 +68,26 @@ class BillingService:
         Возвращает (можно_ли, причина_если_нельзя)
         """
         
+        # ВАЖНО: загружаем актуальную компанию из БД для проверки реального баланса
+        actual_company = await self.company_repository.get(company.company_id)
+        if not actual_company:
+            return False, f"Компания {company.company_id} не найдена"
+        
         # 1. Получаем стоимость ресурса с учетом тарифа компании
-        resource_cost = await self.get_resource_cost_for_company(company, resource_name)
+        resource_cost = await self.get_resource_cost_for_company(actual_company, resource_name)
         
         # 2. Проверяем баланс компании (если ресурс платный)
         if resource_cost > 0:
-            if company.balance <= 0:
-                return False, "На балансе компании недостаточно средств. Пополните баланс."
+            if actual_company.balance <= 0:
+                return False, f"На балансе компании недостаточно средств (баланс: {actual_company.balance:.2f}₽). Пополните баланс."
             
-            if company.balance < resource_cost:
-                return False, f"Недостаточно средств на балансе: {company.balance:.2f}₽, требуется: {resource_cost:.2f}₽"
+            if actual_company.balance < resource_cost:
+                return False, f"Недостаточно средств на балансе: {actual_company.balance:.2f}₽, требуется: {resource_cost:.2f}₽"
         
         # 3. Проверяем месячный лимит расходов (если установлен)
-        if company.monthly_budget > 0 and resource_cost > 0:
-            if company.current_month_spent + resource_cost > company.monthly_budget:
-                return False, f"Превышен месячный лимит расходов: {company.current_month_spent + resource_cost:.2f}₽/{company.monthly_budget}₽"
+        if actual_company.monthly_budget > 0 and resource_cost > 0:
+            if actual_company.current_month_spent + resource_cost > actual_company.monthly_budget:
+                return False, f"Превышен месячный лимит расходов: {actual_company.current_month_spent + resource_cost:.2f}₽/{actual_company.monthly_budget}₽"
         
         return True, ""
     
@@ -94,11 +106,16 @@ class BillingService:
         context = get_context()
         session_id = context.session_id if context else None
         
+        # ВАЖНО: загружаем актуальную компанию из БД чтобы не перезаписать данные
+        actual_company = await self.company_repository.get(company.company_id)
+        if not actual_company:
+            raise ValueError(f"Компания {company.company_id} не найдена в БД")
+        
         # Создаем запись об использовании
         usage_record = UsageRecord(
             usage_id=str(uuid.uuid4()),
             user_id=user.user_id,
-            company_id=company.company_id,
+            company_id=actual_company.company_id,
             session_id=session_id,
             usage_type=usage_type,
             resource_name=resource_name,
@@ -109,31 +126,38 @@ class BillingService:
         
         logger.info(f"Сохраняем запись использования: usage_id={usage_record.usage_id}, стоимость={cost}₽")
         
-        if self.usage_repository:
-            await self.usage_repository.set(usage_record)
-        else:
-            logger.warning("UsageRepository не настроен, запись использования не сохранена")
+        if not self.usage_repository:
+            raise RuntimeError(
+                "UsageRepository не настроен. Биллинг не может работать без репозитория. "
+                "Проверьте инициализацию BillingService."
+            )
+        
+        await self.usage_repository.set(usage_record)
         
         # Обновляем баланс и потраченную сумму компании
-        old_balance = company.balance
-        old_spent = company.current_month_spent
+        old_balance = actual_company.balance
+        old_spent = actual_company.current_month_spent
         
-        company.balance -= cost
-        company.current_month_spent += cost
+        actual_company.balance -= cost
+        actual_company.current_month_spent += cost
         
-        if company.balance < 0:
+        if actual_company.balance < 0:
             raise ValueError(
-                f"Баланс компании {company.company_id} ушел в минус: {company.balance:.2f}₽. "
+                f"Баланс компании {actual_company.company_id} ушел в минус: {actual_company.balance:.2f}₽. "
                 f"Это не должно было произойти - была ошибка в can_use_resource"
             )
         
-        logger.info(f"Обновляем компанию {company.company_id}:")
-        logger.info(f"Баланс: {old_balance:.2f}₽ → {company.balance:.2f}₽")
-        logger.info(f"Потрачено в месяце: {old_spent:.2f}₽ → {company.current_month_spent:.2f}₽")
+        logger.info(f"Обновляем компанию {actual_company.company_id}:")
+        logger.info(f"Баланс: {old_balance:.2f}₽ → {actual_company.balance:.2f}₽")
+        logger.info(f"Потрачено в месяце: {old_spent:.2f}₽ → {actual_company.current_month_spent:.2f}₽")
         
-        await self.company_repository.set(company)
+        await self.company_repository.set(actual_company)
         
-        logger.info(f"Записано использование {resource_name} для компании {company.company_id}: {cost}₽")
+        # Обновляем баланс в переданном объекте для консистентности в текущем контексте
+        company.balance = actual_company.balance
+        company.current_month_spent = actual_company.current_month_spent
+        
+        logger.info(f"Записано использование {resource_name} для компании {actual_company.company_id}: {cost}₽")
     
     async def get_resource_cost_for_company(self, company: Company, resource_name: str) -> float:
         """Получает стоимость ресурса с учетом тарифа компании"""
@@ -173,12 +197,7 @@ class BillingService:
         current_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         
         if not self.usage_repository:
-            return {
-                "total_cost": 0.0,
-                "total_calls": 0,
-                "by_resource": {},
-                "by_user": {}
-            }
+            raise RuntimeError("UsageRepository не настроен. Невозможно получить статистику.")
         
         all_usage_records = await self.usage_repository.list_all(limit=10000)
         

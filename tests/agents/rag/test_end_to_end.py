@@ -2,7 +2,6 @@
 End-to-end тесты RAG системы с flow и агентами.
 """
 
-import pytest
 
 from apps.agents.models import FlowConfig
 from core.rag.models import AgentRAGConfig
@@ -15,7 +14,7 @@ class TestFlowToAgentRAGConfig:
         """Тест что tools могут получить RAG конфигурацию из flow"""
         from apps.agents.tools.misc.rag_tools import _get_rag_config_from_context
         from apps.agents.flows.knowledge_bot_flow import knowledge_bot_flow
-        
+    
         test_context.flow_config = knowledge_bot_flow
         test_context.agent_config = None
         

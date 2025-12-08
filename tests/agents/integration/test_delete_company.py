@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from httpx import AsyncClient, ASGITransport
 
 from core.utils.tokens import get_token_service
-from core.context import set_context, clear_context, get_context
+from core.context import set_context, clear_context
 from core.models import User, Company, Context
 from core.models.identity_models import AuthProvider, UserStatus
 from apps.agents.models import AgentConfig, FlowConfig

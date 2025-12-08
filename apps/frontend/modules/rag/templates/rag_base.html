@@ -48,7 +48,7 @@
                         {% endif %}
                     </div>
                     <div class="rag-provider-info">
-                        <div class="rag-provider-name">{{ provider.name }}</div>
+                        <div class="rag-provider-name">{% if provider.name == 'chromadb' %}Humanetic{% else %}{{ provider.name }}{% endif %}</div>
                         <div class="rag-provider-badge">
                             {% if provider.name == 'chromadb' %}{{ t('rag.sidebar.local') }}{% else %}{{ t('rag.sidebar.cloud') }}{% endif %}
                         </div>

@@ -167,7 +167,7 @@ async def test_duplicate_webhook_protection(
     verification_result = await yoomoney_provider.verify_webhook(webhook_data)
     
     initial_company = await company_repo.get(test_company.company_id)
-    assert initial_company is not None, f"Компания должна быть сохранена"
+    assert initial_company is not None, "Компания должна быть сохранена"
     initial_balance = initial_company.balance
     
     await payment_service.process_webhook(

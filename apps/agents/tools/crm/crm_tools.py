@@ -7,8 +7,8 @@ CRM Tools - инструменты для AI ассистента.
 
 import logging
 import os
-from datetime import date, datetime
-from typing import Optional, List, Dict, Any
+from datetime import date
+from typing import Optional, Dict, Any
 
 from langchain_core.tools import tool
 from pydantic import Field

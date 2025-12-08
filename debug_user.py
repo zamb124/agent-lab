@@ -2,7 +2,6 @@
 Дебаг скрипт для проверки user и companies
 """
 import asyncio
-import json
 import sys
 
 async def main():

@@ -24,16 +24,14 @@ async def send_progress(message: str, chat_action: str = "typing") -> None:
     context = get_context()
     
     if not context:
-        logger.debug("Нет контекста для отправки прогресса")
-        return
+        raise ValueError("Нет контекста для отправки прогресса")
     
     if not context.interface:
-        logger.debug("Нет интерфейса в контексте для отправки прогресса")
+        logger.debug("Нет интерфейса в контексте для отправки прогресса - пропускаем")
         return
     
     if not context.session_id:
-        logger.debug("Нет session_id для отправки прогресса")
-        return
+        raise ValueError("Нет session_id для отправки прогресса")
     
     try:
         # Отправляем typing индикатор перед сообщением
@@ -42,9 +40,14 @@ async def send_progress(message: str, chat_action: str = "typing") -> None:
         # Отправляем сообщение
         from apps.agents.interfaces.base import Message
         
+        if not context.user:
+            raise ValueError("Нет пользователя в контексте для отправки прогресса")
+        if not context.flow_config:
+            raise ValueError("Нет flow_config в контексте для отправки прогресса")
+        
         progress_msg = Message(
-            user_id=context.user.user_id if context.user else "system",
-            flow_id=context.flow_config.flow_id if context.flow_config else "unknown",
+            user_id=context.user.user_id,
+            flow_id=context.flow_config.flow_id,
             session_id=context.session_id,
             content=message,
             platform=context.platform or "web",

@@ -3,7 +3,6 @@
 """
 
 import pytest
-from unittest.mock import AsyncMock
 from datetime import datetime, timezone
 
 from core.models.payment_models import Transaction, PaymentStatus, PaymentProviderType, PaymentNotification

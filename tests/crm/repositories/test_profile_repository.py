@@ -6,7 +6,6 @@ import pytest
 import uuid
 
 from apps.crm.db.models import UserProfile
-from apps.crm.db.repositories.profile_repository import ProfileRepository
 
 
 @pytest.fixture

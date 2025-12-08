@@ -105,7 +105,7 @@ async def test_expired_code_with_cache(auth_service, test_user):
     
     await auth_service.auth_session_repository.set(test_session)
     
-    cached_code_key = f"oauth_code:yandex:expired_code_123"
+    cached_code_key = "oauth_code:yandex:expired_code_123"
     cached_data = json.dumps({
         "user_id": test_user.user_id,
         "session_id": "session_123"
@@ -149,7 +149,7 @@ async def test_expired_code_without_cache(auth_service):
         "redirect_uri": "http://localhost/callback"
     })
     
-    cached_code_key = f"oauth_code:yandex:expired_code_456"
+    cached_code_key = "oauth_code:yandex:expired_code_456"
     cached_data = await auth_service._storage.get(cached_code_key)
     assert cached_data is None
     

@@ -72,6 +72,7 @@ class ContextFactory:
             metadata=metadata,
             auth_token=auth_token,
             trace_id=trace_id,
+            container=self.container,
         )
     
     def _create_anonymous_context(
@@ -105,6 +106,7 @@ class ContextFactory:
             language=language,
             metadata={"anonymous": True},
             trace_id=trace_id,
+            container=self.container,
         )
     
     async def _get_user_companies(self, user: User) -> List[Company]:

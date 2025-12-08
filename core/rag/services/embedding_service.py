@@ -142,20 +142,37 @@ class EmbeddingService:
         base_cost = (token_count / 1_000_000) * self.cost_per_1m_tokens
         return base_cost * self.platform_markup
     
+    def _get_billing_service(self):
+        """Получает billing_service из контекста или параметра инициализации"""
+        if self.billing_service:
+            return self.billing_service
+        
+        from core.billing import get_billing_service
+        return get_billing_service()
+    
     async def _record_usage(self, token_count: int, cost: float):
         """Записывает использование embedding в billing"""
-        if not self.billing_service:
-            # Billing не настроен — пропускаем (для тестов и dev окружения)
-            return
-        
         context = get_context()
+        
+        # Проверяем контекст пользователя - без user/company это системная операция
         if not context or not context.user or not context.active_company:
-            # Нет контекста — пропускаем (системные операции без пользователя)
-            logger.debug("No context for embedding billing")
+            logger.debug("Системная операция embedding без контекста пользователя")
             return
         
-        # Записываем usage — если ошибка, операция прерывается
-        await self.billing_service.record_usage(
+        # Есть user/company - billing обязателен
+        billing = None
+        if self.billing_service:
+            billing = self.billing_service
+        elif context.container:
+            billing = self._get_billing_service()
+        else:
+            raise RuntimeError(
+                "BillingService недоступен: не передан при инициализации и нет контейнера в контексте"
+            )
+        
+        logger.info(f"💰 Embedding billing: записываем {token_count} tokens, cost={cost:.4f}₽")
+        
+        await billing.record_usage(
             user=context.user,
             company=context.active_company,
             resource_name=f"embedding:{self._active_model or 'unknown'}",
@@ -169,7 +186,6 @@ class EmbeddingService:
                 "platform_markup": self.platform_markup,
             }
         )
-        logger.debug(f"Recorded embedding usage: {token_count} tokens, {cost:.4f}₽")
     
     async def _try_model(self, model: str, texts: List[str]) -> Optional[List[List[float]]]:
         """

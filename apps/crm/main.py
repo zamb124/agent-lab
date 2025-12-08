@@ -48,7 +48,7 @@ def create_app() -> FastAPI:
         on_startup=on_startup,
         # CRM использует свою отдельную БД crm_db, таблицы создаются через init_db
         create_tables_config={
-            "shared": ["users", "storage"],
+            "shared": ["users", "storage", "usage"],
         },
         title="CRM Service",
         description="API для управления CRM: сущности, заметки, задачи, связи",

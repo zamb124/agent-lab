@@ -5,7 +5,6 @@ RAG провайдер на базе ChromaDB.
 
 import logging
 import uuid
-from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 import chromadb

@@ -6,7 +6,7 @@
 import asyncio
 import functools
 import logging
-from typing import Optional, Callable, List, Any
+from typing import Optional, Callable, List
 
 from langchain_core.tools import tool as langchain_tool
 

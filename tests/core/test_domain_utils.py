@@ -2,7 +2,6 @@
 Тесты для core/utils/domain.py - утилиты работы с доменами.
 """
 
-import pytest
 
 from core.utils.domain import (
     PRIMARY_DOMAIN,

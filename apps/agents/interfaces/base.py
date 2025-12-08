@@ -262,18 +262,24 @@ class BaseInterface(ABC):
         if not context:
             raise ValueError("Нет глобального контекста - проверьте AuthMiddleware")
         
-        user_id = context.user.user_id if context.user else message.user_id
-        company_id = context.active_company.company_id if context.active_company else ""
+        if not context.user:
+            raise ValueError("Нет пользователя в контексте - авторизация обязательна")
+        
+        if not context.active_company:
+            raise ValueError("Нет активной компании в контексте - выберите компанию")
+        
+        user_id = context.user.user_id
+        company_id = context.active_company.company_id
         
         user_data = {
-            "name": context.user.name if context.user else "User",
-            "groups": context.user.groups if context.user else ["user"],
-        } if context.user else None
+            "name": context.user.name,
+            "groups": context.user.groups,
+        }
         
         company_data = {
-            "name": context.active_company.name if context.active_company else "Company",
-            "subdomain": context.active_company.subdomain if context.active_company else company_id,
-        } if context.active_company else None
+            "name": context.active_company.name,
+            "subdomain": context.active_company.subdomain,
+        }
         
         await self._update_session_for_task(message, flow_id)
         

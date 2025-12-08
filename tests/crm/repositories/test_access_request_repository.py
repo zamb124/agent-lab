@@ -6,7 +6,6 @@ import pytest
 import uuid
 
 from apps.crm.db.models import AccessRequest
-from apps.crm.db.repositories.access_request_repository import AccessRequestRepository
 
 
 @pytest.fixture

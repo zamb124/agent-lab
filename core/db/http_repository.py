@@ -8,7 +8,6 @@ HTTP прокси для удаленных репозиториев.
 """
 
 import logging
-import inspect
 from typing import Generic, TypeVar, Type, Any, Callable
 
 from pydantic import BaseModel

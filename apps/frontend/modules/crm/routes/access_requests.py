@@ -3,7 +3,7 @@ CRM Access Requests - запросы доступа
 """
 
 import logging
-from typing import Optional
+from datetime import datetime
 
 from fastapi import APIRouter, Request, Query
 from fastapi.responses import HTMLResponse
@@ -12,6 +12,23 @@ from ._base import templates, fetch_crm_data
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["crm-access-requests"])
+
+
+def _parse_request_dates(requests_data: list) -> list:
+    """Парсит строковые даты в datetime объекты для шаблона"""
+    if not isinstance(requests_data, list):
+        return []
+    
+    for req in requests_data:
+        if isinstance(req, dict) and req.get("created_at"):
+            try:
+                if isinstance(req["created_at"], str):
+                    req["created_at"] = datetime.fromisoformat(
+                        req["created_at"].replace("Z", "+00:00")
+                    )
+            except (ValueError, TypeError):
+                pass
+    return requests_data
 
 
 @router.get("/partials/access-requests", response_class=HTMLResponse)
@@ -25,6 +42,9 @@ async def partial_access_requests(
     else:
         requests_data = await fetch_crm_data("/access-requests/outgoing", request)
     
+    # Парсим даты для корректного отображения в шаблоне
+    requests_data = _parse_request_dates(requests_data)
+    
     pending_count_data = await fetch_crm_data("/access-requests/pending-count", request)
     pending_count = pending_count_data.get("count", 0) if isinstance(pending_count_data, dict) else 0
     
@@ -32,7 +52,7 @@ async def partial_access_requests(
         "crm/partials/_access_requests.html",
         {
             "request": request,
-            "requests": requests_data if isinstance(requests_data, list) else [],
+            "requests": requests_data,
             "tab": tab,
             "pending_count": pending_count
         }

@@ -84,7 +84,7 @@ class BaseRepository(ABC, Generic[T]):
 | AuthSessionRepository | True | users | auth_session: |
 | SubdomainRepository | True | storage | subdomain: |
 | VariableRepository | False | variables | company:X:var: |
-| UsageRepository | False | storage | company:X:usage: |
+| UsageRepository | False | usage | company:X:usage: |
 | FileRepository | False | storage | company:X:file: |
 
 ### Agents репозитории (service БД):

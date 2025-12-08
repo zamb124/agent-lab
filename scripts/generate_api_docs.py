@@ -14,7 +14,6 @@
 
 import argparse
 import os
-import sys
 import time
 import httpx
 from pathlib import Path
@@ -244,7 +243,7 @@ def main():
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    print(f"Генерация API документации...")
+    print("Генерация API документации...")
     print(f"  Сервис: {args.url}")
     print(f"  Выход: {output_dir}")
     

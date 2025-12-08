@@ -39,7 +39,6 @@ async def test_sync_context7_tools(setup_mcp_servers, mcp_repo, tool_repo, test_
     Интеграционный тест синхронизации тулов с Context7.
     """
     from apps.agents.services.mcp_sync import sync_mcp_server_tools
-    import httpx
     
     tools = []
     try:

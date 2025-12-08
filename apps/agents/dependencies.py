@@ -4,7 +4,7 @@ Dependency Injection для сервиса агентов
 Общие зависимости для API роутеров
 """
 
-from typing import Annotated, Dict, Callable, Any
+from typing import Annotated, Dict, Callable
 from fastapi import Depends
 
 from apps.agents.db.repositories import AgentRepository, FlowRepository, SessionRepository, ToolRepository

@@ -14,7 +14,6 @@ from apps.crm.db.models import AccessRequest
 from apps.crm.models.access_request_models import (
     AccessRequestCreate,
     AccessRequestResponse,
-    AccessRequestStatus,
 )
 
 logger = logging.getLogger(__name__)

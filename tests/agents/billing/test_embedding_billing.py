@@ -5,9 +5,9 @@
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
-from core.models.billing_models import UsageType, UsageRecord
+from core.models.billing_models import UsageType
 from core.rag.services.embedding_service import EmbeddingService
 from core.context import set_context, clear_context, Context
 
@@ -184,7 +184,6 @@ class TestEmbeddingBilling:
     async def test_embedding_no_billing_without_context(self, usage_repo, unique_id):
         """Тест что без контекста billing не записывается"""
         from core.config import get_settings
-        from unittest.mock import AsyncMock
         
         settings = get_settings()
         chromadb_cfg = settings.rag.providers.get("chromadb")

@@ -10,12 +10,10 @@
 """
 
 import pytest
-import pytest_asyncio
 import uuid
 from datetime import date
 from langchain_core.messages import HumanMessage
 
-from apps.crm.db.models import Note
 from core.context import set_context, clear_context, Context
 
 

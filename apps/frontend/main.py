@@ -7,7 +7,7 @@ Frontend Service - FastAPI приложение для фронтенда.
 
 import logging
 from pathlib import Path
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from core.app import create_service_app

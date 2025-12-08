@@ -67,7 +67,7 @@ class EntityService:
         if not existing:
             await self._rag.create_namespace(
                 name=namespace,
-                description=f"CRM entities for company"
+                description="CRM entities for company"
             )
             logger.info(f"Создан CRM namespace: {namespace}")
         return namespace

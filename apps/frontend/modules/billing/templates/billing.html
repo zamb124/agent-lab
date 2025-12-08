@@ -310,8 +310,8 @@
                 {% else %}
                 {{ c.empty_state(
                     icon='inbox',
-                    title='{{ t("billing.payment_history.empty_title") }}',
-                    description='{{ t("billing.payment_history.empty_description") }}',
+                    title=t('billing.payment_history.empty_title'),
+                    description=t('billing.payment_history.empty_description'),
                     centered=false
                 ) }}
                 {% endif %}
@@ -329,7 +329,7 @@
                     {{ t('billing.modal.title') }}
                 </h3>
                 <button class="modal-close" onclick="closePaymentModal()">
-                    <i class="ti ti-x-lg"></i>
+                    <i class="ti ti-x"></i>
                 </button>
             </div>
             <div class="modal-body">

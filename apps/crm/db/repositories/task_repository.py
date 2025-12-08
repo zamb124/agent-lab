@@ -7,7 +7,7 @@ import logging
 from datetime import date
 from typing import List, Type, Optional
 
-from sqlalchemy import select, and_, or_, desc, asc, func
+from sqlalchemy import select, and_, desc, asc, func
 
 from apps.crm.db.base import BaseCRMRepository, CRMDatabase
 from apps.crm.db.models import Task

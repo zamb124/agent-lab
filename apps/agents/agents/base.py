@@ -212,9 +212,12 @@ class BaseAgent(ABC):
             state["store"].update(input_store)
         
         state["task_id"] = input_data.get("task_id", state.get("task_id", ""))
-        state["user_id"] = input_data.get("user_id") or state.get("user_id") or (context.user.user_id if context.user else None)
+        state["user_id"] = input_data.get("user_id") or state.get("user_id")
         if not state["user_id"]:
-            raise ValueError("user_id не указан")
+            if context.user:
+                state["user_id"] = context.user.user_id
+            else:
+                raise ValueError("user_id не указан и нет пользователя в контексте")
         
         state["remaining_steps"] = input_data.get("remaining_steps") or state.get("remaining_steps")
         if state["remaining_steps"] is None:

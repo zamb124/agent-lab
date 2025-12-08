@@ -6,7 +6,7 @@ Pydantic модели для конфигурации агентов и флоу
 from __future__ import annotations
 
 from pydantic import BaseModel, field_validator, ConfigDict
-from typing import Optional, List, Dict, Any, TYPE_CHECKING, Union
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 from enum import Enum
 from datetime import datetime, timezone
 import json

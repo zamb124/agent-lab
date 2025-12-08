@@ -9,7 +9,6 @@ from datetime import datetime
 from apps.frontend.core.template_loader import get_templates
 from core.config import settings
 
-from apps.agents.models import FlowConfig
 from core.models.i18n_models import Language
 from core.context import get_context
 from core.i18n import get_translation_manager

@@ -219,7 +219,10 @@ async def confirm_entities(
     - Связи между сущностями
     - Связь автора с событием если link_author=True
     """
-    return await note_service.confirm_entities(note_id, request)
+    try:
+        return await note_service.confirm_entities(note_id, request)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.post("/{note_id}/link/{entity_id}", response_model=NoteResponse)
