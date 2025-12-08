@@ -177,11 +177,11 @@ class TestRAGSetupScenario:
             "Добавьте **описание** чтобы было понятно назначение коллекции."
         )
         
-        # Создаём неймспейс
-        create_btn = page.locator("#create-namespace-modal button:has-text('Create')")
+        # Создаём неймспейс (кнопка Create в модальном окне)
+        create_btn = page.locator("#create-namespace-modal .rag-modal-footer .rag-btn-primary")
         await doc.click(
             page,
-            "#create-namespace-modal button:has-text('Create')",
+            "#create-namespace-modal .rag-modal-footer .rag-btn-primary",
             "Сохранение неймспейса",
             "Нажмите **Create** для создания неймспейса."
         )
@@ -494,7 +494,7 @@ class TestRAGNamespaceScenario:
         await page.wait_for_selector("#create-namespace-modal.active", timeout=5000)
         await page.locator("#namespace-name").fill(namespace_name)
         await page.locator("#namespace-description").fill("Тестовая загрузка документов")
-        await page.locator("#create-namespace-modal button:has-text('Create')").click()
+        await page.locator("#create-namespace-modal .rag-modal-footer .rag-btn-primary").click()
         await page.wait_for_timeout(1500)
         
         await doc.step(

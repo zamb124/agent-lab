@@ -30,27 +30,54 @@ class CompanyResolver:
         Определяет компанию для запроса.
         
         Приоритет:
-        1. X-Company-Id header (для service API в local env)
+        1. X-Company-Id header (с проверкой доступа пользователя)
         2. Токен (для API запросов)
         3. Субдомен (для frontend)
         4. Системная компания (для anonymous)
+        
+        X-Company-Id позволяет переключить активную компанию:
+        - В local env - без проверок (для разработки)
+        - На проде - только если у пользователя есть доступ к компании
         """
         company_repo = self.container.company_repository
         subdomain_repo = self.container.subdomain_repository
         host = request.headers.get("host", "")
         
-        # 1. X-Company-Id header (только для local env)
-        if settings.server.env == "local":
-            override_company_id = request.headers.get("X-Company-Id")
-            if override_company_id:
+        # 1. X-Company-Id header - переключение активной компании
+        override_company_id = request.headers.get("X-Company-Id")
+        if override_company_id:
+            # В local env разрешаем без проверок
+            if settings.server.env == "local":
+                company = await company_repo.get(override_company_id)
+                if company:
+                    logger.debug(f"Компания из X-Company-Id (local): {override_company_id}")
+                    return company
+                logger.warning(f"Компания {override_company_id} из X-Company-Id не найдена")
+            
+            # На проде проверяем что у пользователя есть доступ
+            elif token_data and token_data.user_id:
+                user = await self.container.user_repository.get(token_data.user_id)
+                if not user:
+                    logger.warning(f"Пользователь {token_data.user_id} не найден")
+                    raise HTTPException(status_code=403, detail="Пользователь не найден")
+                
+                if override_company_id not in user.companies:
+                    logger.warning(
+                        f"Пользователь {token_data.user_id} не имеет доступа к компании {override_company_id}"
+                    )
+                    raise HTTPException(
+                        status_code=403, 
+                        detail=f"У вас нет доступа к компании {override_company_id}"
+                    )
+                
                 company = await company_repo.get(override_company_id)
                 if company:
                     logger.debug(f"Компания из X-Company-Id: {override_company_id}")
                     return company
                 logger.warning(f"Компания {override_company_id} из X-Company-Id не найдена")
         
-        # 2. Токен (для API запросов)
-        if context_type == "api" and token_data and token_data.company_id:
+        # 2. Токен ч- fallback если X-Company-Id не указан
+        if token_data and token_data.company_id:
             company = await company_repo.get(token_data.company_id)
             if company:
                 logger.debug(f"Компания из токена: {token_data.company_id}")

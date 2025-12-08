@@ -5,21 +5,19 @@ API тесты для confirm-entities endpoint.
 - POST /crm/api/v1/notes/{note_id}/confirm-entities
 """
 
+import uuid
 import pytest
 import pytest_asyncio
-from datetime import date
+from datetime import date, datetime, timezone
 
 from apps.crm.db.models import Note
 
 
 @pytest_asyncio.fixture
-async def api_meeting_note(crm_container, session_test_data):
+async def api_meeting_note(crm_container, test_context):
     """Создает meeting_minutes заметку для API тестов"""
-    import uuid
-    from datetime import datetime, timezone
-    
-    user = session_test_data["user"]
-    company = session_test_data["company"]
+    user = test_context.user
+    company = test_context.active_company
     
     note = Note(
         note_id=f"api_meeting_{uuid.uuid4().hex[:8]}",
@@ -45,13 +43,10 @@ async def api_meeting_note(crm_container, session_test_data):
 
 
 @pytest_asyncio.fixture
-async def api_freeform_note(crm_container, session_test_data):
+async def api_freeform_note(crm_container, test_context):
     """Создает freeform заметку для API тестов"""
-    import uuid
-    from datetime import datetime, timezone
-    
-    user = session_test_data["user"]
-    company = session_test_data["company"]
+    user = test_context.user
+    company = test_context.active_company
     
     note = Note(
         note_id=f"api_freeform_{uuid.uuid4().hex[:8]}",

@@ -92,8 +92,23 @@ class AgentsClient:
             logger.info(f"Calling agents: URL={url}, timeout={timeout + 10}")
             async with get_httpx_client(timeout=timeout + 10, use_proxy_from_config=False) as client:
                 response = await client.post(url, json=payload, headers=headers)
+                
+                # Извлекаем детали ошибки из JSON body
+                if response.status_code >= 400:
+                    error_detail = None
+                    try:
+                        error_body = response.json()
+                        error_detail = error_body.get("detail")
+                    except Exception:
+                        pass
+                    
+                    if error_detail:
+                        raise AgentsUnavailableError(error_detail)
                 response.raise_for_status()
+                
                 result = response.json()
+        except AgentsUnavailableError:
+            raise
         except Exception as e:
             logger.warning(f"Agents service unavailable for flow {flow_id}: {type(e).__name__}: {e}", exc_info=True)
             raise AgentsUnavailableError(f"AI сервис недоступен: {e}")

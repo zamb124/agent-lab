@@ -153,11 +153,15 @@ async def send_message_to_flow(flow_id: str, request: FlowMessageRequest, flow_r
 
     # Создаем задачу через TaskIQ
     # Если wait_timeout указан - ждём результат синхронно
+    try:
     task_result = await api_interface.create_task(
         message, 
         flow_id, 
         wait_timeout=request.wait_timeout
     )
+    except RuntimeError as e:
+        # Пробрасываем ошибку выполнения с деталями
+        raise HTTPException(status_code=500, detail=str(e))
 
     # Синхронный режим - результат уже получен
     if request.wait_timeout is not None:

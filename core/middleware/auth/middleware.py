@@ -145,13 +145,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     detail="Компания удаляется. Пожалуйста, выберите другую компанию."
                 )
         
-        # Проверка доступа пользователя к компании
+        # Проверка доступа пользователя к компании (для frontend)
         if user and company and rule.context_type == "frontend":
             if company.company_id not in user.companies:
                 if not self.route_matcher.allows_no_subdomain(request.url.path):
                     raise CompanyCreationRequired()
-            else:
-                await self._sync_active_company(container, user, company)
+        
+        # Синхронизация активной компании (для всех типов контекста)
+        if user and company:
+            await self._sync_active_company(container, user, company)
         
         return await context_factory.create(
             request, rule.context_type, company, user, token_data,
