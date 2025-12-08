@@ -354,14 +354,15 @@ class TestCompanyResolverSubdomain:
 
 
 class TestCompanyResolverFrontendSubdomainPriority:
-    """Тесты: frontend - субдомен имеет приоритет"""
+    """Тесты: frontend - субдомен имеет приоритет, но проверяется доступ"""
     
     @pytest.mark.asyncio
-    async def test_frontend_subdomain_has_priority_over_token(
-        self, mock_container, company_ggg, token_data_zzz
+    async def test_frontend_subdomain_with_access(
+        self, mock_container, company_ggg, user_with_both_companies, token_data_zzz
     ):
-        """Frontend: субдомен ggg имеет приоритет над токеном zzz"""
+        """Frontend: субдомен ggg + токен с доступом к ggg -> успех"""
         mock_container.subdomain_repository.get_company_id.return_value = "ggg"
+        mock_container.user_repository.get.return_value = user_with_both_companies
         mock_container.company_repository.get.return_value = company_ggg
         
         resolver = CompanyResolver(mock_container)
@@ -375,19 +376,46 @@ class TestCompanyResolverFrontendSubdomainPriority:
                 
                 result = await resolver.resolve(
                     request=request,
-                    token_data=token_data_zzz,  # токен с zzz
+                    token_data=token_data_zzz,  # токен с zzz, но user имеет доступ к ggg
                     context_type="frontend",
                 )
         
-        # Субдомен имеет приоритет для frontend
         assert result == company_ggg
-        mock_container.subdomain_repository.get_company_id.assert_called_once_with("ggg")
+    
+    @pytest.mark.asyncio
+    async def test_frontend_subdomain_without_access_raises_403(
+        self, mock_container, user_with_only_zzz
+    ):
+        """Frontend: субдомен ggg + токен без доступа к ggg -> 403"""
+        mock_container.subdomain_repository.get_company_id.return_value = "ggg"
+        mock_container.user_repository.get.return_value = user_with_only_zzz
+        
+        resolver = CompanyResolver(mock_container)
+        request = make_request(host="ggg.humanitec.ru")
+        
+        token_data = make_token_data(user_id="user_456", company_id="zzz")
+        
+        with patch("core.middleware.auth.company_resolver.settings") as mock_settings:
+            mock_settings.server.env = "production"
+            
+            with patch("core.middleware.auth.company_resolver.extract_subdomain") as mock_extract:
+                mock_extract.return_value = "ggg"
+                
+                with pytest.raises(HTTPException) as exc_info:
+                    await resolver.resolve(
+                        request=request,
+                        token_data=token_data,
+                        context_type="frontend",
+                    )
+        
+        assert exc_info.value.status_code == 403
+        assert "нет доступа" in exc_info.value.detail.lower()
     
     @pytest.mark.asyncio
     async def test_frontend_subdomain_without_token(
         self, mock_container, company_ggg
     ):
-        """Frontend: субдомен работает без токена"""
+        """Frontend: субдомен работает без токена (анонимный доступ)"""
         mock_container.subdomain_repository.get_company_id.return_value = "ggg"
         mock_container.company_repository.get.return_value = company_ggg
         

@@ -47,16 +47,30 @@ class CompanyResolver:
         subdomain_repo = self.container.subdomain_repository
         host = request.headers.get("host", "")
         
-        # Для FRONTEND - субдомен имеет приоритет
+        # Для FRONTEND - субдомен имеет приоритет, но проверяем доступ
         if context_type == "frontend":
             subdomain = self._extract_subdomain(host)
             if subdomain:
                 company_id = await subdomain_repo.get_company_id(subdomain)
-                if company_id:
-                    company = await company_repo.get(company_id)
-                    if company:
-                        logger.debug(f"Компания из субдомена {subdomain}: {company_id}")
-                        return company
+                if not company_id:
+                    raise HTTPException(status_code=404, detail=f"Company not found for subdomain: {subdomain}")
+                
+                # Проверяем что у пользователя есть доступ к этой компании
+                if token_data and token_data.user_id:
+                    user = await self.container.user_repository.get(token_data.user_id)
+                    if user and company_id not in user.companies:
+                        logger.warning(
+                            f"Пользователь {token_data.user_id} не имеет доступа к компании {company_id} (субдомен: {subdomain})"
+                        )
+                        raise HTTPException(
+                            status_code=403,
+                            detail=f"У вас нет доступа к компании {subdomain}"
+                        )
+                
+                company = await company_repo.get(company_id)
+                if company:
+                    logger.debug(f"Компания из субдомена {subdomain}: {company_id}")
+                    return company
                 raise HTTPException(status_code=404, detail=f"Company not found for subdomain: {subdomain}")
         
         # X-Company-Id header - переключение активной компании
