@@ -3,15 +3,17 @@
  * Основной JavaScript модуль для CRM функциональности
  */
 
-class CRMModule {
-    constructor() {
+export default class CRMModule {
+    constructor(app) {
+        this.app = app;
+        this.name = 'crm';
+        this.version = '1.0.0';
         this.apiBase = '/crm/api/v1';
         this.graph = null;
-        this.pendingFiles = []; // Файлы ожидающие загрузки после создания заметки
-        this.init();
+        this.pendingFiles = [];
     }
     
-    init() {
+    async init() {
         console.log('CRM Module initialized');
         this.setupMarked();
         this.setupEventListeners();
@@ -25,6 +27,16 @@ class CRMModule {
         document.body.addEventListener('htmx:afterSettle', () => {
             this.initToggleGroups();
         });
+        
+        // Глобальные объекты для обратной совместимости с HTML
+        this._setupGlobalObjects();
+        
+        return this;
+    }
+    
+    _setupGlobalObjects() {
+        window.crmModule = this;
+        window.CRM = this._createGlobalAPI();
     }
     
     setupNotificationHandlers() {
@@ -1729,27 +1741,22 @@ class CRMModule {
             }
         });
     }
-}
-
-// Инициализация при загрузке
-document.addEventListener('DOMContentLoaded', () => {
-    window.crmModule = new CRMModule();
-});
-
-// Глобальные функции для использования в HTML
-window.CRM = {
-    analyzeNote: (noteId) => window.crmModule?.analyzeNote(noteId),
-    zoomGraph: (dir) => window.crmModule?.zoomGraph(dir),
-    fitGraph: () => window.crmModule?.fitGraph(),
-    toggleGraphEditMode: () => window.crmModule?.toggleGraphEditMode(),
-    closeModal: () => window.crmModule?.closeModal(),
-    openEntity: (id) => window.crmModule?.openEntityDetail(id),
-    toggleVoice: () => window.crmModule?.toggleVoiceInput(),
-    switchInputTab: (formId, tab) => window.crmModule?.switchInputTab(formId, tab),
-    triggerFileUpload: (formId) => window.crmModule?.triggerFileUpload(formId),
-    handleMentions: (textarea) => window.crmModule?.handleMentions(textarea),
-    highlightMentions: (textarea) => window.crmModule?.highlightMentions(textarea),
-    syncHighlightsScroll: (textarea) => window.crmModule?.syncHighlightsScroll(textarea),
+    
+    _createGlobalAPI() {
+        const self = this;
+        return {
+    analyzeNote: (noteId) => self.analyzeNote(noteId),
+    zoomGraph: (dir) => self.zoomGraph(dir),
+    fitGraph: () => self.fitGraph(),
+    toggleGraphEditMode: () => self.toggleGraphEditMode(),
+    closeModal: () => self.closeModal(),
+    openEntity: (id) => self.openEntityDetail(id),
+    toggleVoice: () => self.toggleVoiceInput(),
+    switchInputTab: (formId, tab) => self.switchInputTab(formId, tab),
+    triggerFileUpload: (formId) => self.triggerFileUpload(formId),
+    handleMentions: (textarea) => self.handleMentions(textarea),
+    highlightMentions: (textarea) => self.highlightMentions(textarea),
+    syncHighlightsScroll: (textarea) => self.syncHighlightsScroll(textarea),
     handleVisibilityChange: (value) => {
         const container = document.getElementById('shared-with-container');
         if (container) {
@@ -2009,12 +2016,12 @@ window.CRM = {
             container.style.display = select.value === 'shared' ? 'block' : 'none';
         }
     },
-    askAI: () => window.crmModule?.askAI(),
-    showNotification: (msg, type) => window.crmModule?.showNotification(msg, type),
-    uploadFiles: (files) => window.crmModule?.uploadFiles(files),
-    removePendingFile: (fileId) => window.crmModule?.removePendingFile(fileId),
-    uploadPendingFiles: (noteId) => window.crmModule?.uploadPendingFiles(noteId),
-    get pendingFiles() { return window.crmModule?.pendingFiles || []; },
+    askAI: () => self.askAI(),
+    showNotification: (msg, type) => self.showNotification(msg, type),
+    uploadFiles: (files) => self.uploadFiles(files),
+    removePendingFile: (fileId) => self.removePendingFile(fileId),
+    uploadPendingFiles: (noteId) => self.uploadPendingFiles(noteId),
+    get pendingFiles() { return self.pendingFiles || []; },
     
     // Sidebar settings
     saveSidebarSettings: async () => {
@@ -2039,14 +2046,13 @@ window.CRM = {
             });
             
             if (response.ok) {
-                window.crmModule?.showNotification('Настройки меню сохранены', 'success');
-                // Перезагружаем sidebar
+                self.showNotification('Настройки меню сохранены', 'success');
                 window.location.reload();
             } else {
                 throw new Error('Ошибка сохранения');
             }
         } catch (e) {
-            window.crmModule?.showNotification('Ошибка сохранения настроек', 'error');
+            self.showNotification('Ошибка сохранения настроек', 'error');
         }
     },
     
@@ -2068,12 +2074,12 @@ window.CRM = {
             });
             
             if (response.ok) {
-                window.crmModule?.showNotification('Настройки виджетов сохранены', 'success');
+                self.showNotification('Настройки виджетов сохранены', 'success');
             } else {
                 throw new Error('Ошибка сохранения');
             }
         } catch (e) {
-            window.crmModule?.showNotification('Ошибка сохранения настроек', 'error');
+            self.showNotification('Ошибка сохранения настроек', 'error');
         }
     },
     
@@ -2286,14 +2292,14 @@ window.CRM = {
     },
     
     // AI Suggestions
-    toggleSuggestionEdit: (btn) => window.crmModule?.toggleSuggestionEdit(btn),
-    discardSuggestion: (btn) => window.crmModule?.discardSuggestion(btn),
-    discardAllSuggestions: () => window.crmModule?.discardAllSuggestions(),
-    approveSuggestion: (btn, action) => window.crmModule?.approveSuggestion(btn, action),
-    saveSuggestionEdit: (btn) => window.crmModule?.saveSuggestionEdit(btn),
-    updateSuggestionFields: (select) => window.crmModule?.updateSuggestionFields(select),
-    addSuggestionAttr: (btn) => window.crmModule?.addSuggestionAttr(btn),
-    approveAllSuggestions: (noteId) => window.crmModule?.approveAllSuggestions(noteId),
+    toggleSuggestionEdit: (btn) => self.toggleSuggestionEdit(btn),
+    discardSuggestion: (btn) => self.discardSuggestion(btn),
+    discardAllSuggestions: () => self.discardAllSuggestions(),
+    approveSuggestion: (btn, action) => self.approveSuggestion(btn, action),
+    saveSuggestionEdit: (btn) => self.saveSuggestionEdit(btn),
+    updateSuggestionFields: (select) => self.updateSuggestionFields(select),
+    addSuggestionAttr: (btn) => self.addSuggestionAttr(btn),
+    approveAllSuggestions: (noteId) => self.approveAllSuggestions(noteId),
     
     // AI Tooltip
     showAiTooltip(button) {
@@ -2376,11 +2382,11 @@ window.CRM = {
                     const res = await fetch(`/crm/api/notes/${noteId}/attachments`);
                     list.innerHTML = await res.text();
                 }
-                window.crmModule?.showNotification('Файл удален', 'success');
+                self.showNotification('Файл удален', 'success');
             }
         } catch (e) {
             console.error('Delete error:', e);
-            window.crmModule?.showNotification('Ошибка удаления', 'error');
+            self.showNotification('Ошибка удаления', 'error');
         }
     },
     
@@ -2430,5 +2436,7 @@ window.CRM = {
             tooltip.innerHTML = '<div class="error">Ошибка загрузки</div>';
         }
     }
-};
+        };
+    }
+}
 

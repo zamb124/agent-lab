@@ -24,6 +24,13 @@ async def on_startup(app: FastAPI, container, settings):
     # Инициализация системных типов сущностей
     await container.entity_type_service.init_system_types()
     
+    # Инициализация файловых процессоров для attachments
+    from core.files.processors import initialize_default_processors
+    initialize_default_processors(
+        file_repository=container.file_repository,
+        storage=container.shared_storage
+    )
+    
     logger.info("CRM системные типы инициализированы")
 
 

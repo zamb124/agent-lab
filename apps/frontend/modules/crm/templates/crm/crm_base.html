@@ -8,7 +8,11 @@
 
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<script src="{{ static('/crm/js/crm.module.js') }}"></script>
+<script type="module">
+import CRMModule from '{{ static('/crm/js/crm.module.js') }}';
+window.crmModuleInstance = new CRMModule(window.app);
+window.crmModuleInstance.init();
+</script>
 {% endblock %}
 
 {% block content %}

@@ -279,5 +279,9 @@
         }
     };
 </script>
-<script src="/static/rag/js/rag.module.js" type="module"></script>
+<script type="module">
+import RAGModule from '/static/rag/js/rag.module.js';
+window.ragModuleInstance = new RAGModule(window.app);
+window.ragModuleInstance.init();
+</script>
 {% endblock %}

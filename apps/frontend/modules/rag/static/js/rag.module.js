@@ -3,16 +3,17 @@
  */
 import { showNotification } from '/static/js/components/notification.js';
 
-class RAGApp {
-    constructor() {
+export default class RAGModule {
+    constructor(app) {
+        this.app = app;
+        this.name = 'rag';
+        this.version = '1.0.0';
         this.config = window.RAG_CONFIG || {};
         this.currentProvider = this.config.currentProvider;
         this.currentNamespace = this.config.currentNamespace;
         this.apiBase = this.config.apiBase || '/frontend/api/rag';
         this.i18n = this.config.i18n || {};
         this.uploadFiles = [];
-        
-        this.init();
     }
     
     t(key) {
@@ -29,6 +30,12 @@ class RAGApp {
     }
     
     async init() {
+        console.log('RAG Module initialized');
+        
+        // Глобальные объекты для обратной совместимости
+        window.ragApp = this;
+        this._setupGlobalFunctions();
+        
         this.bindEvents();
         await this.loadNamespaces();
         
@@ -37,6 +44,85 @@ class RAGApp {
         } else {
             await this.loadDashboard();
         }
+        
+        // Тема
+        const theme = localStorage.getItem('rag-theme') || 'dark';
+        const icon = document.querySelector('.rag-theme-toggle i');
+        if (icon) {
+            icon.className = `ti ti-${theme === 'light' ? 'sun' : 'moon'}`;
+        }
+        
+        return this;
+    }
+    
+    _setupGlobalFunctions() {
+        window.showCreateNamespaceModal = () => {
+            document.getElementById('create-namespace-modal').classList.add('active');
+            document.getElementById('namespace-name').focus();
+        };
+        
+        window.hideCreateNamespaceModal = () => {
+            document.getElementById('create-namespace-modal').classList.remove('active');
+            document.getElementById('namespace-name').value = '';
+            document.getElementById('namespace-description').value = '';
+        };
+        
+        window.createNamespace = async () => {
+            const name = document.getElementById('namespace-name').value.trim();
+            const description = document.getElementById('namespace-description').value.trim();
+            
+            if (!name) {
+                this.showToast(this.t('notifications.enterNamespaceName'), 'warning');
+                return;
+            }
+            
+            try {
+                const response = await fetch(
+                    `${this.apiBase}/namespaces?provider=${this.currentProvider}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, description })
+                    }
+                );
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to create namespace');
+                }
+                
+                window.hideCreateNamespaceModal();
+                this.showToast(this.t('notifications.namespaceCreated'), 'success');
+                await this.loadNamespaces();
+                await this.loadDashboard();
+            } catch (error) {
+                this.showToast(error.message, 'error');
+            }
+        };
+        
+        window.hideUploadModal = () => {
+            document.getElementById('upload-document-modal').classList.remove('active');
+        };
+        
+        window.hideSearchResults = () => {
+            document.getElementById('search-results-modal').classList.remove('active');
+        };
+        
+        window.toggleTheme = () => {
+            const current = document.documentElement.getAttribute('data-rag-theme') || 'light';
+            const next = current === 'light' ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-rag-theme', next);
+            localStorage.setItem('rag-theme', next);
+            
+            const icon = document.querySelector('.rag-theme-toggle i');
+            if (icon) {
+                icon.className = `ti ti-${next === 'light' ? 'sun' : 'moon'}`;
+            }
+        };
+        
+        window.toggleSidebar = () => {
+            document.querySelector('.rag-sidebar').classList.toggle('open');
+        };
     }
     
     bindEvents() {
@@ -581,7 +667,7 @@ class RAGApp {
             }
         }
         
-        hideUploadModal();
+        window.hideUploadModal();
         
         if (successCount > 0) {
             this.showToast(`${successCount} ${this.t('notifications.documentUploaded')}`, 'success');
@@ -669,89 +755,3 @@ class RAGApp {
         return div.innerHTML;
     }
 }
-
-function showCreateNamespaceModal() {
-    document.getElementById('create-namespace-modal').classList.add('active');
-    document.getElementById('namespace-name').focus();
-}
-
-function hideCreateNamespaceModal() {
-    document.getElementById('create-namespace-modal').classList.remove('active');
-    document.getElementById('namespace-name').value = '';
-    document.getElementById('namespace-description').value = '';
-}
-
-async function createNamespace() {
-    const name = document.getElementById('namespace-name').value.trim();
-    const description = document.getElementById('namespace-description').value.trim();
-    
-    if (!name) {
-        ragApp.showToast(ragApp.t('notifications.enterNamespaceName'), 'warning');
-        return;
-    }
-    
-    try {
-        const response = await fetch(
-            `${ragApp.apiBase}/namespaces?provider=${ragApp.currentProvider}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, description })
-            }
-        );
-        
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || 'Failed to create namespace');
-        }
-        
-        hideCreateNamespaceModal();
-        ragApp.showToast(ragApp.t('notifications.namespaceCreated'), 'success');
-        await ragApp.loadNamespaces();
-        await ragApp.loadDashboard();
-    } catch (error) {
-        ragApp.showToast(error.message, 'error');
-    }
-}
-
-function hideUploadModal() {
-    document.getElementById('upload-document-modal').classList.remove('active');
-}
-
-function hideSearchResults() {
-    document.getElementById('search-results-modal').classList.remove('active');
-}
-
-function toggleTheme() {
-    const current = document.documentElement.getAttribute('data-rag-theme') || 'light';
-    const next = current === 'light' ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-rag-theme', next);
-    localStorage.setItem('rag-theme', next);
-    
-    const icon = document.querySelector('.rag-theme-toggle i');
-    if (icon) {
-        icon.className = `ti ti-${next === 'light' ? 'sun' : 'moon'}`;
-    }
-}
-
-function toggleSidebar() {
-    document.querySelector('.rag-sidebar').classList.toggle('open');
-}
-
-window.showCreateNamespaceModal = showCreateNamespaceModal;
-window.hideCreateNamespaceModal = hideCreateNamespaceModal;
-window.createNamespace = createNamespace;
-window.hideUploadModal = hideUploadModal;
-window.hideSearchResults = hideSearchResults;
-window.toggleTheme = toggleTheme;
-window.toggleSidebar = toggleSidebar;
-
-document.addEventListener('DOMContentLoaded', () => {
-    window.ragApp = new RAGApp();
-    
-    const theme = localStorage.getItem('rag-theme') || 'dark';
-    const icon = document.querySelector('.rag-theme-toggle i');
-    if (icon) {
-        icon.className = `ti ti-${theme === 'light' ? 'sun' : 'moon'}`;
-    }
-});
