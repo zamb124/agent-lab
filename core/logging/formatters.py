@@ -104,54 +104,62 @@ class StructuredConsoleFormatter(logging.Formatter):
         return f"{color_code}{text}{self.RESET}"
 
     def format(self, record):
-        timestamp = datetime.fromtimestamp(record.created).strftime('%H:%M:%S.%f')[:-3]
+        # 1. Базовые поля
+        timestamp = datetime.fromtimestamp(record.created).strftime('%Y-%m-%d %H:%M:%S')
         level = record.levelname
-        logger_name = record.name
-        location = f"[{record.module}:{record.funcName}:{record.lineno}]"
         message = record.getMessage()
+        logger_name = record.name
+        location = f"{record.module}:{record.lineno}"
 
-        level_colored = self._colorize(f"{level:8}", self.COLORS.get(level, ''))
-        location_colored = self._colorize(location, self.DIM)
+        # Цветной уровень
+        level_fmt = self._colorize(f"[{level}]", self.COLORS.get(level, ''))
+        time_fmt = self._colorize(f"[{timestamp}]", self.DIM)
+        logger_fmt = self._colorize(f"[{logger_name}]", self.DIM)
+        loc_fmt = self._colorize(f"[{location}]", self.DIM)
 
-        lines = [f"{timestamp} {level_colored} {logger_name} {location_colored}"]
-        lines.append(f"  ▸ {message}")
+        # 2. Сбор контекста
+        ctx_parts = []
+        ctx = get_context()
 
-        context = get_context()
+        if ctx:
+            if ctx.active_company:
+                ctx_parts.append(f"[COMP:{ctx.active_company.company_id}]")
 
-        if context:
-            context_lines = []
-            
-            if context.user:
-                context_lines.append(f"user: {context.user.name} ({context.user.user_id})")
-            
-            if context.active_company:
-                context_lines.append(f"company: {context.active_company.name} ({context.active_company.company_id})")
-            
-            if context.session_id:
-                context_lines.append(f"session: {context.session_id}")
-            
-            context_lines.append(f"platform: {context.platform}")
-            
-            if context.agent_config:
-                agent_name = getattr(context.agent_config, 'name', 'unknown')
-                agent_id = getattr(context.agent_config, 'agent_id', 'unknown')
-                context_lines.append(f"agent: {agent_name} ({agent_id})")
-            
-            if context.flow_config:
-                flow_name = getattr(context.flow_config, 'name', 'unknown')
-                flow_id = getattr(context.flow_config, 'flow_id', 'unknown')
-                context_lines.append(f"flow: {flow_name} ({flow_id})")
+            if ctx.user:
+                ctx_parts.append(f"[USER:{ctx.user.user_id}]")
 
-            if context_lines:
-                lines.append(self._colorize("  Context:", self.DIM))
-                for line in context_lines:
-                    lines.append(self._colorize(f"    {line}", self.DIM))
+            if ctx.platform:
+                ctx_parts.append(f"[PLAT:{ctx.platform}]")
 
+            if ctx.session_id:
+                ctx_parts.append(f"[SESS:{ctx.session_id}]")
+
+            if ctx.agent_config:
+                agent_id = getattr(ctx.agent_config, 'agent_id', 'unknown')
+                ctx_parts.append(f"[AGENT:{agent_id}]")
+
+            if ctx.flow_config:
+                flow_id = getattr(ctx.flow_config, 'flow_id', 'unknown')
+                ctx_parts.append(f"[FLOW:{flow_id}]")
+
+        # Собираем контекст в одну строку
+        context_str = " ".join(ctx_parts)
+        if context_str:
+            context_str = self._colorize(context_str, self.DIM)
+
+        # 3. Итоговая сборка
+        # [INFO] [Time] [Logger] [Loc] [CTX:...] Message
+        if context_str:
+            log_line = f"{level_fmt} {time_fmt} {logger_fmt} {loc_fmt} {context_str} {message}"
+        else:
+            log_line = f"{level_fmt} {time_fmt} {logger_fmt} {loc_fmt} {message}"
+
+        # 4. Exception
         if hasattr(record, 'exc_info') and record.exc_info:
-            lines.append(self._colorize("  Exception:", '\033[31m'))
+            log_line += self._colorize("\n  Exception:", '\033[31m')
             exception_text = self.formatException(record.exc_info)
             for exc_line in exception_text.split('\n'):
-                lines.append(self._colorize(f"    {exc_line}", '\033[31m'))
+                log_line += self._colorize(f"\n    {exc_line}", '\033[31m')
 
-        return '\n'.join(lines)
+        return log_line
 

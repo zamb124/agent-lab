@@ -22,12 +22,6 @@ scheduler = TaskiqScheduler(broker, sources=[schedule_source])
 
 
 @broker.on_event("startup")
-async def setup_worker_logging() -> None:
-    from core.logging import setup_logging
-    setup_logging("worker")
-
-
-@broker.on_event("startup")
 async def recover_stale_pending_tasks() -> None:
     """
     При старте worker забираем зависшие pending задачи от мёртвых consumers.

@@ -6,6 +6,10 @@
 """
 
 from core.tasks.broker import broker, scheduler, schedule_source
+from core.logging import setup_logging
+
+# Настраиваем логирование при импорте модуля (до запуска воркера)
+setup_logging("worker")
 
 # === Регистрация задач приложений ===
 # Импортируем модули, чтобы декораторы @broker.task сработали

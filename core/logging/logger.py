@@ -49,10 +49,15 @@ def setup_logging(service_name: str = "core", logging_config: Optional[LoggingCo
 
     if logging_config.file_enabled:
         # Выбираем путь к файлу логов в зависимости от сервиса
-        if service_name == "worker":
-            log_file = Path(logging_config.worker_file_path)
+        # Используем logs/{service_name}.log для разделения логов
+        if service_name == "core":
+             log_file = Path(logging_config.file_path)
+        elif service_name == "worker":
+             log_file = Path(logging_config.worker_file_path)
         else:
-            log_file = Path(logging_config.file_path)
+             # Для crm, agents, frontend и других - свой файл
+             log_file = Path(f"logs/{service_name}.log")
+        
         log_file.parent.mkdir(parents=True, exist_ok=True)
 
         file_handler = logging.handlers.RotatingFileHandler(
@@ -74,6 +79,25 @@ def setup_logging(service_name: str = "core", logging_config: Optional[LoggingCo
     for logger_name, level in logging_config.loggers_levels.items():
         logger = logging.getLogger(logger_name)
         logger.setLevel(getattr(logging, level.upper()))
+
+    # Перехватываем логгеры uvicorn и taskiq, чтобы они использовали наш формат
+    # 1. Сначала известные корневые логгеры
+    loggers_to_intercept = ["uvicorn", "uvicorn.access", "uvicorn.error", "taskiq"]
+    for name in loggers_to_intercept:
+        _logger = logging.getLogger(name)
+        _logger.handlers = []
+        _logger.propagate = True
+
+    # 2. Агрессивный перехват всех уже созданных логгеров (Sub-loggers)
+    # TaskIQ создает taskiq.receiver.receiver и другие, которые могут иметь свои handler-ы
+    logger_manager = logging.Logger.manager
+    existing_loggers = list(logger_manager.loggerDict.keys())
+
+    for name in existing_loggers:
+        if name.startswith("taskiq") or name.startswith("uvicorn"):
+            _logger = logging.getLogger(name)
+            _logger.handlers = []  # Удаляем все хендлеры
+            _logger.propagate = True  # Разрешаем всплытие к root
 
     logging.info(f"Логирование настроено для сервиса: {service_name}")
 
