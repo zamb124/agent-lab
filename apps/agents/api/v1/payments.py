@@ -59,9 +59,9 @@ async def create_payment(request: CreatePaymentRequest, context: ContextDep):
         f"пользователь={user.user_id}, сумма={request.amount}₽"
     )
     
-    payment_service = PaymentService()
+    payment_service = PaymentService(context.container.company_repository)
     
-    provider_name = request.provider or company.payment_provider
+    provider_name = request.provider
     if not provider_name:
         available = PaymentProviderFactory.get_available_providers()
         if not available:
@@ -138,7 +138,9 @@ async def payment_webhook(provider_name: str, request: Request):
             )
             raise HTTPException(401, "Invalid signature")
         
-        payment_service = PaymentService()
+        # Для webhook нужен контейнер - получаем через app.state
+        container = request.app.state.container
+        payment_service = PaymentService(container.company_repository)
         await payment_service.process_webhook(
             verification_result=verification_result,
             provider_name=provider_name,
@@ -165,7 +167,7 @@ async def get_transaction(transaction_id: str, context: ContextDep):
     
     company = context.active_company
     
-    payment_service = PaymentService()
+    payment_service = PaymentService(context.container.company_repository)
     transaction = await payment_service.get_transaction(transaction_id)
     
     if not transaction:
@@ -195,7 +197,7 @@ async def get_payment_history(limit: int = 50, offset: int = 0, context: Context
     
     company = context.active_company
     
-    payment_service = PaymentService()
+    payment_service = PaymentService(context.container.company_repository)
     transactions = await payment_service.get_company_transactions(
         company_id=company.company_id,
         limit=limit,

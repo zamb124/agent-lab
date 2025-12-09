@@ -31,8 +31,6 @@ class CompanyResolver:
         
         Приоритет для FRONTEND (ggg.humanitec.ru):
         1. Субдомен (пользователь явно зашел на этот домен)
-        2. X-Company-Id header
-        3. Токен
         
         Приоритет для API (service-to-service):
         1. X-Company-Id header (сервис указывает компанию)
@@ -160,5 +158,3 @@ class CompanyResolver:
         if not company:
             raise RuntimeError("Системная компания не найдена - запустите миграцию")
         return company
-
-
