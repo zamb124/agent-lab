@@ -10,6 +10,7 @@ from fastapi import FastAPI
 
 from core.app import create_service_app
 from core.files import initialize_default_processors
+from core.clients.payment import PaymentProviderFactory
 from apps.agents.config import AgentsSettings
 from apps.agents.container import get_agents_container
 
@@ -18,6 +19,9 @@ logger = logging.getLogger(__name__)
 
 async def on_startup(app: FastAPI, container, settings):
     """Кастомная логика при старте"""
+    # Инициализация платежных провайдеров
+    PaymentProviderFactory.initialize()
+    
     # Инициализация файловых процессоров
     initialize_default_processors(
         file_repository=container.file_repository,
