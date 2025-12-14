@@ -293,37 +293,132 @@ from apps.agents.services.tool_decorator import tool
         )
 
     async def _create_mcp_tool(self, ref: ToolReference) -> Any:
-        """Создает MCP инструмент"""
+        """
+        Создает MCP инструмент через @tool декоратор.
+
+        Динамически создает функцию и оборачивает её в @tool для
+        единообразия с остальными тулами платформы.
+        """
+        logger.info(f"🎯 Создание MCP tool: {ref.tool_id}")
+        from apps.agents.services.mcp_client import get_mcp_client, format_mcp_result, process_mcp_images
+
+        # Проверяем CodeMode для безопасности
+        if not ref.tool_id.startswith("mcp:"):
+            logger.warning(f"⚠️ Ожидался CodeMode.MCP_TOOL для {ref.tool_id}, получен {ref.code_mode}")
+            raise ValueError(f"Ожидался CodeMode.MCP_TOOL для {ref.tool_id}, получен {ref.code_mode}")
+
+        # Загружаем ToolReference из БД для получения полных данных
+        tool_repo = get_agents_container().tool_repository
+        db_ref = await tool_repo.get(ref.tool_id)
+
+        if db_ref:
+            logger.info(f"📦 Загружен ToolReference из БД для {ref.tool_id}")
+            # Сохраняем оригинальный ref для объединения params
+            original_ref = ref
+            # Используем данные из БД как основу
+            ref = db_ref
+            # Объединяем params: приоритет у данных из БД, но добавляем специфичные из переданного ref
+            if original_ref.params:
+                merged_params = {**original_ref.params, **db_ref.params}
+                ref.params = merged_params
+                logger.debug(f"📋 Объединены params: {list(merged_params.keys())}")
+        else:
+            logger.warning(f"⚠️ ToolReference {ref.tool_id} не найден в БД, используем переданный ref")
+
+        # Парсим tool_id: "mcp:server_id:tool_name"
         parts = ref.tool_id.split(":", 2)
         if len(parts) != 3 or parts[0] != "mcp":
+            logger.error(f"❌ Невалидный MCP tool_id: {ref.tool_id}")
             raise ValueError(f"Невалидный MCP tool_id: {ref.tool_id}")
 
         _, server_id, tool_name = parts
-        company_id = ref.params.get("company_id")
-        mcp_client = await get_mcp_client(server_id, company_id)
+        logger.info(f"📦 Разобран MCP tool: server={server_id}, tool={tool_name}")
 
+        # Получаем company_id из params
+        company_id = ref.params.get("company_id")
+        logger.info(f"🏢 Company ID: {company_id}")
+
+        # Получаем HTTP клиент для этого MCP сервера
+        try:
+            mcp_client = await get_mcp_client(server_id, company_id)
+            logger.info(f"🌐 MCP клиент получен для сервера {server_id}")
+        except Exception as e:
+            logger.error(f"❌ Не удалось получить MCP клиент: {e}")
+            return None
+
+        # Получаем схему из params
         input_schema = ref.params.get("input_schema", {})
+
+        # Проверяем, что input_schema есть и правильно структурирован
+        if not input_schema:
+            logger.warning(f"⚠️ MCP tool {tool_name} input_schema отсутствует в params, используем пустую схему")
+        logger.info(f"📋 MCP tool {tool_name} финальный input_schema: {json.dumps(input_schema, indent=2, ensure_ascii=False)}")
+
+        # Создаем Pydantic модель из JSON Schema
         args_schema = self._json_schema_to_pydantic(input_schema, tool_name)
+        logger.info(f"📋 MCP tool {tool_name} args_schema создана: {args_schema}")
+
+        # Создаем функцию с валидным Python именем
         safe_tool_name = tool_name.replace("-", "_").replace(".", "_")
 
-        async def mcp_func(**kwargs):
-            result = await mcp_client.call_tool(tool_name, kwargs)
-            if result.get("isError"):
-                raise ValueError(format_mcp_result(result.get("content", [])))
-            return format_mcp_result(result.get("content", []))
+        # Создаем функцию с нужным именем ДО применения декоратора
+        async def dynamic_mcp_func(**kwargs):
+            """Динамически созданная функция для вызова MCP тула"""
+            try:
+                logger.info(f"🔧 MCP tool {tool_name} вызывается с аргументами: {json.dumps(kwargs, indent=2, ensure_ascii=False)}")
+                # Вызываем MCP тул через HTTP/SSE
+                result = await mcp_client.call_tool(tool_name, kwargs)
 
-        mcp_func.__name__ = safe_tool_name
-        mcp_func.__qualname__ = safe_tool_name
+                # Обрабатываем ошибки
+                if result.get("isError"):
+                    error_msg = format_mcp_result(result.get("content", []))
+                    logger.error(f"MCP тул {tool_name} вернул ошибку: {error_msg}")
+                    return f"❌ Ошибка: {error_msg}"
 
-        return tool(
-            description=ref.description or f"MCP тул {tool_name}",
-            args_schema=args_schema,
-            cost=ref.cost,
-            billing_name=ref.billing_name or f"mcp_{server_id}_{tool_name}",
-            is_public=ref.is_public,
-            state_aware=True,
-            group=ref.group
-        )(mcp_func)
+                # Обрабатываем изображения из результата
+                formatted_text, image_file_ids = await process_mcp_images(result.get("content", []), save_to_s3=True)
+
+                # Если есть изображения, добавляем информацию о них
+                if image_file_ids:
+                    formatted_text += f"\n\n🖼️ Изображения сохранены ({len(image_file_ids)} шт.):"
+                    for file_id in image_file_ids:
+                        formatted_text += f"\n   - file_id: {file_id}"
+                    formatted_text += "\n\n💡 ВАЖНО: Просмотри сохраненные изображения для визуальной проверки результата!"
+
+                logger.info(f"✅ MCP тул {tool_name} выполнен" + (f", сохранено {len(image_file_ids)} изображений" if image_file_ids else ""))
+
+                return formatted_text
+
+            except Exception as e:
+                logger.error(f"Ошибка вызова MCP тула {tool_name}: {e}", exc_info=True)
+                raise ValueError(f"Ошибка MCP тула: {str(e)}") from e
+
+        # Устанавливаем имя ДО декоратора
+        dynamic_mcp_func.__name__ = safe_tool_name
+        dynamic_mcp_func.__qualname__ = safe_tool_name
+
+        # Применяем @tool декоратор
+        try:
+            # Если есть args_schema, отключаем автоматическое определение схемы
+            infer_schema = False  # Всегда False для MCP тулов, так как схема должна быть из input_schema
+
+            mcp_tool = tool(
+                description=ref.description or f"MCP тул {tool_name}",
+                args_schema=args_schema,
+                infer_schema=infer_schema,  # Отключаем auto-infer - используем нашу схему
+                cost=ref.cost,
+                billing_name=ref.billing_name or f"mcp_{server_id}_{tool_name}",
+                is_public=ref.is_public,
+                state_aware=True,
+                group=ref.group
+            )(dynamic_mcp_func)
+
+            logger.info(f"✅ MCP tool {ref.tool_id} успешно создан")
+            return mcp_tool
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка создания MCP tool {ref.tool_id}: {e}")
+            return None
 
     def _json_schema_to_pydantic(self, schema: Dict[str, Any], model_name: str):
         """Конвертирует JSON Schema в Pydantic модель для args_schema"""

@@ -13,14 +13,13 @@ import os
 # Добавляем корневую директорию в путь
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from app.models.mcp_models import MCPServerConfig, MCPTransportType
-from app.db.repositories.mcp_repository import MCPServerRepository
-from app.core.mcp_sync import sync_mcp_server_tools
-from app.core.container import get_container, initialize_system_container
-from app.core.context import set_context
-from app.models.context_models import Context
-from app.identity.models import Company, User, UserStatus
-from app.services.variables_service import VariablesService
+from apps.agents.models.mcp_models import MCPServerConfig, MCPTransportType
+from apps.agents.db.repositories.mcp_repository import MCPServerRepository
+from apps.agents.services.mcp_sync import sync_mcp_server_tools
+from apps.agents.container import get_agents_container
+from core.context import set_context
+from core.models.context_models import Context
+from core.models.identity_models import Company, User, UserStatus
 
 
 async def setup_figma_mcp():
@@ -29,7 +28,7 @@ async def setup_figma_mcp():
     print("🚀 Настройка MCP сервера Figma Designer...")
 
     # Инициализируем системный контейнер
-    container = initialize_system_container()
+    container = get_agents_container()
 
     # Получаем системную компанию
     storage = container.storage
@@ -85,7 +84,7 @@ async def setup_figma_mcp():
 
     # Настраиваем переменные компании (нужно сделать до создания сервера)
     print("\n🔧 Настройка переменных компании...")
-    variables_service = VariablesService(storage)
+    variables_service = container.variables_service
 
     headers = {}
     if figma_api_token:
@@ -131,7 +130,7 @@ async def setup_figma_mcp():
             print(f"   - {tool.tool_id}")
             tool_ids.append(f'        "{tool.tool_id}",')
 
-        print("\n📝 Добавьте эти тулы в app/agents/figma_designer/agent.py:")
+        print("\n📝 Добавьте эти тулы в apps/agents/agents/figma_designer/agent.py:")
         print("    tools = [")
         print("        ask_user,")
         for tool_id in tool_ids:
@@ -176,7 +175,7 @@ async def setup_figma_mcp():
 
     print("\n✅ Настройка завершена!")
     print("\n📝 Следующие шаги:")
-    print("1. Раскомментируйте MCP тулы в app/agents/figma_designer/agent.py")
+    print("1. Раскомментируйте MCP тулы в apps/agents/agents/figma_designer/agent.py")
     print("2. Запустите миграцию для обновления агента в БД")
 
 

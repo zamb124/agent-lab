@@ -2,9 +2,9 @@
 Figma Design Agent - создает интерфейсы в Figma на основе требований пользователя.
 """
 
-from app.agents.react_agent import ReActAgent
-from app.tools.misc.standard import ask_user
-from app.agents.figma_designer.prompts import FIGMA_DESIGN_PROMPT
+from apps.agents.agents.react_agent import ReActAgent
+from apps.agents.tools.misc.standard import ask_user
+from apps.agents.agents.figma_designer.prompts import FIGMA_DESIGN_PROMPT
 
 
 class FigmaDesignAgent(ReActAgent):
@@ -16,7 +16,7 @@ class FigmaDesignAgent(ReActAgent):
     is_public = True
 
     llm_config = {
-        "model": "google/gemini-2.5-pro",
+        "model": "google/gemini-2.5-flash",
         "temperature": 0.3,
         "context_window": 32000,
     }

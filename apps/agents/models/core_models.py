@@ -68,7 +68,7 @@ class ConditionType(str, Enum):
 
 class SubAgentMemoryPolicy(str, Enum):
     """Политики управления памятью для субагентов"""
-    
+
     ISOLATED = "isolated"      # По умолчанию: каждый вызов - новая сессия с новой памятью
     ACCUMULATED = "accumulated" # Накапливает память между вызовами (один session_id для всех вызовов)
     SNAPSHOT = "snapshot"       # Копирует память родителя при вызове, но возвращает только результат
@@ -158,9 +158,9 @@ class GraphEdge(BaseModel):
 
 class BuilderEntity(BaseModel):
     """Базовая модель для всех сущностей Builder с автоматическим преобразованием типов"""
-    
+
     model_config = {"str_strip_whitespace": True}
-    
+
     # Метаданные - общие для всех сущностей
     source: str = Field(
         default="manual",
@@ -180,7 +180,7 @@ class BuilderEntity(BaseModel):
         description="Дата обновления",
         json_schema_extra={"readOnly": True}
     )
-    
+
     @staticmethod
     def parse_json_string(v: Any) -> Any:
         """Преобразует JSON строку в dict/list"""
@@ -207,42 +207,42 @@ class GraphDefinition(BaseModel):
         title="Точка входа",
         description="ID ноды, с которой начинается выполнение графа",
     )
-    
+
     @classmethod
     async def migrate(cls, source) -> Optional["GraphDefinition"]:
         """
         Создает GraphDefinition из различных источников.
-        
+
         Поддерживает:
         - Класс BaseAgent → анализирует build_graph() и создает GraphDefinition
         - StateGraph объект → извлекает ноды и ребра
         - None → возвращает None (ReAct агент)
-        
+
         Args:
             source: Класс агента или StateGraph объект
-            
+
         Returns:
             GraphDefinition или None
         """
-        
+
         if source is None:
             return None
-        
+
         if hasattr(source, 'nodes') and hasattr(source, 'edges'):
             # Устаревший метод миграции из LangGraph StateGraph - больше не используется
             logger.warning(f"Попытка миграции из LangGraph StateGraph для {source} - метод устарел, используйте graph_definition()")
             return None
-        
+
         if inspect.isclass(source):
             return await cls._migrate_from_agent_class(source)
-        
+
         return None
-    
+
     @classmethod
     async def _migrate_from_agent_class(cls, agent_class) -> Optional["GraphDefinition"]:
         """Извлекает GraphDefinition из класса агента"""
         logger.info(f"🔍 Анализируем граф агента {agent_class.__name__}")
-        
+
         # Проверяем атрибут класса graph_definition (определен как class attribute)
         class_graph_def = getattr(agent_class, "graph_definition", None)
         if class_graph_def is not None and not callable(class_graph_def):
@@ -283,32 +283,32 @@ class GraphDefinition(BaseModel):
                     return GraphDefinition(**graph_def)
                 elif isinstance(graph_def, GraphDefinition):
                     return graph_def
-            
+
             # Если не нашли graph_definition - это ReAct агент или базовый класс
             logger.debug(f"🔍 Агент {agent_class.__name__} - ReAct агент или базовый класс без graph_definition")
             return None
-            
+
         except Exception as e:
             logger.warning(f"Не удалось проанализировать граф {agent_class.__name__}: {e}")
             return None
-    
+
     @classmethod
     async def _migrate_from_stategraph(cls, stategraph) -> "GraphDefinition":
         """
         УСТАРЕВШИЙ МЕТОД: Извлекал GraphDefinition из LangGraph StateGraph.
-        
+
         Больше не используется - все агенты используют graph_definition() метод.
         Оставлен для обратной совместимости, но всегда возвращает None.
-        
+
         Args:
             stategraph: StateGraph объект из LangGraph (не используется)
-            
+
         Returns:
             None (метод устарел)
         """
         logger.warning("_migrate_from_stategraph устарел - используйте graph_definition() метод")
         return None
-    
+
     @staticmethod
     def _determine_node_type(node_func) -> NodeType:
         """Определяет тип ноды по функции"""
@@ -317,19 +317,19 @@ class GraphDefinition(BaseModel):
             if hasattr(node_func, '__self__'):
                 # Это bound method агента
                 return NodeType.AGENT_NODE
-            
+
             # Если это свободная функция с "_function" в имени - это FUNCTION_NODE
             if "_function" in node_func.__name__ or node_func.__name__.endswith("_function"):
                 return NodeType.FUNCTION_NODE
-            
+
             # Если это свободная функция с "_node" в имени - тоже FUNCTION_NODE
             if "_node" in node_func.__name__ or node_func.__name__.endswith("_node"):
                 return NodeType.FUNCTION_NODE
-            
+
             # По умолчанию свободная функция = FUNCTION_NODE
             # AGENT_NODE только если это метод агента (с __self__)
             return NodeType.FUNCTION_NODE
-        
+
         return NodeType.FUNCTION_NODE
 
 
@@ -403,7 +403,7 @@ class ToolReference(BuilderEntity):
         description="Описание инструмента",
         widget_attrs={"rows": 3},
     )
-    
+
     # Поля для биллинга и доступа
     cost: float = Field(
         default=0.0,
@@ -435,34 +435,34 @@ class ToolReference(BuilderEntity):
         title="Публичный",
         description="Доступен ли инструмент в публичном редакторе ботов"
     )
-    
+
     # Политика памяти для субагентов (только для agent: инструментов)
     memory_policy: Optional["SubAgentMemoryPolicy"] = Field(
         default=None,
         title="Политика памяти",
         description="Политика управления памятью для субагентов (только для agent: инструментов). По умолчанию ISOLATED.",
     )
-    
+
     @classmethod
     async def migrate(cls, source, migrator=None) -> "ToolReference":
         """
         Мигрирует tool из кода в БД.
-        
+
         Поддерживает:
         - Строка (tool_id) → загружает из кода и мигрирует
         - Функция/StructuredTool → создает ToolReference
-        
+
         Args:
             source: tool_id (строка) или функция/StructuredTool
             migrator: Экземпляр Migrator (нужен только для сохранения в БД)
-            
+
         Returns:
             ToolReference
         """
         if isinstance(source, str):
             if "." not in source:
                 raise ValueError(f"tool_id должен быть полным путем к функции: {source}")
-            
+
             module_path, func_name = source.rsplit(".", 1)
             module = __import__(module_path, fromlist=[func_name])
             tool_obj = getattr(module, func_name)
@@ -476,42 +476,42 @@ class ToolReference(BuilderEntity):
                 target_func = source.coroutine
             else:
                 target_func = source
-            
+
             module_name_for_ref = target_func.__module__ if hasattr(target_func, '__module__') else None
-        
+
         tool_ref = cls._from_function(func=tool_obj, module_name=module_name_for_ref)
-        
+
         if migrator:
             tool_repo = get_agents_container().tool_repository
             await tool_repo.set(tool_ref)
-        
+
         return tool_ref
-    
+
     @classmethod
     def _from_function(
-        cls, 
-        func: callable, 
+        cls,
+        func: callable,
         module_name: Optional[str] = None,
-        tool_id: Optional[str] = None, 
+        tool_id: Optional[str] = None,
         description: Optional[str] = None
     ) -> "ToolReference":
         """
         Создает ToolReference из StructuredTool или обычной функции.
-        
+
         Универсальный метод для преобразования функций в ToolReference.
         Используется в validators FlowConfig и в Migrator.
-        
+
         Args:
             func: StructuredTool объект или обычная функция
             module_name: Имя модуля (для StructuredTool)
             tool_id: ID инструмента (опционально, для обычных функций)
             description: Описание (опционально, для обычных функций)
-            
+
         Returns:
             ToolReference с кодом функции
         """
         is_structured_tool = hasattr(func, "func") or hasattr(func, "coroutine")
-        
+
         if is_structured_tool:
             target_func = None
             if hasattr(func, "func") and func.func is not None:
@@ -560,9 +560,9 @@ class ToolReference(BuilderEntity):
         else:
             if not callable(func):
                 raise ValueError(f"Объект {func} не является функцией или StructuredTool")
-            
+
             source_code = inspect.getsource(func)
-            
+
             return cls(
                 tool_id=tool_id or f"{func.__module__}.{func.__name__}",
                 code_mode=CodeMode.INLINE_CODE,
@@ -593,7 +593,7 @@ class LLMConfig(BaseModel):
         description="Максимальное количество токенов в ответе модели",
         ge=1,
     )
-    
+
     context_window: Optional[int] = Field(
         default=None,
         title="Размер контекстного окна",
@@ -656,7 +656,7 @@ class AgentConfig(BuilderEntity):
         description="Тип агента (ReAct или StateGraph). Автоматически определяется по graph_definition",
         readonly=True,
     )
-    
+
     @field_validator('type', mode='before')
     @classmethod
     def auto_determine_type(cls, v, info):
@@ -692,7 +692,7 @@ class AgentConfig(BuilderEntity):
 
         # По умолчанию ReAct
         return AgentType.REACT
-    
+
     def __init__(self, **data):
         """Инициализация с автоопределением типа"""
         # Если type не передан, но есть graph_definition → STATEGRAPH
@@ -749,7 +749,7 @@ class AgentConfig(BuilderEntity):
         title="Конфигурация LLM",
         description="Конфигурация языковой модели",
     )
-    
+
     # Политика памяти по умолчанию для субагентов
     default_memory_policy: Optional[SubAgentMemoryPolicy] = Field(
         default=None,
@@ -764,7 +764,7 @@ class AgentConfig(BuilderEntity):
         description="Источник истории диалогов (global, список агентов или None)",
         placeholder="global или agent1,agent2",
     )
-    
+
     # Локальные переменные агента
     local_variables: Dict[str, Any] = Field(
         default_factory=dict,
@@ -772,7 +772,7 @@ class AgentConfig(BuilderEntity):
         description="Переменные доступные только в этом агенте (перекрывают переменные flow)",
         widget_attrs={"rows": 4, "placeholder": '{"max_attempts": 3, "greeting": "Привет!"}'}
     )
-    
+
     # Начальные данные store для агента
     store: Dict[str, Any] = Field(
         default_factory=dict,
@@ -780,14 +780,14 @@ class AgentConfig(BuilderEntity):
         description="Начальные значения для state.store (доступны через {store.key} или session_get)",
         widget_attrs={"rows": 4, "placeholder": '{"max_attempts": 3, "welcome_shown": false}'}
     )
-    
+
     # Публичность агента
     is_public: bool = Field(
         default=False,
         title="Публичный",
         description="Доступен ли агент как инструмент в публичном редакторе ботов"
     )
-    
+
     @field_validator('local_variables', 'store', mode='before')
     @classmethod
     def parse_json_fields(cls, v):
@@ -796,13 +796,13 @@ class AgentConfig(BuilderEntity):
             import json
             return json.loads(v)
         return v if v else {}
-    
+
     @field_validator('tools', mode='before')
     @classmethod
     def convert_tools_to_references(cls, v):
         """
         Преобразует список tools в ToolReference.
-        
+
         Поддерживает:
         - dict → создает ToolReference из dict (при загрузке из JSON)
         - ToolReference → как есть
@@ -814,28 +814,28 @@ class AgentConfig(BuilderEntity):
         """
         if not v:
             return []
-        
+
         references = []
-        
+
         for tool in v:
             # Если это dict (загрузка из JSON), создаем ToolReference
             if isinstance(tool, dict):
                 references.append(ToolReference(**tool))
-            
+
             elif isinstance(tool, ToolReference):
                 references.append(tool)
-            
+
             elif inspect.isfunction(tool) or inspect.ismethod(tool):
                 full_path = f"{tool.__module__}.{tool.__name__}"
                 references.append(ToolReference(tool_id=full_path))
-            
+
             elif inspect.isclass(tool):
                 full_path = f"{tool.__module__}.{tool.__name__}"
                 references.append(ToolReference(tool_id=full_path))
-            
+
             elif isinstance(tool, str) and (tool.startswith("mcp:") or tool.startswith("agent:")):
                 references.append(ToolReference(tool_id=tool))
-            
+
             elif hasattr(tool, "__class__"):
                 if hasattr(tool, "as_tool") and hasattr(tool, "agent_id"):
                     agent_class = tool.__class__
@@ -852,35 +852,35 @@ class AgentConfig(BuilderEntity):
                         raise ValueError(f"Неизвестный тип инструмента: {type(tool)}, name={getattr(tool, 'name', 'N/A')}, func={getattr(tool, 'func', None)}, coroutine={getattr(tool, 'coroutine', None)}")
             else:
                 raise ValueError(f"Неизвестный тип инструмента: {type(tool)}")
-        
+
         return references
-    
+
     @classmethod
     async def migrate(cls, agent_id: str, migrator, with_tools: bool = True) -> "AgentConfig":
         """
         Мигрирует агента из кода в БД с зависимостями.
-        
+
         1. Загружает класс агента из кода по agent_id
         2. Создает AgentConfig через from_class
         3. Сохраняет в БД
         4. Если with_tools=True, рекурсивно мигрирует все tools
         5. Возвращает AgentConfig
-        
+
         Args:
             agent_id: Путь к классу (например, "apps.agents.agents.calculator.agent.CalculatorAgent")
             migrator: Экземпляр Migrator для доступа к вспомогательным методам
             with_tools: Мигрировать ли tools агента рекурсивно
-            
+
         Returns:
             Мигрированный AgentConfig
         """
         if not agent_id or "." not in agent_id:
             raise ValueError(f"agent_id должен быть полным путем к классу: {agent_id}")
-        
+
         module_path, class_name = agent_id.rsplit(".", 1)
         module = __import__(module_path, fromlist=[class_name])
         agent_class = getattr(module, class_name)
-        
+
         # Проверяем что это класс, а не готовый AgentConfig
         if isinstance(agent_class, cls):
             # Это уже готовый AgentConfig (например, test_stategraph_agent_config)
@@ -889,24 +889,31 @@ class AgentConfig(BuilderEntity):
         else:
             # Это класс агента, нужно создать конфиг
             agent_config = await cls.from_class(agent_class=agent_class)
-        
+
         await migrator.persister.save_agent(agent_config)
-        
+
         variables_service = get_agents_container().variables_service
-        
+
         # НЕ создаем пустые переменные - они создаются через install_hook с default_value
         if agent_config.local_variables:
             await variables_service.resolve(agent_config.local_variables, auto_create=False)
-        
+
         if agent_config.store:
             await variables_service.resolve(agent_config.store, auto_create=False)
-        
+
         if with_tools:
             for tool_ref in agent_config.tools:
                 tool_id = tool_ref.tool_id
-                
+
                 if tool_id.startswith("agent:"):
                     await cls.migrate(tool_id.replace("agent:", ""), migrator, with_tools=True)
+                elif tool_id.startswith("mcp:"):
+                    # MCP инструменты не мигрируются из кода, они создаются динамически
+                    # Просто сохраняем ToolReference в БД, если его там еще нет
+                    tool_repo = get_agents_container().tool_repository
+                    existing_tool = await tool_repo.get(tool_id)
+                    if not existing_tool:
+                        await tool_repo.set(tool_ref)
                 elif "." in tool_id and not tool_id.startswith("mcp:"):
                     if ".agent." in tool_id or ".Agent" in tool_id:
                         await cls.migrate(tool_id, migrator, with_tools=True)
@@ -914,7 +921,7 @@ class AgentConfig(BuilderEntity):
                         await ToolReference.migrate(tool_id, migrator)
                 else:
                     raise ValueError(f"Неизвестный формат tool_id для миграции: {tool_id}")
-        
+
         # Мигрируем субагенты из graph_definition (для StateGraph агентов)
         if with_tools and agent_config.graph_definition:
             for node in agent_config.graph_definition.nodes:
@@ -923,20 +930,20 @@ class AgentConfig(BuilderEntity):
                     if sub_agent_id and "." in sub_agent_id:
                         logger.info(f"🔄 Рекурсивная миграция субагента из ноды: {sub_agent_id}")
                         await cls.migrate(sub_agent_id, migrator, with_tools=True)
-        
+
         return agent_config
-    
+
     @classmethod
     async def from_class(cls, agent_class):
         """
         Создает AgentConfig из класса BaseAgent.
-        
+
         Извлекает все атрибуты класса и создает AgentConfig.
         Рекурсивно вызывает GraphDefinition.migrate для анализа графа.
-        
+
         Args:
             agent_class: Класс наследник BaseAgent
-            
+
         Returns:
             AgentConfig созданный из класса
         """
@@ -951,16 +958,16 @@ class AgentConfig(BuilderEntity):
         is_public = getattr(agent_class, "is_public", False)
         local_variables = getattr(agent_class, "local_variables", {})
         store = getattr(agent_class, "store", {})
-        
+
         graph_definition = await GraphDefinition.migrate(agent_class)
-        
+
         llm_config = None
         if raw_llm_config:
             if isinstance(raw_llm_config, dict):
                 llm_config = LLMConfig(**raw_llm_config)
             elif isinstance(raw_llm_config, LLMConfig):
                 llm_config = raw_llm_config
-        
+
         return cls(
             agent_id=agent_id,
             name=name,
@@ -1065,7 +1072,7 @@ class FlowConfig(BuilderEntity):
         description="Максимальное количество повторов при ошибке",
         ge=0,
     )
-    
+
     # Переменные флоу
     variables: Dict[str, Any] = Field(
         default_factory=dict,
@@ -1147,14 +1154,14 @@ class FlowConfig(BuilderEntity):
         description="Начальные значения для state.store (доступны во всех агентах через {store.key} или session_get)",
         widget_attrs={"rows": 6, "placeholder": '{"max_attempts": 3, "welcome_shown": false}'}
     )
-    
+
     # Reasoning от LLM
     enable_reasoning: bool = Field(
         default=False,
         title="Включить Reasoning",
         description="Отправлять промежуточные размышления LLM (reasoning) пользователю в реальном времени",
     )
-    
+
     # RAG конфигурация для flow
     rag_config: Optional[AgentRAGConfig] = Field(
         default_factory=lambda: AgentRAGConfig(
@@ -1166,46 +1173,46 @@ class FlowConfig(BuilderEntity):
         title="RAG конфигурация",
         description="Настройки базы знаний для агентов в этом flow"
     )
-    
+
     # Публичность
     is_public: bool = Field(
         default=False,
         title="Публичный",
         description="Доступен ли flow для копирования в новые компании"
     )
-    
+
     # Store поля
     author: Optional[FlowAuthor] = Field(
         default_factory=lambda: FlowAuthor(),
         title="Автор",
         description="Информация об авторе flow"
     )
-    
+
     image_path: Optional[str] = Field(
         default=None,
         title="Путь к картинке",
         description="Путь к картинке flow в проекте (для миграции)"
     )
-    
+
     image_file_id: Optional[str] = Field(
         default=None,
         title="ID файла картинки",
         description="ID файла в S3 после загрузки",
         exclude_from_form=True
     )
-    
+
     install_hook: Optional[ToolReference] = Field(
         default=None,
         title="Хук установки",
         description="ToolReference для установки flow"
     )
-    
+
     after_install_hook: Optional[ToolReference] = Field(
         default=None,
         title="Хук после установки",
         description="ToolReference который выполняется после установки. Может вернуть URL для открытия в новом окне"
     )
-    
+
     uninstall_hook: Optional[ToolReference] = Field(
         default=None,
         title="Хук удаления",
@@ -1219,7 +1226,7 @@ class FlowConfig(BuilderEntity):
         description="Позиции элементов и связи на канвасе Builder",
         exclude_from_form=True,
     )
-    
+
     @field_validator('platforms', 'variables', 'store', mode='before')
     @classmethod
     def parse_json_fields(cls, v):
@@ -1230,7 +1237,7 @@ class FlowConfig(BuilderEntity):
             except json.JSONDecodeError:
                 return v
         return v if v else ({"api": {}} if v is None else v)
-    
+
     @field_validator('canvas_data', mode='before')
     @classmethod
     def parse_canvas_data(cls, v):
@@ -1241,7 +1248,7 @@ class FlowConfig(BuilderEntity):
             except json.JSONDecodeError:
                 return v
         return v if v is not None else None
-    
+
     @field_validator('timeout', mode='before')
     @classmethod
     def parse_timeout(cls, v):
@@ -1249,7 +1256,7 @@ class FlowConfig(BuilderEntity):
         if isinstance(v, str) and v.strip() == "":
             return None
         return v
-    
+
     @field_validator('max_retries', mode='before')
     @classmethod
     def parse_max_retries(cls, v):
@@ -1257,7 +1264,7 @@ class FlowConfig(BuilderEntity):
         if isinstance(v, str) and v.strip() == "":
             return 0
         return v
-    
+
     @field_validator('rag_config', mode='before')
     @classmethod
     def ensure_rag_config(cls, v):
@@ -1270,46 +1277,46 @@ class FlowConfig(BuilderEntity):
                 auto_index_messages=False
             )
         return v
-    
+
     @field_validator('entry_point_agent', mode='before')
     @classmethod
     def convert_entry_point_agent(cls, v):
         """
         Преобразует класс агента в строку с путем.
-        
+
         Поддерживает:
         - Класс агента → строка с путем "module.ClassName"
         - Строка → как есть
         """
         if v is None:
             raise ValueError("entry_point_agent обязателен")
-        
+
         if isinstance(v, str):
             return v
-        
+
         if inspect.isclass(v):
             return f"{v.__module__}.{v.__name__}"
-        
+
         if hasattr(v, "__class__"):
             return f"{v.__class__.__module__}.{v.__class__.__name__}"
-        
+
         return v
-    
+
     @field_validator('install_hook', 'after_install_hook', 'uninstall_hook', mode='before')
     @classmethod
     def convert_hook_to_tool_reference(cls, v, info):
         """
         Преобразует функцию в ToolReference используя ToolReference.migrate.
-        
+
         Если передана функция - создает ToolReference.
         Если передан ToolReference - возвращает как есть.
         """
         if v is None:
             return None
-        
+
         if isinstance(v, ToolReference):
             return v
-        
+
         if callable(v):
             hook_type = info.field_name.replace('_hook', '')
             return ToolReference._from_function(
@@ -1317,50 +1324,50 @@ class FlowConfig(BuilderEntity):
                 tool_id=f"hook.{hook_type}.{v.__name__}",
                 description=f"Хук {hook_type} flow"
             )
-        
+
         return v
-    
+
     @classmethod
     async def migrate(cls, flow_id: str, migrator, with_dependencies: bool = True) -> "FlowConfig":
         """
         Мигрирует flow из кода в БД с зависимостями.
-        
+
         1. Загружает FlowConfig объект из кода по flow_id
         2. Создает FlowConfig через from_flow_config_object
         3. Загружает картинку в S3 если есть
         4. Сохраняет в БД
         5. Если with_dependencies=True, рекурсивно мигрирует entry_point_agent
         6. Возвращает FlowConfig
-        
+
         Args:
             flow_id: Путь к переменной (например, "apps.agents.flows.weather_flow.weather_flow_config")
             migrator: Экземпляр Migrator для доступа к вспомогательным методам
             with_dependencies: Мигрировать ли entry_point_agent и его зависимости
-            
+
         Returns:
             Мигрированный FlowConfig
         """
         if not flow_id or "." not in flow_id:
             raise ValueError(f"flow_id должен быть полным путем к переменной: {flow_id}")
-        
+
         module_path, var_name = flow_id.rsplit(".", 1)
         module = __import__(module_path, fromlist=[var_name])
         flow_config_orig = getattr(module, var_name)
-        
+
         if not isinstance(flow_config_orig, cls):
             raise ValueError(f"Объект {flow_id} не является FlowConfig")
-        
+
         # Определяем реальный flow_id для сохранения
         resolved_flow_id = flow_config_orig.flow_id if flow_config_orig.flow_id else flow_id
-        
+
         flow_repo = get_agents_container().flow_repository
         existing_flow = await flow_repo.get(resolved_flow_id)
-        
+
         flow_config = cls.from_flow_config_object(flow_config_orig, flow_id)
-        
+
         # Загрузка изображений в S3 не выполняется во время миграции,
         # чтобы исключить внешние побочные эффекты и зависания тестов.
-        
+
         flow_config.source = "migration"
         now = datetime.now(timezone.utc)
         flow_config.updated_at = now
@@ -1368,12 +1375,12 @@ class FlowConfig(BuilderEntity):
             flow_config.created_at = existing_flow.created_at
         elif not flow_config.created_at:
             flow_config.created_at = now
-        
+
         await migrator.persister.save_flow(flow_config)
-        
+
         if with_dependencies:
             variables_service = get_agents_container().variables_service
-            
+
             flow_tag = flow_config.name
             data_sources = [
                 flow_config.variables,
@@ -1383,50 +1390,50 @@ class FlowConfig(BuilderEntity):
             tagged_count = await variables_service.tag_variables_for_entity(flow_tag, data_sources)
             if tagged_count > 0:
                 logger.info(f"✅ Добавлено тегов для flow '{flow_tag}': {tagged_count}")
-        
+
         if with_dependencies and flow_config.entry_point_agent:
             await AgentConfig.migrate(
                 flow_config.entry_point_agent,
                 migrator,
                 with_tools=True
             )
-        
+
         return flow_config
-    
+
     @classmethod
     async def _upload_image_to_s3(cls, flow_config: "FlowConfig") -> "FlowConfig":
         """
         Загружает картинку flow в S3.
-        
+
         Args:
             flow_config: FlowConfig с установленным image_path
-            
+
         Returns:
             FlowConfig с установленным image_file_id
         """
         if not flow_config.image_path:
             return flow_config
-        
+
         image_path = Path(flow_config.image_path)
-        
+
         if not image_path.exists():
             logger.warning(f"Картинка не найдена: {flow_config.image_path}")
             return flow_config
-        
+
         if not settings.s3.enabled:
             logger.warning("S3 не настроен, пропускаем загрузку картинки")
             return flow_config
-        
+
         if not flow_config.flow_id:
             logger.warning("flow_id не установлен, пропускаем загрузку картинки")
             return flow_config
-        
+
         s3_client = get_agents_container().s3_factory.create_client_for_bucket(settings.s3.default_bucket)
-        
+
         flow_hash = hashlib.md5(flow_config.flow_id.encode()).hexdigest()[:8]
         extension = image_path.suffix
         s3_key = f"flows/{flow_hash}/image{extension}"
-        
+
         content_types = {
             ".jpg": "image/jpeg",
             ".jpeg": "image/jpeg",
@@ -1435,7 +1442,7 @@ class FlowConfig(BuilderEntity):
             ".webp": "image/webp"
         }
         content_type = content_types.get(extension.lower(), "application/octet-stream")
-        
+
         success = await s3_client.upload_file(
             file_path=str(image_path),
             key=s3_key,
@@ -1445,54 +1452,54 @@ class FlowConfig(BuilderEntity):
                 "type": "flow_image"
             }
         )
-        
+
         if success:
             flow_config.image_file_id = s3_key
             logger.info(f"Картинка загружена в S3: {s3_key}")
         else:
             logger.warning(f"Не удалось загрузить картинку для {flow_config.flow_id}")
-        
+
         await s3_client.close()
-        
+
         return flow_config
-    
+
     @property
     def slug(self) -> str:
         """
         Возвращает slug для использования в namespace.
         Формируется как: {company_subdomain}-{flow_id_slug}
-        
+
         Использует get_context() для получения текущей компании.
         """
         if not self.flow_id:
             raise ValueError("flow_id не установлен")
-        
+
         context = get_context()
         if not context or not context.active_company:
             raise ValueError("Контекст или активная компания не установлены")
-        
+
         company_slug = context.active_company.subdomain
         flow_slug = generate_slug(self.flow_id, add_hash=True)
-        
+
         return f"{company_slug}-{flow_slug}"
-    
+
     @classmethod
     def from_flow_config_object(cls, obj: "FlowConfig", full_path: str) -> "FlowConfig":
         """
         Создает новый FlowConfig из существующего объекта с установкой flow_id.
-        
+
         Используется в Migrator для преобразования FlowConfig из кода.
-        
+
         Args:
             obj: Исходный FlowConfig объект из кода
             full_path: Полный путь к переменной (например, "apps.agents.flows.weather_flow.weather_flow_config")
-            
+
         Returns:
             Новый FlowConfig с установленным flow_id
         """
         # Если flow_id явно указан в объекте - используем его, иначе полный путь
         resolved_flow_id = obj.flow_id if obj.flow_id else full_path
-        
+
         return cls(
             flow_id=resolved_flow_id,
             name=obj.name,

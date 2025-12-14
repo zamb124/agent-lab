@@ -1,7 +1,6 @@
 {
     "version": "0.2.0",
     "configurations": [
-
         {
             "name": "Python: Current File (uv)",
             "type": "debugpy",
@@ -15,10 +14,10 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
-            "name": "Run Server (run.py)",
+            "name": "Backend (Agents Service)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/run.py",
+            "program": "${workspaceFolder}/run_prod.py",
             "console": "integratedTerminal",
             "justMyCode": false,
             "env": {
@@ -27,7 +26,19 @@
             "python": "${workspaceFolder}/.venv/bin/python"
         },
         {
-            "name": "Run Worker (run_worker.py)",
+            "name": "Frontend Service",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/run_frontend_prod.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "Worker (TaskIQ)",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/run_worker.py",
@@ -37,6 +48,47 @@
                 "PYTHONPATH": "${workspaceFolder}"
             },
             "python": "${workspaceFolder}/.venv/bin/python"
+        },
+        {
+            "name": "Sync mcp figma",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/setup_figma_mcp.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}"
+            },
+            "python": "${workspaceFolder}/.venv/bin/python"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "All Services (Backend + Frontend + Worker)",
+            "configurations": [
+                "Backend (Agents Service)",
+                "Frontend Service",
+                // "Worker (TaskIQ)"
+            ],
+            "stopAll": true,
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1
+            }
+        },
+        {
+            "name": "Backend + Frontend",
+            "configurations": [
+                "Backend (Agents Service)",
+                "Frontend Service"
+            ],
+            "stopAll": true,
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 2
+            }
         }
     ]
 }
