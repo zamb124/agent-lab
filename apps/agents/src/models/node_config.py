@@ -118,6 +118,20 @@ class NodeConfig(StrictBaseModel):
         default=None, description="Конфигурация ReAct цикла (loop_mode, exit_tool)"
     )
     
+    # Structured Output (взаимоисключающе с tools)
+    structured_output: bool = Field(
+        default=False,
+        description="Режим structured output вместо tools (response_format json_schema)"
+    )
+    output_schema: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="JSON Schema для structured output (передается в response_format)"
+    )
+    output_mapping: Optional[Dict[str, str]] = Field(
+        default=None,
+        description="Маппинг полей JSON -> state fields. Если None - поля записываются напрямую"
+    )
+    
     # Для function ноды
     code: Optional[str] = Field(default=None, description="Inline Python код")
     

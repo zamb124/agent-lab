@@ -137,7 +137,6 @@ class MockLLM:
         if isinstance(response, dict):
             if response.get("type") == "tool_call":
                 args = response.get("args", {})
-                # Используем переданный id или генерируем автоматически
                 tool_call_id = response.get("id") or f"call_mock_{response['tool']}_{len(messages)}"
                 return {
                     "content": "",
@@ -155,6 +154,15 @@ class MockLLM:
             elif response.get("type") == "text":
                 return {
                     "content": response.get("content", self._default_response),
+                    "reasoning": response.get("reasoning"),
+                    "tool_calls": None,
+                }
+            elif response.get("type") == "structured_output":
+                # Structured output возвращает JSON как content
+                data = response.get("data", {})
+                content = json.dumps(data, ensure_ascii=False) if isinstance(data, dict) else str(data)
+                return {
+                    "content": content,
                     "reasoning": response.get("reasoning"),
                     "tool_calls": None,
                 }
@@ -218,6 +226,7 @@ class MockLLM:
         self,
         messages: List[Message],
         tools: Optional[List[Dict[str, Any]]] = None,
+        response_format: Optional[Dict[str, Any]] = None,
         task_id: Optional[str] = None,
         context_id: Optional[str] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
@@ -228,6 +237,7 @@ class MockLLM:
         Tool calls тоже стримятся по частям: сначала id, потом name, потом arguments кусками.
         
         Поддерживает Redis для межпроцессного обмена mock ответами.
+        Поддерживает response_format для structured output.
         """
 
         task_id = task_id or str(uuid.uuid4())

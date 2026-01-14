@@ -64,12 +64,8 @@ async def run_inline_code(code: str, state: 'ExecutionState') -> 'ExecutionState
     Returns:
         ExecutionState (результат выполнения)
     """
-    from core.state import ExecutionState
+
     
     context = get_context()
     result = await safe_eval(code, state, context=context)
-    
-    if isinstance(result, dict):
-        return ExecutionState.model_validate(result)
-    
     return result

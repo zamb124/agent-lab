@@ -113,6 +113,68 @@ export class ReactNodeModal extends BaseNodeModal {
                 display: flex;
                 flex-direction: column;
             }
+            
+            .mode-toggle-section {
+                padding: var(--space-3);
+                background: var(--glass-tint-subtle);
+                border-radius: var(--radius-md);
+                margin-bottom: var(--space-3);
+            }
+            
+            .mode-toggle-row {
+                display: flex;
+                align-items: center;
+                gap: var(--space-3);
+            }
+            
+            .mode-option {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                border-radius: var(--radius-sm);
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            
+            .mode-option.active {
+                background: var(--accent-subtle);
+                color: var(--accent);
+            }
+            
+            .mode-option input[type="radio"] {
+                width: 16px;
+                height: 16px;
+                cursor: pointer;
+            }
+            
+            .output-schema-section {
+                margin-top: var(--space-3);
+            }
+            
+            .schema-editor {
+                width: 100%;
+                min-height: 150px;
+                font-family: var(--font-mono);
+                font-size: var(--text-sm);
+                padding: var(--space-2);
+                border: 1px solid var(--border);
+                border-radius: var(--radius-sm);
+                background: var(--bg-primary);
+                color: var(--text-primary);
+                resize: vertical;
+            }
+            
+            .schema-editor:focus {
+                outline: none;
+                border-color: var(--accent);
+            }
+            
+            .schema-hint {
+                margin-top: var(--space-2);
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
         `
     ];
 
@@ -122,6 +184,9 @@ export class ReactNodeModal extends BaseNodeModal {
         loopMode: { type: String },
         exitTool: { type: String },
         strictMode: { type: Boolean },
+        structuredOutput: { type: Boolean },
+        outputSchema: { type: Object },
+        outputMapping: { type: Object },
     };
 
     constructor() {
@@ -130,6 +195,20 @@ export class ReactNodeModal extends BaseNodeModal {
         this.loopMode = 'auto';
         this.exitTool = '';
         this.strictMode = true;
+        this.structuredOutput = false;
+        this.outputSchema = this._getDefaultSchema();
+        this.outputMapping = {};
+    }
+    
+    _getDefaultSchema() {
+        return {
+            type: "object",
+            properties: {
+                result: { type: "string", description: "Результат работы агента" }
+            },
+            required: ["result"],
+            additionalProperties: false
+        };
     }
 
     getNodeType() {
@@ -149,6 +228,10 @@ export class ReactNodeModal extends BaseNodeModal {
         this.loopMode = react.loop_mode || 'auto';
         this.exitTool = react.exit_tool || '';
         this.strictMode = react.strict !== false;
+        
+        this.structuredOutput = config.structured_output || false;
+        this.outputSchema = config.output_schema || this._getDefaultSchema();
+        this.outputMapping = config.output_mapping || {};
     }
 
     _parseTools(tools) {
@@ -182,6 +265,30 @@ export class ReactNodeModal extends BaseNodeModal {
     _onStrictModeChange(e) {
         this.strictMode = e.target.checked;
     }
+    
+    _onModeChange(mode) {
+        this.structuredOutput = mode === 'structured';
+        if (this.structuredOutput) {
+            this.selectedTools = [];
+        }
+    }
+    
+    _onOutputSchemaChange(e) {
+        try {
+            this.outputSchema = JSON.parse(e.target.value);
+        } catch (err) {
+            // Невалидный JSON - не обновляем
+        }
+    }
+    
+    _onOutputMappingChange(e) {
+        try {
+            const value = e.target.value.trim();
+            this.outputMapping = value ? JSON.parse(value) : {};
+        } catch (err) {
+            // Невалидный JSON - не обновляем
+        }
+    }
 
     _buildConfig() {
         const nameInput = this.shadowRoot.querySelector('[name="name"]');
@@ -213,25 +320,34 @@ export class ReactNodeModal extends BaseNodeModal {
             name,
             description: description || undefined,
             prompt,
-            tools: this.selectedTools.map(t => t.tool_id),
             llm,
             tags: tags.length > 0 ? tags : undefined,
         };
         
-        if (Object.keys(inputMapping).length > 0) {
-            config.input_mapping = inputMapping;
+        if (this.structuredOutput) {
+            config.structured_output = true;
+            config.output_schema = this.outputSchema;
+            if (Object.keys(this.outputMapping).length > 0) {
+                config.output_mapping = this.outputMapping;
+            }
+        } else {
+            config.tools = this.selectedTools.map(t => t.tool_id);
+            
+            if (this.loopMode === 'explicit') {
+                const exitTool = this.exitTool || (this.selectedTools.length > 0 ? this.selectedTools[0].tool_id : 'finish');
+                config.react = {
+                    loop_mode: 'explicit',
+                    exit_tool: exitTool,
+                    strict: this.strictMode,
+                };
+                if (reminderMessage) {
+                    config.react.reminder_message = reminderMessage;
+                }
+            }
         }
         
-        if (this.loopMode === 'explicit') {
-            const exitTool = this.exitTool || (this.selectedTools.length > 0 ? this.selectedTools[0].tool_id : 'finish');
-            config.react = {
-                loop_mode: 'explicit',
-                exit_tool: exitTool,
-                strict: this.strictMode,
-            };
-            if (reminderMessage) {
-                config.react.reminder_message = reminderMessage;
-            }
+        if (Object.keys(inputMapping).length > 0) {
+            config.input_mapping = inputMapping;
         }
         
         return this._applyStateSettings(config);
@@ -294,32 +410,90 @@ export class ReactNodeModal extends BaseNodeModal {
                         <tag-input .tags=${config.tags || []}></tag-input>
                     </div>
                     
-                    <div class="form-group tools-section">
-                        <div class="tools-header">
-                            <label class="form-label">Инструменты</label>
-                            <div class="tools-actions">
-                                <button type="button" class="tool-add-btn" @click=${this._addTool}>
-                                    + Добавить
-                                </button>
+                    <div class="mode-toggle-section">
+                        <label class="form-label">Режим вывода</label>
+                        <div class="mode-toggle-row">
+                            <label class="mode-option ${!this.structuredOutput ? 'active' : ''}">
+                                <input 
+                                    type="radio" 
+                                    name="output-mode"
+                                    .checked=${!this.structuredOutput}
+                                    @change=${() => this._onModeChange('tools')}
+                                />
+                                Tools
+                            </label>
+                            <label class="mode-option ${this.structuredOutput ? 'active' : ''}">
+                                <input 
+                                    type="radio" 
+                                    name="output-mode"
+                                    .checked=${this.structuredOutput}
+                                    @change=${() => this._onModeChange('structured')}
+                                />
+                                Structured Output
+                            </label>
+                        </div>
+                        <span class="form-hint">Tools: агент вызывает инструменты. Structured Output: агент возвращает JSON по схеме.</span>
+                    </div>
+                    
+                    ${!this.structuredOutput ? html`
+                        <div class="form-group tools-section">
+                            <div class="tools-header">
+                                <label class="form-label">Инструменты</label>
+                                <div class="tools-actions">
+                                    <button type="button" class="tool-add-btn" @click=${this._addTool}>
+                                        + Добавить
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="tools-list">
+                                ${this.selectedTools.length > 0 
+                                    ? this.selectedTools.map(tool => html`
+                                        <span class="tool-tag">
+                                            <platform-icon name="tool" size="12"></platform-icon>
+                                            ${tool.name}
+                                            <button 
+                                                type="button" 
+                                                class="tool-tag-remove"
+                                                @click=${() => this._removeTool(tool.tool_id)}
+                                            >×</button>
+                                        </span>
+                                    `)
+                                    : html`<span class="tools-empty">Нет инструментов</span>`
+                                }
                             </div>
                         </div>
-                        <div class="tools-list">
-                            ${this.selectedTools.length > 0 
-                                ? this.selectedTools.map(tool => html`
-                                    <span class="tool-tag">
-                                        <platform-icon name="tool" size="12"></platform-icon>
-                                        ${tool.name}
-                                        <button 
-                                            type="button" 
-                                            class="tool-tag-remove"
-                                            @click=${() => this._removeTool(tool.tool_id)}
-                                        >×</button>
-                                    </span>
-                                `)
-                                : html`<span class="tools-empty">Нет инструментов</span>`
-                            }
+                    ` : html`
+                        <div class="form-group output-schema-section">
+                            <label class="form-label">Output Schema (JSON Schema)</label>
+                            <textarea
+                                class="schema-editor"
+                                .value=${JSON.stringify(this.outputSchema, null, 2)}
+                                @change=${this._onOutputSchemaChange}
+                                @blur=${this._onOutputSchemaChange}
+                                rows="10"
+                            ></textarea>
+                            <div class="schema-hint">
+                                JSON Schema определяет структуру ответа агента. 
+                                LLM будет возвращать данные строго по этой схеме.
+                            </div>
                         </div>
-                    </div>
+                        
+                        <div class="form-group output-schema-section">
+                            <label class="form-label">Output Mapping (опционально)</label>
+                            <textarea
+                                class="schema-editor"
+                                .value=${JSON.stringify(this.outputMapping, null, 2)}
+                                @change=${this._onOutputMappingChange}
+                                @blur=${this._onOutputMappingChange}
+                                rows="4"
+                                placeholder='{"result_field": "state_field"}'
+                            ></textarea>
+                            <div class="schema-hint">
+                                Маппинг полей из JSON ответа в поля state. 
+                                Если пусто - поля записываются напрямую в state с теми же именами.
+                            </div>
+                        </div>
+                    `}
                     
                     <div class="form-group">
                         <label class="form-label">LLM</label>
@@ -330,59 +504,61 @@ export class ReactNodeModal extends BaseNodeModal {
                         ></llm-config-editor>
                     </div>
                     
-                    <div class="react-loop-section">
-                        <label class="form-label">Режим ReAct Loop</label>
-                        <select 
-                            class="form-select"
-                            .value=${this.loopMode}
-                            @change=${this._onLoopModeChange}
-                        >
-                            <option value="auto">Auto - текст завершает агента</option>
-                            <option value="explicit">Explicit - только через exit tool</option>
-                        </select>
-                        <span class="form-hint">Auto: текстовый ответ = завершение. Explicit: только через finish tool.</span>
-                        
-                        ${this.loopMode === 'explicit' ? html`
-                            <div class="loop-options">
-                                <div class="form-group">
-                                    <label class="form-label">Exit Tool</label>
-                                    <select 
-                                        class="form-select"
-                                        .value=${this.exitTool}
-                                        @change=${this._onExitToolChange}
-                                    >
-                                        ${this.selectedTools.map(t => html`
-                                            <option value=${t.tool_id}>${t.name}</option>
-                                        `)}
-                                    </select>
-                                </div>
-                                
-                                <div class="checkbox-row">
-                                    <input 
-                                        type="checkbox" 
-                                        id="strict-mode"
-                                        .checked=${this.strictMode}
-                                        @change=${this._onStrictModeChange}
-                                    />
-                                    <label for="strict-mode">Строгий режим</label>
-                                </div>
-                                <span class="form-hint">Если включен - текст без exit tool вызывает reminder.</span>
-                                
-                                ${this.strictMode ? html`
+                    ${!this.structuredOutput ? html`
+                        <div class="react-loop-section">
+                            <label class="form-label">Режим ReAct Loop</label>
+                            <select 
+                                class="form-select"
+                                .value=${this.loopMode}
+                                @change=${this._onLoopModeChange}
+                            >
+                                <option value="auto">Auto - текст завершает агента</option>
+                                <option value="explicit">Explicit - только через exit tool</option>
+                            </select>
+                            <span class="form-hint">Auto: текстовый ответ = завершение. Explicit: только через finish tool.</span>
+                            
+                            ${this.loopMode === 'explicit' ? html`
+                                <div class="loop-options">
                                     <div class="form-group">
-                                        <label class="form-label">Текст reminder</label>
-                                        <textarea 
-                                            name="reminder_message"
-                                            class="form-textarea"
-                                            rows="2"
-                                            .value=${react.reminder_message || ''}
-                                            placeholder="Ты не вызвал tool X для завершения..."
-                                        ></textarea>
+                                        <label class="form-label">Exit Tool</label>
+                                        <select 
+                                            class="form-select"
+                                            .value=${this.exitTool}
+                                            @change=${this._onExitToolChange}
+                                        >
+                                            ${this.selectedTools.map(t => html`
+                                                <option value=${t.tool_id}>${t.name}</option>
+                                            `)}
+                                        </select>
                                     </div>
-                                ` : ''}
-                            </div>
-                        ` : ''}
-                    </div>
+                                    
+                                    <div class="checkbox-row">
+                                        <input 
+                                            type="checkbox" 
+                                            id="strict-mode"
+                                            .checked=${this.strictMode}
+                                            @change=${this._onStrictModeChange}
+                                        />
+                                        <label for="strict-mode">Строгий режим</label>
+                                    </div>
+                                    <span class="form-hint">Если включен - текст без exit tool вызывает reminder.</span>
+                                    
+                                    ${this.strictMode ? html`
+                                        <div class="form-group">
+                                            <label class="form-label">Текст reminder</label>
+                                            <textarea 
+                                                name="reminder_message"
+                                                class="form-textarea"
+                                                rows="2"
+                                                .value=${react.reminder_message || ''}
+                                                placeholder="Ты не вызвал tool X для завершения..."
+                                            ></textarea>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            ` : ''}
+                        </div>
+                    ` : ''}
                     
                     ${this.renderStateSettings()}
                 </div>

@@ -225,6 +225,7 @@ class LLMClient:
         self,
         messages: List[Message],
         tools: Optional[List[Dict[str, Any]]] = None,
+        response_format: Optional[Dict[str, Any]] = None,
         task_id: Optional[str] = None,
         context_id: Optional[str] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
@@ -232,6 +233,13 @@ class LLMClient:
         Stream-first метод вызова LLM.
 
         Принимает A2A Message, возвращает A2A события.
+        
+        Args:
+            messages: Список сообщений
+            tools: Список tools для function calling
+            response_format: Формат ответа (json_schema для structured output)
+            task_id: ID задачи
+            context_id: ID контекста
         """
         task_id = task_id or str(uuid.uuid4())
         context_id = context_id or task_id
@@ -257,8 +265,11 @@ class LLMClient:
 
         if tools:
             body["tools"] = tools
+        
+        if response_format:
+            body["response_format"] = response_format
 
-        logger.debug(f"LLM request: messages={len(openai_messages)}, tools={len(tools) if tools else 0}")
+        logger.debug(f"LLM request: messages={len(openai_messages)}, tools={len(tools) if tools else 0}, response_format={bool(response_format)}")
         
         # Логируем полный body для отладки (без секретных данных)
         debug_body = {**body}

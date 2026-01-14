@@ -1006,24 +1006,15 @@ class TestSaveToMessages:
         assert msg.metadata["node_id"] == "my_node"
         assert msg.parts[0].root.text == "Result text"
 
-    def test_output_key_default_is_node_id(self):
-        """output_key по умолчанию равен node_id"""
-        node = ReactNode(
-            node_id="my_agent",
-            prompt="Test"
-        )
-        
-        assert node.output_key == "my_agent"
-
-    def test_output_key_from_config(self):
-        """output_key можно задать в config"""
+    def test_output_mapping_from_config(self):
+        """output_mapping можно задать в config"""
         node = ReactNode(
             node_id="my_agent",
             prompt="Test",
-            config={"output_key": "custom_result"}
+            config={"output_mapping": {"response": "agent_response"}}
         )
         
-        assert node.output_key == "custom_result"
+        assert node.output_mapping == {"response": "agent_response"}
 
 
 class TestToolNodeInputMapping:

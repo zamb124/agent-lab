@@ -315,10 +315,28 @@ class ReactNodeRunner(BaseReactNodeRunner):
     ) -> AsyncGenerator[StreamEvent, None]:
         """ReAct цикл со стримингом событий."""
         system_prompt = await self._render_prompt(state)
-        tools_schema = self._build_tools_schema()
         trace_ctx = _get_trace_ctx_from_state()
         tracer = get_tracer()
         model = self.node_config.llm_override.model if self.node_config and self.node_config.llm_override else "unknown"
+
+        # Определяем режим: structured_output или tools
+        structured_output = self.node_config.structured_output if self.node_config else False
+        output_schema = self.node_config.output_schema if self.node_config else None
+        
+        if structured_output and output_schema:
+            tools_schema = None
+            response_format = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "structured_response",
+                    "strict": True,
+                    "schema": output_schema
+                }
+            }
+            logger.info(f"[agent:{agent_name}] Structured Output режим, schema keys: {list(output_schema.get('properties', {}).keys())}")
+        else:
+            tools_schema = self._build_tools_schema()
+            response_format = None
 
         loop_mode, exit_tool, max_iterations, strict, reminder_message = self._get_react_config()
         reason_tool_name = self._get_reason_tool_name()
@@ -346,10 +364,10 @@ class ReactNodeRunner(BaseReactNodeRunner):
                         output_tokens = 0
 
                         async with tracer.llm_call_span(
-                            model, len(llm_messages), len(tools_schema), trace_ctx=trace_ctx
+                            model, len(llm_messages), len(tools_schema) if tools_schema else 0, trace_ctx=trace_ctx
                         ) as llm_span:
                             async for event in self._call_llm(
-                                llm_messages, tools_schema, context_id, task_id, state
+                                llm_messages, tools_schema, context_id, task_id, state, response_format
                             ):
                                 should_yield = True
                                 
@@ -491,6 +509,29 @@ class ReactNodeRunner(BaseReactNodeRunner):
                                     )
                                 raise
                         else:
+                            # Structured Output - всегда завершаем после первого ответа
+                            if structured_output and output_schema:
+                                try:
+                                    import json
+                                    parsed_output = json.loads(content)
+                                    setattr(state, "structured_output_result", parsed_output)
+                                    final_response = content
+                                    logger.info(
+                                        f"[agent:{agent_name}] Structured Output получен: {list(parsed_output.keys()) if isinstance(parsed_output, dict) else type(parsed_output)}"
+                                    )
+                                except json.JSONDecodeError as e:
+                                    logger.error(f"[agent:{agent_name}] Ошибка парсинга structured output: {e}")
+                                    final_response = content
+                                
+                                messages.append(
+                                    new_assistant_message(
+                                        final_response, context_id=context_id, task_id=task_id
+                                    )
+                                )
+                                self._save_messages_to_state(messages, state)
+                                InterruptManager.clear_interrupt_path(state)
+                                break
+                            
                             if loop_mode == ReactLoopMode.AUTO:
                                 final_response = content
                                 logger.info(
@@ -559,17 +600,18 @@ class ReactNodeRunner(BaseReactNodeRunner):
     async def _call_llm(
         self,
         messages: List[Message],
-        tools: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]],
         context_id: str,
         task_id: str,
         state: ExecutionState,
+        response_format: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Вызывает LLM - ТОЛЬКО STREAM."""
         model = self.node_config.llm_override.model if self.node_config and self.node_config.llm_override else None
         temp = self.node_config.llm_override.temperature if self.node_config and self.node_config.llm_override else None
         llm = get_llm_for_state(state, model_name=model, temperature=temp)
 
-        async for event in llm.stream(messages, tools, task_id, context_id):
+        async for event in llm.stream(messages, tools, response_format, task_id, context_id):
             yield event
 
     async def _execute_tools_parallel(

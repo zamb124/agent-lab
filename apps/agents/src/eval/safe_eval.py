@@ -1046,16 +1046,8 @@ class SafeEval:
         else:
             result = func(state)
         
-        if isinstance(result, ExecutionState):
-            return result
-        
-        if isinstance(result, dict):
-            return ExecutionState.model_validate(result)
-        
-        raise TypeError(
-            f"Function must return ExecutionState, got {type(result).__name__}. "
-            "Modify state and return it: return state"
-        )
+        # Возвращаем результат как есть - BaseNode._apply_output_mapping обработает
+        return result
     
     async def execute_tool(self, code: str, args: Dict[str, Any], state: Optional['ExecutionState'] = None) -> Any:
         """

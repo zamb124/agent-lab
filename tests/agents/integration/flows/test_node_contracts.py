@@ -4,7 +4,7 @@
 БЕЗ МОКОВ (кроме LLM согласно правилам проекта).
 
 Тестирует:
-- output_key: запись результата в state
+- output_mapping: маппинг результата в state
 - save_to_messages: добавление результата в messages
 - message_field: выбор поля для записи в messages
 - diff стейта при save_to_messages без message_field
@@ -37,51 +37,49 @@ def make_state(**kwargs) -> ExecutionState:
     return ExecutionState(**defaults)
 
 
-class TestOutputKey:
-    """Тесты output_key для разных типов нод."""
+class TestOutputMapping:
+    """Тесты output_mapping для разных типов нод."""
 
     @pytest.mark.asyncio
-    async def test_function_node_default_output_key(self):
-        """FunctionNode без output_key пишет в поле с именем node_id."""
+    async def test_function_node_returns_dict(self):
+        """FunctionNode возвращает dict - поля пишутся в state."""
         code = """
 def run(state):
-    state.response = "function_result"
-    return state
+    return {"response": "function_result", "status": "ok"}
 """
         node = FunctionNode(node_id="my_function", code=code)
         
         state = make_state()
         result = await node.run(state)
         
-        # FunctionNode возвращает ExecutionState, мержит в текущий state
         assert result.response == "function_result"
+        assert result.status == "ok"
 
     @pytest.mark.asyncio
-    async def test_function_node_custom_output_key(self):
-        """FunctionNode с custom output_key."""
+    async def test_function_node_with_output_mapping(self):
+        """FunctionNode с output_mapping маппит поля."""
         code = """
 def run(state):
-    state.custom_field = "custom_value"
-    return state
+    return {"value": 42, "name": "test"}
 """
         node = FunctionNode(
             node_id="my_function", 
             code=code,
-            config={"output_key": "custom_result"}
+            config={"output_mapping": {"value": "custom_value", "name": "custom_name"}}
         )
         
         state = make_state()
         result = await node.run(state)
         
-        # FunctionNode модифицирует state напрямую
-        assert result.custom_field == "custom_value"
+        assert result.custom_value == 42
+        assert result.custom_name == "test"
 
     @pytest.mark.asyncio
-    async def test_tool_node_default_output_key(self):
-        """ToolNode по умолчанию пишет в поле с именем node_id."""
+    async def test_tool_node_returns_dict(self):
+        """ToolNode возвращает dict - поля пишутся в state."""
         tool = InlineTool(
             tool_id="calculator",
-            code="def execute(args, state):\n    return args['x'] * 2",
+            code="def execute(args, state):\n    return {'doubled': args['x'] * 2}",
         )
         
         node = ToolNode(
@@ -93,29 +91,27 @@ def run(state):
         state = make_state()
         result = await node.run(state)
         
-        # Результат записан в output_key (по умолчанию = node_id)
-        assert result.double_tool == 20
+        assert result.doubled == 20
 
     @pytest.mark.asyncio
-    async def test_tool_node_custom_output_key(self):
-        """ToolNode с custom output_key."""
+    async def test_tool_node_with_output_mapping(self):
+        """ToolNode с output_mapping маппит поля."""
         tool = InlineTool(
             tool_id="calculator",
-            code="def execute(args, state):\n    return args['x'] * 3",
+            code="def execute(args, state):\n    return {'value': args['x'] * 3}",
         )
         
         node = ToolNode(
             node_id="triple_tool",
             tool=tool,
             input_mapping={"x": 10},
-            output_key="tripled_value",
+            config={"output_mapping": {"value": "tripled_value"}},
         )
         
         state = make_state()
         result = await node.run(state)
         
         assert result.tripled_value == 30
-        assert not hasattr(result, "triple_tool") or result.triple_tool is None
 
 
 class TestSaveToMessages:
@@ -343,7 +339,7 @@ def run(state):
         
         tool = InlineTool(
             tool_id="multiply",
-            code="def execute(args, state):\n    return args['value'] * args['multiplier']",
+            code="def execute(args, state):\n    return {'result': args['value'] * args['multiplier']}",
         )
         tool_node = ToolNode(
             node_id="multiply",
@@ -352,7 +348,6 @@ def run(state):
                 "value": "@state:calculated_value",
                 "multiplier": "@state:factor"
             },
-            output_key="result"
         )
         
         flow = Agent(
@@ -379,13 +374,12 @@ def run(state):
         """ToolNode -> FunctionNode: передача данных."""
         tool = InlineTool(
             tool_id="generate",
-            code="def execute(args, state):\n    return {'id': 12345, 'name': 'Test Item'}",
+            code="def execute(args, state):\n    return {'generated_item': {'id': 12345, 'name': 'Test Item'}}",
         )
         tool_node = ToolNode(
             node_id="generate",
             tool=tool,
             input_mapping={},
-            output_key="generated_item"
         )
         
         func_code = """
@@ -419,34 +413,31 @@ def run(state):
         """Цепочка ToolNode: каждый читает результат предыдущего."""
         tool1 = InlineTool(
             tool_id="step1",
-            code="def execute(args, state):\n    return args['x'] + 10",
+            code="def execute(args, state):\n    return {'after_add': args['x'] + 10}",
         )
         tool2 = InlineTool(
             tool_id="step2",
-            code="def execute(args, state):\n    return args['x'] * 2",
+            code="def execute(args, state):\n    return {'after_double': args['x'] * 2}",
         )
         tool3 = InlineTool(
             tool_id="step3",
-            code="def execute(args, state):\n    return args['x'] - 5",
+            code="def execute(args, state):\n    return {'final': args['x'] - 5}",
         )
         
         node1 = ToolNode(
             node_id="add_ten",
             tool=tool1,
             input_mapping={"x": "@state:initial"},
-            output_key="after_add"
         )
         node2 = ToolNode(
             node_id="double",
             tool=tool2,
             input_mapping={"x": "@state:after_add"},
-            output_key="after_double"
         )
         node3 = ToolNode(
             node_id="subtract",
             tool=tool3,
             input_mapping={"x": "@state:after_double"},
-            output_key="final"
         )
         
         flow = Agent(
@@ -538,7 +529,7 @@ def run(state):
         
         tool = InlineTool(
             tool_id="bonus",
-            code="def execute(args, state):\n    return args['score'] + args['bonus']",
+            code="def execute(args, state):\n    return {'final_score': args['score'] + args['bonus']}",
         )
         tool_node = ToolNode(
             node_id="add_bonus",
@@ -547,7 +538,6 @@ def run(state):
                 "score": "@state:user_data.score",
                 "bonus": "@var:bonus_amount"
             },
-            output_key="final_score",
             config={"save_to_messages": True}
         )
         
@@ -576,8 +566,8 @@ class TestFromConfig:
     """Тесты создания нод из конфигурации."""
 
     @pytest.mark.asyncio
-    async def test_flow_from_config_with_output_key(self):
-        """Agent из конфига с output_key."""
+    async def test_flow_from_config_with_output_mapping(self):
+        """Agent из конфига с output_mapping."""
         agent_config = {
             "id": "config_test",
             "name": "Config Test Agent",
@@ -585,8 +575,8 @@ class TestFromConfig:
             "nodes": {
                 "step1": {
                     "type": "tool",
-                    "code": "def execute(args, state):\n    return 'step1_result'",
-                    "output_key": "first_result",
+                    "code": "def execute(args, state):\n    return {'result': 'step1_result'}",
+                    "output_mapping": {"result": "first_result"},
                 },
                 "step2": {
                     "type": "function",
@@ -621,7 +611,6 @@ def run(state):
                 "process": {
                     "type": "tool",
                     "code": "def execute(args, state):\n    return {'status': 'ok', 'data': 123}",
-                    "output_key": "result",
                     "save_to_messages": True,
                 },
             },
@@ -634,7 +623,8 @@ def run(state):
         state = make_state(messages=[])
         result = await flow.run(state)
         
-        assert result.result == {"status": "ok", "data": 123}
+        assert result.status == "ok"
+        assert result.data == 123
         assert len(result.messages) == 1
 
     @pytest.mark.asyncio
@@ -648,7 +638,6 @@ def run(state):
                 "process": {
                     "type": "tool",
                     "code": "def execute(args, state):\n    return {'public': 'show this', 'private': 'hide this'}",
-                    "output_key": "result",
                     "save_to_messages": True,
                     "message_field": "public",
                 },
@@ -686,11 +675,13 @@ class TestComplexPipeline:
             code="""
 def execute(args, state):
     return {
-        'items': [
-            {'id': 1, 'name': 'item1', 'price': 100},
-            {'id': 2, 'name': 'item2', 'price': 200},
-        ],
-        'total': 2
+        'extracted': {
+            'items': [
+                {'id': 1, 'name': 'item1', 'price': 100},
+                {'id': 2, 'name': 'item2', 'price': 200},
+            ],
+            'total': 2
+        }
     }
 """,
         )
@@ -700,8 +691,10 @@ def execute(args, state):
             code="""
 def execute(args, state):
     return {
-        'saved': len(args['items']),
-        'total_value': args['total_price']
+        'load_result': {
+            'saved': len(args['items']),
+            'total_value': args['total_price']
+        }
     }
 """,
         )
@@ -723,7 +716,6 @@ def run(state):
             node_id="extract",
             tool=extract_tool,
             input_mapping={},
-            output_key="extracted"
         )
         
         transform_node = FunctionNode(
@@ -739,8 +731,7 @@ def run(state):
                 "items": "@state:transformed_items",
                 "total_price": "@state:total_price"
             },
-            output_key="load_result",
-            config={"save_to_messages": True, "message_field": "saved"}
+            config={"save_to_messages": True}
         )
         
         flow = Agent(
@@ -802,9 +793,11 @@ def run(state):
             code="""
 def execute(args, state):
     return {
-        'priority': 'HIGH',
-        'handler': 'urgent_team',
-        'message': f'Urgent: {args["content"]}'
+        'process_result': {
+            'priority': 'HIGH',
+            'handler': 'urgent_team',
+            'message': f'Urgent: {args["content"]}'
+        }
     }
 """,
         )
@@ -814,9 +807,11 @@ def execute(args, state):
             code="""
 def execute(args, state):
     return {
-        'priority': 'NORMAL',
-        'handler': 'standard_queue',
-        'message': f'Request: {args["content"]}'
+        'process_result': {
+            'priority': 'NORMAL',
+            'handler': 'standard_queue',
+            'message': f'Request: {args["content"]}'
+        }
     }
 """,
         )
@@ -838,7 +833,6 @@ def run(state):
             node_id="urgent_process",
             tool=urgent_tool,
             input_mapping={"content": "@state:content"},
-            output_key="process_result",
             config={"save_to_messages": True, "message_field": "priority"}
         )
         
@@ -846,7 +840,6 @@ def run(state):
             node_id="normal_process",
             tool=normal_tool,
             input_mapping={"content": "@state:content"},
-            output_key="process_result",
             config={"save_to_messages": True, "message_field": "priority"}
         )
         

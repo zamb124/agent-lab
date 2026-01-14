@@ -56,14 +56,16 @@ class BaseNode(ABC):
     
     Конфигурация:
     - input_mapping: Dict - маппинг входных данных из state
-    - output_key: str - куда писать результат (default: node_id)
+    - output_mapping: Dict[str, str] - маппинг полей результата -> state fields
     - save_to_messages: bool - добавлять результат в messages
     - message_field: str - какое поле писать в messages (по умолчанию diff стейта)
     - messages_filter: "all" / "own" / List[str] - фильтрация входящих messages
     
-    Контракты _run_impl():
-    - FunctionNode: возвращает ExecutionState (мержится в текущий state)
-    - ToolNode, ReactNode, AgentNode и др.: возвращает Any (записывается в output_key)
+    Контракт _run_impl() для ВСЕХ нод:
+    - Возвращает Any (dict, str, None, etc)
+    - dict: поля записываются в state через output_mapping
+    - не dict и не None: записывается в state.result
+    - None: ничего не записывается
     """
 
     name: str = "node"
@@ -73,7 +75,7 @@ class BaseNode(ABC):
         self.node_id = node_id
         self.config = config or {}
         self.input_mapping = self.config.get("input_mapping")
-        self.output_key = self.config.get("output_key", node_id)
+        self.output_mapping: Optional[Dict[str, str]] = self.config.get("output_mapping")
         self.save_to_messages = self.config.get("save_to_messages", False)
         self.message_field = self.config.get("message_field")
         self.messages_filter: Union[str, List[str]] = self.config.get("messages_filter", "all")
@@ -167,7 +169,7 @@ class BaseNode(ABC):
         4. Выполнение _run_impl(state, inputs)
         5. Обработка результата:
            - ExecutionState: мержим в текущий state
-           - Any: записываем в output_key
+           - dict: записываем поля в state через output_mapping
         6. Добавление в messages если save_to_messages=True
         """
         mock_data = self._check_mock(state)
@@ -185,10 +187,11 @@ class BaseNode(ABC):
         
         result = await self._run_impl(state, inputs)
         
-        if isinstance(result, ExecutionState):
-            self._copy_state_back(result, state)
-        elif self.output_key and result is not None:
-            setattr(state, self.output_key, result)
+        if result is not None:
+            if isinstance(result, ExecutionState):
+                self._copy_state_back(result, state)
+            else:
+                self._apply_output_mapping(state, result)
         
         if self.save_to_messages:
             message_content = self._get_message_content(state, state_before, result)
@@ -196,6 +199,27 @@ class BaseNode(ABC):
                 self._append_to_messages(state, message_content)
         
         return state
+    
+    def _apply_output_mapping(self, state: ExecutionState, result: Any) -> None:
+        """
+        Записывает результат в state через output_mapping.
+        
+        Если result - dict:
+          - С output_mapping: result[key] -> state[mapped_field]
+          - Без output_mapping: result[key] -> state[key] (напрямую)
+        Если result - не dict:
+          - Записываем в state.result
+        """
+        if isinstance(result, dict):
+            if self.output_mapping:
+                for result_key, state_field in self.output_mapping.items():
+                    if result_key in result:
+                        setattr(state, state_field, result[result_key])
+            else:
+                for key, value in result.items():
+                    setattr(state, key, value)
+        else:
+            setattr(state, "result", result)
     
     def _get_message_content(
         self, state: ExecutionState, state_before: Optional[Dict], result: Any
@@ -249,7 +273,7 @@ class BaseNode(ABC):
             inputs: Резолвнутые данные из input_mapping
             
         Returns:
-            Результат (будет записан в output_key если задан)
+            Результат (dict - поля записываются в state через output_mapping)
         """
         pass
 
@@ -393,8 +417,8 @@ class ReactNode(BaseNode):
         """
         Выполняет ReAct цикл.
         
-        Возвращает state.response для записи в output_key.
         _copy_state_back мержит все изменения из agent_state обратно в state.
+        При structured_output возвращает dict с полями из JSON ответа.
         """
         agent_state = self._prepare_state(state, inputs)
 
@@ -413,7 +437,12 @@ class ReactNode(BaseNode):
         finally:
             self._copy_state_back(agent_state, state)
 
-        return state.response
+        # При structured output возвращаем dict для записи в state через output_mapping
+        structured_result = getattr(state, "structured_output_result", None)
+        if structured_result is not None:
+            return structured_result
+        
+        return {"response": state.response} if state.response else None
 
     async def get_runner(self):
         """Возвращает runner для ReactNode."""
@@ -482,6 +511,10 @@ class ReactNode(BaseNode):
         react_dict = self.config.get("react") if self.config else None
         if react_dict:
             react_config = ReactConfig(**react_dict)
+        
+        # Structured output из config
+        structured_output = self.config.get("structured_output", False) if self.config else False
+        output_schema = self.config.get("output_schema") if self.config else None
             
         return NodeConfig(
             node_id=self.node_id,
@@ -491,6 +524,8 @@ class ReactNode(BaseNode):
             prompt=self.prompt_template or self.prompt or "",
             llm_override=llm_override,
             react=react_config,
+            structured_output=structured_output,
+            output_schema=output_schema,
         )
 
     async def _load_tools(self) -> List[Any]:
@@ -571,10 +606,8 @@ class NodeAsTool:
         logger.info(f"NodeAsTool: вызов {node_name} с запросом: {request[:100]}")
         
         state.content = request
-        result = await self.node.run(state)
-        if isinstance(result, ExecutionState):
-            return result.response or "Нет ответа от ноды"
-        return str(result)
+        await self.node.run(state)
+        return state.response or "Нет ответа от ноды"
 
     def to_openai_schema(self) -> Dict[str, Any]:
         """Возвращает схему для OpenAI."""
@@ -592,8 +625,10 @@ class FunctionNode(BaseNode):
     """
     Python функция из inline кода или callable.
     
-    Контракт: функция принимает state и возвращает НОВЫЙ state.
-    При параллельном выполнении раннер мержит стейты.
+    Функция получает state и может:
+    - Модифицировать state напрямую
+    - Вернуть dict с изменениями (применится через output_mapping)
+    - Вернуть None (если все изменения уже в state)
     """
 
     def __init__(
@@ -627,12 +662,12 @@ class FunctionNode(BaseNode):
             self._callable = self.code
             self.code = None
 
-    async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> ExecutionState:
+    async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
         """
         Выполняет функцию.
         
-        Контракт: функция ВСЕГДА возвращает ExecutionState.
-        BaseNode.run() мержит возвращённый state в текущий.
+        Функция может модифицировать state напрямую.
+        Возвращаемый результат (dict или Any) применяется через output_mapping.
         """
         if self._callable is not None:
             if asyncio.iscoroutinefunction(self._callable):
@@ -645,12 +680,6 @@ class FunctionNode(BaseNode):
         else:
             raise ValueError(f"Node '{self.node_id}': code required")
         
-        if not isinstance(result, ExecutionState):
-            raise TypeError(
-                f"FunctionNode '{self.node_id}': function must return ExecutionState, "
-                f"got {type(result).__name__}. "
-                "Modify state and return it: return state"
-            )
         return result
 
 
@@ -662,7 +691,6 @@ class ToolNode(BaseNode):
         node_id: str,
         tool: Optional[BaseTool] = None,
         input_mapping: Optional[Dict[str, Any]] = None,
-        output_key: Optional[str] = None,
         config: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(node_id, config)
@@ -673,9 +701,6 @@ class ToolNode(BaseNode):
             self.input_mapping = input_mapping
         elif cfg.get("input_mapping"):
             self.input_mapping = cfg.get("input_mapping")
-            
-        if output_key is not None:
-            self.output_key = output_key
 
     async def _ensure_tool(self):
         """Загружает tool если он еще не загружен."""
@@ -764,7 +789,6 @@ class AgentNode(BaseNode):
         """
         Запускает вложенный Agent.
         
-        Возвращает result.response для записи в output_key.
         _copy_state_back мержит изменения из вложенного агента обратно в state.
         """
         if not self.agent_id:
