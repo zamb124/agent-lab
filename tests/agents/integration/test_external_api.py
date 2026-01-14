@@ -349,7 +349,7 @@ class TestExternalAPITool:
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result = await tool.execute({"input": "test data"}, state)
+        result = await tool.run({"input": "test data"}, state)
         assert result["result"] == "processed"
 
     @pytest.mark.asyncio
@@ -404,7 +404,7 @@ class TestExternalAPITool:
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result = await tool.execute({}, state)
+        result = await tool.run({}, state)
         assert result == {"answer": 42}
 
 
@@ -454,7 +454,7 @@ class TestFlowWithExternalAPI:
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["api_status"] == "completed"
         assert result["api_response"]["processed"] is True

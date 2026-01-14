@@ -234,7 +234,7 @@ class TestAgentsAPI:
         assert "nonexistent_tool_xyz" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_create_agent_with_agent_as_tool(self, client, app, unique_id, auth_headers_system):
+    async def test_create_agent_with_agent_as_tool(self, client, app, unique_id, auth_headers_system, test_agent_for_tool):
         """Создание agent с другим агентом в качестве tool."""
         agent_id = f"test_agent_agenttool_{unique_id}"
         response = await client.post(
@@ -248,7 +248,7 @@ class TestAgentsAPI:
                     "main": {
                         "type": "react_node",
                         "prompt": "Test prompt",
-                        "tools": ["docs_parser"],  # Нода как tool
+                        "tools": [test_agent_for_tool],  # Агент как tool
                     }
                 },
                 "edges": [{"from": "main", "to": None}],

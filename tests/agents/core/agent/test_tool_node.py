@@ -20,7 +20,7 @@ class SimpleTool(BaseTool):
     name = "simple_tool"
     description = "Простой тестовый tool"
 
-    async def execute(self, args: Dict[str, Any], state: Dict[str, Any]) -> Any:
+    async def _run_impl(self, args: Dict[str, Any], state: Dict[str, Any]) -> Any:
         """Возвращает сумму x и y из args."""
         x = args.get("x", 0)
         y = args.get("y", 0)
@@ -33,7 +33,7 @@ class FormatterTool(BaseTool):
     name = "formatter_tool"
     description = "Форматирует строку"
 
-    async def execute(self, args: Dict[str, Any], state: Dict[str, Any]) -> Any:
+    async def _run_impl(self, args: Dict[str, Any], state: Dict[str, Any]) -> Any:
         """Форматирует шаблон с переменными."""
         template = args.get("template", "")
         name = args.get("name", "")

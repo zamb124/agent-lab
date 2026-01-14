@@ -78,7 +78,7 @@ class TestFastTrackSkill:
             session_id="test-agent:test-context",
             content=input_text
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.get("route") == expected_route
         assert result.get("processed") is None, "formatter не должен выполняться"
@@ -100,7 +100,7 @@ class TestFastTrackSkill:
             session_id="test-agent:test-context",
             content="привет"
         )
-        result = await agent.execute(state)
+        result = await agent.run(state)
 
         # classifier устанавливает route=greeting
         assert result.get("route") == "greeting"
@@ -148,7 +148,7 @@ class TestOrdersOnlySkill:
             session_id="test-agent:test-context",
             content="оформить заказ"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.get("route") == "order"
         assert result.get("processed") is True
@@ -169,7 +169,7 @@ class TestOrdersOnlySkill:
             session_id="test-agent:test-context",
             content="хочу подать жалобу"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         # С orders_only classifier направляет все кроме заказов в general
         assert result.get("route") == "general"
@@ -191,7 +191,7 @@ class TestOrdersOnlySkill:
             session_id="test-agent:test-context",
             content="какой график работы?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.get("route") == "general"
         assert result.get("processed") is True
@@ -234,7 +234,7 @@ class TestFunctionNodesSkill:
             session_id="test-agent:test-context",
             content="заказ"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         assert result.get("route") == "order"
 
         state = ExecutionState(
@@ -244,7 +244,7 @@ class TestFunctionNodesSkill:
             session_id="test-agent:test-context",
             content="вопрос"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         assert result.get("route") == "general"
 
     @pytest.mark.asyncio
@@ -262,7 +262,7 @@ class TestFunctionNodesSkill:
             session_id="test-agent:test-context",
             content="вопрос"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         # Formatter добавляет [ROUTE] префикс
         assert "[GENERAL]" in result.get("response", "")
@@ -303,7 +303,7 @@ class TestReactNodesSkill:
             session_id="test-agent:test-context",
             content="заказ"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.get("route") == "order"
         assert "[ORDER]" in result.get("response", "")
@@ -324,7 +324,7 @@ class TestReactNodesSkill:
             session_id="test-agent:test-context",
             content="жалоба"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.get("route") == "complaint"
         assert "[COMPLAINT]" in result.get("response", "")
@@ -345,7 +345,7 @@ class TestReactNodesSkill:
             session_id="test-agent:test-context",
             content="вопрос"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.get("route") == "general"
         assert "[GENERAL]" in result.get("response", "")
@@ -393,7 +393,7 @@ class TestLlmGraphSkill:
             session_id="test-agent:test-context",
             content=input_text
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.get("route") == expected_route
         assert expected_prefix in result.get("response", "")
@@ -434,7 +434,7 @@ class TestRouteOrderSkill:
             session_id="test-agent:test-context",
             content="заказ"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.get("route") == "order"
         assert "[ORDER]" in result.get("response", "")
@@ -455,7 +455,7 @@ class TestRouteOrderSkill:
             session_id="test-agent:test-context",
             content="жалоба"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         # Базовый classifier определяет route по содержимому
         assert result.get("route") == "complaint"
@@ -497,7 +497,7 @@ class TestRouteComplaintSkill:
             session_id="test-agent:test-context",
             content="жалоба"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.get("route") == "complaint"
         assert "[COMPLAINT]" in result.get("response", "")
@@ -518,7 +518,7 @@ class TestRouteComplaintSkill:
             session_id="test-agent:test-context",
             content="заказ"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         # Базовый classifier определяет route по содержимому
         assert result.get("route") == "order"
@@ -560,7 +560,7 @@ class TestFullGraphSkill:
             session_id="test-agent:test-context",
             content="вопрос"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         # Базовый classifier определяет route
         assert result.get("route") == "general"
@@ -583,7 +583,7 @@ class TestFullGraphSkill:
                 session_id="test-agent:test-context",
                 content=content
             )
-            result = await flow.execute(state)
+            result = await flow.run(state)
             assert result.get("route") == expected_route
             assert result.get("processed") is True
 
@@ -638,7 +638,7 @@ class TestDefaultSkill:
             session_id="test-agent:test-context",
             content=input_text
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.get("route") == expected_route, f"Для '{input_text}' ожидался route={expected_route}, получен {result.get('route')}"
         # Все маршруты кроме fast_track должны проходить через formatter
@@ -657,7 +657,7 @@ class TestDefaultSkill:
             session_id="test-agent:test-context",
             content="cat"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.get("route") == "cat", f"Route должен быть 'cat', получен {result.get('route')}"
         
@@ -683,7 +683,7 @@ class TestDefaultSkill:
             session_id="test-agent:test-context",
             content="привет"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.get("route") == "greeting"
         # greeting_node устанавливает response с приветствием
@@ -705,7 +705,7 @@ class TestDefaultSkill:
             session_id="test-agent:test-context",
             content="заказ"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.get("route") == "order"
         # order_processor обрабатывает заказ и formatter добавляет префикс [ORDER]
@@ -734,7 +734,7 @@ class TestSkillStatePreservation:
             custom_field="test_value",
             user_data={"name": "Test User"}
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.get("custom_field") == "test_value"
         assert result.get("user_data") == {"name": "Test User"}
@@ -755,7 +755,7 @@ class TestSkillStatePreservation:
             content="заказ",
             custom_field="preserved"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.get("custom_field") == "preserved"
         assert result.get("processed") is True
@@ -777,7 +777,7 @@ class TestSkillStatePreservation:
             session_id="test-agent:test-context",
             content="заказ"
         )
-            result = await flow.execute(state)
+            result = await flow.run(state)
             
             assert "variables" in result, f"Variables отсутствуют в skill {skill_id}"
             assert "order_prefix" in result["variables"], f"order_prefix отсутствует в skill {skill_id}"
@@ -801,7 +801,7 @@ class TestSkillEdgeCases:
             session_id="test-agent:test-context",
             content=""
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         # Пустой content идет в general route
         assert result.get("route") == "general"
@@ -824,7 +824,7 @@ class TestSkillEdgeCases:
             session_id="test-agent:test-context",
             content="заказ"
         )
-            result = await flow.execute(state)
+            result = await flow.run(state)
             assert result.get("route") == "order"
 
     @pytest.mark.asyncio
@@ -844,7 +844,7 @@ class TestSkillEdgeCases:
             session_id="test-agent:test-context",
             content="заказ"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.interrupt is not None
         assert result.interrupt.question is not None

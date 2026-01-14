@@ -66,7 +66,7 @@ class TestNodeEventsStreaming:
         async def execute():
             await ready_event.wait()
             await asyncio.sleep(0.05)
-            await agent.execute(state)
+            await agent.run(state)
         
         try:
             # Запускаем подписку и выполнение параллельно
@@ -148,7 +148,7 @@ class TestNodeEventsStreaming:
         async def execute():
             await ready_event.wait()
             await asyncio.sleep(0.05)
-            await agent.execute(state)
+            await agent.run(state)
         
         try:
             await asyncio.wait_for(
@@ -225,7 +225,7 @@ class TestNodeEventsStreaming:
             await ready_event.wait()
             await asyncio.sleep(0.05)
             try:
-                await agent.execute(state)
+                await agent.run(state)
             except ValueError:
                 pass  # Ожидаемая ошибка
         

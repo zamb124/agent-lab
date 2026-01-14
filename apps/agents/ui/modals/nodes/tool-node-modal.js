@@ -170,7 +170,7 @@ export class ToolNodeModal extends BaseNodeModal {
             config.input_mapping = inputMapping;
         }
         
-        return config;
+        return this._applyStateSettings(config);
     }
 
     _getDefaultCode() {
@@ -303,6 +303,8 @@ export class ToolNodeModal extends BaseNodeModal {
                             .availableState=${this._buildDefaultState()}
                         ></input-mapping-editor>
                     </div>
+                    
+                    ${this.renderStateSettings()}
                 </div>
                 
                 <div class="form-main">

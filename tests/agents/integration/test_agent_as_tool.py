@@ -138,7 +138,7 @@ def execute(args, state):
             session_id="test-agent:test-context",
             content="Помогите с моим заказом"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.interrupt is not None
         assert result.interrupt.question == "Какой у вас номер заказа?"
@@ -169,7 +169,7 @@ def execute(args, state):
             content="Где мой заказ?"
         )
 
-        result = await flow.execute(state)
+        result = await flow.run(state)
         assert result.interrupt is not None
         assert result.interrupt.question == "Номер заказа?"
 
@@ -273,7 +273,7 @@ def execute(args, state):
             session_id="test-agent:test-context",
             content="Начни сбор"
         )
-        result1 = await flow.execute(state)
+        result1 = await flow.run(state)
         
         assert result1.interrupt is not None
         assert len(result1.interrupt_path) > 0
@@ -281,7 +281,7 @@ def execute(args, state):
         result1.content = "test@test.com"
         result1.interrupt = None
         
-        result2 = await flow.execute(result1)
+        result2 = await flow.run(result1)
         
         assert result2.interrupt is None, \
             f"Agent должен завершиться без interrupt, получен: {result2.interrupt}"
@@ -297,10 +297,11 @@ class TestToolRegistryInline:
         """ToolRegistry создаёт InlineTool из inline конфига."""
         container = get_container()
 
+        # Используем уникальный tool_id чтобы не перезаписать builtin calculator
         tool_config = {
-            "tool_id": "calculator",
-            "title": "Calculator",
-            "description": "Вычисляет выражения",
+            "tool_id": "test_simple_adder",
+            "title": "Simple Adder",
+            "description": "Складывает два числа",
             "code": """
 async def execute(args: dict, state: dict = None):
     expression = args.get('expression', '1+1')
@@ -316,7 +317,7 @@ async def execute(args: dict, state: dict = None):
 
         assert tool is not None
         assert isinstance(tool, InlineTool)
-        assert tool.name == "calculator"
+        assert tool.name == "test_simple_adder"
 
     @pytest.mark.asyncio
     async def test_tool_registry_creates_node_as_tool(self, app):
@@ -451,7 +452,7 @@ def execute(args, state):
             ]
         )
         
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert result.response, f"Должен быть ответ, state: {result}"
         assert result.interrupt is None, "Не должно быть interrupt"

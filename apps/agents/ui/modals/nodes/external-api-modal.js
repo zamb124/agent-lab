@@ -78,7 +78,7 @@ export class ExternalApiNodeModal extends BaseNodeModal {
             config.state_mapping = stateMappingEditor.getParsedValue();
         }
         
-        return config;
+        return this._applyStateSettings(config);
     }
 
     renderBody() {
@@ -145,6 +145,8 @@ export class ExternalApiNodeModal extends BaseNodeModal {
                             hint="Поддерживает @var:path для переменных"
                         ></json-field-editor>
                     </div>
+                    
+                    ${this.renderStateSettings()}
                 </div>
                 
                 <div class="form-main">

@@ -74,7 +74,7 @@ export class RemoteAgentNodeModal extends BaseNodeModal {
             config.input_mapping = inputMapping;
         }
         
-        return config;
+        return this._applyStateSettings(config);
     }
 
     renderBody() {
@@ -145,6 +145,8 @@ export class RemoteAgentNodeModal extends BaseNodeModal {
                             ></json-field-editor>
                         </div>
                     </div>
+                    
+                    ${this.renderStateSettings()}
                 </div>
                 
                 <div class="form-main">

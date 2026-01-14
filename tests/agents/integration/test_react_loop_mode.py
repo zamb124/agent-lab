@@ -97,7 +97,7 @@ class TestReactLoopModeAuto:
             session_id="test-agent:test-context",
             content="Привет"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert result["response"] == "Привет! Чем могу помочь?"
@@ -162,7 +162,7 @@ async def execute(args: dict, state: dict = None):
             session_id="test-agent:test-context",
             content="5+3?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert "8" in result["response"]
@@ -205,7 +205,7 @@ async def execute(args: dict, state: dict = None):
             session_id="test-agent:test-context",
             content="test"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert result["response"] == "Ответ по умолчанию"
         
@@ -259,7 +259,7 @@ class TestReactLoopModeExplicit:
             session_id="test-agent:test-context",
             content="Завершись"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert result["response"] == "Готово!"
@@ -330,7 +330,7 @@ async def execute(args: dict, state: dict = None):
             session_id="test-agent:test-context",
             content="10*5?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert "50" in result["response"]
@@ -379,7 +379,7 @@ async def execute(args: dict, state: dict = None):
             session_id="test-agent:test-context",
             content="test"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert result["response"] == "Теперь правильно!"
@@ -426,7 +426,7 @@ async def execute(args: dict, state: dict = None):
             session_id="test-agent:test-context",
             content="test"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert "автоматически" in result["response"]
@@ -474,7 +474,7 @@ async def execute(args: dict, state: dict = None):
             session_id="test-agent:test-context",
             content="Привет"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Проверяем что произошел interrupt
         assert "interrupt" in result or result.get("interrupt") is not None
@@ -530,7 +530,7 @@ async def execute(args: dict, state: dict = None):
             session_id="test-agent:test-context",
             content="Выполни"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert "выполнены" in result["response"]
@@ -586,7 +586,7 @@ class TestReactLoopModeStrictAndReminder:
             session_id="test-agent:test-context",
             content="test"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert result["response"] == "Правильный ответ через finish"
@@ -635,7 +635,7 @@ class TestReactLoopModeStrictAndReminder:
             session_id="test-agent:test-context",
             content="test"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert result["response"] == "Текстовый ответ без finish"
@@ -688,7 +688,7 @@ class TestReactLoopModeStrictAndReminder:
             session_id="test-agent:test-context",
             content="test"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Проверяем что агент завершился
         assert "response" in result
@@ -762,7 +762,7 @@ async def execute(args, state):
             session_id="test-agent:test-context",
             content="2*3?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert "6" in result["response"]
@@ -825,7 +825,7 @@ class TestReactLoopModeMaxIterations:
             session_id="test-agent:test-context",
             content="Loop"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Агент должен завершиться (либо по finish, либо по max_iterations)
         assert result.node_history
@@ -871,7 +871,7 @@ class TestExampleReactExplicitMode:
             session_id="test-agent:test-context",
             content="Сколько будет 7+8?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert "15" in result["response"]
@@ -896,7 +896,7 @@ class TestExampleReactExplicitMode:
             session_id="test-agent:test-context",
             content="Посчитай"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Проверяем interrupt
         assert result.interrupt is not None
@@ -921,7 +921,7 @@ class TestExampleReactExplicitMode:
             session_id="test-agent:test-context",
             content="10+5"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert "15" in result["response"]
@@ -954,7 +954,7 @@ class TestExampleReactExplicitMode:
             session_id="test-agent:test-context",
             content="Привет"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert result["response"] == "Простой текстовый ответ"
@@ -1005,7 +1005,7 @@ class TestReactLoopModeEdgeCases:
             session_id="test-agent:test-context",
             content=""
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         
@@ -1044,7 +1044,7 @@ class TestReactLoopModeEdgeCases:
         ])
         
         flow = await container.agent_factory.get_flow(agent_id)
-        result = await flow.execute(make_test_state(content="test"))
+        result = await flow.run(make_test_state(content="test"))
         
         assert result.response is not None
         assert "автоматически" in result.response
@@ -1095,7 +1095,7 @@ class TestReactLoopModeEdgeCases:
             session_id="test-agent:test-context",
             content="test"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert result["response"] == "Наконец finish!"
@@ -1154,7 +1154,7 @@ async def execute(args: dict, state: dict = None):
             session_id="test-agent:test-context",
             content="test"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert "Задача выполнена" in result["response"]
@@ -1201,7 +1201,7 @@ async def execute(args: dict, state: dict = None):
             session_id="test-agent:test-context",
             content="test"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert result["response"] == "Текстовый ответ в auto режиме"

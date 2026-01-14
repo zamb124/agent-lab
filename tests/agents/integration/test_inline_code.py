@@ -150,7 +150,7 @@ def run(state):
             session_id="test-agent:test-context",
             input=42
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert result["processed"] is True
         assert result["value"] == 142
@@ -210,7 +210,7 @@ def run(state):
         )
         
         from core.state import ExecutionState
-        result = await flow.execute(ExecutionState(
+        result = await flow.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -266,7 +266,7 @@ def run(state):
             session_id="test-agent:test-context",
             json_input='{"name": "Test", "value": 123}'
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert result["name"] == "Test"
         assert result["parsed"]["value"] == 123
@@ -332,7 +332,7 @@ def run(state):
             session_id="test-agent:test-context",
             input=10
         )
-        result1 = await flow.execute(state1)
+        result1 = await flow.run(state1)
         assert result1["result"] == "positive_path"
         
         # Негативный путь
@@ -343,7 +343,7 @@ def run(state):
             session_id="test-agent:test-context",
             input=-5
         )
-        result2 = await flow.execute(state2)
+        result2 = await flow.run(state2)
         assert result2["result"] == "negative_path"
 
     @pytest.mark.asyncio
@@ -385,7 +385,7 @@ def run(state):
             session_id="test-agent:test-context",
         )
         with pytest.raises(ValueError, match="Intentional error"):
-            await flow.execute(state)
+            await flow.run(state)
 
 
 class TestMixedNodes:
@@ -441,7 +441,7 @@ def run(state):
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert result.get("first_done") is True
         assert result.get("second_done") is True
@@ -472,7 +472,7 @@ def execute(args, state):
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result = await tool.execute({"x": 10, "y": 5}, state)
+        result = await tool.run({"x": 10, "y": 5}, state)
         assert result == 15
 
     @pytest.mark.asyncio
@@ -494,7 +494,7 @@ async def execute(args, state):
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result = await tool.execute({"value": 21}, state)
+        result = await tool.run({"value": 21}, state)
         assert result == 42
 
     @pytest.mark.asyncio
@@ -518,7 +518,7 @@ def execute(args, state):
             session_id="test-agent:test-context",
             prefix="[Bot] "
         )
-        result = await tool.execute({"name": "Alice"}, state)
+        result = await tool.run({"name": "Alice"}, state)
         assert result == "[Bot] Hello, Alice!"
 
     @pytest.mark.asyncio
@@ -543,7 +543,7 @@ def execute(args, state):
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result = await tool.execute({"data": '{"name": "Test"}'}, state)
+        result = await tool.run({"data": '{"name": "Test"}'}, state)
         assert result == "Test"
 
     @pytest.mark.asyncio
@@ -567,7 +567,7 @@ def execute(args, state):
             session_id="test-agent:test-context",
         )
         with pytest.raises(SafeEvalError, match="Import of 'os' is not allowed"):
-            await tool.execute({}, state)
+            await tool.run({}, state)
 
     @pytest.mark.asyncio
     async def test_inline_tool_schema(self):
@@ -624,7 +624,7 @@ def execute(args, state):
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result = await tool.execute({"value": 7}, state)
+        result = await tool.run({"value": 7}, state)
         assert result == 21
 
 
@@ -817,7 +817,7 @@ async def run(state):
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert result["processed"] is True
         assert "fact" in result

@@ -359,7 +359,7 @@ class TestFlowWithSkills:
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result = await flow_default.execute(state)
+        result = await flow_default.run(state)
         assert result["path"] == "default"
 
         flow_skill = await Agent.from_config(
@@ -381,7 +381,7 @@ class TestFlowWithSkills:
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result = await flow_skill.execute(state)
+        result = await flow_skill.run(state)
         assert result["path"] == "skill"
 
     @pytest.mark.asyncio
@@ -414,7 +414,7 @@ def run(state):
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["mode"] == "refund"
         assert result.variables["extra"] == "skill_var"

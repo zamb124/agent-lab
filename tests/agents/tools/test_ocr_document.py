@@ -79,7 +79,7 @@ class TestVisionAnalyzeTool:
             session_id=f"test-agent:{context_id}",
             files=[]
         )
-        result = await vision_analyze.execute(
+        result = await vision_analyze.run(
             {"prompt": "Извлеки текст"},
             state=state,
         )
@@ -106,7 +106,7 @@ class TestVisionAnalyzeTool:
             ]
         )
 
-        result = await vision_analyze.execute(
+        result = await vision_analyze.run(
             {"prompt": "Извлеки текст", "file_name": "missing.pdf"},
             state=state,
         )
@@ -138,7 +138,7 @@ class TestVisionAnalyzeTool:
                 ]
             )
 
-            result = await vision_analyze.execute(
+            result = await vision_analyze.run(
                 {"prompt": "Извлеки текст"},
                 state=state,
             )
@@ -167,7 +167,7 @@ class TestVisionAnalyzeTool:
             ]
         )
 
-        result = await vision_analyze.execute(
+        result = await vision_analyze.run(
             {"prompt": "Извлеки текст"},
             state=state,
         )
@@ -371,7 +371,7 @@ class TestVisionAnalyzeIntegration:
         if not has_valid_key:
             pytest.skip("Нет валидного API ключа для vision - пропускаем реальный тест")
         
-        result = await vision_analyze.execute(
+        result = await vision_analyze.run(
             {"prompt": "Извлеки весь текст с изображения"},
             state=state,
         )

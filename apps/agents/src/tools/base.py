@@ -139,16 +139,32 @@ class BaseTool(ABC):
 
     async def run(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
         """
-        Точка входа для выполнения tool.
+        Единственная точка входа для выполнения tool.
         
-        Проверяет permissions перед выполнением.
+        Наследники переопределяют этот метод.
+        Для стандартных проверок (permissions, mock) вызывайте _check_before_run().
 
         Args:
             args: Аргументы вызова
             state: ExecutionState агента
 
         Returns:
-            Результат выполнения или сообщение об ошибке если нет прав
+            Результат выполнения
+        """
+        check_result = await self._check_before_run(args, state)
+        if check_result is not None:
+            return check_result
+        
+        return await self._run_impl(args, state)
+
+    async def _check_before_run(
+        self, args: Dict[str, Any], state: "ExecutionState"
+    ) -> Optional[Any]:
+        """
+        Проверки перед выполнением: permissions, mock.
+        
+        Returns:
+            Результат если нужно вернуть (permission error, mock), None если продолжить
         """
         permission_error = self._check_permission(state)
         if permission_error:
@@ -164,13 +180,14 @@ class BaseTool(ABC):
             logger.debug(f"Tool {self.name}: mock mode (TESTING env)")
             return await self.execute_mock(args, state)
 
-        logger.debug(f"Tool {self.name}: real mode")
-        return await self.execute(args, state)
+        return None
 
     @abstractmethod
-    async def execute(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
+    async def _run_impl(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
         """
         Реальное выполнение инструмента.
+
+        Наследники реализуют логику тула здесь.
 
         Args:
             args: Аргументы вызова
@@ -265,16 +282,7 @@ class InlineTool(BaseTool):
             return self._parameters
         return {"type": "object", "properties": {}, "required": []}
 
-    async def run(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
-        """Выполняет inline tool с поддержкой mock из state."""
-        mock_result = get_mock_for_tool(state, self.name)
-        if mock_result is not None:
-            logger.debug(f"InlineTool {self.name}: using mock from state")
-            return mock_result
-        
-        return await self.execute(args, state)
-
-    async def execute(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
+    async def _run_impl(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
         """Выполняет inline код через SafeEval."""
         full_args = self._apply_defaults(args)
         
@@ -377,7 +385,7 @@ class ExternalAPITool(BaseTool):
             "required": required,
         }
 
-    async def execute(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
+    async def _run_impl(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
         """Вызывает внешний API."""
         parameters = []
         for p in self._api_parameters:

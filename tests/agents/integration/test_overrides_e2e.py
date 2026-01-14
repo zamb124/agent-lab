@@ -32,7 +32,7 @@ class TestFunctionNodeOverrides:
             variables={}
         )
 
-        state = await flow_default.execute(ExecutionState(
+        state = await flow_default.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -58,7 +58,7 @@ class TestFunctionNodeOverrides:
             variables={}
         )
 
-        state = await flow_skill.execute(ExecutionState(
+        state = await flow_skill.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -107,7 +107,7 @@ def run(state):
         flow_base = await Agent.from_config(config=config_base, variables={})
 
         # Test complaint routing
-        state = await flow_base.execute(ExecutionState(
+        state = await flow_base.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -149,7 +149,7 @@ def run(state):
         flow_orders_only = await Agent.from_config(config=config_orders_only, variables={})
 
         # Same input now goes to general
-        state = await flow_orders_only.execute(ExecutionState(
+        state = await flow_orders_only.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -188,7 +188,7 @@ def run(state):
             variables={"company_name": "TestCorp", "max_length": 500}
         )
 
-        state = await flow.execute(ExecutionState(
+        state = await flow.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -223,7 +223,7 @@ def run(state):
             variables={"max_length": 500}
         )
 
-        state_base = await flow_base.execute(ExecutionState(
+        state_base = await flow_base.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -253,7 +253,7 @@ def run(state):
             variables={"max_length": 200}  # Overridden by skill
         )
 
-        state_skill = await flow_skill.execute(ExecutionState(
+        state_skill = await flow_skill.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -294,7 +294,7 @@ class TestEntryOverrideE2E:
             variables={}
         )
 
-        state = await flow_default.execute(ExecutionState(
+        state = await flow_default.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -317,7 +317,7 @@ class TestEntryOverrideE2E:
             variables={}
         )
 
-        state = await flow_skill.execute(ExecutionState(
+        state = await flow_skill.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -357,7 +357,7 @@ def run(state):
             variables={}
         )
 
-        state = await flow.execute(ExecutionState(
+        state = await flow.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -396,7 +396,7 @@ def run(state):
             variables={}
         )
 
-        state = await flow.execute(ExecutionState(
+        state = await flow.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -438,7 +438,7 @@ class TestGraphOverridesE2E:
         }
 
         flow_base = await Agent.from_config(config=config_base, variables={})
-        state = await flow_base.execute(ExecutionState(
+        state = await flow_base.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -469,7 +469,7 @@ class TestGraphOverridesE2E:
         }
 
         flow_fast = await Agent.from_config(config=config_fast, variables={})
-        state = await flow_fast.execute(ExecutionState(
+        state = await flow_fast.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -509,7 +509,7 @@ class TestGraphOverridesE2E:
             variables={}
         )
 
-        state = await flow_all.execute(ExecutionState(
+        state = await flow_all.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -542,7 +542,7 @@ class TestGraphOverridesE2E:
             variables={}
         )
 
-        state = await flow_redirect.execute(ExecutionState(
+        state = await flow_redirect.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -578,7 +578,7 @@ class TestMultipleNodesOverrideE2E:
             variables={}
         )
 
-        state = await flow_base.execute(ExecutionState(
+        state = await flow_base.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -608,7 +608,7 @@ class TestMultipleNodesOverrideE2E:
             variables={}
         )
 
-        state = await flow_override.execute(ExecutionState(
+        state = await flow_override.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -639,7 +639,7 @@ class TestMultipleNodesOverrideE2E:
             variables={}
         )
 
-        state = await flow_base.execute(ExecutionState(
+        state = await flow_base.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -667,7 +667,7 @@ class TestMultipleNodesOverrideE2E:
             variables={}
         )
 
-        state = await flow_with_middle.execute(ExecutionState(
+        state = await flow_with_middle.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",

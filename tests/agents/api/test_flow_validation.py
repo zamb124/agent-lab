@@ -165,7 +165,7 @@ class TestFlowValidationReferences:
     """Тесты валидации ссылок на сущности."""
 
     @pytest.mark.asyncio
-    async def test_validate_existing_node_id(self, client, app):
+    async def test_validate_existing_node_id(self, client, app, test_node_in_db):
         """Существующий node_id проходит валидацию."""
         response = await client.post(
             "/agents/api/v1/agents/validate",
@@ -173,7 +173,7 @@ class TestFlowValidationReferences:
                 "nodes": {
                     "main": {
                         "type": "react_node",
-                        "node_id": "docs_parser",
+                        "node_id": test_node_in_db,
                     }
                 },
                 "edges": [{"from": "main", "to": None}],
@@ -810,8 +810,8 @@ class TestFlowValidationComplexCases:
         assert "build_failed" in error_codes
 
     @pytest.mark.asyncio
-    async def test_validate_agent_as_tool_reference(self, client, app):
-        """Агент как tool (docs_parser как tool)."""
+    async def test_validate_agent_as_tool_reference(self, client, app, test_agent_for_tool):
+        """Агент как tool."""
         response = await client.post(
             "/agents/api/v1/agents/validate",
             json={
@@ -819,7 +819,7 @@ class TestFlowValidationComplexCases:
                     "main": {
                         "type": "react_node",
                         "prompt": "Test",
-                        "tools": ["docs_parser"],  # Это агент, не tool
+                        "tools": [test_agent_for_tool],  # Агент используется как tool
                     }
                 },
                 "edges": [{"from": "main", "to": None}],

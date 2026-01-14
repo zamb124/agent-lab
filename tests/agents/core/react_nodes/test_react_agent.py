@@ -105,7 +105,7 @@ class TestToolExecution:
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result = await calculator.execute({"expression": "2 + 2"}, state=state)
+        result = await calculator.run({"expression": "2 + 2"}, state=state)
         assert "4" in result
 
     @pytest.mark.asyncio
@@ -117,7 +117,7 @@ class TestToolExecution:
             user_id="test-user",
             session_id="test-agent:test-context",
         )
-        result = await calculator.execute({"expression": "sin(pi/2)"}, state=state)
+        result = await calculator.run({"expression": "sin(pi/2)"}, state=state)
         # sin(pi/2) = 1.0
         assert "1" in result
 
@@ -131,4 +131,4 @@ class TestToolExecution:
             session_id="test-agent:test-context",
         )
         with pytest.raises(Exception):
-            await calculator.execute({"expression": "invalid_func()"}, state=state)
+            await calculator.run({"expression": "invalid_func()"}, state=state)

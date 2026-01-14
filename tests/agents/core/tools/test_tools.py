@@ -37,7 +37,7 @@ class TestBaseTool:
             name = "tool_with_mock"
             description = "Test"
 
-            async def execute(self, args, state=None):
+            async def _run_impl(self, args, state=None):
                 return "real_called"
 
             async def execute_mock(self, args, state=None):
@@ -47,7 +47,7 @@ class TestBaseTool:
             name = "tool_without_mock"
             description = "Test"
 
-            async def execute(self, args, state=None):
+            async def _run_impl(self, args, state=None):
                 return "real_called"
 
         tool_with_mock = ToolWithMock()
@@ -73,7 +73,7 @@ class TestBaseTool:
             description = "Test"
             mock_response = {"status": "ok", "data": [1, 2, 3]}
 
-            async def execute(self, args, state=None):
+            async def _run_impl(self, args, state=None):
                 return "real"
 
         tool = TestTool()
@@ -95,7 +95,7 @@ class TestBaseTool:
             name = "api_tool"
             description = "API call"
 
-            async def execute(self, args, state=None):
+            async def _run_impl(self, args, state=None):
                 return {"status": "real"}
 
             async def execute_mock(self, args, state=None):

@@ -134,7 +134,7 @@ class TestFlowWithEdges:
         )
 
         from core.state import ExecutionState
-        result = await flow.execute(ExecutionState(
+        result = await flow.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -181,7 +181,7 @@ class TestFlowWithEdges:
         )
 
         from core.state import ExecutionState
-        result = await flow.execute(ExecutionState(
+        result = await flow.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -226,7 +226,7 @@ class TestFlowWithEdges:
         )
 
         from core.state import ExecutionState
-        result = await flow.execute(ExecutionState(
+        result = await flow.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -264,7 +264,7 @@ class TestFlowWithEdges:
         )
 
         from core.state import ExecutionState
-        result = await flow.execute(ExecutionState(
+        result = await flow.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -302,7 +302,7 @@ class TestFlowWithEdges:
         )
 
         from core.state import ExecutionState
-        result = await flow.execute(ExecutionState(
+        result = await flow.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -330,7 +330,7 @@ class TestFlowWithEdges:
 
         from core.state import ExecutionState
         with pytest.raises(ValueError, match="not found"):
-            await flow.execute(ExecutionState(
+            await flow.run(ExecutionState(
                 task_id="test-task",
                 context_id="test-context",
                 user_id="test-user",
@@ -362,7 +362,7 @@ class TestFlowWithEdges:
 
         from core.state import ExecutionState
         with pytest.raises(AgentInfiniteLoopError):
-            await flow.execute(ExecutionState(
+            await flow.run(ExecutionState(
                 task_id="test-task",
                 context_id="test-context",
                 user_id="test-user",
@@ -421,7 +421,7 @@ class TestFlowVariables:
         )
 
         from core.state import ExecutionState
-        await flow.execute(ExecutionState(
+        await flow.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -453,7 +453,7 @@ class TestFlowVariables:
         )
 
         from core.state import ExecutionState
-        result = await flow.execute(ExecutionState(
+        result = await flow.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -587,7 +587,7 @@ class TestFlowConditionEvaluation:
         )
 
         from core.state import ExecutionState
-        result = await flow.execute(ExecutionState(
+        result = await flow.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",
@@ -632,7 +632,7 @@ class TestFlowConditionEvaluation:
         )
 
         from core.state import ExecutionState
-        result = await flow.execute(ExecutionState(
+        result = await flow.run(ExecutionState(
             task_id="test-task",
             context_id="test-context",
             user_id="test-user",

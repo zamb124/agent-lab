@@ -96,7 +96,7 @@ class TestToolNodeInAgent:
             session_id="test-agent:test-context",
             content="test"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result.result == 30
         assert result.response == "Результат: 30"
@@ -137,7 +137,7 @@ class TestToolNodeInAgent:
             session_id="test-agent:test-context",
             user_name="Алексей"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["greeting"] == "Добро пожаловать в Platform Corp, Алексей!"
 
@@ -203,7 +203,7 @@ class TestToolNodeInAgent:
             session_id="test-agent:test-context",
             content="2 + 3 ="
         )
-        result1 = await flow.execute(state1)
+        result1 = await flow.run(state1)
         assert result1["calc_result"] == 5
 
         # Тест без вычисления
@@ -214,7 +214,7 @@ class TestToolNodeInAgent:
             session_id="test-agent:test-context",
             content="просто текст"
         )
-        result2 = await flow.execute(state2)
+        result2 = await flow.run(state2)
         assert result2["calc_result"] == "N/A"
 
 
@@ -276,7 +276,7 @@ class TestToolNodeFromConfig:
 
         flow = await Agent.from_config(agent_config)
         state = make_state(content="start")
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["process"] == 50
         assert result["response"] == "Processed: 50"
@@ -314,14 +314,14 @@ class TestToolNodeWithSkillVariables:
         )
 
         state = make_state(entity_id="12345")
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["formatted_id"] == "ORDER-12345"
 
         # Теперь с другими переменными (как будто другой skill)
         flow.variables = {"prefix": "TICKET-"}
         state2 = make_state(entity_id="67890")
-        result2 = await flow.execute(state2)
+        result2 = await flow.run(state2)
 
         assert result2["formatted_id"] == "TICKET-67890"
 
@@ -372,7 +372,7 @@ class TestToolNodeChaining:
         )
 
         state = make_state(input=25)
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["doubled"] == 50
         assert result["final"] == 150
@@ -489,7 +489,7 @@ class TestToolNodeDynamicDataAgent:
         )
 
         state = make_state(content="start")
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         # Проверяем каждый шаг
         assert result["base_value"] == 10, "init_tool должен установить base_value=10"
@@ -575,7 +575,7 @@ class TestToolNodeDynamicDataAgent:
         )
 
         state = make_state(content="start")
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["user"]["data"]["score"] == 100
         assert result["user"]["data"]["name"] == "Alice"
@@ -668,7 +668,7 @@ class TestToolNodeDynamicDataAgent:
         )
 
         state = make_state(raw_input="apple, banana, cherry")
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         # Проверяем весь pipeline
         assert result["extracted_data"]["count"] == 3
@@ -757,7 +757,7 @@ class TestToolNodeDynamicDataAgent:
         )
 
         state = make_state(content="start")
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["x_value"] == 7
         assert result["y_value"] == 8

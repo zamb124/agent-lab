@@ -234,7 +234,7 @@ export class ReactNodeModal extends BaseNodeModal {
             }
         }
         
-        return config;
+        return this._applyStateSettings(config);
     }
 
     _buildDefaultState() {
@@ -383,6 +383,8 @@ export class ReactNodeModal extends BaseNodeModal {
                             </div>
                         ` : ''}
                     </div>
+                    
+                    ${this.renderStateSettings()}
                 </div>
                 
                 <div class="form-main">

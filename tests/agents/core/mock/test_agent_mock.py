@@ -48,7 +48,7 @@ class TestNodeAsToolWrapperMock:
             }
         )
         
-        result = await wrapper.execute({"query": "test query"}, state)
+        result = await wrapper.run({"query": "test query"}, state)
         
         assert result == "Mock response from node"
 
@@ -74,7 +74,7 @@ class TestNodeAsToolWrapperMock:
             }
         )
         
-        result = await wrapper.execute({"query": "analyze something"}, state)
+        result = await wrapper.run({"query": "analyze something"}, state)
         
         assert result["result"] == "analysis complete"
         assert result["confidence"] == 0.95
@@ -99,7 +99,7 @@ class TestNodeAsToolWrapperMock:
         )
         
         # mock_llm установлен в conftest, нода выполнится с mock LLM
-        result = await wrapper.execute({"query": "test"}, state)
+        result = await wrapper.run({"query": "test"}, state)
         
         # Должен быть результат от реальной ноды (с mock LLM)
         assert result != "should_not_be_used"
@@ -123,7 +123,7 @@ class TestNodeAsToolWrapperMock:
         )
         
         # Нет mock для test_node, вызовется реальная нода
-        result = await wrapper.execute({"query": "test"}, state)
+        result = await wrapper.run({"query": "test"}, state)
         
         assert result != "mock for other"
 
@@ -145,7 +145,7 @@ class TestNodeAsToolWrapperMock:
             }
         )
         
-        result = await wrapper.execute({"query": "test"}, state)
+        result = await wrapper.run({"query": "test"}, state)
         
         assert result == ""
 
@@ -167,7 +167,7 @@ class TestNodeAsToolWrapperMock:
             }
         )
         
-        result = await wrapper.execute({"query": "test"}, state)
+        result = await wrapper.run({"query": "test"}, state)
         
         assert result == ["item1", "item2", "item3"]
 
@@ -200,7 +200,7 @@ class TestNodeAsToolWrapperMock:
             }
         )
         
-        result = await wrapper.execute({"query": "test"}, state)
+        result = await wrapper.run({"query": "test"}, state)
         
         assert result["response"] == "Main response"
         assert result["metadata"]["source"] == "database"
@@ -243,8 +243,8 @@ class TestNodeAsToolWrapperMock:
             }
         )
         
-        result1 = await wrapper1.execute({"query": "test"}, state)
-        result2 = await wrapper2.execute({"query": "test"}, state)
+        result1 = await wrapper1.run({"query": "test"}, state)
+        result2 = await wrapper2.run({"query": "test"}, state)
         
         assert result1 == "Response from node 1"
         assert result2 == "Response from node 2"
@@ -268,7 +268,7 @@ class TestNodeAsToolWrapperMock:
             existing_key="existing_value"
         )
         
-        await wrapper.execute({"query": "test"}, state)
+        await wrapper.run({"query": "test"}, state)
         
         # State не должен быть модифицирован (mock не вызывает ноду)
         assert state.existing_key == "existing_value"

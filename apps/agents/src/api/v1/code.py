@@ -1366,6 +1366,7 @@ async def execute_code(request: ExecuteRequest) -> ExecuteResponse:
         input_state_normalized.setdefault("reasoning_history", [])
         input_state_normalized.setdefault("breakpoints", {})
         input_state_normalized.setdefault("scheduled_tasks", [])
+        input_state_normalized.setdefault("prompt_history", [])
         # Опциональные поля которые ExecutionState.to_dict() включает
         input_state_normalized.setdefault("content", None)
         input_state_normalized.setdefault("response", None)

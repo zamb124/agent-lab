@@ -134,7 +134,7 @@ class TestAllFlowsExecution:
             content="Тестовый запрос",
             messages=[]
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         # Проверяем что flow завершился
         assert result is not None

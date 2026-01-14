@@ -1,0 +1,895 @@
+"""
+Интеграционные тесты для унифицированных контрактов нод.
+
+БЕЗ МОКОВ (кроме LLM согласно правилам проекта).
+
+Тестирует:
+- output_key: запись результата в state
+- save_to_messages: добавление результата в messages
+- message_field: выбор поля для записи в messages
+- diff стейта при save_to_messages без message_field
+- передача данных между всеми типами нод
+"""
+
+import pytest
+from apps.agents.src.agent import Agent
+from apps.agents.src.agent.nodes import (
+    FunctionNode,
+    ToolNode,
+    AgentNode,
+    create_node,
+)
+from apps.agents.src.models import Edge
+from apps.agents.src.tools import InlineTool
+from core.state import ExecutionState
+
+
+def make_state(**kwargs) -> ExecutionState:
+    """Создаёт ExecutionState с минимальными обязательными полями."""
+    defaults = {
+        "task_id": "test-task",
+        "context_id": "test-context",
+        "user_id": "test-user",
+        "session_id": "test-agent:test-context",
+        "messages": [],
+    }
+    defaults.update(kwargs)
+    return ExecutionState(**defaults)
+
+
+class TestOutputKey:
+    """Тесты output_key для разных типов нод."""
+
+    @pytest.mark.asyncio
+    async def test_function_node_default_output_key(self):
+        """FunctionNode без output_key пишет в поле с именем node_id."""
+        code = """
+def run(state):
+    state.response = "function_result"
+    return state
+"""
+        node = FunctionNode(node_id="my_function", code=code)
+        
+        state = make_state()
+        result = await node.run(state)
+        
+        # FunctionNode возвращает ExecutionState, мержит в текущий state
+        assert result.response == "function_result"
+
+    @pytest.mark.asyncio
+    async def test_function_node_custom_output_key(self):
+        """FunctionNode с custom output_key."""
+        code = """
+def run(state):
+    state.custom_field = "custom_value"
+    return state
+"""
+        node = FunctionNode(
+            node_id="my_function", 
+            code=code,
+            config={"output_key": "custom_result"}
+        )
+        
+        state = make_state()
+        result = await node.run(state)
+        
+        # FunctionNode модифицирует state напрямую
+        assert result.custom_field == "custom_value"
+
+    @pytest.mark.asyncio
+    async def test_tool_node_default_output_key(self):
+        """ToolNode по умолчанию пишет в поле с именем node_id."""
+        tool = InlineTool(
+            tool_id="calculator",
+            code="def execute(args, state):\n    return args['x'] * 2",
+        )
+        
+        node = ToolNode(
+            node_id="double_tool",
+            tool=tool,
+            input_mapping={"x": 10},
+        )
+        
+        state = make_state()
+        result = await node.run(state)
+        
+        # Результат записан в output_key (по умолчанию = node_id)
+        assert result.double_tool == 20
+
+    @pytest.mark.asyncio
+    async def test_tool_node_custom_output_key(self):
+        """ToolNode с custom output_key."""
+        tool = InlineTool(
+            tool_id="calculator",
+            code="def execute(args, state):\n    return args['x'] * 3",
+        )
+        
+        node = ToolNode(
+            node_id="triple_tool",
+            tool=tool,
+            input_mapping={"x": 10},
+            output_key="tripled_value",
+        )
+        
+        state = make_state()
+        result = await node.run(state)
+        
+        assert result.tripled_value == 30
+        assert not hasattr(result, "triple_tool") or result.triple_tool is None
+
+
+class TestSaveToMessages:
+    """Тесты save_to_messages."""
+
+    @pytest.mark.asyncio
+    async def test_function_node_save_to_messages_disabled(self):
+        """FunctionNode без save_to_messages не добавляет в messages."""
+        code = """
+def run(state):
+    state.result = "some_value"
+    return state
+"""
+        node = FunctionNode(
+            node_id="no_messages",
+            code=code,
+            config={"save_to_messages": False}
+        )
+        
+        state = make_state(messages=[])
+        result = await node.run(state)
+        
+        assert len(result.messages) == 0
+
+    @pytest.mark.asyncio
+    async def test_function_node_save_to_messages_with_diff(self):
+        """FunctionNode с save_to_messages добавляет diff стейта."""
+        code = """
+def run(state):
+    state.new_field = "new_value"
+    state.another_field = 123
+    return state
+"""
+        node = FunctionNode(
+            node_id="with_messages",
+            code=code,
+            config={"save_to_messages": True}
+        )
+        
+        state = make_state(messages=[])
+        result = await node.run(state)
+        
+        # Должен быть 1 message с diff стейта
+        assert len(result.messages) == 1
+        message = result.messages[0]
+        
+        # Message содержит diff (новые поля)
+        assert "new_field" in str(message) or "new_value" in str(message)
+
+    @pytest.mark.asyncio
+    async def test_tool_node_save_to_messages_disabled(self):
+        """ToolNode без save_to_messages не добавляет в messages."""
+        tool = InlineTool(
+            tool_id="calc",
+            code="def execute(args, state):\n    return 42",
+        )
+        
+        node = ToolNode(
+            node_id="no_msg_tool",
+            tool=tool,
+            input_mapping={},
+            config={"save_to_messages": False}
+        )
+        
+        state = make_state(messages=[])
+        result = await node.run(state)
+        
+        assert len(result.messages) == 0
+
+    @pytest.mark.asyncio
+    async def test_tool_node_save_to_messages_with_result(self):
+        """ToolNode с save_to_messages добавляет результат."""
+        tool = InlineTool(
+            tool_id="calc",
+            code="def execute(args, state):\n    return {'answer': 42, 'status': 'ok'}",
+        )
+        
+        node = ToolNode(
+            node_id="msg_tool",
+            tool=tool,
+            input_mapping={},
+            config={"save_to_messages": True}
+        )
+        
+        state = make_state(messages=[])
+        result = await node.run(state)
+        
+        assert len(result.messages) == 1
+
+
+class TestMessageField:
+    """Тесты message_field."""
+
+    @pytest.mark.asyncio
+    async def test_tool_node_message_field(self):
+        """ToolNode с message_field пишет конкретное поле."""
+        tool = InlineTool(
+            tool_id="calc",
+            code="def execute(args, state):\n    return {'answer': 42, 'debug': 'internal_info'}",
+        )
+        
+        node = ToolNode(
+            node_id="field_tool",
+            tool=tool,
+            input_mapping={},
+            config={
+                "save_to_messages": True,
+                "message_field": "answer"
+            }
+        )
+        
+        state = make_state(messages=[])
+        result = await node.run(state)
+        
+        assert len(result.messages) == 1
+        message = result.messages[0]
+        
+        # Должен содержать только answer, не debug
+        content = str(message.content) if hasattr(message, 'content') else str(message)
+        assert "42" in content
+        # debug не должен попасть в message
+        assert "internal_info" not in content
+
+    @pytest.mark.asyncio
+    async def test_function_node_message_field(self):
+        """FunctionNode с message_field."""
+        code = """
+def run(state):
+    state.result = "public_info"
+    state.internal = "private_info"
+    return state
+"""
+        node = FunctionNode(
+            node_id="field_func",
+            code=code,
+            config={
+                "save_to_messages": True,
+                "message_field": "result"
+            }
+        )
+        
+        state = make_state(messages=[])
+        result = await node.run(state)
+        
+        assert len(result.messages) == 1
+        message = result.messages[0]
+        content = str(message.content) if hasattr(message, 'content') else str(message)
+        assert "public_info" in content
+
+
+class TestStateDiff:
+    """Тесты diff стейта при save_to_messages."""
+
+    @pytest.mark.asyncio
+    async def test_diff_only_new_fields(self):
+        """Diff содержит только новые поля."""
+        code = """
+def run(state):
+    state.new_field1 = "value1"
+    state.new_field2 = "value2"
+    return state
+"""
+        node = FunctionNode(
+            node_id="diff_test",
+            code=code,
+            config={"save_to_messages": True}
+        )
+        
+        state = make_state(
+            messages=[],
+            existing_field="should_not_appear"
+        )
+        result = await node.run(state)
+        
+        assert len(result.messages) == 1
+        message = result.messages[0]
+        content = str(message.content) if hasattr(message, 'content') else str(message)
+        
+        # Новые поля должны быть в diff
+        assert "new_field1" in content or "value1" in content
+        # Существующие поля не должны быть в diff
+        assert "existing_field" not in content
+
+    @pytest.mark.asyncio
+    async def test_diff_changed_fields(self):
+        """Diff содержит измененные поля."""
+        code = """
+def run(state):
+    state.mutable_field = "changed_value"
+    return state
+"""
+        node = FunctionNode(
+            node_id="change_test",
+            code=code,
+            config={"save_to_messages": True}
+        )
+        
+        state = make_state(
+            messages=[],
+            mutable_field="original_value"
+        )
+        result = await node.run(state)
+        
+        assert len(result.messages) == 1
+        message = result.messages[0]
+        content = str(message.content) if hasattr(message, 'content') else str(message)
+        
+        # Измененное значение должно быть в diff
+        assert "changed_value" in content
+
+
+class TestAllNodeTypesDataFlow:
+    """Тесты передачи данных между всеми типами нод."""
+
+    @pytest.mark.asyncio
+    async def test_function_to_tool_data_flow(self):
+        """FunctionNode -> ToolNode: передача данных."""
+        func_code = """
+def run(state):
+    state.calculated_value = 100
+    state.factor = 5
+    return state
+"""
+        func_node = FunctionNode(node_id="prepare", code=func_code)
+        
+        tool = InlineTool(
+            tool_id="multiply",
+            code="def execute(args, state):\n    return args['value'] * args['multiplier']",
+        )
+        tool_node = ToolNode(
+            node_id="multiply",
+            tool=tool,
+            input_mapping={
+                "value": "@state:calculated_value",
+                "multiplier": "@state:factor"
+            },
+            output_key="result"
+        )
+        
+        flow = Agent(
+            agent_id="func_to_tool",
+            name="Function to Tool Agent",
+            entry="prepare",
+            nodes={"prepare": func_node, "multiply": tool_node},
+            edges=[
+                Edge(from_node="prepare", to_node="multiply"),
+                Edge(from_node="multiply", to_node=None),
+            ],
+            variables={},
+        )
+        
+        state = make_state()
+        result = await flow.run(state)
+        
+        assert result.calculated_value == 100
+        assert result.factor == 5
+        assert result.result == 500
+
+    @pytest.mark.asyncio
+    async def test_tool_to_function_data_flow(self):
+        """ToolNode -> FunctionNode: передача данных."""
+        tool = InlineTool(
+            tool_id="generate",
+            code="def execute(args, state):\n    return {'id': 12345, 'name': 'Test Item'}",
+        )
+        tool_node = ToolNode(
+            node_id="generate",
+            tool=tool,
+            input_mapping={},
+            output_key="generated_item"
+        )
+        
+        func_code = """
+def run(state):
+    item = state.generated_item
+    state.formatted = f"Item #{item['id']}: {item['name']}"
+    return state
+"""
+        func_node = FunctionNode(node_id="format", code=func_code)
+        
+        flow = Agent(
+            agent_id="tool_to_func",
+            name="Tool to Function Agent",
+            entry="generate",
+            nodes={"generate": tool_node, "format": func_node},
+            edges=[
+                Edge(from_node="generate", to_node="format"),
+                Edge(from_node="format", to_node=None),
+            ],
+            variables={},
+        )
+        
+        state = make_state()
+        result = await flow.run(state)
+        
+        assert result.generated_item == {'id': 12345, 'name': 'Test Item'}
+        assert result.formatted == "Item #12345: Test Item"
+
+    @pytest.mark.asyncio
+    async def test_tool_chain_data_flow(self):
+        """Цепочка ToolNode: каждый читает результат предыдущего."""
+        tool1 = InlineTool(
+            tool_id="step1",
+            code="def execute(args, state):\n    return args['x'] + 10",
+        )
+        tool2 = InlineTool(
+            tool_id="step2",
+            code="def execute(args, state):\n    return args['x'] * 2",
+        )
+        tool3 = InlineTool(
+            tool_id="step3",
+            code="def execute(args, state):\n    return args['x'] - 5",
+        )
+        
+        node1 = ToolNode(
+            node_id="add_ten",
+            tool=tool1,
+            input_mapping={"x": "@state:initial"},
+            output_key="after_add"
+        )
+        node2 = ToolNode(
+            node_id="double",
+            tool=tool2,
+            input_mapping={"x": "@state:after_add"},
+            output_key="after_double"
+        )
+        node3 = ToolNode(
+            node_id="subtract",
+            tool=tool3,
+            input_mapping={"x": "@state:after_double"},
+            output_key="final"
+        )
+        
+        flow = Agent(
+            agent_id="tool_chain",
+            name="Tool Chain Agent",
+            entry="add_ten",
+            nodes={
+                "add_ten": node1,
+                "double": node2,
+                "subtract": node3,
+            },
+            edges=[
+                Edge(from_node="add_ten", to_node="double"),
+                Edge(from_node="double", to_node="subtract"),
+                Edge(from_node="subtract", to_node=None),
+            ],
+            variables={},
+        )
+        
+        # initial=5 -> +10=15 -> *2=30 -> -5=25
+        state = make_state(initial=5)
+        result = await flow.run(state)
+        
+        assert result.after_add == 15
+        assert result.after_double == 30
+        assert result.final == 25
+
+    @pytest.mark.asyncio
+    async def test_function_chain_data_flow(self):
+        """Цепочка FunctionNode: каждый модифицирует state."""
+        code1 = """
+def run(state):
+    state.step1_done = True
+    state.counter = 1
+    return state
+"""
+        code2 = """
+def run(state):
+    state.step2_done = True
+    state.counter = state.counter + 1
+    return state
+"""
+        code3 = """
+def run(state):
+    state.step3_done = True
+    state.counter = state.counter + 1
+    state.summary = f"Steps completed: {state.counter}"
+    return state
+"""
+        node1 = FunctionNode(node_id="step1", code=code1)
+        node2 = FunctionNode(node_id="step2", code=code2)
+        node3 = FunctionNode(node_id="step3", code=code3)
+        
+        flow = Agent(
+            agent_id="func_chain",
+            name="Function Chain Agent",
+            entry="step1",
+            nodes={"step1": node1, "step2": node2, "step3": node3},
+            edges=[
+                Edge(from_node="step1", to_node="step2"),
+                Edge(from_node="step2", to_node="step3"),
+                Edge(from_node="step3", to_node=None),
+            ],
+            variables={},
+        )
+        
+        state = make_state()
+        result = await flow.run(state)
+        
+        assert result.step1_done is True
+        assert result.step2_done is True
+        assert result.step3_done is True
+        assert result.counter == 3
+        assert result.summary == "Steps completed: 3"
+
+    @pytest.mark.asyncio
+    async def test_mixed_nodes_with_messages(self):
+        """Смешанная цепочка с save_to_messages."""
+        func_code = """
+def run(state):
+    state.user_data = {"name": "Alice", "score": 100}
+    return state
+"""
+        func_node = FunctionNode(
+            node_id="init",
+            code=func_code,
+            config={"save_to_messages": True}
+        )
+        
+        tool = InlineTool(
+            tool_id="bonus",
+            code="def execute(args, state):\n    return args['score'] + args['bonus']",
+        )
+        tool_node = ToolNode(
+            node_id="add_bonus",
+            tool=tool,
+            input_mapping={
+                "score": "@state:user_data.score",
+                "bonus": "@var:bonus_amount"
+            },
+            output_key="final_score",
+            config={"save_to_messages": True}
+        )
+        
+        flow = Agent(
+            agent_id="mixed_messages",
+            name="Mixed with Messages Agent",
+            entry="init",
+            nodes={"init": func_node, "add_bonus": tool_node},
+            edges=[
+                Edge(from_node="init", to_node="add_bonus"),
+                Edge(from_node="add_bonus", to_node=None),
+            ],
+            variables={"bonus_amount": 50},
+        )
+        
+        state = make_state(messages=[])
+        result = await flow.run(state)
+        
+        assert result.user_data == {"name": "Alice", "score": 100}
+        assert result.final_score == 150
+        # Оба узла должны добавить messages
+        assert len(result.messages) == 2
+
+
+class TestFromConfig:
+    """Тесты создания нод из конфигурации."""
+
+    @pytest.mark.asyncio
+    async def test_flow_from_config_with_output_key(self):
+        """Agent из конфига с output_key."""
+        agent_config = {
+            "id": "config_test",
+            "name": "Config Test Agent",
+            "entry": "step1",
+            "nodes": {
+                "step1": {
+                    "type": "tool",
+                    "code": "def execute(args, state):\n    return 'step1_result'",
+                    "output_key": "first_result",
+                },
+                "step2": {
+                    "type": "function",
+                    "code": """
+def run(state):
+    state.combined = f"Got: {state.first_result}"
+    return state
+""",
+                },
+            },
+            "edges": [
+                {"from": "step1", "to": "step2"},
+                {"from": "step2", "to": None},
+            ],
+        }
+        
+        flow = await Agent.from_config(agent_config)
+        state = make_state()
+        result = await flow.run(state)
+        
+        assert result.first_result == "step1_result"
+        assert result.combined == "Got: step1_result"
+
+    @pytest.mark.asyncio
+    async def test_flow_from_config_with_save_to_messages(self):
+        """Agent из конфига с save_to_messages."""
+        agent_config = {
+            "id": "messages_test",
+            "name": "Messages Test Agent",
+            "entry": "process",
+            "nodes": {
+                "process": {
+                    "type": "tool",
+                    "code": "def execute(args, state):\n    return {'status': 'ok', 'data': 123}",
+                    "output_key": "result",
+                    "save_to_messages": True,
+                },
+            },
+            "edges": [
+                {"from": "process", "to": None},
+            ],
+        }
+        
+        flow = await Agent.from_config(agent_config)
+        state = make_state(messages=[])
+        result = await flow.run(state)
+        
+        assert result.result == {"status": "ok", "data": 123}
+        assert len(result.messages) == 1
+
+    @pytest.mark.asyncio
+    async def test_flow_from_config_with_message_field(self):
+        """Agent из конфига с message_field."""
+        agent_config = {
+            "id": "field_test",
+            "name": "Field Test Agent",
+            "entry": "process",
+            "nodes": {
+                "process": {
+                    "type": "tool",
+                    "code": "def execute(args, state):\n    return {'public': 'show this', 'private': 'hide this'}",
+                    "output_key": "result",
+                    "save_to_messages": True,
+                    "message_field": "public",
+                },
+            },
+            "edges": [
+                {"from": "process", "to": None},
+            ],
+        }
+        
+        flow = await Agent.from_config(agent_config)
+        state = make_state(messages=[])
+        result = await flow.run(state)
+        
+        assert len(result.messages) == 1
+        message = result.messages[0]
+        content = str(message.content) if hasattr(message, 'content') else str(message)
+        assert "show this" in content
+        assert "hide this" not in content
+
+
+class TestComplexPipeline:
+    """Тесты комплексного pipeline со всеми типами нод."""
+
+    @pytest.mark.asyncio
+    async def test_etl_pipeline(self):
+        """
+        ETL Pipeline: Extract -> Transform -> Load.
+        
+        1. Extract (ToolNode): извлекает данные
+        2. Transform (FunctionNode): трансформирует
+        3. Load (ToolNode): сохраняет с save_to_messages
+        """
+        extract_tool = InlineTool(
+            tool_id="extract",
+            code="""
+def execute(args, state):
+    return {
+        'items': [
+            {'id': 1, 'name': 'item1', 'price': 100},
+            {'id': 2, 'name': 'item2', 'price': 200},
+        ],
+        'total': 2
+    }
+""",
+        )
+        
+        load_tool = InlineTool(
+            tool_id="load",
+            code="""
+def execute(args, state):
+    return {
+        'saved': len(args['items']),
+        'total_value': args['total_price']
+    }
+""",
+        )
+        
+        transform_code = """
+def run(state):
+    items = state.extracted['items']
+    # Увеличиваем цены на 10%
+    transformed = [
+        {**item, 'price': int(item['price'] * 1.1)}
+        for item in items
+    ]
+    state.transformed_items = transformed
+    state.total_price = sum(item['price'] for item in transformed)
+    return state
+"""
+        
+        extract_node = ToolNode(
+            node_id="extract",
+            tool=extract_tool,
+            input_mapping={},
+            output_key="extracted"
+        )
+        
+        transform_node = FunctionNode(
+            node_id="transform",
+            code=transform_code,
+            config={"save_to_messages": True}
+        )
+        
+        load_node = ToolNode(
+            node_id="load",
+            tool=load_tool,
+            input_mapping={
+                "items": "@state:transformed_items",
+                "total_price": "@state:total_price"
+            },
+            output_key="load_result",
+            config={"save_to_messages": True, "message_field": "saved"}
+        )
+        
+        flow = Agent(
+            agent_id="etl_pipeline",
+            name="ETL Pipeline Agent",
+            entry="extract",
+            nodes={
+                "extract": extract_node,
+                "transform": transform_node,
+                "load": load_node,
+            },
+            edges=[
+                Edge(from_node="extract", to_node="transform"),
+                Edge(from_node="transform", to_node="load"),
+                Edge(from_node="load", to_node=None),
+            ],
+            variables={},
+        )
+        
+        state = make_state(messages=[])
+        result = await flow.run(state)
+        
+        # Extract results
+        assert result.extracted['total'] == 2
+        
+        # Transform results (10% increase: 100->110, 200->220)
+        assert len(result.transformed_items) == 2
+        assert result.transformed_items[0]['price'] == 110
+        assert result.transformed_items[1]['price'] == 220
+        assert result.total_price == 330
+        
+        # Load results
+        assert result.load_result['saved'] == 2
+        assert result.load_result['total_value'] == 330
+        
+        # Messages (transform и load)
+        assert len(result.messages) == 2
+
+    @pytest.mark.asyncio
+    async def test_conditional_pipeline_with_all_features(self):
+        """
+        Условный pipeline со всеми фичами.
+        
+        1. Classify (FunctionNode): определяет тип запроса
+        2. Route (conditional): к process_a или process_b
+        3. Process (ToolNode): обрабатывает с save_to_messages
+        4. Finalize (FunctionNode): финализирует
+        """
+        classify_code = """
+def run(state):
+    content = state.content or ""
+    state.is_urgent = "urgent" in content.lower()
+    state.request_type = "urgent" if state.is_urgent else "normal"
+    return state
+"""
+        
+        urgent_tool = InlineTool(
+            tool_id="urgent_handler",
+            code="""
+def execute(args, state):
+    return {
+        'priority': 'HIGH',
+        'handler': 'urgent_team',
+        'message': f'Urgent: {args["content"]}'
+    }
+""",
+        )
+        
+        normal_tool = InlineTool(
+            tool_id="normal_handler",
+            code="""
+def execute(args, state):
+    return {
+        'priority': 'NORMAL',
+        'handler': 'standard_queue',
+        'message': f'Request: {args["content"]}'
+    }
+""",
+        )
+        
+        finalize_code = """
+def run(state):
+    result = state.process_result
+    state.response = f"Processed by {result['handler']}: {result['message']}"
+    return state
+"""
+        
+        classify_node = FunctionNode(
+            node_id="classify",
+            code=classify_code,
+            config={"save_to_messages": True}
+        )
+        
+        urgent_node = ToolNode(
+            node_id="urgent_process",
+            tool=urgent_tool,
+            input_mapping={"content": "@state:content"},
+            output_key="process_result",
+            config={"save_to_messages": True, "message_field": "priority"}
+        )
+        
+        normal_node = ToolNode(
+            node_id="normal_process",
+            tool=normal_tool,
+            input_mapping={"content": "@state:content"},
+            output_key="process_result",
+            config={"save_to_messages": True, "message_field": "priority"}
+        )
+        
+        finalize_node = FunctionNode(
+            node_id="finalize",
+            code=finalize_code,
+            config={"save_to_messages": True, "message_field": "response"}
+        )
+        
+        flow = Agent(
+            agent_id="conditional_pipeline",
+            name="Conditional Pipeline Agent",
+            entry="classify",
+            nodes={
+                "classify": classify_node,
+                "urgent_process": urgent_node,
+                "normal_process": normal_node,
+                "finalize": finalize_node,
+            },
+            edges=[
+                Edge(from_node="classify", to_node="urgent_process", condition="is_urgent == true"),
+                Edge(from_node="classify", to_node="normal_process", condition="is_urgent == false"),
+                Edge(from_node="urgent_process", to_node="finalize"),
+                Edge(from_node="normal_process", to_node="finalize"),
+                Edge(from_node="finalize", to_node=None),
+            ],
+            variables={},
+        )
+        
+        # Тест urgent
+        state1 = make_state(content="URGENT: Fix critical bug", messages=[])
+        result1 = await flow.run(state1)
+        
+        assert result1.is_urgent is True
+        assert result1.request_type == "urgent"
+        assert result1.process_result['priority'] == "HIGH"
+        assert "urgent_team" in result1.response
+        
+        # Тест normal
+        state2 = make_state(content="Please help with configuration", messages=[])
+        result2 = await flow.run(state2)
+        
+        assert result2.is_urgent is False
+        assert result2.request_type == "normal"
+        assert result2.process_result['priority'] == "NORMAL"
+        assert "standard_queue" in result2.response

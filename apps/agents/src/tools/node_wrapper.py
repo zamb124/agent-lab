@@ -114,7 +114,7 @@ class NodeAsToolWrapper(BaseTool):
 
         return self._node
 
-    async def execute(self, args: Dict[str, Any], state: ExecutionState) -> Any:
+    async def _run_impl(self, args: Dict[str, Any], state: ExecutionState) -> Any:
         """
         Вызывает субноду.
 
@@ -139,7 +139,7 @@ class NodeAsToolWrapper(BaseTool):
         query = args.get("query", "")
         node = await self._get_node()
 
-        logger.info(f"[subnode:{node_id}] ENTER execute, type={node_type}, query={query[:50]}...")
+        logger.info(f"[subnode:{node_id}] run: type={node_type}, query={query[:50]}...")
 
         if node_type == NodeType.REACT_NODE.value:
             return await self._execute_react_node(node, node_id, query, state)
@@ -166,12 +166,12 @@ class NodeAsToolWrapper(BaseTool):
         )
 
         try:
-            result = await node.ainvoke({"content": query}, nested_state)
+            result = await node.run(nested_state)
 
             InterruptManager.save_nested_state(state, node_id, nested_state)
             
-            response = result.get("response", str(result))
-            logger.info(f"[subnode:{node_id}] Завершил: {response[:100]}...")
+            response = result.response if isinstance(result, ExecutionState) else str(result)
+            logger.info(f"[subnode:{node_id}] Завершил: {response[:100] if response else ''}...")
             return response
 
         except AgentInterrupt as e:

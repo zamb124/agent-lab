@@ -30,3 +30,4 @@ docs/video/*.mov
 /logs/app.log.5
 /logs/
 /tmp/
+/scripts/logs/agents.log

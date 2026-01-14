@@ -1024,13 +1024,21 @@ class SafeEval:
         """
         Выполняет код ноды (ищет функцию run).
         
+        Контракт: функция ВСЕГДА должна возвращать ExecutionState.
+        Поддержка dict для обратной совместимости со старым кодом.
+        
         Args:
             code: Код функции
             state: ExecutionState для передачи
             
         Returns:
-            ExecutionState (если функция вернула dict - конвертируем)
+            ExecutionState
+            
+        Raises:
+            TypeError: Если функция вернула не ExecutionState
         """
+        from core.state import ExecutionState
+        
         func = self._compile(code, "run", auto_find=True)
         
         if inspect.iscoroutinefunction(func):
@@ -1038,11 +1046,16 @@ class SafeEval:
         else:
             result = func(state)
         
+        if isinstance(result, ExecutionState):
+            return result
+        
         if isinstance(result, dict):
-            from core.state import ExecutionState
             return ExecutionState.model_validate(result)
         
-        return result
+        raise TypeError(
+            f"Function must return ExecutionState, got {type(result).__name__}. "
+            "Modify state and return it: return state"
+        )
     
     async def execute_tool(self, code: str, args: Dict[str, Any], state: Optional['ExecutionState'] = None) -> Any:
         """
@@ -1077,9 +1090,8 @@ class SafeEval:
                 break
         
         if tool_class:
-            # Создаём инстанс и вызываем execute
             tool_instance = tool_class()
-            return await tool_instance.execute(args, state)
+            return await tool_instance.run(args, state)
         
         # Ищем функцию execute
         func = None

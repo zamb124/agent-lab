@@ -121,7 +121,7 @@ class TestInlineReactAgentWithTools:
             session_id="test-agent:test-context",
             content="Поприветствуй Тест"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Проверяем что агент ответил
         assert "response" in result
@@ -184,7 +184,7 @@ class TestInlineReactAgentWithTools:
             session_id="test-agent:test-context",
             content="Мне нужна помощь"
         )
-        result = await agent.execute(state)
+        result = await agent.run(state)
         
         assert "response" in result
         
@@ -240,7 +240,7 @@ class TestInlineReactAgentWithTools:
             session_id="test-agent:test-context",
             content="Сколько 3+5?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert "8" in result["response"]
@@ -316,7 +316,7 @@ class TestInlineReactAgentWithTools:
             session_id="test-agent:test-context",
             content="Поприветствуй User"
         )
-        result = await agent.execute(state)
+        result = await agent.run(state)
         
         assert "response" in result
         
@@ -388,7 +388,7 @@ async def execute(args: dict, state: dict = None):
             session_id="test-agent:test-context",
             content="Сложи 10 и 20"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert "30" in result["response"]
@@ -445,7 +445,7 @@ async def execute(args: dict, state: dict = None):
             content="Поприветствуй",
             user_name="Виктор"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         
@@ -502,7 +502,7 @@ async def execute(args: dict, state: dict = None):
             session_id="test-agent:test-context",
             content="Выполни шаги"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         

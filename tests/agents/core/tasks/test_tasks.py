@@ -6,7 +6,7 @@
 
 import pytest
 
-from apps.broker.broker import broker, get_broker
+from apps.broker.broker import broker
 from apps.agents.src.tasks.agent_tasks import process_agent_task
 from apps.agents.src.tasks.eval_task import execute_inline_code
 from apps.agents.src.tasks.tool_tasks import execute_tool
@@ -20,10 +20,6 @@ class TestBroker:
         from taskiq_redis import RedisStreamBroker
 
         assert isinstance(broker, RedisStreamBroker)
-
-    def test_get_broker_returns_same_instance(self):
-        """get_broker возвращает тот же broker."""
-        assert get_broker() is broker
 
 
 class TestProcessAgentTask:

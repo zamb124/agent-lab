@@ -17,7 +17,7 @@ class SimpleTool(BaseTool):
     name = "simple_tool"
     description = "Simple test tool"
     
-    async def execute(self, args: Dict[str, Any], state: Optional[Dict[str, Any]] = None) -> Any:
+    async def _run_impl(self, args: Dict[str, Any], state: Optional[Dict[str, Any]] = None) -> Any:
         return f"real_result_{args.get('input', 'default')}"
 
 
@@ -27,7 +27,7 @@ class ToolWithCustomMock(BaseTool):
     name = "tool_with_custom_mock"
     description = "Tool with custom mock"
     
-    async def execute(self, args: Dict[str, Any], state: Optional[Dict[str, Any]] = None) -> Any:
+    async def _run_impl(self, args: Dict[str, Any], state: Optional[Dict[str, Any]] = None) -> Any:
         return "real_result"
     
     async def execute_mock(self, args: Dict[str, Any], state: Optional[Dict[str, Any]] = None) -> Any:
@@ -344,7 +344,7 @@ class TestToolMockWithPermissions:
             description = "Protected tool"
             permission = "admin"
             
-            async def execute(self, args, state=None):
+            async def _run_impl(self, args, state=None):
                 return "real_result"
         
         tool = ProtectedTool()
@@ -381,7 +381,7 @@ class TestToolMockWithPermissions:
             description = "Protected tool"
             permission = "admin"
             
-            async def execute(self, args, state=None):
+            async def _run_impl(self, args, state=None):
                 return "real_result"
         
         tool = ProtectedTool()

@@ -12,16 +12,18 @@ from apps.agents.src.agent.nodes import (
     AgentNode,
     RemoteAgentNode,
     ExternalAPINode,
+    ToolNode,
+    FunctionNode,
 )
 from apps.agents.src.models.external_api import ParameterSchema
 from core.state import ExecutionState
 
 
-class TestReactNodeInputMapping:
-    """Тесты для ReactNode._build_agent_state с input_mapping."""
+class TestBaseNodeInputMapping:
+    """Тесты для BaseNode._resolve_inputs и _prepare_state."""
 
-    def test_no_mapping_returns_original_state(self):
-        """Без input_mapping возвращается исходный state"""
+    def test_no_mapping_returns_empty_dict(self):
+        """Без input_mapping возвращается пустой dict"""
         node = ReactNode(
             node_id="test_agent",
             prompt="Test prompt",
@@ -37,9 +39,9 @@ class TestReactNodeInputMapping:
             variables={"x": 1}
         )
         
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
         
-        assert result.model_dump() == state.model_dump()  # Копия с тем же содержимым
+        assert inputs == {}
 
     def test_simple_state_mapping(self):
         """Простой маппинг @state:field"""
@@ -58,17 +60,16 @@ class TestReactNodeInputMapping:
             session_id="test-agent:test-context",
             user_query="Привет!",
             user_name="Иван",
-            other_field="should_not_be_in_result",
+            other_field="should_not_be_in_inputs",
             variables={"company": "ACME"}
         )
         
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
         
-        assert result.content == "Привет!"
-        assert result.name == "Иван"
-        assert result.variables == {"company": "ACME"}
-        assert not hasattr(result, "other_field")
-        assert not hasattr(result, "user_query")
+        assert inputs["content"] == "Привет!"
+        assert inputs["name"] == "Иван"
+        assert "other_field" not in inputs
+        assert "user_query" not in inputs
 
     def test_nested_state_mapping(self):
         """Маппинг с вложенными путями @state:user.profile.name"""
@@ -92,10 +93,10 @@ class TestReactNodeInputMapping:
             variables={}
         )
         
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
         
-        assert result.user_name == "Иван"
-        assert result.user_city == "Москва"
+        assert inputs["user_name"] == "Иван"
+        assert inputs["user_city"] == "Москва"
 
     def test_var_mapping(self):
         """Маппинг с @var: для переменных"""
@@ -120,12 +121,11 @@ class TestReactNodeInputMapping:
             }
         )
         
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
         
-        assert result.content == "Hello!"
-        assert result.company == "ACME Corp"
-        assert result.api_key == "secret123"
-        assert result.variables == state.variables
+        assert inputs["content"] == "Hello!"
+        assert inputs["company"] == "ACME Corp"
+        assert inputs["api_key"] == "secret123"
 
     def test_constant_values(self):
         """Маппинг с константами"""
@@ -148,12 +148,12 @@ class TestReactNodeInputMapping:
             variables={}
         )
         
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
         
-        assert result.content == "Hello!"
-        assert result.fixed_value == "constant"
-        assert result.number == 42
-        assert result.flag is True
+        assert inputs["content"] == "Hello!"
+        assert inputs["fixed_value"] == "constant"
+        assert inputs["number"] == 42
+        assert inputs["flag"] is True
 
     def test_missing_path_returns_none(self):
         """Отсутствующий путь -> None"""
@@ -174,13 +174,17 @@ class TestReactNodeInputMapping:
             variables={}
         )
         
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
         
-        assert result.existing == "value"
-        assert result.missing is None
+        assert inputs["existing"] == "value"
+        assert inputs["missing"] is None
 
-    def test_copies_all_service_fields(self):
-        """Копируются все служебные поля"""
+
+class TestPrepareState:
+    """Тесты для BaseNode._prepare_state."""
+
+    def test_prepare_state_applies_inputs(self):
+        """_prepare_state применяет inputs к state"""
         node = ReactNode(
             node_id="test_agent",
             prompt="Test prompt",
@@ -196,7 +200,8 @@ class TestReactNodeInputMapping:
             mock={"enabled": True}
         )
         
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
+        result = node._prepare_state(state, inputs)
         
         assert result.content == "Hello!"
         assert result.variables == {"x": 1}
@@ -206,10 +211,10 @@ class TestReactNodeInputMapping:
 
 
 class TestAgentNodeInputMapping:
-    """Тесты для AgentNode._build_agent_state с input_mapping."""
+    """Тесты для AgentNode с input_mapping."""
 
-    def test_no_mapping_returns_copy(self):
-        """Без input_mapping возвращается копия state"""
+    def test_no_mapping_returns_empty_inputs(self):
+        """Без input_mapping inputs пустой"""
         node = AgentNode(
             node_id="test_subflow",
             agent_id="inner_flow",
@@ -224,10 +229,11 @@ class TestAgentNodeInputMapping:
             variables={"x": 1}
         )
         
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
+        result = node._prepare_state(state, inputs)
         
         assert result.model_dump() == state.model_dump()
-        assert result is not state  # Копия, не тот же объект
+        assert result is not state
 
     def test_simple_mapping(self):
         """Простой маппинг"""
@@ -250,12 +256,12 @@ class TestAgentNodeInputMapping:
             variables={"company": "ACME"}
         )
         
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
+        result = node._prepare_state(state, inputs)
         
         assert result.content == "Привет!"
         assert result.context == {"key": "value"}
         assert result.variables == {"company": "ACME"}
-        assert not hasattr(result, "other")
 
     def test_nested_paths(self):
         """Вложенные пути"""
@@ -277,7 +283,8 @@ class TestAgentNodeInputMapping:
             variables={}
         )
         
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
+        result = node._prepare_state(state, inputs)
         
         assert result.name == "Иван"
         assert result.city == "Москва"
@@ -303,17 +310,18 @@ class TestAgentNodeInputMapping:
             }
         )
         
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
+        result = node._prepare_state(state, inputs)
         
         assert result.content == "Hello!"
         assert result.api_url == "https://api.example.com"
 
 
 class TestRemoteAgentNodeInputMapping:
-    """Тесты для RemoteAgentNode._resolve_input с новым и старым форматом."""
+    """Тесты для RemoteAgentNode с input_mapping."""
 
-    def test_new_format_simple(self):
-        """Новый формат: {"content": "@state:field"}"""
+    def test_input_mapping_simple(self):
+        """input_mapping: {"content": "@state:field"}"""
         node = RemoteAgentNode(
             node_id="test_remote",
             url="http://agent:8080",
@@ -328,12 +336,12 @@ class TestRemoteAgentNodeInputMapping:
             variables={}
         )
         
-        result = node._resolve_input(state)
+        inputs = node._resolve_inputs(state)
         
-        assert result == "Привет, агент!"
+        assert inputs["content"] == "Привет, агент!"
 
-    def test_new_format_nested_path(self):
-        """Новый формат с вложенным путём"""
+    def test_input_mapping_nested_path(self):
+        """input_mapping с вложенным путём"""
         node = RemoteAgentNode(
             node_id="test_remote",
             url="http://agent:8080",
@@ -348,12 +356,12 @@ class TestRemoteAgentNodeInputMapping:
             variables={}
         )
         
-        result = node._resolve_input(state)
+        inputs = node._resolve_inputs(state)
         
-        assert result == "Nested query"
+        assert inputs["content"] == "Nested query"
 
-    def test_new_format_with_var(self):
-        """Новый формат с @var:"""
+    def test_input_mapping_with_var(self):
+        """input_mapping с @var:"""
         node = RemoteAgentNode(
             node_id="test_remote",
             url="http://agent:8080",
@@ -367,104 +375,15 @@ class TestRemoteAgentNodeInputMapping:
             variables={"default_prompt": "Default message"}
         )
         
-        result = node._resolve_input(state)
+        inputs = node._resolve_inputs(state)
         
-        assert result == "Default message"
+        assert inputs["content"] == "Default message"
 
-    def test_new_format_non_string_serialized(self):
-        """Новый формат: не-строка сериализуется в JSON"""
-        node = RemoteAgentNode(
-            node_id="test_remote",
-            url="http://agent:8080",
-            input_mapping={"content": "@state:data"}
-        )
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            data={"key": "value", "number": 42},
-            variables={}
-        )
-        
-        result = node._resolve_input(state)
-        
-        assert '"key"' in result
-        assert '"value"' in result
-        assert "42" in result
-
-    def test_legacy_format_content(self):
-        """Старый формат: {"type": "content"}"""
-        node = RemoteAgentNode(
-            node_id="test_remote",
-            url="http://agent:8080",
-            input_mapping={"type": "content"}
-        )
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            content="From content field",
-            variables={}
-        )
-        
-        result = node._resolve_input(state)
-        
-        assert result == "From content field"
-
-    def test_legacy_format_state_field(self):
-        """Старый формат: {"type": "state_field", "field": "x"}"""
-        node = RemoteAgentNode(
-            node_id="test_remote",
-            url="http://agent:8080",
-            input_mapping={"type": "state_field", "field": "custom_field"}
-        )
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            custom_field="Custom value",
-            variables={}
-        )
-        
-        result = node._resolve_input(state)
-        
-        assert result == "Custom value"
-
-    def test_legacy_format_messages(self):
-        """Старый формат: {"type": "messages", "last_n": 2}"""
-        node = RemoteAgentNode(
-            node_id="test_remote",
-            url="http://agent:8080",
-            input_mapping={"type": "messages", "last_n": 2}
-        )
-        from a2a.types import Message, Role, Part, TextPart
-        state = ExecutionState(
-            task_id="test-task",
-            context_id="test-context",
-            user_id="test-user",
-            session_id="test-agent:test-context",
-            messages=[
-                Message(messageId="1", role=Role.user, parts=[Part(root=TextPart(text="First"))], taskId="test-task"),
-                Message(messageId="2", role=Role.user, parts=[Part(root=TextPart(text="Second"))], taskId="test-task"),
-                Message(messageId="3", role=Role.user, parts=[Part(root=TextPart(text="Third"))], taskId="test-task"),
-            ],
-            variables={}
-        )
-        
-        result = node._resolve_input(state)
-        
-        assert "Second" in result
-        assert "Third" in result
-
-    def test_default_mapping_is_content(self):
-        """По умолчанию берётся state["content"]"""
+    def test_no_mapping_uses_state_content(self):
+        """Без input_mapping используется state.content"""
         node = RemoteAgentNode(
             node_id="test_remote",
             url="http://agent:8080"
-            # input_mapping не указан, используется {"type": "content"}
         )
         state = ExecutionState(
             task_id="test-task",
@@ -475,9 +394,9 @@ class TestRemoteAgentNodeInputMapping:
             variables={}
         )
         
-        result = node._resolve_input(state)
+        inputs = node._resolve_inputs(state)
         
-        assert result == "Default content"
+        assert inputs == {}
 
 
 class TestExternalAPINodeParameterSource:
@@ -838,7 +757,8 @@ class TestRealWorldScenarios:
             variables={"company_name": "ACME Corp"}
         )
         
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
+        result = node._prepare_state(state, inputs)
         
         assert result.order_id == "ORD-12345"
         assert result.customer_name == "Иван Петров"
@@ -850,7 +770,6 @@ class TestRealWorldScenarios:
         """API вызов с авторизацией из переменных"""
         from apps.agents.src.mapping import MappingResolver
         
-        # Симуляция конфига API
         auth_mapping = {
             "Authorization": "@var:auth.bearer_token",
             "X-API-Key": "@var:auth.api_key"
@@ -895,7 +814,7 @@ class TestRealWorldScenarios:
                 "id": "doc-123",
                 "text": "Document content here",
                 "meta": {"author": "John", "date": "2024-01-01"},
-                "binary_data": b"huge binary content"  # Не передаётся
+                "binary_data": b"huge binary content"
             },
             other_data="not needed",
             variables={
@@ -903,13 +822,12 @@ class TestRealWorldScenarios:
             }
         )
         
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
+        result = node._prepare_state(state, inputs)
         
         assert result.content == "Document content here"
         assert result.metadata == {"author": "John", "date": "2024-01-01"}
         assert result.analysis_type == "sentiment"
-        assert not hasattr(result, "other_data")
-        assert "binary_data" not in getattr(result, "document", {})
 
     def test_remote_agent_context_injection(self):
         """Remote agent получает контекст из переменных"""
@@ -938,8 +856,221 @@ class TestRealWorldScenarios:
             }
         )
         
-        # Для RemoteAgent берётся только content
-        result = node._resolve_input(state)
+        inputs = node._resolve_inputs(state)
         
-        assert result == "Какая погода в Москве?"
+        assert inputs["content"] == "Какая погода в Москве?"
+        assert inputs["system_context"] == "Ты помощник по погоде"
+        assert inputs["user_info"] == {"name": "Иван", "lang": "ru"}
+
+
+class TestMessagesFilter:
+    """Тесты для фильтрации messages."""
+
+    def test_filter_all_returns_all_messages(self):
+        """messages_filter='all' возвращает все сообщения"""
+        from a2a.types import Message, Role, Part, TextPart
+        
+        node = ReactNode(
+            node_id="test_node",
+            prompt="Test",
+            config={"messages_filter": "all"}
+        )
+        messages = [
+            Message(
+                messageId="1", role=Role.user,
+                parts=[Part(root=TextPart(text="User msg"))],
+                taskId="test", metadata={"node_id": "other_node"}
+            ),
+            Message(
+                messageId="2", role=Role.agent,
+                parts=[Part(root=TextPart(text="Agent msg"))],
+                taskId="test", metadata={"node_id": "test_node"}
+            ),
+            Message(
+                messageId="3", role=Role.agent,
+                parts=[Part(root=TextPart(text="Another agent"))],
+                taskId="test", metadata={"node_id": "another_node"}
+            ),
+        ]
+        state = ExecutionState(
+            task_id="test", context_id="ctx", user_id="u",
+            session_id="test:ctx", messages=messages, variables={}
+        )
+        
+        result = node._get_filtered_messages(state)
+        
+        assert len(result) == 3
+
+    def test_filter_own_returns_own_and_user_messages(self):
+        """messages_filter='own' возвращает свои + user сообщения"""
+        from a2a.types import Message, Role, Part, TextPart
+        
+        node = ReactNode(
+            node_id="test_node",
+            prompt="Test",
+            config={"messages_filter": "own"}
+        )
+        messages = [
+            Message(
+                messageId="1", role=Role.user,
+                parts=[Part(root=TextPart(text="User msg"))],
+                taskId="test", metadata={}
+            ),
+            Message(
+                messageId="2", role=Role.agent,
+                parts=[Part(root=TextPart(text="My msg"))],
+                taskId="test", metadata={"node_id": "test_node"}
+            ),
+            Message(
+                messageId="3", role=Role.agent,
+                parts=[Part(root=TextPart(text="Other msg"))],
+                taskId="test", metadata={"node_id": "other_node"}
+            ),
+        ]
+        state = ExecutionState(
+            task_id="test", context_id="ctx", user_id="u",
+            session_id="test:ctx", messages=messages, variables={}
+        )
+        
+        result = node._get_filtered_messages(state)
+        
+        assert len(result) == 2
+        assert result[0].message_id == "1"
+        assert result[1].message_id == "2"
+
+    def test_filter_list_returns_specified_nodes(self):
+        """messages_filter=['node1', 'node2'] возвращает от указанных + user"""
+        from a2a.types import Message, Role, Part, TextPart
+        
+        node = ReactNode(
+            node_id="test_node",
+            prompt="Test",
+            config={"messages_filter": ["node1", "node2"]}
+        )
+        messages = [
+            Message(
+                messageId="1", role=Role.user,
+                parts=[Part(root=TextPart(text="User"))],
+                taskId="test", metadata={}
+            ),
+            Message(
+                messageId="2", role=Role.agent,
+                parts=[Part(root=TextPart(text="From node1"))],
+                taskId="test", metadata={"node_id": "node1"}
+            ),
+            Message(
+                messageId="3", role=Role.agent,
+                parts=[Part(root=TextPart(text="From node3"))],
+                taskId="test", metadata={"node_id": "node3"}
+            ),
+            Message(
+                messageId="4", role=Role.agent,
+                parts=[Part(root=TextPart(text="From node2"))],
+                taskId="test", metadata={"node_id": "node2"}
+            ),
+        ]
+        state = ExecutionState(
+            task_id="test", context_id="ctx", user_id="u",
+            session_id="test:ctx", messages=messages, variables={}
+        )
+        
+        result = node._get_filtered_messages(state)
+        
+        assert len(result) == 3
+        ids = [m.message_id for m in result]
+        assert "1" in ids
+        assert "2" in ids
+        assert "4" in ids
+        assert "3" not in ids
+
+
+class TestSaveToMessages:
+    """Тесты для save_to_messages."""
+
+    def test_append_to_messages_adds_message_with_node_id(self):
+        """_append_to_messages добавляет сообщение с node_id в metadata"""
+        node = ReactNode(
+            node_id="my_node",
+            prompt="Test",
+            config={"save_to_messages": True}
+        )
+        state = ExecutionState(
+            task_id="test-task", context_id="ctx", user_id="u",
+            session_id="test:ctx", messages=[], variables={}
+        )
+        
+        node._append_to_messages(state, "Result text")
+        
+        assert len(state.messages) == 1
+        msg = state.messages[0]
+        assert msg.metadata["node_id"] == "my_node"
+        assert msg.parts[0].root.text == "Result text"
+
+    def test_output_key_default_is_node_id(self):
+        """output_key по умолчанию равен node_id"""
+        node = ReactNode(
+            node_id="my_agent",
+            prompt="Test"
+        )
+        
+        assert node.output_key == "my_agent"
+
+    def test_output_key_from_config(self):
+        """output_key можно задать в config"""
+        node = ReactNode(
+            node_id="my_agent",
+            prompt="Test",
+            config={"output_key": "custom_result"}
+        )
+        
+        assert node.output_key == "custom_result"
+
+
+class TestToolNodeInputMapping:
+    """Тесты для ToolNode с input_mapping."""
+
+    def test_tool_node_resolves_inputs(self):
+        """ToolNode использует input_mapping для аргументов"""
+        from apps.agents.src.tools.base import BaseTool
+        
+        class MockTool(BaseTool):
+            name = "mock_tool"
+            description = "Test tool"
+            
+            async def _run_impl(self, args, state):
+                return f"Got: {args.get('query')}"
+        
+        node = ToolNode(
+            node_id="test_tool",
+            tool=MockTool(),
+            input_mapping={"query": "@state:user_input"}
+        )
+        state = ExecutionState(
+            task_id="test", context_id="ctx", user_id="u",
+            session_id="test:ctx", user_input="Hello", variables={}
+        )
+        
+        inputs = node._resolve_inputs(state)
+        
+        assert inputs["query"] == "Hello"
+
+
+class TestFunctionNodeInputMapping:
+    """Тесты для FunctionNode с input_mapping."""
+
+    def test_function_node_resolves_inputs(self):
+        """FunctionNode использует input_mapping для kwargs"""
+        node = FunctionNode(
+            node_id="test_func",
+            code=lambda state, name="": state,
+            config={"input_mapping": {"name": "@state:user_name"}}
+        )
+        state = ExecutionState(
+            task_id="test", context_id="ctx", user_id="u",
+            session_id="test:ctx", user_name="Иван", variables={}
+        )
+        
+        inputs = node._resolve_inputs(state)
+        
+        assert inputs["name"] == "Иван"
 

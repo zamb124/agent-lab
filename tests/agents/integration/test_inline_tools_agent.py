@@ -259,9 +259,10 @@ class TestInlineToolsInAgentConfig:
     async def test_agent_config_with_inline_tools(self, container):
         """Конфигурация агента с inline tools (после прохождения через AgentsLoader)."""
         # После AgentsLoader все tools должны быть inline dict с code
+        # Используем уникальные tool_id чтобы не конфликтовать с builtin tools
         agent_tools_config = [
             {
-                "tool_id": "calculator",
+                "tool_id": "test_inline_calc",
                 "description": "Калькулятор",
                 "args_schema": {"expression": {"type": "string"}},
                 "code": "def execute(args, state):\n    return eval(args.get('expression', '0'))",

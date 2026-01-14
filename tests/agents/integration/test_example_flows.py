@@ -576,7 +576,7 @@ class TestExampleReactE2E:
             session_id="test-agent:test-context",
             content="Привет"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert result.current_nodes == []  # Agent завершен
@@ -601,7 +601,7 @@ class TestExampleReactE2E:
             session_id=f"example_react:{context_id}",
             content="Сколько будет 25 умножить на 4?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert "tool_results" in result.model_dump()
@@ -624,7 +624,7 @@ class TestExampleReactE2E:
             session_id="test-agent:test-context",
             content="Хочу познакомиться"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Interrupt возвращается в state
         assert result.interrupt is not None
@@ -650,7 +650,7 @@ class TestExampleReactE2E:
             session_id="test-agent:test-context",
             content="Нужна информация о локации"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Interrupt возвращается в state
         assert result.interrupt is not None
@@ -676,7 +676,7 @@ class TestExampleReactE2E:
             session_id="test-agent:test-context",
             content="Что-нибудь"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         # Variables доступны в state
@@ -701,7 +701,7 @@ class TestExampleReactE2E:
             session_id="test-agent:test-context",
             content="Расскажи подробно"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert result.variables["max_response_length"] == "2000"
 
@@ -727,7 +727,7 @@ class TestExampleReactE2E:
         )
         
         # Субагент сразу задает вопрос через interrupt (сохраняется в state)
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert result.interrupt is not None
         assert "узнать" in result.interrupt.question.lower()
@@ -749,7 +749,7 @@ class TestExampleReactE2E:
             session_id="test-agent:test-context",
             content="Вопрос"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         # Субагент не использовался
@@ -776,7 +776,7 @@ class TestExampleGraphE2E:
             session_id="test-agent:test-context",
             content="Где мой заказ?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Classifier определил route = order
         assert result.get("route") == "order"
@@ -801,7 +801,7 @@ class TestExampleGraphE2E:
             session_id="test-agent:test-context",
             content="Хочу подать жалобу на сервис"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert result.get("route") == "complaint"
         assert "[COMPLAINT]" in result.get("response", "")
@@ -824,7 +824,7 @@ class TestExampleGraphE2E:
             session_id="test-agent:test-context",
             content="Какой у вас график работы?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert result.get("route") == "general"
         assert "[GENERAL]" in result.get("response", "")
@@ -847,7 +847,7 @@ class TestExampleGraphE2E:
             session_id="test-agent:test-context",
             content="Проверить статус заказа"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert result.interrupt is not None
         assert "заказ" in result.interrupt.question.lower()
@@ -869,7 +869,7 @@ class TestExampleGraphE2E:
             session_id="test-agent:test-context",
             content="Срочный вопрос про заказ"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert result.get("route") == "order"
         # Formatter пропущен - нет префикса и processed
@@ -894,7 +894,7 @@ class TestExampleGraphE2E:
             session_id="test-agent:test-context",
             content="Хочу подать жалобу"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # С этим skill жалобы идут в general
         assert result.get("route") == "general"
@@ -916,7 +916,7 @@ class TestExampleGraphE2E:
             session_id="test-agent:test-context",
             content="Статус order"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Variables переданы в state
         assert result.variables.get("order_prefix") == "ORD-"
@@ -939,7 +939,7 @@ class TestExampleGraphE2E:
             session_id="test-agent:test-context",
             content="У меня серьезная жалоба"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert result.interrupt is not None
         assert "проблем" in result.interrupt.question.lower()
@@ -969,7 +969,7 @@ class TestExampleGraphE2E:
             session_id="test-agent:test-context",
             content="Тест"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert result.variables["company_name"] == "MetadataCompany"
         assert result.variables["max_response_length"] == "300"
@@ -1001,7 +1001,7 @@ class TestExampleGraphE2E:
             session_id="test-agent:test-context",
             content="Тест"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert isinstance(result.variables["user_config"], dict)
         assert result.variables["user_config"]["name"] == "TestUser"
@@ -1028,7 +1028,7 @@ class TestExampleFlowsEdgeCases:
             session_id="test-agent:test-context",
             content=""
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
 
@@ -1052,7 +1052,7 @@ class TestExampleFlowsEdgeCases:
             session_id="test-agent:test-context",
             content="Тест"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
 
@@ -1076,7 +1076,7 @@ class TestExampleFlowsEdgeCases:
             session_id=f"example_react:{context_id}",
             content="Посчитай 10+5, потом умножь на 2"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert "response" in result
         assert "calculator" in result.tool_results
@@ -1099,7 +1099,7 @@ class TestExampleFlowsEdgeCases:
             content="Мой заказ",
             custom_field="preserved_value"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Custom field сохранен
         assert result.get("custom_field") == "preserved_value"
@@ -1150,7 +1150,7 @@ class TestSubagentInterruptResume:
             session_id="test-agent:test-context",
             content="где купить цветы"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Agent возвращает state с interrupt
         assert result.interrupt is not None
@@ -1198,14 +1198,15 @@ class TestSubagentInterruptResume:
             session_id="test-agent:test-context",
             content="где купить цветы"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Проверяем состояние после interrupt
         assert result.interrupt is not None
         assert len(result.interrupt_path) > 0
         
         # === RESUME ===
-        final_result = await flow.resume(result, answer="москва")
+        result.content = "москва"
+        final_result = await flow.run(result)
         
         # Проверяем что flow завершился с ответом
         assert final_result.get("response") is not None, "Должен быть финальный ответ"
@@ -1257,12 +1258,13 @@ class TestSubagentInterruptResume:
             session_id="test-agent:test-context",
             content="где купить цветы"
         )
-        result1 = await flow.execute(state)
+        result1 = await flow.run(state)
         assert result1.interrupt is not None
         assert "город" in result1.interrupt.question.lower()
         
         # === RESUME 1 ===
-        result2 = await flow.resume(result1, answer="москва")
+        result1.content = "москва"
+        result2 = await flow.run(result1)
         assert result2.interrupt is not None
         assert "район" in result2.interrupt.question.lower()
         
@@ -1278,7 +1280,8 @@ class TestSubagentInterruptResume:
             f"'москва' должна быть как tool response в истории: {tool_msgs}"
         
         # === RESUME 2 ===
-        result3 = await flow.resume(result2, answer="раменки")
+        result2.content = "раменки"
+        result3 = await flow.run(result2)
         
         # Финальная проверка истории через nested_states
         nested_states3 = result3.nested_states
@@ -1326,10 +1329,11 @@ class TestSubagentInterruptResume:
             session_id="test-agent:test-context",
             content="где купить цветы"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Resume
-        final_result = await flow.resume(result, answer="москва")
+        result.content = "москва"
+        final_result = await flow.run(result)
         
         # Проверяем что messages главного агента НЕ содержат "москва" как user message
         # (ответ должен идти в субагента, не в главного)
@@ -1383,7 +1387,7 @@ class TestSubagentInterruptResume:
             session_id="test-agent:test-context",
             content="найти цветочный магазин"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # ПРОВЕРКА 1: interrupt_path сохранён
         assert len(result.interrupt_path) > 0, \
@@ -1399,7 +1403,8 @@ class TestSubagentInterruptResume:
             f"Должен быть nested state для example_subagent: {result.nested_states.keys()}"
         
         # === RESUME С ОТВЕТОМ "москва" ===
-        final_result = await flow.resume(result, answer="москва")
+        result.content = "москва"
+        final_result = await flow.run(result)
         
         # ПРОВЕРКА 4: interrupt_path очищен
         assert len(final_result.interrupt_path) == 0, \

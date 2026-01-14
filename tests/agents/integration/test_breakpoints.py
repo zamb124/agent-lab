@@ -68,7 +68,7 @@ class TestBreakpointsReactAgent:
             breakpoints={"main": True},  # Breakpoint на entry ноде
         )
         
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Breakpoint сработал
         assert result.breakpoint_hit == "main", \
@@ -107,7 +107,7 @@ class TestBreakpointsReactAgent:
             breakpoints={"main": True},
         )
         
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         snapshot = result.breakpoint_state
         assert snapshot is not None
@@ -151,7 +151,7 @@ class TestBreakpointsReactAgent:
             breakpoints={"main": True},
         )
         
-        result = await flow.execute(state)
+        result = await flow.run(state)
         assert result.breakpoint_hit == "main"
         
         # Шаг 2: Continue - НЕ очищаем breakpoint_hit!
@@ -160,7 +160,7 @@ class TestBreakpointsReactAgent:
         result.breakpoint_state = None
         
         # Шаг 3: Продолжаем выполнение
-        final_result = await flow.execute(result)
+        final_result = await flow.run(result)
         
         # Агент завершился с ответом
         assert final_result.response is not None, \
@@ -195,7 +195,7 @@ class TestBreakpointsReactAgent:
             breakpoints={"main": True},
         )
         
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Breakpoint сработал ДО выполнения
         assert result.breakpoint_hit == "main"
@@ -227,7 +227,7 @@ class TestBreakpointsReactAgent:
             breakpoints={"main": True},
         )
         
-        result = await flow.execute(state)
+        result = await flow.run(state)
         assert result.breakpoint_hit == "main"
         assert result.interrupt is None, "Interrupt не должен быть до continue"
         
@@ -235,7 +235,7 @@ class TestBreakpointsReactAgent:
         # breakpoint_hit остаётся == "main" как сигнал для продолжения
         result.breakpoint_state = None
         
-        result = await flow.execute(result)
+        result = await flow.run(result)
         
         # Шаг 3: Interrupt от ask_user
         assert result.interrupt is not None, "Должен быть interrupt от ask_user"
@@ -279,7 +279,7 @@ class TestBreakpointsGraphAgent:
             breakpoints={"classifier": True},
         )
         
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Breakpoint сработал на classifier
         assert result.breakpoint_hit == "classifier"
@@ -312,7 +312,7 @@ class TestBreakpointsGraphAgent:
             breakpoints={"order_processor": True},
         )
         
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # classifier выполнился
         assert result.get("route") == "order", \
@@ -347,7 +347,7 @@ class TestBreakpointsGraphAgent:
             breakpoints={"formatter": True},
         )
         
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # classifier и order_processor выполнились
         assert result.get("route") == "order"
@@ -383,7 +383,7 @@ class TestBreakpointsGraphAgent:
             breakpoints={"formatter": True},
         )
         
-        result = await flow.execute(state)
+        result = await flow.run(state)
         assert result.breakpoint_hit == "formatter"
         assert result.get("processed") is None
         
@@ -391,7 +391,7 @@ class TestBreakpointsGraphAgent:
         # breakpoint_hit остаётся == "formatter" как сигнал для продолжения
         result.breakpoint_state = None
         
-        final_result = await flow.execute(result)
+        final_result = await flow.run(result)
         
         # formatter выполнился
         assert final_result.get("processed") is True
@@ -432,27 +432,27 @@ class TestBreakpointsGraphAgent:
         )
         
         # Breakpoint 1: classifier
-        result = await flow.execute(state)
+        result = await flow.run(state)
         assert result.breakpoint_hit == "classifier"
         
         # Continue -> classifier выполняется -> Breakpoint 2: order_processor
         # НЕ очищаем breakpoint_hit! Он остаётся как сигнал продолжения.
         result.breakpoint_state = None
-        result = await flow.execute(result)
+        result = await flow.run(result)
         assert result.breakpoint_hit == "order_processor", \
             f"После continue с classifier должен быть breakpoint на order_processor, но {result.breakpoint_hit}"
         assert result.get("route") == "order"
         
         # Continue -> order_processor выполняется -> Breakpoint 3: formatter
         result.breakpoint_state = None
-        result = await flow.execute(result)
+        result = await flow.run(result)
         assert result.breakpoint_hit == "formatter", \
             f"После continue с order_processor должен быть breakpoint на formatter, но {result.breakpoint_hit}"
         assert result.response is not None
         
         # Continue -> formatter выполняется -> Завершение
         result.breakpoint_state = None
-        final_result = await flow.execute(result)
+        final_result = await flow.run(result)
         
         assert final_result.breakpoint_hit is None
         assert final_result.get("processed") is True
@@ -475,7 +475,7 @@ class TestBreakpointsGraphAgent:
             breakpoints={"complaint_processor": True},
         )
         
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # classifier определил route = complaint
         assert result.get("route") == "complaint"
@@ -512,7 +512,7 @@ class TestBreakpointsStateManagement:
             breakpoints={"main": True},
         )
         
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Сохраняем snapshot
         snapshot_content = result.breakpoint_state["content"]
@@ -542,7 +542,7 @@ class TestBreakpointsStateManagement:
             breakpoints={"main": False},  # Отключён
         )
         
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         # Breakpoint не сработал
         assert result.breakpoint_hit is None
@@ -569,7 +569,7 @@ class TestBreakpointsStateManagement:
             breakpoints={},  # Пустой
         )
         
-        result = await flow.execute(state)
+        result = await flow.run(state)
         
         assert result.breakpoint_hit is None
         assert result.response is not None

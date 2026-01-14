@@ -113,7 +113,7 @@ export class AgentNodeModal extends BaseNodeModal {
             config.input_mapping = inputMapping;
         }
         
-        return config;
+        return this._applyStateSettings(config);
     }
 
     renderBody() {
@@ -189,6 +189,8 @@ export class AgentNodeModal extends BaseNodeModal {
                             <span class="form-hint">Skill вложенного agent</span>
                         </div>
                     </div>
+                    
+                    ${this.renderStateSettings()}
                 </div>
                 
                 <div class="form-main">

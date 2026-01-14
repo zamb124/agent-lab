@@ -292,7 +292,7 @@ class AgentValidator:
                     # Inline tool - пропускаем
                     continue
                 
-                # Проверяем как tool, потом как node (ноды могут быть tools)
+                # Проверяем как tool, node или agent (агенты могут использоваться как tools)
                 tool_exists = False
                 if self.tool_repository:
                     tool = await self.tool_repository.get(tool_ref)
@@ -302,6 +302,11 @@ class AgentValidator:
                 if not tool_exists and self.node_repository:
                     node = await self.node_repository.get(tool_ref)
                     if node:
+                        tool_exists = True
+                
+                if not tool_exists and self.agent_repository:
+                    agent = await self.agent_repository.get(tool_ref)
+                    if agent:
                         tool_exists = True
                 
                 if not tool_exists:

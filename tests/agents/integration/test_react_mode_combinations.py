@@ -140,7 +140,7 @@ class TestAutoModeWithoutReason:
             session_id="test-agent:test-context",
             content="Привет"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["response"] == "Привет! Я готов помочь."
         assert not result.reasoning_history
@@ -182,7 +182,7 @@ class TestAutoModeWithoutReason:
             session_id="test-agent:test-context",
             content="7+3?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert "10" in result["response"]
         assert not result.reasoning_history
@@ -225,7 +225,7 @@ class TestAutoModeWithoutReason:
             session_id="test-agent:test-context",
             content="Посчитай 2+2 и 4*3"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert "12" in result["response"]
 
@@ -283,7 +283,7 @@ class TestAutoModeWithReason:
             session_id="test-agent:test-context",
             content="Сколько 5+5?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert "10" in result["response"]
         assert result.reasoning_history
@@ -347,7 +347,7 @@ class TestAutoModeWithReason:
             session_id="test-agent:test-context",
             content="10+10?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert "20" in result["response"]
         assert result.reasoning_history
@@ -401,7 +401,7 @@ class TestAutoModeWithReason:
             session_id="test-agent:test-context",
             content="Вопрос"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["response"] == "Ответ на вопрос"
         assert result.reasoning_history
@@ -458,7 +458,7 @@ class TestExplicitModeWithExitOnly:
             session_id="test-agent:test-context",
             content="Сделай"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["response"] == "Готово!"
         assert not result.reasoning_history
@@ -504,7 +504,7 @@ class TestExplicitModeWithExitOnly:
             session_id="test-agent:test-context",
             content="8*8?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert "64" in result["response"]
         assert not result.reasoning_history
@@ -551,7 +551,7 @@ class TestExplicitModeWithExitOnly:
             session_id="test-agent:test-context",
             content="test"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["response"] == "Теперь правильно!"
 
@@ -608,7 +608,7 @@ class TestExplicitModeWithExitOnly:
             session_id="test-agent:test-context",
             content="Выполни"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert "выполнены" in result["response"]
 
@@ -669,7 +669,7 @@ class TestExplicitModeWithReasonAndExit:
             session_id="test-agent:test-context",
             content="Сделай"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["response"] == "Готово!"
         assert result.reasoning_history
@@ -738,7 +738,7 @@ class TestExplicitModeWithReasonAndExit:
             session_id=f"{agent_id}:{context_id}",
             content="15-5?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert "10" in result["response"]
         assert result.reasoning_history
@@ -798,7 +798,7 @@ class TestExplicitModeWithReasonAndExit:
             session_id="test-agent:test-context",
             content="test"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["response"] == "Правильный ответ"
         assert result.reasoning_history
@@ -854,7 +854,7 @@ class TestCustomReasonAndExitTools:
             session_id=f"{agent_id}:{context_id}",
             content="3*3?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert "9" in result["response"]
         assert result.reasoning_history
@@ -903,7 +903,7 @@ class TestCustomReasonAndExitTools:
             session_id=f"{agent_id}:{context_id}",
             content="6/2?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert "3" in result["response"]
 
@@ -951,7 +951,7 @@ class TestCustomReasonAndExitTools:
             session_id=f"{agent_id}:{context_id}",
             content="100/4?"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert "25" in result["response"]
         assert result.reasoning_history
@@ -1003,7 +1003,7 @@ class TestEdgeCases:
             session_id="test-agent:test-context",
             content="Привет"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["response"] == "Простой ответ"
 
@@ -1047,7 +1047,7 @@ class TestEdgeCases:
             session_id="test-agent:test-context",
             content="test"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert "Auto-injected" in result["response"]
 
@@ -1092,7 +1092,7 @@ class TestEdgeCases:
             session_id="test-agent:test-context",
             content="test"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["response"] == "Текстовый ответ без finish"
 
@@ -1142,7 +1142,7 @@ class TestEdgeCases:
             session_id="test-agent:test-context",
             content="Вопрос"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["response"] == "Прямой ответ"
         assert result.reasoning_history

@@ -555,14 +555,11 @@ class BaseChannel(ABC):
                     )
             else:
                 if params.is_resume and state.interrupt:
-                    # Resume после interrupt (ask_user)
-                    state = await agent.resume(state, answer=params.content)
-                elif params.is_resume and state.breakpoint_hit:
-                    # Continue после breakpoint - просто execute с текущим state
-                    # breakpoint_hit остаётся, agent._check_breakpoint увидит и пропустит проверку
-                    state = await agent.execute(state)
-                else:
-                    state = await agent.execute(state)
+                    # Resume после interrupt: устанавливаем content (ответ пользователя)
+                    state.content = params.content
+                
+                # Единый вызов: agent.run() сам определяет resume или start
+                state = await agent.run(state)
                 
                 final_response = state.response or ""
                 

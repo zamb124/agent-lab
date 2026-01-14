@@ -27,7 +27,7 @@ class CustomReasonTool(BaseTool):
     description = "Custom reasoning tool"
     tool_type = ToolType.REASON
     
-    async def execute(self, args: Dict[str, Any], state: Dict[str, Any] = None) -> str:
+    async def _run_impl(self, args: Dict[str, Any], state: Dict[str, Any] = None) -> str:
         thought = args.get("thought", "")
         if state and "reasoning_history" not in state:
             state["reasoning_history"] = []
@@ -43,7 +43,7 @@ class CustomExitTool(BaseTool):
     description = "Custom exit tool"
     tool_type = ToolType.EXIT
     
-    async def execute(self, args: Dict[str, Any], state: Dict[str, Any] = None) -> str:
+    async def _run_impl(self, args: Dict[str, Any], state: Dict[str, Any] = None) -> str:
         return args.get("answer", "Done")
 
 
@@ -54,7 +54,7 @@ class RegularTool(BaseTool):
     description = "Regular helper tool"
     tool_type = ToolType.TOOL
     
-    async def execute(self, args: Dict[str, Any], state: Dict[str, Any] = None) -> str:
+    async def _run_impl(self, args: Dict[str, Any], state: Dict[str, Any] = None) -> str:
         return "helped"
 
 

@@ -123,7 +123,7 @@ class FunctionTool(BaseTool):
     
     async def run(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
         """
-        Точка входа для выполнения tool.
+        Единственная точка входа для выполнения tool.
         
         Проверяет mock в порядке:
         1. state mock - из metadata агента
@@ -144,9 +144,9 @@ class FunctionTool(BaseTool):
             return self._mock_response
         
         logger.debug(f"Tool {self.name}: real mode")
-        return await self.execute(args, state)
+        return await self._run_impl(args, state)
     
-    async def execute(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
+    async def _run_impl(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
         """Выполняет функцию. State передается как ExecutionState."""
         sig = inspect.signature(self._func)
         

@@ -283,7 +283,6 @@ def run(state):
         assert result.__pydantic_extra__["sum"] == 15
 
     @pytest.mark.asyncio
-    @pytest.mark.skip(reason="safe_eval теперь автоматически конвертирует результат в ExecutionState")
     async def test_safe_eval_must_return_execution_state(self):
         """Функция должна возвращать ExecutionState или dict."""
         code = """
@@ -296,8 +295,7 @@ def run(state):
             user_id="test",
             session_id="test:test"
         )
-        # Функция должна возвращать либо ExecutionState, либо dict
-        with pytest.raises((SafeEvalError, TypeError, ValueError)):
+        with pytest.raises(TypeError, match="Function must return ExecutionState"):
             await safe_eval(code, state)
 
     @pytest.mark.asyncio

@@ -19,8 +19,11 @@ import asyncio
 import importlib
 import inspect
 import json
+import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
+
+from a2a.types import Message, Part, Role, TextPart
 
 from apps.agents.src.agent.exceptions import AgentInterrupt
 from apps.agents.src.agent.runners import ReactNodeRunner
@@ -42,7 +45,26 @@ logger = get_logger(__name__)
 
 
 class BaseNode(ABC):
-    """Базовый класс для нод. Node = функция ExecutionState -> ExecutionState."""
+    """
+    Базовый класс для нод. Node = функция ExecutionState -> ExecutionState.
+    
+    Template Method паттерн:
+    - run() - единая точка входа для всех нод
+    - _resolve_inputs() - единообразный резолвинг input_mapping
+    - _get_filtered_messages() - фильтрация messages
+    - _run_impl() - конкретная логика каждой ноды
+    
+    Конфигурация:
+    - input_mapping: Dict - маппинг входных данных из state
+    - output_key: str - куда писать результат (default: node_id)
+    - save_to_messages: bool - добавлять результат в messages
+    - message_field: str - какое поле писать в messages (по умолчанию diff стейта)
+    - messages_filter: "all" / "own" / List[str] - фильтрация входящих messages
+    
+    Контракты _run_impl():
+    - FunctionNode: возвращает ExecutionState (мержится в текущий state)
+    - ToolNode, ReactNode, AgentNode и др.: возвращает Any (записывается в output_key)
+    """
 
     name: str = "node"
     description: Optional[str] = None
@@ -50,6 +72,11 @@ class BaseNode(ABC):
     def __init__(self, node_id: str, config: Optional[Dict[str, Any]] = None):
         self.node_id = node_id
         self.config = config or {}
+        self.input_mapping = self.config.get("input_mapping")
+        self.output_key = self.config.get("output_key", node_id)
+        self.save_to_messages = self.config.get("save_to_messages", False)
+        self.message_field = self.config.get("message_field")
+        self.messages_filter: Union[str, List[str]] = self.config.get("messages_filter", "all")
 
     @classmethod
     def from_config(cls, node_id: str, config: Dict[str, Any]) -> "BaseNode":
@@ -69,10 +96,187 @@ class BaseNode(ABC):
         """Проверяет наличие mock для ноды."""
         return get_mock_for_node(state, self.node_id)
 
-    @abstractmethod
+    def _resolve_inputs(self, state: ExecutionState) -> Dict[str, Any]:
+        """
+        Единообразный резолвинг input_mapping для всех типов нод.
+        
+        Returns:
+            Dict с резолвнутыми значениями из input_mapping
+        """
+        if not self.input_mapping:
+            return {}
+        return MappingResolver.build_mapped_state(self.input_mapping, state)
+
+    def _get_filtered_messages(self, state: ExecutionState) -> List[Message]:
+        """
+        Возвращает отфильтрованные messages.
+        
+        Фильтры:
+        - "all" - все сообщения
+        - "own" - только свои (node_id совпадает) + user messages
+        - List[str] - от указанных node_id + user messages
+        """
+        all_messages = state.messages or []
+        
+        if self.messages_filter == "all":
+            return list(all_messages)
+        
+        if self.messages_filter == "own":
+            return [m for m in all_messages 
+                    if self._get_message_node_id(m) == self.node_id 
+                    or self._is_user_message(m)]
+        
+        if isinstance(self.messages_filter, list):
+            allowed = set(self.messages_filter)
+            return [m for m in all_messages 
+                    if self._get_message_node_id(m) in allowed
+                    or self._is_user_message(m)]
+        
+        return list(all_messages)
+
+    def _append_to_messages(self, state: ExecutionState, result: Any) -> None:
+        """Добавляет результат в messages с маркировкой node_id."""
+        text = str(result) if not isinstance(result, str) else result
+        message = Message(
+            message_id=str(uuid.uuid4()),
+            role=Role.agent,
+            parts=[Part(root=TextPart(text=text))],
+            metadata={"node_id": self.node_id},
+            task_id=state.task_id,
+        )
+        state.messages.append(message)
+
+    @staticmethod
+    def _get_message_node_id(msg: Message) -> Optional[str]:
+        """Извлекает node_id из metadata сообщения."""
+        metadata = getattr(msg, "metadata", None) or {}
+        return metadata.get("node_id")
+
+    @staticmethod
+    def _is_user_message(msg: Message) -> bool:
+        """Проверяет является ли сообщение от пользователя."""
+        return getattr(msg, "role", None) == Role.user
+
     async def run(self, state: ExecutionState) -> ExecutionState:
-        """Выполняет ноду и возвращает обновленный state."""
+        """
+        Единая точка входа для ВСЕХ нод.
+        
+        1. Проверка mock
+        2. Сохранение snapshot для diff (если save_to_messages без message_field)
+        3. Резолвинг input_mapping -> inputs
+        4. Выполнение _run_impl(state, inputs)
+        5. Обработка результата:
+           - ExecutionState: мержим в текущий state
+           - Any: записываем в output_key
+        6. Добавление в messages если save_to_messages=True
+        """
+        mock_data = self._check_mock(state)
+        if mock_data is not None:
+            logger.info(f"[node:{self.node_id}] using mock data")
+            for key, value in mock_data.items():
+                setattr(state, key, value)
+            return state
+        
+        state_before = None
+        if self.save_to_messages and not self.message_field:
+            state_before = state.model_dump(exclude_none=False)
+        
+        inputs = self._resolve_inputs(state)
+        
+        result = await self._run_impl(state, inputs)
+        
+        if isinstance(result, ExecutionState):
+            self._copy_state_back(result, state)
+        elif self.output_key and result is not None:
+            setattr(state, self.output_key, result)
+        
+        if self.save_to_messages:
+            message_content = self._get_message_content(state, state_before, result)
+            if message_content:
+                self._append_to_messages(state, message_content)
+        
+        return state
+    
+    def _get_message_content(
+        self, state: ExecutionState, state_before: Optional[Dict], result: Any
+    ) -> Optional[str]:
+        """
+        Определяет что записать в messages.
+        
+        Приоритет поиска message_field:
+        1. result[message_field] если result - dict
+        2. state.message_field
+        """
+        if self.message_field:
+            value = None
+            if isinstance(result, dict) and self.message_field in result:
+                value = result[self.message_field]
+            else:
+                value = getattr(state, self.message_field, None)
+            return str(value) if value is not None else None
+        elif state_before:
+            return self._compute_state_diff(state_before, state)
+        else:
+            return str(result) if result is not None else None
+    
+    def _compute_state_diff(
+        self, state_before: Dict[str, Any], state_after: ExecutionState
+    ) -> Optional[str]:
+        """Вычисляет diff между состояниями для записи в messages."""
+        state_after_dict = state_after.model_dump(exclude_none=False)
+        
+        skip_fields = {"messages", "prompt_history", "node_history", "nested_states"}
+        
+        diff_parts = []
+        for key, new_value in state_after_dict.items():
+            if key in skip_fields:
+                continue
+            old_value = state_before.get(key)
+            if old_value != new_value and new_value is not None:
+                diff_parts.append(f"{key}: {new_value}")
+        
+        if not diff_parts:
+            return None
+        return "\n".join(diff_parts)
+
+    @abstractmethod
+    async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
+        """
+        Конкретная логика ноды.
+        
+        Args:
+            state: ExecutionState для чтения/записи
+            inputs: Резолвнутые данные из input_mapping
+            
+        Returns:
+            Результат (будет записан в output_key если задан)
+        """
         pass
+
+    def _copy_state_back(self, source: ExecutionState, target: ExecutionState) -> None:
+        """Копирует все изменения из source обратно в target."""
+        for field_name in ExecutionState.model_fields:
+            if hasattr(source, field_name):
+                setattr(target, field_name, getattr(source, field_name))
+        
+        if hasattr(source, '__pydantic_extra__') and source.__pydantic_extra__:
+            if not hasattr(target, '__pydantic_extra__') or target.__pydantic_extra__ is None:
+                target.__pydantic_extra__ = {}
+            target.__pydantic_extra__.update(source.__pydantic_extra__)
+
+    def _prepare_state(self, state: ExecutionState, inputs: Dict[str, Any]) -> ExecutionState:
+        """
+        Создает state для вложенного выполнения.
+        Применяет inputs и фильтрует messages.
+        """
+        new_state = ExecutionState.model_validate(state.model_dump(exclude_none=False))
+        
+        for key, value in inputs.items():
+            setattr(new_state, key, value)
+        
+        new_state.messages = self._get_filtered_messages(state)
+        
+        return new_state
 
     def as_tool(
         self, name: Optional[str] = None, description: Optional[str] = None
@@ -137,13 +341,16 @@ class ReactNode(BaseNode):
     ):
         super().__init__(node_id or self.name, config)
         
-        # Извлекаем параметры из config если они не переданы явно
         cfg = config or {}
         
         self.prompt_template = prompt or self.prompt or cfg.get("prompt", "")
         self.tool_refs = tools if tools is not None else cfg.get("tools", [])
         self.llm_config_dict = llm_config or cfg.get("llm", {})
-        self.input_mapping = input_mapping or cfg.get("input_mapping")
+        
+        if input_mapping is not None:
+            self.input_mapping = input_mapping
+        elif cfg.get("input_mapping"):
+            self.input_mapping = cfg.get("input_mapping")
         
         self._node_config = node_config
         self._runner = None
@@ -182,16 +389,14 @@ class ReactNode(BaseNode):
             return self._node_config.prompt
         return self.prompt_template or self.prompt
 
-    async def run(self, state: ExecutionState) -> ExecutionState:
-        """Запускает ReactNode как ноду графа."""
-        mock_data = self._check_mock(state)
-        if mock_data is not None:
-            logger.info(f"[node:{self.node_id}] using mock data")
-            for key, value in mock_data.items():
-                setattr(state, key, value)
-            return state
-
-        agent_state = self._build_agent_state(state)
+    async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
+        """
+        Выполняет ReAct цикл.
+        
+        Возвращает state.response для записи в output_key.
+        _copy_state_back мержит все изменения из agent_state обратно в state.
+        """
+        agent_state = self._prepare_state(state, inputs)
 
         if self.tool_refs and self._loaded_tools is None:
             self._loaded_tools = await self._load_tools()
@@ -199,49 +404,16 @@ class ReactNode(BaseNode):
         logger.info(f"[node:{self.node_id}] Запуск ReactNode")
 
         content = agent_state.content or ""
+        input_data = {"content": content}
 
         try:
-            result = await self.ainvoke({"content": content}, agent_state)
-        except AgentInterrupt:
+            runner = await self.get_runner()
+            async for _ in runner.run(input_data, agent_state):
+                pass
+        finally:
             self._copy_state_back(agent_state, state)
-            raise
 
-        self._copy_state_back(result, state)
-        return state
-
-    def _copy_state_back(self, source: ExecutionState, target: ExecutionState) -> None:
-        """Копирует все изменения из source обратно в target."""
-        for field_name in ExecutionState.model_fields:
-            if hasattr(source, field_name):
-                setattr(target, field_name, getattr(source, field_name))
-        
-        if hasattr(source, '__pydantic_extra__') and source.__pydantic_extra__:
-            if not hasattr(target, '__pydantic_extra__') or target.__pydantic_extra__ is None:
-                target.__pydantic_extra__ = {}
-            target.__pydantic_extra__.update(source.__pydantic_extra__)
-
-    async def ainvoke(
-        self, input_data: Dict[str, Any], state: ExecutionState
-    ) -> ExecutionState:
-        """
-        Выполняет ReactNode.
-
-        Args:
-            input_data: Входные данные (content, etc)
-            state: ExecutionState
-
-        Returns:
-            ExecutionState с результатом
-
-        Raises:
-            AgentInterrupt: Если ReactNode задает вопрос пользователю
-        """
-        runner = await self.get_runner()
-
-        async for _ in runner.run(input_data, state):
-            pass
-
-        return state
+        return state.response
 
     async def get_runner(self):
         """Возвращает runner для ReactNode."""
@@ -306,7 +478,6 @@ class ReactNode(BaseNode):
                 temperature=self.llm_config_dict.get("temperature"),
             )
 
-        # Создаём ReactConfig из config dict если есть
         react_config = None
         react_dict = self.config.get("react") if self.config else None
         if react_dict:
@@ -321,24 +492,6 @@ class ReactNode(BaseNode):
             llm_override=llm_override,
             react=react_config,
         )
-
-    def _build_agent_state(self, state: ExecutionState) -> ExecutionState:
-        """Строит ExecutionState на основе input_mapping."""
-        if not self.input_mapping:
-            # Возвращаем копию состояния
-            return ExecutionState.model_validate(state.model_dump(exclude_none=False))
-        
-        mapped_dict = MappingResolver.build_mapped_state(self.input_mapping, state)
-        mapped_dict["task_id"] = state.task_id
-        mapped_dict["context_id"] = state.context_id
-        mapped_dict["user_id"] = state.user_id
-        mapped_dict["session_id"] = state.session_id
-        mapped_dict["variables"] = state.variables
-        mapped_dict["mock"] = state.mock
-        mapped_dict.setdefault("nested_states", state.nested_states or {})
-        mapped_dict.setdefault("interrupted_path", state.interrupt_path or [])
-        mapped_dict.setdefault("messages", state.messages or [])
-        return ExecutionState(**mapped_dict)
 
     async def _load_tools(self) -> List[Any]:
         """Создаёт tools из inline конфигов."""
@@ -411,23 +564,16 @@ class NodeAsTool:
             "required": ["request"],
         }
 
-    async def execute(self, args: Dict[str, Any], state: Dict[str, Any]) -> str:
+    async def run(self, args: Dict[str, Any], state: ExecutionState) -> str:
         """Выполняет ноду как tool."""
         request = args.get("request", "")
         node_name = getattr(self.node, "react_node_name", self.node.node_id)
         logger.info(f"NodeAsTool: вызов {node_name} с запросом: {request[:100]}")
         
-        # Для ReactNode используем ainvoke
-        if hasattr(self.node, "ainvoke"):
-            input_data = {"content": request}
-            result = await self.node.ainvoke(input_data, state)
-            return result.get("response", "Нет ответа от ноды")
-        
-        # Для остальных нод используем run
-        state["content"] = request
+        state.content = request
         result = await self.node.run(state)
-        if isinstance(result, dict):
-            return result.get("response", result.get("result", str(result)))
+        if isinstance(result, ExecutionState):
+            return result.response or "Нет ответа от ноды"
         return str(result)
 
     def to_openai_schema(self) -> Dict[str, Any]:
@@ -443,12 +589,17 @@ class NodeAsTool:
 
 
 class FunctionNode(BaseNode):
-    """Python функция из inline кода или callable."""
+    """
+    Python функция из inline кода или callable.
+    
+    Контракт: функция принимает state и возвращает НОВЫЙ state.
+    При параллельном выполнении раннер мержит стейты.
+    """
 
     def __init__(
         self,
         node_id: str,
-        code: Any = None,  # str (inline код) или callable (для тестов)
+        code: Any = None,
         config: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(node_id, config)
@@ -461,50 +612,46 @@ class FunctionNode(BaseNode):
             self.code = cfg.get("code")
             
         if self.code is None and cfg.get("function"):
-            # Загрузка по пути к функции (CODE_REFERENCE)
             function_path = cfg["function"]
             try:
                 module_path, func_name = function_path.rsplit(".", 1)
                 module = importlib.import_module(module_path)
                 func = getattr(module, func_name)
-                # Для callables сохраняем напрямую если передали путь
                 if not self.code:
                     self.code = inspect.getsource(func)
                     self._callable = func
             except Exception as e:
-                # Мягкое падение: если путь не валиден, ругнемся при run
                 logger.error(f"Node '{node_id}': failed to load code from {function_path}: {e}")
         
         if callable(self.code):
-            # Для тестов - принимаем callable напрямую
             self._callable = self.code
             self.code = None
 
-    async def run(self, state: ExecutionState) -> ExecutionState:
-        """Выполняет inline код через TaskIQ или callable напрямую."""
-        mock_data = self._check_mock(state)
-        if mock_data is not None:
-            logger.info(f"[node:{self.node_id}] using mock data")
-            for key, value in mock_data.items():
-                setattr(state, key, value)
-            return state
-
+    async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> ExecutionState:
+        """
+        Выполняет функцию.
+        
+        Контракт: функция ВСЕГДА возвращает ExecutionState.
+        BaseNode.run() мержит возвращённый state в текущий.
+        """
         if self._callable is not None:
             if asyncio.iscoroutinefunction(self._callable):
-                result = await self._callable(state)
+                result = await self._callable(state, **inputs)
             else:
-                result = self._callable(state)
-            if isinstance(result, dict):
-                return ExecutionState.model_validate(result)
-            return result
+                result = self._callable(state, **inputs)
         elif self.code:
             run_inline_code = get_container().run_inline_code
-            result = await run_inline_code(self.code, state)
-            if isinstance(result, dict):
-                return ExecutionState.model_validate(result)
-            return result
+            result = await run_inline_code(self.code, state, **inputs)
         else:
             raise ValueError(f"Node '{self.node_id}': code required")
+        
+        if not isinstance(result, ExecutionState):
+            raise TypeError(
+                f"FunctionNode '{self.node_id}': function must return ExecutionState, "
+                f"got {type(result).__name__}. "
+                "Modify state and return it: return state"
+            )
+        return result
 
 
 class ToolNode(BaseNode):
@@ -522,8 +669,13 @@ class ToolNode(BaseNode):
         self.tool = tool
         
         cfg = config or {}
-        self.input_mapping = input_mapping if input_mapping is not None else (cfg.get("input_mapping") or {})
-        self.output_key = output_key if output_key is not None else cfg.get("output_key", node_id)
+        if input_mapping is not None:
+            self.input_mapping = input_mapping
+        elif cfg.get("input_mapping"):
+            self.input_mapping = cfg.get("input_mapping")
+            
+        if output_key is not None:
+            self.output_key = output_key
 
     async def _ensure_tool(self):
         """Загружает tool если он еще не загружен."""
@@ -543,25 +695,17 @@ class ToolNode(BaseNode):
             return
             
         if not code:
-             raise ValueError(f"Node '{self.node_id}': code or tool_id required for type=tool")
+            raise ValueError(f"Node '{self.node_id}': code or tool_id required for type=tool")
              
         parameters = None
         args_schema = cfg.get("args_schema")
-        logger.info(f"[ToolNode._ensure_tool] args_schema type: {type(args_schema)}, value: {args_schema}")
         if args_schema:
-            try:
-                parameters = {}
-                logger.info(f"[ToolNode._ensure_tool] Iterating over args_schema.items()")
-                for name, schema in args_schema.items():
-                    logger.info(f"[ToolNode._ensure_tool] Processing param '{name}', schema type: {type(schema)}, value: {schema}")
-                    parameters[name] = CallParameter(
-                        type=schema.get("type", "string"),
-                        description=schema.get("description", ""),
-                    )
-                logger.info(f"[ToolNode._ensure_tool] Successfully created parameters: {list(parameters.keys())}")
-            except Exception as e:
-                logger.error(f"[ToolNode._ensure_tool] Error creating parameters: {e}", exc_info=True)
-                raise
+            parameters = {}
+            for name, schema in args_schema.items():
+                parameters[name] = CallParameter(
+                    type=schema.get("type", "string"),
+                    description=schema.get("description", ""),
+                )
         
         self.tool = InlineTool(
             tool_id=tool_id,
@@ -570,35 +714,25 @@ class ToolNode(BaseNode):
             parameters=parameters,
         )
 
-    async def run(self, state: ExecutionState) -> ExecutionState:
-        """Выполняет tool."""
-        mock_data = self._check_mock(state)
-        if mock_data is not None:
-            logger.info(f"[node:{self.node_id}] using mock data")
-            for key, value in mock_data.items():
-                setattr(state, key, value)
-            return state
-
+    async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
+        """Выполняет tool с inputs как аргументами."""
         await self._ensure_tool()
-
-        args = self._build_args(state)
+        
+        args = self._build_args_with_defaults(inputs)
         logger.info(f"[node:{self.node_id}] Вызов tool '{self.tool.name}' с args: {list(args.keys())}")
         result = await self.tool.run(args, state)
-        setattr(state, self.output_key, result)
-        return state
+        return result
 
-    def _build_args(self, state: ExecutionState) -> Dict[str, Any]:
-        """Собирает аргументы tool из state по маппингу."""
+    def _build_args_with_defaults(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Добавляет default значения из параметров tool к inputs."""
         args = {}
         if hasattr(self.tool, "parameters") and self.tool.parameters:
             properties = self.tool.parameters.get("properties", {})
             for prop_name, prop_schema in properties.items():
                 if "default" in prop_schema:
                     args[prop_name] = prop_schema["default"]
-
-        for arg_name, source in self.input_mapping.items():
-            args[arg_name] = MappingResolver.resolve_value(source, state)
-
+        
+        args.update(inputs)
         return args
 
 
@@ -618,55 +752,34 @@ class AgentNode(BaseNode):
         
         self.agent_id = agent_id or cfg.get("agent_id")
         self.skill_id = skill_id or cfg.get("skill_id", "default")
-        self.input_mapping = input_mapping or cfg.get("input_mapping")
+        
+        if input_mapping is not None:
+            self.input_mapping = input_mapping
+        elif cfg.get("input_mapping"):
+            self.input_mapping = cfg.get("input_mapping")
+            
         self._agent = None
 
-    async def run(self, state: ExecutionState) -> ExecutionState:
-        """Запускает вложенный Agent с указанным skill."""
-        mock_data = self._check_mock(state)
-        if mock_data is not None:
-            logger.info(f"[node:{self.node_id}] using mock data")
-            for key, value in mock_data.items():
-                setattr(state, key, value)
-            return state
-            
+    async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
+        """
+        Запускает вложенный Agent.
+        
+        Возвращает result.response для записи в output_key.
+        _copy_state_back мержит изменения из вложенного агента обратно в state.
+        """
         if not self.agent_id:
-             raise ValueError(f"Node '{self.node_id}': agent_id required")
+            raise ValueError(f"Node '{self.node_id}': agent_id required")
 
-        nested_state = self._build_agent_state(state)
+        nested_state = self._prepare_state(state, inputs)
 
         if self._agent is None:
             container = get_container()
             self._agent = await container.agent_factory.get_flow(self.agent_id, self.skill_id)
 
-        result = await self._agent.execute(nested_state)
+        result = await self._agent.run(nested_state)
+        self._copy_state_back(result, state)
         
-        for field_name in ExecutionState.model_fields:
-            if hasattr(result, field_name):
-                setattr(state, field_name, getattr(result, field_name))
-        
-        if hasattr(result, '__pydantic_extra__') and result.__pydantic_extra__:
-            if not hasattr(state, '__pydantic_extra__') or state.__pydantic_extra__ is None:
-                state.__pydantic_extra__ = {}
-            state.__pydantic_extra__.update(result.__pydantic_extra__)
-        
-        return state
-
-    def _build_agent_state(self, state: ExecutionState) -> ExecutionState:
-        """Строит ExecutionState для вложенного Agent."""
-        if not self.input_mapping:
-            # Возвращаем копию состояния
-            return ExecutionState.model_validate(state.model_dump(exclude_none=False))
-        
-        mapped_dict = MappingResolver.build_mapped_state(self.input_mapping, state)
-        return ExecutionState.create(
-            task_id=state.task_id,
-            context_id=state.context_id,
-            user_id=state.user_id,
-            session_id=state.session_id,
-            variables=state.variables,
-            **mapped_dict
-        )
+        return state.response
 
 
 class RemoteAgentNode(BaseNode):
@@ -686,57 +799,54 @@ class RemoteAgentNode(BaseNode):
         cfg = config or {}
         
         self.url = url if url is not None else cfg.get("url")
-        self.agent_id = agent_id if agent_id is not None else cfg.get("agent_id")
+        self.remote_agent_id = agent_id if agent_id is not None else cfg.get("agent_id")
         self.skill_id = skill_id if skill_id is not None else cfg.get("skill_id", "default")
         self.auth_headers_config = auth_headers if auth_headers is not None else cfg.get("auth_headers", {})
-        self.input_mapping = input_mapping if input_mapping is not None else cfg.get("input_mapping", {"type": "content"})
+        
+        if input_mapping is not None:
+            self.input_mapping = input_mapping
+        elif cfg.get("input_mapping"):
+            self.input_mapping = cfg.get("input_mapping")
 
-        if not self.url and not self.agent_id:
-            # Отложим проверку до run, так как config может быть не полным при инициализации
-            pass
-
-    async def run(self, state: ExecutionState) -> ExecutionState:
+    async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
         """Вызывает внешнего агента."""
-        mock_data = self._check_mock(state)
-        if mock_data is not None:
-            logger.info(f"[node:{self.node_id}] using mock data")
-            for key, value in mock_data.items():
-                setattr(state, key, value)
-            return state
-            
-        if not self.url and not self.agent_id:
-             raise ValueError("RemoteAgentNode requires 'url' or 'agent_id'")
+        if not self.url and not self.remote_agent_id:
+            raise ValueError("RemoteAgentNode requires 'url' or 'agent_id'")
 
         container = get_container()
         variables = state.variables
 
-        url = self.url
-        auth_headers: Dict[str, str] = {}
+        url, auth_headers = await self._resolve_connection(container, variables)
 
-        if self.agent_id:
-            agent = await container.agent_discovery.get_agent(self.agent_id)
-            if agent is None:
-                raise ValueError(f"External agent '{self.agent_id}' not found in registry")
-            url = agent.url
-            auth_headers = agent.auth_headers
-        else:
-            url = self._resolve_value(self.url, variables)
-            auth_headers = self._resolve_auth_headers(self.auth_headers_config, variables)
-
-        content = self._resolve_input(state)
-        session_id = state.session_id
+        content = inputs.get("content", state.content or "")
+        if not isinstance(content, str):
+            content = json.dumps(content, ensure_ascii=False)
 
         result = await container.a2a_client.send_task(
             base_url=url,
             content=content,
-            session_id=session_id,
+            session_id=state.session_id,
             skill_id=self.skill_id,
             auth_headers=auth_headers,
         )
 
         state.response = result.get("response", "")
         setattr(state, "remote_status", result.get("status", "completed"))
-        return state
+        return result.get("response", "")
+
+    async def _resolve_connection(
+        self, container, variables: Dict[str, Any]
+    ) -> tuple[str, Dict[str, str]]:
+        """Резолвит URL и auth headers."""
+        if self.remote_agent_id:
+            agent = await container.agent_discovery.get_agent(self.remote_agent_id)
+            if agent is None:
+                raise ValueError(f"External agent '{self.remote_agent_id}' not found in registry")
+            return agent.url, agent.auth_headers
+        
+        url = self._resolve_value(self.url, variables)
+        auth_headers = self._resolve_auth_headers(self.auth_headers_config, variables)
+        return url, auth_headers
 
     def _resolve_value(self, value: str, variables: Dict[str, Any]) -> str:
         """Резолвит @var: в строке."""
@@ -754,59 +864,6 @@ class RemoteAgentNode(BaseNode):
             return {}
         return {k: self._resolve_value(v, variables) for k, v in headers.items()}
 
-    def _resolve_input(self, state: ExecutionState) -> str:
-        """Резолвит входные данные для отправки агенту."""
-        mapping = self.input_mapping or {"type": "content"}
-
-        if "type" not in mapping:
-            mapped_state = MappingResolver.build_mapped_state(mapping, state)
-            value = mapped_state.get("content", "")
-            if isinstance(value, str):
-                return value
-            return json.dumps(value, ensure_ascii=False)
-
-        mapping_type = mapping.get("type", "content")
-
-        if mapping_type == "content":
-            return getattr(state, "content", "")
-        elif mapping_type == "state_field":
-            field = mapping.get("field", "content")
-            value = getattr(state, field, "")
-            if isinstance(value, str):
-                return value
-            return json.dumps(value, ensure_ascii=False)
-        elif mapping_type == "messages":
-            last_n = mapping.get("last_n", 1)
-            messages = state.messages or []
-            if not messages:
-                return state.get("content", "")
-            selected = messages[-last_n:] if last_n > 0 else messages
-            return self._format_messages(selected)
-
-        return state.get("content", "")
-
-    def _format_messages(self, messages: list) -> str:
-        """Форматирует список сообщений в текст."""
-        result_parts = []
-        for msg in messages:
-            if hasattr(msg, "parts"):
-                # Message объект
-                for part in msg.parts:
-                    if hasattr(part, "root") and hasattr(part.root, "text"):
-                        result_parts.append(part.root.text)
-            elif isinstance(msg, dict):
-                # Сериализованный Message (после to_dict)
-                if "parts" in msg:
-                    for part in msg["parts"]:
-                        if isinstance(part, dict):
-                            if "text" in part:
-                                result_parts.append(part["text"])
-                elif "content" in msg:
-                    result_parts.append(str(msg["content"]))
-                elif "text" in msg:
-                    result_parts.append(str(msg["text"]))
-        return "\n".join(result_parts)
-
 
 class ExternalAPINode(BaseNode):
     """Вызов внешнего HTTP API."""
@@ -814,32 +871,25 @@ class ExternalAPINode(BaseNode):
     def __init__(
         self,
         node_id: str,
-        api_config: Dict[str, Any],
+        api_config: Optional[Dict[str, Any]] = None,
         config: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(node_id, config)
-        self.api_config = api_config or (config if config else {})
+        self.api_config = api_config or config or {}
 
     @classmethod
     def from_config(cls, node_id: str, config: Dict[str, Any]) -> "ExternalAPINode":
         """Создает ExternalAPINode из конфига."""
         return cls(node_id=node_id, api_config=config, config=config)
 
-    async def run(self, state: ExecutionState) -> ExecutionState:
-        """Вызывает внешний API."""
-        mock_data = self._check_mock(state)
-        if mock_data is not None:
-            logger.info(f"[node:{self.node_id}] using mock data")
-            for key, value in mock_data.items():
-                setattr(state, key, value)
-            return state
-
+    def _build_api_config(self) -> ExternalAPIConfig:
+        """Строит конфиг API."""
         parameters = []
         for p in self.api_config.get("parameters", []):
             if isinstance(p, dict):
                 parameters.append(ParameterSchema(**p))
 
-        api_cfg = ExternalAPIConfig(
+        return ExternalAPIConfig(
             api_id=self.node_id,
             name=self.api_config.get("name", self.node_id),
             description=self.api_config.get("description"),
@@ -852,24 +902,25 @@ class ExternalAPINode(BaseNode):
             state_mapping=self.api_config.get("state_mapping", {}),
         )
 
+    async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
+        """Вызывает внешний API с inputs как аргументами."""
+        api_cfg = self._build_api_config()
         variables = state.variables
 
-        args = {}
-        for param in api_cfg.parameters:
-            if param.source:
-                args[param.name] = MappingResolver.resolve_value(param.source, state)
-            elif hasattr(state, param.name):
-                args[param.name] = getattr(state, param.name)
-            elif param.default is not None:
-                args[param.name] = param.default
+        # Если input_mapping не задан, автоматически берем параметры из state
+        if not inputs:
+            for param in api_cfg.parameters:
+                value = state.get(param.name)
+                if value is not None:
+                    inputs[param.name] = value
 
         client = ExternalAPIClient(timeout=api_cfg.timeout)
-        result = await client.call(api_cfg, args, variables)
+        result = await client.call(api_cfg, inputs, variables)
 
         if result.get("status") == "waiting_input" and result.get("interrupt"):
             interrupt_data = result["interrupt"]
             state.interrupt = InterruptData(question=interrupt_data.get("question", ""))
-            return state
+            return None
 
         if result.get("status") == "error":
             raise ValueError(f"External API error: {result.get('error')}")
@@ -882,7 +933,7 @@ class ExternalAPINode(BaseNode):
         setattr(state, "api_response", result.get("data"))
         setattr(state, "api_status", result.get("status"))
 
-        return state
+        return result.get("data")
 
 
 async def create_node(node_id: str, node_config: Dict[str, Any]) -> BaseNode:

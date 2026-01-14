@@ -19,8 +19,8 @@ from core.state import ExecutionState
 class TestSubflowInputMapping:
     """Тесты input_mapping для AgentNode."""
 
-    def test_build_agent_state_no_mapping(self):
-        """Без маппинга передаётся весь state."""
+    def test_resolve_inputs_no_mapping(self):
+        """Без маппинга inputs пустой."""
         node = AgentNode(
             node_id="test_subflow",
             agent_id="child_flow",
@@ -36,14 +36,35 @@ class TestSubflowInputMapping:
             variables={"api_key": "secret"}
         )
 
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
+        
+        assert inputs == {}
 
-        # Весь state скопирован
+    def test_prepare_state_no_mapping(self):
+        """Без маппинга _prepare_state возвращает копию state."""
+        node = AgentNode(
+            node_id="test_subflow",
+            agent_id="child_flow",
+            input_mapping=None,
+        )
+
+        state = ExecutionState(
+            task_id="test-task",
+            context_id="test-context",
+            user_id="123",
+            session_id="test-agent:test-context",
+            content="hello",
+            variables={"api_key": "secret"}
+        )
+
+        inputs = node._resolve_inputs(state)
+        result = node._prepare_state(state, inputs)
+
         assert result.content == "hello"
         assert result.user_id == "123"
         assert result.variables == {"api_key": "secret"}
 
-    def test_build_agent_state_with_state_reference(self):
+    def test_resolve_inputs_with_state_reference(self):
         """@state:field берёт значение из state."""
         node = AgentNode(
             node_id="test_subflow",
@@ -66,18 +87,13 @@ class TestSubflowInputMapping:
             variables={"api_key": "secret"}
         )
 
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
 
-        # Маппинг применён
-        assert result.content == "processed query"
-        assert result.user_name == "John"
-        # Служебные поля скопированы
-        assert result.variables == {"api_key": "secret"}
-        # Немаппированные поля не переданы
-        assert not hasattr(result, "extra_field")
-        assert not hasattr(result, "prepared_query")
+        assert inputs["content"] == "processed query"
+        assert inputs["user_name"] == "John"
+        assert "extra_field" not in inputs
 
-    def test_build_agent_state_with_nested_path(self):
+    def test_resolve_inputs_with_nested_path(self):
         """@state:nested.path берёт вложенное значение."""
         node = AgentNode(
             node_id="test_subflow",
@@ -102,12 +118,12 @@ class TestSubflowInputMapping:
             }
         )
 
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
 
-        assert result.email == "alice@example.com"
-        assert result.name == "Alice"
+        assert inputs["email"] == "alice@example.com"
+        assert inputs["name"] == "Alice"
 
-    def test_build_agent_state_with_constant(self):
+    def test_resolve_inputs_with_constant(self):
         """Строка без @state: передаётся как константа."""
         node = AgentNode(
             node_id="test_subflow",
@@ -128,13 +144,13 @@ class TestSubflowInputMapping:
             variables={}
         )
 
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
 
-        assert result.mode == "analysis"
-        assert result.version == "v2"
-        assert result.content == "user question"
+        assert inputs["mode"] == "analysis"
+        assert inputs["version"] == "v2"
+        assert inputs["content"] == "user question"
 
-    def test_build_agent_state_missing_field_returns_none(self):
+    def test_resolve_inputs_missing_field_returns_none(self):
         """Отсутствующее поле возвращает None."""
         node = AgentNode(
             node_id="test_subflow",
@@ -152,11 +168,11 @@ class TestSubflowInputMapping:
             other="data"
         )
 
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
 
-        assert result.content is None
+        assert inputs["content"] is None
 
-    def test_build_agent_state_missing_nested_path_returns_none(self):
+    def test_resolve_inputs_missing_nested_path_returns_none(self):
         """Отсутствующий вложенный путь возвращает None."""
         node = AgentNode(
             node_id="test_subflow",
@@ -174,11 +190,11 @@ class TestSubflowInputMapping:
             a={"x": 1}
         )
 
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
 
-        assert result.value is None
+        assert inputs["value"] is None
 
-    def test_build_agent_state_non_string_value_passed_as_is(self):
+    def test_resolve_inputs_non_string_value_passed_as_is(self):
         """Нестроковые значения передаются как есть."""
         node = AgentNode(
             node_id="test_subflow",
@@ -197,14 +213,14 @@ class TestSubflowInputMapping:
             session_id="test-agent:test-context",
         )
 
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
 
-        assert result.count == 42
-        assert result.enabled is True
-        assert result.items == ["a", "b", "c"]
+        assert inputs["count"] == 42
+        assert inputs["enabled"] is True
+        assert inputs["items"] == ["a", "b", "c"]
 
-    def test_build_agent_state_all_dunder_fields_copied(self):
-        """Все служебные поля (__name__) копируются."""
+    def test_prepare_state_applies_inputs(self):
+        """_prepare_state применяет inputs к state."""
         node = AgentNode(
             node_id="test_subflow",
             agent_id="child_flow",
@@ -223,12 +239,12 @@ class TestSubflowInputMapping:
             session_id="test-agent:test-context"
         )
 
-        result = node._build_agent_state(state)
+        inputs = node._resolve_inputs(state)
+        result = node._prepare_state(state, inputs)
 
         assert result.content == "test"
         assert result.variables == {"key": "value"}
         assert result.session_id == "test-agent:test-context"
-        assert not hasattr(result, "user_data")
 
 
 class TestSubflowInputMappingIntegration:
@@ -266,9 +282,6 @@ class TestSubflowInputMappingIntegration:
 
         result = await node.run(state)
 
-        # Mock данные применены
         assert result["result"] == "Mocked response"
         assert result["processed"] is True
-        # Оригинальные данные сохранены
         assert result["user_query"] == "What is the weather?"
-

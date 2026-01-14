@@ -1050,3 +1050,42 @@ def test_a2a_agent():
     """
     yield "http://localhost:8005"
 
+
+@pytest_asyncio.fixture
+async def test_node_in_db(container, unique_id):
+    """Создает тестовую ноду в БД для валидации."""
+    from apps.agents.src.models import NodeConfig
+    
+    node_id = f"test_node_{unique_id}"
+    node = NodeConfig(
+        node_id=node_id,
+        name="Test Node",
+        type="react_node",
+        prompt="Test prompt",
+    )
+    await container.node_repository.set(node)
+    yield node_id
+    await container.node_repository.delete(node_id)
+
+
+@pytest_asyncio.fixture
+async def test_agent_for_tool(container, unique_id):
+    """Создает тестового агента для использования как tool."""
+    from apps.agents.src.models import AgentConfig
+    
+    agent_id = f"test_agent_{unique_id}"
+    agent = AgentConfig(
+        agent_id=agent_id,
+        name="Test Agent as Tool",
+        entry="main",
+        nodes={
+            "main": {
+                "type": "function",
+                "code": "async def run(state):\n    return state",
+            }
+        },
+    )
+    await container.agent_repository.set(agent)
+    yield agent_id
+    await container.agent_repository.delete(agent_id)
+

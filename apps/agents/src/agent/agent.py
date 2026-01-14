@@ -106,38 +106,29 @@ class Agent:
                 )
         return result
 
-    async def execute(self, state: ExecutionState) -> ExecutionState:
+    async def run(self, state: ExecutionState) -> ExecutionState:
         """
-        Выполняет агента.
+        Единственная точка входа для выполнения агента.
+        
+        Автоматически определяет режим:
+        - Resume: если есть state.interrupt и state.content (ответ пользователя)
+        - Start: новый запуск с entry ноды
 
         Args:
-            state: Начальный ExecutionState
+            state: ExecutionState
 
         Returns:
             Финальный ExecutionState
         """
-        if not state.current_nodes:
+        if state.interrupt and state.content:
+            # Resume: есть interrupt и новый контент (ответ пользователя)
+            logger.info(f"Agent {self.agent_id}: resume with answer='{state.content[:50]}...'")
+            state.interrupt = None
+        elif not state.current_nodes:
+            # Start: новый запуск
             state.current_nodes = [self.entry]
 
         state.variables = {**self.variables, **state.variables}
-
-        return await self._execute_loop(state)
-
-    async def resume(self, state: ExecutionState, answer: str) -> ExecutionState:
-        """
-        Продолжает выполнение агента после interrupt.
-
-        Args:
-            state: ExecutionState с сохранённым interrupt
-            answer: Ответ пользователя на вопрос
-
-        Returns:
-            Финальный ExecutionState
-        """
-        logger.info(f"Agent {self.agent_id}: resume with answer='{answer[:50]}...'")
-
-        state.interrupt = None
-        state.content = answer
 
         return await self._execute_loop(state)
 

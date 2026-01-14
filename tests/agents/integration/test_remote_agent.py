@@ -201,7 +201,7 @@ class TestFlowWithRemoteAgent:
             session_id="test-agent:test-context",
             content="Hello remote"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["response"] == "Processed: Hello remote"
 
@@ -251,7 +251,7 @@ def run(state):
             session_id="test-agent:test-context",
             content="hello"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["prepared"] is True
         assert result["response"] == "Processed: HELLO"
@@ -302,7 +302,7 @@ def run(state):
             session_id="test-agent:test-context",
             content="test"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         assert result["final"] == "Final: Processed: test"
 
@@ -375,12 +375,12 @@ class TestRemoteAgentInputMapping:
 
     @pytest.mark.asyncio
     async def test_input_mapping_state_field(self, mock_a2a_server_with_logging):
-        """input_mapping с type='state_field' берёт указанное поле."""
+        """input_mapping с @state:field берёт указанное поле."""
         server = mock_a2a_server_with_logging
         node = RemoteAgentNode(
             node_id="remote",
             url=server["url"],
-            input_mapping={"type": "state_field", "field": "my_query"}
+            input_mapping={"content": "@state:my_query"}
         )
 
         state = ExecutionState(
@@ -403,7 +403,7 @@ class TestRemoteAgentInputMapping:
         node = RemoteAgentNode(
             node_id="remote",
             url=server["url"],
-            input_mapping={"type": "state_field", "field": "data"}
+            input_mapping={"content": "@state:data"}
         )
 
         state = ExecutionState(
@@ -443,8 +443,7 @@ def run(state):
                     "type": "remote_agent",
                     "url": server["url"],
                     "input_mapping": {
-                        "type": "state_field",
-                        "field": "prepared_query"
+                        "content": "@state:prepared_query"
                     }
                 }
             },
@@ -472,7 +471,7 @@ def run(state):
             session_id="test-agent:test-context",
             content="original content"
         )
-        result = await flow.execute(state)
+        result = await flow.run(state)
 
         # Проверяем что remote agent получил данные из prepared_query
         assert len(server["received"]) == 1

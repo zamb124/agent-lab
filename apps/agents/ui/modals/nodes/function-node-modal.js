@@ -156,7 +156,7 @@ export class FunctionNodeModal extends BaseNodeModal {
             config.code = code;
         }
         
-        return config;
+        return this._applyStateSettings(config);
     }
 
     renderBody() {
@@ -235,6 +235,8 @@ export class FunctionNodeModal extends BaseNodeModal {
                             <li><code>httpx</code> - HTTP клиент</li>
                         </ul>
                     </div>
+                    
+                    ${this.renderStateSettings()}
                 </div>
                 
                 <div class="form-main">
