@@ -1,19 +1,24 @@
 {
-  "database": {
-    "url": "postgresql+asyncpg://YOUR_DB_USER:YOUR_DB_PASSWORD@localhost:5432/YOUR_DB_NAME",
-    "shared_url": "postgresql+asyncpg://YOUR_DB_USER:YOUR_DB_PASSWORD@localhost:5432/YOUR_SHARED_DB_NAME",
-    "checkpointer_url": "postgresql://YOUR_DB_USER:YOUR_DB_PASSWORD@localhost:5432/YOUR_DB_NAME",
-    "redis_url": "redis://localhost:6379/0"
-  },
   "server": {
-    "env": "local",
-    "domain": "localhost",
-    "port": 8001,
-    "debug": true
+    "env": "development"
   },
   "auth": {
-    "jwt_secret": "YOUR_JWT_SECRET_KEY_CHANGE_IN_PRODUCTION",
-    "session_secret": "YOUR_SESSION_SECRET_KEY_CHANGE_IN_PRODUCTION"
+    "jwt_secret_key": "YOUR_JWT_SECRET_KEY_CHANGE_IN_PRODUCTION",
+    "session_secret": "YOUR_SESSION_SECRET_KEY_CHANGE_IN_PRODUCTION",
+    "providers": {
+      "yandex": {
+        "client_id": "YOUR_YANDEX_CLIENT_ID",
+        "client_secret": "YOUR_YANDEX_CLIENT_SECRET"
+      },
+      "google": {
+        "client_id": "YOUR_GOOGLE_CLIENT_ID",
+        "client_secret": "YOUR_GOOGLE_CLIENT_SECRET"
+      },
+      "github": {
+        "client_id": "YOUR_GITHUB_CLIENT_ID",
+        "client_secret": "YOUR_GITHUB_CLIENT_SECRET"
+      }
+    }
   },
   "llm": {
     "openrouter": {
@@ -21,18 +26,55 @@
     }
   },
   "s3": {
-    "enabled": false,
-    "default_bucket": "your-bucket-name",
     "buckets": {
-      "your-bucket-name": {
-        "provider": "minio",
-        "access_key_id": "YOUR_S3_ACCESS_KEY",
-        "secret_access_key": "YOUR_S3_SECRET_KEY",
-        "region_name": "us-east-1",
-        "endpoint_url": "http://localhost:9000",
-        "enabled": false
+      "secretbucket": {
+        "access_key_id": "YOUR_YANDEX_S3_ACCESS_KEY_ID",
+        "secret_access_key": "YOUR_YANDEX_S3_SECRET_ACCESS_KEY"
+      },
+      "vkbucket": {
+        "access_key_id": "YOUR_VKCLOUD_S3_ACCESS_KEY_ID",
+        "secret_access_key": "YOUR_VKCLOUD_S3_SECRET_ACCESS_KEY"
       }
     }
+  },
+  "proxy": {
+    "proxies": [
+      "http://YOUR_PROXY_USER:YOUR_PROXY_PASSWORD@YOUR_PROXY_HOST:YOUR_PROXY_PORT"
+    ]
+  },
+  "cloud_voice": {
+    "secret_key": "YOUR_CLOUD_VOICE_SECRET_KEY",
+    "client_id": "YOUR_CLOUD_VOICE_CLIENT_ID"
+  },
+  "nano_banana": {
+    "api_key": "YOUR_NANO_BANANA_API_KEY"
+  },
+  "payment_providers": {
+    "providers": {
+      "yoomoney_main": {
+        "account_number": "YOUR_YOOMONEY_ACCOUNT_NUMBER",
+        "notification_secret": "YOUR_YOOMONEY_NOTIFICATION_SECRET",
+        "client_id": "YOUR_YOOMONEY_CLIENT_ID",
+        "client_secret": "YOUR_YOOMONEY_CLIENT_SECRET",
+        "access_token": "YOUR_YOOMONEY_ACCESS_TOKEN"
+      }
+    }
+  },
+  "rag": {
+    "providers": {
+      "chromadb": {
+        "embedding_api_key": "YOUR_EMBEDDING_API_KEY"
+      },
+      "agentset": {
+        "api_key": "YOUR_AGENTSET_API_KEY",
+        "embedding_api_key": "YOUR_EMBEDDING_API_KEY"
+      }
+    }
+  },
+  "push": {
+    "enabled": true,
+    "vapid_public_key": "YOUR_VAPID_PUBLIC_KEY",
+    "vapid_private_key": "YOUR_VAPID_PRIVATE_KEY",
+    "vapid_email": "YOUR_EMAIL@example.com"
   }
 }
-
