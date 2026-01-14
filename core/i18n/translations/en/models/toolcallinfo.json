@@ -1,0 +1,20 @@
+{
+  "fields": {
+    "tool_name": {
+      "title": "Tool Name",
+      "description": "Name of the called tool"
+    },
+    "tool_id": {
+      "title": "Call ID",
+      "description": "Unique identifier of the tool call"
+    },
+    "arguments": {
+      "title": "Arguments",
+      "description": "Arguments passed to the tool"
+    },
+    "result": {
+      "title": "Result",
+      "description": "Result of the tool execution"
+    }
+  }
+}

@@ -1,0 +1,1531 @@
+---
+description: "Правила тестирования агентов и фикстуры playwrite ui tests test"
+alwaysApply: false
+---
+# Правила тестирования
+
+## 🎨 UI ТЕСТЫ: Playwright для компонентов
+
+### ГЛАВНЫЙ ПРИНЦИП: Используй универсальный тестовый endpoint
+
+**ВСЕ UI компоненты тестируются через endpoint `/{service}/test`** который автоматически доступен в TESTING режиме.
+
+### Архитектура UI тестов
+
+```
+Playwright Test
+    ↓
+/{service}/test  →  Пустая HTML страница (создается factory.py)
+    ↓
+page.evaluate()  →  Инжектируем компонент через JavaScript
+    ↓
+Компонент  →  Автоматически определяет WebSocket URL из window.location
+    ↓
+WebSocket  →  ws://{host}/{service}/ws/notifications
+```
+
+### Фикстуры для UI тестов (tests/fixtures/playwright.py)
+
+| Фикстура | Назначение | Использование |
+|----------|------------|---------------|
+| `authenticated_browser_context` | Браузерный контекст с auth cookies | Базовая фикстура для всех UI тестов |
+| `authenticated_page` | Страница с авторизацией | Для прямого использования |
+| `agents_page` | Страница Agents с авторизацией | `await agents_page.goto("http://localhost:9001/agents/test")` |
+| `rag_page` | Страница RAG с авторизацией | `await rag_page.goto("http://localhost:9002/rag/test")` |
+| `crm_page` | Страница CRM с авторизацией | `await crm_page.goto("http://localhost:9003/crm/test")` |
+| `frontend_page` | Страница Frontend с авторизацией | `await frontend_page.goto("http://localhost:9004/frontend/test")` |
+
+### Правильный способ тестирования UI компонентов
+
+```python
+# tests/core/websocket/test_notification_manager_playwright.py
+
+import pytest_asyncio
+import asyncio
+from playwright.async_api import Page, expect
+
+@pytest_asyncio.fixture
+async def page_with_notification_component(crm_page):
+    """
+    Загружает пустую тестовую страницу и инжектирует notification-manager.
+    
+    Использует универсальный endpoint /crm/test из core/app/factory.py
+    URL: http://localhost:9003/crm/test
+    WebSocket: ws://localhost:9003/crm/ws/notifications (определяется автоматически)
+    """
+    # Переходим на пустую тестовую страницу с правильным pathname
+    await crm_page.goto("http://localhost:9003/crm/test", wait_until="load")
+    
+    # Инжектируем notification-manager компонент
+    await crm_page.evaluate("""
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.src = '/static/core/lib/components/platform-notification-manager.js';
+        document.head.appendChild(script);
+        
+        // Создаем компонент после загрузки скрипта
+        script.onload = () => {
+            const manager = document.createElement('platform-notification-manager');
+            document.getElementById('test-root').appendChild(manager);
+        };
+    """)
+    
+    # Ждем загрузку скрипта и инициализацию компонента
+    await asyncio.sleep(5.0)
+    
+    yield crm_page
+
+
+@pytest.mark.asyncio
+@pytest.mark.playwright
+async def test_component_loads_and_connects(page_with_notification_component):
+    """Компонент загружается, кнопка видна, WebSocket подключен"""
+    page = page_with_notification_component
+    
+    # Проверяем что компонент загрузился
+    manager = await page.query_selector('platform-notification-manager')
+    assert manager is not None
+    
+    # Проверяем WebSocket подключение
+    ws_info = await manager.evaluate('''
+        (el) => ({
+            exists: !!el._ws,
+            readyState: el._ws ? el._ws.readyState : null,
+            url: el._ws ? el._ws.url : null,
+            isConnected: el.isConnected
+        })
+    ''')
+    
+    assert ws_info['isConnected'] == True
+    assert ws_info['readyState'] == 1  # OPEN
+```
+
+### Ключевые моменты UI тестов
+
+1. **Универсальный endpoint** `/{service}/test` создается автоматически в `core/app/factory.py`
+2. **Пустая HTML страница** с `<div id="test-root"></div>` - тест сам решает что загружать
+3. **Инжектирование компонента** через `page.evaluate()` с динамической загрузкой скрипта
+4. **Автоопределение WebSocket URL** - компонент сам строит правильный путь из `window.location.pathname`
+5. **Auth cookies** устанавливаются через `authenticated_browser_context`
+
+### ЗАПРЕЩЕНО в UI тестах
+
+```python
+# ❌ НЕ создавай тестовые HTML страницы в production коде
+@app.get("/crm/test-page")
+async def test_page():
+    return """<html>...</html>"""  # НЕТ! Используй endpoint из factory.py
+
+# ❌ НЕ монтируй tests/ директорию в production
+app.mount("/tests", StaticFiles(directory="tests"))  # НЕТ!
+
+# ❌ НЕ используй set_content() для загрузки компонентов
+await page.set_content("""<html>...</html>""")  # НЕТ! Используй goto()
+
+# ❌ НЕ хардкоди WebSocket URL в тестах
+wsUrl = "ws://localhost:9003/crm/ws/notifications"  # НЕТ! Компонент сам определяет
+```
+
+### ПРАВИЛЬНО в UI тестах
+
+```python
+# ✅ Используй универсальный endpoint
+await crm_page.goto("http://localhost:9003/crm/test", wait_until="load")
+
+# ✅ Инжектируй компоненты через evaluate()
+await crm_page.evaluate("""
+    const script = document.createElement('script');
+    script.type = 'module';
+    script.src = '/static/core/lib/components/my-component.js';
+    document.head.appendChild(script);
+    
+    script.onload = () => {
+        const component = document.createElement('my-component');
+        document.getElementById('test-root').appendChild(component);
+    };
+""")
+
+# ✅ Проверяй состояние через Shadow DOM
+await manager.query_selector('.notification-button')
+
+# ✅ Проверяй WebSocket через evaluate()
+ws_info = await manager.evaluate('(el) => ({isConnected: el.isConnected})')
+```
+
+### Пример теста другого UI компонента
+
+```python
+@pytest_asyncio.fixture
+async def page_with_entity_card(crm_page):
+    """Тестирование entity card компонента"""
+    await crm_page.goto("http://localhost:9003/crm/test", wait_until="load")
+    
+    await crm_page.evaluate("""
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.src = '/static/core/lib/components/platform-entity-card.js';
+        document.head.appendChild(script);
+        
+        script.onload = () => {
+            const card = document.createElement('platform-entity-card');
+            card.setAttribute('entity-id', 'test-123');
+            document.getElementById('test-root').appendChild(card);
+        };
+    """)
+    
+    await asyncio.sleep(2.0)
+    yield crm_page
+
+
+@pytest.mark.asyncio
+@pytest.mark.playwright
+async def test_entity_card_renders(page_with_entity_card):
+    """Entity card отображается корректно"""
+    page = page_with_entity_card
+    
+    card = await page.query_selector('platform-entity-card')
+    assert card is not None
+    
+    # Проверяем Shadow DOM элементы
+    title = await card.query_selector('.entity-title')
+    assert title is not None
+```
+
+### Тестирование core компонентов в разных сервисах
+
+**ВАЖНО**: Core компоненты (из `core/frontend/static/lib/components/`) должны тестироваться в контексте **НЕСКОЛЬКИХ** сервисов.
+
+#### Пример: platform-user компонент
+
+Компонент `platform-user` тестируется в 4 разных сервисах, каждый тест фокусируется на разных аспектах:
+
+```
+tests/core/components/
+├── test_platform_user_crm_playwright.py      - Базовый UI, меню, профиль, выход
+├── test_platform_user_agents_playwright.py   - Редактирование профиля, тема
+├── test_platform_user_rag_playwright.py      - Смена компании, multi-tenant
+└── test_platform_user_frontend_playwright.py - Service attrs, полный цикл
+```
+
+#### Почему несколько сервисов?
+
+1. **Универсальность**: Core компонент должен работать везде одинаково
+2. **Разный контекст**: Каждый сервис имеет свои особенности (CRM - компании, Agents - агенты)
+3. **Service-specific attrs**: Компоненты могут использовать специфичные данные сервиса
+4. **Полное покрытие**: Разные сервисы → разные сценарии использования
+
+#### Структура теста core компонента
+
+```python
+# tests/core/components/test_platform_user_crm_playwright.py
+
+@pytest_asyncio.fixture
+async def page_with_user_component(crm_page):
+    """Инжектируем platform-user в CRM контексте"""
+    await crm_page.goto("http://localhost:9003/crm/test", wait_until="load")
+    
+    await crm_page.evaluate("""
+        const script = document.createElement('script');
+        script.type = 'module';
+        script.src = '/static/core/lib/components/platform-user.js';
+        document.head.appendChild(script);
+        
+        script.onload = () => {
+            const component = document.createElement('platform-user');
+            document.getElementById('test-root').appendChild(component);
+        };
+    """)
+    
+    await asyncio.sleep(3.0)
+    yield crm_page
+
+
+# Группа 1: Базовый UI
+@pytest.mark.asyncio
+@pytest.mark.playwright
+async def test_component_loads_and_visible(page_with_user_component):
+    """Компонент загружается и виден"""
+    page = page_with_user_component
+    user_component = await page.query_selector('platform-user')
+    assert user_component is not None
+    is_visible = await user_component.is_visible()
+    assert is_visible
+
+
+# Группа 2: Выпадающее меню
+@pytest.mark.asyncio
+@pytest.mark.playwright
+async def test_menu_opens_on_click(page_with_user_component):
+    """Меню открывается по клику"""
+    page = page_with_user_component
+    user_component = await page.query_selector('platform-user')
+    user_button = await user_component.query_selector('.user-button')
+    
+    await user_button.click()
+    await asyncio.sleep(0.3)
+    
+    menu = await user_component.query_selector('.user-menu')
+    assert menu is not None
+```
+
+#### Запуск тестов core компонентов
+
+```bash
+# Все тесты platform-user
+pytest tests/core/components/test_platform_user_*.py -v -m playwright
+
+# Только CRM контекст
+pytest tests/core/components/test_platform_user_crm_playwright.py -v
+
+# Только смена компании (RAG)
+pytest tests/core/components/test_platform_user_rag_playwright.py -k "company" -v
+
+# Только профиль (Agents)
+pytest tests/core/components/test_platform_user_agents_playwright.py -k "profile" -v
+```
+
+### Тестовый endpoint в factory.py
+
+Endpoint `/{service}/test` создается автоматически при `TESTING=true`:
+
+```python
+# core/app/factory.py
+
+# Testing endpoint (ТОЛЬКО в TESTING режиме)
+if os.getenv("TESTING", "false").lower() == "true":
+    @app.get(f"/{service_name}/test", response_class=HTMLResponse)
+    async def test_page():
+        """
+        Универсальная пустая страница для E2E UI тестов.
+        
+        Доступна ТОЛЬКО в TESTING режиме на всех сервисах:
+        - CRM: http://localhost:9003/crm/test
+        - Frontend: http://localhost:9004/frontend/test
+        - Agents: http://localhost:9001/agents/test
+        - RAG: http://localhost:9002/rag/test
+        
+        Страница пустая - тесты через Playwright сами:
+        - Инжектируют нужные компоненты через evaluate()
+        - Загружают скрипты
+        - Манипулируют DOM
+        
+        Предоставляет:
+        - importmap для lit (CDN)
+        - Доступ к /static/core/* (все core компоненты)
+        - Пустой контейнер #test-root
+        """
+        return """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>E2E Test Page</title>
+    <script type="importmap">
+    {
+        "imports": {
+            "lit": "https://cdn.jsdelivr.net/npm/lit@3/+esm",
+            "lit/": "https://cdn.jsdelivr.net/npm/lit@3/"
+        }
+    }
+    </script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            padding: 2rem;
+        }
+        #test-root {
+            min-height: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div id="test-root"></div>
+</body>
+</html>"""
+    
+    logger.info(f"✅ Test endpoint enabled: /{service_name}/test (TESTING mode)")
+```
+
+### Auth middleware для тестовых страниц
+
+Тестовые endpoint'ы добавлены в `NO_SUBDOMAIN_ALLOWED_PATHS`:
+
+```python
+# core/middleware/auth/route_config.py
+
+NO_SUBDOMAIN_ALLOWED_PATHS = [
+    "/select-company",
+    "/api/companies/check-slug",
+    "/api/companies/me",
+    "/api/companies",
+    "/api/auth/me",
+    "/*/api/auth/me",
+    "/*/api/auth/me/*",
+    "/frontend/api/companies/check-slug",
+    "/frontend/api/companies/me",
+    "/frontend/api/companies",
+    "/*/test",  # E2E тестовые страницы (TESTING mode only)
+]
+```
+
+---
+
+## БЫСТРАЯ СПРАВКА: Какую фикстуру использовать?
+
+### КРИТИЧЕСКИ ВАЖНО: Используй ТОЛЬКО эти фикстуры!
+
+| Задача | Фикстура | Тип | Пример |
+|--------|----------|-----|--------|
+| **Уникальный ID** | `unique_id` | **ОБЯЗАТЕЛЬНО** | `context_id = f"test-{unique_id}"` |
+| **E2E UI тест CRM** | `crm_page` | Playwright Page | `await crm_page.goto("http://localhost:9003/crm/test")` |
+| **E2E UI тест Frontend** | `frontend_page` | Playwright Page | `await frontend_page.goto("http://localhost:9004/frontend/test")` |
+| **Браузер с auth** | `authenticated_browser_context` | Playwright Context | Автоматически через `crm_page` |
+| **Страница с auth** | `authenticated_page` | Playwright Page | Для прямого использования |
+| **Unit тест Agents API** | `agents_client` | ASGI (быстро) | `await agents_client.post(...)` |
+| **Unit тест RAG API** | `rag_client` | ASGI (быстро) | `await rag_client.get(...)` |
+| **Unit тест CRM API** | `crm_client` | ASGI (быстро) | `await crm_client.post(...)` |
+| **Unit тест Frontend API** | `frontend_client` | ASGI (быстро) | `await frontend_client.get(...)` |
+| **E2E тест Agents** | `agents_client_http` | HTTP server | `await agents_client_http.post(...)` |
+| **E2E тест RAG** | `rag_client_http` | HTTP server | `await rag_client_http.get(...)` |
+| **E2E тест CRM** | `crm_client_http` | HTTP server | `await crm_client_http.post(...)` |
+| **E2E тест Frontend** | `frontend_client_http` | HTTP server | `await frontend_client_http.get(...)` |
+| **E2E все сервисы** | `all_clients_http` | dict клиентов | `all_clients_http["crm"].post(...)` |
+| **Запуск Agents сервера** | `agents_service` | HTTP server | Автоматически через `agents_client_http` |
+| **Запуск RAG сервера** | `rag_service` | HTTP server | Автоматически через `rag_client_http` |
+| **Запуск CRM сервера** | `crm_service` | HTTP server | Автоматически через `crm_client_http` |
+| **Запуск Frontend сервера** | `frontend_service` | HTTP server | Автоматически через `frontend_client_http` |
+| **Все сервисы** | `all_services` | dict URL | Для полных E2E тестов |
+| Простой LLM ответ | `mock_llm` | mock | Автоматически с default_response |
+| Несколько LLM ответов | `mock_llm_with_queue` | mock | `mock_llm_with_queue(["Ответ1"])` |
+| Пустой state | `state` | state | `await agent.run(state)` |
+| State с текстом | `state_with_content` | state | `state_with_content.content == "test"` |
+| Кастомный state | `make_test_state` | factory | `state = make_test_state(task_id=...)` |
+| TaskIQ worker | `taskiq_worker` | worker | Автоматически через `app` |
+| RAG worker | `chroma_worker` | worker | Автоматически через `rag_client` |
+| Scheduler | `taskiq_scheduler` | scheduler | `def test_schedule(taskiq_scheduler):` |
+
+**ГЛАВНОЕ:** 
+- 🔴 **СТРОГО ЗАПРЕЩЕНО** создавать свои фикстуры для сервисов/клиентов!
+- ✅ **ВСЕГДА** используй `unique_id` в КАЖДОМ тесте
+- ✅ **ВСЕГДА** используй готовые фикстуры из `tests/fixtures/`
+- ✅ **Unit тесты** → ASGI клиенты (`rag_client`, `crm_client`)
+- ✅ **E2E тесты** → HTTP клиенты (`rag_client_http`, `crm_client_http`)
+- ❌ **НИКОГДА** не создавай свои HTTP клиенты
+- ❌ **НИКОГДА** не запускай сервисы вручную
+- ❌ **НИКОГДА** не используй фиксированные ID
+
+---
+
+## ГЛАВНОЕ ПРАВИЛО: НИКАКИХ МОКОВ
+
+Единственный мок - **MockLLM**. Всё остальное реальное:
+- Реальный PostgreSQL
+- Реальный Redis
+- Реальный MinIO (S3-совместимое хранилище)
+- Реальные agents, nodes, tools
+- Реальный state (ExecutionState)
+- Реальный TaskIQ worker
+
+**ЗАПРЕЩЕНО мокать:**
+- StateRepository
+- AgentFactory
+- ToolRegistry
+- BaseChannel
+- S3Client (используй реальный MinIO)
+- Любые внутренние компоненты
+
+---
+
+## ИЗОЛЯЦИЯ ТЕСТОВ: ОБЯЗАТЕЛЬНО unique_id
+
+**КРИТИЧЕСКИ ВАЖНО:** Все тесты должны использовать уникальные идентификаторы.
+
+### Обязательные правила:
+
+1. **Всегда используй фикстуру `unique_id`** для генерации уникальных значений
+2. **Всегда делай уникальными:**
+   - `session_id` (формат: `agent_id:context_id`)
+   - `context_id`
+   - `task_id`
+   - `user_id`
+   - `agent_id` (если тест создает агента)
+
+3. **Формат `session_id`:**
+```python
+# ПРАВИЛЬНО
+context_id = f"test-{unique_id}"
+session_id = f"{agent_id}:{context_id}"
+
+# НЕПРАВИЛЬНО - одинаковый для всех тестов
+session_id = "test-agent:test-context"
+```
+
+4. **Пример правильного теста:**
+```python
+@pytest.mark.asyncio
+async def test_example(app, mock_llm_with_queue, unique_id):
+    container = get_container()
+    agent = await container.agent_factory.get_agent("example_react")
+    
+    context_id = f"test-{unique_id}"
+    state = ExecutionState.create(
+        task_id=f"task-{unique_id}",
+        context_id=context_id,
+        user_id=f"user-{unique_id}",
+        session_id=f"example_react:{context_id}",
+        content="Test"
+    )
+    result = await agent.run(state)
+```
+
+**Почему это важно:**
+- Тесты могут запускаться параллельно
+- Одинаковые идентификаторы вызывают конфликты в БД/Redis
+- Изоляция данных гарантирует стабильность тестов
+
+---
+
+## Работа с MockLLM
+
+### Простой текстовый ответ
+
+```python
+def test_simple(mock_llm):
+    # mock_llm уже настроен с default_response="Test response"
+    pass
+```
+
+### Очередь ответов (sync тесты)
+
+```python
+def test_with_queue(mock_llm_with_queue):
+    mock_llm_with_queue([
+        "Первый ответ",
+        {"type": "tool_call", "tool": "calculator", "args": {"x": 1}},
+        "Финальный ответ",
+    ])
+```
+
+### Формат ответов в очереди
+
+```python
+# Текстовый ответ
+"Просто текст"
+
+# Tool call
+{"type": "tool_call", "tool": "tool_name", "args": {"arg1": "value"}}
+
+# Явный текст
+{"type": "text", "content": "Текст ответа"}
+```
+
+### MockLLM через Redis (интеграционные тесты)
+
+Worker запускается как subprocess, поэтому mock ответы передаются через Redis:
+
+```python
+@pytest.mark.real_taskiq
+async def test_integration(mock_llm_redis, client, unique_id):
+    await mock_llm_redis([
+        {"type": "text", "content": "Ответ 1"},
+        {"type": "tool_call", "tool": "calculator", "args": {"x": 1}},
+        {"type": "text", "content": "Финальный ответ"},
+    ])
+    
+    context_id = f"test-{unique_id}"
+    response = await client.post(
+        "/agents/example_react",
+        json={
+            "jsonrpc": "2.0",
+            "method": "message/send",
+            "params": {
+                "message": {
+                    "messageId": f"msg-{unique_id}",
+                    "role": "user",
+                    "parts": [{"kind": "text", "text": "Test"}],
+                    "contextId": context_id
+                }
+            }
+        }
+    )
+```
+
+---
+
+## Основные фикстуры
+
+### СТРОГИЕ ПРАВИЛА ИСПОЛЬЗОВАНИЯ ФИКСТУР
+
+**ВСЕГДА используй СУЩЕСТВУЮЩИЕ фикстуры!** НЕ создавай новые, если есть готовые!
+
+```python
+# ✅ ПРАВИЛЬНО - используем готовые фикстуры
+def test_example(app, unique_id, mock_llm_with_queue):
+    pass
+
+# ❌ НЕПРАВИЛЬНО - создаем свои
+def test_example():
+    app = create_app()  # НЕТ! Используй фикстуру app
+    unique_id = str(uuid.uuid4())  # НЕТ! Используй фикстуру unique_id
+```
+
+### Базовые фикстуры (tests/conftest.py)
+
+| Фикстура | Scope | Назначение | ОБЯЗАТЕЛЬНОСТЬ |
+|----------|-------|------------|----------------|
+| `unique_id` | function | Генерирует UUID для изоляции тестов | **ОБЯЗАТЕЛЬНО в КАЖДОМ тесте** |
+| `app` | session | FastAPI приложение с lifespan | Для API тестов |
+| `agents_client` | session | HTTP клиент для /agents API | Для agents API тестов |
+| `frontend_client` | session | HTTP клиент для /frontend API | Для frontend API тестов |
+| `container` | session | AgentContainer (DI) | Для прямого доступа к сервисам |
+| `frontend_container` | session | FrontendContainer (DI) | Для frontend компонентов |
+| `test_context` | function (autouse) | Устанавливает тестовый Context | Автоматически для всех тестов |
+
+### Auth фикстуры (tests/fixtures/auth.py)
+
+**ВАЖНО:** Используй эти фикстуры для тестирования доступа и прав!
+
+| Фикстура | Scope | Компания | Роль | Назначение |
+|----------|-------|----------|------|------------|
+| `auth_headers_system` | function | `system` | owner, admin | Основной пользователь системной компании |
+| `auth_headers_system_user2` | function | `system` | member | Второй пользователь системной компании (для проверки доступа внутри компании) |
+| `auth_headers_company2` | function | `company2` | owner, admin | Пользователь из другой компании (для cross-company тестов) |
+| `auth_headers_company2_user2` | function | `company2` | member | Второй пользователь из другой компании |
+
+**Сценарии использования:**
+
+```python
+# 1. Базовый тест с авторизацией
+async def test_create_entity(crm_client, auth_headers_system, unique_id):
+    response = await crm_client.post(
+        "/crm/api/v1/entities/",
+        json={"entity_type": "note", "name": f"Test {unique_id}"},
+        headers=auth_headers_system  # Авторизованный запрос
+    )
+    assert response.status_code == 200
+
+# 2. Тест доступа внутри компании (same company access)
+async def test_same_company_access(crm_client, auth_headers_system, auth_headers_system_user2, unique_id):
+    # User1 создает entity
+    response1 = await crm_client.post(
+        "/crm/api/v1/entities/",
+        json={"entity_type": "note", "name": f"Test {unique_id}"},
+        headers=auth_headers_system
+    )
+    entity_id = response1.json()["entity_id"]
+    
+    # User2 из той же компании пытается получить доступ
+    response2 = await crm_client.get(
+        f"/crm/api/v1/entities/{entity_id}",
+        headers=auth_headers_system_user2
+    )
+    # Ожидаем 200 если есть namespace access или 403 если нет
+
+# 3. Тест cross-company доступа (public grants)
+async def test_public_access(crm_client, auth_headers_system, auth_headers_company2, unique_id):
+    # System user создает entity
+    response1 = await crm_client.post(
+        "/crm/api/v1/entities/",
+        json={"entity_type": "note", "name": f"Public Note {unique_id}"},
+        headers=auth_headers_system
+    )
+    entity_id = response1.json()["entity_id"]
+    
+    # Делаем публичной
+    await crm_client.post(
+        f"/crm/api/v1/entities/{entity_id}/grants/public",
+        headers=auth_headers_system
+    )
+    
+    # User из другой компании получает доступ
+    response2 = await crm_client.get(
+        f"/crm/api/v1/entities/{entity_id}",
+        headers=auth_headers_company2  # Другая компания
+    )
+    assert response2.status_code == 200
+
+# 4. Тест user-specific grants
+async def test_user_grant(crm_client, auth_headers_system, auth_headers_company2, unique_id):
+    # System user создает entity
+    response1 = await crm_client.post(
+        "/crm/api/v1/entities/",
+        json={"entity_type": "task", "name": f"Task {unique_id}"},
+        headers=auth_headers_system
+    )
+    entity_id = response1.json()["entity_id"]
+    
+    # Шарим конкретному пользователю из company2
+    # Сначала получаем user_id из auth_headers_company2 (через токен)
+    from core.utils.tokens import get_token_service
+    token_service = get_token_service()
+    token = auth_headers_company2["Authorization"].replace("Bearer ", "")
+    payload = token_service.decode_token(token)
+    user_id = payload["user_id"]
+    
+    # Создаем grant для этого user
+    await crm_client.post(
+        f"/crm/api/v1/entities/{entity_id}/grants/user",
+        json={"user_id": user_id, "role": "editor"},
+        headers=auth_headers_system
+    )
+    
+    # User из company2 получает доступ
+    response2 = await crm_client.get(
+        f"/crm/api/v1/entities/{entity_id}",
+        headers=auth_headers_company2
+    )
+    assert response2.status_code == 200
+
+# 5. Тест отказа в доступе (403)
+async def test_access_denied(crm_client, auth_headers_system, auth_headers_company2, unique_id):
+    # System user создает private entity
+    response1 = await crm_client.post(
+        "/crm/api/v1/entities/",
+        json={"entity_type": "note", "name": f"Private {unique_id}"},
+        headers=auth_headers_system
+    )
+    entity_id = response1.json()["entity_id"]
+    
+    # User из другой компании НЕ может получить доступ
+    response2 = await crm_client.get(
+        f"/crm/api/v1/entities/{entity_id}",
+        headers=auth_headers_company2
+    )
+    assert response2.status_code == 403
+```
+
+**Под капотом (как работают auth фикстуры):**
+
+1. **Создают компании** через `Company` модель и сохраняют в `company_repository`
+2. **Создают пользователей** через `User` модель с привязкой к компаниям
+3. **Генерируют JWT токены** через `get_token_service().create_token(user_id, company_id)`
+4. **Возвращают заголовки** в формате `{"Authorization": "Bearer <token>"}`
+
+**Scope: `session` для токенов, `function` для headers**
+- Токены создаются один раз на всю сессию тестов
+- Headers создаются для каждого теста (но используют общий токен)
+- Это обеспечивает баланс между производительностью и изоляцией
+
+### MockLLM фикстуры (tests/conftest.py)
+
+| Фикстура | Scope | Назначение | Когда использовать |
+|----------|-------|------------|-------------------|
+| `mock_llm` | function | MockLLM с default_response | Простые unit тесты |
+| `mock_llm_with_queue` | function | Фабрика для очереди ответов | Sync тесты с несколькими ответами |
+| `reset_mock_llm` | function (autouse) | Сброс MockLLM после теста | Автоматически |
+
+### State фикстуры (tests/conftest.py)
+
+| Фикстура | Scope | Назначение | Когда использовать |
+|----------|-------|------------|-------------------|
+| `state` | function | Пустой ExecutionState | Базовые unit тесты |
+| `state_with_content` | function | State с content="test" | Тесты с входным текстом |
+| `make_test_state` | function | Фабрика для создания state | Когда нужен кастомный state |
+| `mock_context` | function | Тестовый Context | Тесты с контекстом |
+
+### 🚨 НОВЫЕ ФИКСТУРЫ СЕРВИСОВ (tests/fixtures/services.py)
+
+**КРИТИЧЕСКИ ВАЖНО:** ЭТО ЕДИНСТВЕННЫЙ ПРАВИЛЬНЫЙ СПОСОБ ЗАПУСКА СЕРВИСОВ В ТЕСТАХ!
+
+| Фикстура | Порт | Scope | Назначение | Когда использовать |
+|----------|------|-------|------------|-------------------|
+| `agents_service` | 8000 | session | Agents HTTP server | E2E тесты, требующие реальный agents server |
+| `rag_service` | 8004 | session | RAG HTTP server | E2E тесты, CRM attachments, RAG API |
+| `crm_service` | 8003 | session | CRM HTTP server | E2E тесты CRM |
+| `frontend_service` | 8001 | session | Frontend HTTP server | E2E тесты UI |
+| `all_services` | - | session | Все сервисы + dict URL | Полные E2E тесты всей платформы |
+
+**Особенности сервисов:**
+- ✅ Запускаются **ОДИН РАЗ** на всю сессию тестов
+- ✅ Переиспользуются между **параллельными pytest worker'ами**
+- ✅ Используют **тестовую конфигурацию** (БД, Redis на тестовых портах)
+- ✅ Автоматически останавливаются после завершения всех тестов
+- ✅ Поддерживают **pytest-xdist** (параллельный запуск)
+
+**СТРОГО ЗАПРЕЩЕНО:**
+```python
+# ❌ НЕ запускай сервисы вручную!
+import subprocess
+subprocess.Popen(["uvicorn", "apps.rag.main:app", "--port", "8004"])
+
+# ❌ НЕ создавай свои фикстуры для сервисов!
+@pytest.fixture
+def my_rag_server():
+    # НЕТ! Используй rag_service
+    pass
+
+# ✅ ПРАВИЛЬНО - используй готовые фикстуры
+def test_e2e(rag_service):
+    # RAG server уже запущен на localhost:8004
+    import requests
+    response = requests.get("http://localhost:8004/rag/api/v1/providers")
+```
+
+### 🚨 НОВЫЕ HTTP КЛИЕНТЫ (tests/fixtures/clients.py)
+
+**КРИТИЧЕСКИ ВАЖНО:** Используй ПРАВИЛЬНЫЙ тип клиента для ПРАВИЛЬНОГО типа теста!
+
+#### ASGI Clients (для UNIT тестов)
+
+**Когда использовать:** Быстрые unit тесты БЕЗ запуска реального сервера
+
+| Фикстура | Scope | Зависимости | Назначение |
+|----------|-------|-------------|------------|
+| `agents_client` | function | `app` | Unit тесты Agents API |
+| `rag_client` | function | `rag_app`, `chroma_worker` | Unit тесты RAG API |
+| `crm_client` | function | `app`, `rag_app`, `rag_service` | Unit тесты CRM API |
+| `frontend_client` | function | `app` | Unit тесты Frontend API |
+
+**Пример ПРАВИЛЬНОГО использования:**
+```python
+# ✅ Unit тест RAG API (ASGI, быстро)
+async def test_list_providers(rag_client, auth_headers_system):
+    response = await rag_client.get(
+        "/rag/api/v1/providers",
+        headers=auth_headers_system
+    )
+    assert response.status_code == 200
+    assert "chromadb" in response.json()
+```
+
+#### HTTP Clients (для E2E тестов)
+
+**Когда использовать:** E2E тесты с РЕАЛЬНЫМИ HTTP серверами
+
+| Фикстура | Scope | Зависимости | Назначение |
+|----------|-------|-------------|------------|
+| `agents_client_http` | function | `agents_service` | E2E тесты Agents |
+| `rag_client_http` | function | `rag_service` | E2E тесты RAG |
+| `crm_client_http` | function | `crm_service`, `rag_service` | E2E тесты CRM |
+| `frontend_client_http` | function | `frontend_service` | E2E тесты Frontend |
+| `all_clients_http` | function | все сервисы | dict со всеми клиентами |
+
+**Пример ПРАВИЛЬНОГО использования:**
+```python
+# ✅ E2E тест CRM с attachments (реальный HTTP)
+async def test_upload_attachment(crm_client_http, auth_headers_system, unique_id):
+    # Создаем entity
+    entity_response = await crm_client_http.post(
+        "/crm/api/v1/entities/",
+        headers=auth_headers_system,
+        json={
+            "entity_type": "note",
+            "text": f"Test note {unique_id}"
+        }
+    )
+    entity_id = entity_response.json()["entity_id"]
+    
+    # Добавляем attachment (CRM вызовет RAG service через реальный HTTP)
+    with open("test.txt", "rb") as f:
+        attach_response = await crm_client_http.post(
+            f"/crm/api/v1/entities/{entity_id}/attachments",
+            headers=auth_headers_system,
+            files={"file": f}
+        )
+    
+    assert attach_response.status_code == 200
+```
+
+**Пример с all_clients_http:**
+```python
+# ✅ E2E тест всей платформы
+async def test_full_platform(all_clients_http, auth_headers_system, unique_id):
+    # Используем CRM
+    response = await all_clients_http["crm"].post(
+        "/crm/api/v1/entities/",
+        headers=auth_headers_system,
+        json={"entity_type": "note", "text": "Test"}
+    )
+    entity_id = response.json()["entity_id"]
+    
+    # Используем RAG
+    search_response = await all_clients_http["rag"].post(
+        "/rag/api/v1/namespaces/system:default/search",
+        headers=auth_headers_system,
+        json={"query": "Test", "limit": 5}
+    )
+    
+    assert search_response.status_code == 200
+```
+
+### Worker фикстуры (tests/fixtures/workers.py)
+
+**ВАЖНО:** Эти фикстуры запускают реальные subprocess worker'ы!
+
+| Фикстура | Scope | Назначение | Автозапуск |
+|----------|-------|------------|------------|
+| `taskiq_worker` | session | TaskIQ worker subprocess | Автоматически при использовании app |
+| `chroma_worker` | session | ChromaDB worker subprocess | Автоматически через rag_client |
+| `taskiq_broker` | function | TaskIQ broker | Зависит от chroma_worker |
+| `taskiq_scheduler` | session | TaskIQ scheduler subprocess | Для тестов с расписанием |
+
+**Правила использования worker фикстур:**
+```python
+# ✅ ПРАВИЛЬНО - worker запускается автоматически
+def test_api(agents_client, unique_id):
+    # taskiq_worker уже работает через зависимость app
+    pass
+
+# ✅ ПРАВИЛЬНО - явная зависимость от worker
+def test_taskiq(taskiq_worker, unique_id):
+    # Гарантируем что worker запущен
+    pass
+
+# ❌ НЕПРАВИЛЬНО - не запускай worker вручную
+def test_wrong():
+    subprocess.Popen([...])  # НЕТ! Используй фикстуру taskiq_worker
+```
+
+### Inline Tools фикстура (tests/conftest.py)
+
+| Фикстура | Scope | Назначение |
+|----------|-------|------------|
+| `inline_tools` | function | Словарь inline tools для тестов |
+
+### Автоматические фикстуры (autouse=True)
+
+| Фикстура | Scope | Назначение | Отключение |
+|----------|-------|------------|-----------|
+| `test_context` | function | Устанавливает Context | Автоматически |
+| `reset_mock_llm` | function | Сброс MockLLM | Автоматически |
+| `sync_tools` | function | Синхронное выполнение tools | `@pytest.mark.real_taskiq` |
+
+**Как отключить sync_tools:**
+```python
+@pytest.mark.real_taskiq  # Отключает sync_tools
+async def test_with_real_worker(taskiq_worker, unique_id):
+    # Здесь tools выполняются через реальный worker
+    pass
+```
+
+---
+
+## Создание новых worker фикстур
+
+**ВАЖНО:** НЕ дублируй логику! Используй `SessionWorkerManager` из `tests/fixtures/workers.py`!
+
+### Пример создания нового worker
+
+```python
+# tests/fixtures/workers.py
+
+from .workers import SessionWorkerManager
+
+@pytest.fixture(scope="session")
+def my_custom_worker():
+    """
+    Запускает MyCustomWorker для тестов.
+    
+    scope="session" - worker запускается один раз на все тесты.
+    """
+    # В Docker worker уже запущен
+    if os.environ.get("EXTERNAL_AGENT_TEST_URL"):
+        yield None
+        return
+    
+    # Используем SessionWorkerManager для управления worker
+    manager = SessionWorkerManager(
+        name="MyCustomWorker",  # Название для логов
+        lock_file="/tmp/my_custom_worker.lock",  # Файл блокировки
+        pid_file="/tmp/my_custom_worker.pid",  # PID файл
+        command=[sys.executable, "-m", "my_app.worker"],  # Команда запуска
+        env={  # Переменные окружения
+            "TESTING": "true",
+            "DATABASE__URL": "postgresql+asyncpg://...",
+        },
+        cleanup_patterns=[  # Паттерны для pkill (очистка старых процессов)
+            "my_app.worker",
+            "multiprocessing.spawn.*spawn_main",
+            "multiprocessing.resource_tracker",
+        ],
+        startup_wait=3.0,  # Время ожидания запуска (секунды)
+        log_file="/tmp/my_custom_worker.log",  # Путь к stdout логам
+        err_file="/tmp/my_custom_worker_err.log",  # Путь к stderr логам
+    )
+    
+    with manager.start() as worker_process:
+        yield worker_process
+```
+
+### Что делает SessionWorkerManager
+
+1. **Reference counting** - предотвращает преждевременную остановку при параллельном запуске (pytest-xdist)
+2. **Filelock** - гарантирует атомарные операции при запуске/остановке
+3. **Cleanup** - убивает старые процессы и их дочерние multiprocessing процессы
+4. **Автоматическая остановка** - последний тест останавливает worker
+
+**НЕ создавай свою логику запуска worker!** Всегда используй `SessionWorkerManager`!
+
+---
+
+## Маркеры
+
+### `@pytest.mark.real_taskiq`
+
+Отключает `sync_tools` - тест использует реальный TaskIQ worker и Redis pub/sub.
+
+```python
+@pytest.mark.real_taskiq
+async def test_with_real_worker(mock_llm_redis, client, unique_id):
+    # Здесь реальный worker обрабатывает задачи
+    await mock_llm_redis([{"type": "text", "content": "Response"}])
+    ...
+```
+
+---
+
+## 🎯 Как выбрать правильный клиент?
+
+### Decision Tree
+
+```
+Нужно тестировать API?
+├─ Да → Unit тест (один сервис)?
+│  ├─ Да → Используй ASGI клиент
+│  │  ├─ Agents API → agents_client
+│  │  ├─ RAG API → rag_client
+│  │  ├─ CRM API → crm_client
+│  │  └─ Frontend API → frontend_client
+│  └─ Нет → E2E тест (несколько сервисов)?
+│     └─ Да → Используй HTTP клиенты
+│        ├─ CRM + RAG → crm_client_http (зависит от rag_service)
+│        ├─ Вся платформа → all_clients_http
+│        └─ Конкретный сервис → {service}_client_http
+└─ Нет → Unit тест компонента
+   └─ Используй прямой импорт компонента
+```
+
+### Примеры ПРАВИЛЬНОГО выбора
+
+```python
+# ✅ Unit тест RAG API - ASGI клиент (быстро, без реального сервера)
+async def test_rag_providers(rag_client, auth_headers_system):
+    response = await rag_client.get("/rag/api/v1/providers", headers=auth_headers_system)
+    assert response.status_code == 200
+
+# ✅ Unit тест CRM API - ASGI клиент + RAG service (для attachments)
+async def test_crm_entity(crm_client, auth_headers_system, unique_id):
+    response = await crm_client.post(
+        "/crm/api/v1/entities/",
+        headers=auth_headers_system,
+        json={"entity_type": "note", "text": f"Test {unique_id}"}
+    )
+    assert response.status_code == 200
+
+# ✅ E2E тест CRM с attachments - HTTP клиент (реальные сервисы)
+async def test_crm_attachment_e2e(crm_client_http, auth_headers_system, unique_id):
+    # Создаем entity через CRM
+    entity_response = await crm_client_http.post(
+        "/crm/api/v1/entities/",
+        headers=auth_headers_system,
+        json={"entity_type": "note", "text": f"Test {unique_id}"}
+    )
+    entity_id = entity_response.json()["entity_id"]
+    
+    # Загружаем attachment (CRM внутри вызовет RAG через реальный HTTP)
+    with open("test.txt", "rb") as f:
+        attach_response = await crm_client_http.post(
+            f"/crm/api/v1/entities/{entity_id}/attachments",
+            headers=auth_headers_system,
+            files={"file": f}
+        )
+    
+    # Attachment должен быть загружен через RAG service
+    assert attach_response.status_code == 200
+
+# ✅ E2E тест всей платформы - all_clients_http
+async def test_platform_e2e(all_clients_http, auth_headers_system, unique_id):
+    # Используем разные сервисы
+    crm_response = await all_clients_http["crm"].post(...)
+    rag_response = await all_clients_http["rag"].post(...)
+    agents_response = await all_clients_http["agents"].post(...)
+    
+    assert all([crm_response.status_code == 200, ...])
+
+# ✅ Unit тест компонента - без HTTP клиента
+async def test_tool(unique_id):
+    from apps.agents.tools.calculator import CalculatorTool
+    
+    state = ExecutionState.create(
+        task_id=f"task-{unique_id}",
+        context_id=f"ctx-{unique_id}",
+        user_id=f"user-{unique_id}",
+    )
+    
+    tool = CalculatorTool()
+    result = await tool.execute({"expression": "2+2"}, state)
+    assert result == 4
+```
+
+### Примеры НЕПРАВИЛЬНОГО выбора
+
+```python
+# ❌ НЕПРАВИЛЬНО - E2E тест с ASGI клиентом
+async def test_crm_attachment_wrong(crm_client):
+    # crm_client использует ASGI transport
+    # CRM не сможет вызвать RAG через HTTP!
+    # Тест упадет с ошибкой "Connection refused"
+    ...
+
+# ❌ НЕПРАВИЛЬНО - Unit тест с HTTP клиентом (медленно)
+async def test_rag_providers_wrong(rag_client_http):
+    # Запускается реальный HTTP сервер (медленно)
+    # Для unit теста достаточно ASGI клиента
+    response = await rag_client_http.get("/rag/api/v1/providers")
+
+# ❌ НЕПРАВИЛЬНО - создание своего клиента
+async def test_wrong():
+    async with AsyncClient(base_url="http://localhost:8004") as client:
+        # НЕТ! Используй готовую фикстуру rag_client_http
+        response = await client.get("/rag/api/v1/providers")
+```
+
+---
+
+## Примеры тестов
+
+### Unit тест tool
+
+```python
+class TestCalculatorTool:
+    @pytest.mark.asyncio
+    async def test_add(self, unique_id):
+        from apps.agents.tools.calculator import CalculatorTool
+        
+        state = ExecutionState.create(
+            task_id=f"task-{unique_id}",
+            context_id=f"ctx-{unique_id}",
+            user_id=f"user-{unique_id}",
+        )
+        
+        tool = CalculatorTool()
+        result = await tool.execute({"expression": "2+2"}, state)
+        
+        assert result == 4
+```
+
+### Unit тест agent
+
+```python
+class TestAgent:
+    @pytest.mark.asyncio
+    async def test_execute(self, app, mock_llm_with_queue, unique_id):
+        mock_llm_with_queue(["Test response"])
+        
+        container = get_container()
+        agent = await container.agent_factory.get_agent("example_react")
+        
+        context_id = f"test-{unique_id}"
+        state = ExecutionState.create(
+            task_id=f"task-{unique_id}",
+            context_id=context_id,
+            user_id=f"user-{unique_id}",
+            session_id=f"example_react:{context_id}",
+            content="Test input"
+        )
+        
+        result = await agent.run(state)
+        assert result.response == "Test response"
+```
+
+### API тест с A2A
+
+```python
+class TestA2A:
+    @pytest.mark.asyncio
+    async def test_message_send(self, client, mock_llm_with_queue, unique_id):
+        mock_llm_with_queue(["Hello!"])
+        
+        context_id = f"a2a-{unique_id}"
+        response = await client.post(
+            "/agents/example_react",
+            json={
+                "jsonrpc": "2.0",
+                "id": "1",
+                "method": "message/send",
+                "params": {
+                    "message": {
+                        "messageId": f"msg-{unique_id}",
+                        "role": "user",
+                        "parts": [{"kind": "text", "text": "Hi"}],
+                        "contextId": context_id
+                    }
+                }
+            }
+        )
+        
+        assert response.status_code == 200
+        result = response.json()["result"]
+        assert result["status"]["state"] == "completed"
+```
+
+### Тест с tool calls
+
+```python
+class TestReactNode:
+    @pytest.mark.asyncio
+    async def test_tool_call(self, client, mock_llm_with_queue, unique_id):
+        mock_llm_with_queue([
+            {"type": "tool_call", "tool": "calculator", "args": {"expression": "2+2"}},
+            "Результат: 4",
+        ])
+        
+        context_id = f"tool-{unique_id}"
+        response = await client.post(
+            "/agents/example_react",
+            json={
+                "jsonrpc": "2.0",
+                "id": "1",
+                "method": "message/send",
+                "params": {
+                    "message": {
+                        "messageId": f"msg-{unique_id}",
+                        "role": "user",
+                        "parts": [{"kind": "text", "text": "Calculate 2+2"}],
+                        "contextId": context_id
+                    }
+                }
+            }
+        )
+        
+        assert response.status_code == 200
+```
+
+### Тест streaming
+
+```python
+@pytest.mark.real_taskiq
+class TestStreaming:
+    @pytest.mark.asyncio
+    async def test_pubsub(self, redis_client, unique_id):
+        from apps.agents.src.streaming import Emitter, EventSubscriber
+        
+        await redis_client.connect()
+        
+        task_id = f"task-{unique_id}"
+        context_id = f"ctx-{unique_id}"
+        
+        state = ExecutionState.create(
+            task_id=task_id,
+            context_id=context_id,
+            user_id=f"user-{unique_id}"
+        )
+        
+        emitter = Emitter(redis_client, state)
+        subscriber = EventSubscriber(redis_client)
+        
+        # Публикуем событие
+        await emitter.emit_text("Hello")
+        
+        # Подписываемся и читаем
+        events = []
+        async for event in subscriber.subscribe(task_id):
+            events.append(event)
+            if len(events) >= 1:
+                break
+        
+        assert len(events) == 1
+        assert events[0].kind == "task-artifact-update"
+        
+        await redis_client.close()
+```
+
+### Тест interrupt/resume
+
+```python
+class TestInterrupt:
+    @pytest.mark.asyncio
+    async def test_interrupt_resume(self, client, mock_llm_with_queue, unique_id):
+        # Первый запрос - interrupt
+        mock_llm_with_queue([
+            {"type": "tool_call", "tool": "ask_user", "args": {"question": "Какой склад?"}}
+        ])
+        
+        context_id = f"interrupt-{unique_id}"
+        response1 = await client.post(
+            "/agents/example_react",
+            json={
+                "jsonrpc": "2.0",
+                "method": "message/send",
+                "params": {
+                    "message": {
+                        "messageId": f"msg1-{unique_id}",
+                        "role": "user",
+                        "parts": [{"kind": "text", "text": "Start"}],
+                        "contextId": context_id
+                    }
+                }
+            }
+        )
+        
+        assert response1.status_code == 200
+        task1 = response1.json()["result"]
+        assert task1["status"]["state"] == "input-required"
+        
+        # Resume с ответом
+        mock_llm_with_queue(["Спасибо, продолжаю работу"])
+        
+        response2 = await client.post(
+            "/agents/example_react",
+            json={
+                "jsonrpc": "2.0",
+                "method": "message/send",
+                "params": {
+                    "message": {
+                        "messageId": f"msg2-{unique_id}",
+                        "role": "user",
+                        "parts": [{"kind": "text", "text": "Склад Большие"}],
+                        "contextId": context_id
+                    }
+                }
+            }
+        )
+        
+        assert response2.status_code == 200
+        task2 = response2.json()["result"]
+        assert task2["status"]["state"] == "completed"
+```
+
+---
+
+## Структура тестов
+
+```
+tests/
+├── conftest.py          # Общие фикстуры
+├── agents/              # Тесты сервиса agents
+│   ├── conftest.py      # Фикстуры для agents
+│   ├── api/             # Тесты API endpoints
+│   │   ├── test_a2a.py
+│   │   └── test_v1.py
+│   ├── integration/     # Интеграционные тесты
+│   │   ├── test_agent_as_tool.py
+│   │   └── test_interrupt.py
+│   ├── unit/            # Unit тесты
+│   │   ├── test_tools.py
+│   │   └── test_nodes.py
+│   └── streaming/       # Тесты streaming
+│       └── test_emitter.py
+└── core/                # Тесты core модулей
+    ├── auth/
+    ├── clients/
+    └── tracing/
+```
+
+---
+
+## Команды запуска
+
+```bash
+# Поднять тестовые контейнеры
+docker compose -f docker-compose-test.yaml up -d
+
+# Все тесты
+uv run pytest tests/
+
+# С покрытием
+uv run pytest tests/ --cov=apps/agents/src --cov-report=term
+
+# Конкретный файл
+uv run pytest tests/agents/api/test_a2a.py -v
+
+# Конкретный тест
+uv run pytest tests/agents/api/test_a2a.py::TestA2A::test_message_send -v
+
+# С выводом print
+uv run pytest tests/agents/api/test_a2a.py -v -s
+```
+
+---
+
+## СТРОГИЕ ЗАПРЕТЫ
+
+### ❌ ЗАПРЕЩЕНО создавать свои фикстуры для сервисов/клиентов
+
+```python
+# ❌ НЕПРАВИЛЬНО - свой HTTP клиент
+@pytest.fixture
+async def my_rag_client():
+    async with AsyncClient(base_url="http://localhost:8004") as client:
+        yield client
+
+# ✅ ПРАВИЛЬНО - используй готовую фикстуру
+async def test_example(rag_client_http):
+    response = await rag_client_http.get("/rag/api/v1/providers")
+
+
+# ❌ НЕПРАВИЛЬНО - свой сервер
+@pytest.fixture
+def my_rag_server():
+    process = subprocess.Popen(["uvicorn", "apps.rag.main:app", "--port", "8004"])
+    yield
+    process.kill()
+
+# ✅ ПРАВИЛЬНО - используй готовую фикстуру
+def test_example(rag_service):
+    # RAG server уже запущен на localhost:8004
+    pass
+
+
+# ❌ НЕПРАВИЛЬНО - свой app
+@pytest.fixture
+def my_app():
+    return create_app()
+
+# ✅ ПРАВИЛЬНО - используй готовую фикстуру
+def test_example(app):
+    pass
+```
+
+### ❌ ЗАПРЕЩЕНО создавать свои worker фикстуры без SessionWorkerManager
+
+```python
+# ❌ НЕПРАВИЛЬНО
+@pytest.fixture(scope="session")
+def my_worker():
+    process = subprocess.Popen([...])
+    yield process
+    process.kill()
+
+# ✅ ПРАВИЛЬНО
+@pytest.fixture(scope="session")
+def my_worker():
+    manager = SessionWorkerManager(name="MyWorker", ...)
+    with manager.start() as process:
+        yield process
+```
+
+### ❌ ЗАПРЕЩЕНО использовать фиксированные идентификаторы
+
+```python
+# ❌ НЕПРАВИЛЬНО
+def test_example():
+    context_id = "test-context"  # Конфликты при параллельном запуске!
+    
+# ✅ ПРАВИЛЬНО
+def test_example(unique_id):
+    context_id = f"test-{unique_id}"  # Уникально для каждого теста
+```
+
+### ❌ ЗАПРЕЩЕНО мокать внутренние компоненты
+
+```python
+# ❌ НЕПРАВИЛЬНО
+with patch("apps.agents.src.services.agent_factory.AgentFactory"):
+    pass
+
+# ✅ ПРАВИЛЬНО - используй реальные компоненты
+container = get_container()
+agent = await container.agent_factory.get_agent("test_agent")
+```
+
+### ❌ ЗАПРЕЩЕНО запускать worker вручную
+
+```python
+# ❌ НЕПРАВИЛЬНО
+def test_example():
+    subprocess.Popen(["python", "-m", "taskiq", "worker", ...])
+    
+# ✅ ПРАВИЛЬНО
+def test_example(taskiq_worker):  # Worker запущен автоматически
+    pass
+```
+
+---
+
+## Чеклист перед коммитом
+
+### Обязательные проверки
+
+- [ ] `uv run pytest tests/` - **ВСЕ тесты проходят**
+- [ ] `uv run ruff check` - нет ошибок линтера
+- [ ] Новый код покрыт тестами
+
+### Проверка использования фикстур
+
+- [ ] **Все тесты используют `unique_id`** для изоляции данных
+- [ ] Все `session_id`, `context_id`, `task_id`, `user_id` уникальны
+- [ ] Формат `session_id`: `agent_id:context_id` (где `context_id` содержит `unique_id`)
+- [ ] **НЕТ собственных фикстур**, если есть готовые в `conftest.py`
+- [ ] **НЕТ моков** внутренних компонентов (кроме MockLLM)
+- [ ] **НЕТ ручного запуска** worker процессов
+
+### Проверка worker фикстур
+
+- [ ] Если создан новый worker - используется `SessionWorkerManager`
+- [ ] Worker фикстура в `tests/fixtures/workers.py`, а не в `conftest.py`
+- [ ] Worker экспортирован в `tests/fixtures/__init__.py`
+- [ ] Worker импортирован в `tests/conftest.py` с `# noqa: F401`
+
+### Проверка интеграционных тестов
+
+- [ ] Тесты с реальным worker используют маркер `@pytest.mark.real_taskiq`
+- [ ] Интеграционные тесты используют `mock_llm_redis` вместо `mock_llm_with_queue`
+- [ ] API тесты используют `agents_client` или `frontend_client`
+
+---
+
+## Best Practices
+
+### 1. Всегда используй unique_id
+
+```python
+# ПРАВИЛЬНО
+async def test_example(unique_id):
+    context_id = f"test-{unique_id}"
+    task_id = f"task-{unique_id}"
+
+# НЕПРАВИЛЬНО
+async def test_example():
+    context_id = "test-context"
+    task_id = "test-task"
+```
+
+### 2. Используй ExecutionState
+
+```python
+# ПРАВИЛЬНО
+state = ExecutionState.create(
+    task_id=f"task-{unique_id}",
+    context_id=f"ctx-{unique_id}",
+    user_id=f"user-{unique_id}",
+)
+
+# НЕПРАВИЛЬНО
+state = {"task_id": "test", "context_id": "test"}
+```
+
+### 3. Не мокай внутренние компоненты
+
+```python
+# ПРАВИЛЬНО - используй реальные компоненты
+container = get_container()
+agent = await container.agent_factory.get_agent("test_agent")
+
+# НЕПРАВИЛЬНО - не мокай
+with patch("apps.agents.src.services.agent_factory.AgentFactory"):
+    ...
+```
+
+### 4. Используй mock_llm_redis для интеграционных тестов
+
+```python
+# ПРАВИЛЬНО - для тестов с реальным worker
+@pytest.mark.real_taskiq
+async def test_integration(mock_llm_redis, client, unique_id):
+    await mock_llm_redis([...])
+
+# НЕПРАВИЛЬНО - для интеграционных тестов
+async def test_integration(mock_llm_with_queue, client, unique_id):
+    mock_llm_with_queue([...])  # не работает с worker
+```
+
+### 5. Проверяй формат session_id
+
+```python
+# ПРАВИЛЬНО
+session_id = f"{agent_id}:{context_id}"
+
+# НЕПРАВИЛЬНО
+session_id = f"{context_id}:{agent_id}"  # неправильный порядок
+session_id = context_id  # нет agent_id
+```

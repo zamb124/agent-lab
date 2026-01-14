@@ -1,0 +1,129 @@
+{
+  "header": {
+    "about": "About us",
+    "features": "Features",
+    "solutions": "Our Solutions",
+    "docs": "Documentation",
+    "dashboard": "Dashboard",
+    "login": "Login",
+    "builder": "Agent Builder"
+  },
+  "hero": {
+    "trust_process": "Entrust<br>your processes to AI agents",
+    "start_button": "Launch digital employees",
+    "evolution": "The evolution of your<br>business is here"
+  },
+  "about": {
+    "tag": "/ About Us",
+    "title": "Humanitec — your team of AI employees",
+    "subtitle1": "A platform with business automation tools: AI agents, smart knowledge base, and contact management system. Freeing up time for growth.",
+    "subtitle2": "Agents work 24/7, processing requests and communicating with clients.",
+    "metric1_value": "1 day",
+    "metric1_label": "from idea<br>to launch",
+    "metric2_value": "50₽",
+    "metric2_label": "minimum<br>start",
+    "metric3_value": "24/7",
+    "metric3_label": "work<br>without holidays",
+    "metric4_value": "Ready",
+    "metric4_label": "out of the box"
+  },
+  "features": {
+    "tag": "/ Platform Features",
+    "feature1_title": "Launch in hours, not months",
+    "feature1_description": "Don't waste time and money on development from scratch. Use ready-made services: create AI agents, manage contacts in NetWorkle, store documents in Knowledge Base. Everything is already set up and working.",
+    "feature2_title": "Pay only for results",
+    "feature2_description": "No hidden fees or subscription charges. Start with 50 rubles, pay only for what you use. See every penny in detailed expense statistics.",
+    "feature3_title": "Scale without headaches",
+    "feature3_description": "Your agents work 24/7 without weekends, sick days, or vacations. They process thousands of requests simultaneously. Update the logic on the fly, without stopping the service.",
+    "feature4_title": "Your data is under control",
+    "feature4_description": "All data is stored in your database, not shared with third parties. Complete isolation between companies. Integrate with any of your systems via API."
+  },
+  "results": {
+    "title": "We will provide impressive<br><span class=\"highlight\">results</span> for your business",
+    "tag1": "Customized automation solutions",
+    "tag2": "Scalability from a single agent to a network",
+    "tag3": "MVP product in 3 days",
+    "tag4": "Monitoring and detailed analytics",
+    "tag5": "Data encryption and SAAS version"
+  },
+  "solutions": {
+    "tag": "/ Our Solutions",
+    "constructor_title": "Constructor",
+    "constructor_description": "Freedom and control in your hands.<br>Automate on your own at a convenient pace",
+    "constructor_feature1": "Full access to the library of ready-made modules and integrations",
+    "constructor_feature2": "Ready-made automation scenarios for popular tasks",
+    "constructor_feature3": "Access to detailed documentation",
+    "constructor_feature4": "Help with platform-related questions",
+    "constructor_note": "Suitable for teams with technical specialists, startups with typical processes, and enthusiasts",
+    "constructor_button": "Get early access",
+    "expert_title": "Expert",
+    "expert_description": "We will analyze your processes and do everything for you.<br>You get a turnkey solution.",
+    "expert_feature1": "Audit of your business processes",
+    "expert_feature2": "Design of scalable automation systems for your business",
+    "expert_feature3": "Development and implementation of custom AI agents for your specific tasks",
+    "expert_feature4": "Full support and technical assistance",
+    "expert_note": "Suitable for businesses with complex processes and busy entrepreneurs",
+    "expert_button": "Submit an application"
+  },
+  "testimonials": {
+    "tag": "/ Entrepreneurs and small businesses trust us",
+    "author1_name": "Igor",
+    "author1_title": "Online Store Manager",
+    "author1_text": "We focused not on one task, but on a whole cycle of tasks to implement filters for 60k+ typical questions, the second was a well-tuned script, then the assistant qualifies incoming calls and categorizes them. They take all the necessary initiatives. Thus, over the last 4-5 months, we have felt a decrease in the load on departments and an increase in customer loyalty. This includes investments in the business over the last year.",
+    "author2_name": "Maria",
+    "author2_title": "Online Store Manager",
+    "author2_text": "We automated not one task, but a whole cycle: a support agent filters 80% of typical questions, a second one tracks delivery statuses and informs clients, and a third prepares analytics on returns. They work as a single mechanism. The platform paid for itself in 3 months due to the reduced workload on departments and increased customer loyalty. The best investment in the business in the last year.",
+    "author3_name": "Alyona",
+    "author3_title": "E-commerce Owner",
+    "author3_text": "Integration with our CRM went smoothly. AI agents handle customer inquiries 24/7, which has significantly improved our service level. We are seeing an increase in sales and loyalty. This is the best investment in our business in the last year."
+  },
+  "faq": {
+    "tag": "/ Questions and Answers",
+    "q1": "We have a non-standard business process or the necessary integrations are not available on the platform. Can I request turnkey automation from your team?",
+    "a1": "It is for such complex and tertiary cases that we have created the 'Expert' plan! We will identify your specifics, develop individual agents, and integrate with the necessary systems, even if they are not in the standard catalog.",
+    "q2": "How safe is it to entrust my business data to your system?",
+    "a2": "We offer an on-premise solution that allows you to deploy the platform on your servers, ensuring complete control over your data.",
+    "q3": "My team has no technical specialists. Can we easily understand the platform and manage automation?",
+    "a3": "Yes, our platform is designed with a focus on Low-code/No-code, which allows you to manage agents and processes through an intuitive visual interface without the need for programming."
+  },
+  "team": {
+    "tag": "/ Team",
+    "title": "Our Team",
+    "member1_name": "Viktor",
+    "member1_role": "AI Architect",
+    "member2_name": "Jane",
+    "member2_role": "Business Development",
+    "member3_name": "Vladimir",
+    "member3_role": "AI Engineer",
+    "member4_name": "Alexey",
+    "member4_role": "ML Solution Engineer",
+    "member5_name": "Natalia",
+    "member5_role": "UX/UI Designer"
+  },
+  "cta": {
+    "title": "Automate your business<br>with Humanitec",
+    "button": "Request an audit"
+  },
+  "footer": {
+    "docs": "Documentation",
+    "privacy": "Privacy Policy",
+    "terms": "Terms of Service"
+  },
+   "contact_modal": {
+    "title": "Start with Humanitec",
+    "message_label": "Message *",
+    "message_placeholder": "Tell us about your tasks and goals...",
+    "email_label": "Email *",
+    "email_placeholder": "your@email.com",
+    "phone_label": "Phone",
+    "phone_placeholder": "+1 (555) 123-4567",
+    "cancel_button": "Cancel",
+    "send_button": "Send",
+    "notification_success_title": "Message Sent",
+    "notification_success_message": "We will contact you shortly",
+    "notification_error_title": "Send Error",
+    "notification_error_message_default": "Please try again or contact us directly",
+    "notification_error_message_email_invalid": "Please enter a valid email address",
+    "sending": "Sending..."
+  }
+}

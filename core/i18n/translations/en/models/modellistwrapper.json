@@ -1,0 +1,14 @@
+{
+  "fields": {
+    "models": {
+      "title": "Models",
+      "description": "List of models for display"
+    },
+    "count": {
+      "title": "Quantity"
+    },
+    "model_type": {
+      "title": "Model Type"
+    }
+  }
+}

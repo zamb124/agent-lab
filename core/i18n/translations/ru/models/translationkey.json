@@ -1,0 +1,19 @@
+{
+  "fields": {
+    "key": {
+      "description": "Уникальный ключ перевода (например: models.user.fields.name)"
+    },
+    "context": {
+      "description": "Контекст использования ключа"
+    },
+    "source_file": {
+      "description": "Исходный файл где найден ключ"
+    },
+    "default_value": {
+      "description": "Значение по умолчанию (обычно на русском)"
+    },
+    "category": {
+      "description": "Категория ключа (models, common, errors, etc)"
+    }
+  }
+}

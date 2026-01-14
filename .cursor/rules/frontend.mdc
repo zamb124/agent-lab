@@ -1,0 +1,754 @@
+---
+alwaysApply: false
+description: "Фронтенд frontend javascript frontend arch LIT html css style Zustand"
+
+---
+# Frontend Architecture Rules
+
+## КРИТИЧЕСКИЕ ПРАВИЛА DRY/OOP
+
+### ЗАПРЕЩЕНО:
+
+1. **Импортировать `ServiceRegistry` в компонентах** — используй `this.services`, `this.a2a`, `this.notify`
+2. **Дублировать методы** — если метод есть в базовом классе, используй его
+3. **Создавать fallback'и** — если ошибка, бросай исключение
+4. **Импортировать `LitElement` напрямую** — наследуйся от `PlatformElement` или `GlassModal`
+5. **Дублировать стили** — используй shared стили из `@platform/lib/styles/shared/`
+
+### Иерархия классов (СТРОГО):
+
+```
+LitElement (Lit)
+    └── PlatformElement (сервисы, notify, emit, use)
+            ├── Обычные компоненты
+            ├── PlatformApp (корневой компонент)
+            └── GlassModal (модальные окна)
+                    └── GlassFormModal (формы в модалках)
+```
+
+**ВСЕ компоненты и модалки ОБЯЗАНЫ наследоваться от `PlatformElement` или его потомков!**
+
+---
+
+## Архитектура
+
+```
+core/frontend/static/
+├── lib/
+│   ├── base/PlatformApp.js      # Базовый класс приложений
+│   ├── platform-element/        # Базовый класс компонентов
+│   ├── components/glass-modal.js # Базовый класс модалок (extends PlatformElement)
+│   ├── store/BaseStore.js       # Обёртка над Zustand
+│   ├── services/                # ServiceRegistry, BaseService
+│   └── styles/shared/           # Переиспользуемые стили
+└── services/                    # Core сервисы (auth, theme, notify)
+
+apps/{service}/ui/
+├── app/{Service}App.js          # extends PlatformApp
+├── store/{service}.store.js     # Zustand Store
+├── pages/                       # Страницы
+├── components/                  # Компоненты
+├── modals/                      # Модальные окна (extends GlassModal)
+└── services/                    # API сервисы
+```
+
+---
+
+## Компоненты: Иерархия Классов
+
+| Тип | Базовый класс | Доступ к сервисам |
+|-----|---------------|-------------------|
+| Компонент | `PlatformElement` | this.a2a, this.notify, this.auth, this.theme |
+| Приложение | `PlatformApp` | this.a2a, this.notify, this.auth, this.theme |
+| Модальное окно | `GlassModal` | this.a2a, this.notify, this.auth, this.theme |
+| Форма-модалка | `GlassFormModal` | this.a2a, this.notify, this.auth, this.theme |
+
+**Все классы получают сервисы через наследование от `PlatformElement`!**
+
+---
+
+## Доступ к Сервисам (DRY)
+
+**В ЛЮБОМ компоненте или модалке через геттеры:**
+
+```javascript
+class MyComponent extends PlatformElement {
+    async _loadData() {
+        // this.a2a - A2AService
+        const items = await this.a2a.get('/api/items');
+    }
+    
+    _showSuccess() {
+        // this.notify - NotifyService
+        this.notify.success('Сохранено');
+        // или короткий метод
+        this.success('Сохранено');
+    }
+    
+    _handleError(error) {
+        // Короткие методы notify
+        this.error(`Ошибка: ${error.message}`);
+    }
+}
+
+class MyModal extends GlassModal {
+    async _loadData() {
+        // Модалки тоже имеют доступ к сервисам!
+        const data = await this.a2a.get('/api/data');
+    }
+    
+    _onSave() {
+        this.success('Сохранено');
+        this.close();
+    }
+}
+```
+
+**Доступные геттеры (наследуются от PlatformElement):**
+- `this.services` — ServiceRegistry
+- `this.auth` — AuthService
+- `this.a2a` — A2AService
+- `this.theme` — ThemeService
+- `this.notify` — NotifyService
+- `this.icon` — IconService
+- `this.companies` — CompaniesService
+
+**Короткие методы notify:**
+- `this.success(message)` — зелёное уведомление
+- `this.error(message)` — красное уведомление
+- `this.warning(message)` — жёлтое уведомление
+- `this.info(message)` — синее уведомление
+
+**Другие методы:**
+- `this.emit(name, detail)` — диспатч CustomEvent
+- `this.use(selector)` — подписка на Store
+
+---
+
+## ЗАПРЕЩЕНО: Импорт ServiceRegistry в компонентах
+
+```javascript
+// ЗАПРЕЩЕНО — нарушение DRY
+import { ServiceRegistry } from '@platform/lib/services/ServiceRegistry.js';
+
+class MyComponent extends PlatformElement {
+    async _load() {
+        const a2a = ServiceRegistry.get('a2a');  // НЕТ!
+        await a2a.get('/api/items');
+    }
+}
+
+// ПРАВИЛЬНО — через наследование
+class MyComponent extends PlatformElement {
+    async _load() {
+        await this.a2a.get('/api/items');  // ДА!
+    }
+}
+```
+
+**Исключение:** `ServiceRegistry` импортируется ТОЛЬКО в `PlatformApp.initServices()`.
+
+---
+
+## Store: Единая Доменная Структура
+
+**Store ВСЕГДА организован по доменам на первом уровне:**
+
+```javascript
+import { BaseStore } from '@platform/lib/store/BaseStore.js';
+
+const baseStore = new BaseStore('myapp', {
+    entities: {
+        list: [],
+        currentId: null,
+        loading: false,
+    },
+    ui: {
+        currentView: 'list',
+        sidebarOpen: true,
+    },
+}, { devtools: true, persist: true });
+
+export const MyAppStore = {
+    get state() { return baseStore.state; },
+    subscribe(cb) { return baseStore.subscribe(cb); },
+    
+    setEntities(list) {
+        baseStore.setState((s) => ({
+            entities: { ...s.entities, list, loading: false }
+        }));
+    },
+};
+```
+
+---
+
+## Подписка на Store в Компонентах
+
+```javascript
+export class MyList extends PlatformElement {
+    constructor() {
+        super();
+        this.state = this.use(s => ({
+            items: s.entities.list,
+            currentId: s.entities.currentId,
+        }));
+    }
+
+    render() {
+        const { items, currentId } = this.state.value;
+        return html`...`;
+    }
+}
+```
+
+---
+
+## Модальные Окна
+
+**Создание через createElement + showModal():**
+
+```javascript
+_openModal(itemId) {
+    const modal = document.createElement('my-edit-modal');
+    modal.itemId = itemId;
+    document.body.appendChild(modal);
+    modal.showModal();  // Открыть модалку
+    modal.addEventListener('close', () => modal.remove());
+}
+```
+
+**Модалка наследуется от GlassModal:**
+
+```javascript
+import { html, css } from 'lit';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+
+export class MyEditModal extends PlatformModal {
+    static styles = [
+        PlatformModal.styles,
+        css`...`
+    ];
+
+    async _onSave() {
+        try {
+            await this.a2a.post('/api/items', this.data);
+            this.success('Сохранено');
+            this.emit('saved', { data: this.data });
+            this.close();
+        } catch (error) {
+            this.error(`Ошибка: ${error.message}`);
+        }
+    }
+}
+
+customElements.define('my-edit-modal', MyEditModal);
+```
+
+---
+
+## BaseService: API Сервисы
+
+```javascript
+import { BaseService } from '@platform/lib/services/BaseService.js';
+
+export class MyApiService extends BaseService {
+    async getItems() {
+        return this.get('/api/items');
+    }
+    
+    async createItem(data) {
+        return this.post('/api/items', data);
+    }
+}
+```
+
+---
+
+## Стили: Shared Стили (DRY)
+
+```javascript
+import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+
+export class MyForm extends PlatformElement {
+    static styles = [
+        PlatformElement.styles,
+        formStyles,
+        buttonStyles,
+    ];
+}
+```
+
+**Доступные стили:**
+- `form.styles.js` — input, select, textarea, form-group
+- `button.styles.js` — platform-button, варианты (primary, danger)
+- `modal.styles.js` — модальные окна
+- `glass.styles.js` — glass morphism эффекты
+- `typography.styles.js` — текстовые стили
+- `animations.styles.js` — анимации
+- `sidebar.styles.js` — sidebar, nav-item, section (collapsed/mobile aware)
+
+---
+
+## Layout: Platform Sidebar
+
+**Унифицированный sidebar с collapsed/mobile режимами:**
+
+```javascript
+import { sidebarStyles, sidebarNavItemStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
+import '@platform/lib/components/layout/platform-sidebar.js';
+import '@platform/lib/components/layout/sidebar-section.js';
+import '@platform/lib/components/layout/sidebar-nav-item.js';
+```
+
+### PlatformSidebar Properties
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `collapsed` | Boolean | false | Свернутый режим (только иконки) |
+| `mobile-open` | Boolean | false | Открыт на мобильном |
+| `logo-src` | String | '' | Путь к логотипу |
+| `logo-text` | String | '' | Текст логотипа |
+| `width` | String | '280px' | Ширина развернутого |
+| `collapsed-width` | String | '72px' | Ширина свернутого |
+
+### Slots
+
+| Slot | Description |
+|------|-------------|
+| `logo` | Кастомный логотип |
+| `header` | Контент после лого (actions, selectors) |
+| *(default)* | Основной контент (nav items, sections) |
+| `footer` | Footer (user, links) |
+
+### Использование
+
+```javascript
+class MySidebar extends PlatformElement {
+    static properties = {
+        collapsed: { type: Boolean, reflect: true },
+        mobileOpen: { type: Boolean, reflect: true, attribute: 'mobile-open' },
+    };
+
+    toggleCollapse() {
+        this.collapsed = !this.collapsed;
+        this.emit('collapse-change', { collapsed: this.collapsed });
+    }
+
+    render() {
+        return html`
+            <platform-sidebar
+                logo-src="/static/logo.svg"
+                logo-text="My App"
+                ?collapsed=${this.collapsed}
+                ?mobile-open=${this.mobileOpen}
+            >
+                <div slot="header">
+                    <button @click=${this.toggleCollapse}>Toggle</button>
+                </div>
+
+                <sidebar-section title="Main" icon="folder">
+                    <button class="nav-item active">Dashboard</button>
+                    <button class="nav-item">Settings</button>
+                </sidebar-section>
+
+                <div slot="footer">
+                    <platform-user block></platform-user>
+                </div>
+            </platform-sidebar>
+        `;
+    }
+}
+```
+
+### Collapsed Mode
+
+Элементы скрываемые в collapsed режиме:
+- `.sidebar-text`, `.sidebar-section-title`
+- `::slotted([data-hide-collapsed])`
+
+```html
+<!-- Этот элемент скроется в collapsed mode -->
+<div data-hide-collapsed>Скрыть при сворачивании</div>
+```
+
+### Mobile Mode
+
+- Автоматически активируется при ширине < 768px
+- Sidebar становится overlay с backdrop
+- Закрывается по Escape или клику на backdrop
+
+### Mobile Header: Бургер-меню с заголовком
+
+Для унификации мобильных хедеров используй `<page-header>`:
+
+```javascript
+import '@platform/lib/components/layout/page-header.js';
+
+render() {
+    return html`
+        <page-header 
+            title="Заголовок" 
+            subtitle="Подзаголовок"
+        >
+            <button slot="actions" class="btn btn-primary">Действие</button>
+        </page-header>
+    `;
+}
+```
+
+**`page-header` автоматически:**
+- Показывает бургер-меню на мобильных (< 768px)
+- Скрывает бургер когда sidebar открыт
+- Размещает заголовок рядом с бургером в одну строку
+
+**Для компонентов с кастомным хедером** (чат, CRM) - добавляй бургер вручную:
+
+```javascript
+// В стилях
+.menu-btn { display: none; }
+@media (max-width: 767px) {
+    .menu-btn { display: flex; /* стили кнопки */ }
+}
+
+// В render
+<button class="menu-btn" @click=${this._openSidebar}>
+    <platform-icon name="menu" size="20"></platform-icon>
+</button>
+
+// Метод
+_openSidebar() {
+    window.dispatchEvent(new CustomEvent('platform-sidebar-open'));
+}
+```
+
+---
+
+## Импорты: Алиасы
+
+**Используй `@platform/` алиасы:**
+
+```javascript
+// Core библиотека
+import { PlatformElement } from '@platform/lib/platform-element/index.js';
+import { PlatformApp } from '@platform/lib/base/PlatformApp.js';
+import { PlatformModal } from '@platform/lib/components/glass-modal.js';
+import { BaseStore } from '@platform/lib/store/BaseStore.js';
+import { BaseService } from '@platform/lib/services/BaseService.js';
+
+// Layout
+import '@platform/lib/components/layout/platform-sidebar.js';
+import '@platform/lib/components/layout/sidebar-section.js';
+
+// Стили
+import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
+import { sidebarStyles } from '@platform/lib/styles/shared/sidebar.styles.js';
+```
+
+---
+
+## Fail-Fast: Без Fallback'ов
+
+```javascript
+// ПРАВИЛЬНО — явная ошибка
+async loadItem(id) {
+    if (!id) throw new Error('Item ID is required');
+    
+    const item = await this.a2a.get(`/api/items/${id}`);
+    if (!item) throw new Error(`Item not found: ${id}`);
+    
+    return item;
+}
+
+// ЗАПРЕЩЕНО — fallback скрывает ошибки
+async loadItem(id) {
+    const item = await this.a2a.get(`/api/items/${id}`);
+    return item || {};  // НЕТ!
+}
+```
+
+---
+
+## Локальный UI State
+
+**Для UI элементов (не бизнес-данные):**
+
+```javascript
+constructor() {
+    super();
+    this._dropdownOpen = false;
+    this._isHovered = false;
+}
+
+_toggleDropdown() {
+    this._dropdownOpen = !this._dropdownOpen;
+    this.requestUpdate();
+}
+```
+
+---
+
+## Правила (СТРОГО)
+
+1. **Наследование:** Все компоненты от `PlatformElement`, модалки от `GlassModal`
+2. **Сервисы:** Только через `this.a2a`, `this.notify` — НЕ импортировать ServiceRegistry
+3. **Store:** Доменная структура, подписка через `this.use()`
+4. **Стили:** Использовать shared стили, НЕ дублировать CSS
+5. **Ошибки:** Fail-fast, бросать исключения, НЕ делать fallback
+6. **Модалки:** Создавать через `createElement` + `showModal()`
+7. **Импорты:** Только `@platform/` алиасы
+8. **DRY:** Не дублировать методы, использовать наследование
+
+---
+
+## CSS DESIGN SYSTEM - Apple Liquid Glass 2025
+
+### КРИТИЧЕСКИЕ ПРАВИЛА
+
+1. **ОБЕ ТЕМЫ ОБЯЗАТЕЛЬНЫ** - поддержка темной (по умолчанию) и светлой темы через `[data-theme="light"]`
+2. **ТОЛЬКО CSS Variables** - запрещен хардкод цветов, размеров, отступов
+3. **СТРОГОЕ НАСЛЕДОВАНИЕ** - компоненты ОБЯЗАНЫ наследовать `static styles` от родителя
+4. **RESPONSIVE ОБЯЗАТЕЛЕН** - все компоненты должны поддерживать Mobile/Tablet/Desktop
+
+---
+
+### CSS Variables - ТОЛЬКО из tokens.css
+
+**ЗАПРЕЩЕНО хардкодить значения:**
+
+```javascript
+// ЗАПРЕЩЕНО
+css`
+    background: rgba(40, 40, 64, 0.92);  // НЕТ!
+    color: #9333ea;  // НЕТ!
+    padding: 16px;  // НЕТ!
+    font-size: 14px;  // НЕТ!
+`
+
+// ПРАВИЛЬНО - только CSS Variables
+css`
+    background: var(--glass-solid-strong);
+    color: var(--accent-tertiary);
+    padding: var(--space-4);
+    font-size: var(--text-sm);
+`
+```
+
+**Доступные переменные (core/frontend/static/assets/css/tokens.css):**
+
+| Категория | Примеры переменных |
+|-----------|-------------------|
+| Glass фоны | `--glass-solid-subtle`, `--glass-solid-medium`, `--glass-solid-strong` |
+| Glass tint | `--glass-tint-subtle`, `--glass-tint-medium`, `--glass-tint-strong` |
+| Glass borders | `--glass-border-subtle`, `--glass-border-medium`, `--glass-border-strong` |
+| Glass shadows | `--glass-shadow-subtle`, `--glass-shadow-medium`, `--glass-shadow-strong` |
+| Text | `--text-primary`, `--text-secondary`, `--text-tertiary`, `--text-disabled` |
+| Accent | `--accent`, `--accent-hover`, `--accent-subtle`, `--accent-secondary`, `--accent-tertiary` |
+| Borders | `--border-subtle`, `--border-default`, `--border-strong` |
+| Status | `--error`, `--warning`, `--success`, `--info` |
+| Spacing | `--space-1` (4px) ... `--space-16` (64px) |
+| Typography | `--text-xs` ... `--text-3xl`, `--font-normal` ... `--font-bold` |
+| Radius | `--radius-sm` (8px) ... `--radius-full` |
+| Duration | `--duration-fast`, `--duration-normal`, `--duration-slow` |
+| Z-index | `--z-dropdown`, `--z-modal`, `--z-toast`, `--z-tooltip` |
+
+---
+
+### Responsive Breakpoints (Mobile-First)
+
+**Breakpoints:**
+- Mobile: < 768px (базовые стили)
+- Tablet: >= 768px
+- Desktop: >= 1024px  
+- Wide: >= 1440px
+
+```javascript
+static styles = css`
+    /* Mobile - базовые стили */
+    .container {
+        padding: var(--space-3);
+        flex-direction: column;
+    }
+    
+    /* Tablet */
+    @media (min-width: 768px) {
+        .container {
+            padding: var(--space-4);
+            flex-direction: row;
+        }
+    }
+    
+    /* Desktop */
+    @media (min-width: 1024px) {
+        .container {
+            padding: var(--space-6);
+            max-width: 1200px;
+        }
+    }
+`;
+```
+
+---
+
+### Строгое Наследование Стилей
+
+**Иерархия (ОБЯЗАТЕЛЬНО соблюдать):**
+
+```
+tokens.css (CSS Variables)
+    ↓
+shared/*.styles.js (переиспользуемые стили)
+    ↓
+PlatformElement.styles (baseStyles + glassStyles)
+    ↓
+GlassModal.styles (+ modalStyles)
+    ↓
+GlassFormModal.styles (+ formStyles)
+    ↓
+Сервисные компоненты (минимум переопределений)
+```
+
+**Правило наследования:**
+
+```javascript
+// ПРАВИЛЬНО - наследуем ВСЕ стили родителя
+class MyModal extends GlassModal {
+    static styles = [
+        GlassModal.styles,  // ОБЯЗАТЕЛЬНО первым!
+        css`/* только уникальные стили */`
+    ];
+}
+
+// ЗАПРЕЩЕНО - потеря родительских стилей
+class MyModal extends GlassModal {
+    static styles = css`...`;  // НЕТ! Потеряны стили GlassModal
+}
+```
+
+---
+
+### Shared Стили - Не Дублировать
+
+**Используй готовые стили:**
+
+```javascript
+import { modalStyles } from '@platform/lib/styles/shared/modal.styles.js';
+import { formStyles } from '@platform/lib/styles/shared/form.styles.js';
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+import { glassStyles } from '@platform/lib/styles/shared/glass.styles.js';
+
+class MyComponent extends PlatformElement {
+    static styles = [
+        PlatformElement.styles,
+        formStyles,      // готовые .form-group, .form-input, .form-label
+        buttonStyles,    // готовые .btn, .btn-primary, .btn-secondary
+    ];
+}
+```
+
+**ЗАПРЕЩЕНО переопределять базовые классы:**
+
+```javascript
+// ЗАПРЕЩЕНО - дублирование button.styles.js
+css`
+    .btn {
+        padding: var(--space-2) var(--space-4);  // НЕТ!
+        border-radius: var(--radius-md);
+    }
+    .btn-primary {
+        background: var(--accent);  // НЕТ!
+    }
+`
+
+// ПРАВИЛЬНО - использовать shared
+import { buttonStyles } from '@platform/lib/styles/shared/button.styles.js';
+static styles = [ParentClass.styles, buttonStyles];
+```
+
+---
+
+### Модальные окна - Структура
+
+**Обязательные CSS классы модалок:**
+
+```javascript
+// Наследуй от GlassModal - получишь все классы автоматически
+class MyModal extends GlassModal {
+    static styles = [GlassModal.styles, css`/* свои стили */`];
+    
+    // Используй готовую разметку:
+    // .modal-overlay - затемнение фона
+    // .modal - контейнер модалки
+    // .modal-header - заголовок с кнопками
+    // .modal-content - основное содержимое
+    // .modal-actions - футер с кнопками
+}
+```
+
+---
+
+### Запрещенные Практики
+
+| Запрещено | Правильно |
+|-----------|-----------|
+| `color: #ffffff` | `color: var(--text-primary)` |
+| `background: rgba(...)` | `background: var(--glass-solid-medium)` |
+| `padding: 16px` | `padding: var(--space-4)` |
+| `font-size: 14px` | `font-size: var(--text-sm)` |
+| `border-radius: 12px` | `border-radius: var(--radius-md)` |
+| `transition: 0.2s` | `transition: var(--duration-fast)` |
+| `z-index: 1000` | `z-index: var(--z-modal)` |
+| Дублировать стили светлой темы | Использовать `:host-context([data-theme="light"])` в Lit компонентах |
+| `static styles = css\`...\`` | `static styles = [Parent.styles, css\`...\`]` |
+
+---
+
+### Поддержка Светлой Темы
+
+**В shared стилях и компонентах используй `:host-context([data-theme="light"])`:**
+
+```javascript
+static styles = css`
+    /* Базовые стили (темная тема) */
+    .container {
+        background: var(--glass-solid-medium);
+        color: var(--text-primary);
+    }
+
+    /* Светлая тема */
+    :host-context([data-theme="light"]) .container {
+        background: rgba(255, 255, 255, 0.9);
+        border-color: rgba(15, 23, 42, 0.1);
+    }
+`;
+```
+
+**CSS Variables автоматически переключаются через `tokens.css`:**
+
+```css
+/* Темная тема (по умолчанию) */
+:root {
+    --text-primary: rgba(255, 255, 255, 0.95);
+    --glass-solid-medium: rgba(35, 35, 55, 0.85);
+}
+
+/* Светлая тема */
+[data-theme="light"] {
+    --text-primary: rgba(15, 23, 42, 0.95);
+    --glass-solid-medium: rgba(255, 255, 255, 0.9);
+}
+```
+
+---
+
+### Checklist для PR
+
+- [ ] Нет хардкода цветов - только CSS Variables
+- [ ] Нет хардкода размеров - только --space-*, --text-*, --radius-*
+- [ ] static styles наследует от родителя
+- [ ] Responsive стили для Mobile/Tablet/Desktop
+- [ ] Светлая тема поддерживается через `:host-context([data-theme="light"])`
+- [ ] Используются shared стили где возможно
+- [ ] Нет дублирования .btn, .form-input и т.д.

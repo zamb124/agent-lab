@@ -1,0 +1,537 @@
+/**
+ * AgentsStore - Состояние Agents Builder приложения
+ */
+import { BaseStore } from '@platform/lib/store/BaseStore.js';
+
+const baseStore = new BaseStore('agents', {
+    app: {
+        isAuthenticated: false,
+        user: null,
+        theme: 'dark',
+        currentRoute: '/',
+        authChecking: true,
+        agentName: '',
+        skillId: '',
+        skillName: '',
+    },
+    
+    agents: {
+        list: [],
+        currentId: null,
+        loading: false,
+        error: null,
+    },
+    
+    editor: {
+        agentId: null,
+        agentConfig: null,
+        currentSkillId: null,
+        selectedNodeId: null,
+        skillsData: { nodes: {}, edges: [], entry: null, variables: {} },
+        inheritedData: null,
+        panelOpen: false,
+        panelExpanded: false,
+        variablesPanelOpen: false,
+        executionPanelOpen: false,
+        activeTool: 'select',
+        canUndo: false,
+        canRedo: false,
+        historyStack: [],
+        historyPosition: -1,
+        isDirty: false,
+        isSaving: false,
+        loading: false,
+    },
+    
+    chat: {
+        messages: [],
+        loading: false,
+        contextId: null,
+        currentTaskId: null,
+    },
+    
+    modals: {
+        confirmModal: { open: false, data: null },
+        toolPickerModal: { open: false, data: null },
+        sessionsModal: { open: false, data: null },
+        agentEditModal: { open: false, data: null },
+    },
+    
+    ui: {
+        toasts: [],
+        expandedAgents: {},
+        agentDetails: {},
+    },
+}, {
+    persist: true,
+    devtools: true,
+    partialize: (state) => ({
+        app: {
+            theme: state.app.theme,
+        },
+        ui: {
+            expandedAgents: state.ui.expandedAgents,
+        }
+    })
+});
+
+export const AgentsStore = {
+    get state() {
+        return baseStore.state;
+    },
+    
+    subscribe(callback) {
+        return baseStore.subscribe(callback);
+    },
+    
+    setState(updater) {
+        return baseStore.setState(updater);
+    },
+    
+    initChat() {
+        const contextId = `${Date.now()}`;
+        baseStore.setState((s) => ({
+            chat: { ...s.chat, contextId, messages: [] }
+        }));
+    },
+    
+    setAuth(isAuth, user = null) {
+        baseStore.setState((s) => ({
+            app: { ...s.app, isAuthenticated: isAuth, user, authChecking: false }
+        }));
+    },
+    
+    setAgents(list) {
+        baseStore.setState((s) => ({
+            agents: { ...s.agents, list, loading: false }
+        }));
+    },
+    
+    setCurrentAgent(id) {
+        console.log('[Store] setCurrentAgent called with:', id);
+        baseStore.setState((s) => ({
+            agents: { ...s.agents, currentId: id },
+            app: { ...s.app, currentSkillId: null }
+        }));
+        console.log('[Store] currentId set to:', baseStore.state.agents.currentId);
+    },
+    
+    setCurrentAgentAndSkill(agentId, skillId) {
+        console.log('[Store] setCurrentAgentAndSkill called with:', agentId, skillId);
+        baseStore.setState((s) => ({
+            agents: { ...s.agents, currentId: agentId },
+            app: { ...s.app, currentSkillId: skillId }
+        }));
+    },
+    
+    async createAgent(config, a2aService) {
+        baseStore.setState((s) => ({
+            agents: { ...s.agents, loading: true }
+        }));
+        
+        try {
+            const createdAgent = await a2aService.createAgent(config);
+            
+            baseStore.setState((s) => ({
+                agents: {
+                    ...s.agents,
+                    list: [...s.agents.list, createdAgent],
+                    loading: false
+                }
+            }));
+            
+            return createdAgent;
+        } catch (error) {
+            baseStore.setState((s) => ({
+                agents: { ...s.agents, loading: false }
+            }));
+            console.error('[Store] Failed to create agent:', error);
+            throw error;
+        }
+    },
+    
+    async deleteAgent(agentId, a2aService) {
+        const prevList = baseStore.state.agents.list;
+        
+        baseStore.setState((s) => ({
+            agents: {
+                ...s.agents,
+                list: s.agents.list.filter(a => a.agent_id !== agentId)
+            }
+        }));
+        
+        try {
+            await a2aService.deleteAgent(agentId);
+        } catch (error) {
+            baseStore.setState((s) => ({
+                agents: { ...s.agents, list: prevList }
+            }));
+            console.error('[Store] Failed to delete agent:', error);
+            throw error;
+        }
+    },
+    
+    async deleteSkill(agentId, skillId, a2aService) {
+        const agent = baseStore.state.agents.list.find(a => a.agent_id === agentId);
+        if (!agent) {
+            throw new Error(`Agent ${agentId} not found`);
+        }
+        
+        const prevSkills = agent.skills || {};
+        
+        baseStore.setState((s) => ({
+            agents: {
+                ...s.agents,
+                list: s.agents.list.map(a => {
+                    if (a.agent_id === agentId) {
+                        const { [skillId]: removed, ...remainingSkills } = a.skills || {};
+                        return { ...a, skills: remainingSkills };
+                    }
+                    return a;
+                })
+            }
+        }));
+        
+        try {
+            await a2aService.deleteSkill(agentId, skillId);
+        } catch (error) {
+            baseStore.setState((s) => ({
+                agents: {
+                    ...s.agents,
+                    list: s.agents.list.map(a =>
+                        a.agent_id === agentId ? { ...a, skills: prevSkills } : a
+                    )
+                }
+            }));
+            console.error('[Store] Failed to delete skill:', error);
+            throw error;
+        }
+    },
+    
+    addMessage(message) {
+        baseStore.setState((s) => ({
+            chat: { ...s.chat, messages: [...s.chat.messages, message] }
+        }));
+    },
+    
+    updateMessage(messageId, updates) {
+        baseStore.setState((s) => ({
+            chat: {
+                ...s.chat,
+                messages: s.chat.messages.map(m =>
+                    m.id === messageId ? { ...m, ...updates } : m
+                )
+            }
+        }));
+    },
+    
+    appendToMessage(messageId, text) {
+        baseStore.setState((s) => ({
+            chat: {
+                ...s.chat,
+                messages: s.chat.messages.map(m =>
+                    m.id === messageId ? { ...m, content: m.content + text } : m
+                )
+            }
+        }));
+    },
+    
+    appendToMessageField(messageId, field, text) {
+        baseStore.setState((s) => ({
+            chat: {
+                ...s.chat,
+                messages: s.chat.messages.map(m =>
+                    m.id === messageId ? { ...m, [field]: (m[field] || '') + text } : m
+                )
+            }
+        }));
+    },
+    
+    setLoading(loading) {
+        baseStore.setState((s) => ({
+            chat: { ...s.chat, loading }
+        }));
+    },
+    
+    clearChat() {
+        const contextId = `${Date.now()}`;
+        baseStore.setState((s) => ({
+            chat: { ...s.chat, messages: [], contextId }
+        }));
+    },
+    
+    loadSession(sessionId, stateMessages, agentId, sessionTaskId = null) {
+        // sessionId format: {agent_id}:{context_id}
+        const parts = sessionId.split(':');
+        const contextId = parts.length > 1 ? parts.slice(1).join(':') : sessionId;
+        
+        // Конвертируем messages из state формата в chat формат
+        const messages = (stateMessages || []).map((msg, idx) => {
+            const role = typeof msg.role === 'string' ? msg.role.toLowerCase() : 
+                         (msg.role?.value || 'assistant');
+            
+            let content = msg.content || '';
+            if (!content && msg.parts) {
+                content = msg.parts
+                    .filter(p => p.kind === 'text' || p.text)
+                    .map(p => p.text || '')
+                    .join('');
+            }
+            
+            return {
+                id: msg.messageId || msg.id || `msg-${idx}`,
+                role: role === 'user' ? 'user' : 'assistant',
+                content: content,
+                timestamp: msg.timestamp || new Date().toISOString(),
+                taskId: msg.taskId || sessionTaskId
+            };
+        });
+        
+        baseStore.setState((s) => ({
+            agents: { ...s.agents, currentId: agentId },
+            chat: { ...s.chat, messages, contextId, loading: false, currentTaskId: sessionTaskId }
+        }));
+    },
+    
+    async loadAgent(agentId, a2aService, skillId = null) {
+        baseStore.setState((s) => ({
+            editor: { ...s.editor, loading: true, agentId }
+        }));
+        
+        try {
+            const agent = await a2aService.getAgent(agentId);
+            
+            console.log('[Store] loadAgent received:', agent);
+            console.log('[Store] agent.nodes:', agent?.nodes);
+            console.log('[Store] agent.skills:', agent?.skills);
+            console.log('[Store] skillId param:', skillId);
+            
+            if (!agent) {
+                throw new Error('Agent not found');
+            }
+            
+            if (!agent.agent_id) {
+                throw new Error('Agent is missing agent_id');
+            }
+            
+            const skillsData = {
+                nodes: agent.nodes ?? {},
+                edges: agent.edges ?? [],
+                entry: agent.entry ?? null,
+                variables: agent.variables ?? {}
+            };
+            
+            baseStore.setState((s) => ({
+                editor: {
+                    ...s.editor,
+                    agentConfig: agent,
+                    skillsData,
+                    currentSkillId: skillId,
+                    loading: false
+                },
+                app: {
+                    ...s.app,
+                    agentName: agent.name || ''
+                }
+            }));
+            
+            console.log('[Store] State after loadAgent:', baseStore.state.editor.agentConfig);
+            console.log('[Store] skillsData set to:', skillsData);
+            console.log('[Store] currentSkillId set to:', skillId);
+        } catch (error) {
+            console.error('[Store] Failed to load agent:', error);
+            baseStore.setState((s) => ({
+                editor: { ...s.editor, loading: false }
+            }));
+            throw error;
+        }
+    },
+    
+    loadAgents(a2aService) {
+        baseStore.setState((s) => ({
+            agents: { ...s.agents, loading: true }
+        }));
+        
+        a2aService.getAgents().then(agents => {
+            if (!Array.isArray(agents)) {
+                throw new Error('API returned invalid agents list');
+            }
+            baseStore.setState((s) => ({
+                agents: { ...s.agents, list: agents, loading: false }
+            }));
+        }).catch(error => {
+            console.error('[Store] Failed to load agents:', error);
+            baseStore.setState((s) => ({
+                agents: { ...s.agents, loading: false, error: error.message }
+            }));
+        });
+    },
+    
+    setCurrentSkill(skillId) {
+        baseStore.setState((s) => ({
+            editor: { ...s.editor, currentSkillId: skillId }
+        }));
+    },
+    
+    updateSkillsData(data, inherited = {}) {
+        baseStore.setState((s) => ({
+            editor: { ...s.editor, skillsData: data, inheritedData: inherited }
+        }));
+    },
+    
+    updateVariables(variables) {
+        baseStore.setState((s) => ({
+            editor: {
+                ...s.editor,
+                skillsData: { ...s.editor.skillsData, variables }
+            }
+        }));
+    },
+    
+    selectNode(nodeId) {
+        baseStore.setState((s) => ({
+            editor: { ...s.editor, selectedNodeId: nodeId, panelOpen: !!nodeId }
+        }));
+    },
+    
+    closePanel() {
+        baseStore.setState((s) => ({
+            editor: { ...s.editor, panelOpen: false, selectedNodeId: null }
+        }));
+    },
+    
+    togglePanelExpanded() {
+        baseStore.setState((s) => ({
+            editor: { ...s.editor, panelExpanded: !s.editor.panelExpanded }
+        }));
+    },
+    
+    toggleVariablesPanel() {
+        baseStore.setState((s) => ({
+            editor: { ...s.editor, variablesPanelOpen: !s.editor.variablesPanelOpen }
+        }));
+    },
+    
+    setExecutionPanelOpen(isOpen) {
+        baseStore.setState((s) => ({
+            editor: { ...s.editor, executionPanelOpen: isOpen }
+        }));
+    },
+    
+    setDirty(isDirty) {
+        baseStore.setState((s) => ({
+            editor: { ...s.editor, isDirty }
+        }));
+    },
+    
+    toggleExpandedAgent(agentId) {
+        baseStore.setState((s) => ({
+            ui: {
+                ...s.ui,
+                expandedAgents: {
+                    ...s.ui.expandedAgents,
+                    [agentId]: !s.ui.expandedAgents[agentId]
+                }
+            }
+        }));
+    },
+    
+    openModal(modalName, data = null) {
+        baseStore.setState((s) => ({
+            modals: {
+                ...s.modals,
+                [modalName]: { open: true, data }
+            }
+        }));
+    },
+    
+    closeModal(modalName) {
+        baseStore.setState((s) => ({
+            modals: {
+                ...s.modals,
+                [modalName]: { open: false, data: null }
+            }
+        }));
+    },
+    
+    setActiveTool(tool) {
+        baseStore.setState((s) => ({
+            editor: { ...s.editor, activeTool: tool }
+        }));
+    },
+    
+    pushHistory(snapshot) {
+        baseStore.setState((s) => {
+            const newStack = s.editor.historyStack.slice(0, s.editor.historyPosition + 1);
+            newStack.push(snapshot);
+            
+            if (newStack.length > 50) {
+                newStack.shift();
+            }
+            
+            return {
+                editor: {
+                    ...s.editor,
+                    historyStack: newStack,
+                    historyPosition: newStack.length - 1,
+                    canUndo: newStack.length > 0,
+                    canRedo: false
+                }
+            };
+        });
+    },
+    
+    undo() {
+        baseStore.setState((s) => {
+            if (s.editor.historyPosition < 0) return s;
+            
+            const newPosition = s.editor.historyPosition - 1;
+            
+            return {
+                editor: {
+                    ...s.editor,
+                    historyPosition: newPosition,
+                    canUndo: newPosition >= 0,
+                    canRedo: true
+                }
+            };
+        });
+    },
+    
+    redo() {
+        baseStore.setState((s) => {
+            const maxPosition = s.editor.historyStack.length - 1;
+            if (s.editor.historyPosition >= maxPosition) return s;
+            
+            const newPosition = s.editor.historyPosition + 1;
+            
+            return {
+                editor: {
+                    ...s.editor,
+                    historyPosition: newPosition,
+                    canUndo: true,
+                    canRedo: newPosition < maxPosition
+                }
+            };
+        });
+    },
+    
+    getCurrentHistorySnapshot() {
+        const { historyStack, historyPosition } = baseStore.state.editor;
+        return historyPosition >= 0 ? historyStack[historyPosition] : null;
+    },
+    
+    clearHistory() {
+        baseStore.setState((s) => ({
+            editor: {
+                ...s.editor,
+                historyStack: [],
+                historyPosition: -1,
+                canUndo: false,
+                canRedo: false
+            }
+        }));
+    },
+};
+
+

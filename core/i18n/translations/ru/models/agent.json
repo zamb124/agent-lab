@@ -1,0 +1,23 @@
+{
+  "title_plural": "Агенты",
+  "fields": {
+    "agent_id": {
+      "title": "ID агента"
+    },
+    "name": {
+      "title": "Название"
+    },
+    "description": {
+      "title": "Описание"
+    },
+    "type": {
+      "title": "Тип агента"
+    },
+    "created_at": {
+      "title": "Создан"
+    },
+    "updated_at": {
+      "title": "Обновлен"
+    }
+  }
+}

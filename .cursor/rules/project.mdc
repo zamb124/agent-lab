@@ -1,0 +1,187 @@
+---
+description: "Правила проекта Humanitec"
+alwaysApply: false
+---
+# Правила проекта Humanitec
+
+## Язык
+
+Всегда отвечай на русском языке.
+
+## Стиль кода и комментариев
+
+### ❌ Нет эмодзи
+Запрещено использовать эмодзи в комментариях к коду и сообщениях коммитов.
+Исключение: UI, логи или контент, где эмодзи являются частью данных.
+
+<bad_example>
+# 🚀 Запускаем сервер
+# 🐛 Исправлено
+</bad_example>
+
+<good_example>
+# Запуск сервера
+# Исправлено поведение при ошибке
+</good_example>
+
+### ❌ Нет мета-комментариев
+Не пиши комментарии о том, *что* ты сделал (рефакторинг, удаление, обновление).
+Комментарии должны объяснять *почему* код написан именно так (бизнес-логика, неочевидные моменты).
+
+<bad_example>
+# Отрефакторил функцию
+# Удалил старый код
+# Обновил логику обработки
+</bad_example>
+
+<good_example>
+# Используем set() для O(1) проверки наличия элемента
+# Важно: этот метод должен быть синхронным из-за ограничений библиотеки X
+</good_example>
+
+### Именование переменных
+Строго запрещены префиксы `new_`, `old_`, `temp_` и подобные бессмысленные имена.
+Используй осмысленные имена, отражающие суть данных.
+
+<bad_example>
+new_config = {...}
+temp_data = "..."
+old_value = 123
+data = get_data()
+</bad_example>
+
+<good_example>
+updated_config = {...}
+user_cache = "..."
+previous_count = 123
+user_profile = get_user_profile()
+</good_example>
+
+## Управление зависимостями
+
+Используй UV для управления зависимостями:
+- Добавление: `uv add package`
+- Синхронизация: `uv sync`
+- Запуск: `uv run python file.py`
+
+<good_example>
+# Добавить зависимость
+uv add httpx
+
+# Запустить скрипт
+uv run python run.py
+
+# Запустить тесты
+uv run pytest
+</good_example>
+
+## Структура импортов
+
+**КРИТИЧНО: НИКАКИХ локальных импортов!**
+
+Все импорты ТОЛЬКО в начале файла. Группируй: stdlib → third-party → local.
+Локальные импорты допустимы ТОЛЬКО при неразрешимых циркулярных зависимостях.
+
+<bad_example>
+def my_function():
+    from apps.agents.models import AgentConfig  # НЕТ!
+    from core.db.storage import Storage  # НЕТ!
+    ...
+</bad_example>
+
+<good_example>
+import asyncio
+from typing import Optional
+
+from langchain_core.tools import tool
+from fastapi import APIRouter
+
+from core.container import get_container
+from apps.agents.models.core_models import AgentConfig
+
+# Доступ к сущностям через контейнер
+storage = get_agents_container().storage
+agent_repo = get_agents_container().agent_repository
+</good_example>
+
+## Обработка ошибок и Фолбэки
+
+### ❌ ЗАПРЕТ на фолбэки
+Не делай фолбэки "на всякий случай". Если операция не может быть выполнена корректно — бросай исключение.
+Фолбэки (возврат None, пустых списков, игнорирование ошибок) делают систему непредсказуемой и скрывают баги.
+
+<bad_example>
+try:
+    await migrator.migrate()
+except Exception:
+    logger.warning("Миграция не удалась, продолжаем")
+    # Система в неизвестном состоянии!
+</bad_example>
+
+<good_example>
+# Миграция обязательна. Если упадет — приложение не должно стартовать.
+await migrator.migrate()
+</good_example>
+
+### Обработка исключений
+Не используй излишние `try-except` блоки. Добавляй проверки условий.
+Если ловишь исключение, пробрасывай его с контекстом через `raise ... from e`.
+
+<good_example>
+if not user_id:
+    raise ValueError("user_id не может быть пустым")
+
+try:
+    result = await external_api.fetch()
+except httpx.HTTPStatusError as e:
+    raise ValueError(
+        f"Ошибка API ({e.response.status_code}): {e.response.text}"
+    ) from e
+</good_example>
+
+## Порт по умолчанию
+
+Сервер должен запускаться на порту 8001:
+- В `run.py` используй порт 8001
+- В документации указывай 8001
+- В примерах curl используй 8001
+
+## Межсервисное взаимодействие
+
+**КРИТИЧНО**: Для взаимодействия между сервисами **ТОЛЬКО** `ServiceClient`!
+
+```python
+from core.clients import get_service_client
+
+client = get_service_client()
+response = await client.get("agents", "/agents/api/v1/flows/")
+response = await client.post("crm", "/crm/api/v1/entities/", json=data)
+```
+
+**ЗАПРЕЩЕНО** использовать `httpx.AsyncClient` напрямую для межсервисных запросов!
+
+## Не генерируй лишнее
+
+НЕ создавай без явного запроса:
+- Документацию после каждого рефакторинга
+- Demo скрипты для демонстрации
+- Новые файлы если можно обновить существующие
+- Тесты автоматически
+
+## Context7 для документации
+
+Используй Context7 для получения актуальной документации библиотек:
+- FastAPI, SQLAlchemy, LangChain, ChromaDB, Taskiq, Redis, и другие библиотеки
+- Всегда проверяй актуальность подхода через документацию, прежде чем использовать устаревшие паттерны.
+
+## INLINE-FIRST идеология
+
+**КРИТИЧНО**: Понимай архитектурную идеологию платформы!
+
+Платформа построена на принципе **INLINE-FIRST**:
+- Агент = огромный JSON в БД, содержащий ВСЁ необходимое для исполнения
+- Код хранится как строки внутри JSON (inline code)
+- Python классы в `src/` - это БИБЛИОТЕКА базовых блоков, а не хранилище логики
+- Бизнес-логика живет в JSON конфигах, а не в Python коде
+
+**Ключевое правило**: Когда пишешь код в `apps/agents/src/`, ты создаешь ИНСТРУМЕНТЫ для Runtime, а не решения для бизнеса. Бизнес-логика должна быть в JSON конфигах агентов.

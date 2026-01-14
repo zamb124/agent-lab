@@ -1,0 +1,836 @@
+"""
+Тесты для API валидации flow.
+
+POST /api/v1/agents/validate - валидация графа без сохранения.
+
+Тестируемые проверки:
+1. Структура графа (entry, edges, достижимость)
+2. Ссылки на агенты, tools, subflows
+3. Переменные @var:
+4. Парсинг inline code
+5. Попытка сборки Agent
+"""
+
+import json
+from pathlib import Path
+
+import pytest
+
+AGENTS_DIR = Path(__file__).parent.parent.parent.parent / "apps" / "agents" / "agents"
+
+
+class TestFlowValidationStructure:
+    """Тесты валидации структуры графа."""
+
+    @pytest.mark.asyncio
+    async def test_validate_valid_flow(self, client, app):
+        """Валидный flow проходит проверку."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "react_node",
+                        "prompt": "Test agent",
+                        "tools": [],
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is True
+        assert len([e for e in data["errors"] if e["severity"] == "error"]) == 0
+
+    @pytest.mark.asyncio
+    async def test_validate_missing_entry(self, client, app):
+        """Ошибка при отсутствии entry."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {"type": "react_node", "prompt": "Test"},
+                },
+                "edges": [],
+                "entry": "",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        
+        error_codes = [e["code"] for e in data["errors"]]
+        assert "missing_entry" in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_entry_not_in_nodes(self, client, app):
+        """Ошибка если entry не существует в nodes."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {"type": "react_node", "prompt": "Test"},
+                },
+                "edges": [],
+                "entry": "nonexistent_node",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        
+        error_codes = [e["code"] for e in data["errors"]]
+        assert "entry_not_found" in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_edge_from_not_found(self, client, app):
+        """Ошибка если edge.from ссылается на несуществующую ноду."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {"type": "react_node", "prompt": "Test"},
+                },
+                "edges": [
+                    {"from": "nonexistent", "to": "main"},
+                ],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        
+        error_codes = [e["code"] for e in data["errors"]]
+        assert "edge_from_not_found" in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_edge_to_not_found(self, client, app):
+        """Ошибка если edge.to ссылается на несуществующую ноду."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {"type": "react_node", "prompt": "Test"},
+                },
+                "edges": [
+                    {"from": "main", "to": "nonexistent"},
+                ],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        
+        error_codes = [e["code"] for e in data["errors"]]
+        assert "edge_to_not_found" in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_unreachable_nodes_warning(self, client, app):
+        """Предупреждение о недостижимых нодах."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {"type": "react_node", "prompt": "Test"},
+                    "orphan": {"type": "react_node", "prompt": "Orphan node"},
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Valid - нет критических ошибок, но есть warning
+        warnings = [e for e in data["errors"] if e["severity"] == "warning"]
+        warning_codes = [w["code"] for w in warnings]
+        assert "unreachable_nodes" in warning_codes
+        
+        # Проверяем что orphan в details
+        unreachable_warning = next(w for w in warnings if w["code"] == "unreachable_nodes")
+        assert "orphan" in unreachable_warning["details"]["unreachable"]
+
+
+class TestFlowValidationReferences:
+    """Тесты валидации ссылок на сущности."""
+
+    @pytest.mark.asyncio
+    async def test_validate_existing_node_id(self, client, app):
+        """Существующий node_id проходит валидацию."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "react_node",
+                        "node_id": "docs_parser",
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "node_not_found" not in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_nonexistent_node_id(self, client, app):
+        """Ошибка при несуществующем node_id."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "react_node",
+                        "node_id": "nonexistent_node_xyz_12345",
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        
+        error_codes = [e["code"] for e in data["errors"]]
+        assert "node_not_found" in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_existing_tool(self, client, app):
+        """Существующий tool проходит валидацию."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "react_node",
+                        "prompt": "Test",
+                        "tools": ["calculator"],
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "tool_not_found" not in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_nonexistent_tool(self, client, app):
+        """Ошибка при несуществующем tool."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "react_node",
+                        "prompt": "Test",
+                        "tools": ["nonexistent_tool_xyz_12345"],
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        
+        error_codes = [e["code"] for e in data["errors"]]
+        assert "tool_not_found" in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_inline_tool_skipped(self, client, app):
+        """Inline tool (dict) не проверяется как ссылка."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "react_node",
+                        "prompt": "Test",
+                        "tools": [
+                            {
+                                "tool_id": "inline_test",
+                                "code": "def execute(args, state): return 'ok'",
+                            }
+                        ],
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "tool_not_found" not in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_tool_node_with_valid_tool_id(self, client, app):
+        """type: tool с существующим tool_id."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "tool",
+                        "tool_id": "calculator",
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "tool_not_found" not in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_tool_node_with_invalid_tool_id(self, client, app):
+        """type: tool с несуществующим tool_id."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "tool",
+                        "tool_id": "nonexistent_tool_xyz_12345",
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        
+        error_codes = [e["code"] for e in data["errors"]]
+        assert "tool_not_found" in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_tool_node_with_inline_code(self, client, app):
+        """type: tool с inline code не проверяет tool_id."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "tool",
+                        "code": "def execute(args, state): return 'ok'",
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "tool_not_found" not in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_agent_not_found(self, client, app):
+        """type: agent с несуществующим agent_id."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "agent",
+                        "agent_id": "nonexistent_agent_xyz_12345",
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        
+        error_codes = [e["code"] for e in data["errors"]]
+        assert "agent_not_found" in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_remote_agent_no_target(self, client, app):
+        """remote_agent без agent_id и url."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "remote_agent",
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        
+        error_codes = [e["code"] for e in data["errors"]]
+        assert "remote_agent_no_target" in error_codes
+
+
+class TestFlowValidationVariables:
+    """Тесты валидации переменных @var:."""
+
+    @pytest.mark.asyncio
+    async def test_validate_defined_variable(self, client, app):
+        """Переменная объявлена в variables - OK."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "react_node",
+                        "prompt": "Test",
+                        "input_mapping": {
+                            "api_key": "@var:my_api_key",
+                        },
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {
+                    "my_api_key": "secret123",
+                },
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "undefined_variable" not in error_codes
+        
+        # Проверяем что переменная собрана
+        assert "my_api_key" in data["var_keys_used"]
+
+    @pytest.mark.asyncio
+    async def test_validate_undefined_variable(self, client, app):
+        """Переменная НЕ объявлена в variables - ошибка."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "react_node",
+                        "prompt": "Test",
+                        "input_mapping": {
+                            "api_key": "@var:undefined_var_xyz",
+                        },
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        
+        error_codes = [e["code"] for e in data["errors"]]
+        assert "undefined_variable" in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_variable_in_url(self, client, app):
+        """@var: в url remote_agent."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "remote_agent",
+                        "url": "https://api.example.com/@var:api_version/endpoint",
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {
+                    "api_version": "v2",
+                },
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "undefined_variable" not in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_variable_in_auth_headers(self, client, app):
+        """@var: в auth_headers."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "external_api",
+                        "url": "https://api.example.com",
+                        "auth_headers": {
+                            "Authorization": "Bearer @var:api_token",
+                        },
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},  # api_token НЕ определён
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        
+        error_codes = [e["code"] for e in data["errors"]]
+        assert "undefined_variable" in error_codes
+
+
+class TestFlowValidationInlineCode:
+    """Тесты парсинга inline code."""
+
+    @pytest.mark.asyncio
+    async def test_validate_inline_code_state_keys_extracted(self, client, app):
+        """Извлечение state ключей из inline code."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "function",
+                        "code": "def run(state):\n    content = state.get('content', '')\n    state['result'] = content.upper()\n    return state",
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # state_keys_used должен содержать найденные ключи
+        assert "content" in data["state_keys_used"]
+        assert "result" in data["state_keys_used"]
+
+    @pytest.mark.asyncio
+    async def test_validate_inline_code_info_message(self, client, app):
+        """Info сообщение о найденных state ключах."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "classifier": {
+                        "type": "function",
+                        "code": "def run(state):\n    content = state['content'].lower()\n    if 'order' in content:\n        state['route'] = 'order'\n    return state",
+                    }
+                },
+                "edges": [{"from": "classifier", "to": None}],
+                "entry": "classifier",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        info_messages = [e for e in data["errors"] if e["severity"] == "info"]
+        assert len(info_messages) > 0
+        
+        code_info = [e for e in info_messages if e["code"] == "inline_code_state_keys"]
+        assert len(code_info) > 0
+
+
+class TestFlowValidationExampleGraph:
+    """Тесты на примере agents/example_graph."""
+
+    @pytest.mark.asyncio
+    async def test_validate_example_graph_flow(self, client, app):
+        """Валидация example_graph flow."""
+        flow_path = AGENTS_DIR / "example_graph" / "agent.json"
+        with open(flow_path) as f:
+            agent_config = json.load(f)
+        
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": agent_config["nodes"],
+                "edges": agent_config["edges"],
+                "entry": agent_config["entry"],
+                "variables": agent_config.get("variables", {}),
+                "agent_id": agent_config["id"],
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Должен быть валидным (агенты предзагружены)
+        errors = [e for e in data["errors"] if e["severity"] == "error"]
+        
+        # Выводим ошибки для отладки
+        for err in errors:
+            print(f"Error: {err['code']} - {err['message']}")
+        
+        # example_graph может иметь ссылки на несуществующие агенты в тестах
+        # Проверяем только структуру
+        structure_errors = [
+            e for e in errors 
+            if e["code"] in ["missing_entry", "entry_not_found", "edge_from_not_found", "edge_to_not_found"]
+        ]
+        assert len(structure_errors) == 0, f"Structure errors: {structure_errors}"
+
+    @pytest.mark.asyncio
+    async def test_validate_example_graph_has_inline_code(self, client, app):
+        """example_graph содержит inline code - должны извлечься state ключи."""
+        flow_path = AGENTS_DIR / "example_graph" / "agent.json"
+        with open(flow_path) as f:
+            agent_config = json.load(f)
+        
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": agent_config["nodes"],
+                "edges": agent_config["edges"],
+                "entry": agent_config["entry"],
+                "variables": agent_config.get("variables", {}),
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # classifier имеет inline code с state.get('content'), state['route']
+        assert "content" in data["state_keys_used"]
+        assert "route" in data["state_keys_used"]
+
+    @pytest.mark.asyncio
+    async def test_validate_example_graph_variables(self, client, app):
+        """example_graph использует @var: - проверка variables."""
+        flow_path = AGENTS_DIR / "example_graph" / "agent.json"
+        with open(flow_path) as f:
+            agent_config = json.load(f)
+        
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": agent_config["nodes"],
+                "edges": agent_config["edges"],
+                "entry": agent_config["entry"],
+                "variables": agent_config.get("variables", {}),
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Variables секция использует @var:company_name и @var:support_contacts
+        assert "company_name" in data["var_keys_used"]
+        assert "support_contacts" in data["var_keys_used"]
+
+
+class TestFlowValidationComplexCases:
+    """Сложные тестовые кейсы."""
+
+    @pytest.mark.asyncio
+    async def test_validate_graph_with_conditions(self, client, app):
+        """Граф с условными переходами."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "router": {
+                        "type": "function",
+                        "code": "def run(state):\n    state['route'] = 'a' if state.get('flag') else 'b'\n    return state",
+                    },
+                    "handler_a": {"type": "react_node", "prompt": "Handler A"},
+                    "handler_b": {"type": "react_node", "prompt": "Handler B"},
+                    "final": {"type": "react_node", "prompt": "Final"},
+                },
+                "edges": [
+                    {"from": "router", "to": "handler_a", "condition": "route == 'a'"},
+                    {"from": "router", "to": "handler_b", "condition": "route == 'b'"},
+                    {"from": "handler_a", "to": "final"},
+                    {"from": "handler_b", "to": "final"},
+                    {"from": "final", "to": None},
+                ],
+                "entry": "router",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        errors = [e for e in data["errors"] if e["severity"] == "error"]
+        assert len(errors) == 0
+
+    @pytest.mark.asyncio
+    async def test_validate_graph_with_multiple_exits(self, client, app):
+        """Граф с несколькими выходами."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "router": {
+                        "type": "function",
+                        "code": "def run(state): state['route'] = 'a'; return state",
+                    },
+                    "exit_a": {"type": "react_node", "prompt": "Exit A"},
+                    "exit_b": {"type": "react_node", "prompt": "Exit B"},
+                },
+                "edges": [
+                    {"from": "router", "to": "exit_a", "condition": "route == 'a'"},
+                    {"from": "router", "to": "exit_b", "condition": "route == 'b'"},
+                    {"from": "exit_a", "to": None},
+                    {"from": "exit_b", "to": None},
+                ],
+                "entry": "router",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        errors = [e for e in data["errors"] if e["severity"] == "error"]
+        assert len(errors) == 0
+
+    @pytest.mark.asyncio
+    async def test_validate_empty_nodes(self, client, app):
+        """Пустой граф - ошибка."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {},
+                "edges": [],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        
+        # entry не найден
+        error_codes = [e["code"] for e in data["errors"]]
+        assert "entry_not_found" in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_nested_input_mapping(self, client, app):
+        """Вложенный input_mapping с @var:."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "react_node",
+                        "prompt": "Test",
+                        "input_mapping": {
+                            "config": {
+                                "api_key": "@var:api_key",
+                                "settings": {
+                                    "mode": "@var:mode",
+                                },
+                            },
+                        },
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {
+                    "api_key": "secret",
+                    # mode НЕ определён
+                },
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        
+        # mode не определён
+        undefined_errors = [e for e in data["errors"] if e["code"] == "undefined_variable"]
+        assert len(undefined_errors) > 0
+        
+        # api_key определён, mode нет
+        assert "api_key" in data["var_keys_used"]
+        assert "mode" in data["var_keys_used"]
+
+    @pytest.mark.asyncio
+    async def test_validate_build_failure(self, client, app):
+        """Agent не может быть собран - ошибка build_failed."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "unknown_type_xyz",  # Неизвестный тип ноды
+                        "prompt": "Test",
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["valid"] is False
+        
+        error_codes = [e["code"] for e in data["errors"]]
+        assert "build_failed" in error_codes
+
+    @pytest.mark.asyncio
+    async def test_validate_agent_as_tool_reference(self, client, app):
+        """Агент как tool (docs_parser как tool)."""
+        response = await client.post(
+            "/agents/api/v1/agents/validate",
+            json={
+                "nodes": {
+                    "main": {
+                        "type": "react_node",
+                        "prompt": "Test",
+                        "tools": ["docs_parser"],  # Это агент, не tool
+                    }
+                },
+                "edges": [{"from": "main", "to": None}],
+                "entry": "main",
+                "variables": {},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        
+        # Агент как tool должен быть найден
+        error_codes = [e["code"] for e in data["errors"] if e["severity"] == "error"]
+        assert "tool_not_found" not in error_codes
+

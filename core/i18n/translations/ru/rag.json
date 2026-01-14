@@ -1,0 +1,105 @@
+{
+  "title": "RAG Dashboard",
+  "nav": {
+    "dashboard": "Дашборд",
+    "back_to_platform": "Назад к платформе"
+  },
+  "sidebar": {
+    "provider": "Провайдер",
+    "namespaces": "Неймспейсы",
+    "search_namespaces": "Поиск неймспейсов...",
+    "local": "ЛОКАЛЬНО",
+    "cloud": "ОБЛАКО"
+  },
+  "header": {
+    "search_placeholder": "Поиск по всем документам...",
+    "new_namespace": "Новый неймспейс",
+    "theme_toggle": "Переключить тему"
+  },
+  "loading": {
+    "default": "Загрузка...",
+    "namespaces": "Загрузка неймспейсов...",
+    "namespace": "Загрузка неймспейса...",
+    "documents": "Загрузка документов...",
+    "searching": "Поиск...",
+    "uploading": "Загрузка..."
+  },
+  "empty": {
+    "namespaces": "Неймспейсов пока нет",
+    "namespaces_description": "Создайте первый неймспейс для начала работы",
+    "documents": "Документов пока нет",
+    "documents_description": "Загрузите первый документ в этот неймспейс"
+  },
+  "errors": {
+    "load_namespaces": "Не удалось загрузить неймспейсы",
+    "load_documents": "Не удалось загрузить документы",
+    "create_namespace": "Не удалось создать неймспейс",
+    "delete_namespace": "Не удалось удалить неймспейс",
+    "upload_document": "Не удалось загрузить документ",
+    "delete_document": "Не удалось удалить документ",
+    "download_document": "Не удалось скачать документ",
+    "search_failed": "Поиск не удался",
+    "connection": "Проверьте подключение и попробуйте снова"
+  },
+  "namespace": {
+    "documents": "документов",
+    "delete_confirm": "Вы уверены, что хотите удалить этот неймспейс и все его документы?"
+  },
+  "document": {
+    "delete_confirm": "Вы уверены, что хотите удалить этот документ?",
+    "status": {
+      "ready": "готов",
+      "processing": "обработка",
+      "error": "ошибка"
+    }
+  },
+  "modals": {
+    "create_namespace": {
+      "title": "Создать неймспейс",
+      "name_label": "Название",
+      "name_placeholder": "my-namespace",
+      "description_label": "Описание (опционально)",
+      "description_placeholder": "Опишите ваш неймспейс...",
+      "cancel": "Отмена",
+      "create": "Создать"
+    },
+    "upload_document": {
+      "title": "Загрузить документ",
+      "drag_drop": "Перетащите файлы сюда",
+      "or": "или",
+      "browse": "Выбрать файлы",
+      "cancel": "Отмена",
+      "upload": "Загрузить"
+    },
+    "search_results": {
+      "title": "Результаты поиска",
+      "no_results": "Ничего не найдено",
+      "no_results_description": "Попробуйте другой поисковый запрос",
+      "match": "совпадение"
+    }
+  },
+  "actions": {
+    "upload": "Загрузить",
+    "download": "Скачать",
+    "delete": "Удалить",
+    "back": "Назад",
+    "create_namespace": "Создать неймспейс",
+    "upload_document": "Загрузить документ"
+  },
+  "notifications": {
+    "namespace_created": "Неймспейс создан",
+    "namespace_deleted": "Неймспейс удален",
+    "document_uploaded": "документ(ов) успешно загружено",
+    "document_upload_failed": "документ(ов) не удалось загрузить",
+    "document_deleted": "Документ удален",
+    "enter_namespace_name": "Введите название неймспейса",
+    "select_namespace_first": "Сначала выберите неймспейс"
+  }
+}
+
+
+
+
+
+
+

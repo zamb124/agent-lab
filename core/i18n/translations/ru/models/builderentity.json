@@ -1,0 +1,16 @@
+{
+  "fields": {
+    "source": {
+      "title": "Источник",
+      "description": "Источник создания (manual, migration, canvas_created)"
+    },
+    "created_at": {
+      "title": "Создан",
+      "description": "Дата создания"
+    },
+    "updated_at": {
+      "title": "Обновлен",
+      "description": "Дата обновления"
+    }
+  }
+}

@@ -1,0 +1,623 @@
+---
+description: "Правила создания инструментов (Tools) для агентов"
+alwaysApply: false
+---
+# Правила создания инструментов (Tools)
+
+## Декоратор @tool
+
+**ВСЕ tools создаются через декоратор `@tool`!** Не используй классы.
+
+```python
+from apps.agents.src.tools import tool
+
+@tool(
+    name="calculator",
+    description="Вычисляет математические выражения",
+    tags=["math", "utility"]
+)
+async def calculator(expression: str, state: "ExecutionState" = None) -> str:
+    """
+    Вычисляет математическое выражение.
+    
+    Args:
+        expression: Математическое выражение (например, "2+2*3")
+        state: ExecutionState агента (опционально)
+    
+    Returns:
+        Результат вычисления
+    """
+    import math
+    result = eval(expression, {'__builtins__': {}}, {'sin': math.sin, 'cos': math.cos})
+    return f"Результат: {result}"
+```
+
+### Обязательные параметры декоратора
+
+- `name: str` - уникальное имя tool
+- `description: str` - описание для LLM (что делает tool)
+- `tags: List[str]` - теги/категории для группировки
+
+### Опциональные параметры
+
+- `mock_response: Any` - mock ответ для тестов
+- `permission: Optional[str]` - требуемая группа пользователя
+- `tool_type: ToolType` - тип tool (TOOL, REASON, EXIT)
+
+---
+
+## Типизация параметров
+
+**ВСЕГДА указывай типы параметров!** Они автоматически преобразуются в JSON Schema для LLM.
+
+```python
+@tool(
+    name="create_user",
+    description="Создаёт нового пользователя",
+    tags=["user", "admin"]
+)
+async def create_user(
+    username: str,
+    email: str,
+    age: int,
+    is_admin: bool = False,
+    state: "ExecutionState" = None
+) -> dict:
+    """
+    Создаёт пользователя.
+    
+    Args:
+        username: Имя пользователя
+        email: Email адрес
+        age: Возраст пользователя
+        is_admin: Является ли админом (по умолчанию False)
+        state: ExecutionState агента
+    """
+    return {
+        "id": "user_123",
+        "username": username,
+        "email": email,
+        "age": age,
+        "is_admin": is_admin
+    }
+```
+
+**Поддерживаемые типы:**
+- `str` → "string"
+- `int` → "integer"
+- `float` → "number"
+- `bool` → "boolean"
+- `dict` → "object"
+- `list` → "array"
+
+---
+
+## Параметр state
+
+Параметр `state: "ExecutionState" = None` **опционален**. Если он есть - tool получает нативный ExecutionState объект.
+
+**ВАЖНО:** После глобального рефакторинга tools ВСЕГДА получают нативный `ExecutionState`, а не Dict!
+
+```python
+@tool(
+    name="save_data",
+    description="Сохраняет данные в state",
+    tags=["state"]
+)
+async def save_data(key: str, value: str, state: "ExecutionState" = None) -> str:
+    """Сохраняет данные."""
+    if state:
+        if not state.variables:
+            state.variables = {}
+        state.variables[key] = value
+        return f"Сохранено: {key} = {value}"
+    return "State недоступен"
+```
+
+---
+
+## Async vs Sync
+
+**Предпочитай async функции**, но sync тоже работают:
+
+```python
+# ПРАВИЛЬНО - async
+@tool(name="fetch", description="Получает данные", tags=["api"])
+async def fetch_data(url: str) -> dict:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        return response.json()
+
+# ТОЖЕ ПРАВИЛЬНО - sync (для простых операций)
+@tool(name="double", description="Удваивает число", tags=["math"])
+def double_number(value: int) -> int:
+    return value * 2
+```
+
+---
+
+## Mock для тестов
+
+Используй `mock_response` для тестирования:
+
+```python
+@tool(
+    name="external_api",
+    description="Вызывает внешний API",
+    tags=["api"],
+    mock_response={"status": "ok", "data": "mock_data"}
+)
+async def call_external_api(endpoint: str) -> dict:
+    """Вызывает внешний API."""
+    # Реальная логика
+    async with httpx.AsyncClient() as client:
+        response = await client.get(f"https://api.example.com/{endpoint}")
+        return response.json()
+```
+
+**Mock работает только когда:**
+- `TESTING=true` в environment
+- Или mock передан через `state.metadata.mocks`
+
+**Mock может быть:**
+- Строка: `mock_response="Test result"`
+- Dict: `mock_response={"key": "value"}`
+- Callable: `mock_response=lambda args: f"Result: {args['param']}"`
+
+---
+
+## Permissions
+
+Tool может требовать определённые группы пользователя:
+
+```python
+@tool(
+    name="delete_user",
+    description="Удаляет пользователя (только для админов)",
+    tags=["admin", "user"],
+    permission="admin"
+)
+async def delete_user(user_id: str) -> str:
+    """Удаляет пользователя."""
+    # Логика удаления
+    return f"User {user_id} deleted"
+
+@tool(
+    name="approve_order",
+    description="Одобряет заказ",
+    tags=["order"],
+    permission=["admin", "managers"]  # любая из групп
+)
+async def approve_order(order_id: str) -> str:
+    """Одобряет заказ."""
+    return f"Order {order_id} approved"
+```
+
+**Поведение при отсутствии прав:**
+- Tool НЕ выбрасывает исключение
+- Возвращает сообщение агенту: "У пользователя нет прав..."
+- Агент может попросить авторизацию или выбрать другой путь
+
+---
+
+## Встроенные tools
+
+### ask_user
+
+Запрашивает информацию у пользователя (вызывает interrupt).
+
+```python
+from apps.agents.src.tools import ask_user
+
+# Используется автоматически
+# LLM вызывает: ask_user(question="Какой склад?")
+# Результат: AgentInterrupt exception
+```
+
+**Не создавай свой ask_user!** Используй встроенный.
+
+### finish
+
+Завершает выполнение ноды с финальным ответом.
+
+```python
+from apps.agents.src.tools import finish
+
+# LLM вызывает: finish(response="Задача выполнена")
+# Результат: нода завершается с этим ответом
+```
+
+---
+
+## Примеры tools
+
+### Простой tool
+
+```python
+@tool(
+    name="greet",
+    description="Приветствует пользователя",
+    tags=["greeting"]
+)
+async def greet(name: str) -> str:
+    """Приветствует пользователя по имени."""
+    return f"Привет, {name}!"
+```
+
+### Tool с state
+
+```python
+@tool(
+    name="get_user_info",
+    description="Получает информацию о текущем пользователе",
+    tags=["user"]
+)
+async def get_user_info(state: "ExecutionState" = None) -> dict:
+    """Получает информацию о пользователе из state."""
+    if not state:
+        return {"error": "State недоступен"}
+    
+    return {
+        "user_id": state.user_id,
+        "context_id": state.context_id,
+        "session_id": state.session_id
+    }
+```
+
+### Tool с API вызовом
+
+```python
+@tool(
+    name="get_weather",
+    description="Получает погоду в городе",
+    tags=["weather", "api"],
+    mock_response={"temp": 20, "condition": "sunny"}
+)
+async def get_weather(city: str) -> dict:
+    """
+    Получает погоду.
+    
+    Args:
+        city: Название города
+    """
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            "https://api.weather.com/forecast",
+            params={"city": city}
+        )
+        return response.json()
+```
+
+### Tool с permissions
+
+```python
+@tool(
+    name="view_analytics",
+    description="Показывает аналитику (только для менеджеров)",
+    tags=["analytics", "admin"],
+    permission=["admin", "managers"]
+)
+async def view_analytics(period: str = "today") -> dict:
+    """
+    Показывает аналитику за период.
+    
+    Args:
+        period: Период (today, week, month)
+    """
+    # Логика получения аналитики
+    return {
+        "period": period,
+        "users": 1000,
+        "revenue": 50000
+    }
+```
+
+### Tool с обработкой ошибок
+
+```python
+@tool(
+    name="fetch_data",
+    description="Получает данные по URL",
+    tags=["api"]
+)
+async def fetch_data(url: str) -> dict:
+    """
+    Получает данные.
+    
+    Args:
+        url: URL для запроса
+    """
+    if not url.startswith("https://"):
+        raise ValueError(f"Небезопасный URL: {url}")
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.json()
+    except httpx.HTTPStatusError as e:
+        raise ValueError(
+            f"Ошибка HTTP {e.response.status_code}: {url}"
+        ) from e
+    except httpx.TimeoutException:
+        raise ValueError(f"Timeout при запросе к {url}")
+```
+
+### Tool с вычислениями
+
+```python
+@tool(
+    name="calculate",
+    description="Вычисляет математическое выражение",
+    tags=["math"],
+    mock_response="42"
+)
+def calculate(expression: str) -> float:
+    """
+    Вычисляет выражение.
+    
+    Args:
+        expression: Математическое выражение
+    """
+    import math
+    
+    # Безопасный eval с ограниченным контекстом
+    allowed = {
+        'sin': math.sin,
+        'cos': math.cos,
+        'tan': math.tan,
+        'sqrt': math.sqrt,
+        'pi': math.pi,
+        'e': math.e,
+    }
+    
+    try:
+        result = eval(expression, {'__builtins__': {}}, allowed)
+        return float(result)
+    except Exception as e:
+        raise ValueError(f"Ошибка вычисления: {e}")
+```
+
+---
+
+## Использование в агентах
+
+### В agent.json
+
+```json
+{
+  "nodes": {
+    "main": {
+      "type": "react_node",
+      "prompt": "Ты помощник...",
+      "tools": ["calculator", "get_weather", "ask_user"]
+    }
+  }
+}
+```
+
+### В Python коде (nodes.py)
+
+```python
+from apps.agents.src.tools import tool
+
+@tool(name="my_tool", description="Мой инструмент", tags=["custom"])
+async def my_tool(param: str) -> str:
+    return f"Result: {param}"
+
+# В nodes.json можно указать:
+# "tools": ["apps.agents.agents.my_agent.nodes.my_tool"]
+```
+
+---
+
+## Регистрация tools
+
+Tools автоматически регистрируются через `ToolRegistry`:
+
+```python
+from apps.agents.src.container import get_container
+
+container = get_container()
+
+# Создать tool из конфига
+tool = await container.tool_registry.create_tool({
+    "name": "calculator",
+    "description": "Вычисляет выражения",
+    "code": "def execute(args, state): return eval(args['expr'])"
+})
+```
+
+**Для декораторных tools** код извлекается автоматически через `inspect.getsource()`.
+
+---
+
+## Best Practices
+
+### 1. Всегда указывай типы
+
+```python
+# ПРАВИЛЬНО
+async def my_tool(name: str, age: int, active: bool = True) -> dict:
+    pass
+
+# НЕПРАВИЛЬНО - без типов
+async def my_tool(name, age, active=True):
+    pass
+```
+
+### 2. Пиши хорошие docstrings
+
+```python
+# ПРАВИЛЬНО
+@tool(name="create", description="Создаёт пользователя", tags=["user"])
+async def create_user(username: str, email: str) -> dict:
+    """
+    Создаёт нового пользователя в системе.
+    
+    Args:
+        username: Уникальное имя пользователя
+        email: Email адрес для уведомлений
+    
+    Returns:
+        Словарь с данными созданного пользователя
+    """
+    pass
+
+# НЕПРАВИЛЬНО - без docstring
+@tool(name="create", description="Создаёт пользователя", tags=["user"])
+async def create_user(username: str, email: str) -> dict:
+    pass
+```
+
+### 3. Используй mock для внешних API
+
+```python
+# ПРАВИЛЬНО
+@tool(
+    name="external_api",
+    description="Вызывает API",
+    tags=["api"],
+    mock_response={"status": "ok"}  # mock для тестов
+)
+async def call_api(endpoint: str) -> dict:
+    pass
+
+# НЕПРАВИЛЬНО - без mock
+@tool(name="external_api", description="Вызывает API", tags=["api"])
+async def call_api(endpoint: str) -> dict:
+    pass  # тесты будут вызывать реальный API
+```
+
+### 4. Не скрывай ошибки
+
+```python
+# ПРАВИЛЬНО
+async def my_tool(url: str) -> dict:
+    if not url.startswith("https://"):
+        raise ValueError("Only HTTPS URLs allowed")
+    return await fetch(url)
+
+# НЕПРАВИЛЬНО
+async def my_tool(url: str) -> dict:
+    try:
+        return await fetch(url)
+    except Exception:
+        return {}  # скрыли ошибку
+```
+
+### 5. Используй permission для защиты
+
+```python
+# ПРАВИЛЬНО
+@tool(
+    name="delete_all",
+    description="Удаляет все данные",
+    tags=["admin"],
+    permission="admin"  # только для админов
+)
+async def delete_all() -> str:
+    pass
+
+# НЕПРАВИЛЬНО - опасная операция без защиты
+@tool(name="delete_all", description="Удаляет все данные", tags=["admin"])
+async def delete_all() -> str:
+    pass
+```
+
+### 6. Возвращай JSON-сериализуемые типы
+
+```python
+# ПРАВИЛЬНО
+async def my_tool() -> dict:
+    return {"status": "ok", "data": [1, 2, 3]}
+
+# НЕПРАВИЛЬНО - не сериализуется
+async def my_tool() -> MyCustomClass:
+    return MyCustomClass()
+```
+
+---
+
+## Отладка
+
+### Логирование
+
+```python
+from core.logging import get_logger
+
+logger = get_logger(__name__)
+
+@tool(name="debug", description="Debug tool", tags=["debug"])
+async def debug_tool(param: str) -> str:
+    logger.info(f"debug_tool called with param={param}")
+    result = process(param)
+    logger.info(f"debug_tool result={result}")
+    return result
+```
+
+### Проверка mock режима
+
+```python
+import os
+
+def is_test_mode() -> bool:
+    return os.environ.get("TESTING", "").lower() in ("true", "1", "yes")
+
+@tool(name="check", description="Проверка", tags=["debug"])
+async def check_mode() -> str:
+    if is_test_mode():
+        return "Test mode"
+    return "Production mode"
+```
+
+---
+
+## Частые ошибки
+
+### ❌ Создание tool через класс
+
+```python
+# НЕПРАВИЛЬНО - не используй классы
+class MyTool(BaseTool):
+    name = "my_tool"
+    async def execute(self, args, state):
+        pass
+```
+
+### ❌ Забыл указать обязательные параметры декоратора
+
+```python
+# НЕПРАВИЛЬНО - нет name, description, tags
+@tool()
+async def my_tool():
+    pass
+```
+
+### ❌ Неправильная сигнатура state
+
+```python
+# НЕПРАВИЛЬНО - state должен быть dict с default=None
+@tool(name="tool", description="Tool", tags=["test"])
+async def my_tool(state: ExecutionState):
+    pass
+
+# ПРАВИЛЬНО
+@tool(name="tool", description="Tool", tags=["test"])
+async def my_tool(state: "ExecutionState" = None):
+    pass
+```
+
+### ❌ Возврат несериализуемых объектов
+
+```python
+# НЕПРАВИЛЬНО
+@tool(name="tool", description="Tool", tags=["test"])
+async def my_tool() -> datetime:
+    return datetime.now()
+
+# ПРАВИЛЬНО
+@tool(name="tool", description="Tool", tags=["test"])
+async def my_tool() -> str:
+    return datetime.now().isoformat()
+```

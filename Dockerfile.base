@@ -1,0 +1,29 @@
+# Base image with core dependencies + heavy common libs
+# Build & Push (multiplatform):
+#   docker buildx build --platform linux/amd64,linux/arm64 -f Dockerfile.base -t zambas/agent-lab-base:latest --push .
+
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+
+WORKDIR /app
+
+# Системные зависимости для всех сервисов
+RUN apt-get update && apt-get install -y \
+    curl \
+    poppler-utils \
+    tesseract-ocr \
+    tesseract-ocr-rus \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy only dependency files
+COPY pyproject.toml README.md ./
+
+# Torch CPU-only (экономит ~2-3 GB по сравнению с CUDA версией)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system torch torchvision \
+    --index-url https://download.pytorch.org/whl/cpu
+
+# Core + worker-base зависимости
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system --group core --group worker-base

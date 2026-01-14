@@ -1,0 +1,10 @@
+{
+  "fields": {
+    "amount": {
+      "description": "Payment amount in rubles"
+    },
+    "provider": {
+      "description": "Payment provider (yoomoney, yukassa)"
+    }
+  }
+}

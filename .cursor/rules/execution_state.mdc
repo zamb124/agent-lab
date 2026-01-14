@@ -1,0 +1,387 @@
+---
+description: "Правила работы с ExecutionState как нативным объектом"
+alwaysApply: false
+---
+# ExecutionState как нативный объект
+
+## ГЛАВНЫЙ ПРИНЦИП
+
+**ExecutionState - это нативный Pydantic объект, который используется ВЕЗДЕ в системе!**
+
+После глобального рефакторинга система работает следующим образом:
+- Внутри всей платформы используется **только** нативный `ExecutionState` объект
+- Сериализация/десериализация происходит **ТОЛЬКО** на границах системы
+- Никаких `model_dump()` и `model_validate()` в бизнес-логике!
+
+---
+
+## Границы сериализации
+
+`model_dump()` и `model_validate()` вызываются **ТОЛЬКО** в следующих местах:
+
+### 1. Repository (граница с БД)
+
+```python
+# apps/agents/src/db/state_repository.py
+
+class DatabaseStateRepository(BaseStateRepository):
+    async def get(self, session_id: str) -> Optional[ExecutionState]:
+        # Pydantic автоматически десериализует из JSONB
+        entity = StateData.model_validate_json(data)
+        return entity.data  # ExecutionState
+    
+    async def set(self, session_id: str, state: ExecutionState) -> bool:
+        # Pydantic автоматически сериализует в JSONB
+        entity = StateData(session_id=session_id, data=state)
+        data = entity.model_dump_json()
+        await self._storage.execute(query, data, session_id)
+```
+
+**Важно**: Сериализация происходит **автоматически** через Pydantic при сохранении в JSONB колонку!
+
+### 2. TaskIQ tasks (граница очереди)
+
+```python
+# apps/agents/src/tasks/tool_tasks.py
+
+@broker.task(task_name="execute_tool")
+async def execute_tool(
+    tool_id_or_config: Any,
+    args: Dict[str, Any],
+    state_dict: Dict[str, Any],  # ← Сериализованный на входе
+) -> Dict[str, Any]:  # ← Сериализуем на выходе
+    # Десериализация на входе в задачу (граница TaskIQ)
+    from core.state import ExecutionState
+    tool_state = ExecutionState.model_validate(state_dict)
+    
+    # Работаем с нативным ExecutionState
+    result = await tool.run(args, tool_state)
+    
+    # Сериализация для возврата через TaskIQ
+    return {
+        "tool_id": tool_id,
+        "result": result,
+        "nested_states": tool_state.nested_states,
+    }
+```
+
+**Вызов задачи:**
+```python
+# Сериализуем ТОЛЬКО при отправке в очередь
+await execute_tool.kiq(
+    tool_id="my_tool",
+    args={"param": "value"},
+    state_dict=state.model_dump(exclude_none=False)  # ← Явная сериализация
+)
+```
+
+### 3. Tracing (граница с OpenTelemetry)
+
+```python
+# core/tracing/tracer.py
+
+def record_state_snapshot(self, span: Span, state: ExecutionState) -> None:
+    # Конвертируем ExecutionState в dict для JSON сериализации
+    state_dict = state.model_dump(exclude_none=False)
+    
+    snapshot = {k: v for k, v in state_dict.items() if not k.startswith("__")}
+    snapshot_str = json.dumps(snapshot, ensure_ascii=False, default=str)[:4000]
+    span.set_attribute(attr.ATTR_STATE_SNAPSHOT, snapshot_str)
+```
+
+---
+
+## Компоненты работают с ExecutionState
+
+### Ноды
+
+```python
+class BaseNode(ABC):
+    @abstractmethod
+    async def run(self, state: ExecutionState) -> ExecutionState:
+        pass
+```
+
+**ЗАПРЕЩЕНО:**
+```python
+# ❌ НЕ ТАК
+state_dict = state.model_dump()
+result_dict = await some_function(state_dict)
+return ExecutionState.model_validate(result_dict)
+```
+
+**ПРАВИЛЬНО:**
+```python
+# ✅ ТАК
+result_state = await some_function(state)
+return result_state
+```
+
+### Tools
+
+```python
+class BaseTool(ABC):
+    @abstractmethod
+    async def execute(self, args: Dict[str, Any], state: ExecutionState) -> Any:
+        pass
+```
+
+**Inline Tools через SafeEval:**
+```python
+class InlineTool(BaseTool):
+    async def execute(self, args: Dict[str, Any], state: ExecutionState) -> Any:
+        SafeEval = get_container().safe_eval_class
+        evaluator = SafeEval(variables=state.variables)
+        
+        # Передаем ExecutionState напрямую в SafeEval
+        result = await evaluator.execute_tool(self._code, args, state)
+        return result
+```
+
+### SafeEval
+
+```python
+class SafeEval:
+    async def execute_node(self, code: str, state: ExecutionState) -> ExecutionState:
+        # Inline код работает с ExecutionState
+        func = self._compile(code, "run", auto_find=True)
+        
+        if inspect.iscoroutinefunction(func):
+            result = await func(state)
+        else:
+            result = func(state)
+        
+        # Если вернули dict - конвертируем в ExecutionState
+        if isinstance(result, dict):
+            return ExecutionState.model_validate(result)
+        
+        return result
+    
+    async def execute_tool(self, code: str, args: Dict[str, Any], state: ExecutionState) -> Any:
+        # Tool inline код также работает с ExecutionState
+        func = self._compile(code, "execute", auto_find=True)
+        
+        if "state" in inspect.signature(func).parameters:
+            return await func(**args, state=state)
+        return await func(**args)
+```
+
+### StateManager
+
+```python
+class StateManager:
+    async def get_state(self, session_id: str) -> Optional[ExecutionState]:
+        # Возвращает ExecutionState, не Dict!
+        return await self._repository.get(session_id)
+    
+    async def save_state(self, session_id: str, state: ExecutionState) -> bool:
+        # Принимает ExecutionState, не Dict!
+        return await self._repository.set(session_id, state)
+```
+
+### MappingResolver
+
+```python
+class MappingResolver:
+    @staticmethod
+    def resolve_value(source: Any, state: ExecutionState) -> Any:
+        if source.startswith("@state:"):
+            path = source[7:]
+            return MappingResolver.get_nested_value(state, path)
+        if source.startswith("@var:"):
+            var_path = source[5:]
+            return MappingResolver.get_nested_value(state.variables, var_path)
+        return source
+    
+    @staticmethod
+    def get_nested_value(data: Any, path: str) -> Any:
+        # Работает и с ExecutionState (через атрибуты), и с dict (через ключи)
+        keys = path.split(".")
+        value = data
+        
+        for key in keys:
+            if hasattr(value, key):
+                value = getattr(value, key)
+            elif isinstance(value, dict):
+                value = value.get(key)
+            else:
+                return None
+        
+        return value
+```
+
+### LLM Factory
+
+```python
+def get_llm_for_state(
+    state: Optional[ExecutionState] = None,
+    model_name: Optional[str] = None,
+    temperature: Optional[float] = None,
+) -> LLMClient | MockLLM:
+    # Принимает ExecutionState для проверки mock конфигурации
+    mock_config = get_mock_for_llm(state)
+    if mock_config:
+        return MockLLM.from_mock_config(mock_config)
+    return get_llm(model_name, temperature)
+```
+
+### Mock Resolver
+
+```python
+def get_mock_for_tool(state: Optional[ExecutionState], tool_id: str) -> Optional[Any]:
+    if not state or not state.mock or not state.mock.get("enabled"):
+        return None
+    tools = state.mock.get("tools", {})
+    return tools.get(tool_id)
+```
+
+---
+
+## ЗАПРЕЩЕННЫЕ паттерны
+
+### ❌ НЕ конвертируй ExecutionState в Dict внутри системы
+
+```python
+# ❌ ПЛОХО
+def process_state(state: ExecutionState):
+    state_dict = state.model_dump()  # НЕТ!
+    # ... работа с dict
+    return ExecutionState.model_validate(state_dict)
+
+# ✅ ХОРОШО
+def process_state(state: ExecutionState) -> ExecutionState:
+    # Работаем с нативным объектом
+    state.response = "Updated"
+    return state
+```
+
+### ❌ НЕ передавай Dict вместо ExecutionState
+
+```python
+# ❌ ПЛОХО
+async def my_function(state_dict: Dict[str, Any]):
+    state = ExecutionState.model_validate(state_dict)  # Лишняя конвертация
+    # ... работа
+
+# ✅ ХОРОШО
+async def my_function(state: ExecutionState):
+    # Сразу работаем с ExecutionState
+    # ... работа
+```
+
+### ❌ НЕ используй удаленные функции
+
+```python
+# ❌ УДАЛЕНО - больше не существует!
+from core.state import serialize_state, deserialize_state
+
+state_dict = serialize_state(state)  # Эта функция УДАЛЕНА!
+state = deserialize_state(state_dict)  # Эта функция УДАЛЕНА!
+```
+
+---
+
+## ПРАВИЛЬНЫЕ паттерны
+
+### ✅ Работа с ExecutionState напрямую
+
+```python
+# Получаем ExecutionState
+state = await state_manager.get_state(session_id)
+
+# Работаем с атрибутами
+state.response = "Updated response"
+state.variables["key"] = "value"
+state.messages.append(message)
+
+# Сохраняем ExecutionState напрямую
+await state_manager.save_state(session_id, state)
+```
+
+### ✅ Передача ExecutionState между компонентами
+
+```python
+# Получаем из хранилища
+state = await state_manager.get_state(session_id)
+
+# Передаем в ноду
+result_state = await node.run(state)
+
+# Передаем в tool
+tool_result = await tool.execute(args, result_state)
+
+# Сохраняем обратно
+await state_manager.save_state(session_id, result_state)
+```
+
+### ✅ Создание нового ExecutionState
+
+```python
+# Используем конструктор или create()
+state = ExecutionState.create(
+    task_id=task_id,
+    context_id=context_id,
+    user_id=user_id,
+    session_id=session_id,
+    content=content,
+)
+
+# Или прямой конструктор
+state = ExecutionState(
+    task_id=task_id,
+    context_id=context_id,
+    user_id=user_id,
+    session_id=session_id,
+    content=content,
+    messages=[],
+    variables={},
+)
+```
+
+---
+
+## Копирование состояния
+
+### ❌ ПЛОХО - через Dict
+
+```python
+# ❌ Избыточная сериализация/десериализация
+state_dict = source_state.model_dump(exclude_none=False)
+for key, value in state_dict.items():
+    setattr(target_state, key, value)
+```
+
+### ✅ ХОРОШО - через атрибуты
+
+```python
+# ✅ Прямое копирование через Pydantic fields
+for field_name in source_state.model_fields:
+    if hasattr(source_state, field_name):
+        setattr(target_state, field_name, getattr(source_state, field_name))
+
+# Копирование extra полей
+if hasattr(source_state, '__pydantic_extra__') and source_state.__pydantic_extra__:
+    if not hasattr(target_state, '__pydantic_extra__') or target_state.__pydantic_extra__ is None:
+        target_state.__pydantic_extra__ = {}
+    target_state.__pydantic_extra__.update(source_state.__pydantic_extra__)
+```
+
+---
+
+## Итоги
+
+**ТРИ границы сериализации:**
+1. **БД** - Pydantic автоматически сериализует/десериализует в JSONB
+2. **TaskIQ** - явная сериализация при отправке в очередь (`model_dump()`) и десериализация при получении (`model_validate()`)
+3. **Tracing** - сериализация для JSON в OpenTelemetry spans
+
+**Везде остальное:**
+- Работа **ТОЛЬКО** с нативным `ExecutionState` объектом
+- Никаких `model_dump()` и `model_validate()` в бизнес-логике
+- Прямой доступ через атрибуты (`state.response`, `state.variables`)
+
+**Преимущества:**
+- Типобезопасность
+- Читаемость кода
+- Производительность (нет лишних сериализаций)
+- Соответствие INLINE-FIRST идеологии ("объект = данные")

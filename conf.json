@@ -1,0 +1,299 @@
+{
+  "server": {
+    "services": {
+      "agents": {
+        "url": "http://localhost:8001",
+        "name": "agents"
+      },
+      "crm": {
+        "url": "http://localhost:8003",
+        "name": "crm"
+      },
+      "frontend": {
+        "url": "http://localhost:8002",
+        "name": "frontend"
+      },
+      "rag": {
+        "url": "http://localhost:8004",
+        "name": "rag"
+      }
+    }
+  },
+  "database": {
+    "url": "postgresql+asyncpg://platform_user:admin@localhost:5435/platform_db",
+    "shared_url": "postgresql+asyncpg://platform_user:admin@localhost:5435/platform_db",
+    "redis_url": "redis://localhost:6381/0"
+  },
+  "tasks": {
+    "broker_url": "redis://localhost:6381/0"
+  },
+  "auth": {
+    "enabled": true,
+    "jwt_secret_key": "dev-secret-key-change-in-production",
+    "session_timeout": 7200,
+    "providers": {
+      "yandex": {
+        "auth_url": "https://oauth.yandex.ru/authorize",
+        "token_url": "https://oauth.yandex.ru/token",
+        "userinfo_url": "https://login.yandex.ru/info",
+        "scope": "login:email login:avatar",
+        "enabled": true
+      },
+      "google": {
+        "auth_url": "https://accounts.google.com/o/oauth2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "userinfo_url": "https://openidconnect.googleapis.com/v1/userinfo",
+        "scope": "openid email profile",
+        "enabled": true
+      },
+      "github": {
+        "auth_url": "https://github.com/login/oauth/authorize",
+        "token_url": "https://github.com/login/oauth/access_token",
+        "userinfo_url": "https://api.github.com/user",
+        "scope": "read:user user:email",
+        "enabled": true
+      }
+    }
+  },
+  "llm": {
+    "openrouter": {
+      "api_key": "YOUR_OPENROUTER_API_KEY",
+      "base_url": "https://openrouter.ai/api/v1",
+      "site_url": "https://humanitec.ru",
+      "site_name": "Humanitec",
+      "timeout": 300,
+      "max_retries": 3,
+      "enabled": true
+    },
+    "models": {
+      "anthropic/claude-sonnet-4.5": {
+        "max_tokens": 8192,
+        "context_window": 200000,
+        "temperature": 0.2,
+        "description": "Самая мощная модель Anthropic, лучшая для сложных задач",
+        "input_cost_per_token": 0.0003,
+        "output_cost_per_token": 0.0015
+      },
+      "anthropic/claude-sonnet-4": {
+        "max_tokens": 8192,
+        "context_window": 200000,
+        "temperature": 0.2,
+        "description": "Предыдущая версия Claude Sonnet",
+        "input_cost_per_token": 0.0003,
+        "output_cost_per_token": 0.0015
+      },
+      "google/gemini-2.5-pro": {
+        "max_tokens": 8192,
+        "context_window": 1000000,
+        "temperature": 0.2,
+        "description": "Топовая модель Google, огромный контекст",
+        "input_cost_per_token": 0.000125,
+        "output_cost_per_token": 0.001
+      },
+      "google/gemini-2.5-flash": {
+        "max_tokens": 8192,
+        "context_window": 1000000,
+        "temperature": 0.2,
+        "description": "Быстрая версия Gemini 2.5",
+        "input_cost_per_token": 0.00003,
+        "output_cost_per_token": 0.00025
+      },
+      "google/gemini-2.0-flash": {
+        "max_tokens": 8192,
+        "context_window": 1000000,
+        "temperature": 0.2,
+        "description": "Gemini 2.0 Flash - очень быстрая",
+        "input_cost_per_token": 0.00001,
+        "output_cost_per_token": 0.00004
+      },
+      "x-ai/grok-code-fast-1": {
+        "max_tokens": 8192,
+        "context_window": 200000,
+        "temperature": 0.2,
+        "description": "Grok для кода - очень быстрая",
+        "input_cost_per_token": 0.00002,
+        "output_cost_per_token": 0.00015
+      },
+      "x-ai/grok-4-fast": {
+        "max_tokens": 8192,
+        "context_window": 131072,
+        "temperature": 0.2,
+        "description": "Grok 4 Fast - быстрая версия",
+        "input_cost_per_token": 0.00002,
+        "output_cost_per_token": 0.00005
+      },
+      "deepseek/deepseek-v3-0324": {
+        "max_tokens": 8192,
+        "context_window": 64000,
+        "temperature": 0.2,
+        "description": "DeepSeek V3 - отличная для кода",
+        "input_cost_per_token": 0.000024,
+        "output_cost_per_token": 0.000084
+      },
+      "openai/gpt-4o": {
+        "max_tokens": 4096,
+        "context_window": 128000,
+        "temperature": 0.2,
+        "description": "GPT-4 Optimized - быстрая версия GPT-4",
+        "input_cost_per_token": 0.00025,
+        "output_cost_per_token": 0.001
+      },
+      "openai/gpt-oss-20b": {
+        "max_tokens": 8192,
+        "context_window": 32768,
+        "temperature": 0.2,
+        "description": "GPT OSS 20B - открытая модель OpenAI",
+        "input_cost_per_token": 0.000003,
+        "output_cost_per_token": 0.000014
+      },
+      "openai/gpt-oss-120b": {
+        "max_tokens": 8192,
+        "context_window": 32768,
+        "temperature": 0.2,
+        "description": "GPT OSS 120B - большая открытая модель OpenAI",
+        "input_cost_per_token": 0.000004,
+        "output_cost_per_token": 0.00004
+      },
+      "google/gemini-2.5-flash-preview-image": {
+        "max_tokens": 8192,
+        "context_window": 1000000,
+        "temperature": 0.1,
+        "description": "Gemini 2.5 Flash Preview Image - генерация изображений",
+        "input_cost_per_token": 0.0000003,
+        "output_cost_per_token": 0.0000025
+      },
+      "mock-gpt-4": {
+        "max_tokens": 8192,
+        "context_window": 100000,
+        "temperature": 0.3,
+        "description": "Mock модель для тестов",
+        "input_cost_per_token": 0.0,
+        "output_cost_per_token": 0.0
+      }
+    },
+    "default_model": "x-ai/grok-code-fast-1",
+    "default_summarization_model": "x-ai/grok-4-fast"
+  },
+  "s3": {
+    "enabled": true,
+    "default_bucket": "vkbucket",
+    "buckets": {
+      "secretbucket": {
+        "provider": "yandex",
+        "access_key_id": "YOUR_YANDEX_S3_ACCESS_KEY_ID",
+        "secret_access_key": "YOUR_YANDEX_S3_SECRET_ACCESS_KEY",
+        "region_name": "ru-central1",
+        "endpoint_url": "https://storage.yandexcloud.net",
+        "enabled": true
+      },
+      "aws-bucket": {
+        "provider": "aws",
+        "access_key_id": null,
+        "secret_access_key": null,
+        "region_name": "us-west-2",
+        "endpoint_url": null,
+        "enabled": false
+      },
+      "minio-local": {
+        "provider": "minio",
+        "access_key_id": "minioadmin",
+        "secret_access_key": "minioadmin",
+        "region_name": "us-east-1",
+        "endpoint_url": "http://localhost:9000",
+        "enabled": false
+      },
+      "test-bucket": {
+        "provider": "minio",
+        "bucket_name": "test-bucket",
+        "access_key_id": "minioadmin",
+        "secret_access_key": "minioadmin",
+        "region_name": "us-east-1",
+        "endpoint_url": "http://localhost:9010",
+        "enabled": true
+      },
+      "vkbucket": {
+        "provider": "vkcloud",
+        "access_key_id": "YOUR_VKCLOUD_S3_ACCESS_KEY_ID",
+        "secret_access_key": "YOUR_VKCLOUD_S3_SECRET_ACCESS_KEY",
+        "region_name": "ru-msk",
+        "endpoint_url": "https://hb.ru-msk.vkcloud-storage.ru",
+        "enabled": true
+      }
+    }
+  },
+  "proxy": {
+    "enabled": true,
+    "proxies": [
+      "http://YOUR_PROXY_USER:YOUR_PROXY_PASSWORD@YOUR_PROXY_HOST:YOUR_PROXY_PORT"
+    ],
+    "connect_timeout": 10.0
+  },
+  "cloud_voice": {
+    "enabled": true,
+    "secret_key": "YOUR_CLOUD_VOICE_SECRET_KEY",
+    "client_id": "YOUR_CLOUD_VOICE_CLIENT_ID",
+    "auth_url": "https://mcs.mail.ru/auth/oauth/v1/token",
+    "asr_url": "https://voice.mcs.mail.ru/asr",
+    "tts_url": "https://voice.mcs.mail.ru/tts",
+    "timeout": 30
+  },
+  "nano_banana": {
+    "enabled": true,
+    "api_key": "YOUR_NANO_BANANA_API_KEY",
+    "model_name": "google/gemini-2.5-flash-preview-image",
+    "timeout": 60
+  },
+  "payment_providers": {
+    "default_provider": "yoomoney_main",
+    "providers": {
+      "yoomoney_main": {
+        "provider_type": "yoomoney",
+        "enabled": true,
+        "account_number": "YOUR_YOOMONEY_ACCOUNT_NUMBER",
+        "notification_secret": "YOUR_YOOMONEY_NOTIFICATION_SECRET",
+        "quickpay_url": "https://yoomoney.ru/quickpay/confirm.xml",
+        "client_id": "YOUR_YOOMONEY_CLIENT_ID",
+        "client_secret": "YOUR_YOOMONEY_CLIENT_SECRET",
+        "access_token": "YOUR_YOOMONEY_ACCESS_TOKEN"
+      }
+    }
+  },
+  "migration": {
+    "default_flows": ["apps.agents.flows.faq_flow.faq_flow_config"],
+    "default_agents": [],
+    "default_tools": [],
+    "migrate_dependencies": true
+  },
+  "rag": {
+    "enabled": true,
+    "default_provider": "chromadb",
+    
+    "embedding": {
+      "model": "baai/bge-m3",
+      "dimension": 1024
+    },
+    
+    "providers": {
+      "chromadb": {
+        "enabled": true,
+        "host": "localhost",
+        "port": 8100,
+        "embedding_api_key": "YOUR_EMBEDDING_API_KEY",
+        "embedding_cost_per_1m_tokens": 5.0,
+        "embedding_platform_markup": 1.1,
+        "chunk_size": 1000,
+        "chunk_overlap": 100,
+        "timeout": 60
+      },
+      "agentset": {
+        "enabled": true,
+        "api_key": "YOUR_AGENTSET_API_KEY",
+        "embedding_api_key": "YOUR_EMBEDDING_API_KEY",
+        "embedding_cost_per_1m_tokens": 5.0,
+        "embedding_platform_markup": 1.1,
+        "base_url": "https://api.agentset.ai",
+        "timeout": 60
+      }
+    }
+  }
+}

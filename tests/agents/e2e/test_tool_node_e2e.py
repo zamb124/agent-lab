@@ -1,0 +1,374 @@
+"""
+End-to-End тесты для ToolNode.
+
+Сценарии:
+1. Создание flow с ToolNode через API и выполнение через A2A
+2. ToolNode с input_mapping (@state:, @var:, константы)
+3. Цепочка ToolNode в flow
+4. ToolNode с вложенными путями в state
+5. Условный переход к ToolNode
+"""
+
+import uuid
+from typing import Any, Dict
+
+import pytest
+
+
+def _msg(text: str, context_id: str = None) -> Dict[str, Any]:
+    """Создаёт A2A Message."""
+    m = {
+        "messageId": str(uuid.uuid4()),
+        "role": "user",
+        "parts": [{"kind": "text", "text": text}],
+    }
+    if context_id:
+        m["contextId"] = context_id
+    return m
+
+
+def get_task_from_response(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Извлекает Task из JSON-RPC response."""
+    return data.get("result", {})
+
+
+def get_task_state(task: Dict[str, Any]) -> str:
+    """Извлекает state из Task."""
+    return task.get("status", {}).get("state", "")
+
+
+def get_task_response(task: Dict[str, Any]) -> str:
+    """Извлекает текст ответа из Task."""
+    # Сначала проверяем status.message
+    msg = task.get("status", {}).get("message")
+    if msg and msg.get("parts"):
+        return msg["parts"][0].get("text", "")
+    
+    # Если нет - ищем в artifacts (node_complete с result_preview)
+    artifacts = task.get("artifacts", [])
+    for artifact in reversed(artifacts):
+        parts = artifact.get("parts", [])
+        for part in parts:
+            data = part.get("data", {})
+            if data.get("event") == "node_complete" and data.get("result_preview"):
+                return data["result_preview"]
+    
+    return ""
+
+
+class TestToolNodeE2E:
+    """E2E тесты ToolNode через A2A API."""
+
+    @pytest.mark.asyncio
+    async def test_create_and_execute_inline_tool_node_flow(self, client, unique_id):
+        """E2E: Создание flow с inline ToolNode и выполнение через A2A."""
+        agent_id = f"e2e_tool_node_{unique_id}"
+
+        # Создаем flow с inline ToolNode
+        create_response = await client.post(
+            "/agents/api/v1/agents/",
+            json={
+                "agent_id": agent_id,
+                "name": "E2E Tool Node Agent",
+                "entry": "prepare",
+                "nodes": {
+                    "prepare": {
+                        "type": "function",
+                        "code": "def run(state):\n    state['num1'] = 25\n    state['num2'] = 17\n    return state",
+                    },
+                    "calculate": {
+                        "type": "tool",
+                        "code": "def execute(args, state):\n    return args['a'] + args['b']",
+                        "input_mapping": {
+                            "a": "@state:num1",
+                            "b": "@state:num2",
+                        },
+                        "output_key": "sum",
+                    },
+                    "finish": {
+                        "type": "function",
+                        "code": "def run(state):\n    state['response'] = f\"Сумма: {state['sum']}\"\n    return state",
+                    },
+                },
+                "edges": [
+                    {"from": "prepare", "to": "calculate"},
+                    {"from": "calculate", "to": "finish"},
+                    {"from": "finish", "to": None},
+                ],
+            },
+        )
+        assert create_response.status_code == 200
+
+        # Выполняем flow через A2A API
+        exec_response = await client.post(
+            f"/agents/api/v1/{agent_id}",
+            json={
+                "jsonrpc": "2.0",
+                "id": f"test-{unique_id}",
+                "method": "message/send",
+                "params": {"message": _msg("calculate")},
+            },
+        )
+        assert exec_response.status_code == 200
+        data = exec_response.json()
+        task = get_task_from_response(data)
+
+        assert get_task_state(task) == "completed"
+        response_text = get_task_response(task)
+        assert "42" in response_text or "Сумма" in response_text
+
+        # Cleanup
+        await client.delete(f"/agents/api/v1/{agent_id}")
+
+    @pytest.mark.asyncio
+    async def test_tool_node_with_variables(self, client, unique_id):
+        """E2E: ToolNode использует переменные из flow через A2A."""
+        agent_id = f"e2e_tool_var_{unique_id}"
+
+        create_response = await client.post(
+            "/agents/api/v1/agents/",
+            json={
+                "agent_id": agent_id,
+                "name": "E2E Tool with Variables",
+                "entry": "prepare",
+                "nodes": {
+                    "prepare": {
+                        "type": "function",
+                        "code": "def run(state):\n    state['order_id'] = '12345'\n    return state",
+                    },
+                    "format": {
+                        "type": "tool",
+                        "code": "def execute(args, state):\n    return f\"{args['prefix']}{args['id']}\"",
+                        "input_mapping": {
+                            "prefix": "@var:order_prefix",
+                            "id": "@state:order_id",
+                        },
+                        "output_key": "formatted_order",
+                    },
+                    "finish": {
+                        "type": "function",
+                        "code": "def run(state):\n    state['response'] = f\"Order: {state['formatted_order']}\"\n    return state",
+                    },
+                },
+                "edges": [
+                    {"from": "prepare", "to": "format"},
+                    {"from": "format", "to": "finish"},
+                    {"from": "finish", "to": None},
+                ],
+                "variables": {"order_prefix": "ORD-"},
+            },
+        )
+        assert create_response.status_code == 200
+
+        exec_response = await client.post(
+            f"/agents/api/v1/{agent_id}",
+            json={
+                "jsonrpc": "2.0",
+                "id": f"test-{unique_id}",
+                "method": "message/send",
+                "params": {"message": _msg("format order")},
+            },
+        )
+        assert exec_response.status_code == 200
+        task = get_task_from_response(exec_response.json())
+
+        assert get_task_state(task) == "completed"
+        response_text = get_task_response(task)
+        assert "ORD-12345" in response_text
+
+        # Cleanup
+        await client.delete(f"/agents/api/v1/{agent_id}")
+
+    @pytest.mark.asyncio
+    async def test_tool_node_chain(self, client, unique_id):
+        """E2E: Цепочка ToolNode через A2A."""
+        agent_id = f"e2e_tool_chain_{unique_id}"
+
+        create_response = await client.post(
+            "/agents/api/v1/agents/",
+            json={
+                "agent_id": agent_id,
+                "name": "E2E Tool Chain",
+                "entry": "init",
+                "nodes": {
+                    "init": {
+                        "type": "function",
+                        "code": "def run(state):\n    state['input'] = 10\n    return state",
+                    },
+                    "double": {
+                        "type": "tool",
+                        "code": "def execute(args, state):\n    return args['x'] * 2",
+                        "input_mapping": {"x": "@state:input"},
+                        "output_key": "doubled",
+                    },
+                    "square": {
+                        "type": "tool",
+                        "code": "def execute(args, state):\n    return args['x'] ** 2",
+                        "input_mapping": {"x": "@state:doubled"},
+                        "output_key": "squared",
+                    },
+                    "finish": {
+                        "type": "function",
+                        "code": "def run(state):\n    state['response'] = f\"Result: {state['squared']}\"\n    return state",
+                    },
+                },
+                "edges": [
+                    {"from": "init", "to": "double"},
+                    {"from": "double", "to": "square"},
+                    {"from": "square", "to": "finish"},
+                    {"from": "finish", "to": None},
+                ],
+            },
+        )
+        assert create_response.status_code == 200
+
+        exec_response = await client.post(
+            f"/agents/api/v1/{agent_id}",
+            json={
+                "jsonrpc": "2.0",
+                "id": f"test-{unique_id}",
+                "method": "message/send",
+                "params": {"message": _msg("chain")},
+            },
+        )
+        assert exec_response.status_code == 200
+        task = get_task_from_response(exec_response.json())
+
+        assert get_task_state(task) == "completed"
+        response_text = get_task_response(task)
+        # 10 * 2 = 20, 20 ** 2 = 400
+        assert "400" in response_text
+
+        # Cleanup
+        await client.delete(f"/agents/api/v1/{agent_id}")
+
+    @pytest.mark.asyncio
+    async def test_tool_node_with_nested_state(self, client, unique_id):
+        """E2E: ToolNode с вложенными путями в state через A2A."""
+        agent_id = f"e2e_tool_nested_{unique_id}"
+
+        create_response = await client.post(
+            "/agents/api/v1/agents/",
+            json={
+                "agent_id": agent_id,
+                "name": "E2E Tool Nested State",
+                "entry": "prepare",
+                "nodes": {
+                    "prepare": {
+                        "type": "function",
+                        "code": "def run(state):\n    state['user'] = {'name': 'Иван', 'email': 'ivan@test.com'}\n    state['config'] = {'template': 'Привет, {name}!'}\n    return state",
+                    },
+                    "greet": {
+                        "type": "tool",
+                        "code": "def execute(args, state):\n    return args['template'].format(name=args['name'])",
+                        "input_mapping": {
+                            "name": "@state:user.name",
+                            "template": "@state:config.template",
+                        },
+                        "output_key": "greeting",
+                    },
+                    "finish": {
+                        "type": "function",
+                        "code": "def run(state):\n    state['response'] = state['greeting']\n    return state",
+                    },
+                },
+                "edges": [
+                    {"from": "prepare", "to": "greet"},
+                    {"from": "greet", "to": "finish"},
+                    {"from": "finish", "to": None},
+                ],
+            },
+        )
+        assert create_response.status_code == 200
+
+        exec_response = await client.post(
+            f"/agents/api/v1/{agent_id}",
+            json={
+                "jsonrpc": "2.0",
+                "id": f"test-{unique_id}",
+                "method": "message/send",
+                "params": {"message": _msg("greet")},
+            },
+        )
+        assert exec_response.status_code == 200
+        task = get_task_from_response(exec_response.json())
+
+        assert get_task_state(task) == "completed"
+        response_text = get_task_response(task)
+        assert "Привет, Иван!" in response_text
+
+        # Cleanup
+        await client.delete(f"/agents/api/v1/{agent_id}")
+
+    @pytest.mark.asyncio
+    async def test_conditional_routing_to_tool_node(self, client, unique_id):
+        """E2E: Условный переход к ToolNode через A2A."""
+        agent_id = f"e2e_tool_condition_{unique_id}"
+
+        create_response = await client.post(
+            "/agents/api/v1/agents/",
+            json={
+                "agent_id": agent_id,
+                "name": "E2E Conditional Tool",
+                "entry": "classify",
+                "nodes": {
+                    "classify": {
+                        "type": "function",
+                        "code": "def run(state):\n    content = state.get('content', '').lower()\n    state['route'] = 'calc' if 'calc' in content else 'skip'\n    state['a'] = 2\n    state['b'] = 2\n    return state",
+                    },
+                    "calculate": {
+                        "type": "tool",
+                        "code": "def execute(args, state):\n    return args['x'] + args['y']",
+                        "input_mapping": {"x": "@state:a", "y": "@state:b"},
+                        "output_key": "result",
+                    },
+                    "skip": {
+                        "type": "function",
+                        "code": "def run(state):\n    state['result'] = 'skipped'\n    return state",
+                    },
+                    "finish": {
+                        "type": "function",
+                        "code": "def run(state):\n    state['response'] = f\"Result: {state['result']}\"\n    return state",
+                    },
+                },
+                "edges": [
+                    {"from": "classify", "to": "calculate", "condition": "route == 'calc'"},
+                    {"from": "classify", "to": "skip", "condition": "route == 'skip'"},
+                    {"from": "calculate", "to": "finish"},
+                    {"from": "skip", "to": "finish"},
+                    {"from": "finish", "to": None},
+                ],
+            },
+        )
+        assert create_response.status_code == 200
+
+        # Тест с calc
+        exec_response1 = await client.post(
+            f"/agents/api/v1/{agent_id}",
+            json={
+                "jsonrpc": "2.0",
+                "id": f"test1-{unique_id}",
+                "method": "message/send",
+                "params": {"message": _msg("calculate please")},
+            },
+        )
+        assert exec_response1.status_code == 200
+        task1 = get_task_from_response(exec_response1.json())
+        assert "4" in get_task_response(task1)
+
+        # Тест без calc
+        exec_response2 = await client.post(
+            f"/agents/api/v1/{agent_id}",
+            json={
+                "jsonrpc": "2.0",
+                "id": f"test2-{unique_id}",
+                "method": "message/send",
+                "params": {"message": _msg("something else")},
+            },
+        )
+        assert exec_response2.status_code == 200
+        task2 = get_task_from_response(exec_response2.json())
+        assert "skipped" in get_task_response(task2)
+
+        # Cleanup
+        await client.delete(f"/agents/api/v1/{agent_id}")

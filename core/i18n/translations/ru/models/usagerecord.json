@@ -1,0 +1,31 @@
+{
+  "fields": {
+    "usage_id": {
+      "title": "ID записи"
+    },
+    "user_id": {
+      "title": "ID пользователя"
+    },
+    "company_id": {
+      "title": "ID компании"
+    },
+    "session_id": {
+      "title": "ID сессии"
+    },
+    "usage_type": {
+      "title": "Тип использования"
+    },
+    "resource_name": {
+      "title": "Название ресурса"
+    },
+    "cost": {
+      "title": "Стоимость в RUB"
+    },
+    "quantity": {
+      "title": "Количество"
+    },
+    "metadata": {
+      "title": "Дополнительные данные"
+    }
+  }
+}

@@ -1,0 +1,389 @@
+/* 
+ * Liquid Glass Design System
+ * Apple-inspired glassmorphism theme (2025)
+ * Поддержка темной и светлой темы
+ */
+
+:root {
+    /* ========== RESPONSIVE BREAKPOINTS ========== */
+    
+    --breakpoint-mobile: 480px;
+    --breakpoint-tablet: 768px;
+    --breakpoint-desktop: 1024px;
+    --breakpoint-wide: 1440px;
+    
+    /* ========== ЦВЕТОВАЯ ПАЛИТРА ========== */
+    
+    /* Основной фон с градиентом */
+    --bg-gradient: linear-gradient(
+        135deg,
+        #1a1a2e 0%,
+        #16213e 25%,
+        #0f3460 50%,
+        #1a1a2e 75%,
+        #16213e 100%
+    );
+    
+    /* Фоновые цвета */
+    --bg-primary: #16213e;
+    --bg-secondary: #1a1a2e;
+    --bg-tertiary: #1e2a47;
+    --bg-elevated: #253659;
+    --bg-surface: #1e2a47;
+    
+    /* ========== GLASS MORPHISM ========== */
+    
+    /* Glass уровни прозрачности */
+    --glass-tint-subtle: rgba(255, 255, 255, 0.03);
+    --glass-tint-medium: rgba(255, 255, 255, 0.05);
+    --glass-tint-strong: rgba(255, 255, 255, 0.08);
+    
+    /* Glass фоны с градиентом для глубины */
+    --glass-bg-subtle: linear-gradient(
+        135deg,
+        rgba(32, 32, 48, 0.6) 0%,
+        rgba(24, 24, 40, 0.8) 100%
+    );
+    --glass-bg-medium: linear-gradient(
+        135deg,
+        rgba(40, 40, 60, 0.7) 0%,
+        rgba(30, 30, 50, 0.85) 100%
+    );
+    --glass-bg-strong: linear-gradient(
+        135deg,
+        rgba(45, 45, 70, 0.85) 0%,
+        rgba(35, 35, 55, 0.95) 100%
+    );
+    
+    /* Glass solid backgrounds (for backdrop-filter) */
+    --glass-solid-subtle: rgba(28, 28, 46, 0.75);
+    --glass-solid-medium: rgba(35, 35, 55, 0.85);
+    --glass-solid-strong: rgba(40, 40, 64, 0.92);
+    
+    /* Blur уровни */
+    --glass-blur-subtle: 20px;
+    --glass-blur-medium: 40px;
+    --glass-blur-strong: 60px;
+    --glass-blur-ultra: 80px;
+    
+    /* Glass границы с свечением */
+    --glass-border-subtle: rgba(255, 255, 255, 0.08);
+    --glass-border-medium: rgba(255, 255, 255, 0.12);
+    --glass-border-strong: rgba(255, 255, 255, 0.18);
+    --glass-border-glow: rgba(255, 255, 255, 0.25);
+    
+    /* Внутреннее свечение (top highlight) */
+    --glass-inner-glow-subtle: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --glass-inner-glow-medium: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    --glass-inner-glow-strong: inset 0 1px 1px rgba(255, 255, 255, 0.15);
+    
+    /* Glass тени (многослойные для глубины) */
+    --glass-shadow-subtle: 
+        0 4px 16px rgba(0, 0, 0, 0.2),
+        0 1px 4px rgba(0, 0, 0, 0.1);
+    --glass-shadow-medium: 
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        0 2px 8px rgba(0, 0, 0, 0.2);
+    --glass-shadow-strong: 
+        0 16px 48px rgba(0, 0, 0, 0.4),
+        0 4px 16px rgba(0, 0, 0, 0.25);
+    --glass-shadow-ultra: 
+        0 24px 80px rgba(0, 0, 0, 0.5),
+        0 8px 32px rgba(0, 0, 0, 0.3);
+    
+    /* ========== АКЦЕНТНЫЕ ЦВЕТА ========== */
+    
+    /* Основной акцент (изумрудный) */
+    --accent: #10b981;
+    --accent-hover: #34d399;
+    --accent-active: #059669;
+    --accent-subtle: rgba(16, 185, 129, 0.15);
+    --accent-glow: 0 0 24px rgba(16, 185, 129, 0.4);
+    --accent-gradient: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+    
+    /* Вторичный акцент (голубой) */
+    --accent-secondary: #06b6d4;
+    --accent-secondary-hover: #22d3ee;
+    --accent-secondary-subtle: rgba(6, 182, 212, 0.15);
+    
+    /* Третичный акцент (фиолетовый) */
+    --accent-tertiary: #8b5cf6;
+    --accent-tertiary-subtle: rgba(139, 92, 246, 0.15);
+    
+    /* ========== ТЕКСТ ========== */
+    
+    --text-primary: rgba(255, 255, 255, 0.95);
+    --text-secondary: rgba(255, 255, 255, 0.65);
+    --text-tertiary: rgba(255, 255, 255, 0.45);
+    --text-disabled: rgba(255, 255, 255, 0.25);
+    --text-inverse: #0f0f1a;
+    
+    /* ========== ГРАНИЦЫ ========== */
+    
+    --border-subtle: rgba(255, 255, 255, 0.06);
+    --border-default: rgba(255, 255, 255, 0.1);
+    --border-strong: rgba(255, 255, 255, 0.15);
+    --border-focus: var(--accent);
+    
+    /* ========== СОСТОЯНИЯ ========== */
+    
+    --error: #f43f5e;
+    --error-bg: rgba(244, 63, 94, 0.12);
+    --error-border: rgba(244, 63, 94, 0.3);
+    --error-glow: 0 0 16px rgba(244, 63, 94, 0.3);
+    
+    --warning: #f59e0b;
+    --warning-bg: rgba(245, 158, 11, 0.12);
+    --warning-border: rgba(245, 158, 11, 0.3);
+    
+    --success: #10b981;
+    --success-bg: rgba(16, 185, 129, 0.12);
+    --success-border: rgba(16, 185, 129, 0.3);
+    
+    --info: #3b82f6;
+    --info-bg: rgba(59, 130, 246, 0.12);
+    --info-border: rgba(59, 130, 246, 0.3);
+    
+    /* ========== ТИПОГРАФИКА ========== */
+    
+    --font-sans: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    
+    --text-xs: 0.75rem;
+    --text-sm: 0.8125rem;
+    --text-base: 0.9375rem;
+    --text-lg: 1.0625rem;
+    --text-xl: 1.25rem;
+    --text-2xl: 1.5rem;
+    --text-3xl: 2rem;
+    
+    --font-normal: 400;
+    --font-medium: 500;
+    --font-semibold: 600;
+    --font-bold: 700;
+    
+    --leading-tight: 1.25;
+    --leading-normal: 1.5;
+    --leading-relaxed: 1.75;
+    
+    --tracking-tight: -0.02em;
+    --tracking-normal: 0;
+    --tracking-wide: 0.02em;
+    
+    /* ========== ПРОСТРАНСТВО ========== */
+    
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+    --space-10: 2.5rem;
+    --space-12: 3rem;
+    --space-16: 4rem;
+    
+    /* ========== РАДИУСЫ ========== */
+    
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-2xl: 24px;
+    --radius-3xl: 32px;
+    --radius-full: 9999px;
+    
+    /* ========== АНИМАЦИИ ========== */
+    
+    --duration-instant: 100ms;
+    --duration-fast: 150ms;
+    --duration-normal: 250ms;
+    --duration-slow: 400ms;
+    --duration-slower: 600ms;
+    
+    --easing-default: cubic-bezier(0.4, 0, 0.2, 1);
+    --easing-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --easing-smooth: cubic-bezier(0.25, 0.1, 0.25, 1);
+    --easing-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    
+    /* ========== Z-INDEX ========== */
+    
+    --z-base: 0;
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-fixed: 300;
+    --z-modal-backdrop: 900;
+    --z-modal: 1000;
+    --z-toast: 1100;
+    --z-tooltip: 1200;
+    --z-max: 9999;
+    
+    /* ========== РАЗМЕРЫ КОМПОНЕНТОВ ========== */
+    
+    --navbar-width: 380px;
+    --navbar-collapsed-width: 72px;
+    --header-height: 64px;
+    --input-height: 48px;
+    --button-height: 44px;
+    --icon-size-sm: 18px;
+    --icon-size-md: 22px;
+    --icon-size-lg: 28px;
+    
+    /* ========== СПЕЦИАЛЬНЫЕ ЭФФЕКТЫ ========== */
+    
+    /* Hover glow для интерактивных элементов */
+    --hover-glow: 0 0 0 4px rgba(16, 185, 129, 0.15);
+    --focus-ring: 0 0 0 3px rgba(16, 185, 129, 0.4);
+    
+    /* Shimmer эффект для загрузки */
+    --shimmer-gradient: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.08) 50%,
+        transparent 100%
+    );
+}
+
+/* ========== СВЕТЛАЯ ТЕМА ========== */
+
+[data-theme="light"] {
+    /* Фоновые цвета */
+    --bg-gradient: linear-gradient(
+        135deg,
+        #f8fafc 0%,
+        #e2e8f0 25%,
+        #f1f5f9 50%,
+        #e2e8f0 75%,
+        #f8fafc 100%
+    );
+    
+    --bg-primary: #f8fafc;
+    --bg-secondary: #f1f5f9;
+    --bg-tertiary: #e2e8f0;
+    --bg-elevated: #ffffff;
+    --bg-surface: #ffffff;
+    
+    /* Glass для светлой темы */
+    --glass-tint-subtle: rgba(15, 23, 42, 0.02);
+    --glass-tint-medium: rgba(15, 23, 42, 0.04);
+    --glass-tint-strong: rgba(15, 23, 42, 0.06);
+    
+    --glass-bg-subtle: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.7) 0%,
+        rgba(248, 250, 252, 0.85) 100%
+    );
+    --glass-bg-medium: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.8) 0%,
+        rgba(248, 250, 252, 0.92) 100%
+    );
+    --glass-bg-strong: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.92) 0%,
+        rgba(248, 250, 252, 0.98) 100%
+    );
+    
+    --glass-solid-subtle: rgba(255, 255, 255, 0.8);
+    --glass-solid-medium: rgba(255, 255, 255, 0.9);
+    --glass-solid-strong: rgba(255, 255, 255, 0.96);
+    
+    --glass-border-subtle: rgba(15, 23, 42, 0.06);
+    --glass-border-medium: rgba(15, 23, 42, 0.1);
+    --glass-border-strong: rgba(15, 23, 42, 0.15);
+    --glass-border-glow: rgba(15, 23, 42, 0.2);
+    
+    --glass-inner-glow-subtle: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    --glass-inner-glow-medium: inset 0 1px 0 rgba(255, 255, 255, 1);
+    --glass-inner-glow-strong: inset 0 2px 0 rgba(255, 255, 255, 1);
+    
+    --glass-shadow-subtle: 
+        0 4px 16px rgba(0, 0, 0, 0.06),
+        0 1px 4px rgba(0, 0, 0, 0.04);
+    --glass-shadow-medium: 
+        0 8px 32px rgba(0, 0, 0, 0.08),
+        0 2px 8px rgba(0, 0, 0, 0.04);
+    --glass-shadow-strong: 
+        0 16px 48px rgba(0, 0, 0, 0.1),
+        0 4px 16px rgba(0, 0, 0, 0.06);
+    --glass-shadow-ultra: 
+        0 24px 80px rgba(0, 0, 0, 0.12),
+        0 8px 32px rgba(0, 0, 0, 0.08);
+    
+    /* Текст для светлой темы */
+    --text-primary: rgba(15, 23, 42, 0.95);
+    --text-secondary: rgba(15, 23, 42, 0.65);
+    --text-tertiary: rgba(15, 23, 42, 0.45);
+    --text-disabled: rgba(15, 23, 42, 0.25);
+    --text-inverse: #ffffff;
+    
+    /* Границы для светлой темы */
+    --border-subtle: rgba(15, 23, 42, 0.06);
+    --border-default: rgba(15, 23, 42, 0.1);
+    --border-strong: rgba(15, 23, 42, 0.15);
+    
+    /* Акценты для светлой темы */
+    --accent: #059669;
+    --accent-hover: #10b981;
+    --accent-subtle: rgba(5, 150, 105, 0.1);
+    --accent-glow: 0 0 24px rgba(5, 150, 105, 0.25);
+    
+    /* Shimmer для светлой темы */
+    --shimmer-gradient: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(0, 0, 0, 0.04) 50%,
+        transparent 100%
+    );
+}
+
+/* ========== УТИЛИТЫ ========== */
+
+/* Glass панели */
+.glass-subtle {
+    background: var(--glass-solid-subtle);
+    backdrop-filter: blur(var(--glass-blur-subtle));
+    -webkit-backdrop-filter: blur(var(--glass-blur-subtle));
+    border: 1px solid var(--glass-border-subtle);
+    box-shadow: var(--glass-shadow-subtle), var(--glass-inner-glow-subtle);
+}
+
+.glass-medium {
+    background: var(--glass-solid-medium);
+    backdrop-filter: blur(var(--glass-blur-medium));
+    -webkit-backdrop-filter: blur(var(--glass-blur-medium));
+    border: 1px solid var(--glass-border-medium);
+    box-shadow: var(--glass-shadow-medium), var(--glass-inner-glow-medium);
+}
+
+.glass-strong {
+    background: var(--glass-solid-strong);
+    backdrop-filter: blur(var(--glass-blur-strong));
+    -webkit-backdrop-filter: blur(var(--glass-blur-strong));
+    border: 1px solid var(--glass-border-strong);
+    box-shadow: var(--glass-shadow-strong), var(--glass-inner-glow-strong);
+}
+
+/* Hover эффект для glass элементов */
+.glass-interactive {
+    transition: all var(--duration-normal) var(--easing-default);
+}
+
+.glass-interactive:hover {
+    border-color: var(--glass-border-glow);
+    box-shadow: var(--glass-shadow-medium), var(--glass-inner-glow-medium), var(--hover-glow);
+    transform: translateY(-1px);
+}
+
+/* Accent градиентные кнопки */
+.gradient-accent {
+    background: var(--accent-gradient);
+    color: white;
+    border: none;
+    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+}
+
+.gradient-accent:hover {
+    box-shadow: 0 6px 24px rgba(16, 185, 129, 0.4);
+    transform: translateY(-2px);
+}

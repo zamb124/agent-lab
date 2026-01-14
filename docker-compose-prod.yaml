@@ -1,0 +1,306 @@
+# Production Docker Compose с YAML anchors для DRY
+# Использование: docker-compose -f docker-compose-prod.yaml up -d
+
+# ============================================
+# Общие переменные окружения
+# ============================================
+x-common-env: &common-env
+  DATABASE__URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_db
+  DATABASE__SHARED_URL: postgresql+asyncpg://platform_user:${POSTGRES_PASSWORD:-change-me-in-production}@postgres:5432/platform_db
+  DATABASE__REDIS_URL: redis://redis:6379/0
+  DATABASE__AUTO_MIGRATE: "false"
+  TASKS__BROKER_URL: redis://redis:6379/1
+  SERVER__DEBUG: "false"
+  SERVER__AGENTS_SERVICE_URL: http://agents:8001
+  SERVER__FRONTEND_SERVICE_URL: http://frontend:8002
+  SERVER__CRM_SERVICE_URL: http://crm:8003
+  SERVER__RAG_SERVICE_URL: http://rag:8004
+  AUTH__JWT_SECRET: ${AUTH__JWT_SECRET:-change-me-in-production}
+  CHROMA_HOST: chroma
+  CHROMA_PORT: "8000"
+
+x-healthcheck: &healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 40s
+
+x-build: &default-build
+  context: .
+  dockerfile: Dockerfile
+
+services:
+  # ============================================
+  # Infrastructure
+  # ============================================
+  postgres:
+    image: postgres:15
+    container_name: platform-postgres
+    environment:
+      POSTGRES_DB: platform_db
+      POSTGRES_USER: platform_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-in-production}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    command: postgres -c max_connections=300
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platform_user -d platform_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - platform-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: platform-redis
+    command: redis-server --save 60 1 --loglevel notice --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - platform-net
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: platform-chroma
+    ports:
+      - "127.0.0.1:8100:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      ANONYMIZED_TELEMETRY: "False"
+      IS_PERSISTENT: "TRUE"
+    restart: unless-stopped
+    networks:
+      - platform-net
+
+  # ============================================
+  # Init container: Migrations
+  # ============================================
+  migrations:
+    build:
+      <<: *default-build
+      target: migrations
+    container_name: platform-migrations
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - ./migrations:/app/migrations:ro
+    environment:
+      <<: *common-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - platform-net
+
+  # ============================================
+  # Application Services
+  # ============================================
+  agents:
+    build:
+      <<: *default-build
+      target: agents
+    container_name: platform-agents
+    ports:
+      - "127.0.0.1:8001:8001"
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - ./conf.local.json:/app/conf.local.json:ro
+      - ./apps/agents/conf.json:/app/apps/agents/conf.json:ro
+      - agents_logs:/app/logs
+    environment:
+      <<: *common-env
+      SERVER__HOST: 0.0.0.0
+      SERVER__PORT: "8001"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_started
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+    restart: unless-stopped
+    networks:
+      - platform-net
+
+  frontend:
+    build:
+      <<: *default-build
+      target: frontend
+    container_name: platform-frontend
+    ports:
+      - "127.0.0.1:8002:8002"
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - ./conf.local.json:/app/conf.local.json:ro
+      - ./apps/frontend/conf.json:/app/apps/frontend/conf.json:ro
+      - frontend_logs:/app/logs
+    environment:
+      <<: *common-env
+      SERVER__HOST: 0.0.0.0
+      SERVER__PORT: "8002"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      agents:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+    restart: unless-stopped
+    networks:
+      - platform-net
+
+  crm:
+    build:
+      <<: *default-build
+      target: crm
+    container_name: platform-crm
+    ports:
+      - "127.0.0.1:8003:8003"
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - ./conf.local.json:/app/conf.local.json:ro
+      - ./apps/crm/conf.json:/app/apps/crm/conf.json:ro
+      - crm_logs:/app/logs
+    environment:
+      <<: *common-env
+      SERVER__HOST: 0.0.0.0
+      SERVER__PORT: "8003"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      agents:
+        condition: service_healthy
+      chroma:
+        condition: service_started
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+    restart: unless-stopped
+    networks:
+      - platform-net
+
+  rag:
+    build:
+      <<: *default-build
+      target: rag
+    container_name: platform-rag
+    ports:
+      - "127.0.0.1:8004:8004"
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - ./conf.local.json:/app/conf.local.json:ro
+      - ./apps/rag/conf.json:/app/apps/rag/conf.json:ro
+      - rag_logs:/app/logs
+    environment:
+      <<: *common-env
+      SERVER__HOST: 0.0.0.0
+      SERVER__PORT: "8004"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_started
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+    restart: unless-stopped
+    networks:
+      - platform-net
+
+  # ============================================
+  # Workers
+  # ============================================
+  worker:
+    build:
+      <<: *default-build
+      target: worker
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - ./conf.local.json:/app/conf.local.json:ro
+      - worker_logs:/app/logs
+    environment:
+      <<: *common-env
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - platform-net
+    deploy:
+      replicas: 2
+
+  scheduler:
+    build:
+      <<: *default-build
+      target: scheduler
+    container_name: platform-scheduler
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - ./conf.local.json:/app/conf.local.json:ro
+    environment:
+      <<: *common-env
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - platform-net
+
+  chroma-worker:
+    build:
+      <<: *default-build
+      target: chroma-worker
+    container_name: platform-chroma-worker
+    volumes:
+      - ./conf.json:/app/conf.json:ro
+      - ./conf.local.json:/app/conf.local.json:ro
+      - ./apps/chroma_worker/conf.json:/app/apps/chroma_worker/conf.json:ro
+      - chroma_worker_logs:/app/logs
+    environment:
+      <<: *common-env
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - platform-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  chroma_data:
+  agents_logs:
+  frontend_logs:
+  crm_logs:
+  rag_logs:
+  worker_logs:
+  chroma_worker_logs:
+
+networks:
+  platform-net:
+    driver: bridge

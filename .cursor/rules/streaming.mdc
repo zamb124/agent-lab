@@ -1,0 +1,493 @@
+---
+description: streaming redis pubsub emitter subscriber events a2a TaskStatusUpdateEvent TaskArtifactUpdateEvent Emitter EventSubscriber BaseEmitter trace_id span_id OpenTelemetry
+alwaysApply: false
+---
+
+# Streaming Architecture
+
+## Stream-First принцип
+
+**LLM ВСЕГДА вызывается через `.stream()`!** Никаких синхронных вызовов.
+
+Все события идут через Redis Pub/Sub. Клиент подписывается на канал и получает события в реальном времени.
+
+```python
+# ПРАВИЛЬНО
+async for event in llm.stream(messages, tools):
+    await emitter.emit_text(event.text)
+
+# НЕПРАВИЛЬНО - синхронных методов НЕТ
+response = await llm.generate(messages)  # НЕ СУЩЕСТВУЕТ
+```
+
+---
+
+## Архитектура потока событий
+
+```
+┌─────────────┐
+│   Client    │ ← SSE/WebSocket
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────────────────┐
+│   EventSubscriber           │
+│   subscribe(task_id)        │
+└──────┬──────────────────────┘
+       │
+       ▼
+┌─────────────────────────────┐
+│   Redis Pub/Sub             │
+│   channel: stream:{task_id} │
+└──────┬──────────────────────┘
+       ▲
+       │
+┌──────┴──────────────────────┐
+│   Emitter                   │
+│   emit_text()               │
+│   emit_tool_call()          │
+│   emit_complete()           │
+└──────┬──────────────────────┘
+       ▲
+       │
+┌──────┴──────────────────────┐
+│   ReactNodeRunner           │
+│   async for event in        │
+│   llm.stream(...)           │
+└──────┬──────────────────────┘
+       ▲
+       │
+┌──────┴──────────────────────┐
+│   BaseChannel.process_task  │
+│   (TaskIQ Worker)           │
+└─────────────────────────────┘
+```
+
+---
+
+## Emitter - публикация событий
+
+Публикует A2A события в Redis Pub/Sub.
+Файл: `apps/agents/src/streaming/emitter.py`
+
+### BaseEmitter
+
+Базовый класс для всех emitters. Определяет интерфейс публикации событий.
+
+```python
+from apps.agents.src.streaming import BaseEmitter
+
+class BaseEmitter(ABC):
+    def __init__(self, state: ExecutionState):
+        self.state = state
+        self._span_context = self._get_span_context()
+    
+    @abstractmethod
+    async def _publish(self, event: Any) -> None:
+        pass
+    
+    async def emit_text(self, text: str, append: bool = True) -> None:
+        # Публикует текстовый чанк
+        pass
+    
+    async def emit_tool_call(self, tool_name: str, tool_args: Dict, tool_call_id: str) -> None:
+        # Публикует вызов tool
+        pass
+    
+    async def emit_tool_result(self, tool_name: str, result: Any, tool_call_id: str) -> None:
+        # Публикует результат tool
+        pass
+    
+    async def emit_complete(self, response: str, message_id: Optional[str] = None) -> None:
+        # Публикует завершение задачи
+        pass
+    
+    async def emit_interrupt(self, question: str, message_id: Optional[str] = None) -> None:
+        # Публикует запрос ввода от пользователя
+        pass
+    
+    async def emit_error(self, error: str, message_id: Optional[str] = None) -> None:
+        # Публикует ошибку
+        pass
+```
+
+### Emitter (Redis реализация)
+
+Основная реализация через Redis Pub/Sub.
+
+```python
+from apps.agents.src.streaming import Emitter
+from core.clients import RedisClient
+
+emitter = Emitter(redis_client, state)
+
+# Текстовый чанк
+await emitter.emit_text("Hello")
+
+# Tool call
+await emitter.emit_tool_call(
+    tool_name="calculator",
+    tool_args={"expression": "2+2"},
+    tool_call_id="call_123"
+)
+
+# Tool result
+await emitter.emit_tool_result(
+    tool_name="calculator",
+    result=4,
+    tool_call_id="call_123"
+)
+
+# Завершение
+await emitter.emit_complete("Done!")
+
+# Interrupt
+await emitter.emit_interrupt("Какой склад?")
+
+# Ошибка
+await emitter.emit_error("Connection failed")
+```
+
+### Автоматическое добавление метаданных
+
+Emitter автоматически добавляет к каждому событию:
+- `task_id` - ID задачи
+- `context_id` - ID контекста
+- `trace_id` - OpenTelemetry trace ID
+- `span_id` - OpenTelemetry span ID
+
+```python
+# Событие автоматически получает метаданные
+event = {
+    "kind": "task-artifact-update",
+    "taskId": state.task_id,
+    "contextId": state.context_id,
+    "metadata": {
+        "trace_id": "abc123...",
+        "span_id": "def456..."
+    },
+    "artifact": {...}
+}
+```
+
+---
+
+## EventSubscriber - подписка на события
+
+Подписывается на события из Redis Pub/Sub и yield'ит их клиенту.
+Файл: `apps/agents/src/streaming/subscriber.py`
+
+### Базовое использование
+
+```python
+from apps.agents.src.streaming import EventSubscriber
+from core.clients import RedisClient
+
+redis_client = RedisClient(settings.redis_url)
+await redis_client.connect()
+
+subscriber = EventSubscriber(redis_client)
+
+# Подписка на события задачи
+async for event in subscriber.subscribe(task_id):
+    if event.kind == "task-status-update":
+        print(f"Status: {event.status.state}")
+    elif event.kind == "task-artifact-update":
+        print(f"Artifact: {event.artifact.parts[0].text}")
+```
+
+### Интеграция с A2A API
+
+```python
+# В A2AChannel.on_message_stream()
+subscriber = EventSubscriber(redis_client)
+
+async for event in subscriber.subscribe(task_id):
+    # SSE формат
+    yield f"event: {event.kind}\n"
+    yield f"data: {json.dumps(event.model_dump())}\n\n"
+```
+
+### Таймауты и готовность
+
+```python
+# Ожидание готовности worker'а
+ready_event = asyncio.Event()
+
+async def wait_ready():
+    async for event in subscriber.subscribe(task_id):
+        if event.kind == "task-status-update":
+            if event.status.state == "working":
+                ready_event.set()
+                break
+
+await asyncio.wait_for(ready_event.wait(), timeout=5.0)
+```
+
+---
+
+## A2A типы событий
+
+Все события используют типы из `a2a-sdk`. НЕ создаём свои типы!
+
+### TaskStatusUpdateEvent
+
+Обновление статуса задачи.
+
+```python
+from a2a.types import TaskStatusUpdateEvent, TaskState
+
+event = TaskStatusUpdateEvent(
+    kind="task-status-update",
+    taskId=task_id,
+    contextId=context_id,
+    status={
+        "state": TaskState.working,  # working | input-required | completed | failed
+        "message": "Processing..."
+    }
+)
+```
+
+**Состояния:**
+- `working` - задача выполняется
+- `input-required` - требуется ввод пользователя (interrupt)
+- `completed` - задача завершена успешно
+- `failed` - задача завершена с ошибкой
+- `canceled` - задача отменена
+
+### TaskArtifactUpdateEvent
+
+Обновление артефакта (текстовые чанки от LLM).
+
+```python
+from a2a.types import TaskArtifactUpdateEvent, Artifact, Part, TextPart
+
+event = TaskArtifactUpdateEvent(
+    kind="task-artifact-update",
+    taskId=task_id,
+    contextId=context_id,
+    artifact=Artifact(
+        name="response",
+        parts=[Part(root=TextPart(text="Hello"))]
+    ),
+    append=True
+)
+```
+
+**Параметры:**
+- `append=True` - добавить к существующему артефакту
+- `append=False` - заменить артефакт
+
+---
+
+## Полный поток message/stream
+
+### 1. Client → API
+
+```python
+POST /agents/example_react
+{
+  "jsonrpc": "2.0",
+  "method": "message/stream",
+  "params": {
+    "message": {
+      "messageId": "msg-123",
+      "role": "user",
+      "parts": [{"kind": "text", "text": "Hello"}],
+      "contextId": "ctx-456"
+    }
+  }
+}
+```
+
+### 2. A2AChannel.on_message_stream()
+
+```python
+# Создаём subscriber
+subscriber = EventSubscriber(redis_client)
+
+# Запускаем worker
+await process_agent_task.kiq(
+    agent_id=agent_id,
+    task_id=task_id,
+    context_id=context_id,
+    content="Hello",
+    ...
+)
+
+# Стримим события клиенту
+async for event in subscriber.subscribe(task_id):
+    yield event
+```
+
+### 3. Worker: BaseChannel.process_task()
+
+```python
+# Создаём emitter
+emitter = Emitter(redis_client, state)
+
+# Загружаем agent
+agent = await agent_factory.get_agent(agent_id)
+
+# Выполняем
+try:
+    state = await agent.run(state)
+    await emitter.emit_complete(state.response)
+except AgentInterrupt as e:
+    await emitter.emit_interrupt(e.question)
+except Exception as e:
+    await emitter.emit_error(str(e))
+```
+
+### 4. ReactNodeRunner.run()
+
+```python
+# LLM stream
+async for event in llm.stream(messages, tools):
+    if event.type == "text":
+        await emitter.emit_text(event.text)
+    elif event.type == "tool_call":
+        await emitter.emit_tool_call(
+            tool_name=event.tool_name,
+            tool_args=event.tool_args,
+            tool_call_id=event.tool_call_id
+        )
+```
+
+### 5. Client получает события
+
+```
+event: task-status-update
+data: {"kind":"task-status-update","taskId":"...","status":{"state":"working"}}
+
+event: task-artifact-update
+data: {"kind":"task-artifact-update","artifact":{"parts":[{"kind":"text","text":"Hello"}]}}
+
+event: task-artifact-update
+data: {"kind":"task-artifact-update","artifact":{"parts":[{"kind":"text","text":" world"}]}}
+
+event: task-status-update
+data: {"kind":"task-status-update","status":{"state":"completed"}}
+```
+
+---
+
+## InMemoryEmitter для тестов
+
+В тестах можно использовать `InMemoryEmitter` вместо Redis.
+Файл: `apps/agents/src/streaming/memory.py`
+
+```python
+from apps.agents.src.streaming import InMemoryEmitter
+
+emitter = InMemoryEmitter(state)
+
+await emitter.emit_text("Hello")
+await emitter.emit_complete("Done")
+
+# Проверка событий
+assert len(emitter.events) == 2
+assert emitter.events[0]["kind"] == "task-artifact-update"
+assert emitter.events[1]["kind"] == "task-status-update"
+```
+
+---
+
+## OpenTelemetry интеграция
+
+Emitter автоматически добавляет trace контекст к событиям.
+
+### Получение trace контекста
+
+```python
+from core.tracing.context import get_current_trace_context
+
+trace_data = get_current_trace_context()
+# {"trace_id": "abc123...", "span_id": "def456..."}
+```
+
+### Автоматическое добавление в события
+
+```python
+class Emitter(BaseEmitter):
+    async def _publish(self, event: Any) -> None:
+        event_dict = event.model_dump()
+        
+        # Добавляем trace контекст
+        if self._span_context:
+            if "metadata" not in event_dict:
+                event_dict["metadata"] = {}
+            event_dict["metadata"]["trace_id"] = self._span_context["trace_id"]
+            event_dict["metadata"]["span_id"] = self._span_context["span_id"]
+        
+        await self.redis.publish(channel, json.dumps(event_dict))
+```
+
+### Использование в клиенте
+
+```python
+# Клиент может использовать trace_id для корреляции логов
+async for event in subscriber.subscribe(task_id):
+    trace_id = event.metadata.get("trace_id")
+    logger.info(f"Event received", extra={"trace_id": trace_id})
+```
+
+---
+
+## Best Practices
+
+### 1. Всегда используй stream
+
+```python
+# ПРАВИЛЬНО
+async for event in llm.stream(messages, tools):
+    await emitter.emit_text(event.text)
+
+# НЕПРАВИЛЬНО
+response = await llm.generate(messages)
+```
+
+### 2. Публикуй события часто
+
+```python
+# Публикуй каждый чанк, не накапливай
+async for chunk in llm.stream(...):
+    await emitter.emit_text(chunk.text)  # ← сразу публикуй
+```
+
+### 3. Обрабатывай ошибки
+
+```python
+try:
+    async for event in llm.stream(...):
+        await emitter.emit_text(event.text)
+except Exception as e:
+    await emitter.emit_error(str(e))
+    raise
+```
+
+### 4. Используй правильные типы
+
+```python
+# ПРАВИЛЬНО - используй A2A типы
+from a2a.types import TaskStatusUpdateEvent, TaskState
+
+event = TaskStatusUpdateEvent(
+    kind="task-status-update",
+    taskId=task_id,
+    status={"state": TaskState.working}
+)
+
+# НЕПРАВИЛЬНО - не создавай свои типы
+event = {"type": "status", "data": "working"}
+```
+
+### 5. Закрывай соединения
+
+```python
+try:
+    async for event in subscriber.subscribe(task_id):
+        yield event
+finally:
+    await redis_client.close()
+```

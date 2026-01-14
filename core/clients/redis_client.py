@@ -1,0 +1,238 @@
+"""
+Redis клиент для кэширования, сессий и Pub/Sub streaming.
+"""
+
+import asyncio
+from typing import Any, AsyncIterator, Optional
+from urllib.parse import urlparse
+
+try:
+    import redis.asyncio as redis
+except ImportError:
+    redis = None
+
+from core.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+class RedisClient:
+    """
+    Redis клиент для кэширования токенов и сессий с auto-reconnect.
+    """
+
+    def __init__(self, redis_url: str, max_retries: int = 3):
+        """
+        Args:
+            redis_url: URL подключения к Redis (например, redis://localhost:6379/0)
+            max_retries: Максимальное количество попыток переподключения
+        """
+        self.redis_url = redis_url
+        self._client: Optional[Any] = None
+        self._max_retries = max_retries
+        self._connection_lock = asyncio.Lock()
+
+    async def connect(self) -> None:
+        """Подключается к Redis"""
+        if redis is None:
+            logger.warning("Redis не установлен, RedisClient будет работать в режиме без подключения")
+            return
+        try:
+            parsed = urlparse(self.redis_url)
+            db = int(parsed.path.lstrip("/")) if parsed.path else 0
+
+            self._client = redis.Redis(
+                host=parsed.hostname or "localhost",
+                port=parsed.port or 6379,
+                db=db,
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=5,
+                health_check_interval=30,
+            )
+            await self._client.ping()
+            logger.info("RedisClient: подключение к Redis установлено")
+        except Exception as e:
+            logger.warning(f"RedisClient: не удалось подключиться к Redis: {e}")
+            self._client = None
+
+    async def close(self) -> None:
+        """Закрывает соединение с Redis"""
+        if self._client:
+            await self._client.aclose()
+            self._client = None
+            logger.info("RedisClient: соединение закрыто")
+
+    async def _ensure_connected(self) -> bool:
+        """Автоматическое переподключение с retry и exponential backoff"""
+        async with self._connection_lock:
+            # Проверяем текущее соединение
+            if self._client:
+                try:
+                    await self._client.ping()
+                    return True
+                except Exception:
+                    logger.warning("Redis connection lost, reconnecting...")
+                    self._client = None
+            
+            # Переподключаемся с exponential backoff
+            for attempt in range(self._max_retries):
+                try:
+                    await self.connect()
+                    if self._client:
+                        logger.info("Redis reconnected successfully")
+                        return True
+                except Exception as e:
+                    if attempt < self._max_retries - 1:
+                        wait_time = 2 ** attempt
+                        logger.warning(f"Reconnect attempt {attempt+1} failed: {e}, retry in {wait_time}s")
+                        await asyncio.sleep(wait_time)
+                    else:
+                        logger.error(f"Failed to reconnect to Redis after {self._max_retries} attempts")
+            
+            return False
+
+    async def get(self, key: str) -> Optional[str]:
+        """Получает значение по ключу с auto-reconnect"""
+        if not await self._ensure_connected():
+            return None
+        
+        try:
+            return await self._client.get(key)
+        except Exception as e:
+            logger.warning(f"Get failed for key {key}: {e}")
+            # Одна попытка после переподключения
+            if await self._ensure_connected():
+                try:
+                    return await self._client.get(key)
+                except Exception:
+                    pass
+            return None
+
+    async def set(self, key: str, value: str, ttl: int | None = None) -> bool:
+        """Устанавливает значение по ключу с auto-reconnect"""
+        if not await self._ensure_connected():
+            return False
+        
+        for attempt in range(2):
+            try:
+                await self._client.set(key, value, ex=ttl)
+                return True
+            except Exception as e:
+                if attempt == 0 and await self._ensure_connected():
+                    continue
+                logger.warning(f"Set failed for key {key}: {e}")
+                return False
+
+    async def setex(self, key: str, seconds: int, value: str) -> bool:
+        """Устанавливает значение с TTL"""
+        if not await self._ensure_connected():
+            return False
+        try:
+            await self._client.setex(key, seconds, value)
+            return True
+        except Exception as e:
+            logger.warning(f"RedisClient: ошибка установки ключа {key} с TTL: {e}")
+            return False
+
+    async def delete(self, *keys: str) -> int:
+        """Удаляет ключи"""
+        if not await self._ensure_connected():
+            return 0
+        try:
+            return await self._client.delete(*keys)
+        except Exception as e:
+            logger.warning(f"RedisClient: ошибка удаления ключей: {e}")
+            return 0
+
+    async def ping(self) -> bool:
+        """Проверяет соединение с Redis"""
+        if not self._client:
+            return False
+        try:
+            await self._client.ping()
+            return True
+        except Exception:
+            return False
+
+    async def publish(self, channel: str, message: str) -> int:
+        """Публикует сообщение в канал Pub/Sub с auto-reconnect и retry"""
+        if not await self._ensure_connected():
+            raise RuntimeError("Redis client not connected after retries")
+        
+        # Попытка публикации с одним retry
+        for attempt in range(2):
+            try:
+                return await self._client.publish(channel, message)
+            except Exception as e:
+                if attempt == 0:
+                    logger.warning(f"Publish failed, reconnecting: {e}")
+                    if await self._ensure_connected():
+                        continue
+                logger.error(f"Publish failed after retry: {e}")
+                raise
+
+    async def subscribe(
+        self, 
+        channel: str, 
+        timeout: float = 300.0,
+        ready_event: Optional[asyncio.Event] = None,
+    ) -> AsyncIterator[str]:
+        """
+        Подписывается на канал и yield'ит сообщения с auto-reconnect.
+
+        Args:
+            channel: Имя канала
+            timeout: Таймаут ожидания сообщений в секундах
+            ready_event: Event для сигнализации о готовности подписки
+
+        Yields:
+            Сообщения из канала
+        """
+        if not await self._ensure_connected():
+            raise RuntimeError("Redis client not connected")
+        
+        pubsub = self._client.pubsub()
+        
+        try:
+            await pubsub.subscribe(channel)
+            logger.debug(f"Subscribed to {channel}")
+            
+            if ready_event:
+                ready_event.set()
+            
+            import time
+            start_time = time.monotonic()
+            
+            while True:
+                elapsed = time.monotonic() - start_time
+                if elapsed >= timeout:
+                    logger.warning(f"Subscription timeout on {channel} after {elapsed:.1f}s")
+                    break
+                
+                try:
+                    message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                    if message and message["type"] == "message":
+                        yield message["data"]
+                except Exception as e:
+                    logger.warning(f"Error receiving message from {channel}: {e}")
+                    # Пытаемся переподключиться и переподписаться
+                    if await self._ensure_connected():
+                        try:
+                            await pubsub.unsubscribe(channel)
+                            await pubsub.aclose()
+                            pubsub = self._client.pubsub()
+                            await pubsub.subscribe(channel)
+                            logger.info(f"Resubscribed to {channel}")
+                        except Exception as resub_error:
+                            logger.error(f"Failed to resubscribe to {channel}: {resub_error}")
+                            break
+                    else:
+                        break
+        finally:
+            try:
+                await pubsub.unsubscribe(channel)
+                await pubsub.aclose()
+            except Exception:
+                pass
+

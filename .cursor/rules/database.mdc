@@ -1,0 +1,430 @@
+---
+description: "База данных, репозитории, модели и Storage"
+alwaysApply: false
+---
+# База данных и репозитории
+
+## Главный принцип
+
+**ВСЕ данные ТОЛЬКО через репозитории. Storage - приватный класс.**
+
+## Три главных правила кода
+
+1. **НИКАКИХ локальных импортов** - все импорты в начале файла
+2. **НИКАКИХ лишних if-else** - логика должна быть прозрачной, используй early return
+3. **try-except ТОЛЬКО для IO/внешних сервисов** - не для бизнес-логики
+
+## Структура
+
+```
+core/db/
+├── storage.py              # Storage (приватный, только для репозиториев)
+├── base_repository.py      # BaseRepository (композиция с Storage)
+├── models.py               # SQLAlchemy таблицы
+└── repositories/           # Core репозитории (shared БД)
+    ├── user_repository.py
+    ├── company_repository.py
+    ├── auth_session_repository.py
+    ├── subdomain_repository.py
+    ├── variable_repository.py
+    ├── usage_repository.py
+    ├── document_status_repository.py
+    ├── embed_config_repository.py
+    ├── embed_mapping_repository.py
+    ├── namespace_repository.py
+    └── __init__.py
+
+apps/agents/src/db/
+├── models.py               # SQLAlchemy таблицы для agents
+├── agent_repository.py
+├── node_repository.py
+├── tool_repository.py
+├── state_repository.py
+├── evaluation_repository.py
+├── llm_model_repository.py
+├── push_repository.py
+├── scheduled_task_repository.py
+└── __init__.py
+```
+
+## BaseRepository - незыблемая логика
+
+```python
+class BaseRepository(ABC, Generic[T]):
+    is_global: bool = False  # Атрибут класса
+    owner_service: str = None  # Для изоляции по сервисам
+    
+    def __init__(self, storage: Storage, model_class: Type[T]):
+        self._storage = storage  # Приватная композиция
+        self.model_class = model_class
+    
+    def _build_final_key(self, key: str) -> str:
+        if self.is_global:
+            return key
+        
+        context = get_context()
+        company_id = context.active_company.company_id
+        return f"company:{company_id}:{key}"
+    
+    @abstractmethod
+    def _get_key(self, entity_id: str) -> str:
+        """Базовый ключ БЕЗ префикса компании"""
+        pass
+    
+    @abstractmethod
+    def _get_prefix(self) -> str:
+        """Префикс для поиска"""
+        pass
+    
+    @abstractmethod
+    def _get_table_name(self) -> str:
+        """Имя таблицы БД"""
+        pass
+    
+    @abstractmethod
+    def _extract_entity_id(self, entity: T) -> str:
+        """Извлечение ID из сущности"""
+        pass
+```
+
+## Все репозитории
+
+### Core репозитории (shared БД):
+
+| Репозиторий | is_global | Таблица | Префикс ключа |
+|-------------|-----------|---------|---------------|
+| UserRepository | True | users | user: |
+| CompanyRepository | True | storage | company: |
+| AuthSessionRepository | True | users | auth_session: |
+| SubdomainRepository | True | storage | subdomain: |
+| VariableRepository | False | variables | company:X:var: |
+| UsageRepository | False | usage | company:X:usage: |
+| FileRepository | False | storage | company:X:file: |
+| DocumentStatusRepository | False | storage | company:X:doc_status: |
+| EmbedConfigRepository | False | storage | company:X:embed_config: |
+| EmbedMappingRepository | False | storage | company:X:embed_mapping: |
+| NamespaceRepository | False | storage | company:X:namespace: |
+
+### Agents репозитории (service БД):
+
+| Репозиторий | is_global | Таблица | Префикс ключа |
+|-------------|-----------|---------|---------------|
+| AgentRepository | False | agents | company:X:agent: |
+| NodeRepository | False | nodes | company:X:node: |
+| ToolRepository | False | tools | company:X:tool: |
+| StateRepository | False | states | company:X:state: |
+| EvaluationRepository | False | storage | company:X:evaluation: |
+| LLMModelRepository | False | storage | company:X:llm_model: |
+| PushRepository | False | storage | company:X:push: |
+| ScheduledTaskRepository | False | storage | company:X:scheduled_task: |
+
+## is_global определяет поведение
+
+**is_global=True (глобальные сущности):**
+- User, Company, AuthSession, Subdomain
+- Ключ: `user:{user_id}` (без префикса компании)
+- Таблица: обычно `users` или `storage`
+
+**is_global=False (изолированные сущности):**
+- Agent, Node, Tool, State, Variable, Usage, File
+- Evaluation, LLMModel, Push, ScheduledTask
+- DocumentStatus, EmbedConfig, EmbedMapping, Namespace
+- Ключ: `company:{company_id}:agent:{agent_id}` (ВСЕГДА с префиксом)
+- Таблица: `agents`, `nodes`, `tools`, `states`, `variables`, `usage`, `storage`
+
+## Использование репозиториев
+
+```python
+from apps/agents/src/container import get_container
+
+container = get_container()
+
+# Получить сущность
+agent = await container.agent_repository.get("agent_id")
+user = await container.user_repository.get("user_id")
+
+# Сохранить
+await container.agent_repository.set(agent_config)
+await container.user_repository.set(user)
+
+# Удалить
+await container.agent_repository.delete("agent_id")
+
+# Список всех
+agents = await container.agent_repository.list_all(limit=100)
+
+# Получить несколько
+agents_dict = await container.agent_repository.get_many(["id1", "id2"])
+```
+
+## Service БД vs Shared БД
+
+**Service БД** (`container.storage`):
+- Данные специфичные для сервиса agents
+- agent, node, tool, state
+- var, usage, file
+
+**Shared БД** (`container.shared_storage`):
+- Общие данные между сервисами
+- user, company
+- auth_session, subdomain
+
+```python
+container = AgentsContainer(
+    service_db_url="postgresql://localhost/agents_db",
+    shared_db_url="postgresql://localhost/shared_db"
+)
+
+# Маршрутизация:
+agent_repo = container.agent_repository      # → service БД
+user_repo = container.user_repository        # → shared БД
+state_repo = container.state_repository      # → service БД
+company_repo = container.company_repository  # → shared БД
+```
+
+## Изоляция данных
+
+**Автоматическая через `is_global`:**
+
+```python
+# AgentRepository (is_global=False)
+await agent_repo.set(agent)
+# Хранится: company:acme:agent:my_agent
+
+# UserRepository (is_global=True)
+await user_repo.set(user)
+# Хранится: user:user_123
+```
+
+**НЕТ ручного добавления префикса:**
+
+```python
+# НЕТ! Не добавляй префикс вручную
+key = f"company:{company_id}:agent:{agent_id}"
+await storage.set(key, data)
+
+# ДА! Репозиторий сам добавит префикс
+await agent_repo.set(agent)
+```
+
+## Storage - ТОЛЬКО для репозиториев
+
+**Storage теперь приватный класс:**
+
+```python
+# Внутри BaseRepository
+self._storage._get_with_session_and_table(key, table)
+self._storage._set_with_table(key, value, table)
+```
+
+```python
+# НЕ используй Storage напрямую
+storage = container.storage
+await storage.get("agent:my_agent")  # НЕТ!
+
+# Используй репозиторий
+agent_repo = container.agent_repository
+await agent_repo.get("my_agent")  # ДА!
+```
+
+## Создание нового репозитория
+
+**Шаги:**
+
+1. Создай класс репозитория
+2. Определи `is_global` (True или False)
+3. Реализуй все абстрактные методы
+4. Добавь в контейнер
+5. Добавь dependency (опционально)
+
+```python
+# 1. Создать репозиторий
+class MyRepository(BaseRepository[MyModel]):
+    is_global = False
+    owner_service = "agents"
+    
+    def __init__(self, storage: Storage):
+        super().__init__(storage=storage, model_class=MyModel)
+    
+    def _get_key(self, entity_id: str) -> str:
+        return f"my:{entity_id}"
+    
+    def _get_prefix(self) -> str:
+        return "my:"
+    
+    def _get_table_name(self) -> str:
+        return "storage"
+    
+    def _extract_entity_id(self, entity: MyModel) -> str:
+        return entity.id
+
+# 2. Добавить в контейнер
+class AgentsContainer(BaseContainer):
+    def __getattr__(self, name):
+        if name == 'my_repository':
+            if self._my_repository is None:
+                self._my_repository = MyRepository(storage=self.storage)
+            return self._my_repository
+        return super().__getattr__(name)
+
+# 3. Добавить dependency
+async def get_my_repository() -> MyRepository:
+    return get_container().my_repository
+
+MyRepositoryDep = Annotated[MyRepository, Depends(get_my_repository)]
+```
+
+## Модели
+
+### Разделение: Shared vs Service-specific
+
+**Shared модели (в core/models/)**:
+- `identity_models.py`: User, Company, AuthSession
+- `context_models.py`: Context
+- `files/models.py`: FileRecord, AudioRecord
+
+**Service-specific модели (в apps/agents/src/models/)**:
+- `agent_config.py`: AgentConfig, NodeConfig, SkillConfig
+- `state.py`: ExecutionState
+- `enums.py`: NodeType, CodeMode, MemoryPolicy
+
+### Правило: НЕТ дубликатов
+
+```python
+# НЕ создавай эти файлы в apps/agents/src/models/:
+# context_models.py - Context в core!
+# identity_models.py - User, Company в core!
+# file_models.py - FileRecord в core!
+```
+
+### Импорты моделей
+
+```python
+# Можно импортировать из apps.agents.src.models (реэкспорт)
+from apps.agents.src.models import User, Company, AgentConfig, FileRecord
+
+# Или напрямую из core
+from core.models import User, Company
+from core.files.models import FileRecord
+from apps.agents.src.models import AgentConfig
+```
+
+### Кастомный Field
+
+**КРИТИЧНО**: Используй `from core.fields import Field` вместо `from pydantic import Field`
+
+```python
+from core.fields import Field
+
+class User(BaseModel):
+    user_id: str = Field(
+        title="ID",
+        readonly=True,        # → json_schema_extra
+        placeholder="user_123"  # → json_schema_extra
+    )
+```
+
+Кастомные поля автоматически переносятся в json_schema_extra:
+- readonly
+- placeholder
+- groups
+- widget_attrs
+- exclude_from_form
+- editable_in_table
+- hidden
+
+### Хранение моделей через репозитории
+
+**Каждая модель имеет свой репозиторий:**
+
+```python
+# User → UserRepository (core/db/repositories/)
+# Company → CompanyRepository (core/db/repositories/)
+# AgentConfig → AgentRepository (apps/agents/src/db/repositories/)
+# NodeConfig → NodeRepository (apps/agents/src/db/repositories/)
+# ExecutionState → StateRepository (apps/agents/src/db/repositories/)
+```
+
+**НИКОГДА не работай с моделями через Storage напрямую:**
+
+```python
+# НЕТ!
+storage = container.storage
+data = await storage.get("agent:my_agent")
+agent = AgentConfig.model_validate_json(data)
+
+# ДА!
+agent_repo = container.agent_repository
+agent = await agent_repo.get("my_agent")
+```
+
+## API репозиториев
+
+**Единообразный интерфейс:**
+
+```python
+# Получить
+entity = await repo.get(entity_id)
+
+# Сохранить
+await repo.set(entity)
+
+# Удалить
+await repo.delete(entity_id)
+
+# Список всех
+entities = await repo.list_all(limit=100)
+
+# Получить несколько
+entities_dict = await repo.get_many([id1, id2, id3])
+```
+
+## В API endpoints
+
+```python
+from apps.agents.src.dependencies import AgentRepositoryDep
+
+@router.get("/{agent_id}")
+async def get_agent(agent_id: str, agent_repo: AgentRepositoryDep):
+    agent = await agent_repo.get(agent_id)
+    if not agent:
+        raise HTTPException(status_code=404)
+    return agent
+```
+
+## В тестах
+
+```python
+async def test_example(
+    app,
+    unique_id,         # Генератор уникальных ID для изоляции
+):
+    container = get_container()
+    agent_repo = container.agent_repository
+    
+    agent_id = f"test_agent_{unique_id}"
+    agent = AgentConfig(
+        agent_id=agent_id,
+        name="Test Agent",
+        ...
+    )
+    
+    await agent_repo.set(agent)
+    
+    loaded = await agent_repo.get(agent_id)
+    assert loaded.name == "Test Agent"
+```
+
+## 🚨 КРИТИЧНЫЕ ПРАВИЛА
+
+1. **ВСЕГДА** через репозитории, НИКОГДА напрямую Storage
+2. **НИКОГДА** не добавляй префикс `company:` вручную
+3. **ВСЕГДА** определяй `is_global` в классе
+4. **НИКОГДА** не используй параметр `force_global`
+5. **ВСЕГДА** получай репозитории из контейнера
+6. **НЕТ дубликатов** между core и apps
+7. **Shared модели** (User, Company, FileRecord) → core → shared БД
+8. **Бизнес-модели** (AgentConfig, NodeConfig, ExecutionState) → apps/agents → service БД
+9. Используй **core.fields.Field** везде (Pydantic v2 совместимый)
+
+**Нарушение приведет к ошибкам изоляции и дублированию данных!**

@@ -1,0 +1,37 @@
+{
+  "fields": {
+    "model_height_cm": {
+      "description": "Model height in cm"
+    },
+    "product_width_cm": {
+      "description": "Product width in cm"
+    },
+    "product_height_cm": {
+      "description": "Product height in cm"
+    },
+    "item_kind": {
+      "description": "Product type"
+    },
+    "placement": {
+      "description": "Placement"
+    },
+    "offset_x_pct": {
+      "description": "X axis offset in %"
+    },
+    "offset_y_pct": {
+      "description": "Y axis offset in %"
+    },
+    "visible_top_pct": {
+      "description": "Top figure crop"
+    },
+    "visible_bottom_pct": {
+      "description": "Bottom figure crop"
+    },
+    "scale_bias": {
+      "description": "Size multiplier"
+    },
+    "variations": {
+      "description": "Number of variations"
+    }
+  }
+}

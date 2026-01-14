@@ -1,0 +1,394 @@
+---
+alwaysApply: false
+description: "CRM NetWorkle система управления сущностями: entities, relationships, graph, ChromaDB, PostgreSQL, access control, grants, entity types, relationship types, namespace, semantic search, влияние, граф связей, бизнес сущности, записная книжка, встречи, контакты, заметки, задачи, сделки, звонки"
+---
+
+# CRM Service - Правила
+
+## Архитектура
+
+CRM = **ChromaDB (entities) + PostgreSQL (types, relationships, grants)**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  ChromaDB (векторный поиск)    │   PostgreSQL (relations)   │
+├────────────────────────────────┼────────────────────────────┤
+│  Entity (content + metadata)   │   EntityType, Relationship │
+│  Semantic search               │   RelationshipType, Grants │
+│  company_id изоляция           │   company_id изоляция      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Модели
+
+**ChromaDB:**
+- `Entity` - сущности с content, metadata, векторами
+  - Всегда: `entity_id`, `company_id`, `namespace`, `entity_type`
+  - Опционально: `tags`, `user_id`, `source`, `summary`
+
+**PostgreSQL:**
+- `EntityType` - типы сущностей (note, meeting, call, task, deal, contact)
+- `RelationshipType` - типы связей (mentions, linked, manages, reports_to)
+- `Relationship` - связи между entities (source → target, weight, metadata)
+- `AccessGrant` - права доступа (public, user, company, с ролями viewer/editor/admin)
+
+### Изоляция
+
+**СТРОГАЯ изоляция по `company_id`:**
+- Каждая запись имеет `company_id`
+- Репозитории ВСЕГДА фильтруют по `company_id` из контекста
+- Системные типы: `is_system=True`, но ВСЕГДА с `company_id` компании
+
+**Исключение:** Graph traversal с `cross_company=True` для granted entities.
+
+## Репозитории
+
+### Базовый класс `BaseCRMRepository`
+
+```python
+class MyRepository(BaseCRMRepository[MyModel]):
+    @property
+    def model_class(self) -> Type[MyModel]:
+        return MyModel
+    
+    @property
+    def id_field(self) -> str:
+        return "my_id"
+```
+
+**Методы:**
+- `get(id)` - получить по ID (с фильтром по company_id)
+- `create(entity)` - создать
+- `update(id, updates)` - обновить
+- `delete(id)` - удалить
+- `list_all(limit, offset)` - список (с фильтром по company_id)
+
+**ВАЖНО:** Контекст (`company_id`) берется из `core.context.get_context()` ВНУТРИ репозитория.
+
+### ChromaDB Entity
+
+`EntityService` - работа с ChromaDB:
+- `create_entity()` - создать entity + вектор
+- `search()` - семантический поиск
+- `get_by_id()` - получить по ID
+- `update()` - обновить content/metadata
+- `delete()` - удалить (+ cascade для relationships)
+
+**Namespace изоляция:** `{company_id}_{namespace}` - каждый namespace изолирован.
+
+## Типы и их роль
+
+### EntityType
+
+Определяет **ЧТО** это за сущность:
+
+```python
+EntityType(
+    type_id="meeting",           # Уникальный ID типа
+    company_id="acme",           # Владелец
+    name="Встреча",              # Название
+    prompt="Инструкции для AI...", # Как AI должна обрабатывать
+    required_fields={"date": "datetime"},  # Обязательные поля
+    optional_fields={"location": "string"},  # Опциональные
+    is_system=True,              # Системный тип
+    parent_type_id="note",       # Наследование
+    public_fields=["name", "entity_type"]  # Поля для public доступа
+)
+```
+
+**Использование:**
+- AI анализирует текст → определяет entity_type → применяет prompt
+- При создании entity проверяется соответствие required_fields
+- `public_fields` - что видят пользователи без полного доступа
+
+### RelationshipType
+
+Определяет **КАК** связаны entities:
+
+```python
+RelationshipType(
+    type_id="manages",
+    name="Управляет",
+    is_directed=True,            # Направленная связь
+    inverse_type_id="reports_to", # Обратная связь
+    weight_default=1.0           # Вес по умолчанию
+)
+```
+
+**Направленность:**
+- `is_directed=True` - строгое направление (A manages B ≠ B manages A)
+- `is_directed=False` - двунаправленная (A knows B = B knows A)
+- `inverse_type_id` - позволяет траверсал в обе стороны для directed
+
+## Relationships & Graph
+
+### Создание связи
+
+```python
+Relationship(
+    relationship_id=uuid(),
+    company_id="acme",
+    source_entity_id="entity_1",
+    target_entity_id="entity_2",
+    relationship_type="manages",
+    weight=1.5,                  # Вес связи (для алгоритмов)
+    metadata={"since": "2024"}   # Доп. данные
+)
+```
+
+### Graph алгоритмы
+
+**Influence Graph (BFS):**
+- Строит граф влияния от entity на depth уровней
+- Учитывает `weight` и `is_directed`
+- Возвращает nodes + edges
+
+**Shortest Path (Bidirectional Weighted Dijkstra):**
+- Находит кратчайший путь между двумя entities
+- Учитывает `weight` (меньше вес = предпочтительнее путь)
+- Учитывает `is_directed`
+
+**Related Entities:**
+- Возвращает связанные entities на 1 уровень
+- Фильтр по типам связей
+- Учитывает направление
+
+**Cross-company traversal:**
+- `RelationshipRepository.get_by_entity_for_graph(cross_company=True)`
+- Используется ТОЛЬКО в graph алгоритмах для granted entities
+- Access control применяется на уровне nodes (placeholders для недоступных)
+
+## Access Control
+
+### AccessGrant модель
+
+```python
+AccessGrant(
+    grant_id=uuid(),
+    company_id="acme",           # Владелец
+    resource_type="entity",      # entity | namespace
+    resource_id="entity_123",    # ID ресурса
+    grant_type="user",           # public | user | company
+    target_user_id="user_456",   # Для grant_type=user
+    target_company_id="beta",    # Для grant_type=company
+    role="viewer"                # viewer | editor | admin
+)
+```
+
+### Типы грантов
+
+**Public grant:**
+- Доступен всем
+- Показывает только `public_fields` из EntityType
+- Relationships видны в графах, но соседи - placeholders если нет доступа
+
+**User grant:**
+- Доступ конкретному user_id из другой компании
+- Полный доступ к entity (viewer/editor/admin)
+- Relationships видны
+
+**Company grant:**
+- Доступ всем пользователям другой компании
+- Для `resource_type=namespace` - весь namespace
+
+**НЕ копирует данные** - предоставляет real-time доступ к оригиналу!
+
+### AccessControlService
+
+```python
+# Проверка доступа
+can_access = await access_control.check_access(
+    entity_id="entity_123",
+    user_id="user_456",
+    company_id="beta",
+    required_role="viewer"
+)
+
+# Фильтрация полей
+filtered = await access_control.filter_entity_fields(
+    entity=entity,
+    user_id="user_456",
+    company_id="beta"
+)
+```
+
+**Интеграция в сервисы:**
+- `EntityService` использует `AccessControlService` в `get_by_id()` и `search()`
+- `GraphService` показывает placeholders для недоступных nodes
+
+## Access Requests (Copy механизм)
+
+**Отличие от Grants:** Access Request **КОПИРУЕТ** entity в другую компанию.
+
+### Shallow Copy
+- Копирует entity
+- Relationships → текстовое описание в `external_relationships`
+- Не создает live связи
+
+### Deep Copy
+- Копирует entity + связанные entities рекурсивно (до `max_depth`)
+- Создает новые relationships между копиями
+- Полностью автономная копия в новой компании
+
+**Когда использовать:**
+- Grants - для real-time доступа, не дублируем данные
+- Shallow copy - нужна snapshot с контекстом
+- Deep copy - нужен полный автономный граф
+
+## Namespaces
+
+Организация entities внутри компании:
+
+```python
+# Namespace = логическая группировка
+company_id="acme", namespace="sales"     # Продажи
+company_id="acme", namespace="support"   # Поддержка
+company_id="acme", namespace="default"   # По умолчанию
+```
+
+**В ChromaDB:** collection = `{company_id}_{namespace}`
+
+**Access:** можно дать доступ к целому namespace через `AccessGrant`.
+
+## API Endpoints
+
+**Entities:**
+- `POST /entities` - создать
+- `GET /entities/{id}` - получить (+ access control)
+- `PUT /entities/{id}` - обновить
+- `DELETE /entities/{id}` - удалить (+ cascade)
+- `GET /entities` - поиск (семантический + фильтры)
+
+**Types:**
+- `GET /entity-types` - список типов
+- `POST /entity-types` - создать тип
+- `GET /relationship-types` - список типов связей
+
+**Relationships:**
+- `POST /relationships` - создать связь
+- `GET /relationships` - список связей entity
+- `DELETE /relationships/{id}` - удалить
+
+**Graph:**
+- `GET /entities/{id}/influence-graph` - граф влияния
+- `GET /entities/{from}/shortest-path/{to}` - кратчайший путь
+- `GET /entities/{id}/related` - связанные entities
+
+**Grants:**
+- `POST /entities/{id}/grants/public` - public grant
+- `POST /entities/{id}/grants/user` - user grant
+- `POST /namespaces/{ns}/grants/company` - company grant
+- `GET /grants` - список грантов
+
+**Access Requests:**
+- `POST /access-requests` - запросить доступ
+- `POST /access-requests/{id}/approve` - одобрить (shallow/deep copy)
+
+## Инициализация компании
+
+`CompanyInitService.initialize_company(company_id)`:
+- Копирует системные EntityType с `company_id`
+- Копирует системные RelationshipType
+- Вызывается при старте CRM и при создании компании
+
+**Системные типы:**
+- `note`, `meeting`, `call`, `task` - базовые entity types
+- `mentions`, `linked` - базовые relationship types
+
+## Cascade удаление
+
+При удалении entity:
+1. Удаляется из ChromaDB
+2. Удаляются все Relationship где entity участвует (source/target)
+3. Удаляются все AccessGrant для этой entity
+
+**Saga pattern** в `EntityService.delete()`.
+
+## Тестирование
+
+**БЕЗ МОКОВ** - только реальные:
+- PostgreSQL
+- ChromaDB
+- Redis (для pub/sub)
+- HTTP запросы через `crm_client`
+
+**Фикстуры:**
+- `crm_client` - HTTP клиент к CRM сервису
+- `auth_headers_system` - заголовки авторизации для company=system
+- `unique_id` - уникальный ID для изоляции тестов
+- `unique_namespace_name` - уникальный namespace
+
+**E2E тесты в:** `tests/crm/e2e/`
+
+## Ключевые принципы
+
+1. **Company изоляция** - ВСЕГДА фильтруем по `company_id` из контекста
+2. **Grants ≠ Copy** - grants дают доступ, не копируют данные
+3. **Graph cross-company** - только через grants, с access control на nodes
+4. **Types определяют behavior** - AI использует prompts из EntityType
+5. **Cascade всё** - удаление entity → удаление связей и грантов
+6. **Namespace изоляция** - в ChromaDB = отдельные collections
+7. **БЕЗ легаси** - чистая архитектура, никаких фолбеков
+
+## Частые ошибки
+
+❌ Передавать `company_id` в методы репозиториев - берется из контекста
+❌ Копировать entity при создании grant - grant дает доступ к оригиналу
+❌ Использовать `RelationshipRepository.get_by_entity()` для графов - использовать `get_by_entity_for_graph(cross_company=True)`
+❌ Забывать про `public_fields` в EntityType при public grants
+❌ Пытаться обойти company_id изоляцию - НИКОГДА, это security
+
+## Примеры
+
+### Создание entity с relationships
+
+```python
+# 1. Создать entity
+entity = await entity_service.create_entity(
+    namespace="sales",
+    content="Встреча с клиентом Acme Corp",
+    entity_type="meeting",
+    metadata={"date": "2024-01-15", "location": "Офис"}
+)
+
+# 2. Создать relationships
+await relationship_service.create(
+    source_entity_id=entity.entity_id,
+    target_entity_id="contact_123",
+    relationship_type="mentions"
+)
+```
+
+### Поиск с фильтрами
+
+```python
+results = await entity_service.search(
+    query="встречи январь",
+    namespace="sales",
+    filters={"entity_type": "meeting"},
+    limit=10
+)
+```
+
+### Граф влияния
+
+```python
+graph = await graph_service.build_influence_graph(
+    entity_id="entity_123",
+    max_depth=3,
+    relationship_types=["mentions", "linked"]
+)
+# Возвращает: {nodes: [...], edges: [...]}
+```
+
+### Public grant
+
+```python
+# Создать grant
+await grant_service.create_public_grant(
+    entity_id="entity_123",
+    role="viewer"
+)
+
+# Теперь entity видна всем (только public_fields из EntityType)
+```

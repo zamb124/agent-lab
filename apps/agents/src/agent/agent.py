@@ -1,0 +1,419 @@
+"""
+Agent - выполнение графа нод.
+
+Архитектура:
+- nodes: ноды (react_node, function, agent)
+- edges: связи между нодами с условиями
+- entry: точка входа
+
+Выполнение:
+1. Начинаем с entry ноды
+2. Выполняем ноду (ExecutionState -> ExecutionState)
+3. Ищем подходящий edge по conditions
+4. Переходим к следующей ноде или завершаем
+"""
+
+from __future__ import annotations
+
+import operator
+import re
+from typing import Any, Dict, List, Optional, Union
+
+from opentelemetry import trace
+
+from apps.agents.src.agent.exceptions import AgentInterrupt, BreakpointInterrupt, NodeCallLimitError
+from apps.agents.src.container import get_container
+from core.state import ExecutionState, InterruptData
+from apps.agents.src.streaming import Emitter
+from apps.agents.src.mapping import MappingResolver
+from core.logging import get_logger
+from core.tracing import get_tracer
+from core.tracing.context import TraceContext, get_current_trace_context
+from core.tracing.provider import is_tracing_enabled
+from core.errors import AgentInfiniteLoopError, NodeCallLimitError
+
+from .nodes import BaseNode, create_node
+
+logger = get_logger(__name__)
+
+MAX_ITERATIONS = 100
+MAX_FUNCTION_CALLS = 5
+
+
+class Agent:
+    """
+    Agent = граф нод с edges.
+
+    Атрибуты:
+        agent_id: ID агента
+        name: Название
+        entry: ID стартовой ноды
+        nodes: Словарь нод {node_id: BaseNode}
+        edges: Список edges с conditions
+        variables: Резолвнутые переменные (доступны в state.variables)
+    """
+
+    def __init__(
+        self,
+        agent_id: str,
+        name: str,
+        entry: str,
+        nodes: Dict[str, BaseNode],
+        edges: List[Union[Dict[str, Any], Any]],
+        description: str = "",
+        tags: Optional[List[str]] = None,
+        variables: Optional[Dict[str, Any]] = None,
+    ):
+        self.agent_id = agent_id
+        self.name = name
+        self.entry = entry
+        self.nodes = nodes
+        self.description = description
+        self.tags = tags or []
+        self.variables = variables or {}
+
+        # Нормализуем edges в единый формат (список словарей)
+        self.edges = self._normalize_edges(edges)
+
+        # Индекс edges по from_node
+        self._edges_by_from: Dict[str, List[Dict[str, Any]]] = {}
+        for edge in self.edges:
+            from_node = edge["from"]
+            if from_node not in self._edges_by_from:
+                self._edges_by_from[from_node] = []
+            self._edges_by_from[from_node].append(edge)
+
+    def _normalize_edges(self, edges: List[Any]) -> List[Dict[str, Any]]:
+        """Нормализует edges в list of dicts."""
+        result = []
+        for edge in edges:
+            if isinstance(edge, dict):
+                result.append(
+                    {
+                        "from": edge.get("from"),
+                        "to": edge.get("to"),
+                        "condition": edge.get("condition"),
+                    }
+                )
+            else:
+                # Объект Edge
+                result.append(
+                    {
+                        "from": edge.from_node,
+                        "to": edge.to_node,
+                        "condition": edge.condition,
+                    }
+                )
+        return result
+
+    async def execute(self, state: ExecutionState) -> ExecutionState:
+        """
+        Выполняет агента.
+
+        Args:
+            state: Начальный ExecutionState
+
+        Returns:
+            Финальный ExecutionState
+        """
+        if not state.current_nodes:
+            state.current_nodes = [self.entry]
+
+        state.variables = {**self.variables, **state.variables}
+
+        return await self._execute_loop(state)
+
+    async def resume(self, state: ExecutionState, answer: str) -> ExecutionState:
+        """
+        Продолжает выполнение агента после interrupt.
+
+        Args:
+            state: ExecutionState с сохранённым interrupt
+            answer: Ответ пользователя на вопрос
+
+        Returns:
+            Финальный ExecutionState
+        """
+        logger.info(f"Agent {self.agent_id}: resume with answer='{answer[:50]}...'")
+
+        state.interrupt = None
+        state.content = answer
+
+        return await self._execute_loop(state)
+
+    async def _execute_loop(self, state: ExecutionState) -> ExecutionState:
+        """Цикл выполнения."""
+        current_node_id = state.current_nodes[0] if state.current_nodes else self.entry
+        iterations = 0
+
+        container = get_container()
+        emitter = Emitter(container.redis_client, state)
+
+        trace_ctx = None
+        if is_tracing_enabled():
+            trace_ctx_data = get_current_trace_context()
+            if trace_ctx_data:
+                trace_ctx = TraceContext.from_dict(trace_ctx_data)
+
+        tracer = get_tracer()
+        async with tracer.flow_span(self.agent_id, self.entry, trace_ctx):
+            while current_node_id is not None:
+                iterations += 1
+                if iterations > MAX_ITERATIONS:
+                    raise AgentInfiniteLoopError(
+                        agent_id=self.agent_id,
+                        max_iterations=MAX_ITERATIONS
+                    )
+
+                if current_node_id not in self.nodes:
+                    raise ValueError(f"Node '{current_node_id}' not found in agent '{self.agent_id}'")
+
+                node = self.nodes[current_node_id]
+                node_type = node.config.get("type", "unknown")
+
+                self._check_node_call_limit(state, current_node_id, node_type)
+
+                # Проверка breakpoint перед выполнением ноды
+                if await self._check_breakpoint(state, current_node_id, node_type, emitter):
+                    return state
+
+                logger.debug(f"Agent {self.agent_id}: executing node '{current_node_id}' (type={node_type})")
+
+                await emitter.emit_node_start(current_node_id, node_type)
+
+                async with tracer.node_span(current_node_id, node_type, trace_ctx) as span:
+                    try:
+                        state = await node.run(state)
+                        tracer.record_state_snapshot(span, state)
+                        
+                        result_preview = str(state.response)[:200] if state.response else ""
+                        await emitter.emit_node_complete(current_node_id, result_preview)
+                    except Exception as e:
+                        if isinstance(e, AgentInterrupt):
+                            logger.info(
+                                f"Agent {self.agent_id}: interrupt at '{current_node_id}': {e.question}"
+                            )
+                            state.interrupt = InterruptData(question=e.question)
+                            state.current_nodes = [current_node_id]
+                            tracer.record_state_snapshot(span, state)
+                            await emitter.emit_node_complete(current_node_id, f"interrupt: {e.question[:100]}")
+                            return state
+                        await emitter.emit_node_error(current_node_id, str(e))
+                        raise
+
+                self._record_node_call(state, current_node_id, node_type)
+
+                if state.interrupt:
+                    logger.info(f"Agent {self.agent_id}: interrupted at '{current_node_id}'")
+                    state.current_nodes = [current_node_id]
+                    return state
+
+                next_nodes = self._find_next_nodes(current_node_id, state)
+
+                if not next_nodes:
+                    logger.debug(f"Agent {self.agent_id}: completed at '{current_node_id}'")
+                    state.current_nodes = []
+                    return state
+
+                current_node_id = next_nodes[0]
+        
+        return state
+
+
+    async def _check_breakpoint(
+        self,
+        state: ExecutionState,
+        node_id: str,
+        node_type: str,
+        emitter: Emitter,
+    ) -> bool:
+        """
+        Проверяет breakpoint и останавливает выполнение если активен.
+        
+        Args:
+            state: Текущий ExecutionState
+            node_id: ID текущей ноды
+            node_type: Тип ноды
+            emitter: Emitter для публикации событий
+            
+        Returns:
+            True если breakpoint сработал и выполнение остановлено
+        """
+        logger.info(f"Agent {self.agent_id}: _check_breakpoint node='{node_id}', breakpoint_hit='{state.breakpoint_hit}', breakpoints={state.breakpoints}")
+        
+        # Если мы продолжаем после breakpoint на этой же ноде - пропускаем проверку
+        if state.breakpoint_hit == node_id:
+            logger.debug(f"Agent {self.agent_id}: resuming after breakpoint at '{node_id}'")
+            state.breakpoint_hit = None
+            state.breakpoint_state = None
+            return False
+        
+        # Проверяем есть ли активный breakpoint для этой ноды
+        breakpoints = state.breakpoints or {}
+        if not breakpoints.get(node_id):
+            return False
+        
+        logger.info(f"Agent {self.agent_id}: breakpoint hit at node '{node_id}'")
+        
+        # Создаем snapshot state
+        state_snapshot = state.model_dump(exclude_none=False)
+        
+        # Публикуем событие breakpoint
+        await emitter.emit_breakpoint(node_id, node_type, state_snapshot)
+        
+        # Сохраняем данные breakpoint в state
+        state.breakpoint_hit = node_id
+        state.breakpoint_state = state_snapshot
+        state.current_nodes = [node_id]
+        
+        # Возвращаем True чтобы прервать выполнение
+        return True
+
+    def _check_node_call_limit(self, state: ExecutionState, node_id: str, node_type: str) -> None:
+        """Проверяет лимит вызовов ноды."""
+        node_history = state.node_history.get(node_id, {})
+        call_count = len(node_history.get("calls", []))
+
+        if node_type == "function" and call_count >= MAX_FUNCTION_CALLS:
+            raise NodeCallLimitError(
+                f"Node '{node_id}' (type={node_type}): превышен лимит {MAX_FUNCTION_CALLS} вызовов",
+                limit=MAX_FUNCTION_CALLS
+            )
+
+    def _record_node_call(self, state: ExecutionState, node_id: str, node_type: str) -> None:
+        """Записывает вызов ноды в историю."""
+        if node_id not in state.node_history:
+            state.node_history[node_id] = {"type": node_type, "calls": []}
+
+        state.node_history[node_id]["calls"].append(
+            {
+                "response": state.response,
+                "validation": getattr(state, "validation", None),
+            }
+        )
+
+    def _find_next_nodes(self, from_node: str, state: ExecutionState) -> List[str]:
+        """
+        Находит следующие ноды по edges.
+
+        Возвращает ВСЕ ноды, для которых condition выполняется.
+        Edge без condition - безусловный переход.
+        Если несколько нод - параллельное выполнение.
+        """
+        edges = self._edges_by_from.get(from_node, [])
+
+        if not edges:
+            return []
+
+        result = []
+        for edge in edges:
+            to_node = edge.get("to")
+            if to_node is None:
+                continue
+            
+            condition = edge.get("condition")
+            if condition is None:
+                result.append(to_node)
+            elif self._evaluate_condition(condition, state):
+                result.append(to_node)
+
+        return result
+
+    def _evaluate_condition(self, condition: str, state: ExecutionState) -> bool:
+        """
+        Вычисляет условие.
+
+        Поддерживаемые форматы:
+        - "field == value"
+        - "field != value"
+        - "field.nested == value"
+        - "field == true/false"
+        - "field == \"string\""
+        """
+        patterns = [
+            (r"(.+?)\s*==\s*(.+)", operator.eq),
+            (r"(.+?)\s*!=\s*(.+)", operator.ne),
+            (r"(.+?)\s*>\s*(.+)", operator.gt),
+            (r"(.+?)\s*<\s*(.+)", operator.lt),
+            (r"(.+?)\s*>=\s*(.+)", operator.ge),
+            (r"(.+?)\s*<=\s*(.+)", operator.le),
+        ]
+
+        for pattern, op in patterns:
+            match = re.match(pattern, condition.strip())
+            if match:
+                left_path = match.group(1).strip()
+                right_value = match.group(2).strip()
+
+                left = MappingResolver.get_nested_value(state, left_path)
+                right = self._parse_value(right_value)
+
+                try:
+                    return op(left, right)
+                except TypeError:
+                    return False
+
+        value = MappingResolver.get_nested_value(state, condition.strip())
+        return bool(value)
+
+    def _parse_value(self, value: str) -> Any:
+        """Парсит значение из строки."""
+        value = value.strip()
+
+        # Boolean
+        if value.lower() == "true":
+            return True
+        if value.lower() == "false":
+            return False
+
+        # None
+        if value.lower() == "null" or value.lower() == "none":
+            return None
+
+        # String в кавычках
+        if (value.startswith('"') and value.endswith('"')) or (
+            value.startswith("'") and value.endswith("'")
+        ):
+            return value[1:-1]
+
+        # Number
+        try:
+            if "." in value:
+                return float(value)
+            return int(value)
+        except ValueError:
+            pass
+
+        # Как есть
+        return value
+
+    @classmethod
+    async def from_config(
+        cls, config: Dict[str, Any], variables: Optional[Dict[str, Any]] = None
+    ) -> "Agent":
+        """
+        Создает агента из конфига.
+
+        Zero-Guess: все обязательные поля должны присутствовать.
+
+        Args:
+            config: Конфиг агента
+            variables: Резолвнутые переменные
+
+        Returns:
+            Agent instance
+        """
+        nodes = {}
+        for node_id, node_config in config["nodes"].items():
+            nodes[node_id] = await create_node(node_id, node_config)
+
+        return cls(
+            agent_id=config["id"],
+            name=config["name"],
+            entry=config["entry"],
+            nodes=nodes,
+            edges=config["edges"],
+            description=config.get("description", ""),
+            tags=config.get("tags", []),
+            variables=variables or {},
+        )

@@ -1,0 +1,40 @@
+{
+  "fields": {
+    "session_id": {
+      "title": "Session ID",
+      "description": "Identifier session"
+    },
+    "flow_id": {
+      "title": "Flow ID",
+      "description": "Identifier flow"
+    },
+    "flow_name": {
+      "title": "Name Flow",
+      "description": "Human-readable flow name"
+    },
+    "messages": {
+      "title": "Messages",
+      "description": "List of all messages in chronological order"
+    },
+    "checkpoints": {
+      "title": "Checkpoints",
+      "description": "List of all checkpoints (for detailed analysis)"
+    },
+    "total_messages": {
+      "title": "Total Messages",
+      "description": "Total number of messages"
+    },
+    "total_checkpoints": {
+      "title": "Total Checkpoints",
+      "description": "Total number of checkpoints"
+    },
+    "created_at": {
+      "title": "Created",
+      "description": "Time of first message"
+    },
+    "last_activity": {
+      "title": "Last Activity",
+      "description": "Time of last message"
+    }
+  }
+}

@@ -1,0 +1,83 @@
+"""
+Semantic Conventions для Platform трейсинга.
+
+Все атрибуты имеют префикс 'platform.' для namespace изоляции.
+"""
+
+# Идентификаторы пользователя
+ATTR_USER_ID = "platform.user.id"
+ATTR_USER_NAME = "platform.user.name"
+ATTR_USER_GROUPS = "platform.user.groups"
+
+# Сессии
+ATTR_SESSION_AUTH = "platform.session.auth"
+ATTR_SESSION_AGENT = "platform.session.agent"
+
+# Основные идентификаторы
+ATTR_TASK_ID = "platform.task_id"
+ATTR_CONTEXT_ID = "platform.context_id"
+ATTR_CHANNEL = "platform.channel"
+ATTR_IS_RESUME = "platform.is_resume"
+
+# Agent
+ATTR_FLOW_ID = "platform.agent_id"
+ATTR_FLOW_ENTRY = "platform.flow.entry_node"
+ATTR_FLOW_VARIABLES_COUNT = "platform.flow.variables_count"
+ATTR_SKILL_ID = "platform.skill_id"
+
+# Node
+ATTR_NODE_ID = "platform.node_id"
+ATTR_NODE_TYPE = "platform.node_type"
+ATTR_NODE_ITERATION = "platform.node.iteration"
+
+# Agent
+ATTR_AGENT_NAME = "platform.agent.name"
+ATTR_AGENT_ID = "platform.agent.id"
+ATTR_AGENT_PROMPT_LENGTH = "platform.agent.prompt_length"
+ATTR_AGENT_TOOLS_COUNT = "platform.agent.tools_count"
+
+# ReAct
+ATTR_REACT_ITERATION = "platform.react.iteration"
+
+# LLM
+ATTR_LLM_MODEL = "platform.llm.model"
+ATTR_LLM_PROVIDER = "platform.llm.provider"
+ATTR_LLM_INPUT_TOKENS = "platform.llm.input_tokens"
+ATTR_LLM_OUTPUT_TOKENS = "platform.llm.output_tokens"
+ATTR_LLM_TOTAL_TOKENS = "platform.llm.total_tokens"
+ATTR_LLM_DURATION_MS = "platform.llm.duration_ms"
+ATTR_LLM_HAS_TOOL_CALLS = "platform.llm.has_tool_calls"
+ATTR_LLM_STREAM = "platform.llm.stream"
+
+# Tool
+ATTR_TOOL_NAME = "platform.tool.name"
+ATTR_TOOL_CALL_ID = "platform.tool.call_id"
+ATTR_TOOL_ARGS = "platform.tool.args"
+ATTR_TOOL_RESULT = "platform.tool.result"
+ATTR_TOOL_DURATION_MS = "platform.tool.duration_ms"
+ATTR_TOOL_IS_AGENT = "platform.tool.is_agent"
+ATTR_TOOL_ERROR = "platform.tool.error"
+
+# Interrupt
+ATTR_INTERRUPT_QUESTION = "platform.interrupt.question"
+ATTR_INTERRUPT_TOOL = "platform.interrupt.tool"
+ATTR_INTERRUPT_PATH_DEPTH = "platform.interrupt.path_depth"
+
+# Status
+ATTR_STATUS = "platform.status"
+ATTR_ERROR_MESSAGE = "platform.error.message"
+ATTR_ERROR_TYPE = "platform.error.type"
+
+# Files
+ATTR_FILES_COUNT = "platform.files.count"
+
+# State
+ATTR_STATE_SNAPSHOT = "platform.state.snapshot"
+
+# Prompt
+ATTR_PROMPT_NODE_ID = "platform.prompt.node_id"
+ATTR_PROMPT_TEMPLATE_LENGTH = "platform.prompt.template_length"
+ATTR_PROMPT_RENDERED_LENGTH = "platform.prompt.rendered_length"
+ATTR_PROMPT_VARIABLES_COUNT = "platform.prompt.variables_count"
+ATTR_PROMPT_HASH = "platform.prompt.hash"
+ATTR_PROMPT_VARIABLES = "platform.prompt.variables"

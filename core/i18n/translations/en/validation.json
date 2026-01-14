@@ -1,0 +1,8 @@
+{
+  "required": "Field is required",
+  "email_invalid": "Invalid email address",
+  "min_length": "Minimum length {min_length} characters",
+  "max_length": "Maximum length {max_length} characters",
+  "numeric": "Field must contain only numbers",
+  "positive": "Value must be positive"
+}

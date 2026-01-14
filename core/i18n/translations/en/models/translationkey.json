@@ -1,0 +1,19 @@
+{
+  "fields": {
+    "key": {
+      "description": "Unique translation key (example: models.user.fields.name)"
+    },
+    "context": {
+      "description": "Context of key usage"
+    },
+    "source_file": {
+      "description": "Source file where key is found"
+    },
+    "default_value": {
+      "description": "Default value (usually in Russian)"
+    },
+    "category": {
+      "description": "Key category (models, common, errors, etc)"
+    }
+  }
+}

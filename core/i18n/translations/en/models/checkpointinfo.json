@@ -1,0 +1,36 @@
+{
+  "fields": {
+    "checkpoint_id": {
+      "title": "Checkpoint ID",
+      "description": "Unique checkpoint identifier"
+    },
+    "session_id": {
+      "title": "Session ID",
+      "description": "Session ID"
+    },
+    "checkpoint_ns": {
+      "title": "Namespace",
+      "description": "Checkpoint namespace"
+    },
+    "step": {
+      "title": "Step",
+      "description": "Step number in the graph"
+    },
+    "source_node": {
+      "title": "Source Node",
+      "description": "Name of the node/agent that created the checkpoint"
+    },
+    "timestamp": {
+      "title": "Time",
+      "description": "Checkpoint creation time"
+    },
+    "messages": {
+      "title": "Messages",
+      "description": "Messages in this checkpoint"
+    },
+    "metadata": {
+      "title": "Metadata",
+      "description": "Checkpoint metadata"
+    }
+  }
+}

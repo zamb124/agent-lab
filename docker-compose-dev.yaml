@@ -1,0 +1,183 @@
+services:
+  postgres:
+    platform: "linux/amd64"
+    image: postgres:15
+    container_name: platform-postgres-dev
+    environment:
+      POSTGRES_DB: platform_db
+      POSTGRES_USER: platform_user
+      POSTGRES_PASSWORD: admin
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    command: postgres -c max_connections=300
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U platform_user -d platform_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dev-net
+
+  redis:
+    platform: "linux/amd64"
+    image: redis:7-alpine
+    container_name: platform-redis-dev
+    command: redis-server --save 60 1 --loglevel notice
+    ports:
+      - "6381:6379"
+    volumes:
+      - redis_dev_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dev-net
+
+  # Chroma - RAG vector database
+  chroma:
+    platform: "linux/amd64"
+    image: chromadb/chroma:latest
+    container_name: platform-chroma-dev
+    ports:
+      - "8100:8000"
+    volumes:
+      - chroma_dev_data:/chroma/chroma
+    environment:
+      - ANONYMIZED_TELEMETRY=False
+      - IS_PERSISTENT=TRUE
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dev-net
+
+  minio:
+    platform: "linux/amd64"
+    image: minio/minio:latest
+    container_name: platform-minio-dev
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_dev_data:/data
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - dev-net
+
+  # External Cat Agent опционален - требует сборки образа, что замедляет запуск:
+  # external-cat-agent-dev:
+  #   platform: "linux/amd64"
+  #   build:
+  #     context: .
+  #     dockerfile: apps/agents/agents/external_cat_agent/Dockerfile
+  #   container_name: platform-external-cat-agent-dev
+  #   ports:
+  #     - "8004:8002"
+  #   environment:
+  #     - API_KEY=dev-cat-api-key
+  #     - AGENT_URL=http://external-cat-agent-dev:8002
+  #     - PORT=8002
+  #     - LLM__OPENAI__API_KEY=${LLM__OPENAI__API_KEY:-sk-test-fake-key-for-testing}
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   networks:
+  #     - dev-net
+
+  # Worker опционален - можно запустить локально для дебага:
+  # DATABASE__URL=postgresql://platform_user:admin@localhost:5435/platform_db TASKS__BROKER_URL=redis://localhost:6381/1 uv run python -m taskiq worker apps.broker.worker:broker
+  # worker:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #     target: worker
+  #   container_name: platform-worker-dev
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #     postgres:
+  #       condition: service_healthy
+  #   environment:
+  #     - DATABASE__URL=postgresql://platform_user:admin@postgres:5432/platform_db
+  #     - DATABASE__REDIS_URL=redis://redis:6379/0
+  #     - TASKS__BROKER_URL=redis://redis:6379/1
+  #   command: ["uv", "run", "python", "-m", "taskiq", "worker", "apps.broker.worker:broker", "--workers", "4"]
+  #   restart: unless-stopped
+  #   networks:
+  #     - dev-net
+
+  # Scheduler опционален - можно запустить локально для дебага:
+  # DATABASE__URL=postgresql://platform_user:admin@localhost:5435/platform_db TASKS__BROKER_URL=redis://localhost:6381/1 uv run python -m taskiq scheduler apps.scheduler.scheduler:scheduler
+  # scheduler:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #     target: scheduler
+  #   container_name: platform-scheduler-dev
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #     postgres:
+  #       condition: service_healthy
+  #   environment:
+  #     - DATABASE__URL=postgresql://platform_user:admin@postgres:5432/platform_db
+  #     - DATABASE__REDIS_URL=redis://redis:6379/0
+  #     - TASKS__BROKER_URL=redis://redis:6379/1
+  #   command: ["python", "-m", "apps.scheduler.run_scheduler"]
+  #   restart: unless-stopped
+  #   networks:
+  #     - dev-net
+
+  # ChromaWorker опционален - можно запустить локально для дебага:
+  # DATABASE__URL=postgresql://platform_user:admin@localhost:5435/platform_db TASKS__BROKER_URL=redis://localhost:6381/1 CHROMA_HOST=localhost uv run python scripts/run_chroma_worker.py
+  # chroma-worker:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #     target: chroma-worker
+  #   container_name: platform-chroma-worker-dev
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #     postgres:
+  #       condition: service_healthy
+  #   environment:
+  #     - DATABASE__URL=postgresql://platform_user:admin@postgres:5432/platform_db
+  #     - DATABASE__REDIS_URL=redis://redis:6379/0
+  #     - TASKS__BROKER_URL=redis://redis:6379/1
+  #     - CHROMA_HOST=chroma
+  #   command: ["taskiq", "worker", "apps.chroma_worker.worker:broker", "--workers", "2"]
+  #   restart: unless-stopped
+  #   networks:
+  #     - dev-net
+
+volumes:
+  postgres_dev_data:
+    driver: local
+  redis_dev_data:
+    driver: local
+  chroma_dev_data:
+    driver: local
+  minio_dev_data:
+    driver: local
+
+networks:
+  dev-net:
+    driver: bridge
+

@@ -1,0 +1,378 @@
+"""
+URN (Universal Resource Name) для ресурсов платформы.
+
+Формат: urn:iman:type:id
+
+Примеры:
+- urn:iman:agent:customer_service
+- urn:iman:node:summarizer
+- urn:iman:tool:calculator
+- urn:iman:skill:refund_processing
+
+URN обеспечивает:
+1. Явное разделение namespace (больше никаких "это tool или node?")
+2. Прозрачный резолвинг ресурсов
+3. Защиту от циклических зависимостей (можно отследить путь)
+4. Валидацию на этапе парсинга
+"""
+
+from typing import Literal, Union
+from pydantic import BaseModel, Field, field_validator
+
+
+# Типы ресурсов платформы
+URNNamespace = Literal["iman"]
+URNType = Literal["agent", "node", "tool", "skill", "variable"]
+
+
+class URN(BaseModel):
+    """
+    Базовый URN для ресурсов платформы.
+    
+    Формат: urn:namespace:type:id
+    Пример: urn:iman:node:summarizer
+    """
+    
+    namespace: URNNamespace = Field(default="iman", description="Namespace (всегда 'iman')")
+    type: URNType = Field(..., description="Тип ресурса")
+    id: str = Field(..., min_length=1, description="Идентификатор ресурса")
+    
+    @property
+    def urn(self) -> str:
+        """Возвращает полный URN в строковом формате"""
+        return f"urn:{self.namespace}:{self.type}:{self.id}"
+    
+    @classmethod
+    def parse(cls, urn_string: str) -> "URN":
+        """
+        Парсит строку URN в объект.
+        
+        Args:
+            urn_string: Строка вида 'urn:iman:node:summarizer'
+        
+        Returns:
+            URN объект
+        
+        Raises:
+            ValueError: Если формат URN невалиден
+        
+        Examples:
+            >>> URN.parse("urn:iman:node:summarizer")
+            URN(namespace='iman', type='node', id='summarizer')
+        """
+        parts = urn_string.split(":")
+        if len(parts) != 4:
+            raise ValueError(
+                f"Невалидный URN формат: '{urn_string}'. "
+                f"Ожидается: 'urn:namespace:type:id'"
+            )
+        
+        prefix, namespace, resource_type, resource_id = parts
+        
+        if prefix != "urn":
+            raise ValueError(f"URN должен начинаться с 'urn:', получено: '{prefix}:'")
+        
+        if namespace != "iman":
+            raise ValueError(f"Namespace должен быть 'iman', получено: '{namespace}'")
+        
+        valid_types = ["agent", "node", "tool", "skill", "variable"]
+        if resource_type not in valid_types:
+            raise ValueError(
+                f"Неизвестный тип ресурса: '{resource_type}'. "
+                f"Допустимые значения: {', '.join(valid_types)}"
+            )
+        
+        return cls(namespace=namespace, type=resource_type, id=resource_id)
+    
+    @classmethod
+    def from_string_or_urn(cls, value: Union[str, "URN"]) -> "URN":
+        """
+        Конвертирует строку или URN объект в URN.
+        
+        Args:
+            value: Строка URN или URN объект
+        
+        Returns:
+            URN объект
+        
+        Examples:
+            >>> URN.from_string_or_urn("urn:iman:node:test")
+            URN(...)
+            >>> URN.from_string_or_urn(URN(type="node", id="test"))
+            URN(...)
+        """
+        if isinstance(value, URN):
+            return value
+        return cls.parse(value)
+    
+    def __str__(self) -> str:
+        """Строковое представление - полный URN"""
+        return self.urn
+    
+    def __repr__(self) -> str:
+        """Представление для отладки"""
+        return f"URN('{self.urn}')"
+    
+    def __eq__(self, other) -> bool:
+        """Сравнение URN"""
+        if isinstance(other, URN):
+            return self.urn == other.urn
+        if isinstance(other, str):
+            return self.urn == other
+        return False
+    
+    def __hash__(self) -> int:
+        """Хеш для использования в dict/set"""
+        return hash(self.urn)
+
+
+# ============================================================================
+# Специализированные URN типы
+# ============================================================================
+
+
+class AgentURN(URN):
+    """
+    URN для агентов.
+    
+    Примеры:
+    - urn:iman:agent:customer_service
+    - urn:iman:agent:docs_processor
+    """
+    
+    type: Literal["agent"] = Field(default="agent", description="Тип: agent")
+    
+    @classmethod
+    def create(cls, agent_id: str) -> "AgentURN":
+        """
+        Создаёт AgentURN из ID.
+        
+        Args:
+            agent_id: ID агента
+        
+        Returns:
+            AgentURN объект
+        
+        Examples:
+            >>> AgentURN.create("customer_service")
+            AgentURN('urn:iman:agent:customer_service')
+        """
+        return cls(id=agent_id)
+
+
+class NodeURN(URN):
+    """
+    URN для нод.
+    
+    Примеры:
+    - urn:iman:node:summarizer
+    - urn:iman:node:validator
+    """
+    
+    type: Literal["node"] = Field(default="node", description="Тип: node")
+    
+    @classmethod
+    def create(cls, node_id: str) -> "NodeURN":
+        """
+        Создаёт NodeURN из ID.
+        
+        Args:
+            node_id: ID ноды
+        
+        Returns:
+            NodeURN объект
+        
+        Examples:
+            >>> NodeURN.create("summarizer")
+            NodeURN('urn:iman:node:summarizer')
+        """
+        return cls(id=node_id)
+
+
+class ToolURN(URN):
+    """
+    URN для инструментов.
+    
+    Примеры:
+    - urn:iman:tool:calculator
+    - urn:iman:tool:search_web
+    """
+    
+    type: Literal["tool"] = Field(default="tool", description="Тип: tool")
+    
+    @classmethod
+    def create(cls, tool_id: str) -> "ToolURN":
+        """
+        Создаёт ToolURN из ID.
+        
+        Args:
+            tool_id: ID инструмента
+        
+        Returns:
+            ToolURN объект
+        
+        Examples:
+            >>> ToolURN.create("calculator")
+            ToolURN('urn:iman:tool:calculator')
+        """
+        return cls(id=tool_id)
+
+
+class SkillURN(URN):
+    """
+    URN для skills агента.
+    
+    Примеры:
+    - urn:iman:skill:refund_processing
+    - urn:iman:skill:order_tracking
+    """
+    
+    type: Literal["skill"] = Field(default="skill", description="Тип: skill")
+    
+    @classmethod
+    def create(cls, skill_id: str) -> "SkillURN":
+        """
+        Создаёт SkillURN из ID.
+        
+        Args:
+            skill_id: ID skill
+        
+        Returns:
+            SkillURN объект
+        
+        Examples:
+            >>> SkillURN.create("refund_processing")
+            SkillURN('urn:iman:skill:refund_processing')
+        """
+        return cls(id=skill_id)
+
+
+class VariableURN(URN):
+    """
+    URN для переменных.
+    
+    Примеры:
+    - urn:iman:variable:api_key
+    - urn:iman:variable:config.database.host
+    """
+    
+    type: Literal["variable"] = Field(default="variable", description="Тип: variable")
+    
+    @classmethod
+    def create(cls, variable_name: str) -> "VariableURN":
+        """
+        Создаёт VariableURN из имени.
+        
+        Args:
+            variable_name: Имя переменной
+        
+        Returns:
+            VariableURN объект
+        
+        Examples:
+            >>> VariableURN.create("api_key")
+            VariableURN('urn:iman:variable:api_key')
+        """
+        return cls(id=variable_name)
+
+
+# ============================================================================
+# Utility функции
+# ============================================================================
+
+
+def is_urn(value: str) -> bool:
+    """
+    Проверяет является ли строка валидным URN.
+    
+    Args:
+        value: Строка для проверки
+    
+    Returns:
+        True если строка - валидный URN
+    
+    Examples:
+        >>> is_urn("urn:iman:node:test")
+        True
+        >>> is_urn("just_an_id")
+        False
+    """
+    try:
+        URN.parse(value)
+        return True
+    except (ValueError, Exception):
+        return False
+
+
+def extract_id(value: Union[str, URN]) -> str:
+    """
+    Извлекает ID из URN или возвращает строку как есть.
+    
+    Args:
+        value: URN или строка
+    
+    Returns:
+        ID ресурса
+    
+    Examples:
+        >>> extract_id("urn:iman:node:summarizer")
+        'summarizer'
+        >>> extract_id("just_id")
+        'just_id'
+    """
+    if isinstance(value, URN):
+        return value.id
+    
+    if isinstance(value, str) and is_urn(value):
+        return URN.parse(value).id
+    
+    return value
+
+
+def normalize_to_urn(value: Union[str, URN], default_type: URNType) -> URN:
+    """
+    Нормализует значение к URN.
+    
+    Если передана строка без URN формата - добавляет тип по умолчанию.
+    
+    Args:
+        value: Строка или URN
+        default_type: Тип по умолчанию если value - простая строка
+    
+    Returns:
+        URN объект
+    
+    Examples:
+        >>> normalize_to_urn("urn:iman:node:test", "agent")
+        URN('urn:iman:node:test')
+        >>> normalize_to_urn("test", "node")
+        URN('urn:iman:node:test')
+    """
+    if isinstance(value, URN):
+        return value
+    
+    if is_urn(value):
+        return URN.parse(value)
+    
+    # Простая строка - создаём URN с типом по умолчанию
+    return URN(type=default_type, id=value)
+
+
+# ============================================================================
+# Export
+# ============================================================================
+
+
+__all__ = [
+    "URN",
+    "URNNamespace",
+    "URNType",
+    "AgentURN",
+    "NodeURN",
+    "ToolURN",
+    "SkillURN",
+    "VariableURN",
+    "is_urn",
+    "extract_id",
+    "normalize_to_urn",
+]

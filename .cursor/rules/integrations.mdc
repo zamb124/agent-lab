@@ -1,0 +1,167 @@
+---
+description: "Интеграции: A2A, TaskIQ, Redis Pub/Sub, HTTP, Remote Agents"
+alwaysApply: false
+---
+# Интеграции
+
+## TaskIQ - Очереди задач
+
+**Компоненты:**
+- RedisStreamBroker (Redis Streams + consumer groups)
+- RedisAsyncResultBackend (хранение результатов)
+- ListRedisScheduleSource (отложенные задачи)
+- SessionLockMiddleware (FIFO per session)
+
+```python
+from core.tasks import broker, scheduler, schedule_source
+
+@broker.task(retry_on_error=True, max_retries=3)
+async def my_task(param: str) -> str:
+    return "result"
+
+# Вызов
+task = await my_task.kiq(param="value")
+result = await task.wait_result(timeout=30)
+```
+
+**Основные задачи:**
+- `process_agent_task` - выполнение агента
+- `execute_tool` - выполнение tool
+- `execute_inline_code` - SafeEval для inline кода
+
+**Отложенные задачи:**
+```python
+from datetime import datetime, timezone, timedelta
+
+execute_at = datetime.now(timezone.utc) + timedelta(hours=1)
+schedule = await my_task.schedule_by_time(
+    schedule_source, execute_at, param="value"
+)
+```
+
+## Redis Pub/Sub - Streaming
+
+**Stream-First:** LLM ВСЕГДА через `.stream()`, все события через Redis Pub/Sub.
+
+```python
+from apps.agents.src.streaming import Emitter, EventSubscriber
+
+# Публикация (в worker)
+emitter = Emitter(redis_client, state)
+await emitter.emit_text("Hello")
+await emitter.emit_tool_call("calculator", {"x": 1}, "call_123")
+await emitter.emit_complete("Done")
+await emitter.emit_interrupt("Вопрос?")
+
+# Подписка (в API)
+subscriber = EventSubscriber(redis_client)
+async for event in subscriber.subscribe(task_id):
+    yield event  # SSE/WebSocket
+```
+
+**A2A типы (из a2a-sdk):**
+- `TaskStatusUpdateEvent` - статус задачи (working, input-required, completed, failed)
+- `TaskArtifactUpdateEvent` - текстовые чанки от LLM
+
+**Автоматически добавляется:**
+- `task_id`, `context_id`
+- `trace_id`, `span_id` (OpenTelemetry)
+
+## HTTP клиенты
+
+### Межсервисное взаимодействие - ТОЛЬКО ServiceClient
+
+```python
+from core.clients import get_service_client
+
+client = get_service_client()
+response = await client.get("agents", "/agents/api/v1/flows/")
+response = await client.post("crm", "/crm/api/v1/entities/", json=data)
+```
+
+**Сервисы:** `agents`, `crm`, `frontend`
+
+**Преимущества:**
+- Автоматическая передача trace_id, авторизации
+- Валидация по OpenAPI
+- Единая конфигурация URL
+
+### Внешние API - get_httpx_client
+
+```python
+from core.http import get_httpx_client
+
+# OAuth провайдеры - БЕЗ прокси
+async with get_httpx_client(timeout=30.0, use_proxy_from_config=False) as client:
+    response = await client.get(url)
+
+# Внутренние API - с прокси
+async with get_httpx_client(timeout=30.0, use_proxy_from_config=True) as client:
+    response = await client.get(url)
+```
+
+**ЗАПРЕЩЕНО:** `httpx.AsyncClient()` напрямую!
+
+## Remote Agents (A2A протокол)
+
+### Регистрация внешних агентов
+
+```python
+# Из конфига
+await container.agent_discovery.init_from_config(config.external_agents.agents)
+
+# Динамическая
+agent = await container.agent_discovery.register_agent(
+    url="http://agent:8080",
+    auth_headers={"Authorization": "Bearer token"}
+)
+```
+
+### RemoteAgentNode в agent.json
+
+```json
+{
+  "type": "remote_agent",
+  "agent_id": "external_agent",
+  "input_mapping": {"content": "@state:user_query"},
+  "skill_id": "default"
+}
+```
+
+**Требования к внешнему агенту:**
+- `GET /.well-known/agent-card.json`
+- `POST /tasks/send` (JSON-RPC 2.0)
+
+## External API
+
+### ExternalAPINode в agent.json
+
+```json
+{
+  "type": "external_api",
+  "url": "https://@var:api.host/endpoint",
+  "method": "POST",
+  "auth_headers": {"Authorization": "Bearer @var:auth.token"},
+  "parameters": [
+    {
+      "name": "city",
+      "source": "@state:user.city",
+      "type": "string",
+      "location": "query"
+    }
+  ],
+  "state_mapping": {"result": "api_result"}
+}
+```
+
+**Поддержка @var: с вложенными путями:**
+- `@var:api.host` → `variables["api"]["host"]`
+- `@var:auth.tokens.access` → `variables["auth"]["tokens"]["access"]`
+
+## КРИТИЧНЫЕ ПРАВИЛА
+
+1. **TaskIQ:** Все задачи через `core.tasks.broker`, FIFO per session автоматически
+2. **Streaming:** LLM ТОЛЬКО через `.stream()`, события через Redis Pub/Sub
+3. **HTTP:** Межсервисное ТОЛЬКО через `ServiceClient`, внешнее через `get_httpx_client`
+4. **A2A типы:** Используй типы из `a2a-sdk`, НЕ создавай свои
+5. **OAuth:** ВСЕГДА `use_proxy_from_config=False`

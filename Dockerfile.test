@@ -1,0 +1,52 @@
+# Test Dockerfile
+# Базовый образ zambas/agent-lab-base содержит:
+#   - Python 3.12 + uv
+#   - Core + worker-base зависимости
+#   - Torch CPU-only
+#   - Системные пакеты: curl, tesseract, poppler, libgl1, libglib2.0-0
+
+FROM zambas/agent-lab-base:latest AS base-test
+
+WORKDIR /app
+
+# build-essential для компиляции некоторых test-зависимостей
+RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml README.md ./
+
+# dev зависимости (core + worker-base уже есть в базовом образе)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system --group dev
+
+# Default stage: для запуска тестов
+FROM base-test AS default
+
+COPY . .
+
+RUN mkdir -p /app/test-results /app/htmlcov && \
+    chmod 777 /app/test-results /app/htmlcov
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV TESTING=true
+
+CMD ["python", "-m", "pytest", "tests/", "-v"]
+
+# ChromaWorker stage для тестов
+FROM base-test AS chroma-worker
+
+# chroma-worker зависимости (системные пакеты уже в базовом образе)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --system --group chroma-worker
+
+COPY core/ ./core/
+COPY apps/chroma_worker/ ./apps/chroma_worker/
+COPY apps/__init__.py ./apps/
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV TESTING=true
+
+CMD ["taskiq", "worker", "apps.chroma_worker.worker:broker", "--workers", "1"]

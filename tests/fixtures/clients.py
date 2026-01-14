@@ -1,0 +1,203 @@
+"""
+HTTP клиенты для тестирования сервисов платформы.
+
+Каждый клиент:
+- Использует AsyncClient для async HTTP запросов
+- Поддерживает как ASGI transport (для быстрых unit тестов), так и реальный HTTP (для E2E тестов)
+- Автоматически настраивает base_url для соответствующего сервиса
+- Поддерживает аутентификацию через headers
+
+Использование:
+
+    # Unit тесты (ASGI transport)
+    async def test_api(agents_client):
+        response = await agents_client.get("/agents/api/v1/agents")
+        assert response.status_code == 200
+    
+    # E2E тесты (реальный HTTP)
+    async def test_e2e(agents_client_http):
+        response = await agents_client_http.get("/agents/api/v1/agents")
+        assert response.status_code == 200
+"""
+
+import pytest
+import pytest_asyncio
+from httpx import AsyncClient, ASGITransport
+
+# chroma_worker импортируется из tests.conftest через pytest
+# Он объявлен там как session-scoped фикстура
+
+
+# ==============================================================================
+# ASGI Clients (для unit тестов)
+# ==============================================================================
+
+@pytest_asyncio.fixture
+async def agents_client():
+    """
+    HTTP клиент для Agents API (ASGI transport).
+    
+    Использует ASGI transport для быстрых unit тестов без запуска реального сервера.
+    Таблицы создаются через миграции в setup_database_before_tests.
+    """
+    from apps.agents.main import app
+    
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def rag_app():
+    """
+    FastAPI приложение RAG сервиса.
+    
+    Используется как зависимость для rag_client (ASGI transport).
+    Таблицы создаются через миграции в setup_database_before_tests.
+    """
+    from apps.rag.main import app
+    
+    yield app
+
+
+@pytest_asyncio.fixture
+async def rag_client(rag_app, chroma_worker):
+    """
+    HTTP клиент для RAG API (ASGI transport).
+    
+    Использует ASGI transport для быстрых unit тестов без запуска реального сервера.
+    
+    Зависимости:
+    - rag_app: FastAPI приложение
+    - chroma_worker: для обработки документов
+    """
+    transport = ASGITransport(app=rag_app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def crm_client(app, rag_app, rag_service, agents_service, chroma_worker):
+    """
+    HTTP клиент для CRM API (ASGI transport).
+    
+    Использует ASGI transport для быстрых unit тестов без запуска реального сервера.
+    Таблицы создаются через миграции в setup_database_before_tests.
+    
+    Зависимости:
+    - app: Agents service (из tests/conftest.py)
+    - rag_app: для инициализации RAG таблиц
+    - rag_service: реальный HTTP сервер для inter-service communication (attachments)
+    - chroma_worker: для обработки загруженных документов
+    """
+    from apps.crm.main import create_app
+    from apps.crm.container import get_crm_container
+    
+    crm_app = create_app()
+    
+    container = get_crm_container()
+    await container.company_init_service.initialize_company("system")
+    
+    transport = ASGITransport(app=crm_app)
+    async with AsyncClient(transport=transport, base_url="http://testserver", follow_redirects=True) as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def frontend_client():
+    """
+    HTTP клиент для Frontend API (ASGI transport).
+    
+    Использует ASGI transport для быстрых unit тестов без запуска реального сервера.
+    """
+    from apps.frontend.main import app
+    
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield client
+
+
+# ==============================================================================
+# HTTP Clients (для E2E тестов с реальными серверами)
+# ==============================================================================
+
+@pytest_asyncio.fixture
+async def agents_client_http(agents_service):
+    """
+    HTTP клиент для Agents API (реальный HTTP).
+    
+    Использует реальный HTTP сервер на порту 8000.
+    Для E2E тестов всей платформы.
+    """
+    async with AsyncClient(base_url="http://localhost:8000") as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def rag_client_http(rag_service):
+    """
+    HTTP клиент для RAG API (реальный HTTP).
+    
+    Использует реальный HTTP сервер на порту 8004.
+    Для E2E тестов всей платформы.
+    """
+    async with AsyncClient(base_url="http://localhost:8004") as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def crm_client_http(crm_service, rag_service):
+    """
+    HTTP клиент для CRM API (реальный HTTP).
+    
+    Использует реальный HTTP сервер на порту 8003.
+    Для E2E тестов всей платформы.
+    Таблицы создаются через миграции в setup_database_before_tests.
+    
+    Зависимости:
+    - rag_service: для attachments через inter-service communication
+    """
+    from apps.crm.container import get_crm_container
+    
+    container = get_crm_container()
+    await container.company_init_service.initialize_company("system")
+    
+    async with AsyncClient(base_url="http://localhost:8003") as client:
+        yield client
+
+
+@pytest_asyncio.fixture
+async def frontend_client_http(frontend_service):
+    """
+    HTTP клиент для Frontend API (реальный HTTP).
+    
+    Использует реальный HTTP сервер на порту 8001.
+    Для E2E тестов всей платформы.
+    """
+    async with AsyncClient(base_url="http://localhost:8001") as client:
+        yield client
+
+
+# ==============================================================================
+# Convenience фикстуры
+# ==============================================================================
+
+@pytest_asyncio.fixture
+async def all_clients_http(
+    agents_client_http,
+    rag_client_http,
+    crm_client_http,
+    frontend_client_http
+):
+    """
+    Все HTTP клиенты для E2E тестов.
+    
+    Возвращает dict с клиентами для всех сервисов.
+    """
+    return {
+        "agents": agents_client_http,
+        "rag": rag_client_http,
+        "crm": crm_client_http,
+        "frontend": frontend_client_http,
+    }
+

@@ -1,0 +1,60 @@
+---
+description: "Миграции БД: Alembic, multi-db, autogenerate"
+globs:
+  - "migrations/**"
+  - "**/db/models.py"
+  - "core/db/migrations.py"
+  - "core/db/service_registry.py"
+alwaysApply: false
+---
+
+# Миграции БД
+
+## Архитектура
+
+- Единая папка `migrations/` в корне проекта
+- Все модели наследуются от `core.db.models.Base`
+- Сервисы регистрируются в `core.db.service_registry`
+- Одна команда `alembic upgrade head` применяет миграции ко всем БД
+
+## Регистрация сервиса
+
+Каждый сервис с моделями регистрирует себя в `apps/{service}/db/models.py`:
+
+```python
+from core.db.service_registry import register_service
+
+def _get_db_url() -> str:
+    from apps.{service}.config import get_settings
+    return get_settings().database.{service}_url or get_settings().database.url
+
+register_service("{service}", _get_db_url, "apps.{service}.db.models")
+```
+
+## Команды
+
+```bash
+# Создать миграцию
+alembic -c migrations/alembic.ini revision --autogenerate -m "описание"
+
+# Применить миграции
+alembic -c migrations/alembic.ini upgrade head
+
+# Откатить
+alembic -c migrations/alembic.ini downgrade -1
+
+# Текущая версия
+alembic -c migrations/alembic.ini current
+```
+
+## Автоматический запуск
+
+- `settings.database.auto_migrate = True` — миграции при старте сервиса
+- Тесты запускают миграции через `run_migrations_async()` в `conftest.py`
+
+## Файлы
+
+- `migrations/env.py` — конфигурация Alembic, итерация по БД
+- `migrations/versions/` — файлы миграций
+- `core/db/migrations.py` — `run_migrations()`, `run_migrations_async()`
+- `core/db/service_registry.py` — реестр сервисов и их БД

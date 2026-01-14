@@ -1,0 +1,79 @@
+"""
+Тесты заметок с прошедшей датой.
+
+User Story: Создание заметок задним числом для переноса старых данных.
+"""
+
+import pytest
+from datetime import date, timedelta
+
+
+class TestHistoricalNotes:
+    """Заметки с прошедшей датой"""
+    
+    @pytest.mark.asyncio
+    async def test_create_note_past_date(self, crm_client, unique_id, auth_headers_system):
+        """Создание заметки задним числом"""
+        past_date = (date.today() - timedelta(days=30)).isoformat()
+        
+        response = await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "entity_subtype": "meeting",
+            "name": f"Историческая заметка {unique_id}",
+            "description": "Событие месяц назад",
+            "note_date": past_date
+        }, headers=auth_headers_system)
+        assert response.status_code == 200
+        
+        note = response.json()
+        assert note["note_date"] == past_date
+    
+    @pytest.mark.asyncio
+    async def test_timeline_order(self, crm_client, unique_id, auth_headers_system):
+        """Заметки отображаются в хронологическом порядке"""
+        test_user_id = f"test_user_{unique_id}"
+        dates = [
+            (date.today() - timedelta(days=2)).isoformat(),
+            (date.today() - timedelta(days=1)).isoformat(),
+            date.today().isoformat()
+        ]
+        
+        for i, note_date in enumerate(dates):
+            await crm_client.post("/crm/api/v1/entities/", json={
+                "entity_type": "note",
+                "name": f"Note day {i} {unique_id}",
+                "note_date": note_date,
+                "user_id": test_user_id
+            }, headers=auth_headers_system)
+        
+        list_resp = await crm_client.get(
+            f"/crm/api/v1/entities/?entity_type=note&user_id={test_user_id}&sort=note_date&order=asc"
+        , headers=auth_headers_system)
+        notes = list_resp.json()
+        
+        assert len(notes) >= 3
+        for n in notes:
+            assert n["user_id"] == test_user_id
+    
+    @pytest.mark.asyncio
+    async def test_filter_by_date_range(self, crm_client, unique_id, auth_headers_system):
+        """Фильтрация по диапазону исторических дат"""
+        test_user_id = f"test_user_{unique_id}"
+        start_date = (date.today() - timedelta(days=60)).isoformat()
+        end_date = (date.today() - timedelta(days=30)).isoformat()
+        
+        await crm_client.post("/crm/api/v1/entities/", json={
+            "entity_type": "note",
+            "name": f"Old note {unique_id}",
+            "note_date": (date.today() - timedelta(days=45)).isoformat(),
+            "user_id": test_user_id
+        }, headers=auth_headers_system)
+        
+        filter_resp = await crm_client.get(
+            f"/crm/api/v1/entities/?entity_type=note&user_id={test_user_id}&note_date_from={start_date}&note_date_to={end_date}"
+        , headers=auth_headers_system)
+        filtered = filter_resp.json()
+        assert len(filtered) >= 1
+        for n in filtered:
+            assert n["user_id"] == test_user_id
+

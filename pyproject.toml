@@ -1,0 +1,148 @@
+[project]
+name = "agent-lab"
+version = "0.1.0"
+description = "Agent Platform - платформа агентских систем"
+requires-python = ">=3.13"
+dependencies = [
+    "cairosvg>=2.8.2",
+    "pywebpush>=2.1.2",
+    "reportlab>=4.4.7",
+    "svglib>=1.6.0",
+]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["apps", "core"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+filterwarnings = [
+    "ignore:.*HTTP_413_REQUEST_ENTITY_TOO_LARGE.*:DeprecationWarning",
+    "ignore:.*SwigPy.*has no __module__ attribute:DeprecationWarning",
+    "ignore:.*swigvar.*has no __module__ attribute:DeprecationWarning",
+    "ignore::DeprecationWarning:starlette.templating:",
+    "ignore::DeprecationWarning:httpx._models:",
+    "ignore::DeprecationWarning:httpx._client:",
+]
+markers = [
+    "unit: unit tests",
+    "integration: integration tests that require external services",
+    "e2e: end-to-end tests",
+    "slow: slow tests that take longer to run",
+    "real_taskiq: тесты с реальным TaskIQ worker",
+    "timeout: тесты с таймаутом выполнения",
+    "schemathesis: автоматические тесты API на основе OpenAPI схемы",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[dependency-groups]
+core = [
+    "fastapi>=0.118.0",
+    "pydantic>=2.11.0",
+    "a2a-sdk>=0.3.7",
+    "pydantic-settings>=2.0.0",
+    "uvicorn>=0.37.0",
+    "asyncpg>=0.30.0",
+    "redis>=7.0.0",
+    "httpx>=0.28.0",
+    "httpx-sse>=0.4.0",
+    "sqlalchemy[asyncpg]>=2.0.23",
+    "alembic>=1.13.0",
+    "aioboto3>=13.0.0",
+    "boto3>=1.28.0",
+    "python-jose[cryptography]>=3.3.0",
+    "bcrypt>=4.0.0",
+    "authlib>=1.3.0",
+    "itsdangerous>=2.2.0",
+    "jinja2>=3.1.0",
+    "opentelemetry-api>=1.25.0",
+    "opentelemetry-sdk>=1.25.0",
+    "opentelemetry-exporter-otlp>=1.25.0",
+    "python-multipart>=0.0.6",
+    "psycopg2-binary>=2.9.9",
+    "pyjwt>=2.10.1",
+    "python-dotenv>=1.1.0",
+    "pyyaml>=6.0.0",
+    "pywebpush>=2.1.2",
+    "opentelemetry-instrumentation-asyncpg>=0.59b0",
+    "gunicorn>=21.2.0",
+]
+
+agents = [
+    "pymupdf>=1.26.7",
+    "simpleeval>=1.0.3",
+    "openai>=2.2.0",
+    "Pillow>=10.0.0",
+    "sse-starlette>=2.0.0",
+    "pydub>=0.25.1",
+    "uvicorn>=0.27.0",
+    "taskiq>=0.11.0",
+    "taskiq-redis>=1.0.0",
+]
+
+worker-base = [
+    "taskiq>=0.11.0",
+    "taskiq-redis>=1.0.0",
+    "openai>=2.2.0",
+]
+
+chroma-worker = [
+    # Легковесная версия unstructured без всех экстра зависимостей (PDF, docx, изображения)
+    # Для базовой обработки текста достаточно core версии
+    "unstructured>=0.16.0",
+    "chromadb>=0.6.0",
+    "tiktoken>=0.9.0",
+    "beautifulsoup4>=4.12.0",
+]
+
+crm = [
+    "chromadb>=0.6.0",
+    "tiktoken>=0.9.0",
+]
+
+rag = [
+    "chromadb>=0.6.0",
+    "tiktoken>=0.9.0",
+]
+
+dev = [
+    "pillow>=12.0.0",
+    "pytest>=9.0.0",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.0.0",
+    "pytest-xdist>=3.0.0",
+    "pytest-rerunfailures>=15.0",
+    "filelock>=3.0.0",
+    "pytest-playwright-asyncio>=0.7.2",
+    "ruff>=0.14.0",
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocs-static-i18n>=1.3.0",
+    "pymdown-extensions>=10.16.1",
+    "websockets>=14.0",
+    "schemathesis>=3.19.0",
+    "coverage>=7.4.0",
+    "pytest-timeout>=2.4.0",
+]
+
+[tool.coverage.run]
+source = ["apps", "core"]
+omit = ["*/tests/*", "*/__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
+show_missing = true
+precision = 2
+skip_covered = false
+skip_empty = true

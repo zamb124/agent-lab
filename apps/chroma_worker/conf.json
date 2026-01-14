@@ -1,0 +1,30 @@
+{
+  "service": {
+    "name": "chroma-worker",
+    "version": "1.0.0"
+  },
+  "database": {
+    "url": "${DATABASE__URL}",
+    "redis_url": "${DATABASE__REDIS_URL}"
+  },
+  "tasks": {
+    "broker_url": "${TASKS__BROKER_URL}"
+  },
+  "rag": {
+    "enabled": true,
+    "default_provider": "chromadb",
+    "providers": {
+      "chromadb": {
+        "enabled": true,
+        "host": "${CHROMA_HOST:-chroma}",
+        "port": 8000
+      }
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "json"
+  }
+}
+
+

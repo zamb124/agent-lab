@@ -1,0 +1,105 @@
+{
+  "title": "RAG Dashboard",
+  "nav": {
+    "dashboard": "Dashboard",
+    "back_to_platform": "Back to Platform"
+  },
+  "sidebar": {
+    "provider": "Provider",
+    "namespaces": "Namespaces",
+    "search_namespaces": "Search namespaces...",
+    "local": "LOCAL",
+    "cloud": "CLOUD"
+  },
+  "header": {
+    "search_placeholder": "Search across all documents...",
+    "new_namespace": "New Namespace",
+    "theme_toggle": "Toggle theme"
+  },
+  "loading": {
+    "default": "Loading...",
+    "namespaces": "Loading namespaces...",
+    "namespace": "Loading namespace...",
+    "documents": "Loading documents...",
+    "searching": "Searching...",
+    "uploading": "Uploading..."
+  },
+  "empty": {
+    "namespaces": "No namespaces yet",
+    "namespaces_description": "Create your first namespace to get started",
+    "documents": "No documents yet",
+    "documents_description": "Upload your first document to this namespace"
+  },
+  "errors": {
+    "load_namespaces": "Failed to load namespaces",
+    "load_documents": "Failed to load documents",
+    "create_namespace": "Failed to create namespace",
+    "delete_namespace": "Failed to delete namespace",
+    "upload_document": "Failed to upload document",
+    "delete_document": "Failed to delete document",
+    "download_document": "Failed to download document",
+    "search_failed": "Search failed",
+    "connection": "Please check your connection and try again"
+  },
+  "namespace": {
+    "documents": "documents",
+    "delete_confirm": "Are you sure you want to delete this namespace and all its documents?"
+  },
+  "document": {
+    "delete_confirm": "Are you sure you want to delete this document?",
+    "status": {
+      "ready": "ready",
+      "processing": "processing",
+      "error": "error"
+    }
+  },
+  "modals": {
+    "create_namespace": {
+      "title": "Create Namespace",
+      "name_label": "Name",
+      "name_placeholder": "my-namespace",
+      "description_label": "Description (optional)",
+      "description_placeholder": "Describe your namespace...",
+      "cancel": "Cancel",
+      "create": "Create"
+    },
+    "upload_document": {
+      "title": "Upload Document",
+      "drag_drop": "Drag and drop files here",
+      "or": "or",
+      "browse": "Browse Files",
+      "cancel": "Cancel",
+      "upload": "Upload"
+    },
+    "search_results": {
+      "title": "Search Results",
+      "no_results": "No results found",
+      "no_results_description": "Try a different search query",
+      "match": "match"
+    }
+  },
+  "actions": {
+    "upload": "Upload",
+    "download": "Download",
+    "delete": "Delete",
+    "back": "Back",
+    "create_namespace": "Create Namespace",
+    "upload_document": "Upload Document"
+  },
+  "notifications": {
+    "namespace_created": "Namespace created",
+    "namespace_deleted": "Namespace deleted",
+    "document_uploaded": "document(s) uploaded successfully",
+    "document_upload_failed": "document(s) failed to upload",
+    "document_deleted": "Document deleted",
+    "enter_namespace_name": "Please enter a namespace name",
+    "select_namespace_first": "Please select a namespace first"
+  }
+}
+
+
+
+
+
+
+

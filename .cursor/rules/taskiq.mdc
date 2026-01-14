@@ -1,0 +1,525 @@
+---
+description: "Правила работы с TaskIQ"
+alwaysApply: false
+globs: ["**/tasks/**", "**/broker.py", "**/worker.py"]
+---
+# Правила работы с TaskIQ
+
+## Обзор архитектуры
+
+TaskIQ - единая система очередей задач для всей платформы. Использует Redis как брокер.
+
+**Компоненты:**
+- **RedisStreamBroker** - брокер сообщений (Redis Streams с consumer groups)
+- **RedisAsyncResultBackend** - хранение результатов
+- **ListRedisScheduleSource** - отложенные/cron задачи
+- **SessionLockMiddleware** - FIFO выполнение в рамках одной сессии
+- **TaskiqScheduler** - планировщик отложенных задач
+
+**Преимущества Redis:**
+- Блокирующая очередь - каждый воркер получает свою задачу (XREADGROUP)
+- Consumer groups для надежной доставки
+- FIFO per session через distributed lock
+
+## Структура
+
+```
+core/tasks/
+├── __init__.py          # Экспорт broker, scheduler, schedule_source
+├── broker.py            # RedisStreamBroker + ListRedisScheduleSource + TaskiqScheduler
+├── session_lock.py      # SessionLockMiddleware для FIFO per session
+└── worker.py            # TaskiqWorker entry point (экспортирует scheduler)
+
+apps/agents/tasks/
+├── __init__.py          # Экспорт задач
+├── agent_tasks.py       # process_agent_task
+└── message_tasks.py     # send_message_task
+
+apps/agents/tools/task/
+└── delayed_task_tools.py # create_delayed_task, list_delayed_tasks, cancel_delayed_task
+
+apps/frontend/tasks/
+├── __init__.py          # Экспорт задач
+└── notification_tasks.py # send_notification_task
+```
+
+## Брокер и Scheduler
+
+Брокер и scheduler живут в `core/tasks/broker.py`:
+
+```python
+from core.tasks import broker, scheduler, schedule_source
+
+# Брокер для задач (Redis Streams)
+broker = get_broker()
+
+# Schedule source для отложенных задач (Redis List)
+schedule_source = get_schedule_source()
+
+# Scheduler для выполнения отложенных
+scheduler = get_scheduler()
+```
+
+**КРИТИЧНО**: Все компоненты используют `settings.database.redis_url`.
+
+## FIFO per Session
+
+SessionLockMiddleware обеспечивает последовательное выполнение задач одной сессии:
+
+```
+[Task 1: session_A] → lock(session_A) → execute → unlock(session_A)
+[Task 2: session_A] → lock busy → requeue → wait → lock(session_A) → execute
+[Task 3: session_B] → lock(session_B) → execute (параллельно с session_A)
+```
+
+**Алгоритм:**
+1. Перед выполнением - `SETNX session_lock:{session_id}` (атомарный lock)
+2. Если lock занят - задача возвращается в очередь с задержкой 100ms
+3. После выполнения - `DEL session_lock:{session_id}`
+4. TTL lock = 5 минут (защита от зависших воркеров)
+
+## Создание задачи
+
+<good_example>
+from core.tasks import broker
+
+@broker.task(retry_on_error=True, max_retries=3)
+async def my_task(param1: str, param2: int) -> str:
+    """
+    Описание задачи.
+    
+    Args:
+        param1: Описание параметра
+        param2: Описание параметра
+        
+    Returns:
+        Результат выполнения
+    """
+    # Логика задачи
+    return "result"
+</good_example>
+
+<bad_example>
+# НЕ создавай свой брокер
+from taskiq_redis import RedisStreamBroker
+my_broker = RedisStreamBroker(url="...")  # НЕТ!
+
+# НЕ используй InMemoryBroker в продакшене
+from taskiq import InMemoryBroker
+broker = InMemoryBroker()  # НЕТ!
+</bad_example>
+
+## Вызов задачи
+
+### Асинхронный вызов (fire-and-forget)
+
+```python
+task = await my_task.kiq(param1="value", param2=42)
+# task.task_id - ID задачи
+```
+
+### Синхронный вызов с ожиданием результата
+
+```python
+task = await my_task.kiq(param1="value", param2=42)
+result = await task.wait_result(timeout=30)
+
+if result.is_err:
+    raise result.error
+    
+return result.return_value
+```
+
+## Основные задачи
+
+### process_agent_task
+
+Главная задача для выполнения agent. Делегирует выполнение в `BaseChannel.process_task()`.
+
+```python
+from apps.agents.src.tasks.agent_tasks import process_agent_task
+
+task = await process_agent_task.kiq(
+    agent_id="example_react",
+    task_id="task-123",
+    context_id="ctx-456",
+    session_id="example_react:ctx-456",  # FIFO гарантируется для этой сессии
+    user_id="user-789",
+    content="Привет",
+    channel="a2a",
+    skill_id="default",
+    user_groups=["user"],
+    variables={},
+    files=[],
+    is_resume=False,
+)
+```
+
+**Внутри process_agent_task:**
+1. Получает канал через `get_channel(channel, agent_id)`
+2. Подготавливает `PreparedTaskParams`
+3. Вызывает `channel.process_task(params)`
+4. Внутри `process_task`:
+   - Создаёт `Emitter` для публикации событий
+   - Загружает `Agent` через `AgentFactory`
+   - Запускает `await agent.run(state)`
+   - Публикует `emit_complete()` или `emit_interrupt()`
+   - Сохраняет state через `StateRepository`
+
+### execute_tool
+
+Выполнение tool в изолированном окружении.
+
+```python
+from apps.agents.src.tasks.tool_tasks import execute_tool
+
+result = await execute_tool.kiq(
+    tool_config={
+        "name": "calculator",
+        "description": "Вычисляет выражения",
+        "code": "def execute(args, state): return eval(args['expr'])"
+    },
+    args={"expr": "2+2"},
+    state_dict=state.model_dump(exclude_none=False)  # Сериализация на границе TaskIQ
+)
+
+# result содержит:
+# {
+#     "tool_id": "calculator",
+#     "result": 4,
+#     "nested_states": {...}
+# }
+```
+
+**Используется в ReactNodeRunner** для параллельного выполнения tools.
+
+### execute_inline_code
+
+Выполнение inline кода через SafeEval.
+
+```python
+from apps.agents.src.tasks.eval_task import execute_inline_code
+
+result = await execute_inline_code.kiq(
+    code="def run(state): return state.get('x', 0) * 2",
+    state_dict={"x": 5}
+)
+
+# result = 10
+```
+
+### send_task_update (Push Notifications)
+
+Отправка push notification о статусе задачи.
+
+```python
+from apps.agents.src.tasks.push_notification_tasks import send_task_update
+
+await send_task_update.kiq(
+    task_id="task-123",
+    context_id="ctx-456",
+    event={
+        "kind": "task-status-update",
+        "taskId": "task-123",
+        "status": {"state": "completed"}
+    }
+)
+```
+
+**Используется для:**
+- Отправки уведомлений о завершении задачи
+- Уведомлений об interrupt (input-required)
+- Уведомлений об ошибках
+
+## Интеграция с Channels
+
+### A2AChannel.on_message_send()
+
+Метод `on_message_send` создаёт TaskIQ задачу и ждёт результата:
+
+```python
+# В A2AChannel
+subscriber = EventSubscriber(redis_client)
+
+# Запускаем worker
+await process_agent_task.kiq(
+    agent_id=agent_id,
+    task_id=task_id,
+    context_id=context_id,
+    content=content,
+    ...
+)
+
+# Собираем события
+events = []
+async for event in subscriber.subscribe(task_id):
+    events.append(event)
+    if event.kind == "task-status-update":
+        if event.status.state in ["completed", "failed", "canceled"]:
+            break
+
+# Формируем Task из событий
+task = _build_task_from_events(events, task_id, context_id)
+return task
+```
+
+### Streaming через Emitter
+
+Worker публикует события через `Emitter`:
+
+```python
+# В BaseChannel.process_task()
+emitter = Emitter(redis_client, state)
+
+try:
+    # Выполняем agent
+    result_state = await agent.run(state)
+    await emitter.emit_complete(result_state.response)
+except AgentInterrupt as e:
+    await emitter.emit_interrupt(e.question)
+except Exception as e:
+    await emitter.emit_error(str(e))
+```
+
+## Запуск воркера
+
+### Локально
+
+```bash
+make taskiq           # Обычный режим
+make taskiq-reload    # С hot reload
+```
+
+### Docker
+
+```bash
+make worker-up        # Запустить контейнер
+make worker-logs      # Логи
+make worker-restart   # Перезапуск
+```
+
+### Конфигурация Docker
+
+```yaml
+# docker-compose.yml
+redis:
+  image: redis:7-alpine
+  ports:
+    - "8099:6379"
+  healthcheck:
+    test: ["CMD", "redis-cli", "ping"]
+
+taskiq-worker:
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: worker
+  depends_on:
+    redis:
+      condition: service_healthy
+  command: taskiq worker core.tasks.worker:broker --workers 1
+```
+
+### Масштабирование
+
+Redis с consumer groups позволяет безопасно масштабировать воркеры:
+
+```bash
+# Запуск нескольких воркеров
+docker-compose up --scale taskiq-worker=4
+
+# Каждый воркер получает свою задачу благодаря XREADGROUP
+# FIFO per session гарантируется SessionLockMiddleware
+```
+
+## Retry и обработка ошибок
+
+```python
+@broker.task(
+    retry_on_error=True,   # Повторять при ошибке
+    max_retries=3,         # Максимум попыток
+)
+async def reliable_task(data: str) -> str:
+    # При ошибке задача будет повторена до 3 раз
+    return await process(data)
+```
+
+## Тестирование
+
+### Запуск тестов (с Redis)
+
+```bash
+make test  # Автоматически поднимает postgres, chroma, redis
+```
+
+### Инициализация брокера в тестах
+
+```python
+# tests/conftest.py
+@pytest.fixture(scope="session")
+async def taskiq_broker(event_loop):
+    """Инициализация TaskIQ брокера для тестов"""
+    from core.tasks import broker
+    
+    await broker.startup()
+    yield broker
+    await broker.shutdown()
+```
+
+### Использование в тестах
+
+```python
+@pytest.mark.asyncio
+async def test_agent_task(taskiq_broker, test_context):
+    from apps.agents.tasks.agent_tasks import process_agent_task
+    
+    task = await process_agent_task.kiq(
+        flow_id="test_flow",
+        session_id="test_session",
+        # ...
+    )
+    
+    result = await task.wait_result(timeout=30)
+    assert not result.is_err
+```
+
+## КРИТИЧНЫЕ ПРАВИЛА
+
+1. **ВСЕГДА** используй `broker` из `core.tasks`
+2. **НИКОГДА** не создавай свой брокер
+3. **ВСЕГДА** используй `.kiq()` для создания задач
+4. **НИКОГДА** не используй InMemoryBroker в продакшене
+5. **ВСЕГДА** инициализируй брокер в тестах через фикстуру
+6. **ВСЕГДА** используй `retry_on_error=True` для критичных задач
+7. **ПОМНИ** что задачи с session_id выполняются последовательно (FIFO)
+
+## Отложенные задачи (Delayed Tasks)
+
+### Архитектура
+
+Отложенные задачи реализованы через `taskiq-redis`:
+- **ListRedisScheduleSource** - хранит расписание в Redis List
+- **TaskiqScheduler** - выполняет задачи по расписанию
+- **schedule_by_time()** - метод для планирования на конкретное время
+
+### Создание отложенной задачи
+
+```python
+from datetime import datetime, timezone, timedelta
+from apps.agents.tasks.agent_tasks import process_agent_task
+from core.tasks import schedule_source
+
+# Время выполнения
+execute_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+
+# Планирование задачи
+schedule = await process_agent_task.schedule_by_time(
+    schedule_source,
+    execute_at,
+    flow_id="flow_123",
+    session_id="session_456",
+    message="Напоминание: проверить статус заказа",
+    platform="api",
+    user_id="user_789",
+    company_id="company_abc",
+    metadata={"delayed": True, "task_type": "reminder"},
+)
+
+# schedule.schedule_id - ID для отмены
+```
+
+### Отмена отложенной задачи
+
+```python
+await schedule.unschedule()
+```
+
+### Тулы для агентов
+
+Агенты могут создавать отложенные задачи через тулы:
+
+```python
+from apps.agents.tools.task.delayed_task_tools import (
+    create_delayed_task,
+    list_delayed_tasks,
+    cancel_delayed_task,
+    get_delayed_task_status,
+)
+
+class MyAgent(BaseAgent):
+    tools = [create_delayed_task, list_delayed_tasks]
+    prompt = """
+    Можешь создавать отложенные задачи:
+    - create_delayed_task(delay_seconds=3600, message="Напоминание")
+    - create_delayed_task(delay_seconds=60, tool_call={"name": "check_status", "args": {"order_id": "123"}})
+    """
+```
+
+### Типы отложенных задач
+
+1. **Текстовое сообщение**:
+```python
+await create_delayed_task.invoke({
+    "delay_seconds": 3600,
+    "message": "Напоминание через час"
+})
+```
+
+2. **Вызов функции (tool_call)**:
+```python
+await create_delayed_task.invoke({
+    "delay_seconds": 60,
+    "tool_call": {
+        "name": "check_order_status",
+        "args": {"order_id": "ORD-12345"}
+    }
+})
+```
+
+### Хранение в state
+
+Созданные отложенные задачи сохраняются в `state["store"]["delayed_tasks"]`:
+
+```python
+state["store"]["delayed_tasks"] = {
+    "task_abc123": {
+        "task_id": "task_abc123",
+        "schedule_id": "sched_xyz",
+        "execute_at": "2025-01-15T15:00:00Z",
+        "message": "Напоминание",
+        "tool_call": None,
+        "status": "scheduled"
+    }
+}
+```
+
+### Запуск Scheduler
+
+**Локально:**
+```bash
+make taskiq-scheduler
+```
+
+**Docker:**
+```bash
+docker-compose up -d taskiq-scheduler
+```
+
+**КРИТИЧНО**: Scheduler должен работать для выполнения отложенных задач!
+
+## Конфигурация
+
+Redis URL настраивается в `conf.json`:
+
+```json
+{
+  "database": {
+    "redis_url": "redis://redis:6379"
+  }
+}
+```
+
+Или через переменную окружения:
+```bash
+export DATABASE__REDIS_URL="redis://localhost:8099"
+```

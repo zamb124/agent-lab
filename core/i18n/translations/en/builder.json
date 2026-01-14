@@ -1,0 +1,26 @@
+{
+  "title": "Agent Builder",
+  "toolbar": {
+    "back_to_dashboard": "Back to Dashboard",
+    "zoom_in": "Zoom In",
+    "zoom_out": "Zoom Out",
+    "fit_to_screen": "Fit to Screen",
+    "select_or_create_flow": "Select or Create Flow",
+    "save": "Save",
+    "run": "Run",
+    "clear_canvas": "Clear Canvas"
+  },
+  "sidebar": {
+    "collapse": "Collapse Panel",
+    "flows_tab": "Flows",
+    "agents_tab": "Agents",
+    "tools_tab": "Tools",
+    "search_placeholder": "Search...",
+    "create_new_element": "Create New Element"
+  },
+  "context_menu": {
+    "edit": "Edit",
+    "duplicate": "Duplicate",
+    "delete": "Delete"
+  }
+}

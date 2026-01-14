@@ -1,0 +1,6 @@
+{
+  "server": {
+    "name": "crm",
+    "port": 8003
+  }
+}

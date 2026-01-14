@@ -1,0 +1,32 @@
+{
+  "fields": {
+    "notification_id": {
+      "title": "Notification ID",
+      "description": "Unique notification identifier"
+    },
+    "provider": {
+      "title": "Provider",
+      "description": "Payment provider that sent notification"
+    },
+    "transaction_id": {
+      "title": "Transaction ID",
+      "description": "Related transaction identifier"
+    },
+    "external_payment_id": {
+      "title": "External Payment ID",
+      "description": "Payment ID from external provider"
+    },
+    "raw_data": {
+      "title": "Raw Data",
+      "description": "Original notification data from provider"
+    },
+    "processed": {
+      "title": "Processed",
+      "description": "Whether notification was processed"
+    },
+    "created_at": {
+      "title": "Created At",
+      "description": "Notification timestamp"
+    }
+  }
+}

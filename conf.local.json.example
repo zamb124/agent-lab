@@ -1,0 +1,38 @@
+{
+  "database": {
+    "url": "postgresql+asyncpg://YOUR_DB_USER:YOUR_DB_PASSWORD@localhost:5432/YOUR_DB_NAME",
+    "shared_url": "postgresql+asyncpg://YOUR_DB_USER:YOUR_DB_PASSWORD@localhost:5432/YOUR_SHARED_DB_NAME",
+    "checkpointer_url": "postgresql://YOUR_DB_USER:YOUR_DB_PASSWORD@localhost:5432/YOUR_DB_NAME",
+    "redis_url": "redis://localhost:6379/0"
+  },
+  "server": {
+    "env": "local",
+    "domain": "localhost",
+    "port": 8001,
+    "debug": true
+  },
+  "auth": {
+    "jwt_secret": "YOUR_JWT_SECRET_KEY_CHANGE_IN_PRODUCTION",
+    "session_secret": "YOUR_SESSION_SECRET_KEY_CHANGE_IN_PRODUCTION"
+  },
+  "llm": {
+    "openrouter": {
+      "api_key": "YOUR_OPENROUTER_API_KEY"
+    }
+  },
+  "s3": {
+    "enabled": false,
+    "default_bucket": "your-bucket-name",
+    "buckets": {
+      "your-bucket-name": {
+        "provider": "minio",
+        "access_key_id": "YOUR_S3_ACCESS_KEY",
+        "secret_access_key": "YOUR_S3_SECRET_KEY",
+        "region_name": "us-east-1",
+        "endpoint_url": "http://localhost:9000",
+        "enabled": false
+      }
+    }
+  }
+}
+
