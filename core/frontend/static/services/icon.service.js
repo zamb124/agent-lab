@@ -69,6 +69,9 @@ const ICON_MAP = {
     'filter': 'filter',
     'list': 'list',
     'access-request': 'access-request',
+    'mcp': 'mcp',
+    'server': 'server',
+    'key': 'key',
     
     // Алиасы
     'menu': 'hamburger',
@@ -84,7 +87,6 @@ const ICON_MAP = {
     'arrow-down': 'collapse',
     'chevron-down': 'collapse',
     'chevron-up': 'expand',
-    'key': 'tool',
     'lock': 'condition',
     'unlock': 'condition',
     'drag': 'drag-handle',
@@ -96,7 +98,7 @@ const ICON_MAP = {
     'redo': 'redo',
     'external-link': 'share',
     'x': 'close',
-    'server': 'cloud',
+    'plug': 'mcp',
     'notification-warning': 'notification-warning',
     'notification-error': 'notification-error',
     'notification-success': 'notification-success',

@@ -1,10 +1,12 @@
 """
-Модель ToolReference - инструмент с inline кодом.
+Модель ToolReference - инструмент с inline кодом или MCP.
 """
 
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from .enums import CodeMode
 
 # Тип для permission: строка или список строк
 Permission = Optional[Union[str, List[str]]]
@@ -61,6 +63,20 @@ class ToolReference(BaseModel):
     public_fields: Optional[List[str]] = Field(
         default=None,
         description="Поля доступные для редактирования в UI. None = все поля доступны"
+    )
+    
+    # MCP-специфичные поля
+    code_mode: CodeMode = Field(
+        default=CodeMode.INLINE_CODE,
+        description="Режим кода: inline_code или mcp_tool"
+    )
+    mcp_server_id: Optional[str] = Field(
+        default=None,
+        description="ID MCP сервера (для MCP тулов)"
+    )
+    mcp_tool_name: Optional[str] = Field(
+        default=None,
+        description="Имя tool на MCP сервере"
     )
 
     def to_registry_format(self) -> Dict[str, Any]:

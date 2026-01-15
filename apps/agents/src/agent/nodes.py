@@ -431,7 +431,7 @@ class ReactNode(BaseNode):
         input_data = {"content": content}
 
         try:
-            runner = await self.get_runner()
+            runner = await self.get_runner(agent_state)
             async for _ in runner.run(input_data, agent_state):
                 pass
         finally:
@@ -444,13 +444,13 @@ class ReactNode(BaseNode):
         
         return {"response": state.response} if state.response else None
 
-    async def get_runner(self):
+    async def get_runner(self, state: Optional[ExecutionState] = None):
         """Возвращает runner для ReactNode."""
         if self._runner is not None:
             return self._runner
 
         tools = await self.get_tools()
-        llm = self._get_llm()
+        llm = self._get_llm(state)
         prompt = self.react_node_prompt or ""
 
         config = self._node_config or self._create_default_config()
@@ -483,20 +483,37 @@ class ReactNode(BaseNode):
         """Устанавливает tools."""
         self._loaded_tools = tools
 
-    def _get_llm(self):
+    def _get_llm(self, state: Optional[ExecutionState] = None):
         """Возвращает LLM клиент."""
         model = None
         temp = None
+        provider = None
+        api_key = None
+        base_url = None
 
         if self._node_config and self._node_config.llm_override:
-            model = self._node_config.llm_override.model
-            temp = self._node_config.llm_override.temperature
+            override = self._node_config.llm_override
+            model = override.model
+            temp = override.temperature
+            provider = override.provider
+            api_key = override.api_key
+            base_url = override.base_url
         elif self.llm_config_dict:
             model = self.llm_config_dict.get("model")
             temp = self.llm_config_dict.get("temperature")
+            provider = self.llm_config_dict.get("provider")
+            api_key = self.llm_config_dict.get("api_key")
+            base_url = self.llm_config_dict.get("base_url")
 
-        logger.info(f"[_get_llm] node_id={self.node_id}, model={model}, temp={temp}, llm_config_dict={self.llm_config_dict}")
-        return get_llm(model_name=model, temperature=temp)
+        logger.info(f"[_get_llm] node_id={self.node_id}, model={model}, temp={temp}, provider={provider}")
+        return get_llm(
+            model_name=model,
+            temperature=temp,
+            provider=provider,
+            api_key=api_key,
+            base_url=base_url,
+            state=state,
+        )
 
     def _create_default_config(self) -> NodeConfig:
         """Создает конфигурацию по умолчанию."""
@@ -505,6 +522,9 @@ class ReactNode(BaseNode):
             llm_override = NodeLLMOverride(
                 model=self.llm_config_dict.get("model"),
                 temperature=self.llm_config_dict.get("temperature"),
+                provider=self.llm_config_dict.get("provider"),
+                api_key=self.llm_config_dict.get("api_key"),
+                base_url=self.llm_config_dict.get("base_url"),
             )
 
         react_config = None
@@ -958,6 +978,67 @@ class ExternalAPINode(BaseNode):
         setattr(state, "api_status", result.get("status"))
 
         return result.get("data")
+
+
+class MCPNode(BaseNode):
+    """
+    Вызов MCP tool как нода графа.
+    
+    Подключается к MCP серверу и вызывает указанный tool.
+    """
+
+    def __init__(
+        self,
+        node_id: str,
+        config: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(node_id, config)
+        cfg = config or {}
+        self.server_id = cfg.get("server_id")
+        self.tool_name = cfg.get("tool_name")
+        self.extra_headers = cfg.get("headers", {})
+        self.state_mapping = cfg.get("state_mapping", {})
+
+    @classmethod
+    def from_config(cls, node_id: str, config: Dict[str, Any]) -> "MCPNode":
+        """Создает MCPNode из конфига."""
+        return cls(node_id=node_id, config=config)
+
+    async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
+        """Вызывает MCP tool."""
+        if not self.server_id:
+            raise ValueError(f"MCPNode '{self.node_id}': server_id is required")
+        if not self.tool_name:
+            raise ValueError(f"MCPNode '{self.node_id}': tool_name is required")
+        
+        container = get_container()
+        
+        server = await container.mcp_server_repository.get(self.server_id)
+        if not server:
+            raise ValueError(f"MCP server not found: {self.server_id}")
+        
+        if self.extra_headers:
+            merged_headers = {**server.headers, **self.extra_headers}
+            server.headers = merged_headers
+        
+        variables = state.variables
+        
+        from apps.agents.src.clients.mcp_client import MCPHttpClient
+        
+        client = MCPHttpClient(server, variables)
+        result = await client.call_tool(self.tool_name, inputs)
+        
+        if result.is_error:
+            raise ValueError(f"MCP tool error: {result.get_text()}")
+        
+        text_result = result.get_text()
+        
+        for field, state_field in self.state_mapping.items():
+            setattr(state, state_field, text_result)
+        
+        setattr(state, "mcp_result", text_result)
+        
+        return text_result
 
 
 async def create_node(node_id: str, node_config: Dict[str, Any]) -> BaseNode:

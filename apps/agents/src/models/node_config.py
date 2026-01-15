@@ -57,7 +57,9 @@ class NodeLLMOverride(StrictBaseModel):
     model: Optional[str] = Field(default=None, description="Модель (если None - из global LLMConfig)")
     temperature: Optional[float] = Field(default=None, description="Температура генерации")
     max_tokens: Optional[int] = Field(default=None, description="Максимум токенов в ответе")
-    provider: Optional[str] = Field(default=None, description="Провайдер LLM (mock для тестов)")
+    provider: Optional[str] = Field(default=None, description="Провайдер: openai, openrouter, bothub")
+    api_key: Optional[str] = Field(default=None, description="API ключ (напрямую или @var:my_key)")
+    base_url: Optional[str] = Field(default=None, description="Base URL провайдера (напрямую или @var:my_url)")
 
 
 class NodeConfig(StrictBaseModel):

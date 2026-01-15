@@ -83,6 +83,7 @@ export class PropertyPanel extends PlatformElement {
                 'agent': { name: 'Новый суб-агент', agent_id: '' },
                 'external_api': { name: 'Новый API', url: '', method: 'GET' },
                 'remote_agent': { name: 'Новый удалённый агент', agent_url: '' },
+                'mcp': { name: 'MCP Tool', server_id: '', tool_name: '' },
             };
             
             const typeDefaults = defaults[config.type] || {};
@@ -209,6 +210,17 @@ export class PropertyPanel extends PlatformElement {
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
                 ></agent-node-editor>`;
+            case 'mcp':
+                return html`<mcp-node-editor
+                    .nodeConfig=${this.config}
+                    .nodeId=${this.node.id || this.node.nodeId}
+                    .agentId=${this.agentId}
+                    .skillId=${this.skillId}
+                    .agentVariables=${this.agentVariables}
+                    ?expanded=${this.expanded}
+                    @config-change=${this._onConfigChanged}
+                    @node-delete=${this._onNodeDeleted}
+                ></mcp-node-editor>`;
             default:
                 return this._renderDefaultPanel();
         }

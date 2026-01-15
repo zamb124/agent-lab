@@ -56,6 +56,11 @@
     }
   },
   "llm": {
+    "provider": "bothub",
+    "bothub": {
+      "api_key": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6ImExMGNjMTJhLTc3NDUtNGM4MS05Mzc0LTdlNzJmNTk3YjEyMyIsImlzRGV2ZWxvcGVyIjp0cnVlLCJpYXQiOjE3NjIwMDQ2NzYsImV4cCI6MjA3NzU4MDY3Nn0._VOKGW2u_lmN9DvRQwYWWE7rbHRs9h5wbftz_W1Xjlg",
+      "base_url": "https://bothub.chat/api/v2/openai/v1"
+    },
     "openrouter": {
       "api_key": "YOUR_OPENROUTER_API_KEY",
       "base_url": "https://openrouter.ai/api/v1",

@@ -11,9 +11,10 @@ from typing import Any, Dict, List, Optional, Union
 
 from core.logging import get_logger
 from apps.agents.src.models import ToolReference
-from apps.agents.src.models.enums import NodeType
+from apps.agents.src.models.enums import CodeMode, NodeType
 from apps.agents.src.models.tool_reference import CallParameter
 from apps.agents.src.tools.base import BaseTool, InlineTool, ToolType
+from apps.agents.src.tools.mcp_wrapper import MCPTool
 
 logger = get_logger(__name__)
 
@@ -123,6 +124,11 @@ class ToolRegistry:
         if tool_ref.get("type") == NodeType.REACT_NODE.value or tool_ref.get("prompt"):
             return self._create_node_as_tool(tool_ref)
         
+        # MCP tool - создаём MCPTool
+        code_mode = tool_ref.get("code_mode")
+        if code_mode == CodeMode.MCP_TOOL.value or code_mode == CodeMode.MCP_TOOL:
+            return await self._create_mcp_tool(tool_ref)
+        
         code = tool_ref.get("code")
         if not code:
             raise ValueError(f"Tool config requires 'code' field: {tool_ref}")
@@ -222,6 +228,64 @@ class ToolRegistry:
             description=config.get("description"),
             parameters=parameters,
             tool_type=tool_type,
+        )
+        
+        self.register(tool)
+        return tool
+
+    async def _create_mcp_tool(self, config: Dict[str, Any]) -> BaseTool:
+        """
+        Создает MCPTool из конфига.
+
+        Args:
+            config: {
+                "tool_id": "mcp:server:tool",
+                "description": "...",
+                "args_schema": {...},
+                "mcp_server_id": "server_id",
+                "mcp_tool_name": "tool_name"
+            }
+
+        Returns:
+            MCPTool
+        """
+        from apps.agents.src.container import get_container
+        
+        tool_id = config.get("tool_id", "mcp_tool")
+        mcp_server_id = config.get("mcp_server_id")
+        mcp_tool_name = config.get("mcp_tool_name")
+        
+        if not mcp_server_id:
+            raise ValueError(f"MCP tool '{tool_id}' requires 'mcp_server_id'")
+        if not mcp_tool_name:
+            raise ValueError(f"MCP tool '{tool_id}' requires 'mcp_tool_name'")
+        
+        container = get_container()
+        server_config = await container.mcp_server_repository.get(mcp_server_id)
+        
+        if not server_config:
+            raise ValueError(f"MCP server '{mcp_server_id}' not found")
+        
+        parameters = None
+        args_schema = config.get("args_schema")
+        if args_schema:
+            parameters = {}
+            for name, schema in args_schema.items():
+                if isinstance(schema, CallParameter):
+                    parameters[name] = schema
+                else:
+                    parameters[name] = CallParameter(
+                        type=schema.get("type", "string"),
+                        description=schema.get("description", ""),
+                    )
+        
+        tool = MCPTool(
+            tool_id=tool_id,
+            mcp_server_config=server_config,
+            mcp_tool_name=mcp_tool_name,
+            description=config.get("description"),
+            parameters=parameters,
+            tags=config.get("tags"),
         )
         
         self.register(tool)

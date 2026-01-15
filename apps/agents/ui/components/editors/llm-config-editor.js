@@ -1,5 +1,5 @@
 /**
- * LLMConfigEditor - редактор конфигурации LLM (модель, temperature, max_tokens)
+ * LLMConfigEditor - редактор конфигурации LLM (модель, temperature, max_tokens, provider, api_key, base_url)
  * Загружает список моделей из API /registry/models/values
  */
 import { html, css } from 'lit';
@@ -103,6 +103,27 @@ export class LLMConfigEditor extends PlatformElement {
                 color: var(--text-tertiary);
                 font-size: var(--text-xs);
             }
+            
+            .credentials-section {
+                margin-top: var(--space-2);
+                padding: var(--space-3);
+                background: var(--glass-tint-subtle);
+                border-radius: var(--radius-md);
+                border: 1px solid var(--border-subtle);
+            }
+            
+            .credentials-title {
+                font-size: var(--text-xs);
+                font-weight: var(--font-medium);
+                color: var(--text-secondary);
+                margin-bottom: var(--space-2);
+            }
+            
+            .config-hint {
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+                margin-top: var(--space-1);
+            }
         `
     ];
 
@@ -110,6 +131,9 @@ export class LLMConfigEditor extends PlatformElement {
         model: { type: String },
         temperature: { type: Number },
         maxTokens: { type: Number, attribute: 'max-tokens' },
+        provider: { type: String },
+        apiKey: { type: String, attribute: 'api-key' },
+        baseUrl: { type: String, attribute: 'base-url' },
         models: { type: Array },
         loading: { type: Boolean },
     };
@@ -119,6 +143,9 @@ export class LLMConfigEditor extends PlatformElement {
         this.model = 'gpt-4o';
         this.temperature = 0.2;
         this.maxTokens = null;
+        this.provider = '';
+        this.apiKey = '';
+        this.baseUrl = '';
         this.models = [];
         this.loading = true;
     }
@@ -128,11 +155,12 @@ export class LLMConfigEditor extends PlatformElement {
         this._loadModels();
     }
 
-    async _loadModels() {
+    async _loadModels(provider = null) {
         this.loading = true;
         
         if (this.a2a) {
-            const models = await this.a2a.getAvailableModels();
+            // Передаём provider в API - если указан, получим модели этого провайдера
+            const models = await this.a2a.getAvailableModels(provider || this.provider || null);
             if (Array.isArray(models) && models.length > 0) {
                 this.models = models.map(m => ({ id: m, name: m }));
             } else {
@@ -162,6 +190,15 @@ export class LLMConfigEditor extends PlatformElement {
         if (this.maxTokens) {
             config.max_tokens = this.maxTokens;
         }
+        if (this.provider) {
+            config.provider = this.provider;
+        }
+        if (this.apiKey) {
+            config.api_key = this.apiKey;
+        }
+        if (this.baseUrl) {
+            config.base_url = this.baseUrl;
+        }
         return config;
     }
 
@@ -169,6 +206,9 @@ export class LLMConfigEditor extends PlatformElement {
         if (config.model) this.model = config.model;
         if (config.temperature !== undefined) this.temperature = config.temperature;
         if (config.max_tokens) this.maxTokens = config.max_tokens;
+        if (config.provider !== undefined) this.provider = config.provider || '';
+        if (config.api_key !== undefined) this.apiKey = config.api_key || '';
+        if (config.base_url !== undefined) this.baseUrl = config.base_url || '';
     }
 
     _onModelChange(e) {
@@ -186,12 +226,31 @@ export class LLMConfigEditor extends PlatformElement {
         this.maxTokens = value ? parseInt(value, 10) : null;
         this._emitChange();
     }
+    
+    _onProviderChange(e) {
+        this.provider = e.target.value;
+        // Перезагружаем модели при смене провайдера
+        this._loadModels(this.provider || null);
+        this._emitChange();
+    }
+    
+    _onApiKeyChange(e) {
+        this.apiKey = e.target.value;
+        this._emitChange();
+    }
+    
+    _onBaseUrlChange(e) {
+        this.baseUrl = e.target.value;
+        this._emitChange();
+    }
 
     _emitChange() {
         this.emit('change', { value: this.getValue() });
     }
 
     render() {
+        const showCredentials = this.provider !== '';
+        
         return html`
             <div class="config-container">
                 <div class="config-field">
@@ -237,6 +296,50 @@ export class LLMConfigEditor extends PlatformElement {
                         @input=${this._onMaxTokensChange}
                     />
                 </div>
+                
+                <div class="config-field">
+                    <label class="config-label">Provider</label>
+                    <select 
+                        class="config-select"
+                        .value=${this.provider}
+                        @change=${this._onProviderChange}
+                    >
+                        <option value="">System Default</option>
+                        <option value="openai" ?selected=${this.provider === 'openai'}>OpenAI</option>
+                        <option value="openrouter" ?selected=${this.provider === 'openrouter'}>OpenRouter</option>
+                        <option value="bothub" ?selected=${this.provider === 'bothub'}>Bothub</option>
+                    </select>
+                    <div class="config-hint">Выберите провайдера или используйте системный по умолчанию</div>
+                </div>
+                
+                ${showCredentials ? html`
+                    <div class="credentials-section">
+                        <div class="credentials-title">Credentials для ${this.provider}</div>
+                        
+                        <div class="config-field">
+                            <label class="config-label">API Key</label>
+                            <input
+                                type="text"
+                                class="config-input"
+                                placeholder="sk-... или @var:my_api_key"
+                                .value=${this.apiKey}
+                                @input=${this._onApiKeyChange}
+                            />
+                            <div class="config-hint">Напрямую или через переменную @var:имя_переменной</div>
+                        </div>
+                        
+                        <div class="config-field">
+                            <label class="config-label">Base URL (опционально)</label>
+                            <input
+                                type="text"
+                                class="config-input"
+                                placeholder="https://api.openai.com/v1"
+                                .value=${this.baseUrl}
+                                @input=${this._onBaseUrlChange}
+                            />
+                        </div>
+                    </div>
+                ` : ''}
             </div>
         `;
     }

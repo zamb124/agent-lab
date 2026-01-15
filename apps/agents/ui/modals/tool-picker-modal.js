@@ -240,6 +240,32 @@ export class ToolPickerModal extends PlatformModal {
                 color: var(--warning);
                 margin-left: auto;
             }
+            
+            .mcp-badge {
+                font-size: var(--text-xs);
+                font-weight: var(--font-semibold);
+                padding: 2px var(--space-2);
+                border-radius: var(--radius-sm);
+                background: rgba(139, 92, 246, 0.15);
+                color: #8b5cf6;
+            }
+            
+            .tag-btn-mcp {
+                background: rgba(139, 92, 246, 0.1);
+                color: #8b5cf6;
+                font-weight: var(--font-semibold);
+                border: 1px solid rgba(139, 92, 246, 0.3);
+            }
+            
+            .tag-btn-mcp:hover {
+                background: rgba(139, 92, 246, 0.2);
+            }
+            
+            .tag-btn-mcp.active {
+                background: #8b5cf6;
+                color: white;
+                border-color: #8b5cf6;
+            }
 
             /* Responsive - Tablet */
             @media (max-width: 768px) {
@@ -340,6 +366,21 @@ export class ToolPickerModal extends PlatformModal {
                item.tool_id === 'final_answer';
     }
 
+    _isMCPTool(item) {
+        return item.tool_id?.startsWith('mcp:') || 
+               item.code_mode === 'mcp_tool' ||
+               (item.tags || []).includes('mcp');
+    }
+
+    _getMCPServerFromTool(item) {
+        if (item.mcp_server_id) return item.mcp_server_id;
+        if (item.tool_id?.startsWith('mcp:')) {
+            const parts = item.tool_id.split(':');
+            return parts[1] || null;
+        }
+        return null;
+    }
+
     _getAllTags() {
         const tags = new Set();
         this.allItems.forEach(item => {
@@ -357,6 +398,9 @@ export class ToolPickerModal extends PlatformModal {
         }
         if (this.activeTag === 'reason') {
             return this.allItems.filter(item => this._isReasonTool(item));
+        }
+        if (this.activeTag === 'mcp') {
+            return this.allItems.filter(item => this._isMCPTool(item));
         }
         return this.allItems.filter(item => 
             !this._isReasonTool(item) && (item.tags || ['misc']).includes(this.activeTag)
@@ -396,6 +440,7 @@ export class ToolPickerModal extends PlatformModal {
         };
 
         const reasonCount = this.allItems.filter(i => this._isReasonTool(i)).length;
+        const mcpCount = this.allItems.filter(i => this._isMCPTool(i)).length;
         
         return html`
             <div class="sidebar-title">Категории</div>
@@ -407,6 +452,16 @@ export class ToolPickerModal extends PlatformModal {
                 <span>Все</span>
                 <span class="tag-count">${this.allItems.length}</span>
             </button>
+            
+            ${mcpCount > 0 ? html`
+                <button 
+                    class="tag-btn tag-btn-mcp ${this.activeTag === 'mcp' ? 'active' : ''}" 
+                    @click=${() => this._onTagClick('mcp')}
+                >
+                    <span>MCP</span>
+                    <span class="tag-count">${mcpCount}</span>
+                </button>
+            ` : ''}
             
             ${reasonCount > 0 ? html`
                 <button 
@@ -437,10 +492,12 @@ export class ToolPickerModal extends PlatformModal {
     _renderCard(item) {
         const isSelected = this.selectedTools.has(item.tool_id);
         const isAgent = item.item_type === 'agent';
+        const isMCP = this._isMCPTool(item);
+        const mcpServer = this._getMCPServerFromTool(item);
         
-        const tagsHtml = (item.tags || ['misc']).map(tag => 
-            html`<span class="card-tag">${tag}</span>`
-        );
+        const tagsHtml = (item.tags || ['misc'])
+            .filter(tag => tag !== 'mcp' && !tag.startsWith('mcp:'))
+            .map(tag => html`<span class="card-tag">${tag}</span>`);
 
         return html`
             <div 
@@ -449,9 +506,12 @@ export class ToolPickerModal extends PlatformModal {
             >
                 <div class="card-header">
                     <span class="card-icon">
-                        <platform-icon name="${isAgent ? 'agent' : 'tool'}" size="20"></platform-icon>
+                        <platform-icon name="${isAgent ? 'agent' : (isMCP ? 'plug' : 'tool')}" size="20"></platform-icon>
                     </span>
                     <span class="card-type-badge">${isAgent ? 'Agent' : 'Tool'}</span>
+                    ${isMCP && mcpServer ? html`
+                        <span class="mcp-badge">mcp:${mcpServer}</span>
+                    ` : ''}
                     ${isSelected ? html`
                         <span class="card-check">
                             <platform-icon name="check" size="16"></platform-icon>

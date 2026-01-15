@@ -11,6 +11,7 @@ import '../editors/input-mapping-editor.js';
 import '../editors/test-panel.js';
 import '../../modals/inline-tool-modal.js';
 import '../../modals/tool-picker-modal.js';
+import '../editors/json-field-editor.js';
 
 export class ReactNodeEditor extends BaseNodeEditor {
     static styles = [
@@ -177,6 +178,39 @@ export class ReactNodeEditor extends BaseNodeEditor {
             .tool-item-name:hover {
                 color: var(--accent);
             }
+            
+            .mode-toggle-row {
+                display: flex;
+                gap: var(--space-3);
+                margin-bottom: var(--space-2);
+            }
+            
+            .mode-option {
+                display: flex;
+                align-items: center;
+                gap: var(--space-2);
+                padding: var(--space-2) var(--space-3);
+                background: var(--glass-tint-subtle);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                cursor: pointer;
+                font-size: var(--text-sm);
+                transition: all var(--duration-fast);
+            }
+            
+            .mode-option:hover {
+                border-color: var(--accent-light);
+            }
+            
+            .mode-option.active {
+                background: var(--accent-subtle);
+                border-color: var(--accent);
+                color: var(--accent);
+            }
+            
+            .mode-option input[type="radio"] {
+                display: none;
+            }
         `
     ];
 
@@ -190,6 +224,8 @@ export class ReactNodeEditor extends BaseNodeEditor {
         strict: { type: Boolean },
         reminderMessage: { type: String },
         maxIterations: { type: Number },
+        structuredOutput: { type: Boolean },
+        outputSchema: { type: Object },
     };
 
     constructor() {
@@ -203,6 +239,18 @@ export class ReactNodeEditor extends BaseNodeEditor {
         this.strict = true;
         this.reminderMessage = '';
         this.maxIterations = 10;
+        this.structuredOutput = false;
+        this.outputSchema = this._getDefaultSchema();
+    }
+    
+    _getDefaultSchema() {
+        return {
+            type: 'object',
+            properties: {
+                result: { type: 'string', description: 'Результат выполнения' }
+            },
+            required: ['result']
+        };
     }
     
     updated(changedProperties) {
@@ -248,6 +296,46 @@ export class ReactNodeEditor extends BaseNodeEditor {
         }
         if (this.maxIterations !== newMaxIterations) {
             this.maxIterations = newMaxIterations;
+        }
+        
+        // Structured Output
+        const newStructuredOutput = this.nodeConfig?.structured_output || false;
+        const newOutputSchema = this.nodeConfig?.output_schema || this._getDefaultSchema();
+        
+        if (this.structuredOutput !== newStructuredOutput) {
+            this.structuredOutput = newStructuredOutput;
+        }
+        if (JSON.stringify(this.outputSchema) !== JSON.stringify(newOutputSchema)) {
+            this.outputSchema = newOutputSchema;
+        }
+    }
+    
+    _onModeChange(mode) {
+        this.structuredOutput = mode === 'structured';
+        this._updateConfig('structured_output', this.structuredOutput);
+        if (this.structuredOutput) {
+            this._updateConfig('output_schema', this.outputSchema);
+        }
+    }
+    
+    _onOutputSchemaChange(e) {
+        try {
+            this.outputSchema = JSON.parse(e.target.value);
+            this._updateConfig('output_schema', this.outputSchema);
+        } catch (err) {
+            // Invalid JSON - ignore
+        }
+    }
+    
+    _onOutputSchemaJsonChange(e) {
+        // json-field-editor отдаёт detail.value и detail.valid
+        if (e.detail.valid) {
+            try {
+                this.outputSchema = JSON.parse(e.detail.value);
+                this._updateConfig('output_schema', this.outputSchema);
+            } catch (err) {
+                // Invalid JSON - ignore
+            }
         }
     }
 
@@ -616,10 +704,57 @@ export class ReactNodeEditor extends BaseNodeEditor {
                         model=${config.llm ? (config.llm.model || 'gpt-4o') : 'gpt-4o'}
                         temperature=${config.llm && config.llm.temperature !== undefined ? config.llm.temperature : 0.2}
                         max-tokens=${config.llm ? (config.llm.max_tokens || '') : ''}
+                        provider=${config.llm ? (config.llm.provider || '') : ''}
+                        api-key=${config.llm ? (config.llm.api_key || '') : ''}
+                        base-url=${config.llm ? (config.llm.base_url || '') : ''}
                         @change=${this._onLLMChange}
                     ></llm-config-editor>
                 </div>
                 
+                <div class="section">
+                    <div class="section-header">
+                        <span class="section-title">Режим вывода</span>
+                    </div>
+                    <div class="loop-config">
+                        <div class="mode-toggle-row">
+                            <label class="mode-option ${!this.structuredOutput ? 'active' : ''}">
+                                <input 
+                                    type="radio" 
+                                    name="output-mode"
+                                    .checked=${!this.structuredOutput}
+                                    @change=${() => this._onModeChange('tools')}
+                                />
+                                Tools Mode
+                            </label>
+                            <label class="mode-option ${this.structuredOutput ? 'active' : ''}">
+                                <input 
+                                    type="radio" 
+                                    name="output-mode"
+                                    .checked=${this.structuredOutput}
+                                    @change=${() => this._onModeChange('structured')}
+                                />
+                                Structured Output
+                            </label>
+                        </div>
+                        <span class="form-label-hint">Tools Mode: агент использует инструменты. Structured Output: JSON Schema для ответа.</span>
+                        
+                        ${this.structuredOutput ? html`
+                            <div class="loop-config-row" style="margin-top: var(--space-3);">
+                                <div class="form-label">
+                                    <span class="form-label-text">Output Schema (JSON Schema)</span>
+                                </div>
+                                <json-field-editor
+                                    .value=${JSON.stringify(this.outputSchema, null, 2)}
+                                    min-height="150"
+                                    hint="JSON Schema для структурированного вывода"
+                                    @change=${this._onOutputSchemaJsonChange}
+                                ></json-field-editor>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+                
+                ${!this.structuredOutput ? html`
                 <div class="section">
                     <div class="section-header">
                         <span class="section-title">React Loop Configuration</span>
@@ -765,6 +900,7 @@ export class ReactNodeEditor extends BaseNodeEditor {
                         }
                     </div>
                 </div>
+                ` : ''}
                 
                 <div class="form-group">
                     <input-mapping-editor

@@ -210,6 +210,20 @@ export class AgentsSidebar extends PlatformElement {
         modal.addEventListener('close', () => modal.remove());
     }
 
+    _openMCPServers() {
+        const modal = document.createElement('mcp-servers-modal');
+        document.body.appendChild(modal);
+        modal.showModal();
+        modal.addEventListener('close', () => modal.remove());
+    }
+
+    _openVariables() {
+        const modal = document.createElement('variables-modal');
+        document.body.appendChild(modal);
+        modal.showModal();
+        modal.addEventListener('close', () => modal.remove());
+    }
+
     _handleAgentAction(e) {
         const { action, agentId, skillId } = e.detail;
         
@@ -342,11 +356,19 @@ export class AgentsSidebar extends PlatformElement {
                     <div class="footer-links">
                         <a class="footer-link" href="/docs" target="_blank">
                             <platform-icon name="file" size="16"></platform-icon>
-                            <span>Документация</span>
+                            <span>Docs</span>
                         </a>
                         <button class="footer-link" @click=${this._openSessions}>
                             <platform-icon name="chat" size="16"></platform-icon>
                             <span>Сессии</span>
+                        </button>
+                        <button class="footer-link" @click=${this._openMCPServers}>
+                            <platform-icon name="cloud" size="16"></platform-icon>
+                            <span>MCP</span>
+                        </button>
+                        <button class="footer-link" @click=${this._openVariables}>
+                            <platform-icon name="key" size="16"></platform-icon>
+                            <span>Vars</span>
                         </button>
                     </div>
                     <platform-user block></platform-user>

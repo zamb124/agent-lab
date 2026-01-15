@@ -22,6 +22,25 @@ export class BaseService {
         return `${path}?${queryString}`;
     }
 
+    _formatError(errorData, status) {
+        if (!errorData) return `HTTP ${status}`;
+        
+        // Pydantic validation errors (422) - detail is array
+        if (Array.isArray(errorData.detail)) {
+            const messages = errorData.detail.map(err => {
+                const field = err.loc?.slice(1).join('.') || 'field';
+                return `${field}: ${err.msg}`;
+            });
+            return messages.join('; ');
+        }
+        
+        // String detail or message
+        if (typeof errorData.detail === 'string') return errorData.detail;
+        if (typeof errorData.message === 'string') return errorData.message;
+        
+        return `HTTP ${status}`;
+    }
+
     async post(path, data, options = {}) {
         return this._fetch('POST', path, data, options);
     }
@@ -44,7 +63,7 @@ export class BaseService {
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => null);
-            throw new Error(errorData?.detail || errorData?.message || `HTTP ${response.status}`);
+            throw new Error(this._formatError(errorData, response.status));
         }
 
         const reader = response.body.getReader();
@@ -95,7 +114,7 @@ export class BaseService {
         
         if (!response.ok) {
             const errorData = await response.json().catch(() => null);
-            throw new Error(errorData?.detail || errorData?.message || `HTTP ${response.status}`);
+            throw new Error(this._formatError(errorData, response.status));
         }
 
         const contentType = response.headers.get('content-type');

@@ -20,6 +20,7 @@ const NODE_CATEGORIES = [
         items: [
             { type: 'tool', name: 'Tool', icon: 'tool', color: '#10b981', description: 'Инструмент агента' },
             { type: 'external_api', name: 'External API', icon: 'globe', color: '#06b6d4', description: 'HTTP API вызов' },
+            { type: 'mcp', name: 'MCP Tool', icon: 'plug', color: '#8b5cf6', description: 'MCP сервер tool' },
         ]
     },
     {

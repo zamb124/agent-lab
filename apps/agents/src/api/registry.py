@@ -3,7 +3,7 @@ Registry API - совместимость с platformweb.
 Предоставляет endpoints для получения списка flows и tools.
 """
 
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -180,13 +180,20 @@ async def get_tools() -> List[Dict[str, Any]]:
 
 
 @router.get("/models/values")
-async def get_models_values() -> List[str]:
+async def get_models_values(provider: Optional[str] = None) -> List[str]:
     """
-    Список доступных моделей от текущего провайдера.
-    Совместимость с platformweb OrchestratorService.getModels()
+    Список доступных моделей.
+    
+    Args:
+        provider: Провайдер (bothub, openrouter, openai). 
+                  Если не указан - используется текущий из конфига.
     """
     container = get_container()
-    models = await container.llm_models_service.get_models()
+    
+    if provider:
+        models = await container.llm_models_service.get_models_by_provider(provider)
+    else:
+        models = await container.llm_models_service.get_models()
     
     # Fallback на базовый список если БД пуста
     if not models:
@@ -198,6 +205,25 @@ async def get_models_values() -> List[str]:
         ]
     
     return models
+
+
+@router.post("/models/sync")
+async def sync_models(provider: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Синхронизация моделей от провайдеров.
+    
+    Args:
+        provider: Провайдер для синхронизации. 
+                  Если не указан - синхронизируются ВСЕ настроенные провайдеры.
+    """
+    container = get_container()
+    
+    if provider:
+        count = await container.llm_models_service.sync_models_by_provider(provider)
+        return {"provider": provider, "count": count}
+    else:
+        results = await container.llm_models_service.sync_all_providers()
+        return {"providers": results, "total": sum(results.values())}
 
 
 def _add_subagents_recursive(lines: list, parent_id: str, subagents: list, depth: int = 0) -> None:

@@ -537,10 +537,50 @@ class LLMClient:
         return content or ""
 
 
+def _resolve_var(value: Optional[str], state: Optional["ExecutionState"]) -> Optional[str]:
+    """Резолвит @var:key из state.variables."""
+    if not value:
+        return None
+    if not value.startswith("@var:"):
+        return value
+    var_key = value[5:]
+    if state and state.variables and var_key in state.variables:
+        return state.variables[var_key]
+    return None
+
+
+def _detect_provider(base_url: Optional[str]) -> Optional[str]:
+    """Определяет провайдера по base_url."""
+    if not base_url:
+        return None
+    if "openrouter.ai" in base_url:
+        return "openrouter"
+    if "bothub.chat" in base_url:
+        return "bothub"
+    if "openai.com" in base_url:
+        return "openai"
+    return None
+
+
 def get_llm(
-    model_name: Optional[str] = None, temperature: Optional[float] = None
+    model_name: Optional[str] = None,
+    temperature: Optional[float] = None,
+    provider: Optional[str] = None,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    state: Optional["ExecutionState"] = None,
 ) -> LLMClient | MockLLM:
-    """Создает LLM клиент."""
+    """
+    Создает LLM клиент.
+    
+    Args:
+        model_name: Имя модели
+        temperature: Температура
+        provider: Провайдер (openai, openrouter, bothub)
+        api_key: API ключ (напрямую или @var:my_key)
+        base_url: Base URL провайдера (напрямую или @var:my_url)
+        state: ExecutionState для резолюции @var:
+    """
     settings = get_settings()
     model = model_name or settings.llm.default_model
 
@@ -559,7 +599,10 @@ def get_llm(
             _global_mock_registry[model] = MockLLM(model_name=model)
         return _global_mock_registry[model]
 
-    provider = settings.llm.provider
+    # Резолвим @var: если указаны
+    resolved_api_key = _resolve_var(api_key, state)
+    resolved_base_url = _resolve_var(base_url, state)
+    
     model_config = settings.llm.models.get(model)
     temp = (
         temperature
@@ -568,8 +611,34 @@ def get_llm(
     )
     max_tokens = model_config.max_tokens if model_config else settings.llm.max_tokens
     timeout = settings.llm.timeout
+    
+    # Если указан кастомный api_key - используем его
+    if resolved_api_key:
+        actual_provider = provider or _detect_provider(resolved_base_url) or settings.llm.provider
+        actual_base_url = resolved_base_url or _get_default_base_url(actual_provider, settings)
+        
+        default_headers = {}
+        if actual_provider == "openrouter" and settings.llm.openrouter:
+            default_headers = {
+                "HTTP-Referer": settings.llm.openrouter.site_url,
+                "X-Title": settings.llm.openrouter.site_name,
+            }
+        
+        logger.info(f"[get_llm] Using custom api_key for provider={actual_provider}, base_url={actual_base_url}")
+        return LLMClient(
+            model=model,
+            api_key=resolved_api_key,
+            base_url=actual_base_url,
+            temperature=temp,
+            max_tokens=max_tokens,
+            timeout=timeout,
+            default_headers=default_headers,
+        )
+    
+    # Иначе используем системный конфиг
+    actual_provider = provider or settings.llm.provider
 
-    if provider == "openrouter":
+    if actual_provider == "openrouter":
         cfg = settings.llm.openrouter
         if not cfg or not cfg.api_key:
             raise ValueError("OpenRouter API key не настроен")
@@ -587,7 +656,7 @@ def get_llm(
             },
         )
 
-    if provider == "bothub":
+    if actual_provider == "bothub":
         cfg = settings.llm.bothub
         if not cfg or not cfg.api_key:
             raise ValueError("Bothub API key не настроен")
@@ -601,7 +670,7 @@ def get_llm(
             timeout=timeout,
         )
 
-    if provider == "openai":
+    if actual_provider == "openai":
         cfg = settings.llm.openai
         if not cfg or not cfg.api_key:
             raise ValueError("OpenAI API key не настроен")
@@ -615,13 +684,27 @@ def get_llm(
             timeout=timeout,
         )
 
-    raise ValueError(f"Неизвестный LLM провайдер: {provider}")
+    raise ValueError(f"Неизвестный LLM провайдер: {actual_provider}")
+
+
+def _get_default_base_url(provider: str, settings) -> str:
+    """Возвращает base_url по умолчанию для провайдера."""
+    if provider == "openrouter":
+        return settings.llm.openrouter.base_url if settings.llm.openrouter else "https://openrouter.ai/api/v1"
+    if provider == "bothub":
+        return settings.llm.bothub.base_url if settings.llm.bothub else "https://bothub.chat/api/v2/openai/v1"
+    if provider == "openai":
+        return settings.llm.openai.base_url if settings.llm.openai else "https://api.openai.com/v1"
+    return "https://api.openai.com/v1"
 
 
 def get_llm_for_state(
     state: Optional["ExecutionState"] = None,
     model_name: Optional[str] = None,
     temperature: Optional[float] = None,
+    provider: Optional[str] = None,
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
 ) -> LLMClient | MockLLM:
     """
     Создает LLM клиент с учётом mock конфига из state.
@@ -630,6 +713,9 @@ def get_llm_for_state(
         state: ExecutionState
         model_name: Имя модели
         temperature: Температура
+        provider: Провайдер (openai, openrouter, bothub)
+        api_key: API ключ (напрямую или @var:my_key)
+        base_url: Base URL провайдера (напрямую или @var:my_url)
         
     Returns:
         MockLLM или реальный LLMClient
@@ -645,7 +731,14 @@ def get_llm_for_state(
             return mock
     
     # Реальный LLM клиент
-    return get_llm(model_name, temperature)
+    return get_llm(
+        model_name=model_name,
+        temperature=temperature,
+        provider=provider,
+        api_key=api_key,
+        base_url=base_url,
+        state=state,
+    )
 
 
 def get_vision_llm(

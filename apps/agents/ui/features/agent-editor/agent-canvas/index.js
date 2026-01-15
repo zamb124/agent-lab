@@ -23,6 +23,7 @@ const NODE_TYPE_ICON_NAMES = {
     'external_api': 'globe',
     'remote_agent': 'cloud',
     'agent': 'workflow',
+    'mcp': 'mcp',
 };
 
 export class AgentCanvas extends PlatformElement {
@@ -695,6 +696,7 @@ export class AgentCanvas extends PlatformElement {
             'external_api': '#06b6d4',
             'remote_agent': '#3b82f6',
             'agent': '#ec4899',
+            'mcp': '#14b8a6',
         };
         
         const color = colors[type];

@@ -501,6 +501,9 @@ export class ReactNodeModal extends BaseNodeModal {
                             model=${config.llm ? (config.llm.model || 'gpt-4o') : 'gpt-4o'}
                             temperature=${config.llm && config.llm.temperature !== undefined ? config.llm.temperature : 0.2}
                             max-tokens=${config.llm ? (config.llm.max_tokens || '') : ''}
+                            provider=${config.llm ? (config.llm.provider || '') : ''}
+                            api-key=${config.llm ? (config.llm.api_key || '') : ''}
+                            base-url=${config.llm ? (config.llm.base_url || '') : ''}
                         ></llm-config-editor>
                     </div>
                     

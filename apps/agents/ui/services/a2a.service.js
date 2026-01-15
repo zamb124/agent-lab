@@ -73,8 +73,11 @@ export class A2AService extends BaseService {
         return this.get('/api/v1/tools');
     }
 
-    async getAvailableModels() {
-        return this.get('/api/v1/registry/models/values');
+    async getAvailableModels(provider = null) {
+        const url = provider 
+            ? `/api/v1/registry/models/values?provider=${provider}`
+            : '/api/v1/registry/models/values';
+        return this.get(url);
     }
 
     async validateNode(nodeType, nodeConfig, state, agentId, skillId) {

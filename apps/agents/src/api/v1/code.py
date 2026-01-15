@@ -1564,6 +1564,25 @@ async def _build_node_config(request: ExecuteRequest) -> Dict[str, Any]:
         
         raise SafeEvalError("Код пустой или tool_id не указан")
 
+    elif node_type == "mcp":
+        agent_config = request.agent_config or {}
+        server_id = agent_config.get("server_id")
+        tool_name = agent_config.get("tool_name")
+        
+        if not server_id:
+            raise ValueError("server_id обязателен для mcp")
+        if not tool_name:
+            raise ValueError("tool_name обязателен для mcp")
+        
+        return {
+            "type": "mcp",
+            "server_id": server_id,
+            "tool_name": tool_name,
+            "headers": agent_config.get("headers", {}),
+            "state_mapping": agent_config.get("state_mapping", {}),
+            "input_mapping": agent_config.get("input_mapping"),
+        }
+
     raise ValueError(f"Неизвестный тип ноды: {node_type}")
 
 

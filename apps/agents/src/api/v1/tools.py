@@ -44,6 +44,8 @@ class ToolResponse(BaseModel):
     permission: Optional[str | List[str]] = None
     item_type: str = "tool"  # tool или agent
     tool_type: Optional[str] = None  # tool, reason, exit
+    code_mode: Optional[str] = None  # inline_code или mcp_tool
+    mcp_server_id: Optional[str] = None  # ID MCP сервера
 
 
 @router.get("/", response_model=List[ToolResponse])
@@ -88,6 +90,8 @@ async def list_all_tools_and_agents(
             permission=t.permission,
             item_type="tool",
             tool_type=t.tool_type,
+            code_mode=t.code_mode.value if t.code_mode else None,
+            mcp_server_id=t.mcp_server_id,
         ))
     
     # Agents (as tools)

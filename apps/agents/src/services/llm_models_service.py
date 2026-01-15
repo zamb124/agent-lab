@@ -3,7 +3,7 @@
 """
 
 import asyncio
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import httpx
 
@@ -24,21 +24,33 @@ class LLMModelsService:
         self._sync_task: Optional[asyncio.Task] = None
 
     async def _fetch_bothub_models(self) -> List[str]:
-        """Запрос моделей от BotHub API."""
+        """
+        Запрос моделей от BotHub API.
+        API: https://bothub.chat/api/v2/model/list?children=1
+        """
         settings = get_settings()
         cfg = settings.llm.bothub
         if not cfg or not cfg.api_key:
             logger.warning("BotHub API key не настроен")
             return []
 
-        url = f"{cfg.base_url}/models"
-        headers = {"Authorization": f"Bearer {cfg.api_key}"}
+        # BotHub использует отдельный endpoint для списка моделей
+        url = "https://bothub.chat/api/v2/model/list?children=1"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {cfg.api_key}",
+        }
 
         async with get_httpx_client(timeout=30.0, proxy=True) as client:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
             data = response.json()
-            models = [item["id"] for item in data.get("data", [])]
+            # BotHub возвращает список моделей с полем "name" или "id"
+            models = []
+            for item in data if isinstance(data, list) else data.get("data", []):
+                model_id = item.get("name") or item.get("id")
+                if model_id:
+                    models.append(model_id)
             logger.info(f"BotHub: получено {len(models)} моделей")
             return models
 
@@ -85,11 +97,8 @@ class LLMModelsService:
             logger.info(f"OpenAI: получено {len(models)} моделей")
             return models
 
-    async def fetch_models(self) -> List[str]:
-        """Запрос моделей от текущего провайдера из конфига."""
-        settings = get_settings()
-        provider = settings.llm.provider
-
+    async def fetch_models_by_provider(self, provider: str) -> List[str]:
+        """Запрос моделей от указанного провайдера."""
         if provider == "bothub":
             return await self._fetch_bothub_models()
         elif provider == "openrouter":
@@ -100,18 +109,19 @@ class LLMModelsService:
             logger.warning(f"Неизвестный провайдер: {provider}")
             return []
 
-    async def sync_models(self) -> int:
-        """Синхронизация моделей: fetch от провайдера + upsert в БД."""
+    async def fetch_models(self) -> List[str]:
+        """Запрос моделей от текущего провайдера из конфига."""
         settings = get_settings()
-        provider = settings.llm.provider
+        return await self.fetch_models_by_provider(settings.llm.provider)
 
+    async def sync_models_by_provider(self, provider: str) -> int:
+        """Синхронизация моделей от указанного провайдера."""
         try:
-            model_ids = await self.fetch_models()
+            model_ids = await self.fetch_models_by_provider(provider)
             if not model_ids:
                 logger.warning(f"Не получено моделей от провайдера {provider}")
                 return 0
 
-            # Upsert каждой модели
             for model_id in model_ids:
                 model = LLMModel(model_id=model_id, provider=provider)
                 await self._repository.set(model)
@@ -120,27 +130,55 @@ class LLMModelsService:
             return len(model_ids)
 
         except httpx.HTTPError as e:
-            logger.error(f"Ошибка HTTP при синхронизации моделей: {e}")
+            logger.error(f"Ошибка HTTP при синхронизации моделей от {provider}: {e}")
             return 0
         except Exception as e:
-            logger.error(f"Ошибка при синхронизации моделей: {e}")
+            logger.error(f"Ошибка при синхронизации моделей от {provider}: {e}")
             return 0
+
+    async def sync_models(self) -> int:
+        """Синхронизация моделей от текущего провайдера из конфига."""
+        settings = get_settings()
+        return await self.sync_models_by_provider(settings.llm.provider)
+
+    async def sync_all_providers(self) -> Dict[str, int]:
+        """Синхронизация моделей от ВСЕХ настроенных провайдеров."""
+        settings = get_settings()
+        results = {}
+        
+        # BotHub
+        if settings.llm.bothub and settings.llm.bothub.api_key:
+            results["bothub"] = await self.sync_models_by_provider("bothub")
+        
+        # OpenRouter
+        if settings.llm.openrouter and settings.llm.openrouter.api_key:
+            results["openrouter"] = await self.sync_models_by_provider("openrouter")
+        
+        # OpenAI
+        if settings.llm.openai and settings.llm.openai.api_key:
+            results["openai"] = await self.sync_models_by_provider("openai")
+        
+        total = sum(results.values())
+        logger.info(f"Синхронизировано {total} моделей от всех провайдеров: {results}")
+        return results
 
     async def get_models(self) -> List[str]:
         """Возвращает список id моделей текущего провайдера из БД."""
         settings = get_settings()
-        provider = settings.llm.provider
+        return await self.get_models_by_provider(settings.llm.provider)
 
+    async def get_models_by_provider(self, provider: str) -> List[str]:
+        """Возвращает список id моделей указанного провайдера из БД."""
         models = await self._repository.list_by_provider(provider)
         return [m.model_id for m in models]
 
     async def start_background_sync(self, interval: int = 60) -> None:
-        """Запускает фоновую задачу синхронизации."""
+        """Запускает фоновую задачу синхронизации ВСЕХ провайдеров."""
         async def _sync_loop():
             while True:
                 await asyncio.sleep(interval)
                 try:
-                    await self.sync_models()
+                    await self.sync_all_providers()
                 except Exception as e:
                     logger.error(f"Ошибка в фоновой синхронизации моделей: {e}")
 

@@ -9,9 +9,10 @@ from enum import Enum
 
 
 class CodeMode(str, Enum):
-    """Режим хранения кода - только inline"""
+    """Режим хранения кода"""
 
     INLINE_CODE = "inline_code"
+    MCP_TOOL = "mcp_tool"  # Внешний MCP инструмент
 
 
 class SessionStatus(str, Enum):
@@ -38,6 +39,7 @@ class NodeType(str, Enum):
     AGENT = "agent"                 # Вложенный agent (subflow)
     REMOTE_AGENT = "remote_agent"   # Внешний агент по A2A протоколу
     EXTERNAL_API = "external_api"   # Вызов внешнего HTTP API
+    MCP = "mcp"                     # MCP Tool как нода
 
 
 class ToolType(str, Enum):

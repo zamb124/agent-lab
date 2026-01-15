@@ -1,6 +1,6 @@
 /conf.json
 /conf.local.json
-*__pycache__*
+*__pycache__*public
 artifacts/*
 .env
 .venv

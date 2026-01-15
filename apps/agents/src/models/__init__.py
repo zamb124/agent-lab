@@ -30,6 +30,7 @@ from .agent_config import (
 
 from .session_config import SessionConfig
 from .tool_reference import CallParameter, ToolReference
+from .mcp import MCPServerConfig, MCPToolInfo, MCPCallResult, MCPTransportType
 
 # Алиас для обратной совместимости (deprecated)
 LLMConfig = NodeLLMOverride
@@ -69,4 +70,8 @@ __all__ = [
     "TestCaseConfig",
     "TestTurn",
     "ToolReference",
+    "MCPServerConfig",
+    "MCPToolInfo",
+    "MCPCallResult",
+    "MCPTransportType",
 ]

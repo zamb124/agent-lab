@@ -48,6 +48,8 @@ import './modals/state-modal.js';
 import './modals/agent-edit-modal.js';
 import './modals/agent-create-modal.js';
 import './modals/edge-condition-modal.js';
+import './modals/mcp-servers-modal.js';
+import './modals/variables-modal.js';
 
 // Функциональные компоненты
 import './features/chat/chat-message.js';

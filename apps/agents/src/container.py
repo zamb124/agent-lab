@@ -63,6 +63,11 @@ class AgentContainer(BaseContainer):
         return ScheduledTaskRepository(storage=self.storage)
 
     @lazy
+    def mcp_server_repository(self):
+        from apps.agents.src.db.mcp_repository import MCPServerRepository
+        return MCPServerRepository(storage=self.storage)
+
+    @lazy
     def variables_service(self):
         from apps.agents.src.variables import VariablesService
         return VariablesService(self.variable_repository)
