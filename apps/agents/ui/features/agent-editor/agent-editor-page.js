@@ -698,6 +698,39 @@ export class AgentEditorPage extends PlatformElement {
         this.emit('agent-changed');
     }
 
+    _onNodeIdChanged(e) {
+        const { oldId, newId } = e.detail;
+        const canvas = this.querySelector('agent-canvas');
+        
+        if (canvas?.updateNodeId(oldId, newId)) {
+            const data = this.state.value.skillsData;
+            if (data?.nodes?.[oldId]) {
+                const nodeData = data.nodes[oldId];
+                delete data.nodes[oldId];
+                data.nodes[newId] = { ...nodeData, nodeId: newId };
+                
+                if (data.entry === oldId) {
+                    data.entry = newId;
+                }
+                
+                data.edges = data.edges.map(edge => ({
+                    ...edge,
+                    from: edge.from === oldId ? newId : edge.from,
+                    to: edge.to === oldId ? newId : edge.to,
+                }));
+                
+                AgentsStore.updateSkillsData(data, this.state.value.inheritedData);
+            }
+            
+            if (this.state.value.selectedNodeId === oldId) {
+                AgentsStore.selectNode(newId);
+            }
+            
+            this._checkForChanges();
+            this.success(`Node ID: ${oldId} → ${newId}`);
+        }
+    }
+
     async _handleSave() {
         try {
             const canvas = this.querySelector('agent-canvas');
@@ -740,15 +773,8 @@ export class AgentEditorPage extends PlatformElement {
             
             this.success('Агент сохранен, перезагрузка...');
             
-            await AgentsStore.loadAgent(this.agentId, this.a2a);
-            
-            if (this.state.value.currentSkillId && this.state.value.currentSkillId !== 'base') {
-                const skillsTabsBar = this.querySelector('skills-tabs-bar');
-                if (skillsTabsBar) {
-                    await skillsTabsBar.updateComplete;
-                    skillsTabsBar._switchSkill(this.state.value.currentSkillId);
-                }
-            }
+            const currentSkillId = this.state.value.currentSkillId;
+            await AgentsStore.loadAgent(this.agentId, this.a2a, currentSkillId);
             
             AgentsStore.setDirty(false);
             this.success('Агент успешно обновлен');
@@ -888,6 +914,7 @@ export class AgentEditorPage extends PlatformElement {
                         ?expanded=${panelExpanded}
                         @node-updated=${this._onNodeUpdated}
                         @node-deleted=${this._onNodeDeleted}
+                        @node-id-changed=${this._onNodeIdChanged}
                     ></property-panel>
                 </div>
             </div>

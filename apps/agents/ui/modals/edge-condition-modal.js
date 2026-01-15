@@ -1,8 +1,23 @@
 /**
  * EdgeConditionModal - модальное окно для редактирования условий связи между нодами
+ * Поддерживает два режима: Simple (визуальный) и Python (код)
  */
 import { html, css } from 'lit';
 import { PlatformFormModal } from '@platform/lib/components/glass-form-modal.js';
+import '../components/editors/python-code-editor.js';
+
+const DEFAULT_PYTHON_CODE = `def check(state):
+    """
+    Проверка условия перехода.
+    
+    Args:
+        state: dict - текущее состояние
+        
+    Returns:
+        bool - True если условие выполнено
+    """
+    return state.get('route') == 'expected_value'
+`;
 
 export class EdgeConditionModal extends PlatformFormModal {
     static styles = [
@@ -10,6 +25,7 @@ export class EdgeConditionModal extends PlatformFormModal {
         css`
             .modal-body {
                 padding: var(--space-6);
+                min-width: 500px;
             }
             
             .condition-header {
@@ -29,6 +45,37 @@ export class EdgeConditionModal extends PlatformFormModal {
                 font-size: var(--text-sm);
                 color: var(--text-tertiary);
                 font-family: var(--font-mono);
+            }
+            
+            .mode-tabs {
+                display: flex;
+                gap: var(--space-2);
+                margin-bottom: var(--space-4);
+            }
+            
+            .mode-tab {
+                flex: 1;
+                padding: var(--space-2) var(--space-4);
+                font-size: var(--text-sm);
+                font-weight: var(--font-medium);
+                color: var(--text-secondary);
+                background: var(--glass-tint-subtle);
+                border: 1px solid var(--border-subtle);
+                border-radius: var(--radius-md);
+                cursor: pointer;
+                transition: all var(--duration-fast) var(--easing-default);
+                text-align: center;
+            }
+            
+            .mode-tab:hover {
+                color: var(--text-primary);
+                border-color: var(--border-medium);
+            }
+            
+            .mode-tab.active {
+                color: var(--accent);
+                background: var(--accent-subtle);
+                border-color: var(--accent);
             }
             
             .condition-builder {
@@ -141,6 +188,29 @@ export class EdgeConditionModal extends PlatformFormModal {
             .skip-link:hover {
                 color: var(--text-primary);
             }
+            
+            .python-mode {
+                margin-bottom: var(--space-4);
+            }
+            
+            .python-hint {
+                margin-top: var(--space-2);
+                font-size: var(--text-xs);
+                color: var(--text-tertiary);
+            }
+            
+            .variables-hint {
+                margin-top: var(--space-2);
+                padding: var(--space-2);
+                background: var(--glass-tint-subtle);
+                border-radius: var(--radius-sm);
+                font-size: var(--text-xs);
+                color: var(--text-secondary);
+            }
+            
+            .variables-hint strong {
+                color: var(--text-primary);
+            }
         `
     ];
 
@@ -148,11 +218,16 @@ export class EdgeConditionModal extends PlatformFormModal {
         ...PlatformFormModal.properties,
         fromNode: { type: String },
         toNode: { type: String },
-        condition: { type: String },
+        condition: { type: Object },
         variables: { type: Array },
+        sourceNodeConfig: { type: Object },
+        stateVariables: { type: Array },
+        
+        mode: { type: String },
         selectedVariable: { type: String },
         selectedOperator: { type: String },
         conditionValue: { type: String },
+        pythonCode: { type: String },
         preview: { type: String },
     };
 
@@ -160,12 +235,16 @@ export class EdgeConditionModal extends PlatformFormModal {
         super();
         this.fromNode = '';
         this.toNode = '';
-        this.condition = '';
+        this.condition = null;
         this.variables = [];
+        this.sourceNodeConfig = null;
+        this.stateVariables = [];
         
+        this.mode = 'simple';
         this.selectedVariable = '';
         this.selectedOperator = '==';
         this.conditionValue = '';
+        this.pythonCode = DEFAULT_PYTHON_CODE;
         this.preview = '';
         
         this.title = 'Условие перехода';
@@ -173,16 +252,49 @@ export class EdgeConditionModal extends PlatformFormModal {
 
     connectedCallback() {
         super.connectedCallback();
-        if (this.condition) {
-            const parsed = this._parseCondition(this.condition);
-            this.selectedVariable = parsed.variable;
-            this.selectedOperator = parsed.operator;
-            this.conditionValue = parsed.value;
-            this._updatePreview();
+        this._parseExistingCondition();
+        this._updatePreview();
+    }
+
+    updated(changedProperties) {
+        super.updated(changedProperties);
+        if (changedProperties.has('condition')) {
+            this._parseExistingCondition();
         }
     }
 
-    _parseCondition(condition) {
+    _parseExistingCondition() {
+        if (!this.condition) {
+            this.mode = 'simple';
+            this.selectedVariable = '';
+            this.selectedOperator = '==';
+            this.conditionValue = '';
+            this.pythonCode = DEFAULT_PYTHON_CODE;
+            return;
+        }
+        
+        if (typeof this.condition === 'object') {
+            if (this.condition.type === 'python') {
+                this.mode = 'python';
+                this.pythonCode = this.condition.code || DEFAULT_PYTHON_CODE;
+            } else if (this.condition.type === 'simple') {
+                this.mode = 'simple';
+                this.selectedVariable = this.condition.variable || '';
+                this.selectedOperator = this.condition.operator || '==';
+                this.conditionValue = this.condition.value || '';
+            }
+        } else if (typeof this.condition === 'string') {
+            this.mode = 'simple';
+            const parsed = this._parseLegacyCondition(this.condition);
+            this.selectedVariable = parsed.variable;
+            this.selectedOperator = parsed.operator;
+            this.conditionValue = parsed.value;
+        }
+        
+        this._updatePreview();
+    }
+
+    _parseLegacyCondition(condition) {
         if (!condition) {
             return { variable: '', operator: '==', value: '' };
         }
@@ -203,7 +315,71 @@ export class EdgeConditionModal extends PlatformFormModal {
         return { variable: '', operator: '==', value: '' };
     }
 
+    _collectAllVariables() {
+        const vars = new Set();
+        
+        // Переданные variables (legacy)
+        if (this.variables && Array.isArray(this.variables)) {
+            this.variables.forEach(v => vars.add(v));
+        }
+        
+        // State variables
+        if (this.stateVariables && Array.isArray(this.stateVariables)) {
+            this.stateVariables.forEach(v => vars.add(`variables.${v}`));
+        }
+        
+        // Из output_mapping исходящей ноды
+        if (this.sourceNodeConfig?.output_mapping) {
+            const mapping = this.sourceNodeConfig.output_mapping;
+            if (typeof mapping === 'object') {
+                Object.values(mapping).forEach(stateField => {
+                    if (typeof stateField === 'string') {
+                        vars.add(stateField);
+                    }
+                });
+            }
+        }
+        
+        // Из output_schema если structured_output
+        if (this.sourceNodeConfig?.structured_output && 
+            this.sourceNodeConfig?.output_schema?.properties &&
+            !this.sourceNodeConfig?.output_mapping) {
+            Object.keys(this.sourceNodeConfig.output_schema.properties).forEach(prop => {
+                vars.add(prop);
+            });
+        }
+        
+        // Стандартные поля state
+        ['content', 'route', 'status', 'result', 'category', 'type'].forEach(f => vars.add(f));
+        
+        return Array.from(vars).sort();
+    }
+
     _buildCondition() {
+        if (this.mode === 'python') {
+            return {
+                type: 'python',
+                code: this.pythonCode
+            };
+        }
+        
+        if (!this.selectedVariable || !this.conditionValue) {
+            return null;
+        }
+        
+        return {
+            type: 'simple',
+            variable: this.selectedVariable,
+            operator: this.selectedOperator,
+            value: this.conditionValue
+        };
+    }
+
+    _buildPreviewString() {
+        if (this.mode === 'python') {
+            return 'Python: check(state) -> bool';
+        }
+        
         if (!this.selectedVariable || !this.conditionValue) {
             return '';
         }
@@ -214,7 +390,12 @@ export class EdgeConditionModal extends PlatformFormModal {
     }
 
     _updatePreview() {
-        this.preview = this._buildCondition();
+        this.preview = this._buildPreviewString();
+    }
+
+    _onModeChange(newMode) {
+        this.mode = newMode;
+        this._updatePreview();
     }
 
     _onVariableChange(e) {
@@ -232,11 +413,16 @@ export class EdgeConditionModal extends PlatformFormModal {
         this._updatePreview();
     }
 
+    _onPythonCodeChange(e) {
+        this.pythonCode = e.detail.value;
+        this._updatePreview();
+    }
+
     _skipCondition() {
         this.emit('condition-saved', { 
             fromNode: this.fromNode, 
             toNode: this.toNode, 
-            condition: '' 
+            condition: null 
         });
         this.close();
     }
@@ -244,12 +430,20 @@ export class EdgeConditionModal extends PlatformFormModal {
     validateForm() {
         const errors = {};
         
-        if (!this.selectedVariable && this.conditionValue) {
-            errors.variable = 'Выберите переменную';
+        if (this.mode === 'simple') {
+            if (!this.selectedVariable && this.conditionValue) {
+                errors.variable = 'Выберите переменную';
+            }
+            
+            if (this.selectedVariable && !this.conditionValue) {
+                errors.value = 'Введите значение';
+            }
         }
         
-        if (this.selectedVariable && !this.conditionValue) {
-            errors.value = 'Введите значение';
+        if (this.mode === 'python') {
+            if (!this.pythonCode || !this.pythonCode.includes('def check')) {
+                errors.code = 'Код должен содержать функцию check(state)';
+            }
         }
         
         return errors;
@@ -268,6 +462,8 @@ export class EdgeConditionModal extends PlatformFormModal {
     }
 
     renderBody() {
+        const allVariables = this._collectAllVariables();
+        
         return html`
             <div class="condition-header">
                 <h3>Условие перехода</h3>
@@ -276,55 +472,25 @@ export class EdgeConditionModal extends PlatformFormModal {
                 </div>
             </div>
             
+            <div class="mode-tabs">
+                <button 
+                    type="button"
+                    class="mode-tab ${this.mode === 'simple' ? 'active' : ''}"
+                    @click=${() => this._onModeChange('simple')}
+                >
+                    Простой режим
+                </button>
+                <button 
+                    type="button"
+                    class="mode-tab ${this.mode === 'python' ? 'active' : ''}"
+                    @click=${() => this._onModeChange('python')}
+                >
+                    Python код
+                </button>
+            </div>
+            
             <form @submit=${(e) => { e.preventDefault(); this._onSubmit(e); }}>
-                <div class="condition-builder">
-                    <div class="builder-row">
-                        <div class="form-field">
-                            <label for="variable">Переменная</label>
-                            <select 
-                                id="variable"
-                                .value=${this.selectedVariable}
-                                @change=${this._onVariableChange}
-                            >
-                                <option value="">-- выберите --</option>
-                                ${this.variables.map(v => html`
-                                    <option value="${v}" ?selected=${v === this.selectedVariable}>
-                                        ${v}
-                                    </option>
-                                `)}
-                            </select>
-                            ${this.renderFieldError('variable')}
-                        </div>
-                        
-                        <div class="operator-connector">
-                            <select
-                                .value=${this.selectedOperator}
-                                @change=${this._onOperatorChange}
-                                style="width: 80px; padding: 0 var(--space-2);"
-                            >
-                                <option value="==">==</option>
-                                <option value="!=">!=</option>
-                                <option value=">">&gt;</option>
-                                <option value="<">&lt;</option>
-                                <option value=">=">&gt;=</option>
-                                <option value="<=">&lt;=</option>
-                                <option value="in">in</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-field">
-                            <label for="value">Значение</label>
-                            <input
-                                id="value"
-                                type="text"
-                                .value=${this.conditionValue}
-                                @input=${this._onValueInput}
-                                placeholder="order"
-                            />
-                            ${this.renderFieldError('value')}
-                        </div>
-                    </div>
-                </div>
+                ${this.mode === 'simple' ? this._renderSimpleMode(allVariables) : this._renderPythonMode()}
                 
                 <div class="condition-preview">
                     <div class="preview-label">Результат:</div>
@@ -339,6 +505,83 @@ export class EdgeConditionModal extends PlatformFormModal {
                     </span>
                 </div>
             </form>
+        `;
+    }
+
+    _renderSimpleMode(allVariables) {
+        return html`
+            <div class="condition-builder">
+                <div class="builder-row">
+                    <div class="form-field">
+                        <label for="variable">Переменная</label>
+                        <select 
+                            id="variable"
+                            .value=${this.selectedVariable}
+                            @change=${this._onVariableChange}
+                        >
+                            <option value="">-- выберите --</option>
+                            ${allVariables.map(v => html`
+                                <option value="${v}" ?selected=${v === this.selectedVariable}>
+                                    ${v}
+                                </option>
+                            `)}
+                        </select>
+                        ${this.renderFieldError('variable')}
+                    </div>
+                    
+                    <div class="operator-connector">
+                        <select
+                            .value=${this.selectedOperator}
+                            @change=${this._onOperatorChange}
+                            style="width: 80px; padding: 0 var(--space-2);"
+                        >
+                            <option value="==">==</option>
+                            <option value="!=">!=</option>
+                            <option value=">">&gt;</option>
+                            <option value="<">&lt;</option>
+                            <option value=">=">&gt;=</option>
+                            <option value="<=">&lt;=</option>
+                            <option value="in">in</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-field">
+                        <label for="value">Значение</label>
+                        <input
+                            id="value"
+                            type="text"
+                            .value=${this.conditionValue}
+                            @input=${this._onValueInput}
+                            placeholder="order"
+                        />
+                        ${this.renderFieldError('value')}
+                    </div>
+                </div>
+            </div>
+            
+            ${this.sourceNodeConfig ? html`
+                <div class="variables-hint">
+                    <strong>Доступные переменные:</strong> ${allVariables.slice(0, 5).join(', ')}${allVariables.length > 5 ? '...' : ''}
+                </div>
+            ` : ''}
+        `;
+    }
+
+    _renderPythonMode() {
+        return html`
+            <div class="python-mode">
+                <python-code-editor
+                    .value=${this.pythonCode}
+                    @change=${this._onPythonCodeChange}
+                    min-height="180"
+                    show-header="false"
+                ></python-code-editor>
+                <div class="python-hint">
+                    Функция <code>check(state)</code> должна возвращать <code>True</code> или <code>False</code>.
+                    <br>state - это dict со всеми переменными текущего состояния.
+                </div>
+                ${this.renderFieldError('code')}
+            </div>
         `;
     }
 
@@ -359,5 +602,3 @@ export class EdgeConditionModal extends PlatformFormModal {
 }
 
 customElements.define('edge-condition-modal', EdgeConditionModal);
-
-

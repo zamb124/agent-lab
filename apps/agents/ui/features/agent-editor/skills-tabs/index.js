@@ -420,8 +420,10 @@ export class SkillsTabsBar extends PlatformElement {
             const skill = this._skillsData.get(skillId);
             if (skill) {
                 const diff = this._computeDiff(canvasData);
-                skill.nodes = diff.nodes;
-                skill.edges = diff.edges;
+                
+                // В режиме replace сохраняем все данные, в merge - только diff
+                skill.nodes = skill.nodes_mode === 'replace' ? canvasData.nodes : diff.nodes;
+                skill.edges = skill.edges_mode === 'replace' ? canvasData.edges : diff.edges;
                 skill.entry = diff.entry;
             }
         }

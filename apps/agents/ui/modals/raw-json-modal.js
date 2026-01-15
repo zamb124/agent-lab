@@ -76,12 +76,13 @@ export class RawJsonModal extends PlatformModal {
     }
 
     _downloadJson() {
-        const jsonStr = JSON.stringify(this.data, null, 2);
+        const beautified = this._beautifyData(this.data);
+        const jsonStr = JSON.stringify(beautified, null, 2);
         const blob = new Blob([jsonStr], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${this.data.span_id || 'data'}.json`;
+        a.download = `${this.data?.span_id || 'data'}.json`;
         a.click();
         URL.revokeObjectURL(url);
     }
@@ -98,12 +99,57 @@ export class RawJsonModal extends PlatformModal {
         `;
     }
 
+    _beautifyData(data) {
+        if (!data || typeof data !== 'object') return data;
+        
+        const result = { ...data };
+        
+        // Парсим вложенные JSON строки в attributes
+        if (result.attributes && typeof result.attributes === 'object') {
+            const attrs = { ...result.attributes };
+            
+            const jsonFields = [
+                'platform.llm.request',
+                'platform.llm.response', 
+                'platform.state.snapshot',
+                'platform.tool.args',
+                'platform.tool.result',
+                'platform.prompt.variables'
+            ];
+            
+            for (const field of jsonFields) {
+                if (attrs[field] && typeof attrs[field] === 'string') {
+                    try {
+                        attrs[field] = JSON.parse(attrs[field]);
+                    } catch {
+                        // оставляем как есть
+                    }
+                }
+            }
+            
+            result.attributes = attrs;
+        }
+        
+        // Парсим attributes если это строка
+        if (typeof result.attributes === 'string') {
+            try {
+                result.attributes = JSON.parse(result.attributes);
+                return this._beautifyData(result);
+            } catch {
+                // оставляем как есть
+            }
+        }
+        
+        return result;
+    }
+
     renderBody() {
         if (!this.data) {
             return html`<p>Нет данных</p>`;
         }
 
-        const jsonStr = JSON.stringify(this.data, null, 2);
+        const beautified = this._beautifyData(this.data);
+        const jsonStr = JSON.stringify(beautified, null, 2);
 
         return html`
             <div class="raw-json-container">

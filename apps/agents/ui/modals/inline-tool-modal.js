@@ -94,7 +94,8 @@ export class InlineToolModal extends PlatformModal {
             'agent': 'Agent',
             'function': 'Function',
             'external_api': 'External API',
-            'remote_agent': 'Remote Agent'
+            'remote_agent': 'Remote Agent',
+            'mcp': 'MCP Tool'
         };
         
         const label = typeLabels[this.toolType] || 'Инструмент';
@@ -213,6 +214,18 @@ export class InlineToolModal extends PlatformModal {
                         .agentVariables=${this.agentVariables}
                         @config-change=${this._onConfigChanged}
                     ></remote-agent-editor>
+                `;
+            
+            case 'mcp':
+                return html`
+                    <mcp-node-editor
+                        data-editor
+                        .nodeConfig=${config}
+                        .agentId=${this.agentId}
+                        .skillId=${this.skillId}
+                        .agentVariables=${this.agentVariables}
+                        @config-change=${this._onConfigChanged}
+                    ></mcp-node-editor>
                 `;
             
             default:

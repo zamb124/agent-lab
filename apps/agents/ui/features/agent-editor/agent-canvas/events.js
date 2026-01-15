@@ -121,7 +121,8 @@ export function setupContextMenu(component) {
             const parent = path.closest('.connection');
             if (!parent) return;
             
-            const classes = parent.className.split(' ');
+            const classAttr = parent.getAttribute('class') || '';
+            const classes = classAttr.split(' ');
             let outputId = null;
             let inputId = null;
             

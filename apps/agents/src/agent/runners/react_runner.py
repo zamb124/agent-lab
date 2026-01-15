@@ -176,6 +176,18 @@ class ReactNodeRunner(BaseReactNodeRunner):
         """Сохраняет сообщения в state."""
         state.messages = messages
 
+    def _messages_to_dict(self, messages: List[Message]) -> List[Dict[str, Any]]:
+        """Конвертирует Message объекты в dict для трейсинга."""
+        result = []
+        for msg in messages:
+            if hasattr(msg, "model_dump"):
+                result.append(msg.model_dump())
+            elif isinstance(msg, dict):
+                result.append(msg)
+            else:
+                result.append({"role": "unknown", "content": str(msg)})
+        return result
+
     def _get_react_config(self) -> tuple[ReactLoopMode, str, int, bool, str | None]:
         """Возвращает конфигурацию ReAct цикла."""
         if self.node_config and self.node_config.react:
@@ -366,6 +378,9 @@ class ReactNodeRunner(BaseReactNodeRunner):
                         async with tracer.llm_call_span(
                             model, len(llm_messages), len(tools_schema) if tools_schema else 0, trace_ctx=trace_ctx
                         ) as llm_span:
+                            llm_messages_for_trace = self._messages_to_dict(llm_messages)
+                            tracer.record_llm_request(llm_span, llm_messages_for_trace, tools_schema, response_format)
+                            
                             async for event in self._call_llm(
                                 llm_messages, tools_schema, context_id, task_id, state, response_format
                             ):
@@ -398,6 +413,8 @@ class ReactNodeRunner(BaseReactNodeRunner):
                                 output_tokens=output_tokens,
                                 has_tool_calls=bool(tool_calls),
                                 duration_ms=llm_duration,
+                                response_content=content,
+                                tool_calls=tool_calls,
                             )
 
                         if tool_calls:

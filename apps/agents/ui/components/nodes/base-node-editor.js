@@ -211,6 +211,55 @@ export class BaseNodeEditor extends PlatformElement {
         this.emit('node-delete', { nodeId: this.nodeId });
     }
 
+    /**
+     * Обработчик изменения Node ID
+     * Валидирует формат и эмитит событие для обновления
+     */
+    _onNodeIdChange(e) {
+        const newId = e.target.value.trim();
+        
+        if (!newId) {
+            this.error('Node ID не может быть пустым');
+            e.target.value = this.nodeId;
+            return;
+        }
+        
+        if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(newId)) {
+            this.error('Node ID должен начинаться с буквы и содержать только буквы, цифры и _');
+            e.target.value = this.nodeId;
+            return;
+        }
+        
+        if (newId !== this.nodeId) {
+            this.emit('node-id-changed', {
+                oldId: this.nodeId,
+                newId: newId
+            });
+        }
+    }
+
+    /**
+     * Рендер поля для редактирования Node ID
+     * Унифицированный компонент для всех типов нод
+     */
+    renderNodeIdField() {
+        return html`
+            <div class="form-group">
+                <div class="form-label">
+                    <span class="form-label-text">Node ID</span>
+                </div>
+                <input 
+                    type="text" 
+                    class="form-input"
+                    .value=${this.nodeId}
+                    @change=${this._onNodeIdChange}
+                    placeholder="my_node_id"
+                />
+                <span class="form-label-hint">Уникальный идентификатор ноды (латиница, цифры, _)</span>
+            </div>
+        `;
+    }
+
     renderDescription() {
         return html`<p class="panel-description">Настройки ноды</p>`;
     }

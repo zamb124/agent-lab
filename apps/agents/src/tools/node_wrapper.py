@@ -20,7 +20,7 @@ from apps.agents.src.models import NodeConfig
 from apps.agents.src.models.enums import NodeType
 from apps.agents.src.state.interrupt_manager import InterruptManager
 from core.state import ExecutionState, InterruptPathItem
-from apps.agents.src.tools.base import BaseTool
+from apps.agents.src.tools.base import BaseTool, sanitize_tool_name
 
 if TYPE_CHECKING:
     from apps.agents.src.agent.nodes import BaseNode
@@ -80,7 +80,7 @@ class NodeAsToolWrapper(BaseTool):
             self.node_config = node_config
         
         self._tool_registry = tool_registry
-        self.name = self.node_config.node_id
+        self.name = sanitize_tool_name(self.node_config.node_id)
         self.description = self.node_config.description or f"Вызов ноды {self.node_config.name}"
         self.tags = self.node_config.tags or [self.node_config.type]
         self._node: Optional["BaseNode"] = None

@@ -280,7 +280,7 @@ export class VariablesModal extends PlatformModal {
     async _loadVariables() {
         this.loading = true;
         try {
-            this.variables = await this.a2a.get('/api/v1/variables');
+            this.variables = await this.a2a.get('/api/v1/variables/');
         } catch (error) {
             this.error(`Ошибка загрузки: ${error.message}`);
             this.variables = [];
@@ -303,7 +303,7 @@ export class VariablesModal extends PlatformModal {
         }
         
         try {
-            await this.a2a.post('/api/v1/variables', { key, value, secret });
+            await this.a2a.post('/api/v1/variables/', { key, value, secret });
             this.success(`Переменная "${key}" создана`);
             this.showAddForm = false;
             form.reset();

@@ -120,8 +120,9 @@ class ToolRegistry:
         if not isinstance(tool_ref, dict):
             raise ValueError(f"Tool ref must be dict with inline code, got {type(tool_ref)}")
         
-        # react_node как tool - используем NodeAsToolWrapper
-        if tool_ref.get("type") == NodeType.REACT_NODE.value or tool_ref.get("prompt"):
+        # react_node / agent как tool - используем NodeAsToolWrapper
+        tool_type = tool_ref.get("type")
+        if tool_type in (NodeType.REACT_NODE.value, NodeType.AGENT.value, "agent") or tool_ref.get("prompt"):
             return self._create_node_as_tool(tool_ref)
         
         # MCP tool - создаём MCPTool

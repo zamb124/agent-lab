@@ -48,6 +48,8 @@ ATTR_LLM_TOTAL_TOKENS = "platform.llm.total_tokens"
 ATTR_LLM_DURATION_MS = "platform.llm.duration_ms"
 ATTR_LLM_HAS_TOOL_CALLS = "platform.llm.has_tool_calls"
 ATTR_LLM_STREAM = "platform.llm.stream"
+ATTR_LLM_REQUEST = "platform.llm.request"
+ATTR_LLM_RESPONSE = "platform.llm.response"
 
 # Tool
 ATTR_TOOL_NAME = "platform.tool.name"

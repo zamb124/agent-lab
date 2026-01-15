@@ -164,7 +164,7 @@ export class ToolNodeModal extends BaseNodeModal {
             }
         }
         
-        const inputMappingEditor = this.shadowRoot.querySelector('input-mapping-editor');
+        const inputMappingEditor = this.shadowRoot.querySelector('state-mapping-editor');
         const inputMapping = inputMappingEditor?.getValue() || {};
         if (Object.keys(inputMapping).length > 0) {
             config.input_mapping = inputMapping;
@@ -298,10 +298,11 @@ export class ToolNodeModal extends BaseNodeModal {
                     </div>
                     
                     <div class="form-group">
-                        <input-mapping-editor
-                            .mappings=${[]}
-                            .availableState=${this._buildDefaultState()}
-                        ></input-mapping-editor>
+                        <state-mapping-editor
+                            mode="input"
+                            .mappings=${{}}
+                            .stateVariables=${Object.keys(this._buildDefaultState())}
+                        ></state-mapping-editor>
                     </div>
                     
                     ${this.renderStateSettings()}

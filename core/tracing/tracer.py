@@ -370,6 +370,31 @@ class PlatformTracer:
             finally:
                 await self._save_span(span, f"llm.{model}", "CLIENT", start_time, trace_ctx)
 
+    def record_llm_request(
+        self,
+        span: Span,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        response_format: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Записывает полный LLM request в span.
+        
+        Args:
+            span: OpenTelemetry span
+            messages: Список сообщений в формате OpenAI
+            tools: Список tools schemas
+            response_format: Structured output schema (json_schema)
+        """
+        request_data = {
+            "messages": messages,
+            "tools": tools or [],
+        }
+        if response_format:
+            request_data["response_format"] = response_format
+        request_str = json.dumps(request_data, ensure_ascii=False, default=str)
+        span.set_attribute(attr.ATTR_LLM_REQUEST, request_str)
+
     def record_llm_response(
         self,
         span: Span,
@@ -377,6 +402,8 @@ class PlatformTracer:
         output_tokens: int,
         has_tool_calls: bool,
         duration_ms: float,
+        response_content: Optional[str] = None,
+        tool_calls: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         """Записывает результат LLM вызова в span."""
         span.set_attributes(
@@ -388,6 +415,14 @@ class PlatformTracer:
                 attr.ATTR_LLM_DURATION_MS: duration_ms,
             }
         )
+        
+        if response_content is not None or tool_calls:
+            response_data = {
+                "content": response_content,
+                "tool_calls": tool_calls or [],
+            }
+            response_str = json.dumps(response_data, ensure_ascii=False, default=str)
+            span.set_attribute(attr.ATTR_LLM_RESPONSE, response_str)
 
     @asynccontextmanager
     async def tool_call_span(

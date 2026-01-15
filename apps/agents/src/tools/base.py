@@ -10,12 +10,30 @@ Permissions:
 
 from __future__ import annotations
 
+import hashlib
 import os
+import re
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, Union
 
 from pydantic import BaseModel
+
+
+def sanitize_tool_name(name: str) -> str:
+    """
+    Санитизирует имя tool для совместимости с OpenAI API.
+    
+    OpenAI требует pattern: ^[a-zA-Z0-9_-]+$
+    """
+    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+    sanitized = re.sub(r'_+', '_', sanitized)
+    sanitized = sanitized.strip('_-')
+    
+    if not sanitized:
+        sanitized = f"tool_{hashlib.md5(name.encode()).hexdigest()[:8]}"
+    
+    return sanitized
 
 if TYPE_CHECKING:
     from core.state import ExecutionState
@@ -223,7 +241,7 @@ class BaseTool(ABC):
         return {
             "type": "function",
             "function": {
-                "name": self.name,
+                "name": sanitize_tool_name(self.name),
                 "description": self.description,
                 "parameters": self.parameters,
             },

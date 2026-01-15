@@ -119,6 +119,10 @@ export class PropertyPanel extends PlatformElement {
         this.emit('node-deleted', { nodeId: this.node.id || this.node.nodeId });
     }
 
+    _onNodeIdChanged(e) {
+        this.emit('node-id-changed', e.detail);
+    }
+
     _renderDefaultPanel() {
         return html`
             <div style="padding: var(--space-4); text-align: center; color: var(--text-tertiary);">
@@ -154,6 +158,7 @@ export class PropertyPanel extends PlatformElement {
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
+                    @node-id-changed=${this._onNodeIdChanged}
                 ></react-node-editor>`;
             case 'function':
                 return html`<function-node-editor
@@ -165,6 +170,7 @@ export class PropertyPanel extends PlatformElement {
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
+                    @node-id-changed=${this._onNodeIdChanged}
                 ></function-node-editor>`;
             case 'tool':
                 return html`<tool-node-editor
@@ -176,6 +182,7 @@ export class PropertyPanel extends PlatformElement {
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
+                    @node-id-changed=${this._onNodeIdChanged}
                 ></tool-node-editor>`;
             case 'external_api':
                 return html`<external-api-editor
@@ -187,6 +194,7 @@ export class PropertyPanel extends PlatformElement {
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
+                    @node-id-changed=${this._onNodeIdChanged}
                 ></external-api-editor>`;
             case 'remote_agent':
                 return html`<remote-agent-editor
@@ -198,6 +206,7 @@ export class PropertyPanel extends PlatformElement {
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
+                    @node-id-changed=${this._onNodeIdChanged}
                 ></remote-agent-editor>`;
             case 'agent':
                 return html`<agent-node-editor
@@ -209,6 +218,7 @@ export class PropertyPanel extends PlatformElement {
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
+                    @node-id-changed=${this._onNodeIdChanged}
                 ></agent-node-editor>`;
             case 'mcp':
                 return html`<mcp-node-editor
@@ -220,6 +230,7 @@ export class PropertyPanel extends PlatformElement {
                     ?expanded=${this.expanded}
                     @config-change=${this._onConfigChanged}
                     @node-delete=${this._onNodeDeleted}
+                    @node-id-changed=${this._onNodeIdChanged}
                 ></mcp-node-editor>`;
             default:
                 return this._renderDefaultPanel();

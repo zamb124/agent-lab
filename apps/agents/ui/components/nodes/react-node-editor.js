@@ -7,7 +7,7 @@ import { BaseNodeEditor } from './base-node-editor.js';
 import '@platform/lib/components/prompt-editor.js';
 import '../editors/llm-config-editor.js';
 import '../editors/tag-input.js';
-import '../editors/input-mapping-editor.js';
+import '../editors/state-mapping-editor.js';
 import '../editors/test-panel.js';
 import '../../modals/inline-tool-modal.js';
 import '../../modals/tool-picker-modal.js';
@@ -169,6 +169,15 @@ export class ReactNodeEditor extends BaseNodeEditor {
             
             .tool-item.is-agent .tool-item-icon {
                 color: #9333ea;
+            }
+            
+            .tool-item.is-mcp {
+                background: rgba(16, 185, 129, 0.1);
+                border: 1px solid rgba(16, 185, 129, 0.3);
+            }
+            
+            .tool-item.is-mcp .tool-item-icon {
+                color: #10b981;
             }
             
             .tool-item-name {
@@ -524,13 +533,60 @@ export class ReactNodeEditor extends BaseNodeEditor {
         }, { once: true });
     }
     
+    _isMCPTool(tool) {
+        const toolId = typeof tool === 'string' ? tool : tool.tool_id;
+        return toolId?.startsWith('mcp:');
+    }
+    
+    _parseMCPToolId(toolId) {
+        const parts = toolId.split(':');
+        return {
+            server_id: parts[1] || '',
+            tool_name: parts[2] || '',
+        };
+    }
+    
     _onEditTool(toolId) {
+        // Проверяем MCP инструмент
+        if (toolId.startsWith('mcp:')) {
+            const { server_id, tool_name } = this._parseMCPToolId(toolId);
+            
+            const modal = document.createElement('inline-tool-modal');
+            modal.mode = 'edit';
+            modal.toolType = 'mcp';
+            modal.toolConfig = {
+                tool_id: toolId,
+                type: 'mcp',
+                server_id: server_id,
+                tool_name: tool_name,
+            };
+            modal.agentVariables = this.agentVariables;
+            modal.agentId = this.agentId;
+            modal.skillId = this.skillId;
+            
+            modal.addEventListener('tool-saved', (e) => {
+                const { toolId: savedToolId, config: savedConfig } = e.detail;
+                const tools = (this.nodeConfig.tools || []).map(t => {
+                    const tid = typeof t === 'string' ? t : t.tool_id;
+                    return tid === toolId ? savedConfig : t;
+                });
+                this._updateConfig('tools', tools);
+            });
+            
+            document.body.appendChild(modal);
+            modal.showModal();
+            
+            modal.addEventListener('close', () => {
+                modal.remove();
+            }, { once: true });
+            return;
+        }
+        
         const toolConfig = this.inlineTools.get(toolId);
         if (!toolConfig) {
             return;
         }
         
-        // Определяем тип инструмента
         const toolType = toolConfig.type || 'tool';
         
         const modal = document.createElement('inline-tool-modal');
@@ -543,7 +599,7 @@ export class ReactNodeEditor extends BaseNodeEditor {
         
         modal.addEventListener('tool-saved', (e) => {
             const { toolId: savedToolId, config: savedConfig } = e.detail;
-            const tools = (this.config.tools || []).map(t => {
+            const tools = (this.nodeConfig.tools || []).map(t => {
                 const tid = typeof t === 'string' ? t : t.tool_id;
                 return tid === savedToolId ? savedConfig : t;
             });
@@ -601,6 +657,12 @@ export class ReactNodeEditor extends BaseNodeEditor {
     }
     
     _getToolIcon(tool) {
+        const toolId = typeof tool === 'string' ? tool : tool.tool_id;
+        
+        if (toolId?.startsWith('mcp:')) {
+            return 'plug';
+        }
+        
         if (typeof tool === 'object') {
             if (tool.type === 'agent' || tool.type === 'react_node') {
                 return 'agent';
@@ -646,6 +708,8 @@ export class ReactNodeEditor extends BaseNodeEditor {
                 <p class="panel-description">
                     LLM агент с инструментами. Выполняет задачи через ReAct loop.
                 </p>
+                
+                ${this.renderNodeIdField()}
                 
                 <div class="form-group">
                     <div class="form-label">
@@ -880,10 +944,11 @@ export class ReactNodeEditor extends BaseNodeEditor {
                                 const displayName = this._getToolDisplayName(tool);
                                 const isInline = this._isInlineTool(tool);
                                 const isAgent = this._isAgentTool(tool);
+                                const isMCP = this._isMCPTool(tool);
                                 const icon = this._getToolIcon(tool);
-                                const canEdit = isInline || isAgent;
+                                const canEdit = isInline || isAgent || isMCP;
                                 return html`
-                                    <div class="tool-item ${isInline ? 'is-inline' : ''} ${isAgent ? 'is-agent' : ''}">
+                                    <div class="tool-item ${isInline ? 'is-inline' : ''} ${isAgent ? 'is-agent' : ''} ${isMCP ? 'is-mcp' : ''}">
                                         <platform-icon class="tool-item-icon" name="${icon}" size="14"></platform-icon>
                                         <span 
                                             class="tool-item-name ${canEdit ? '' : 'not-editable'}"
@@ -903,11 +968,20 @@ export class ReactNodeEditor extends BaseNodeEditor {
                 ` : ''}
                 
                 <div class="form-group">
-                    <input-mapping-editor
+                    <state-mapping-editor
+                        mode="input"
                         .mappings=${config.input_mapping || {}}
-                        .availableState=${this._buildDefaultState()}
+                        .stateVariables=${Object.keys(this._buildDefaultState())}
                         @change=${(e) => this._onInputChange('input_mapping', e.detail.value)}
-                    ></input-mapping-editor>
+                    ></state-mapping-editor>
+                </div>
+                
+                <div class="form-group">
+                    <state-mapping-editor
+                        mode="output"
+                        .mappings=${config.output_mapping || {}}
+                        @change=${(e) => this._onInputChange('output_mapping', e.detail.value)}
+                    ></state-mapping-editor>
                 </div>
                 
                 <test-panel

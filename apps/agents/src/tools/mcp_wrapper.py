@@ -6,7 +6,8 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from apps.agents.src.clients.mcp_client import MCPClient, MCPClientError
 from apps.agents.src.models.mcp import MCPServerConfig
-from apps.agents.src.tools.base import BaseTool, CallParameter
+from apps.agents.src.models.tool_reference import CallParameter
+from apps.agents.src.tools.base import BaseTool, sanitize_tool_name
 from core.logging import get_logger
 
 if TYPE_CHECKING:
@@ -34,7 +35,7 @@ class MCPTool(BaseTool):
         parameters: Optional[Dict[str, CallParameter]] = None,
         tags: Optional[List[str]] = None,
     ):
-        self.name = tool_id
+        self.name = sanitize_tool_name(tool_id)
         self.description = description or f"MCP tool: {mcp_tool_name}"
         self._mcp_server_config = mcp_server_config
         self._mcp_tool_name = mcp_tool_name
@@ -64,7 +65,7 @@ class MCPTool(BaseTool):
             "required": required,
         }
     
-    async def run(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
+    async def _run_impl(self, args: Dict[str, Any], state: "ExecutionState") -> Any:
         """
         Вызывает MCP tool на удалённом сервере.
         
@@ -75,7 +76,6 @@ class MCPTool(BaseTool):
         Returns:
             Текстовый результат от MCP tool
         """
-        # Получаем переменные из state для @var: резолвинга
         variables = state.variables if hasattr(state, 'variables') else {}
         
         client = MCPClient(

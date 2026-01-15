@@ -146,7 +146,7 @@ export class MCPNodeModal extends BaseNodeModal {
             }
         }
         
-        const inputMappingEditor = this.shadowRoot.querySelector('input-mapping-editor');
+        const inputMappingEditor = this.shadowRoot.querySelector('state-mapping-editor');
         const inputMapping = inputMappingEditor?.getValue() || {};
         if (Object.keys(inputMapping).length > 0) {
             config.input_mapping = inputMapping;
@@ -254,10 +254,11 @@ export class MCPNodeModal extends BaseNodeModal {
                 
                 <div class="form-main">
                     <div class="form-group">
-                        <input-mapping-editor
-                            .mappings=${this._parseMappings(config.input_mapping)}
-                            .availableState=${this._buildDefaultState()}
-                        ></input-mapping-editor>
+                        <state-mapping-editor
+                            mode="input"
+                            .mappings=${config.input_mapping || {}}
+                            .stateVariables=${Object.keys(this._buildDefaultState())}
+                        ></state-mapping-editor>
                     </div>
                     
                     <div class="form-group">

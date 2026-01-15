@@ -310,17 +310,84 @@ class Agent:
 
         return result
 
-    def _evaluate_condition(self, condition: str, state: ExecutionState) -> bool:
+    def _evaluate_condition(self, condition: Any, state: ExecutionState) -> bool:
         """
-        Вычисляет условие.
+        Вычисляет условие перехода.
 
         Поддерживаемые форматы:
-        - "field == value"
-        - "field != value"
-        - "field.nested == value"
-        - "field == true/false"
-        - "field == \"string\""
+        1. Объект с type='simple': {"type": "simple", "variable": "route", "operator": "==", "value": "order"}
+        2. Объект с type='python': {"type": "python", "code": "def check(state): return state.get('route') == 'order'"}
+        3. Legacy строка: "field == value", "field != value", и т.д.
         """
+        if isinstance(condition, dict):
+            return self._evaluate_condition_object(condition, state)
+        
+        return self._evaluate_condition_string(str(condition), state)
+
+    def _evaluate_condition_object(self, condition: Dict[str, Any], state: ExecutionState) -> bool:
+        """Вычисляет условие в новом объектном формате."""
+        condition_type = condition.get("type")
+        
+        if condition_type == "simple":
+            return self._evaluate_simple_condition(condition, state)
+        elif condition_type == "python":
+            return self._evaluate_python_condition(condition.get("code", ""), state)
+        
+        return True
+
+    def _evaluate_simple_condition(self, condition: Dict[str, Any], state: ExecutionState) -> bool:
+        """Вычисляет простое условие: variable operator value."""
+        variable = condition.get("variable", "")
+        op_str = condition.get("operator", "==")
+        value = condition.get("value", "")
+        
+        ops = {
+            "==": operator.eq,
+            "!=": operator.ne,
+            ">": operator.gt,
+            "<": operator.lt,
+            ">=": operator.ge,
+            "<=": operator.le,
+            "in": lambda a, b: a in b if hasattr(b, "__contains__") else False,
+        }
+        
+        op = ops.get(op_str, operator.eq)
+        left = MappingResolver.get_nested_value(state, variable)
+        right = self._parse_value(str(value)) if not isinstance(value, (bool, int, float)) else value
+        
+        try:
+            return op(left, right)
+        except TypeError:
+            return False
+
+    def _evaluate_python_condition(self, code: str, state: ExecutionState) -> bool:
+        """
+        Вычисляет Python условие через SafeEval.
+        Код должен содержать функцию check(state) -> bool.
+        """
+        from apps.agents.src.eval.safe_eval import SafeEval
+        from core.errors import SafeEvalError
+        
+        if not code or "def check" not in code:
+            logger.warning(f"Invalid Python condition: missing check function")
+            return False
+        
+        state_dict = state.model_dump(exclude_none=False)
+        
+        try:
+            evaluator = SafeEval(variables=state.variables)
+            check_fn = evaluator._compile(code, "check", auto_find=False)
+            result = check_fn(state_dict)
+            return bool(result)
+        except SafeEvalError as e:
+            logger.error(f"Python condition SafeEval error: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Python condition execution error: {e}")
+            return False
+
+    def _evaluate_condition_string(self, condition: str, state: ExecutionState) -> bool:
+        """Вычисляет условие в legacy строковом формате."""
         patterns = [
             (r"(.+?)\s*==\s*(.+)", operator.eq),
             (r"(.+?)\s*!=\s*(.+)", operator.ne),

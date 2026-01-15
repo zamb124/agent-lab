@@ -312,7 +312,7 @@ export class ReactNodeModal extends BaseNodeModal {
         const tagsEditor = this.shadowRoot.querySelector('tag-input');
         const tags = tagsEditor ? tagsEditor.getTags() : [];
         
-        const inputMappingEditor = this.shadowRoot.querySelector('input-mapping-editor');
+        const inputMappingEditor = this.shadowRoot.querySelector('state-mapping-editor');
         const inputMapping = inputMappingEditor ? inputMappingEditor.getValue() : {};
         
         const config = {
@@ -582,10 +582,11 @@ export class ReactNodeModal extends BaseNodeModal {
                     </div>
                     
                     <div class="form-group">
-                        <input-mapping-editor
-                            .mappings=${this._parseMappings(config.input_mapping)}
-                            .availableState=${this._buildDefaultState()}
-                        ></input-mapping-editor>
+                        <state-mapping-editor
+                            mode="input"
+                            .mappings=${config.input_mapping || {}}
+                            .stateVariables=${Object.keys(this._buildDefaultState())}
+                        ></state-mapping-editor>
                     </div>
                     
                     <test-panel

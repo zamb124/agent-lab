@@ -5,6 +5,7 @@
 import { html } from 'lit';
 import { BaseNodeEditor } from './base-node-editor.js';
 import '../editors/json-field-editor.js';
+import '../editors/state-mapping-editor.js';
 import '../editors/test-panel.js';
 
 export class ExternalApiEditor extends BaseNodeEditor {
@@ -21,6 +22,8 @@ export class ExternalApiEditor extends BaseNodeEditor {
                 <p class="panel-description">
                     HTTP вызов внешнего API.
                 </p>
+                
+                ${this.renderNodeIdField()}
                 
                 <div class="form-group">
                     <div class="form-label">
@@ -98,20 +101,11 @@ export class ExternalApiEditor extends BaseNodeEditor {
                 </div>
                 
                 <div class="form-group">
-                    <div class="form-label">
-                        <span class="form-label-text">State Mapping (JSON)</span>
-                    </div>
-                    <json-field-editor
-                        .value=${config.state_mapping ? JSON.stringify(config.state_mapping, null, 2) : '{}'}
-                        @change=${(e) => {
-                            const editor = e.target;
-                            if (editor.isValid()) {
-                                this._onInputChange('state_mapping', editor.getParsedValue());
-                            }
-                        }}
-                        min-height="60"
-                        hint="Маппинг ответа API в state"
-                    ></json-field-editor>
+                    <state-mapping-editor
+                        mode="output"
+                        .mappings=${config.output_mapping || config.state_mapping || {}}
+                        @change=${(e) => this._onInputChange('output_mapping', e.detail.value)}
+                    ></state-mapping-editor>
                 </div>
                 
                 <test-panel

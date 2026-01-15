@@ -5,7 +5,7 @@
 import { html } from 'lit';
 import { BaseNodeEditor } from './base-node-editor.js';
 import '../editors/python-code-editor.js';
-import '../editors/input-mapping-editor.js';
+import '../editors/state-mapping-editor.js';
 import '../editors/test-panel.js';
 
 export class FunctionNodeEditor extends BaseNodeEditor {
@@ -34,6 +34,8 @@ export class FunctionNodeEditor extends BaseNodeEditor {
                 <p class="panel-description">
                     Python функция для обработки данных.
                 </p>
+                
+                ${this.renderNodeIdField()}
                 
                 <div class="form-group">
                     <div class="form-label">
@@ -84,15 +86,20 @@ export class FunctionNodeEditor extends BaseNodeEditor {
                 `}
                 
                 <div class="form-group">
-                    <div class="form-label">
-                        <span class="form-label-text">Input Mapping</span>
-                        <span class="form-label-hint">Маппинг из state</span>
-                    </div>
-                    <input-mapping-editor
+                    <state-mapping-editor
+                        mode="input"
                         .mappings=${config.input_mapping || {}}
-                        .availableState=${this._buildDefaultState()}
+                        .stateVariables=${Object.keys(this._buildDefaultState())}
                         @change=${(e) => this._onInputChange('input_mapping', e.detail.value)}
-                    ></input-mapping-editor>
+                    ></state-mapping-editor>
+                </div>
+                
+                <div class="form-group">
+                    <state-mapping-editor
+                        mode="output"
+                        .mappings=${config.output_mapping || {}}
+                        @change=${(e) => this._onInputChange('output_mapping', e.detail.value)}
+                    ></state-mapping-editor>
                 </div>
                 
                 <test-panel

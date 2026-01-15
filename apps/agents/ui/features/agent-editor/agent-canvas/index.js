@@ -338,13 +338,15 @@ export class AgentCanvas extends PlatformElement {
         }
     }
 
-    _showEdgeConditionModal(fromId, toId, currentCondition = '') {
+    _showEdgeConditionModal(fromId, toId, currentCondition = null) {
         const fromConfig = this.nodeConfigs.get(fromId.toString());
         const toConfig = this.nodeConfigs.get(toId.toString());
         
         if (!fromConfig || !toConfig) return;
 
         const variables = this._getAgentVariables();
+        const stateVariables = this._getStateVariables();
+        const sourceNodeConfig = fromConfig.config || {};
         
         let modal = document.querySelector('edge-condition-modal');
         if (!modal) {
@@ -356,6 +358,8 @@ export class AgentCanvas extends PlatformElement {
         modal.toNode = toConfig.nodeId;
         modal.condition = currentCondition;
         modal.variables = variables;
+        modal.sourceNodeConfig = sourceNodeConfig;
+        modal.stateVariables = stateVariables;
 
         const handleConditionSaved = (e) => {
             const { condition } = e.detail;
@@ -364,7 +368,8 @@ export class AgentCanvas extends PlatformElement {
             if (condition) {
                 this.edgeConditions.set(key, condition);
                 if (this._edgeLabelsManager) {
-                    this._edgeLabelsManager.add(fromId, toId, condition);
+                    const labelText = this._getConditionLabelText(condition);
+                    this._edgeLabelsManager.add(fromId, toId, labelText);
                 }
             } else {
                 this.edgeConditions.delete(key);
@@ -386,6 +391,46 @@ export class AgentCanvas extends PlatformElement {
         modal.showModal();
     }
 
+    _getConditionLabelText(condition) {
+        if (!condition) return '';
+        
+        if (typeof condition === 'string') {
+            return condition;
+        }
+        
+        if (condition.type === 'simple') {
+            const value = isNaN(condition.value) ? `'${condition.value}'` : condition.value;
+            return `${condition.variable} ${condition.operator} ${value}`;
+        }
+        
+        if (condition.type === 'python') {
+            return 'Python';
+        }
+        
+        return '';
+    }
+
+    _getStateVariables() {
+        if (!this.agentConfig) {
+            return [];
+        }
+        
+        const variables = this.agentConfig.variables;
+        if (!variables) {
+            return [];
+        }
+        
+        if (Array.isArray(variables)) {
+            return variables.map(v => typeof v === 'object' ? v.name || v.key : v);
+        }
+        
+        if (typeof variables === 'object') {
+            return Object.keys(variables);
+        }
+        
+        return [];
+    }
+
     _showConnectionContextMenu(x, y, fromId, toId, currentCondition) {
         this.connectionContextMenu = {
             x,
@@ -394,6 +439,7 @@ export class AgentCanvas extends PlatformElement {
             toId,
             currentCondition
         };
+        this.requestUpdate();
     }
 
     _onEditConnectionCondition() {
@@ -811,6 +857,39 @@ export class AgentCanvas extends PlatformElement {
         }
     }
 
+    /**
+     * Обновляет nodeId ноды
+     * @param {string} oldId - текущий nodeId
+     * @param {string} newId - новый nodeId
+     * @returns {boolean} - успешно ли обновление
+     */
+    updateNodeId(oldId, newId) {
+        console.log('[AgentCanvas] updateNodeId called:', { oldId, newId });
+        
+        for (const [drawflowId, nodeConfig] of this.nodeConfigs.entries()) {
+            if (nodeConfig.nodeId === oldId) {
+                // Обновляем nodeId в конфиге
+                nodeConfig.nodeId = newId;
+                
+                // Обновляем отображение имени в DOM
+                const nodeEl = this.querySelector(`#node-${drawflowId}`);
+                if (nodeEl) {
+                    const nameEl = nodeEl.querySelector('.agent-node-name');
+                    if (nameEl) {
+                        nameEl.textContent = newId;
+                    }
+                }
+                
+                console.log('[AgentCanvas] Node ID updated successfully:', { drawflowId, oldId, newId });
+                this._saveSnapshot();
+                return true;
+            }
+        }
+        
+        console.warn('[AgentCanvas] Node not found for updateNodeId:', oldId);
+        return false;
+    }
+
     removeNode(nodeId) {
         for (const [drawflowId, nodeConfig] of this.nodeConfigs.entries()) {
             if (nodeConfig.nodeId === nodeId) {
@@ -1223,7 +1302,8 @@ export class AgentCanvas extends PlatformElement {
                 const fromId = nodePositions.get(edge.from);
                 const toId = nodePositions.get(edge.to);
                 if (fromId && toId) {
-                    this._edgeLabelsManager?.add(fromId, toId, edge.condition);
+                    const labelText = this._getConditionLabelText(edge.condition);
+                    this._edgeLabelsManager?.add(fromId, toId, labelText);
                 }
             }
         }

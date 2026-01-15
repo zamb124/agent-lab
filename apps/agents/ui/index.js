@@ -30,7 +30,7 @@ import './components/editors/json-field-editor.js';
 import './components/editors/tag-input.js';
 import './components/editors/llm-config-editor.js';
 import './components/editors/llm-mocks-editor.js';
-import './components/editors/input-mapping-editor.js';
+import './components/editors/state-mapping-editor.js';
 import './components/editors/python-code-editor.js';
 import './components/editors/test-panel.js';
 
