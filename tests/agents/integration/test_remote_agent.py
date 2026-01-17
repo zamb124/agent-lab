@@ -84,7 +84,7 @@ class TestRemoteAgentNode:
         """Выполнение RemoteAgentNode."""
         node = RemoteAgentNode(
             node_id="remote",
-            url=remote_agent_server,
+            config={"url": remote_agent_server},
         )
 
         state = ExecutionState(
@@ -104,7 +104,7 @@ class TestRemoteAgentNode:
         """RemoteAgentNode сохраняет существующие поля state."""
         node = RemoteAgentNode(
             node_id="remote",
-            url=remote_agent_server,
+            config={"url": remote_agent_server},
         )
 
         state = ExecutionState(
@@ -214,7 +214,7 @@ class TestFlowWithRemoteAgent:
             entry="prepare",
             nodes={
                 "prepare": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     state['content'] = state.get('content', '').upper()
@@ -269,7 +269,7 @@ def run(state):
                     "url": remote_agent_server,
                 },
                 "process": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     response = state.get('response', '')
@@ -357,7 +357,7 @@ class TestRemoteAgentInputMapping:
         server = mock_a2a_server_with_logging
         node = RemoteAgentNode(
             node_id="remote",
-            url=server["url"],
+            config={"url": server["url"]},
         )
 
         state = ExecutionState(
@@ -379,8 +379,10 @@ class TestRemoteAgentInputMapping:
         server = mock_a2a_server_with_logging
         node = RemoteAgentNode(
             node_id="remote",
-            url=server["url"],
-            input_mapping={"content": "@state:my_query"}
+            config={
+                "url": server["url"],
+                "input_mapping": {"content": "@state:my_query"}
+            }
         )
 
         state = ExecutionState(
@@ -402,8 +404,10 @@ class TestRemoteAgentInputMapping:
         server = mock_a2a_server_with_logging
         node = RemoteAgentNode(
             node_id="remote",
-            url=server["url"],
-            input_mapping={"content": "@state:data"}
+            config={
+                "url": server["url"],
+                "input_mapping": {"content": "@state:data"}
+            }
         )
 
         state = ExecutionState(
@@ -432,7 +436,7 @@ class TestRemoteAgentInputMapping:
             entry="prepare",
             nodes={
                 "prepare": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     state['prepared_query'] = 'Query from function node'

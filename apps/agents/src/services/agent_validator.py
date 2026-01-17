@@ -316,8 +316,8 @@ class AgentValidator:
                         node_id=node_id,
                     )
             
-            # tool_id для type: tool
-            if node_type == "tool":
+            # tool_id для type: code
+            if node_type == "code":
                 tool_id = config.get("tool_id")
                 has_code = "code" in config
                 

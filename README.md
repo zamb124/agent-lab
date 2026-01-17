@@ -40,9 +40,6 @@ make sgr-up      # Запустить SGR сервис
 make test        # Запуск тестов (без интеграционных)
 make test-all    # Все тесты (включая интеграционные)
 
-# E2E UI тесты (Playwright)
-pytest tests/core/components/ -v -m playwright  # Все UI тесты компонентов
-pytest tests/core/websocket/ -v -m playwright   # WebSocket тесты
 ```
 
 ### Локальная разработка

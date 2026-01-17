@@ -637,53 +637,114 @@ class ReactNodeRunner(BaseReactNodeRunner):
         state: ExecutionState,
         trace_ctx: Optional[TraceContext] = None,
     ) -> List[Dict[str, str]]:
-        """Выполняет tools."""
+        """
+        Выполняет tools ПАРАЛЛЕЛЬНО через asyncio.gather.
+        
+        Каждый tool получает копию state.
+        Результаты мержатся: messages extend, остальное - кто последний.
+        """
+        import asyncio
+        
+        if len(tool_calls) == 1:
+            # Один tool - выполняем напрямую без копирования
+            return await self._execute_single_tool(tool_calls[0], state, trace_ctx)
+        
+        # Несколько tools - параллельное выполнение
+        original_msg_count = len(state.messages)
+        
+        # Создаем копии state для каждого tool
+        state_copies = [
+            ExecutionState.model_validate(state.model_dump(exclude_none=False))
+            for _ in tool_calls
+        ]
+        
+        # Запускаем все tools параллельно
+        tasks = [
+            self._execute_single_tool(tc, state_copy, trace_ctx)
+            for tc, state_copy in zip(tool_calls, state_copies)
+        ]
+        
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Собираем результаты и мержим state
         tool_results = []
-        tracer = get_tracer()
-
-        for tc in tool_calls:
+        for i, (tc, result, state_copy) in enumerate(zip(tool_calls, results, state_copies)):
             tool_name = tc["name"]
-            tool_args = tc.get("arguments", {})
             tool_call_id = tc.get("id", tool_name)
-
-            tool = next((t for t in self.tools if t.name == tool_name), None)
-            is_agent_tool = hasattr(tool, "agent_id") if tool else False
-
-            async with tracer.tool_call_span(
-                tool_name, tool_call_id, tool_args, is_agent_tool, trace_ctx=trace_ctx
-            ) as tool_span:
-                tool_start = time.time()
-
-                if tool:
-                    logger.info(f"Выполняю tool напрямую: {tool_name}")
-                    try:
-                        result = await tool.run(tool_args, state)
-                        state.tool_results[tool_name] = result
-
-                        tool_duration = (time.time() - tool_start) * 1000
-                        tracer.record_tool_result(tool_span, result, tool_duration)
-                        tracer.record_state_snapshot(tool_span, state)
-
-                        tool_results.append(
-                            {
-                                "tool_call_id": tool_call_id,
-                                "content": str(result),
-                            }
-                        )
-                    except AgentInterrupt:
-                        raise
-                    except Exception as e:
-                        tool_duration = (time.time() - tool_start) * 1000
-                        tracer.record_tool_result(tool_span, None, tool_duration, error=str(e))
-                        logger.error(f"Tool {tool_name} failed: {e}")
-                        raise ToolExecutionError(f"Tool {tool_name} failed: {e}", error=e)
-                else:
-                    raise ToolExecutionError(
-                        f"Tool '{tool_name}' not found. Agent must be fully inline with all tools loaded.",
-                        error=None
-                    )
-
+            
+            if isinstance(result, Exception):
+                if isinstance(result, AgentInterrupt):
+                    raise result
+                logger.error(f"Tool {tool_name} failed: {result}")
+                raise ToolExecutionError(f"Tool {tool_name} failed: {result}", error=result)
+            
+            # Мержим state: messages extend, остальное перезаписываем
+            new_messages = state_copy.messages[original_msg_count:]
+            state.messages.extend(new_messages)
+            
+            # tool_results - мержим (не перезаписываем!)
+            state.tool_results.update(state_copy.tool_results)
+            
+            # Все поля (включая динамические) - перезаписываем
+            state_dict = state_copy.model_dump(exclude_none=False)
+            for field, value in state_dict.items():
+                if field in ("messages", "tool_results"):
+                    continue  # Уже обработали
+                if value is not None:
+                    setattr(state, field, value)
+            
+            tool_results.extend(result)
+        
         return tool_results
+
+    async def _execute_single_tool(
+        self,
+        tc: Dict[str, Any],
+        state: ExecutionState,
+        trace_ctx: Optional[TraceContext] = None,
+    ) -> List[Dict[str, str]]:
+        """Выполняет один tool."""
+        tracer = get_tracer()
+        tool_name = tc["name"]
+        tool_args = tc.get("arguments", {})
+        tool_call_id = tc.get("id", tool_name)
+        
+        tool = next((t for t in self.tools if t.name == tool_name), None)
+        if not tool:
+            raise ToolExecutionError(
+                f"Tool '{tool_name}' not found. Agent must be fully inline with all tools loaded.",
+                error=None
+            )
+        
+        is_agent_tool = hasattr(tool, "agent_id")
+        
+        async with tracer.tool_call_span(
+            tool_name, tool_call_id, tool_args, is_agent_tool, trace_ctx=trace_ctx
+        ) as tool_span:
+            tool_start = time.time()
+            
+            logger.info(f"Выполняю tool: {tool_name}")
+            try:
+                result = await tool.run(tool_args, state)
+                state.tool_results[tool_name] = result
+                
+                tool_duration = (time.time() - tool_start) * 1000
+                tracer.record_tool_result(tool_span, result, tool_duration)
+                tracer.record_state_snapshot(tool_span, state)
+                
+                return [
+                    {
+                        "tool_call_id": tool_call_id,
+                        "content": str(result),
+                    }
+                ]
+            except AgentInterrupt:
+                raise
+            except Exception as e:
+                tool_duration = (time.time() - tool_start) * 1000
+                tracer.record_tool_result(tool_span, None, tool_duration, error=str(e))
+                logger.error(f"Tool {tool_name} failed: {e}")
+                raise ToolExecutionError(f"Tool {tool_name} failed: {e}", error=e)
 
     async def _render_prompt(self, state: ExecutionState) -> str:
         """Рендерит промпт с переменными и сохраняет в историю."""

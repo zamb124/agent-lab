@@ -104,11 +104,11 @@ def execute(args, state):
                 "entry": "init",
                 "nodes": {
                     "init": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    return state",
                     },
                     "process": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    company = state.variables.get('e2e_company_name', 'Unknown')\n    state.response = f'Hello from {company}!'\n    return state",
                     },
                 },
@@ -157,7 +157,7 @@ class TestE2EFlowWithConditions:
                 "entry": "classifier",
                 "nodes": {
                     "classifier": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     content = state.get('content', '')
@@ -169,11 +169,11 @@ def run(state):
 """,
                     },
                     "urgent_handler": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['response'] = 'URGENT: Processing immediately!'\n    return state",
                     },
                     "normal_handler": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['response'] = 'Normal: Added to queue'\n    return state",
                     },
                 },
@@ -218,7 +218,7 @@ def run(state):
         assert "Normal" in get_task_response(data)
 
 
-class TestE2EInterruptInFunctionNode:
+class TestE2EInterruptInCodeNode:
     """E2E: Interrupt в функциональной ноде."""
 
     @pytest.mark.asyncio
@@ -232,7 +232,7 @@ class TestE2EInterruptInFunctionNode:
                 "entry": "ask_name",
                 "nodes": {
                     "ask_name": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     if 'user_name' not in state:
@@ -242,7 +242,7 @@ def run(state):
 """,
                     },
                     "greet": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     name = state.get('user_name', 'Guest')
@@ -281,7 +281,7 @@ def run(state):
         # Функция читает ответ пользователя из state["content"]
 
 
-class TestE2EInterruptInFunctionNodeV2:
+class TestE2EInterruptInCodeNodeV2:
     """E2E: Interrupt в функциональной ноде (правильная версия)."""
 
     @pytest.mark.asyncio
@@ -304,7 +304,7 @@ class TestE2EInterruptInFunctionNodeV2:
                 "entry": "ask_name",
                 "nodes": {
                     "ask_name": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 from apps.agents.src.agent.exceptions import AgentInterrupt
 
@@ -323,7 +323,7 @@ def run(state):
 """,
                     },
                     "greet": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     name = state.variables.get('user_name', 'Guest')
@@ -406,7 +406,7 @@ class TestE2EExternalAPIWithVarAuth:
                         "state_mapping": {"api_result": "response.data"},
                     },
                     "format_result": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     result = state.get('api_result', 'No data')
@@ -439,7 +439,7 @@ class TestE2EMultipleInterruptScenarios:
                 "entry": "classifier",
                 "nodes": {
                     "classifier": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     content = state.get('content', '').lower()
@@ -453,7 +453,7 @@ def run(state):
 """,
                     },
                     "order_handler": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     if 'order_id' in state:
@@ -469,7 +469,7 @@ def run(state):
 """,
                     },
                     "support_handler": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     if 'problem' in state:
@@ -485,7 +485,7 @@ def run(state):
 """,
                     },
                     "general_handler": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     state['response'] = 'Добро пожаловать! Напишите "order" или "support".'
@@ -524,7 +524,7 @@ def run(state):
                 "entry": "classifier",
                 "nodes": {
                     "classifier": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     content = state.get('content', '').lower()
@@ -538,7 +538,7 @@ def run(state):
 """,
                     },
                     "order_handler": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     # При resume content содержит ответ пользователя (номер заказа)
@@ -557,7 +557,7 @@ def run(state):
 """,
                     },
                     "support_handler": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     if 'problem' in state:
@@ -573,7 +573,7 @@ def run(state):
 """,
                     },
                     "general_handler": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     state['response'] = 'Добро пожаловать! Напишите "order" или "support".'
@@ -695,7 +695,7 @@ class TestE2EExternalAgentInAgent:
                         "skill_id": "default",
                     },
                     "process_result": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     agent_response = state.get('response', '')
@@ -763,7 +763,7 @@ def execute(args, state):
                 "entry": "welcome",
                 "nodes": {
                     "welcome": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     greeting = state.get('variables', {}).get('greeting', 'Hello')
@@ -772,7 +772,7 @@ def run(state):
 """,
                     },
                     "ask_action": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     if 'action' in state:
@@ -786,7 +786,7 @@ def run(state):
 """,
                     },
                     "process_action": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     action = state.get('action', '')

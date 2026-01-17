@@ -605,11 +605,11 @@ class TestBreakpointsAPIIntegration:
             entry="step1",
             nodes={
                 "step1": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    state['step1_done'] = True\n    return state",
                 },
                 "step2": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    state['step2_done'] = True\n    state['response'] = 'All done'\n    return state",
                 },
             },

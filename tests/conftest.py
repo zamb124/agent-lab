@@ -13,7 +13,6 @@ pytest_plugins = [
     "tests.fixtures.services",
     "tests.fixtures.clients",
     "tests.fixtures.auth",
-    "tests.fixtures.playwright",
     "tests.fixtures.push",
 ]
 
@@ -620,7 +619,10 @@ def container(app):
     """
     from apps.agents.src.container import get_container
 
-    return get_container()
+    c = get_container()
+    # В тестах по умолчанию без воркера (локальное выполнение)
+    c.use_worker = False
+    return c
 
 
 @pytest.fixture(scope="session")

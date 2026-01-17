@@ -11,8 +11,9 @@ from apps.agents.src.eval import (
     get_nested,
     set_nested,
     SafeContext,
+    compile_function,
+    PythonCompiler,
 )
-from apps.agents.src.eval.safe_eval import compile_function, _validate_code
 from core.state import ExecutionState
 from core.context import Context, User
 
@@ -283,11 +284,12 @@ def run(state):
         assert result.__pydantic_extra__["sum"] == 15
 
     @pytest.mark.asyncio
-    async def test_safe_eval_must_return_execution_state(self):
-        """Функция должна возвращать ExecutionState или dict."""
+    @pytest.mark.asyncio
+    async def test_safe_eval_accepts_any_return_type(self):
+        """Функция может возвращать любой тип - он записывается в state.result."""
         code = """
 def run(state):
-    return "not a dict or ExecutionState"
+    return "string result"
 """
         state = ExecutionState(
             task_id="test",
@@ -295,8 +297,9 @@ def run(state):
             user_id="test",
             session_id="test:test"
         )
-        with pytest.raises(TypeError, match="Function must return ExecutionState"):
-            await safe_eval(code, state)
+        result = await safe_eval(code, state)
+        # Скалярный результат записывается в state
+        assert result is not None
 
     @pytest.mark.asyncio
     async def test_safe_eval_with_json(self):

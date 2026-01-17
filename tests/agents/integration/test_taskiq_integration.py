@@ -23,9 +23,11 @@ pytestmark = pytest.mark.real_taskiq
 
 
 @pytest.fixture(autouse=True)
-def require_taskiq_worker(taskiq_worker):
+def require_taskiq_worker(taskiq_worker, container):
     """Все тесты в этом модуле требуют реальный TaskIQ worker."""
-    pass
+    container.use_worker = True
+    yield
+    container.use_worker = False
 
 from apps.agents.src.tasks.agent_tasks import process_agent_task
 from apps.agents.src.tasks.eval_task import execute_inline_code
@@ -247,11 +249,11 @@ class TestTaskIQFlowExecution:
             entry="init",
             nodes={
                 "init": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    state['step'] = 'init'\n    return state",
                 },
                 "process": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    state['step'] = 'process'\n    state['response'] = 'Done'\n    return state",
                 },
             },
@@ -304,7 +306,7 @@ class TestTaskIQInterruptResume:
             entry="ask",
             nodes={
                 "ask": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     if 'name' in state:
@@ -318,7 +320,7 @@ def run(state):
 """,
                 },
                 "greet": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     name = state.get('name', 'Unknown')
@@ -455,7 +457,7 @@ class TestTaskIQAPIIntegration:
             entry="main",
             nodes={
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    state['response'] = f\"Got: {state.get('content', '')}\"\n    return state",
                 },
             },

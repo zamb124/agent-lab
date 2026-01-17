@@ -1,14 +1,14 @@
 """
-Тесты для ToolNode.
+Тесты для CodeNode.
 
-ToolNode позволяет использовать BaseTool как ноду графа.
+CodeNode позволяет использовать BaseTool как ноду графа.
 Поддерживает input_mapping для @state:, @var: и констант.
 """
 
 import pytest
 from typing import Any, Dict
 
-from apps.agents.src.agent.nodes import ToolNode, create_node
+from apps.agents.src.agent.nodes import CodeNode, create_node
 from apps.agents.src.mapping import MappingResolver
 from apps.agents.src.tools.base import BaseTool, InlineTool
 from apps.agents.src.models.tool_reference import CallParameter
@@ -40,19 +40,18 @@ class FormatterTool(BaseTool):
         return template.format(name=name)
 
 
-class TestToolNode:
-    """Тесты ToolNode."""
+class TestCodeNode:
+    """Тесты CodeNode."""
 
     @pytest.mark.asyncio
     async def test_tool_node_basic_execution(self):
-        """ToolNode выполняет tool и сохраняет результат в state."""
+        """CodeNode выполняет tool и сохраняет результат в state."""
         tool = SimpleTool()
-        node = ToolNode(
+        node = CodeNode(
             node_id="test_node",
-            tool=tool,
-            input_mapping={"x": 10, "y": 20},
-            output_key="result",
+            config={"input_mapping": {"x": 10, "y": 20}, "output_key": "result"},
         )
+        node.tool = tool
 
         from core.state import ExecutionState
         state = ExecutionState(
@@ -67,17 +66,19 @@ class TestToolNode:
 
     @pytest.mark.asyncio
     async def test_tool_node_input_mapping_state(self):
-        """ToolNode берет аргументы из state через @state:."""
+        """CodeNode берет аргументы из state через @state:."""
         tool = SimpleTool()
-        node = ToolNode(
+        node = CodeNode(
             node_id="test_node",
-            tool=tool,
-            input_mapping={
-                "x": "@state:value_x",
-                "y": "@state:value_y",
+            config={
+                "input_mapping": {
+                    "x": "@state:value_x",
+                    "y": "@state:value_y",
+                },
+                "output_key": "sum",
             },
-            output_key="sum",
         )
+        node.tool = tool
 
         from core.state import ExecutionState
         state = ExecutionState(
@@ -94,17 +95,19 @@ class TestToolNode:
 
     @pytest.mark.asyncio
     async def test_tool_node_input_mapping_nested_state(self):
-        """ToolNode берет аргументы из вложенного state через @state:path."""
+        """CodeNode берет аргументы из вложенного state через @state:path."""
         tool = SimpleTool()
-        node = ToolNode(
+        node = CodeNode(
             node_id="test_node",
-            tool=tool,
-            input_mapping={
-                "x": "@state:data.first",
-                "y": "@state:data.second",
+            config={
+                "input_mapping": {
+                    "x": "@state:data.first",
+                    "y": "@state:data.second",
+                },
+                "output_key": "total",
             },
-            output_key="total",
         )
+        node.tool = tool
 
         from core.state import ExecutionState
         state = ExecutionState(
@@ -120,17 +123,19 @@ class TestToolNode:
 
     @pytest.mark.asyncio
     async def test_tool_node_input_mapping_var(self):
-        """ToolNode берет аргументы из переменных через @var:."""
+        """CodeNode берет аргументы из переменных через @var:."""
         tool = SimpleTool()
-        node = ToolNode(
+        node = CodeNode(
             node_id="test_node",
-            tool=tool,
-            input_mapping={
-                "x": "@var:multiplier",
-                "y": "@state:value",
+            config={
+                "input_mapping": {
+                    "x": "@var:multiplier",
+                    "y": "@state:value",
+                },
+                "output_key": "result",
             },
-            output_key="result",
         )
+        node.tool = tool
 
         from core.state import ExecutionState
         state = ExecutionState(
@@ -147,17 +152,19 @@ class TestToolNode:
 
     @pytest.mark.asyncio
     async def test_tool_node_input_mapping_constants(self):
-        """ToolNode использует константы в input_mapping."""
+        """CodeNode использует константы в input_mapping."""
         tool = SimpleTool()
-        node = ToolNode(
+        node = CodeNode(
             node_id="test_node",
-            tool=tool,
-            input_mapping={
-                "x": 42,
-                "y": 8,
+            config={
+                "input_mapping": {
+                    "x": 42,
+                    "y": 8,
+                },
+                "output_key": "answer",
             },
-            output_key="answer",
         )
+        node.tool = tool
 
         from core.state import ExecutionState
         state = ExecutionState(
@@ -172,17 +179,19 @@ class TestToolNode:
 
     @pytest.mark.asyncio
     async def test_tool_node_mixed_mapping(self):
-        """ToolNode поддерживает смешанный маппинг."""
+        """CodeNode поддерживает смешанный маппинг."""
         tool = FormatterTool()
-        node = ToolNode(
+        node = CodeNode(
             node_id="test_node",
-            tool=tool,
-            input_mapping={
-                "template": "Привет, {name}!",
-                "name": "@state:user.name",
+            config={
+                "input_mapping": {
+                    "template": "Привет, {name}!",
+                    "name": "@state:user.name",
+                },
+                "output_key": "greeting",
             },
-            output_key="greeting",
         )
+        node.tool = tool
 
         from core.state import ExecutionState
         state = ExecutionState(
@@ -197,14 +206,14 @@ class TestToolNode:
         assert result["greeting"] == "Привет, Иван!"
 
     @pytest.mark.asyncio
-    async def test_tool_node_default_output_key(self):
-        """ToolNode использует node_id как output_key по умолчанию."""
+    async def test_tool_node_without_output_key(self):
+        """CodeNode без output_key записывает результат в state.result."""
         tool = SimpleTool()
-        node = ToolNode(
+        node = CodeNode(
             node_id="my_calculator",
-            tool=tool,
-            input_mapping={"x": 1, "y": 2},
+            config={"input_mapping": {"x": 1, "y": 2}},
         )
+        node.tool = tool
 
         from core.state import ExecutionState
         state = ExecutionState(
@@ -215,19 +224,18 @@ class TestToolNode:
         )
         result = await node.run(state)
 
-        # По умолчанию output_key = node_id
-        assert result["my_calculator"] == 3
+        # Без output_key скалярный результат записывается в state.result
+        assert result.result == 3
 
     @pytest.mark.asyncio
     async def test_tool_node_preserves_state(self):
-        """ToolNode сохраняет остальные поля state."""
+        """CodeNode сохраняет остальные поля state."""
         tool = SimpleTool()
-        node = ToolNode(
+        node = CodeNode(
             node_id="test_node",
-            tool=tool,
-            input_mapping={"x": 1, "y": 2},
-            output_key="result",
+            config={"input_mapping": {"x": 1, "y": 2}, "output_key": "result"},
         )
+        node.tool = tool
 
         from core.state import ExecutionState
         state = ExecutionState(
@@ -246,14 +254,13 @@ class TestToolNode:
 
     @pytest.mark.asyncio
     async def test_tool_node_mock(self):
-        """ToolNode поддерживает mock через state.mock."""
+        """CodeNode поддерживает mock через state.mock."""
         tool = SimpleTool()
-        node = ToolNode(
+        node = CodeNode(
             node_id="my_tool_node",
-            tool=tool,
-            input_mapping={"x": 1, "y": 2},
-            # output_key по умолчанию = node_id = "my_tool_node"
+            config={"input_mapping": {"x": 1, "y": 2}},
         )
+        node.tool = tool
 
         from core.state import ExecutionState
         state = ExecutionState(
@@ -274,12 +281,12 @@ class TestToolNode:
         assert result["mocked"] is True
 
 
-class TestInlineToolNode:
-    """Тесты ToolNode с InlineTool."""
+class TestInlineCodeNode:
+    """Тесты CodeNode с InlineTool."""
 
     @pytest.mark.asyncio
     async def test_inline_tool_basic(self):
-        """InlineTool выполняется через ToolNode."""
+        """InlineTool выполняется через CodeNode."""
         inline_tool = InlineTool(
             tool_id="inline_add",
             code="def execute(args, state):\n    return args['a'] + args['b']",
@@ -290,12 +297,11 @@ class TestInlineToolNode:
             },
         )
 
-        node = ToolNode(
+        node = CodeNode(
             node_id="inline_node",
-            tool=inline_tool,
-            input_mapping={"a": 100, "b": 200},
-            output_key="sum",
+            config={"input_mapping": {"a": 100, "b": 200}, "output_key": "sum"},
         )
+        node.tool = inline_tool
 
         from core.state import ExecutionState
         state = ExecutionState(
@@ -317,12 +323,11 @@ class TestInlineToolNode:
             description="Читает из state",
         )
 
-        node = ToolNode(
+        node = CodeNode(
             node_id="reader_node",
-            tool=inline_tool,
-            input_mapping={},
-            output_key="secret_value",
+            config={"input_mapping": {}, "output_key": "secret_value"},
         )
+        node.tool = inline_tool
 
         from core.state import ExecutionState
         state = ExecutionState(
@@ -345,15 +350,17 @@ class TestInlineToolNode:
             description="Приветствие",
         )
 
-        node = ToolNode(
+        node = CodeNode(
             node_id="greeting_node",
-            tool=inline_tool,
-            input_mapping={
-                "company": "@var:company_name",
-                "user": "@state:user.name",
+            config={
+                "input_mapping": {
+                    "company": "@var:company_name",
+                    "user": "@state:user.name",
+                },
+                "output_key": "message",
             },
-            output_key="message",
         )
+        node.tool = inline_tool
 
         from core.state import ExecutionState
         state = ExecutionState(
@@ -374,9 +381,9 @@ class TestCreateNodeTool:
 
     @pytest.mark.asyncio
     async def test_create_node_inline_tool(self):
-        """create_node создает ToolNode из inline кода."""
+        """create_node создает CodeNode из inline кода."""
         node_config = {
-            "type": "tool",
+            "type": "code",
             "code": "def execute(args, state):\n    return args['x'] * 2",
             "args_schema": {
                 "x": {"type": "integer", "description": "Число для удвоения"},
@@ -387,7 +394,7 @@ class TestCreateNodeTool:
 
         node = await create_node("double_node", node_config)
 
-        assert isinstance(node, ToolNode)
+        assert isinstance(node, CodeNode)
         assert node.node_id == "double_node"
         assert node.output_key == "doubled"
 
@@ -405,7 +412,7 @@ class TestCreateNodeTool:
     async def test_create_node_inline_tool_with_mapping(self):
         """create_node c inline tool и input_mapping."""
         node_config = {
-            "type": "tool",
+            "type": "code",
             "code": "def execute(args, state):\n    return f\"{args['prefix']}{args['value']}\"",
             "input_mapping": {
                 "prefix": "@var:order_prefix",

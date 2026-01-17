@@ -67,7 +67,7 @@ async def flow_with_permission(container, unique_id):
         permission="managers",
         nodes={
             "main": {
-                "type": "function",
+                "type": "code",
                 "code": "def run(state): state['response'] = 'Agent executed'; return state",
             }
         },
@@ -96,11 +96,11 @@ async def flow_with_skill_permission(container, unique_id):
         permission=["users", "vip"],
         nodes={
             "main": {
-                "type": "function",
+                "type": "code",
                 "code": "def run(state): state['response'] = 'Default skill'; return state",
             },
             "vip_main": {
-                "type": "function",
+                "type": "code",
                 "code": "def run(state): state['response'] = 'VIP skill'; return state",
             }
         },

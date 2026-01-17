@@ -73,11 +73,11 @@ class NodeConfig(StrictBaseModel):
     
     Поддерживаемые типы:
     - NodeType.REACT_NODE: LLM агент с ReAct циклом
-    - NodeType.FUNCTION: Python функция (inline код)
-    - NodeType.TOOL: BaseTool как нода
+    - NodeType.CODE: выполнение кода (Python, JavaScript, Go)
     - NodeType.AGENT: вложенный agent
     - NodeType.REMOTE_AGENT: внешний агент по A2A
     - NodeType.EXTERNAL_API: вызов HTTP API
+    - NodeType.MCP: MCP tool
     """
 
     model_config = ConfigDict(json_schema_extra={"storage_prefix": "node"}, populate_by_name=True)

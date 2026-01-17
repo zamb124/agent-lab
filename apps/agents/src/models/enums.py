@@ -34,8 +34,7 @@ class NodeType(str, Enum):
     """
     
     REACT_NODE = "react_node"       # ReAct агент с LLM и tools
-    FUNCTION = "function"           # Python функция (inline код)
-    TOOL = "tool"                   # BaseTool как нода
+    CODE = "code"                   # Выполнение кода (Python, JavaScript, Go)
     AGENT = "agent"                 # Вложенный agent (subflow)
     REMOTE_AGENT = "remote_agent"   # Внешний агент по A2A протоколу
     EXTERNAL_API = "external_api"   # Вызов внешнего HTTP API

@@ -102,14 +102,19 @@ class ToolRegistry:
         """
         Создает tool из inline конфига.
 
+        Поддерживает все типы нод как tools:
+        - code: InlineTool с Python/JS/Go кодом
+        - react_node: NodeAsToolWrapper с ReAct агентом
+        - agent: NodeAsToolWrapper с вложенным agent
+        - remote_agent: NodeAsToolWrapper с A2A агентом
+        - external_api: NodeAsToolWrapper с HTTP API
+        - mcp: MCPTool
+
         Args:
-            tool_ref: inline конфиг (dict) с полным кодом
+            tool_ref: inline конфиг (dict)
 
         Returns:
             BaseTool
-
-        Raises:
-            ValueError: если tool_ref - строка или отсутствует code
         """
         if isinstance(tool_ref, str):
             raise ValueError(
@@ -120,20 +125,34 @@ class ToolRegistry:
         if not isinstance(tool_ref, dict):
             raise ValueError(f"Tool ref must be dict with inline code, got {type(tool_ref)}")
         
-        # react_node / agent как tool - используем NodeAsToolWrapper
         tool_type = tool_ref.get("type")
-        if tool_type in (NodeType.REACT_NODE.value, NodeType.AGENT.value, "agent") or tool_ref.get("prompt"):
-            return self._create_node_as_tool(tool_ref)
         
-        # MCP tool - создаём MCPTool
+        # MCP tool
         code_mode = tool_ref.get("code_mode")
         if code_mode == CodeMode.MCP_TOOL.value or code_mode == CodeMode.MCP_TOOL:
             return await self._create_mcp_tool(tool_ref)
         
+        # Все типы нод кроме code -> NodeAsToolWrapper
+        if tool_type in (
+            NodeType.REACT_NODE.value,
+            NodeType.AGENT.value,
+            NodeType.REMOTE_AGENT.value,
+            NodeType.EXTERNAL_API.value,
+            NodeType.MCP.value,
+            "agent",
+        ) or tool_ref.get("prompt"):
+            return self._create_node_as_tool(tool_ref)
+        
+        # code node -> InlineTool (если есть code) или NodeAsToolWrapper
         code = tool_ref.get("code")
-        if not code:
-            raise ValueError(f"Tool config requires 'code' field: {tool_ref}")
-        return self._create_inline_tool_from_config(tool_ref)
+        if code:
+            return self._create_inline_tool_from_config(tool_ref)
+        
+        # Fallback для type=code без code -> NodeAsToolWrapper
+        if tool_type == NodeType.CODE.value:
+            return self._create_node_as_tool(tool_ref)
+        
+        raise ValueError(f"Tool config requires 'type' or 'code' field: {tool_ref}")
 
     async def create_tools(
         self, tool_refs: List[Union[str, Dict[str, Any], ToolReference]]

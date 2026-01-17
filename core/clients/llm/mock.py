@@ -5,7 +5,7 @@ Mock LLM для тестов.
 import asyncio
 import json
 import uuid
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional, Type, TypeVar, Union, overload
 
 from a2a.types import (
     Artifact,
@@ -19,10 +19,23 @@ from a2a.types import (
     TextPart,
 )
 from a2a.utils.message import get_message_text
+from pydantic import BaseModel
 
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+T = TypeVar("T", bound=BaseModel)
+
+# Типы для messages
+MessageInput = Union[
+    str,
+    List[str],
+    Message,
+    List[Message],
+    Dict[str, Any],
+    List[Dict[str, Any]],
+]
 
 # A2A событие от LLM
 StreamEvent = TaskArtifactUpdateEvent | TaskStatusUpdateEvent
@@ -150,6 +163,26 @@ class MockLLM:
                             "arguments": args,
                         }
                     ],
+                }
+            elif response.get("type") == "tool_calls":
+                # Множественные tool_calls - ПАРАЛЛЕЛЬНОЕ выполнение
+                calls = response.get("calls", [])
+                tool_calls = []
+                for i, call in enumerate(calls):
+                    args = call.get("args", {})
+                    tool_name = call.get("tool")
+                    tool_call_id = call.get("id") or f"call_mock_{tool_name}_{len(messages)}_{i}"
+                    tool_calls.append({
+                        "id": tool_call_id,
+                        "type": "function",
+                        "function": {"name": tool_name, "arguments": json.dumps(args)},
+                        "name": tool_name,
+                        "arguments": args,
+                    })
+                return {
+                    "content": "",
+                    "reasoning": None,
+                    "tool_calls": tool_calls,
                 }
             elif response.get("type") == "text":
                 return {
@@ -328,6 +361,167 @@ class MockLLM:
                 status=TaskStatus(state=TaskState.completed, message=final_message),
                 final=True,
             )
+
+    @overload
+    async def chat(
+        self,
+        messages: MessageInput,
+        *,
+        response_model: Type[T],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        max_tokens: Optional[int] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+    ) -> T: ...
+
+    @overload
+    async def chat(
+        self,
+        messages: MessageInput,
+        *,
+        response_model: None = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        max_tokens: Optional[int] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+    ) -> Message: ...
+
+    async def chat(
+        self,
+        messages: MessageInput,
+        *,
+        response_model: Optional[Type[T]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        max_tokens: Optional[int] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+    ) -> Message | T:
+        """
+        Единый метод вызова MockLLM (совместим с LLMClient.chat).
+        """
+        normalized = _normalize_messages(messages)
+        
+        response_format = None
+        if response_model:
+            json_schema = response_model.model_json_schema()
+            response_format = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_model.__name__,
+                    "strict": True,
+                    "schema": json_schema,
+                },
+            }
+        
+        content_parts: List[str] = []
+        tool_calls: List[Dict[str, Any]] = []
+        
+        async for event in self.stream(
+            normalized,
+            tools=tools if not response_model else None,
+            response_format=response_format,
+        ):
+            if isinstance(event, TaskArtifactUpdateEvent):
+                if event.artifact and event.artifact.parts:
+                    for part in event.artifact.parts:
+                        if hasattr(part, "root") and hasattr(part.root, "text"):
+                            content_parts.append(part.root.text)
+            if hasattr(event, "status") and event.status:
+                if event.status.message and event.status.message.metadata:
+                    tc = event.status.message.metadata.get("tool_calls")
+                    if tc:
+                        tool_calls = tc
+        
+        content = "".join(content_parts)
+        
+        if response_model:
+            data = json.loads(content)
+            return response_model.model_validate(data)
+        
+        return Message(
+            messageId=str(uuid.uuid4()),
+            role=Role.agent,
+            parts=[Part(root=TextPart(text=content))],
+            metadata={"tool_calls": tool_calls} if tool_calls else None,
+        )
+
+
+def _normalize_messages(messages: MessageInput) -> List[Message]:
+    """
+    Нормализует различные форматы messages в List[Message].
+    """
+    if isinstance(messages, str):
+        return [
+            Message(
+                messageId=str(uuid.uuid4()),
+                role=Role.user,
+                parts=[Part(root=TextPart(text=messages))],
+            )
+        ]
+    
+    if isinstance(messages, Message):
+        return [messages]
+    
+    if isinstance(messages, dict):
+        role = Role.user if messages.get("role", "user") == "user" else Role.agent
+        content = messages.get("content", "")
+        return [
+            Message(
+                messageId=str(uuid.uuid4()),
+                role=role,
+                parts=[Part(root=TextPart(text=content))],
+            )
+        ]
+    
+    if isinstance(messages, list):
+        if not messages:
+            return []
+        
+        first = messages[0]
+        
+        if isinstance(first, str):
+            result = []
+            for i, text in enumerate(messages):
+                role = Role.user if i % 2 == 0 else Role.agent
+                result.append(
+                    Message(
+                        messageId=str(uuid.uuid4()),
+                        role=role,
+                        parts=[Part(root=TextPart(text=text))],
+                    )
+                )
+            return result
+        
+        if isinstance(first, Message):
+            return messages
+        
+        if isinstance(first, dict):
+            result = []
+            for msg in messages:
+                role = Role.user if msg.get("role", "user") == "user" else Role.agent
+                content = msg.get("content", "")
+                result.append(
+                    Message(
+                        messageId=str(uuid.uuid4()),
+                        role=role,
+                        parts=[Part(root=TextPart(text=content))],
+                    )
+                )
+            return result
+    
+    raise ValueError(f"Unsupported messages type: {type(messages)}")
 
 
 def get_global_mock_llm(model_name: str = "mock-gpt-4") -> Optional[MockLLM]:

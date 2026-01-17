@@ -23,7 +23,7 @@ class TestSkillVariablesOverride:
             agent_id="test_vars",
             name="Test",
             entry="main",
-            nodes={"main": {"type": "function", "code": "def run(s): return s"}},
+            nodes={"main": {"type": "code", "code": "def run(s): return s"}},
             edges=[Edge(from_node="main", to_node=None)],
             variables={
                 "company_name": "BaseCompany",
@@ -50,7 +50,7 @@ class TestSkillVariablesOverride:
             agent_id="test_vars",
             name="Test",
             entry="main",
-            nodes={"main": {"type": "function", "code": "def run(s): return s"}},
+            nodes={"main": {"type": "code", "code": "def run(s): return s"}},
             edges=[Edge(from_node="main", to_node=None)],
             variables={
                 "max_length": 500,
@@ -76,7 +76,7 @@ class TestSkillVariablesOverride:
             agent_id="test_vars",
             name="Test",
             entry="main",
-            nodes={"main": {"type": "function", "code": "def run(s): return s"}},
+            nodes={"main": {"type": "code", "code": "def run(s): return s"}},
             edges=[Edge(from_node="main", to_node=None)],
             variables={
                 "base_var1": "value1",
@@ -103,7 +103,7 @@ class TestSkillVariablesOverride:
             agent_id="test_vars",
             name="Test",
             entry="main",
-            nodes={"main": {"type": "function", "code": "def run(s): return s"}},
+            nodes={"main": {"type": "code", "code": "def run(s): return s"}},
             edges=[Edge(from_node="main", to_node=None)],
             variables={
                 "company_name": {
@@ -143,7 +143,7 @@ class TestSkillNodesOverride:
             entry="main",
             nodes={
                 "main": {"type": "react_node", "prompt": "Base main"},
-                "helper": {"type": "function", "code": "def run(s): return s"}
+                "helper": {"type": "code", "code": "def run(s): return s"}
             },
             edges=[Edge(from_node="main", to_node=None)],
             skills={
@@ -178,7 +178,7 @@ class TestSkillNodesOverride:
                 "custom": SkillConfig(
                     name="Custom",
                     nodes={
-                        "new_node": {"type": "function", "code": "def run(s): return s"}
+                        "new_node": {"type": "code", "code": "def run(s): return s"}
                     },
                     nodes_mode=MergeMode.MERGE
                 )
@@ -268,8 +268,8 @@ class TestSkillEdgesOverride:
             name="Test",
             entry="main",
             nodes={
-                "main": {"type": "function", "code": "def run(s): return s"},
-                "step2": {"type": "function", "code": "def run(s): return s"}
+                "main": {"type": "code", "code": "def run(s): return s"},
+                "step2": {"type": "code", "code": "def run(s): return s"}
             },
             edges=[
                 Edge(from_node="main", to_node="step2"),
@@ -297,9 +297,9 @@ class TestSkillEdgesOverride:
             name="Test",
             entry="main",
             nodes={
-                "main": {"type": "function", "code": "def run(s): return s"},
-                "step2": {"type": "function", "code": "def run(s): return s"},
-                "step3": {"type": "function", "code": "def run(s): return s"}
+                "main": {"type": "code", "code": "def run(s): return s"},
+                "step2": {"type": "code", "code": "def run(s): return s"},
+                "step3": {"type": "code", "code": "def run(s): return s"}
             },
             edges=[
                 Edge(from_node="main", to_node="step2"),
@@ -333,9 +333,9 @@ class TestSkillEdgesOverride:
             name="Test",
             entry="classifier",
             nodes={
-                "classifier": {"type": "function", "code": "def run(s): s['route']='a'; return s"},
-                "route_a": {"type": "function", "code": "def run(s): return s"},
-                "route_b": {"type": "function", "code": "def run(s): return s"}
+                "classifier": {"type": "code", "code": "def run(s): s['route']='a'; return s"},
+                "route_a": {"type": "code", "code": "def run(s): return s"},
+                "route_b": {"type": "code", "code": "def run(s): return s"}
             },
             edges=[
                 Edge(from_node="classifier", to_node="route_a", condition="route == 'a'"),
@@ -378,8 +378,8 @@ class TestSkillEntryOverride:
             name="Test",
             entry="default_start",
             nodes={
-                "default_start": {"type": "function", "code": "def run(s): s['path']='default'; return s"},
-                "skill_start": {"type": "function", "code": "def run(s): s['path']='skill'; return s"}
+                "default_start": {"type": "code", "code": "def run(s): s['path']='default'; return s"},
+                "skill_start": {"type": "code", "code": "def run(s): s['path']='skill'; return s"}
             },
             edges=[
                 Edge(from_node="default_start", to_node=None),
@@ -404,7 +404,7 @@ class TestSkillEntryOverride:
             name="Test",
             entry="default_start",
             nodes={
-                "default_start": {"type": "function", "code": "def run(s): return s"}
+                "default_start": {"type": "code", "code": "def run(s): return s"}
             },
             edges=[Edge(from_node="default_start", to_node=None)],
             skills={
@@ -527,7 +527,7 @@ class TestSkillCombinedOverrides:
             entry="default_entry",
             nodes={
                 "default_entry": {"type": "react_node", "prompt": "Default", "tools": ["t1"]},
-                "helper": {"type": "function", "code": "def run(s): return s"}
+                "helper": {"type": "code", "code": "def run(s): return s"}
             },
             edges=[
                 Edge(from_node="default_entry", to_node="helper"),
@@ -627,7 +627,7 @@ class TestSkillCombinedOverrides:
             entry="classifier",
             nodes={
                 "classifier": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    content = state.get('content', '').lower()\n    if 'заказ' in content:\n        state['route'] = 'order'\n    elif 'жалоб' in content:\n        state['route'] = 'complaint'\n    else:\n        state['route'] = 'general'\n    return state"
                 },
                 "order_processor": {"type": "react_node", "prompt": "Order"},
@@ -647,7 +647,7 @@ class TestSkillCombinedOverrides:
                     name="Только заказы",
                     nodes={
                         "classifier": {
-                            "type": "function",
+                            "type": "code",
                             "code": "def run(state):\n    content = state.get('content', '').lower()\n    if 'заказ' in content or 'order' in content:\n        state['route'] = 'order'\n    else:\n        state['route'] = 'general'\n    return state"
                         }
                     },

@@ -358,7 +358,7 @@ class TestMCPNodeInGraph:
                 "entry": "init",
                 "nodes": {
                     "init": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['query'] = 'fastapi'\n    return state",
                     },
                     "mcp_call": {
@@ -370,7 +370,7 @@ class TestMCPNodeInGraph:
                         },
                     },
                     "finish": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['response'] = 'done'\n    return state",
                     },
                 },

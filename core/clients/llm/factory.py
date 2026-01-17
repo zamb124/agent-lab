@@ -11,8 +11,10 @@ import json
 import os
 import re
 import uuid
-from typing import Any, AsyncGenerator, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, AsyncGenerator, Dict, List, Optional, Type, TypeVar, Union, TYPE_CHECKING, overload
 import httpx
+from pydantic import BaseModel
+
 from core.http import get_httpx_client
 from a2a.types import (
     Artifact,
@@ -41,6 +43,18 @@ from core.clients.llm.mock import (
 )
 
 logger = get_logger(__name__)
+
+T = TypeVar("T", bound=BaseModel)
+
+# Типы для messages
+MessageInput = Union[
+    str,
+    List[str],
+    Message,
+    List[Message],
+    Dict[str, Any],
+    List[Dict[str, Any]],
+]
 
 # A2A событие от LLM
 StreamEvent = TaskArtifactUpdateEvent | TaskStatusUpdateEvent
@@ -197,6 +211,80 @@ def _messages_to_openai(messages: List[Message | Dict[str, Any] | str]) -> List[
     return result
 
 
+def _normalize_messages(messages: MessageInput) -> List[Message]:
+    """
+    Нормализует различные форматы messages в List[Message].
+    
+    Поддерживает:
+    - str: одно сообщение пользователя
+    - List[str]: список сообщений (чередуются user/assistant)
+    - Message: одно A2A сообщение
+    - List[Message]: список A2A сообщений
+    - Dict: одно сообщение в формате {"role": "user", "content": "text"}
+    - List[Dict]: список сообщений в формате OpenAI
+    """
+    if isinstance(messages, str):
+        return [
+            Message(
+                messageId=str(uuid.uuid4()),
+                role=Role.user,
+                parts=[Part(root=TextPart(text=messages))],
+            )
+        ]
+    
+    if isinstance(messages, Message):
+        return [messages]
+    
+    if isinstance(messages, dict):
+        role = Role.user if messages.get("role", "user") == "user" else Role.agent
+        content = messages.get("content", "")
+        return [
+            Message(
+                messageId=str(uuid.uuid4()),
+                role=role,
+                parts=[Part(root=TextPart(text=content))],
+            )
+        ]
+    
+    if isinstance(messages, list):
+        if not messages:
+            return []
+        
+        first = messages[0]
+        
+        if isinstance(first, str):
+            result = []
+            for i, text in enumerate(messages):
+                role = Role.user if i % 2 == 0 else Role.agent
+                result.append(
+                    Message(
+                        messageId=str(uuid.uuid4()),
+                        role=role,
+                        parts=[Part(root=TextPart(text=text))],
+                    )
+                )
+            return result
+        
+        if isinstance(first, Message):
+            return messages
+        
+        if isinstance(first, dict):
+            result = []
+            for msg in messages:
+                role = Role.user if msg.get("role", "user") == "user" else Role.agent
+                content = msg.get("content", "")
+                result.append(
+                    Message(
+                        messageId=str(uuid.uuid4()),
+                        role=role,
+                        parts=[Part(root=TextPart(text=content))],
+                    )
+                )
+            return result
+    
+    raise ValueError(f"Unsupported messages type: {type(messages)}")
+
+
 class LLMClient:
     """
     LLM клиент через HTTP.
@@ -228,6 +316,12 @@ class LLMClient:
         response_format: Optional[Dict[str, Any]] = None,
         task_id: Optional[str] = None,
         context_id: Optional[str] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        max_tokens: Optional[int] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """
         Stream-first метод вызова LLM.
@@ -240,6 +334,12 @@ class LLMClient:
             response_format: Формат ответа (json_schema для structured output)
             task_id: ID задачи
             context_id: ID контекста
+            temperature: Температура генерации (переопределяет self.temperature)
+            top_p: Top-P семплирование (nucleus sampling)
+            top_k: Top-K семплирование
+            max_tokens: Максимальное количество токенов (переопределяет self.max_tokens)
+            frequency_penalty: Штраф за частоту токенов
+            presence_penalty: Штраф за присутствие токенов
         """
         task_id = task_id or str(uuid.uuid4())
         context_id = context_id or task_id
@@ -252,16 +352,31 @@ class LLMClient:
             **self.default_headers,
         }
 
+        actual_temperature = temperature if temperature is not None else self.temperature
+        actual_max_tokens = max_tokens if max_tokens is not None else self.max_tokens
+
         body: Dict[str, Any] = {
             "model": self.model,
             "messages": openai_messages,
-            "temperature": self.temperature,
+            "temperature": actual_temperature,
             "stream": True,
             "stream_options": {"include_usage": True},
         }
 
-        if self.max_tokens:
-            body["max_tokens"] = self.max_tokens
+        if actual_max_tokens:
+            body["max_tokens"] = actual_max_tokens
+        
+        if top_p is not None:
+            body["top_p"] = top_p
+        
+        if top_k is not None:
+            body["top_k"] = top_k
+        
+        if frequency_penalty is not None:
+            body["frequency_penalty"] = frequency_penalty
+        
+        if presence_penalty is not None:
+            body["presence_penalty"] = presence_penalty
 
         if tools:
             body["tools"] = tools
@@ -535,6 +650,151 @@ class LLMClient:
             return json.loads(content)
         
         return content or ""
+
+    @overload
+    async def chat(
+        self,
+        messages: MessageInput,
+        *,
+        response_model: Type[T],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        max_tokens: Optional[int] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+    ) -> T: ...
+
+    @overload
+    async def chat(
+        self,
+        messages: MessageInput,
+        *,
+        response_model: None = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        max_tokens: Optional[int] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+    ) -> Message: ...
+
+    async def chat(
+        self,
+        messages: MessageInput,
+        *,
+        response_model: Optional[Type[T]] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        model: Optional[str] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        max_tokens: Optional[int] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+    ) -> Message | T:
+        """
+        Единый метод вызова LLM.
+        
+        Принимает messages в любом формате и возвращает:
+        - T (экземпляр Pydantic модели) если указан response_model
+        - Message с tool_calls если указаны tools (и нет response_model)
+        - Message с текстом в остальных случаях
+        
+        Args:
+            messages: Сообщения в любом формате:
+                - str: "Привет!" 
+                - List[str]: ["Привет!", "Привет! Как дела?", "Отлично!"]
+                - Message или List[Message]: A2A сообщения
+                - Dict или List[Dict]: {"role": "user", "content": "..."}
+            response_model: Pydantic модель для structured output
+            tools: Список tools для function calling
+            model: Имя модели (переопределяет self.model)
+            temperature: Температура генерации (0.0-2.0)
+            top_p: Top-P семплирование (0.0-1.0)
+            top_k: Top-K семплирование
+            max_tokens: Максимальное количество токенов
+            frequency_penalty: Штраф за частоту токенов (-2.0-2.0)
+            presence_penalty: Штраф за присутствие токенов (-2.0-2.0)
+        
+        Returns:
+            Message или экземпляр response_model
+            
+        Examples:
+            # Простой чат
+            msg = await llm.chat("Привет!")
+            
+            # С параметрами
+            msg = await llm.chat("Расскажи историю", temperature=0.9, max_tokens=500)
+            
+            # Structured output
+            class User(BaseModel):
+                name: str
+                age: int
+                
+            user = await llm.chat("Extract: John is 25", response_model=User)
+            print(user.name, user.age)
+            
+            # Function calling
+            msg = await llm.chat(messages, tools=[...])
+            if msg.metadata and msg.metadata.get("tool_calls"):
+                ...
+        """
+        normalized = _normalize_messages(messages)
+        
+        response_format = None
+        if response_model:
+            json_schema = response_model.model_json_schema()
+            response_format = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_model.__name__,
+                    "strict": True,
+                    "schema": json_schema,
+                },
+            }
+        
+        content_parts: List[str] = []
+        tool_calls: List[Dict[str, Any]] = []
+        
+        async for event in self.stream(
+            normalized,
+            tools=tools if not response_model else None,
+            response_format=response_format,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            max_tokens=max_tokens,
+            frequency_penalty=frequency_penalty,
+            presence_penalty=presence_penalty,
+        ):
+            if isinstance(event, TaskArtifactUpdateEvent):
+                if event.artifact and event.artifact.parts:
+                    for part in event.artifact.parts:
+                        if hasattr(part, "root") and hasattr(part.root, "text"):
+                            content_parts.append(part.root.text)
+            if hasattr(event, "status") and event.status:
+                if event.status.message and event.status.message.metadata:
+                    tc = event.status.message.metadata.get("tool_calls")
+                    if tc:
+                        tool_calls = tc
+        
+        content = "".join(content_parts)
+        
+        if response_model:
+            data = json.loads(content)
+            return response_model.model_validate(data)
+        
+        return Message(
+            messageId=str(uuid.uuid4()),
+            role=Role.agent,
+            parts=[Part(root=TextPart(text=content))],
+            metadata={"tool_calls": tool_calls} if tool_calls else None,
+        )
 
 
 def _resolve_var(value: Optional[str], state: Optional["ExecutionState"]) -> Optional[str]:

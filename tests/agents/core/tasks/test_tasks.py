@@ -36,7 +36,7 @@ class TestProcessAgentTask:
             entry="main",
             nodes={
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    state['response'] = 'Initialized'\n    return state",
                 }
             },
@@ -113,7 +113,7 @@ class TestProcessAgentTaskResume:
             entry="main",
             nodes={
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    state['response'] = 'Resumed'\n    return state",
                 }
             },

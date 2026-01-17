@@ -1,5 +1,5 @@
 """
-API тесты для ToolNode.
+API тесты для CodeNode.
 
 Тестирует создание flow с type: tool через API.
 """
@@ -7,12 +7,12 @@ API тесты для ToolNode.
 import pytest
 
 
-class TestToolNodeFlowAPI:
-    """Тесты создания flow с ToolNode через API."""
+class TestCodeNodeFlowAPI:
+    """Тесты создания flow с CodeNode через API."""
 
     @pytest.mark.asyncio
     async def test_create_flow_with_inline_tool_node(self, client, app, unique_id):
-        """Создание flow с inline ToolNode."""
+        """Создание flow с inline CodeNode."""
         agent_id = f"test_tool_inline_{unique_id}"
 
         response = await client.post(
@@ -23,7 +23,7 @@ class TestToolNodeFlowAPI:
                 "entry": "calculator",
                 "nodes": {
                     "calculator": {
-                        "type": "tool",
+                        "type": "code",
                         "code": "def execute(args, state):\n    return args['a'] + args['b']",
                         "args_schema": {
                             "a": {"type": "integer", "description": "First number"},
@@ -61,7 +61,7 @@ class TestToolNodeFlowAPI:
                 "entry": "calc",
                 "nodes": {
                     "calc": {
-                        "type": "tool",
+                        "type": "code",
                         "tool_id": "calculator",
                         "input_mapping": {
                             "expression": "@state:expr",
@@ -92,7 +92,7 @@ class TestToolNodeFlowAPI:
                 "entry": "bad_tool",
                 "nodes": {
                     "bad_tool": {
-                        "type": "tool",
+                        "type": "code",
                         "tool_id": "nonexistent_tool_xyz",
                         "input_mapping": {"x": 1},
                     }
@@ -105,7 +105,7 @@ class TestToolNodeFlowAPI:
 
     @pytest.mark.asyncio
     async def test_create_flow_with_tool_and_var_mapping(self, client, app, unique_id):
-        """Создание flow с ToolNode и @var: маппингом."""
+        """Создание flow с CodeNode и @var: маппингом."""
         agent_id = f"test_tool_var_{unique_id}"
 
         response = await client.post(
@@ -116,7 +116,7 @@ class TestToolNodeFlowAPI:
                 "entry": "formatter",
                 "nodes": {
                     "formatter": {
-                        "type": "tool",
+                        "type": "code",
                         "code": "def execute(args, state):\n    return f\"{args['prefix']}{args['value']}\"",
                         "input_mapping": {
                             "prefix": "@var:order_prefix",
@@ -144,7 +144,7 @@ class TestToolNodeFlowAPI:
 
     @pytest.mark.asyncio
     async def test_create_flow_with_tool_chain(self, client, app, unique_id):
-        """Создание flow с цепочкой ToolNode."""
+        """Создание flow с цепочкой CodeNode."""
         agent_id = f"test_tool_chain_{unique_id}"
 
         response = await client.post(
@@ -155,13 +155,13 @@ class TestToolNodeFlowAPI:
                 "entry": "step1",
                 "nodes": {
                     "step1": {
-                        "type": "tool",
+                        "type": "code",
                         "code": "def execute(args, state):\n    return args['x'] * 2",
                         "input_mapping": {"x": "@state:input"},
                         "output_key": "doubled",
                     },
                     "step2": {
-                        "type": "tool",
+                        "type": "code",
                         "code": "def execute(args, state):\n    return args['a'] + args['b']",
                         "input_mapping": {
                             "a": "@state:doubled",
@@ -265,12 +265,12 @@ class TestAgentWithInlineToolAPI:
         await client.delete(f"/agents/api/v1/{agent_id}")
 
 
-class TestUpdateFlowWithToolNode:
-    """Тесты обновления flow с ToolNode."""
+class TestUpdateFlowWithCodeNode:
+    """Тесты обновления flow с CodeNode."""
 
     @pytest.mark.asyncio
     async def test_update_flow_add_tool_node(self, client, app, unique_id, auth_headers_system):
-        """Обновление flow: добавление ToolNode."""
+        """Обновление flow: добавление CodeNode."""
         agent_id = f"test_update_tool_{unique_id}"
 
         # Создаем простой flow
@@ -282,7 +282,7 @@ class TestUpdateFlowWithToolNode:
                 "entry": "start",
                 "nodes": {
                     "start": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['value'] = 10\n    return state",
                     }
                 },
@@ -290,7 +290,7 @@ class TestUpdateFlowWithToolNode:
             },
         )
 
-        # Обновляем - добавляем ToolNode
+        # Обновляем - добавляем CodeNode
         response = await client.put(
             f"/agents/api/v1/agents/{agent_id}",
             headers=auth_headers_system,
@@ -300,11 +300,11 @@ class TestUpdateFlowWithToolNode:
                 "entry": "start",
                 "nodes": {
                     "start": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['value'] = 10\n    return state",
                     },
                     "process": {
-                        "type": "tool",
+                        "type": "code",
                         "code": "def execute(args, state):\n    return args['x'] * 2",
                         "input_mapping": {"x": "@state:value"},
                         "output_key": "processed",

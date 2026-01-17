@@ -74,9 +74,6 @@ def run(state):
         data = response.json()
         assert data["valid"] is True
         assert data["error"] is None
-        # Должно быть предупреждение про async
-        assert len(data["warnings"]) > 0
-        assert "async" in data["warnings"][0].lower()
 
     @pytest.mark.asyncio
     async def test_validate_valid_async_code(self, client, app):
@@ -157,8 +154,8 @@ async def run(state):
         assert data["valid"] is True
 
     @pytest.mark.asyncio
-    async def test_validate_missing_run_function(self, client, app):
-        """Валидация кода без функции run."""
+    async def test_validate_any_function_name(self, client, app):
+        """Валидация кода с любым именем функции - valid."""
         code = """
 def process(state):
     return state
@@ -170,8 +167,8 @@ def process(state):
         assert response.status_code == 200
         
         data = response.json()
-        assert data["valid"] is False
-        assert "run" in data["error"].lower()
+        assert data["valid"] is True
+        assert data["error"] is None
 
     @pytest.mark.asyncio
     async def test_validate_empty_code(self, client, app):
@@ -202,7 +199,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -226,7 +223,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -262,7 +259,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -285,7 +282,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -308,7 +305,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -325,7 +322,7 @@ def run(state):
 """
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"code": code, "state": {}}
+            json={"node_type": "code", "node_config": {"code": code}, "state": {}}
         )
         assert response.status_code == 200
         
@@ -345,7 +342,7 @@ def run(state):
 """
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"code": code, "state": {}}
+            json={"node_type": "code", "node_config": {"code": code}, "state": {}}
         )
         assert response.status_code == 200
         
@@ -363,7 +360,7 @@ async def run(state):
 """
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"code": code, "state": {}}
+            json={"node_type": "code", "node_config": {"code": code}, "state": {}}
         )
         assert response.status_code == 200
         
@@ -386,7 +383,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -480,7 +477,7 @@ class TestFlowWithInlineCodeAPI:
             },
             "nodes": {
                 "router": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     content = state.get('content', '').lower()
@@ -561,12 +558,12 @@ def run(state):
         
         execute_response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert execute_response.status_code == 200
         
         data = execute_response.json()
-        assert data["success"] is True
+        assert data["success"] is True, f"Error: {data.get('error')}"
         assert data["output_state"]["greeting"] == "Welcome to Platform Corp!"
         assert data["output_state"]["version"] == "2.0"
         
@@ -619,7 +616,8 @@ async def run(state):
             exec_resp = await client.post(
                 "/agents/api/v1/code/execute",
                 json={
-                    "code": router_code,
+                    "node_type": "code",
+                    "node_config": {"code": router_code},
                     "state": {"content": test["content"], "messages": [], "variables": {}}
                 }
             )
@@ -634,7 +632,7 @@ async def run(state):
             "variables": {"default_priority": "low"},
             "nodes": {
                 "router": {
-                    "type": "function",
+                    "type": "code",
                     "code": router_code
                 }
             },

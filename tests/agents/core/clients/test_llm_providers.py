@@ -277,7 +277,7 @@ class TestReactNodeLLMConfig:
         
         node = ReactNode(
             node_id="test_node",
-            prompt="Test prompt",
+            config={"prompt": "Test prompt"},
         )
         node._node_config = node_config
         
@@ -317,8 +317,7 @@ class TestReactNodeLLMConfig:
         
         node = ReactNode(
             node_id="test_node",
-            prompt="Test prompt",
-            llm_config=llm_config,
+            config={"prompt": "Test prompt", "llm": llm_config},
         )
         
         state = ExecutionState(

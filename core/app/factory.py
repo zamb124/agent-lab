@@ -311,10 +311,7 @@ def create_service_app(
             - Agents: http://localhost:9001/agents/test
             - RAG: http://localhost:9002/rag/test
             
-            Страница пустая - тесты через Playwright сами:
-            - Инжектируют нужные компоненты через evaluate()
-            - Загружают скрипты
-            - Манипулируют DOM
+            Страница пустая для тестирования компонентов
             
             Предоставляет:
             - importmap для lit (CDN)

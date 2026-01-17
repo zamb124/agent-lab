@@ -481,8 +481,8 @@ class AgentsLoader:
         for node_id, node_config in nodes.items():
             node_type = node_config.get("type")
             
-            # Для нод типа tool с tool_id - инлайним код
-            if node_type == "tool":
+            # Для нод типа code с tool_id - инлайним код
+            if node_type == "code":
                 tool_id = node_config.get("tool_id")
                 if tool_id and not node_config.get("code"):
                     tool_ref = self._tools_cache.get(tool_id)

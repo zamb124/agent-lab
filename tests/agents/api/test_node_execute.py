@@ -153,8 +153,8 @@ def assert_diff_item(diff_item, path: str, change_type: str, old_value=None, new
         assert diff_item.get("new_value") == new_value
 
 
-class TestFunctionNode:
-    """Тесты FunctionNode (node_type: 'function')."""
+class TestCodeNode:
+    """Тесты CodeNode (node_type: 'function')."""
     
     @pytest.mark.asyncio
     async def test_function_simple_execution(self, client, app):
@@ -169,7 +169,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -197,7 +197,7 @@ async def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -218,7 +218,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -241,7 +241,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -265,7 +265,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -290,7 +290,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -314,7 +314,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -339,7 +339,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -364,7 +364,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -389,7 +389,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -415,7 +415,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -437,7 +437,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert response.status_code == 200
         
@@ -453,24 +453,24 @@ def run(state):
         """code=''."""
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": "", "state": {}}
+            json={"node_type": "code", "code": "", "state": {}}
         )
         assert response.status_code == 200
         
         data = response.json()
-        assert_execute_response(data, expected_success=False, expected_error="Код пустой")
+        assert_execute_response(data, expected_success=False, expected_error="code, tool_id или function обязателен")
     
     @pytest.mark.asyncio
     async def test_function_whitespace_code(self, client, app):
         """code='   \n  '."""
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": "   \n  ", "state": {}}
+            json={"node_type": "code", "code": "   \n  ", "state": {}}
         )
         assert response.status_code == 200
         
         data = response.json()
-        assert_execute_response(data, expected_success=False, expected_error="Код пустой")
+        assert_execute_response(data, expected_success=False, expected_error="code, tool_id или function обязателен")
     
     @pytest.mark.asyncio
     async def test_function_syntax_error(self, client, app):
@@ -479,7 +479,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": {}}
+            json={"node_type": "code", "node_config": {"code": code}, "state": {}}
         )
         assert response.status_code == 200
         
@@ -496,7 +496,7 @@ def run(state):
 """
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": {}}
+            json={"node_type": "code", "node_config": {"code": code}, "state": {}}
         )
         assert response.status_code == 200
         
@@ -511,7 +511,7 @@ def run(state):
         
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": {}}
+            json={"node_type": "code", "node_config": {"code": code}, "state": {}}
         )
         assert response.status_code == 200
         
@@ -528,7 +528,7 @@ def run(state):
 """
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": {}}
+            json={"node_type": "code", "node_config": {"code": code}, "state": {}}
         )
         assert response.status_code == 200
         
@@ -547,7 +547,7 @@ def run(state):
 """
         response = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": {}}
+            json={"node_type": "code", "node_config": {"code": code}, "state": {}}
         )
         assert response.status_code == 200
         
@@ -568,12 +568,14 @@ class TestExternalAPINode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "external_api",
-                "url": f"{external_api_server}/echo",
-                "method": "POST",
-                "parameters": [
-                    {"name": "message", "location": "body"},
-                    {"name": "uppercase", "location": "body"}
-                ],
+                "node_config": {
+                    "url": f"{external_api_server}/echo",
+                    "method": "POST",
+                    "parameters": [
+                        {"name": "message", "location": "body"},
+                        {"name": "uppercase", "location": "body"}
+                    ]
+                },
                 "state": state
             }
         )
@@ -594,11 +596,13 @@ class TestExternalAPINode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "external_api",
-                "url": f"{external_api_server}/user/{{user_id}}",
-                "method": "GET",
-                "parameters": [
-                    {"name": "user_id", "location": "path"}
-                ],
+                "node_config": {
+                    "url": f"{external_api_server}/user/{{user_id}}",
+                    "method": "GET",
+                    "parameters": [
+                        {"name": "user_id", "location": "path"}
+                    ]
+                },
                 "state": state
             }
         )
@@ -618,13 +622,15 @@ class TestExternalAPINode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "external_api",
-                "url": f"{external_api_server}/calculate",
-                "method": "POST",
-                "parameters": [
-                    {"name": "a", "location": "body"},
-                    {"name": "b", "location": "body"},
-                    {"name": "operation", "location": "body"}
-                ],
+                "node_config": {
+                    "url": f"{external_api_server}/calculate",
+                    "method": "POST",
+                    "parameters": [
+                        {"name": "a", "location": "body"},
+                        {"name": "b", "location": "body"},
+                        {"name": "operation", "location": "body"}
+                    ]
+                },
                 "state": state
             }
         )
@@ -643,13 +649,15 @@ class TestExternalAPINode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "external_api",
-                "url": f"{external_api_server}/calculate",
-                "method": "POST",
-                "parameters": [
-                    {"name": "a", "location": "body"},
-                    {"name": "b", "location": "body"},
-                    {"name": "operation", "location": "body"}
-                ],
+                "node_config": {
+                    "url": f"{external_api_server}/calculate",
+                    "method": "POST",
+                    "parameters": [
+                        {"name": "a", "location": "body"},
+                        {"name": "b", "location": "body"},
+                        {"name": "operation", "location": "body"}
+                    ]
+                },
                 "state": state
             }
         )
@@ -668,10 +676,12 @@ class TestExternalAPINode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "external_api",
-                "url": f"{external_api_server}/auth-required",
-                "method": "POST",
-                "auth_headers": {"Authorization": "Bearer test-token-123"},
-                "parameters": [{"name": "message", "location": "body"}],
+                "node_config": {
+                    "url": f"{external_api_server}/auth-required",
+                    "method": "POST",
+                    "auth_headers": {"Authorization": "Bearer test-token-123"},
+                    "parameters": [{"name": "message", "location": "body"}]
+                },
                 "state": state
             }
         )
@@ -690,10 +700,12 @@ class TestExternalAPINode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "external_api",
-                "url": f"{external_api_server}/auth-required",
-                "method": "POST",
-                "auth_headers": {"X-API-Key": "api-key-456"},
-                "parameters": [{"name": "message", "location": "body"}],
+                "node_config": {
+                    "url": f"{external_api_server}/auth-required",
+                    "method": "POST",
+                    "auth_headers": {"X-API-Key": "api-key-456"},
+                    "parameters": [{"name": "message", "location": "body"}]
+                },
                 "state": state
             }
         )
@@ -715,10 +727,12 @@ class TestExternalAPINode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "external_api",
-                "url": f"{external_api_server}/auth-required",
-                "method": "POST",
-                "auth_headers": {"Authorization": "Bearer @var:api_token"},
-                "parameters": [{"name": "message", "location": "body"}],
+                "node_config": {
+                    "url": f"{external_api_server}/auth-required",
+                    "method": "POST",
+                    "auth_headers": {"Authorization": "Bearer @var:api_token"},
+                    "parameters": [{"name": "message", "location": "body"}]
+                },
                 "state": state
             }
         )
@@ -737,10 +751,12 @@ class TestExternalAPINode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "external_api",
-                "url": f"{external_api_server}/echo",
-                "method": "POST",
-                "parameters": [{"name": "message", "location": "body"}],
-                "state_mapping": {"result": "echo_result"},
+                "node_config": {
+                    "url": f"{external_api_server}/echo",
+                    "method": "POST",
+                    "parameters": [{"name": "message", "location": "body"}],
+                    "state_mapping": {"result": "echo_result"}
+                },
                 "state": state
             }
         )
@@ -759,14 +775,16 @@ class TestExternalAPINode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "external_api",
-                "url": f"{external_api_server}/calculate",
-                "method": "POST",
-                "parameters": [
-                    {"name": "a", "location": "body"},
-                    {"name": "b", "location": "body"},
-                    {"name": "operation", "location": "body"}
-                ],
-                "state_mapping": {"result": "calculation_result"},
+                "node_config": {
+                    "url": f"{external_api_server}/calculate",
+                    "method": "POST",
+                    "parameters": [
+                        {"name": "a", "location": "body"},
+                        {"name": "b", "location": "body"},
+                        {"name": "operation", "location": "body"}
+                    ],
+                    "state_mapping": {"result": "calculation_result"}
+                },
                 "state": state
             }
         )
@@ -785,16 +803,18 @@ class TestExternalAPINode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "external_api",
-                "url": f"{external_api_server}/calculate",
-                "method": "POST",
-                "parameters": [
-                    {"name": "a", "location": "body"},
-                    {"name": "b", "location": "body"},
-                    {"name": "operation", "location": "body"}
-                ],
-                "state_mapping": {
-                    "result": "calc_result",
-                    "operation": "calc_operation"
+                "node_config": {
+                    "url": f"{external_api_server}/calculate",
+                    "method": "POST",
+                    "parameters": [
+                        {"name": "a", "location": "body"},
+                        {"name": "b", "location": "body"},
+                        {"name": "operation", "location": "body"}
+                    ],
+                    "state_mapping": {
+                        "result": "calc_result",
+                        "operation": "calc_operation"
+                    }
                 },
                 "state": state
             }
@@ -818,9 +838,11 @@ class TestExternalAPINode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "external_api",
-                "url": "@var:base_url/user/{user_id}",
-                "method": "GET",
-                "parameters": [{"name": "user_id", "location": "path"}],
+                "node_config": {
+                    "url": "@var:base_url/user/{user_id}",
+                    "method": "GET",
+                    "parameters": [{"name": "user_id", "location": "path"}]
+                },
                 "state": state
             }
         )
@@ -837,14 +859,14 @@ class TestExternalAPINode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "external_api",
-                "url": "",
+                "node_config": {"url": ""},
                 "state": {}
             }
         )
         assert response.status_code == 200
         
         data = response.json()
-        assert_execute_response(data, expected_success=False, expected_error="URL обязателен")
+        assert_execute_response(data, expected_success=False, expected_error="url обязателен")
     
     @pytest.mark.asyncio
     async def test_external_api_error_response(self, client, app, external_api_server):
@@ -855,13 +877,15 @@ class TestExternalAPINode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "external_api",
-                "url": f"{external_api_server}/calculate",
-                "method": "POST",
-                "parameters": [
-                    {"name": "a", "location": "body"},
-                    {"name": "b", "location": "body"},
-                    {"name": "operation", "location": "body"}
-                ],
+                "node_config": {
+                    "url": f"{external_api_server}/calculate",
+                    "method": "POST",
+                    "parameters": [
+                        {"name": "a", "location": "body"},
+                        {"name": "b", "location": "body"},
+                        {"name": "operation", "location": "body"}
+                    ]
+                },
                 "state": state
             }
         )
@@ -880,9 +904,11 @@ class TestExternalAPINode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "external_api",
-                "url": f"{external_api_server}/auth-required",
-                "method": "POST",
-                "parameters": [{"name": "message", "location": "body"}],
+                "node_config": {
+                    "url": f"{external_api_server}/auth-required",
+                    "method": "POST",
+                    "parameters": [{"name": "message", "location": "body"}]
+                },
                 "state": state
             }
         )
@@ -901,9 +927,11 @@ class TestExternalAPINode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "external_api",
-                "url": f"{external_api_server}/ask-clarification",
-                "method": "POST",
-                "parameters": [{"name": "message", "location": "body"}],
+                "node_config": {
+                    "url": f"{external_api_server}/ask-clarification",
+                    "method": "POST",
+                    "parameters": [{"name": "message", "location": "body"}]
+                },
                 "state": state
             }
         )
@@ -926,7 +954,7 @@ class TestRemoteAgentNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "remote_agent",
-                "url": remote_agent_server,
+                "node_config": {"url": remote_agent_server},
                 "state": state
             }
         )
@@ -947,8 +975,10 @@ class TestRemoteAgentNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "remote_agent",
-                "url": remote_agent_server,
-                "skill_id": "custom_skill",
+                "node_config": {
+                    "url": remote_agent_server,
+                    "skill_id": "custom_skill"
+                },
                 "state": state
             }
         )
@@ -960,15 +990,17 @@ class TestRemoteAgentNode:
     
     @pytest.mark.asyncio
     async def test_remote_agent_input_mapping_content(self, client, app, remote_agent_server):
-        """type='content'."""
+        """input_mapping с @state:content."""
         state = {"content": "Mapped content"}
         
         response = await client.post(
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "remote_agent",
-                "url": remote_agent_server,
-                "input_mapping": {"type": "content"},
+                "node_config": {
+                    "url": remote_agent_server,
+                    "input_mapping": {"content": "@state:content"}
+                },
                 "state": state
             }
         )
@@ -980,15 +1012,17 @@ class TestRemoteAgentNode:
     
     @pytest.mark.asyncio
     async def test_remote_agent_input_mapping_state_field(self, client, app, remote_agent_server):
-        """type='state_field'."""
+        """input_mapping с @state:user_query."""
         state = {"user_query": "Query from state field"}
         
         response = await client.post(
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "remote_agent",
-                "url": remote_agent_server,
-                "input_mapping": {"type": "state_field", "field": "user_query"},
+                "node_config": {
+                    "url": remote_agent_server,
+                    "input_mapping": {"content": "@state:user_query"}
+                },
                 "state": state
             }
         )
@@ -1000,22 +1034,19 @@ class TestRemoteAgentNode:
     
     @pytest.mark.asyncio
     async def test_remote_agent_input_mapping_messages(self, client, app, remote_agent_server):
-        """type='messages', last_n=2."""
-        import uuid
+        """input_mapping с @state:last_message (messages как JSON)."""
         state = {
-            "messages": [
-                {"role": "user", "messageId": str(uuid.uuid4()), "parts": [{"kind": "text", "text": "First message"}]},
-                {"role": "agent", "messageId": str(uuid.uuid4()), "parts": [{"kind": "text", "text": "Agent response"}]},
-                {"role": "user", "messageId": str(uuid.uuid4()), "parts": [{"kind": "text", "text": "Last message"}]}
-            ]
+            "last_message": "Last user message text"
         }
         
         response = await client.post(
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "remote_agent",
-                "url": remote_agent_server,
-                "input_mapping": {"type": "messages", "last_n": 2},
+                "node_config": {
+                    "url": remote_agent_server,
+                    "input_mapping": {"content": "@state:last_message"}
+                },
                 "state": state
             }
         )
@@ -1024,6 +1055,7 @@ class TestRemoteAgentNode:
         data = response.json()
         assert_execute_response(data, expected_success=True)
         assert "response" in data["output_state"]
+        assert "Last user message" in data["output_state"]["response"]
     
     @pytest.mark.asyncio
     async def test_remote_agent_auth_headers(self, client, app, remote_agent_server):
@@ -1034,8 +1066,10 @@ class TestRemoteAgentNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "remote_agent",
-                "url": remote_agent_server,
-                "auth_headers": {"Authorization": "Bearer token-123"},
+                "node_config": {
+                    "url": remote_agent_server,
+                    "auth_headers": {"Authorization": "Bearer token-123"}
+                },
                 "state": state
             }
         )
@@ -1056,8 +1090,10 @@ class TestRemoteAgentNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "remote_agent",
-                "url": remote_agent_server,
-                "auth_headers": {"Authorization": "Bearer @var:remote_token"},
+                "node_config": {
+                    "url": remote_agent_server,
+                    "auth_headers": {"Authorization": "Bearer @var:remote_token"}
+                },
                 "state": state
             }
         )
@@ -1073,14 +1109,14 @@ class TestRemoteAgentNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "remote_agent",
-                "url": "",
+                "node_config": {"url": ""},
                 "state": {}
             }
         )
         assert response.status_code == 200
         
         data = response.json()
-        assert_execute_response(data, expected_success=False, expected_error="URL обязателен")
+        assert_execute_response(data, expected_success=False, expected_error="url или agent_id обязателен")
     
     @pytest.mark.asyncio
     async def test_remote_agent_connection_error(self, client, app):
@@ -1091,7 +1127,7 @@ class TestRemoteAgentNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "remote_agent",
-                "url": "http://nonexistent-host:99999",
+                "node_config": {"url": "http://nonexistent-host:99999"},
                 "state": state
             }
         )
@@ -1114,7 +1150,7 @@ class TestAgentNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "agent",
-                "agent_id": "example_graph",
+                "node_config": {"agent_id": "example_graph"},
                 "state": state
             }
         )
@@ -1133,8 +1169,10 @@ class TestAgentNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "agent",
-                "agent_id": "example_graph",
-                "skill_id": "fast_track",
+                "node_config": {
+                    "agent_id": "example_graph",
+                    "skill_id": "fast_track"
+                },
                 "state": state
             }
         )
@@ -1152,7 +1190,7 @@ class TestAgentNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "agent",
-                "agent_id": "example_graph",
+                "node_config": {"agent_id": "example_graph"},
                 "state": state
             }
         )
@@ -1170,9 +1208,11 @@ class TestAgentNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "agent",
-                "agent_id": "example_graph",
-                "input_mapping": {
-                    "content": "Fixed content from mapping"
+                "node_config": {
+                    "agent_id": "example_graph",
+                    "input_mapping": {
+                        "content": "Fixed content from mapping"
+                    }
                 },
                 "state": state
             }
@@ -1191,9 +1231,11 @@ class TestAgentNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "agent",
-                "agent_id": "example_graph",
-                "input_mapping": {
-                    "content": "@state:user.name"
+                "node_config": {
+                    "agent_id": "example_graph",
+                    "input_mapping": {
+                        "content": "@state:user.name"
+                    }
                 },
                 "state": state
             }
@@ -1212,10 +1254,12 @@ class TestAgentNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "agent",
-                "agent_id": "example_graph",
-                "input_mapping": {
-                    "content": "@state:user_query",
-                    "user_name": "@state:user_name"
+                "node_config": {
+                    "agent_id": "example_graph",
+                    "input_mapping": {
+                        "content": "@state:user_query",
+                        "user_name": "@state:user_name"
+                    }
                 },
                 "state": state
             }
@@ -1237,7 +1281,7 @@ class TestAgentNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "agent",
-                "agent_id": "example_graph",
+                "node_config": {"agent_id": "example_graph"},
                 "state": state
             }
         )
@@ -1260,7 +1304,7 @@ class TestAgentNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "agent",
-                "agent_id": "example_graph",
+                "node_config": {"agent_id": "example_graph"},
                 "state": state
             }
         )
@@ -1277,7 +1321,7 @@ class TestAgentNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "agent",
-                "agent_id": "",
+                "node_config": {"agent_id": ""},
                 "state": {}
             }
         )
@@ -1295,7 +1339,7 @@ class TestAgentNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "agent",
-                "agent_id": "nonexistent_flow_12345",
+                "node_config": {"agent_id": "nonexistent_flow_12345"},
                 "state": state
             }
         )
@@ -1322,7 +1366,7 @@ class TestReactNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "react_node",
-                "agent_config": {
+                "node_config": {
                     "prompt": "You are a helpful assistant.",
                     "tools": [],
                     "llm": {"model": "gpt-4o", "temperature": 0.2}
@@ -1350,7 +1394,7 @@ class TestReactNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "react_node",
-                "agent_config": {
+                "node_config": {
                     "prompt": "You can use calculator tool.",
                     "tools": ["calculator"],
                     "llm": {"model": "gpt-4o"}
@@ -1377,7 +1421,7 @@ class TestReactNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "react_node",
-                "agent_config": {
+                "node_config": {
                     "prompt": "You are an assistant.",
                     "tools": [],
                     "llm": {"model": "gpt-4o", "temperature": 0.5}
@@ -1403,7 +1447,7 @@ class TestReactNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "react_node",
-                "agent_config": {
+                "node_config": {
                     "prompt": "You are an assistant.",
                     "tools": [],
                     "llm": {"model": "gpt-4o"},
@@ -1433,7 +1477,7 @@ class TestReactNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "react_node",
-                "agent_config": {
+                "node_config": {
                     "prompt": "Say hello to the user.",
                     "tools": [],
                     "llm": {"model": "gpt-4o"},
@@ -1462,7 +1506,7 @@ class TestReactNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "react_node",
-                "agent_config": {
+                "node_config": {
                     "prompt": "You are an assistant.",
                     "tools": [],
                     "llm": {"model": "gpt-4o"},
@@ -1494,7 +1538,7 @@ class TestReactNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "react_node",
-                "agent_config": {
+                "node_config": {
                     "prompt": "You work for {company}.",
                     "tools": [],
                     "llm": {"model": "gpt-4o"},
@@ -1524,7 +1568,7 @@ class TestReactNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "react_node",
-                "agent_config": {
+                "node_config": {
                     "prompt": "You are an assistant.",
                     "tools": [],
                     "llm": {"model": "gpt-4o"}
@@ -1553,7 +1597,7 @@ class TestReactNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "react_node",
-                "agent_config": {
+                "node_config": {
                     "prompt": "You are an assistant.",
                     "tools": [],
                     "llm": {"model": "gpt-4o"}
@@ -1581,7 +1625,7 @@ class TestReactNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "react_node",
-                "agent_config": {
+                "node_config": {
                     "prompt": "Use calculator tool when needed.",
                     "tools": ["calculator"],
                     "llm": {"model": "gpt-4o"}
@@ -1597,19 +1641,19 @@ class TestReactNode:
     
     @pytest.mark.asyncio
     async def test_react_node_missing_node_config(self, client, app):
-        """node_config=None."""
+        """node_config={}."""
         response = await client.post(
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "react_node",
-                "node_config": None,
+                "node_config": {},
                 "state": {}
             }
         )
         assert response.status_code == 200
         
         data = response.json()
-        assert_execute_response(data, expected_success=False, expected_error="agent_config обязателен")
+        assert_execute_response(data, expected_success=False, expected_error="prompt обязателен")
     
     @pytest.mark.asyncio
     async def test_react_node_missing_prompt(self, client, app):
@@ -1618,7 +1662,7 @@ class TestReactNode:
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "react_node",
-                "agent_config": {
+                "node_config": {
                     "prompt": "",
                     "tools": [],
                     "llm": {}
@@ -1629,7 +1673,7 @@ class TestReactNode:
         assert response.status_code == 200
         
         data = response.json()
-        assert_execute_response(data, expected_success=False, expected_error="Prompt обязателен")
+        assert_execute_response(data, expected_success=False, expected_error="prompt обязателен")
 
 
 class TestE2EIntegration:
@@ -1652,7 +1696,7 @@ def run(state):
         state = {}
         exec_resp = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": code, "state": state}
+            json={"node_type": "code", "node_config": {"code": code}, "state": state}
         )
         assert exec_resp.status_code == 200
         data = exec_resp.json()
@@ -1675,7 +1719,7 @@ def run(state):
         
         function_resp = await client.post(
             "/agents/api/v1/code/execute",
-            json={"node_type": "function", "code": function_code, "state": state}
+            json={"node_type": "code", "code": function_code, "state": state}
         )
         assert function_resp.json()["success"] is True
         processed_state = function_resp.json()["output_state"]
@@ -1684,7 +1728,7 @@ def run(state):
             "/agents/api/v1/code/execute",
             json={
                 "node_type": "react_node",
-                "agent_config": {
+                "node_config": {
                     "prompt": "Respond to the processed query.",
                     "tools": [],
                     "llm": {"model": "gpt-4o"},

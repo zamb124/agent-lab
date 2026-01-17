@@ -363,7 +363,7 @@ class TestScheduledTaskExecution:
             entry="main",
             nodes={
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    state['response'] = f\"Received: {state.get('content', '')}\"\n    return state",
                 },
             },

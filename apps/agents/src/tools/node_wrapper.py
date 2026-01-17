@@ -1,26 +1,26 @@
 """
 NodeAsToolWrapper - обёртка ноды для использования как tool.
 
-Zero-Guess: все методы работают с ExecutionState.
-AgentInterrupt из субноды пробрасывается наверх.
+Простая логика:
+1. Создает args_schema для LLM из конфига ноды
+2. Записывает args в state
+3. Вызывает node.run(state)
+
+Нода сама берет нужные данные через input_mapping.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import Field, create_model
 
-from apps.agents.src.agent.exceptions import AgentInterrupt
 from apps.agents.src.agent.nodes import create_node
-from apps.agents.src.container import get_container
 from core.logging import get_logger
 from apps.agents.src.mock import get_mock_for_agent
 from apps.agents.src.models import NodeConfig
-from apps.agents.src.models.enums import NodeType
-from apps.agents.src.state.interrupt_manager import InterruptManager
-from core.state import ExecutionState, InterruptPathItem
 from apps.agents.src.tools.base import BaseTool, sanitize_tool_name
+from core.state import ExecutionState
 
 if TYPE_CHECKING:
     from apps.agents.src.agent.nodes import BaseNode
@@ -28,34 +28,51 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-class NodeWrapperArgs(BaseModel):
-    """Аргументы для вызова ноды."""
-
-    query: str = Field(description="Запрос для ноды")
+def _build_pydantic_schema(args_schema_dict: Optional[Dict[str, Any]]) -> type:
+    """Строит Pydantic модель из args_schema для OpenAI tools."""
+    if not args_schema_dict:
+        return create_model("EmptyArgs")
+    
+    fields = {}
+    for name, schema in args_schema_dict.items():
+        field_type = str
+        type_str = schema.get("type", "string")
+        
+        if type_str == "integer":
+            field_type = int
+        elif type_str == "number":
+            field_type = float
+        elif type_str == "boolean":
+            field_type = bool
+        elif type_str == "array":
+            field_type = list
+        elif type_str == "object":
+            field_type = dict
+        
+        description = schema.get("description", "")
+        default = schema.get("default", ...)
+        
+        if default is ...:
+            fields[name] = (field_type, Field(description=description))
+        else:
+            fields[name] = (field_type, Field(default=default, description=description))
+    
+    return create_model("DynamicArgs", **fields)
 
 
 class NodeAsToolWrapper(BaseTool):
     """
     Обёртка над любой нодой для использования как tool.
-
-    Поддерживает все типы нод:
-    - react_node: LLM агент с ReAct циклом
-    - function: Python функция
-    - tool: вложенный tool
+    
+    Поддерживает все типы нод.
+    Args записываются в state, нода берет их через input_mapping.
     """
-
-    args_schema = NodeWrapperArgs
 
     def __init__(
         self, 
         node_config: Union[NodeConfig, Dict[str, Any]],
         tool_registry: Optional[Any] = None
     ):
-        """
-        Args:
-            node_config: Конфигурация ноды (NodeConfig или dict)
-            tool_registry: Опциональный реестр для создания вложенных tools
-        """
         if isinstance(node_config, dict):
             self._raw_config = node_config
             node_type = node_config.get("type")
@@ -64,6 +81,8 @@ class NodeAsToolWrapper(BaseTool):
             node_id = node_config.get("tool_id") or node_config.get("node_id")
             if not node_id:
                 raise ValueError(f"Node config requires 'tool_id' or 'node_id' field: {node_config}")
+            
+            self._args_schema_dict = node_config.get("args_schema")
             
             self.node_config = NodeConfig(
                 node_id=node_id,
@@ -77,19 +96,22 @@ class NodeAsToolWrapper(BaseTool):
             )
         else:
             self._raw_config = None
+            self._args_schema_dict = None
             self.node_config = node_config
         
-        self._tool_registry = tool_registry
         self.name = sanitize_tool_name(self.node_config.node_id)
         self.description = self.node_config.description or f"Вызов ноды {self.node_config.name}"
         self.tags = self.node_config.tags or [self.node_config.type]
         self._node: Optional["BaseNode"] = None
+        
+        self.args_schema = _build_pydantic_schema(self._args_schema_dict)
 
     async def _get_node(self) -> "BaseNode":
-        """Lazy создание ноды нужного типа."""
+        """Lazy создание ноды."""
         if self._node is None:
             if self._raw_config:
                 node_dict = dict(self._raw_config)
+                node_dict.pop("tool_id", None)
             else:
                 tools = []
                 if self.node_config.tools:
@@ -116,92 +138,27 @@ class NodeAsToolWrapper(BaseTool):
 
     async def _run_impl(self, args: Dict[str, Any], state: ExecutionState) -> Any:
         """
-        Вызывает субноду.
-
-        Args:
-            args: {"query": "запрос для субноды"}
-            state: ExecutionState родительской ноды
-
-        Returns:
-            Ответ субноды
-
-        Raises:
-            AgentInterrupt: Если субнода запрашивает input от пользователя
+        Записывает args в state и вызывает node.run(state).
+        Нода сама возьмет данные через input_mapping.
         """
         node_id = self.node_config.node_id
-        node_type = self.node_config.type
         
         mock_result = get_mock_for_agent(state, node_id)
         if mock_result is not None:
-            logger.info(f"[subnode:{node_id}] using mock response")
+            logger.info(f"[wrapper:{node_id}] mock response")
             return mock_result
         
-        query = args.get("query", "")
+        # Записываем args в state
+        for key, value in args.items():
+            setattr(state, key, value)
+        
         node = await self._get_node()
-
-        logger.info(f"[subnode:{node_id}] run: type={node_type}, query={query[:50]}...")
-
-        if node_type == NodeType.REACT_NODE.value:
-            return await self._execute_react_node(node, node_id, query, state)
+        logger.info(f"[wrapper:{node_id}] run with args in state: {list(args.keys())}")
         
-        return await self._execute_simple_node(node, node_id, query, state)
-
-    async def _execute_react_node(
-        self, node: "BaseNode", node_id: str, query: str, state: ExecutionState
-    ) -> Any:
-        """Выполняет react_node с поддержкой interrupt."""
-        nested_state = InterruptManager.load_nested_state(state, node_id)
+        # Вызываем ноду - она сама разберется через input_mapping
+        result = await node.run(state)
         
-        nested_state.content = query
-        nested_state.variables = state.variables.copy()
-        nested_state.files = list(state.files)
-        
-        has_interrupt_path = bool(nested_state.interrupt_path)
-
-        logger.info(
-            f"[subnode:{node_id}] Вызов: {self.node_config.name}, "
-            f"files={len(nested_state.files)}, "
-            f"resume={has_interrupt_path}, "
-            f"messages={len(nested_state.messages)}"
-        )
-
-        try:
-            result = await node.run(nested_state)
-
-            InterruptManager.save_nested_state(state, node_id, nested_state)
-            
-            response = result.response if isinstance(result, ExecutionState) else str(result)
-            logger.info(f"[subnode:{node_id}] Завершил: {response[:100] if response else ''}...")
-            return response
-
-        except AgentInterrupt as e:
-            InterruptManager.save_nested_state(state, node_id, nested_state)
-            
-            # Копируем interrupt_path из nested_state в parent state
-            for item in nested_state.interrupt_path:
-                state.interrupt_path.append(item)
-            
-            InterruptManager.push_interrupt_path(
-                state,
-                InterruptPathItem(type="react_node", id=node_id),
-            )
-            raise
-
-    async def _execute_simple_node(
-        self, node: "BaseNode", node_id: str, query: str, state: ExecutionState
-    ) -> Any:
-        """Выполняет простую ноду (function, tool, etc)."""
-        exec_state = ExecutionState(
-            task_id=state.task_id,
-            context_id=state.context_id,
-            session_id=state.session_id,
-            user_id=state.user_id,
-            content=query,
-            variables=state.variables.copy(),
-        )
-
-        result = await node.run(exec_state)
-
+        # Возвращаем response
         if isinstance(result, ExecutionState):
             return result.response or str(result.model_dump(exclude_none=False))
         if isinstance(result, dict):
@@ -209,4 +166,4 @@ class NodeAsToolWrapper(BaseTool):
         return str(result)
 
     def __repr__(self) -> str:
-        return f"NodeAsToolWrapper(node_id={self.node_config.node_id}, type={self.node_config.type})"
+        return f"NodeAsToolWrapper({self.node_config.node_id})"

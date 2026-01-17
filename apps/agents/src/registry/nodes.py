@@ -12,8 +12,7 @@ from core.errors import ResourceNotFoundError
 from apps.agents.src.models.enums import NodeType
 from apps.agents.src.agent.nodes import (
     ReactNode,
-    FunctionNode,
-    ToolNode,
+    CodeNode,
     AgentNode,
     RemoteAgentNode,
     ExternalAPINode,
@@ -27,7 +26,7 @@ class NodeRegistry(ResourceRegistry):
     
     При startup регистрируются все доступные типы нод:
     - NodeType.REACT_NODE → ReactNode
-    - NodeType.FUNCTION → FunctionNode
+    - NodeType.CODE → CodeNode
     - NodeType.AGENT → AgentNode
     - и т.д.
     
@@ -92,10 +91,8 @@ def create_default_node_registry() -> NodeRegistry:
     """
     registry = NodeRegistry()
     
-    # Регистрируем все типы нод
     registry.register(NodeType.REACT_NODE, ReactNode, {"description": "ReAct агент с LLM"})
-    registry.register(NodeType.FUNCTION, FunctionNode, {"description": "Python функция"})
-    registry.register(NodeType.TOOL, ToolNode, {"description": "BaseTool как нода"})
+    registry.register(NodeType.CODE, CodeNode, {"description": "Выполнение кода"})
     registry.register(NodeType.AGENT, AgentNode, {"description": "Вложенный agent"})
     registry.register(NodeType.REMOTE_AGENT, RemoteAgentNode, {"description": "Внешний A2A агент"})
     registry.register(NodeType.EXTERNAL_API, ExternalAPINode, {"description": "HTTP API вызов"})

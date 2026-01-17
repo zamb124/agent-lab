@@ -1,12 +1,12 @@
 """
-End-to-End тесты для ToolNode.
+End-to-End тесты для CodeNode.
 
 Сценарии:
-1. Создание flow с ToolNode через API и выполнение через A2A
-2. ToolNode с input_mapping (@state:, @var:, константы)
-3. Цепочка ToolNode в flow
-4. ToolNode с вложенными путями в state
-5. Условный переход к ToolNode
+1. Создание flow с CodeNode через API и выполнение через A2A
+2. CodeNode с input_mapping (@state:, @var:, константы)
+3. Цепочка CodeNode в flow
+4. CodeNode с вложенными путями в state
+5. Условный переход к CodeNode
 """
 
 import uuid
@@ -56,15 +56,15 @@ def get_task_response(task: Dict[str, Any]) -> str:
     return ""
 
 
-class TestToolNodeE2E:
-    """E2E тесты ToolNode через A2A API."""
+class TestCodeNodeE2E:
+    """E2E тесты CodeNode через A2A API."""
 
     @pytest.mark.asyncio
     async def test_create_and_execute_inline_tool_node_flow(self, client, unique_id):
-        """E2E: Создание flow с inline ToolNode и выполнение через A2A."""
+        """E2E: Создание flow с inline CodeNode и выполнение через A2A."""
         agent_id = f"e2e_tool_node_{unique_id}"
 
-        # Создаем flow с inline ToolNode
+        # Создаем flow с inline CodeNode
         create_response = await client.post(
             "/agents/api/v1/agents/",
             json={
@@ -73,11 +73,11 @@ class TestToolNodeE2E:
                 "entry": "prepare",
                 "nodes": {
                     "prepare": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['num1'] = 25\n    state['num2'] = 17\n    return state",
                     },
                     "calculate": {
-                        "type": "tool",
+                        "type": "code",
                         "code": "def execute(args, state):\n    return args['a'] + args['b']",
                         "input_mapping": {
                             "a": "@state:num1",
@@ -86,7 +86,7 @@ class TestToolNodeE2E:
                         "output_key": "sum",
                     },
                     "finish": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['response'] = f\"Сумма: {state['sum']}\"\n    return state",
                     },
                 },
@@ -122,7 +122,7 @@ class TestToolNodeE2E:
 
     @pytest.mark.asyncio
     async def test_tool_node_with_variables(self, client, unique_id):
-        """E2E: ToolNode использует переменные из flow через A2A."""
+        """E2E: CodeNode использует переменные из flow через A2A."""
         agent_id = f"e2e_tool_var_{unique_id}"
 
         create_response = await client.post(
@@ -133,11 +133,11 @@ class TestToolNodeE2E:
                 "entry": "prepare",
                 "nodes": {
                     "prepare": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['order_id'] = '12345'\n    return state",
                     },
                     "format": {
-                        "type": "tool",
+                        "type": "code",
                         "code": "def execute(args, state):\n    return f\"{args['prefix']}{args['id']}\"",
                         "input_mapping": {
                             "prefix": "@var:order_prefix",
@@ -146,7 +146,7 @@ class TestToolNodeE2E:
                         "output_key": "formatted_order",
                     },
                     "finish": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['response'] = f\"Order: {state['formatted_order']}\"\n    return state",
                     },
                 },
@@ -181,7 +181,7 @@ class TestToolNodeE2E:
 
     @pytest.mark.asyncio
     async def test_tool_node_chain(self, client, unique_id):
-        """E2E: Цепочка ToolNode через A2A."""
+        """E2E: Цепочка CodeNode через A2A."""
         agent_id = f"e2e_tool_chain_{unique_id}"
 
         create_response = await client.post(
@@ -192,23 +192,23 @@ class TestToolNodeE2E:
                 "entry": "init",
                 "nodes": {
                     "init": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['input'] = 10\n    return state",
                     },
                     "double": {
-                        "type": "tool",
+                        "type": "code",
                         "code": "def execute(args, state):\n    return args['x'] * 2",
                         "input_mapping": {"x": "@state:input"},
                         "output_key": "doubled",
                     },
                     "square": {
-                        "type": "tool",
+                        "type": "code",
                         "code": "def execute(args, state):\n    return args['x'] ** 2",
                         "input_mapping": {"x": "@state:doubled"},
                         "output_key": "squared",
                     },
                     "finish": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['response'] = f\"Result: {state['squared']}\"\n    return state",
                     },
                 },
@@ -244,7 +244,7 @@ class TestToolNodeE2E:
 
     @pytest.mark.asyncio
     async def test_tool_node_with_nested_state(self, client, unique_id):
-        """E2E: ToolNode с вложенными путями в state через A2A."""
+        """E2E: CodeNode с вложенными путями в state через A2A."""
         agent_id = f"e2e_tool_nested_{unique_id}"
 
         create_response = await client.post(
@@ -255,11 +255,11 @@ class TestToolNodeE2E:
                 "entry": "prepare",
                 "nodes": {
                     "prepare": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['user'] = {'name': 'Иван', 'email': 'ivan@test.com'}\n    state['config'] = {'template': 'Привет, {name}!'}\n    return state",
                     },
                     "greet": {
-                        "type": "tool",
+                        "type": "code",
                         "code": "def execute(args, state):\n    return args['template'].format(name=args['name'])",
                         "input_mapping": {
                             "name": "@state:user.name",
@@ -268,7 +268,7 @@ class TestToolNodeE2E:
                         "output_key": "greeting",
                     },
                     "finish": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['response'] = state['greeting']\n    return state",
                     },
                 },
@@ -302,7 +302,7 @@ class TestToolNodeE2E:
 
     @pytest.mark.asyncio
     async def test_conditional_routing_to_tool_node(self, client, unique_id):
-        """E2E: Условный переход к ToolNode через A2A."""
+        """E2E: Условный переход к CodeNode через A2A."""
         agent_id = f"e2e_tool_condition_{unique_id}"
 
         create_response = await client.post(
@@ -313,21 +313,21 @@ class TestToolNodeE2E:
                 "entry": "classify",
                 "nodes": {
                     "classify": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    content = state.get('content', '').lower()\n    state['route'] = 'calc' if 'calc' in content else 'skip'\n    state['a'] = 2\n    state['b'] = 2\n    return state",
                     },
                     "calculate": {
-                        "type": "tool",
+                        "type": "code",
                         "code": "def execute(args, state):\n    return args['x'] + args['y']",
                         "input_mapping": {"x": "@state:a", "y": "@state:b"},
                         "output_key": "result",
                     },
                     "skip": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['result'] = 'skipped'\n    return state",
                     },
                     "finish": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['response'] = f\"Result: {state['result']}\"\n    return state",
                     },
                 },

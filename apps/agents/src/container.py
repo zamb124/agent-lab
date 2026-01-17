@@ -11,6 +11,11 @@ logger = get_logger(__name__)
 class AgentContainer(BaseContainer):
     """DI контейнер сервиса agents."""
 
+    # Флаг выполнения через воркер. 
+    # True = kiq() отправляет в воркер
+    # False = kiq() выполняет локально (внутри воркера)
+    use_worker: bool = True
+
     @lazy
     def agent_repository(self):
         from apps.agents.src.db import AgentRepository
@@ -134,6 +139,20 @@ class AgentContainer(BaseContainer):
         from apps.agents.src.tools.base import BaseTool
         return BaseTool
 
+    def get_code_runner(self, language: str = "python"):
+        """Возвращает runner для указанного языка."""
+        from core.context import get_context
+        context = get_context()
+        
+        if language == "python":
+            from apps.agents.src.runners.python import PythonCodeRunner
+            return PythonCodeRunner(context=context)
+        elif language == "javascript":
+            from apps.agents.src.runners.javascript import JavaScriptCodeRunner
+            return JavaScriptCodeRunner()
+        else:
+            raise ValueError(f"Unsupported language: {language}")
+
     @lazy
     def resource_loader(self):
         from apps.agents.src.services.resource_loader import ResourceLoader
@@ -186,6 +205,7 @@ _container: Optional[AgentContainer] = None
 
 def get_container() -> AgentContainer:
     """Получает контейнер (создает при первом вызове)"""
+    import os
     global _container
     if _container is None:
         from apps.agents.config import get_settings
@@ -194,6 +214,9 @@ def get_container() -> AgentContainer:
             db_url=settings.database.url,
             shared_db_url=settings.database.shared_url
         )
+        # В тестах по умолчанию без воркера
+        if os.environ.get("TESTING") == "true":
+            _container.use_worker = False
         logger.info("AgentContainer создан")
     return _container
 

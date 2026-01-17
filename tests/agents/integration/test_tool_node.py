@@ -1,15 +1,14 @@
 """
-Интеграционные тесты для ToolNode.
+Интеграционные тесты для CodeNode.
 
-Тестирует ToolNode в контексте Agent с реальными tools.
+Тестирует CodeNode в контексте Agent с реальными tools.
 """
 
 import pytest
 from apps.agents.src.agent import Agent
-from apps.agents.src.agent.nodes import create_node, ToolNode, FunctionNode
+from apps.agents.src.agent.nodes import create_node, CodeNode
 from apps.agents.src.models import Edge
 from core.state import ExecutionState
-from apps.agents.src.tools import InlineTool
 
 
 def make_state(**kwargs) -> ExecutionState:
@@ -27,50 +26,48 @@ def make_state(**kwargs) -> ExecutionState:
     return ExecutionState(**defaults)
 
 
-class TestToolNodeInAgent:
-    """Тесты ToolNode в контексте Agent."""
+class TestCodeNodeInAgent:
+    """Тесты CodeNode в контексте Agent."""
 
     @pytest.mark.asyncio
     async def test_flow_with_inline_tool_node(self):
-        """Agent с inline ToolNode."""
-        # Создаем inline tool
-        inline_tool = InlineTool(
-            tool_id="multiplier",
-            code="def execute(args, state):\n    return args['x'] * args['factor']",
-            description="Умножает число на фактор",
-        )
-
-        # Создаем ноды
-        def prepare_func(state):
-            state.value = 10
-            state.multiplier = 3
-            return state
-        
-        prepare_node = FunctionNode(
+        """Agent с inline CodeNode."""
+        prepare_code = """
+def execute(args, state):
+    state.value = 10
+    state.multiplier = 3
+    return state
+"""
+        prepare_node = CodeNode(
             node_id="prepare",
-            code=prepare_func,
+            config={"code": prepare_code},
         )
 
-        tool_node = ToolNode(
+        multiply_code = """
+def execute(args, state):
+    return {'result': args['x'] * args['factor']}
+"""
+        tool_node = CodeNode(
             node_id="multiply",
-            tool=inline_tool,
-            input_mapping={
-                "x": "@state:value",
-                "factor": "@state:multiplier",
+            config={
+                "code": multiply_code,
+                "input_mapping": {
+                    "x": "@state:value",
+                    "factor": "@state:multiplier",
+                }
             },
-            output_key="result",
         )
 
-        def format_func(state):
-            state.response = f"Результат: {state.result}"
-            return state
-        
-        format_node = FunctionNode(
+        format_code = """
+def execute(args, state):
+    state.response = f"Результат: {state.result}"
+    return state
+"""
+        format_node = CodeNode(
             node_id="format",
-            code=format_func,
+            config={"code": format_code},
         )
 
-        # Создаем flow
         flow = Agent(
             agent_id="test_flow",
             name="Test Agent",
@@ -103,21 +100,20 @@ class TestToolNodeInAgent:
 
     @pytest.mark.asyncio
     async def test_flow_with_tool_node_and_variables(self):
-        """Agent с ToolNode и переменными из variables."""
-        inline_tool = InlineTool(
-            tool_id="greeter",
-            code="def execute(args, state):\n    return f\"Добро пожаловать в {args['company']}, {args['name']}!\"",
-            description="Приветствие",
-        )
-
-        tool_node = ToolNode(
+        """Agent с CodeNode и переменными из variables."""
+        greet_code = """
+def execute(args, state):
+    return {'greeting': f"Добро пожаловать в {args['company']}, {args['name']}!"}
+"""
+        tool_node = CodeNode(
             node_id="greet",
-            tool=inline_tool,
-            input_mapping={
-                "company": "@var:company_name",
-                "name": "@state:user_name",
+            config={
+                "code": greet_code,
+                "input_mapping": {
+                    "company": "@var:company_name",
+                    "name": "@state:user_name",
+                }
             },
-            output_key="greeting",
         )
 
         flow = Agent(
@@ -139,42 +135,44 @@ class TestToolNodeInAgent:
         )
         result = await flow.run(state)
 
-        assert result["greeting"] == "Добро пожаловать в Platform Corp, Алексей!"
+        assert result.greeting == "Добро пожаловать в Platform Corp, Алексей!"
 
     @pytest.mark.asyncio
     async def test_flow_with_conditional_tool_node(self):
-        """Agent с условным переходом к ToolNode."""
-        calc_tool = InlineTool(
-            tool_id="calculator",
-            code="def execute(args, state):\n    # Простое вычисление без eval\n    parts = args['expr'].split('+')\n    return sum(int(p.strip()) for p in parts)",
-            description="Калькулятор",
-        )
-
-        def classifier_func(state):
-            content = getattr(state, "content", "")
-            state.needs_calc = "=" in content
-            state.expr = content.replace("=", "").strip()
-            return state
-        
-        classifier_node = FunctionNode(
+        """Agent с условным переходом к CodeNode."""
+        classifier_code = """
+def execute(args, state):
+    content = state.content or ""
+    state.needs_calc = "=" in content
+    state.expr = content.replace("=", "").strip()
+    return state
+"""
+        classifier_node = CodeNode(
             node_id="classifier",
-            code=classifier_func,
+            config={"code": classifier_code},
         )
 
-        calc_node = ToolNode(
+        calc_code = """
+def execute(args, state):
+    parts = args['expr'].split('+')
+    return {'calc_result': sum(int(p.strip()) for p in parts)}
+"""
+        calc_node = CodeNode(
             node_id="calculate",
-            tool=calc_tool,
-            input_mapping={"expr": "@state:expr"},
-            output_key="calc_result",
+            config={
+                "code": calc_code,
+                "input_mapping": {"expr": "@state:expr"}
+            },
         )
 
-        def skip_func(state):
-            state.calc_result = "N/A"
-            return state
-        
-        skip_node = FunctionNode(
+        skip_code = """
+def execute(args, state):
+    state.calc_result = "N/A"
+    return state
+"""
+        skip_node = CodeNode(
             node_id="skip",
-            code=skip_func,
+            config={"code": skip_code},
         )
 
         flow = Agent(
@@ -218,33 +216,32 @@ class TestToolNodeInAgent:
         assert result2["calc_result"] == "N/A"
 
 
-class TestToolNodeFromConfig:
-    """Тесты создания ToolNode через create_node."""
+class TestCodeNodeFromConfig:
+    """Тесты создания CodeNode через create_node."""
 
     @pytest.mark.asyncio
     async def test_create_node_with_inline_code(self):
-        """create_node создает ToolNode из inline кода."""
+        """create_node создает CodeNode из inline кода."""
         config = {
-            "type": "tool",
-            "code": "def execute(args, state):\n    return args['a'] ** 2",
+            "type": "code",
+            "code": "def execute(args, state):\n    return {'squared': args['a'] ** 2}",
             "args_schema": {
                 "a": {"type": "integer", "description": "Число для возведения в квадрат"},
             },
             "input_mapping": {"a": 7},
-            "output_key": "squared",
         }
 
         node = await create_node("square_node", config)
 
-        assert isinstance(node, ToolNode)
+        assert isinstance(node, CodeNode)
         assert node.node_id == "square_node"
 
         result = await node.run(make_state())
-        assert result.model_extra.get("squared") == 49
+        assert result.squared == 49
 
     @pytest.mark.asyncio
     async def test_flow_from_config_with_tool_node(self):
-        """Agent из конфига с ToolNode."""
+        """Agent из конфига с CodeNode."""
         # Agent.from_config принимает dict, не AgentConfig
         agent_config = {
             "id": "config_flow",
@@ -252,18 +249,17 @@ class TestToolNodeFromConfig:
             "entry": "prepare",
             "nodes": {
                 "prepare": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    state.input_value = 5\n    return state",
                 },
                 "process": {
-                    "type": "tool",
-                    "code": "def execute(args, state):\n    return args['x'] * 10",
+                    "type": "code",
+                    "code": "def execute(args, state):\n    return {'processed': args['x'] * 10}",
                     "input_mapping": {"x": "@state:input_value"},
-                    # output_key по умолчанию = "process"
                 },
                 "finish": {
-                    "type": "function",
-                    "code": "def run(state):\n    state.response = f\"Processed: {state.process}\"\n    return state",
+                    "type": "code",
+                    "code": "def run(state):\n    state.response = f\"Processed: {state.processed}\"\n    return state",
                 },
             },
             "edges": [
@@ -278,30 +274,29 @@ class TestToolNodeFromConfig:
         state = make_state(content="start")
         result = await flow.run(state)
 
-        assert result["process"] == 50
+        assert result["processed"] == 50
         assert result["response"] == "Processed: 50"
 
 
-class TestToolNodeWithSkillVariables:
-    """Тесты ToolNode с переменными из skill."""
+class TestCodeNodeWithSkillVariables:
+    """Тесты CodeNode с переменными из skill."""
 
     @pytest.mark.asyncio
     async def test_tool_node_uses_skill_variables(self):
-        """ToolNode использует переменные из текущего skill."""
-        inline_tool = InlineTool(
-            tool_id="prefix_formatter",
-            code="def execute(args, state):\n    return f\"{args['prefix']}{args['id']}\"",
-            description="Форматирует ID с префиксом",
-        )
-
-        tool_node = ToolNode(
+        """CodeNode использует переменные из текущего skill."""
+        format_code = """
+def execute(args, state):
+    return {'formatted_id': f"{args['prefix']}{args['id']}"}
+"""
+        tool_node = CodeNode(
             node_id="format",
-            tool=inline_tool,
-            input_mapping={
-                "prefix": "@var:prefix",
-                "id": "@state:entity_id",
+            config={
+                "code": format_code,
+                "input_mapping": {
+                    "prefix": "@var:prefix",
+                    "id": "@state:entity_id",
+                }
             },
-            output_key="formatted_id",
         )
 
         flow = Agent(
@@ -316,47 +311,47 @@ class TestToolNodeWithSkillVariables:
         state = make_state(entity_id="12345")
         result = await flow.run(state)
 
-        assert result["formatted_id"] == "ORDER-12345"
+        assert result.formatted_id == "ORDER-12345"
 
         # Теперь с другими переменными (как будто другой skill)
         flow.variables = {"prefix": "TICKET-"}
         state2 = make_state(entity_id="67890")
         result2 = await flow.run(state2)
 
-        assert result2["formatted_id"] == "TICKET-67890"
+        assert result2.formatted_id == "TICKET-67890"
 
 
-class TestToolNodeChaining:
-    """Тесты цепочки ToolNode."""
+class TestCodeNodeChaining:
+    """Тесты цепочки CodeNode."""
 
     @pytest.mark.asyncio
     async def test_chain_of_tool_nodes(self):
-        """Цепочка ToolNode передает данные через state."""
-        double_tool = InlineTool(
-            tool_id="double",
-            code="def execute(args, state):\n    return args['x'] * 2",
-        )
-
-        add_tool = InlineTool(
-            tool_id="add",
-            code="def execute(args, state):\n    return args['a'] + args['b']",
-        )
-
-        node1 = ToolNode(
+        """Цепочка CodeNode передает данные через state."""
+        double_code = """
+def execute(args, state):
+    return {'doubled': args['x'] * 2}
+"""
+        add_code = """
+def execute(args, state):
+    return {'final': args['a'] + args['b']}
+"""
+        node1 = CodeNode(
             node_id="step1",
-            tool=double_tool,
-            input_mapping={"x": "@state:input"},
-            output_key="doubled",
+            config={
+                "code": double_code,
+                "input_mapping": {"x": "@state:input"}
+            },
         )
 
-        node2 = ToolNode(
+        node2 = CodeNode(
             node_id="step2",
-            tool=add_tool,
-            input_mapping={
-                "a": "@state:doubled",
-                "b": "@var:bonus",
+            config={
+                "code": add_code,
+                "input_mapping": {
+                    "a": "@state:doubled",
+                    "b": "@var:bonus",
+                }
             },
-            output_key="final",
         )
 
         flow = Agent(
@@ -378,92 +373,64 @@ class TestToolNodeChaining:
         assert result["final"] == 150
 
 
-class TestToolNodeDynamicDataAgent:
+class TestCodeNodeDynamicDataAgent:
     """
-    Тесты динамической передачи данных между ToolNode.
+    Тесты динамической передачи данных между CodeNode.
     
     Проверяет что @state:, @var: и константы корректно работают
-    в цепочке ToolNode где каждый tool модифицирует state.
+    в цепочке CodeNode где каждый tool модифицирует state.
     """
 
     @pytest.mark.asyncio
     async def test_dynamic_state_flow_with_all_mapping_types(self):
         """
-        Цепочка ToolNode с @state:, @var: и константами.
-        
-        Agent:
-        1. init_tool: устанавливает base_value=10 в state
-        2. multiply_tool: берет @state:base_value * @var:multiplier, сохраняет в multiplied
-        3. add_constant_tool: берет @state:multiplied + константу 50, сохраняет в added
-        4. final_tool: берет @state:added + @state:base_value + @var:bonus
-        
-        Ожидаемый результат:
-        - base_value = 10
-        - multiplied = 10 * 3 = 30
-        - added = 30 + 50 = 80
-        - final = 80 + 10 + 5 = 95
+        Цепочка CodeNode с @state:, @var: и константами.
         """
-        # Tool 1: Инициализирует base_value
-        init_tool = InlineTool(
-            tool_id="init",
-            code="def execute(args, state):\n    return args['initial']",
-        )
+        init_code = "def execute(args, state):\n    return {'base_value': args['initial']}"
+        multiply_code = "def execute(args, state):\n    return {'multiplied': args['value'] * args['factor']}"
+        add_const_code = "def execute(args, state):\n    return {'added': args['value'] + args['const']}"
+        final_code = "def execute(args, state):\n    return {'final_result': args['current'] + args['original'] + args['bonus']}"
 
-        # Tool 2: Умножает на multiplier из переменных
-        multiply_tool = InlineTool(
-            tool_id="multiply",
-            code="def execute(args, state):\n    return args['value'] * args['factor']",
-        )
-
-        # Tool 3: Добавляет константу
-        add_constant_tool = InlineTool(
-            tool_id="add_const",
-            code="def execute(args, state):\n    return args['value'] + args['const']",
-        )
-
-        # Tool 4: Финальный расчет с @state: и @var:
-        final_tool = InlineTool(
-            tool_id="final_calc",
-            code="def execute(args, state):\n    return args['current'] + args['original'] + args['bonus']",
-        )
-
-        # Создаем ноды
-        node1 = ToolNode(
+        node1 = CodeNode(
             node_id="init_node",
-            tool=init_tool,
-            input_mapping={"initial": 10},  # константа
-            output_key="base_value",
+            config={
+                "code": init_code,
+                "input_mapping": {"initial": 10}
+            },
         )
 
-        node2 = ToolNode(
+        node2 = CodeNode(
             node_id="multiply_node",
-            tool=multiply_tool,
-            input_mapping={
-                "value": "@state:base_value",  # из предыдущего результата
-                "factor": "@var:multiplier",   # из переменных flow
+            config={
+                "code": multiply_code,
+                "input_mapping": {
+                    "value": "@state:base_value",
+                    "factor": "@var:multiplier",
+                }
             },
-            output_key="multiplied",
         )
 
-        node3 = ToolNode(
+        node3 = CodeNode(
             node_id="add_node",
-            tool=add_constant_tool,
-            input_mapping={
-                "value": "@state:multiplied",  # из предыдущего результата
-                "const": 50,                   # константа
+            config={
+                "code": add_const_code,
+                "input_mapping": {
+                    "value": "@state:multiplied",
+                    "const": 50,
+                }
             },
-            output_key="added",
         )
 
-        node4 = ToolNode(
+        node4 = CodeNode(
             node_id="final_node",
-            tool=final_tool,
-            input_mapping={
-                "current": "@state:added",      # из предыдущего результата
-                "original": "@state:base_value", # из первого результата
-                "bonus": "@var:bonus",          # из переменных flow
+            config={
+                "code": final_code,
+                "input_mapping": {
+                    "current": "@state:added",
+                    "original": "@state:base_value",
+                    "bonus": "@var:bonus",
+                }
             },
-            output_key="final_result",
         )
 
         flow = Agent(
@@ -491,67 +458,51 @@ class TestToolNodeDynamicDataAgent:
         state = make_state(content="start")
         result = await flow.run(state)
 
-        # Проверяем каждый шаг
-        assert result["base_value"] == 10, "init_tool должен установить base_value=10"
-        assert result["multiplied"] == 30, "multiply_tool: 10 * 3 = 30"
-        assert result["added"] == 80, "add_constant_tool: 30 + 50 = 80"
-        assert result["final_result"] == 95, "final_tool: 80 + 10 + 5 = 95"
+        assert result.base_value == 10
+        assert result.multiplied == 30
+        assert result.added == 80
+        assert result.final_result == 95
 
     @pytest.mark.asyncio
     async def test_dynamic_nested_state_modification(self):
-        """
-        Тест с вложенными структурами в state.
-        
-        Agent:
-        1. setup_tool: создает вложенную структуру user.data.score = 100
-        2. boost_tool: берет @state:user.data.score + @var:boost_amount
-        3. format_tool: форматирует результат с @state: и константой
-        """
-        setup_tool = InlineTool(
-            tool_id="setup",
-            code="""def execute(args, state):
-    return {'data': {'score': args['initial_score'], 'name': args['name']}}""",
-        )
+        """Тест с вложенными структурами в state."""
+        setup_code = """def execute(args, state):
+    return {'user': {'data': {'score': args['initial_score'], 'name': args['name']}}}"""
+        boost_code = "def execute(args, state):\n    return {'boosted_score': args['score'] + args['boost']}"
+        format_code = "def execute(args, state):\n    return {'formatted_result': f\"{args['prefix']}{args['name']}: {args['final_score']}\"}"
 
-        boost_tool = InlineTool(
-            tool_id="boost",
-            code="def execute(args, state):\n    return args['score'] + args['boost']",
-        )
-
-        format_tool = InlineTool(
-            tool_id="format",
-            code="def execute(args, state):\n    return f\"{args['prefix']}{args['name']}: {args['final_score']}\"",
-        )
-
-        node1 = ToolNode(
+        node1 = CodeNode(
             node_id="setup_node",
-            tool=setup_tool,
-            input_mapping={
-                "initial_score": 100,
-                "name": "@var:player_name",
+            config={
+                "code": setup_code,
+                "input_mapping": {
+                    "initial_score": 100,
+                    "name": "@var:player_name",
+                }
             },
-            output_key="user",
         )
 
-        node2 = ToolNode(
+        node2 = CodeNode(
             node_id="boost_node",
-            tool=boost_tool,
-            input_mapping={
-                "score": "@state:user.data.score",
-                "boost": "@var:boost_amount",
+            config={
+                "code": boost_code,
+                "input_mapping": {
+                    "score": "@state:user.data.score",
+                    "boost": "@var:boost_amount",
+                }
             },
-            output_key="boosted_score",
         )
 
-        node3 = ToolNode(
+        node3 = CodeNode(
             node_id="format_node",
-            tool=format_tool,
-            input_mapping={
-                "prefix": "Player ",
-                "name": "@state:user.data.name",
-                "final_score": "@state:boosted_score",
+            config={
+                "code": format_code,
+                "input_mapping": {
+                    "prefix": "Player ",
+                    "name": "@state:user.data.name",
+                    "final_score": "@state:boosted_score",
+                }
             },
-            output_key="formatted_result",
         )
 
         flow = Agent(
@@ -577,75 +528,56 @@ class TestToolNodeDynamicDataAgent:
         state = make_state(content="start")
         result = await flow.run(state)
 
-        assert result["user"]["data"]["score"] == 100
-        assert result["user"]["data"]["name"] == "Alice"
-        assert result["boosted_score"] == 150
-        assert result["formatted_result"] == "Player Alice: 150"
+        assert result.user["data"]["score"] == 100
+        assert result.user["data"]["name"] == "Alice"
+        assert result.boosted_score == 150
+        assert result.formatted_result == "Player Alice: 150"
 
     @pytest.mark.asyncio
     async def test_tool_modifies_state_for_next_tool(self):
-        """
-        Тест где каждый tool записывает результат который читает следующий.
-        
-        Симулирует реальный сценарий обработки данных:
-        1. extract: извлекает данные, записывает extracted_data
-        2. transform: трансформирует @state:extracted_data, записывает transformed_data
-        3. validate: валидирует @state:transformed_data + @var:threshold
-        4. save: сохраняет все с @state: и констант
-        """
-        extract_tool = InlineTool(
-            tool_id="extract",
-            code="def execute(args, state):\n    return {'items': args['raw'].split(','), 'count': len(args['raw'].split(','))}",
-        )
+        """Тест где каждый tool записывает результат который читает следующий."""
+        extract_code = "def execute(args, state):\n    return {'extracted_data': {'items': args['raw'].split(','), 'count': len(args['raw'].split(','))}}"
+        transform_code = "def execute(args, state):\n    return {'transformed_data': [item.strip().upper() for item in args['data']['items']]}"
+        validate_code = "def execute(args, state):\n    return {'is_valid': len(args['items']) >= args['min_count']}"
+        save_code = "def execute(args, state):\n    return {'saved_result': {'items': args['items'], 'valid': args['is_valid'], 'source': args['source']}}"
 
-        transform_tool = InlineTool(
-            tool_id="transform",
-            code="def execute(args, state):\n    return [item.strip().upper() for item in args['data']['items']]",
-        )
-
-        validate_tool = InlineTool(
-            tool_id="validate",
-            code="def execute(args, state):\n    return len(args['items']) >= args['min_count']",
-        )
-
-        save_tool = InlineTool(
-            tool_id="save",
-            code="def execute(args, state):\n    return {'items': args['items'], 'valid': args['is_valid'], 'source': args['source']}",
-        )
-
-        node1 = ToolNode(
+        node1 = CodeNode(
             node_id="extract_node",
-            tool=extract_tool,
-            input_mapping={"raw": "@state:raw_input"},
-            output_key="extracted_data",
+            config={
+                "code": extract_code,
+                "input_mapping": {"raw": "@state:raw_input"}
+            },
         )
 
-        node2 = ToolNode(
+        node2 = CodeNode(
             node_id="transform_node",
-            tool=transform_tool,
-            input_mapping={"data": "@state:extracted_data"},
-            output_key="transformed_data",
+            config={
+                "code": transform_code,
+                "input_mapping": {"data": "@state:extracted_data"}
+            },
         )
 
-        node3 = ToolNode(
+        node3 = CodeNode(
             node_id="validate_node",
-            tool=validate_tool,
-            input_mapping={
-                "items": "@state:transformed_data",
-                "min_count": "@var:min_items",
+            config={
+                "code": validate_code,
+                "input_mapping": {
+                    "items": "@state:transformed_data",
+                    "min_count": "@var:min_items",
+                }
             },
-            output_key="is_valid",
         )
 
-        node4 = ToolNode(
+        node4 = CodeNode(
             node_id="save_node",
-            tool=save_tool,
-            input_mapping={
-                "items": "@state:transformed_data",
-                "is_valid": "@state:is_valid",
-                "source": "api",  # константа
+            config={
+                "code": save_code,
+                "input_mapping": {
+                    "items": "@state:transformed_data",
+                    "is_valid": "@state:is_valid",
+                    "source": "api",
+                }
             },
-            output_key="saved_result",
         )
 
         flow = Agent(
@@ -680,61 +612,51 @@ class TestToolNodeDynamicDataAgent:
 
     @pytest.mark.asyncio
     async def test_mixed_function_and_tool_nodes_data_flow(self):
-        """
-        Тест смешанного flow: FunctionNode и ToolNode передают данные друг другу.
-        
-        1. FunctionNode: устанавливает начальные данные в state
-        2. ToolNode: читает @state:, модифицирует
-        3. FunctionNode: читает результат tool, добавляет свое
-        4. ToolNode: финализирует с @state: и @var:
-        """
-        multiply_tool = InlineTool(
-            tool_id="multiply",
-            code="def execute(args, state):\n    return args['x'] * args['y']",
-        )
+        """Тест смешанного flow: CodeNode передают данные друг другу."""
+        init_code = """
+def execute(args, state):
+    state.x_value = 7
+    state.y_value = 8
+    return state
+"""
+        multiply_code = "def execute(args, state):\n    return {'product': args['x'] * args['y']}"
+        process_code = """
+def execute(args, state):
+    state.processed_value = state.product + 100
+    return state
+"""
+        finalize_code = "def execute(args, state):\n    return {'final_message': f\"Result: {args['value']} (bonus: {args['bonus']})\"}"
 
-        finalize_tool = InlineTool(
-            tool_id="finalize",
-            code="def execute(args, state):\n    return f\"Result: {args['value']} (bonus: {args['bonus']})\"",
-        )
-
-        def init_func_code(state):
-            state.x_value = 7
-            state.y_value = 8
-            return state
-        
-        init_func = FunctionNode(
+        init_func = CodeNode(
             node_id="init_func",
-            code=init_func_code,
+            config={"code": init_code},
         )
 
-        tool_node1 = ToolNode(
+        tool_node1 = CodeNode(
             node_id="multiply_node",
-            tool=multiply_tool,
-            input_mapping={
-                "x": "@state:x_value",
-                "y": "@state:y_value",
+            config={
+                "code": multiply_code,
+                "input_mapping": {
+                    "x": "@state:x_value",
+                    "y": "@state:y_value",
+                }
             },
-            output_key="product",
         )
 
-        def process_func_code(state):
-            state.processed_value = state.product + 100
-            return state
-        
-        process_func = FunctionNode(
+        process_func = CodeNode(
             node_id="process_func",
-            code=process_func_code,
+            config={"code": process_code},
         )
 
-        tool_node2 = ToolNode(
+        tool_node2 = CodeNode(
             node_id="finalize_node",
-            tool=finalize_tool,
-            input_mapping={
-                "value": "@state:processed_value",
-                "bonus": "@var:bonus_text",
+            config={
+                "code": finalize_code,
+                "input_mapping": {
+                    "value": "@state:processed_value",
+                    "bonus": "@var:bonus_text",
+                }
             },
-            output_key="final_message",
         )
 
         flow = Agent(
@@ -759,9 +681,9 @@ class TestToolNodeDynamicDataAgent:
         state = make_state(content="start")
         result = await flow.run(state)
 
-        assert result["x_value"] == 7
-        assert result["y_value"] == 8
-        assert result["product"] == 56  # 7 * 8
-        assert result["processed_value"] == 156  # 56 + 100
-        assert result["final_message"] == "Result: 156 (bonus: +VIP)"
+        assert result.x_value == 7
+        assert result.y_value == 8
+        assert result.product == 56
+        assert result.processed_value == 156
+        assert result.final_message == "Result: 156 (bonus: +VIP)"
 

@@ -20,6 +20,7 @@ from apps.broker.broker import broker
 # Регистрируем tasks сервиса agents
 import apps.agents.src.tasks.agent_tasks  # noqa: F401
 import apps.agents.src.tasks.eval_task  # noqa: F401
+import apps.agents.src.tasks.node_tasks  # noqa: F401
 import apps.agents.src.tasks.tool_tasks  # noqa: F401
 import apps.agents.src.tasks.push_notification_tasks  # noqa: F401
 import apps.agents.src.tasks.scheduled_tasks  # noqa: F401

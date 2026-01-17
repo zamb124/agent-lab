@@ -1,10 +1,11 @@
 /**
- * FunctionNodeModal - модалка редактирования Function Node
+ * CodeNodeModal - модалка редактирования Code Node
+ * Универсальная нода для выполнения кода (Python, JavaScript, Go)
  */
 import { html, css } from 'lit';
 import { BaseNodeModal } from './base-node-modal.js';
 
-export class FunctionNodeModal extends BaseNodeModal {
+export class CodeNodeModal extends BaseNodeModal {
     static styles = [
         BaseNodeModal.styles,
         css`
@@ -97,32 +98,34 @@ export class FunctionNodeModal extends BaseNodeModal {
     static properties = {
         ...BaseNodeModal.properties,
         codeMode: { type: String },
-        functionPath: { type: String },
+        language: { type: String },
     };
 
     constructor() {
         super();
         this.codeMode = 'INLINE_CODE';
-        this.functionPath = '';
+        this.language = 'python';
     }
 
     getNodeType() {
-        return 'function';
+        return 'code';
     }
 
     getModalTitle() {
-        return 'Function Node';
+        return 'Code Node';
     }
 
     showModal(nodeId = '', config = {}) {
         super.showModal(nodeId, config);
         
-        if (config.function && !config.code) {
+        this.language = config.language || 'python';
+        
+        if (config.tool_id) {
+            this.codeMode = 'TOOL_ID';
+        } else if (config.function) {
             this.codeMode = 'CODE_REFERENCE';
-            this.functionPath = config.function;
         } else {
             this.codeMode = 'INLINE_CODE';
-            this.functionPath = '';
         }
     }
 
@@ -132,16 +135,24 @@ export class FunctionNodeModal extends BaseNodeModal {
 
     _buildConfig() {
         const name = this.shadowRoot.querySelector('[name="name"]')?.value?.trim() || '';
+        const language = this.shadowRoot.querySelector('[name="language"]')?.value || 'python';
         
         const config = {
-            type: 'function',
+            type: 'code',
+            language: language,
         };
         
         if (name) {
             config.name = name;
         }
         
-        if (this.codeMode === 'CODE_REFERENCE') {
+        if (this.codeMode === 'TOOL_ID') {
+            const toolId = this.shadowRoot.querySelector('[name="tool_id"]')?.value?.trim();
+            if (!toolId) {
+                throw new Error('Укажите Tool ID');
+            }
+            config.tool_id = toolId;
+        } else if (this.codeMode === 'CODE_REFERENCE') {
             const functionPath = this.shadowRoot.querySelector('[name="function_path"]')?.value?.trim();
             if (!functionPath) {
                 throw new Error('Укажите путь к функции');
@@ -151,9 +162,18 @@ export class FunctionNodeModal extends BaseNodeModal {
             const codeEditor = this.shadowRoot.querySelector('python-code-editor');
             const code = codeEditor?.getValue()?.trim();
             if (!code) {
-                throw new Error('Введите код функции');
+                throw new Error('Введите код');
             }
             config.code = code;
+        }
+        
+        // Args schema
+        const argsSchemaEditor = this.shadowRoot.querySelector('json-field-editor[name="args_schema"]');
+        if (argsSchemaEditor && argsSchemaEditor.isValid()) {
+            const argsSchema = argsSchemaEditor.getParsedValue();
+            if (argsSchema && Object.keys(argsSchema).length > 0) {
+                config.args_schema = argsSchema;
+            }
         }
         
         return this._applyStateSettings(config);
@@ -173,7 +193,7 @@ export class FunctionNodeModal extends BaseNodeModal {
                             class="form-input ${this.isEdit ? 'readonly' : ''}"
                             .value=${this.nodeId || ''}
                             ?readonly=${this.isEdit}
-                            placeholder="my_function"
+                            placeholder="my_code_node"
                             required
                         />
                     </div>
@@ -187,52 +207,80 @@ export class FunctionNodeModal extends BaseNodeModal {
                             .value=${config.name || ''}
                             placeholder="Классификатор"
                         />
-                        <span class="form-hint">Используется для генерации Node ID</span>
                     </div>
                     
                     <div class="form-group">
-                        <label class="form-label">Режим кода</label>
+                        <label class="form-label">Язык</label>
+                        <select name="language" class="form-input">
+                            <option value="python" ?selected=${this.language === 'python'}>Python</option>
+                            <option value="javascript" ?selected=${this.language === 'javascript'}>JavaScript</option>
+                            <option value="go" ?selected=${this.language === 'go'}>Go</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Режим</label>
                         <div class="code-mode-toggle">
                             <button 
                                 type="button"
                                 class="code-mode-btn ${this.codeMode === 'INLINE_CODE' ? 'active' : ''}"
                                 @click=${() => this._onCodeModeChange('INLINE_CODE')}
-                            >
-                                INLINE_CODE
-                            </button>
+                            >Inline</button>
                             <button 
                                 type="button"
                                 class="code-mode-btn ${this.codeMode === 'CODE_REFERENCE' ? 'active' : ''}"
                                 @click=${() => this._onCodeModeChange('CODE_REFERENCE')}
-                            >
-                                CODE_REFERENCE
-                            </button>
+                            >Path</button>
+                            <button 
+                                type="button"
+                                class="code-mode-btn ${this.codeMode === 'TOOL_ID' ? 'active' : ''}"
+                                @click=${() => this._onCodeModeChange('TOOL_ID')}
+                            >Tool</button>
                         </div>
                     </div>
                     
-                    ${this.codeMode === 'CODE_REFERENCE' ? html`
+                    ${this.codeMode === 'TOOL_ID' ? html`
+                        <div class="form-group">
+                            <label class="form-label">Tool ID *</label>
+                            <input 
+                                type="text" 
+                                name="tool_id"
+                                class="form-input"
+                                .value=${config.tool_id || ''}
+                                placeholder="calculator, weather_api"
+                            />
+                            <span class="form-hint">Загрузка tool из реестра</span>
+                        </div>
+                    ` : this.codeMode === 'CODE_REFERENCE' ? html`
                         <div class="form-group function-path-section">
                             <label class="form-label">Function Path *</label>
                             <input 
                                 type="text" 
                                 name="function_path"
                                 class="form-input"
-                                .value=${this.functionPath}
+                                .value=${config.function || ''}
                                 placeholder="agents.my_agent.functions.my_func"
                             />
-                            <span class="form-hint">Путь к функции в agents/&lt;agent&gt;/functions.py</span>
                         </div>
                     ` : ''}
                     
+                    <div class="form-group">
+                        <label class="form-label">Args Schema</label>
+                        <json-field-editor
+                            name="args_schema"
+                            .value=${config.args_schema ? JSON.stringify(config.args_schema, null, 2) : '{}'}
+                            min-height="60"
+                            hint="Схема параметров (опционально)"
+                        ></json-field-editor>
+                    </div>
+                    
                     <div class="help-section">
-                        <h4>Справка по API</h4>
+                        <h4>Справка</h4>
                         <ul>
-                            <li><code>async def run(state):</code> - основная функция</li>
-                            <li><code>state["content"]</code> - текст от пользователя</li>
-                            <li><code>state["response"] = "..."</code> - ответ пользователю</li>
-                            <li><code>llm</code> - LLM клиент</li>
-                            <li><code>context</code> - контекст выполнения</li>
-                            <li><code>httpx</code> - HTTP клиент</li>
+                            <li><code>def execute(args, state):</code> - функция с параметрами</li>
+                            <li><code>def run(state):</code> - простая функция</li>
+                            <li><code>args["param"]</code> - параметры из input_mapping</li>
+                            <li><code>state["response"] = "..."</code> - ответ</li>
                         </ul>
                     </div>
                     
@@ -243,11 +291,11 @@ export class FunctionNodeModal extends BaseNodeModal {
                     <div class="code-section">
                         <div class="form-group" style="flex: 1;">
                             <label class="form-label">
-                                ${this.codeMode === 'CODE_REFERENCE' ? 'Python Code (readonly)' : 'Python Code'}
+                                ${this.codeMode === 'TOOL_ID' ? 'Code (не используется)' : 'Code'}
                             </label>
                             <python-code-editor
                                 .value=${config.code || ''}
-                                ?readonly=${this.codeMode === 'CODE_REFERENCE'}
+                                ?readonly=${this.codeMode === 'TOOL_ID'}
                                 min-height="300"
                             ></python-code-editor>
                         </div>
@@ -264,6 +312,4 @@ export class FunctionNodeModal extends BaseNodeModal {
     }
 }
 
-customElements.define('function-node-modal', FunctionNodeModal);
-
-
+customElements.define('code-node-modal', CodeNodeModal);

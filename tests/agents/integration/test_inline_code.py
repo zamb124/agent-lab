@@ -4,21 +4,21 @@
 
 import pytest
 from apps.agents.src.agent import Agent
-from apps.agents.src.agent.nodes import create_node, FunctionNode, FunctionNode
+from apps.agents.src.agent.nodes import create_node, CodeNode, CodeNode
 from apps.agents.src.models import AgentConfig, Edge, CodeMode, ToolReference
 from apps.agents.src.tools import InlineTool
 from apps.agents.src.eval import SafeEvalError
 from core.state import ExecutionState
 
 
-class TestFunctionNode:
-    """Тесты FunctionNode."""
+class TestCodeNode:
+    """Тесты CodeNode."""
 
     @pytest.mark.asyncio
     async def test_create_inline_node(self):
         """Создание inline ноды."""
         node_config = {
-            "type": "function",
+            "type": "code",
             "code": """
 def run(state):
     state['result'] = 'inline_ok'
@@ -27,19 +27,19 @@ def run(state):
         }
         node = await create_node("test_inline", node_config)
         
-        assert isinstance(node, FunctionNode)
+        assert isinstance(node, CodeNode)
         assert node.node_id == "test_inline"
 
     @pytest.mark.asyncio
     async def test_create_reference_node(self):
         """Создание reference ноды (без code)."""
         node_config = {
-            "type": "function",
+            "type": "code",
             "function": "json.loads"
         }
         node = await create_node("test_ref", node_config)
         
-        assert isinstance(node, FunctionNode)
+        assert isinstance(node, CodeNode)
         assert node.node_id == "test_ref"
 
     @pytest.mark.asyncio
@@ -50,7 +50,7 @@ async def run(state):
     state['doubled'] = state.get('value', 0) * 2
     return state
 """
-        node = FunctionNode(node_id="doubler", code=code)
+        node = CodeNode(node_id="doubler", config={"code": code})
         
         state = ExecutionState(
             task_id="test-task",
@@ -72,7 +72,7 @@ def run(state):
     state['greeting'] = f"Hello, {vars.get('company', 'World')}!"
     return state
 """
-        node = FunctionNode(node_id="greeter", code=code)
+        node = CodeNode(node_id="greeter", config={"code": code})
         
         state = ExecutionState(
             task_id="test-task",
@@ -95,7 +95,7 @@ def run(state):
     state['files'] = os.listdir('/')
     return state
 """
-        node = FunctionNode(node_id="bad_node", code=code)
+        node = CodeNode(node_id="bad_node", config={"code": code})
         
         with pytest.raises(SafeEvalError, match="Import of 'os' is not allowed"):
             await node.run(ExecutionState(
@@ -118,7 +118,7 @@ class TestFlowWithInlineCode:
             entry="process",
             nodes={
                 "process": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     state['processed'] = True
@@ -164,7 +164,7 @@ def run(state):
             entry="step1",
             nodes={
                 "step1": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     state['step1'] = 'done'
@@ -173,7 +173,7 @@ def run(state):
 """
                 },
                 "step2": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     state['step2'] = 'done'
@@ -182,7 +182,7 @@ def run(state):
 """
                 },
                 "step3": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     state['step3'] = 'done'
@@ -231,7 +231,7 @@ def run(state):
             entry="parse",
             nodes={
                 "parse": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 import json
 
@@ -280,7 +280,7 @@ def run(state):
             entry="check",
             nodes={
                 "check": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     value = state.get('input', 0)
@@ -289,7 +289,7 @@ def run(state):
 """
                 },
                 "positive": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     state['result'] = 'positive_path'
@@ -297,7 +297,7 @@ def run(state):
 """
                 },
                 "negative": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     state['result'] = 'negative_path'
@@ -355,7 +355,7 @@ def run(state):
             entry="bad",
             nodes={
                 "bad": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     raise ValueError("Intentional error")
@@ -400,7 +400,7 @@ class TestMixedNodes:
             entry="first",
             nodes={
                 "first": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     state['first_done'] = True
@@ -409,7 +409,7 @@ def run(state):
 """
                 },
                 "second": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     state['second_done'] = True
@@ -650,7 +650,7 @@ async def run(state):
     
     return state
 """
-        node = FunctionNode(node_id="cat_facts", code=code)
+        node = CodeNode(node_id="cat_facts", config={"code": code})
         
         state = ExecutionState(
             task_id="test-task",
@@ -693,7 +693,7 @@ async def run(state):
     
     return state
 """
-        node = FunctionNode(node_id="http_post", code=code)
+        node = CodeNode(node_id="http_post", config={"code": code})
         
         state = ExecutionState(
             task_id="test-task",
@@ -732,7 +732,7 @@ async def run(state):
     
     return state
 """
-        node = FunctionNode(node_id="http_params", code=code)
+        node = CodeNode(node_id="http_params", config={"code": code})
         
         state = ExecutionState(
             task_id="test-task",
@@ -760,7 +760,7 @@ async def run(state):
     
     return state
 """
-        node = FunctionNode(node_id="http_error", code=code)
+        node = CodeNode(node_id="http_error", config={"code": code})
         
         state = ExecutionState(
             task_id="test-task",
@@ -783,7 +783,7 @@ async def run(state):
             entry="fetch_data",
             nodes={
                 "fetch_data": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 async def run(state):
     response = await httpx.get("https://catfact.ninja/fact")

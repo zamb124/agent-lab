@@ -37,7 +37,7 @@ class TestNodeEventsStreaming:
             "entry": "process",
             "nodes": {
                 "process": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    state['response'] = 'done'\n    return state",
                 },
             },
@@ -107,15 +107,15 @@ class TestNodeEventsStreaming:
             "entry": "step1",
             "nodes": {
                 "step1": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    state['step1'] = True\n    return state",
                 },
                 "step2": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    state['step2'] = True\n    return state",
                 },
                 "step3": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    state['response'] = 'all done'\n    return state",
                 },
             },
@@ -196,7 +196,7 @@ class TestNodeEventsStreaming:
             "entry": "failing",
             "nodes": {
                 "failing": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    raise ValueError('Test error')",
                 },
             },

@@ -23,8 +23,7 @@ class TestSubflowInputMapping:
         """Без маппинга inputs пустой."""
         node = AgentNode(
             node_id="test_subflow",
-            agent_id="child_flow",
-            input_mapping=None,
+            config={"agent_id": "child_flow", "input_mapping": None},
         )
 
         state = ExecutionState(
@@ -44,8 +43,7 @@ class TestSubflowInputMapping:
         """Без маппинга _prepare_state возвращает копию state."""
         node = AgentNode(
             node_id="test_subflow",
-            agent_id="child_flow",
-            input_mapping=None,
+            config={"agent_id": "child_flow", "input_mapping": None},
         )
 
         state = ExecutionState(
@@ -68,10 +66,12 @@ class TestSubflowInputMapping:
         """@state:field берёт значение из state."""
         node = AgentNode(
             node_id="test_subflow",
-            agent_id="child_flow",
-            input_mapping={
-                "content": "@state:prepared_query",
-                "user_name": "@state:user_name",
+            config={
+                "agent_id": "child_flow",
+                "input_mapping": {
+                    "content": "@state:prepared_query",
+                    "user_name": "@state:user_name",
+                },
             },
         )
 
@@ -97,8 +97,9 @@ class TestSubflowInputMapping:
         """@state:nested.path берёт вложенное значение."""
         node = AgentNode(
             node_id="test_subflow",
-            agent_id="child_flow",
-            input_mapping={
+            config={
+                "agent_id": "child_flow",
+                "input_mapping": {
                 "email": "@state:user.profile.email",
                 "name": "@state:user.name",
             },
@@ -127,8 +128,9 @@ class TestSubflowInputMapping:
         """Строка без @state: передаётся как константа."""
         node = AgentNode(
             node_id="test_subflow",
-            agent_id="child_flow",
-            input_mapping={
+            config={
+                "agent_id": "child_flow",
+                "input_mapping": {
                 "mode": "analysis",
                 "version": "v2",
                 "content": "@state:query",
@@ -154,8 +156,9 @@ class TestSubflowInputMapping:
         """Отсутствующее поле возвращает None."""
         node = AgentNode(
             node_id="test_subflow",
-            agent_id="child_flow",
-            input_mapping={
+            config={
+                "agent_id": "child_flow",
+                "input_mapping": {
                 "content": "@state:missing_field",
             },
         )
@@ -176,8 +179,9 @@ class TestSubflowInputMapping:
         """Отсутствующий вложенный путь возвращает None."""
         node = AgentNode(
             node_id="test_subflow",
-            agent_id="child_flow",
-            input_mapping={
+            config={
+                "agent_id": "child_flow",
+                "input_mapping": {
                 "value": "@state:a.b.c",
             },
         )
@@ -198,8 +202,9 @@ class TestSubflowInputMapping:
         """Нестроковые значения передаются как есть."""
         node = AgentNode(
             node_id="test_subflow",
-            agent_id="child_flow",
-            input_mapping={
+            config={
+                "agent_id": "child_flow",
+                "input_mapping": {
                 "count": 42,
                 "enabled": True,
                 "items": ["a", "b", "c"],
@@ -223,8 +228,9 @@ class TestSubflowInputMapping:
         """_prepare_state применяет inputs к state."""
         node = AgentNode(
             node_id="test_subflow",
-            agent_id="child_flow",
-            input_mapping={
+            config={
+                "agent_id": "child_flow",
+                "input_mapping": {
                 "content": "@state:query",
             },
         )
@@ -255,8 +261,9 @@ class TestSubflowInputMappingIntegration:
         """AgentNode с input_mapping и mock."""
         node = AgentNode(
             node_id="test_subflow",
-            agent_id="child_flow",
-            input_mapping={
+            config={
+                "agent_id": "child_flow",
+                "input_mapping": {
                 "content": "@state:user_query",
                 "context": "test context",
             },

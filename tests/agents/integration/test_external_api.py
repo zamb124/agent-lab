@@ -203,7 +203,7 @@ class TestExternalAPINode:
 
         node = ExternalAPINode(
             node_id="echo_node",
-            api_config={
+            config={
                 "url": "http://test/echo",
                 "method": "POST",
                 "parameters": [
@@ -242,7 +242,7 @@ class TestExternalAPINode:
 
         node = ExternalAPINode(
             node_id="clarify_node",
-            api_config={
+            config={
                 "url": "http://test/clarify",
                 "method": "POST",
                 "parameters": [],
@@ -278,7 +278,7 @@ class TestExternalAPINode:
 
         node = ExternalAPINode(
             node_id="auth_node",
-            api_config={
+            config={
                 "url": "http://test/auth",
                 "method": "POST",
                 "auth_headers": {"Authorization": "@var:auth_token"},

@@ -9,7 +9,7 @@ from apps.agents.src.agent import Agent
 from core.state import ExecutionState
 
 
-class TestFunctionNodeOverrides:
+class TestCodeNodeOverrides:
     """E2E тесты переопределения function nodes."""
 
     @pytest.mark.asyncio
@@ -23,7 +23,7 @@ class TestFunctionNodeOverrides:
                 "entry": "classifier",
                 "nodes": {
                     "classifier": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['route'] = 'default'\n    return state"
                     }
                 },
@@ -49,7 +49,7 @@ class TestFunctionNodeOverrides:
                 "entry": "classifier",
                 "nodes": {
                     "classifier": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['route'] = 'custom'\n    return state"
                     }
                 },
@@ -77,7 +77,7 @@ class TestFunctionNodeOverrides:
             "entry": "classifier",
             "nodes": {
                 "classifier": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     content = state.get('content', '').lower()
@@ -90,9 +90,9 @@ def run(state):
     return state
 """
                 },
-                "order": {"type": "function", "code": "def run(s): s['result'] = 'order'; return s"},
-                "complaint": {"type": "function", "code": "def run(s): s['result'] = 'complaint'; return s"},
-                "general": {"type": "function", "code": "def run(s): s['result'] = 'general'; return s"}
+                "order": {"type": "code", "code": "def run(s): s['result'] = 'order'; return s"},
+                "complaint": {"type": "code", "code": "def run(s): s['result'] = 'complaint'; return s"},
+                "general": {"type": "code", "code": "def run(s): s['result'] = 'general'; return s"}
             },
             "edges": [
                 {"from": "classifier", "to": "order", "condition": "route == 'order'"},
@@ -124,7 +124,7 @@ def run(state):
             "entry": "classifier",
             "nodes": {
                 "classifier": {
-                    "type": "function",
+                    "type": "code",
                     "code": """
 def run(state):
     content = state.get('content', '').lower()
@@ -135,8 +135,8 @@ def run(state):
     return state
 """
                 },
-                "order": {"type": "function", "code": "def run(s): s['result'] = 'order'; return s"},
-                "general": {"type": "function", "code": "def run(s): s['result'] = 'general'; return s"}
+                "order": {"type": "code", "code": "def run(s): s['result'] = 'order'; return s"},
+                "general": {"type": "code", "code": "def run(s): s['result'] = 'general'; return s"}
             },
             "edges": [
                 {"from": "classifier", "to": "order", "condition": "route == 'order'"},
@@ -173,7 +173,7 @@ class TestVariablesOverrideE2E:
                 "entry": "main",
                 "nodes": {
                     "main": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     vars = state.get('variables', {})
@@ -209,7 +209,7 @@ def run(state):
                 "entry": "main",
                 "nodes": {
                     "main": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     vars = state.get('variables', {})
@@ -239,7 +239,7 @@ def run(state):
                 "entry": "main",
                 "nodes": {
                     "main": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     vars = state.get('variables', {})
@@ -270,11 +270,11 @@ class TestEntryOverrideE2E:
         """Skill entry меняет стартовую ноду."""
         config_nodes = {
             "default_start": {
-                "type": "function",
+                "type": "code",
                 "code": "def run(s): s['path'] = 'default'; return s"
             },
             "skill_start": {
-                "type": "function",
+                "type": "code",
                 "code": "def run(s): s['path'] = 'skill'; return s"
             }
         }
@@ -340,7 +340,7 @@ class TestExternalApiNodeOverridesE2E:
                 "entry": "mock_api",
                 "nodes": {
                     "mock_api": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     # Симулируем API response
@@ -381,7 +381,7 @@ class TestNestedOverridesE2E:
                 "entry": "main",
                 "nodes": {
                     "main": {
-                        "type": "function",
+                        "type": "code",
                         "code": """
 def run(state):
     # В реальности LLM config используется в ReactNode
@@ -418,15 +418,15 @@ class TestGraphOverridesE2E:
             "entry": "classifier",
             "nodes": {
                 "classifier": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(s): s['route'] = 'order'; s['step'] = ['classifier']; return s"
                 },
                 "processor": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(s): s['step'].append('processor'); return s"
                 },
                 "formatter": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(s): s['step'].append('formatter'); return s"
                 }
             },
@@ -454,11 +454,11 @@ class TestGraphOverridesE2E:
             "entry": "classifier",
             "nodes": {
                 "classifier": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(s): s['route'] = 'order'; s['step'] = ['classifier']; return s"
                 },
                 "processor": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(s): s['step'].append('processor'); return s"
                 }
             },
@@ -490,12 +490,12 @@ class TestGraphOverridesE2E:
                 "entry": "start",
                 "nodes": {
                     "start": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(s): s['route'] = s.get('input_route', 'a'); return s"
                     },
-                    "path_a": {"type": "function", "code": "def run(s): s['result'] = 'A'; return s"},
-                    "path_b": {"type": "function", "code": "def run(s): s['result'] = 'B'; return s"},
-                    "path_c": {"type": "function", "code": "def run(s): s['result'] = 'C'; return s"}
+                    "path_a": {"type": "code", "code": "def run(s): s['result'] = 'A'; return s"},
+                    "path_b": {"type": "code", "code": "def run(s): s['result'] = 'B'; return s"},
+                    "path_c": {"type": "code", "code": "def run(s): s['result'] = 'C'; return s"}
                 },
                 "edges": [
                     {"from": "start", "to": "path_a", "condition": "route == 'a'"},
@@ -526,11 +526,11 @@ class TestGraphOverridesE2E:
                 "entry": "start",
                 "nodes": {
                     "start": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(s): s['route'] = 'c' if s.get('input_route') == 'b' else s.get('input_route', 'a'); return s"
                     },
-                    "path_a": {"type": "function", "code": "def run(s): s['result'] = 'A'; return s"},
-                    "path_c": {"type": "function", "code": "def run(s): s['result'] = 'C'; return s"}
+                    "path_a": {"type": "code", "code": "def run(s): s['result'] = 'A'; return s"},
+                    "path_c": {"type": "code", "code": "def run(s): s['result'] = 'C'; return s"}
                 },
                 "edges": [
                     {"from": "start", "to": "path_a", "condition": "route == 'a'"},
@@ -565,9 +565,9 @@ class TestMultipleNodesOverrideE2E:
                 "name": "Test",
                 "entry": "step1",
                 "nodes": {
-                    "step1": {"type": "function", "code": "def run(s): s['v1'] = 'base1'; return s"},
-                    "step2": {"type": "function", "code": "def run(s): s['v2'] = 'base2'; return s"},
-                    "step3": {"type": "function", "code": "def run(s): s['v3'] = 'base3'; return s"}
+                    "step1": {"type": "code", "code": "def run(s): s['v1'] = 'base1'; return s"},
+                    "step2": {"type": "code", "code": "def run(s): s['v2'] = 'base2'; return s"},
+                    "step3": {"type": "code", "code": "def run(s): s['v3'] = 'base3'; return s"}
                 },
                 "edges": [
                     {"from": "step1", "to": "step2"},
@@ -595,9 +595,9 @@ class TestMultipleNodesOverrideE2E:
                 "name": "Test",
                 "entry": "step1",
                 "nodes": {
-                    "step1": {"type": "function", "code": "def run(s): s['v1'] = 'override1'; return s"},
-                    "step2": {"type": "function", "code": "def run(s): s['v2'] = 'base2'; return s"},
-                    "step3": {"type": "function", "code": "def run(s): s['v3'] = 'override3'; return s"}
+                    "step1": {"type": "code", "code": "def run(s): s['v1'] = 'override1'; return s"},
+                    "step2": {"type": "code", "code": "def run(s): s['v2'] = 'base2'; return s"},
+                    "step3": {"type": "code", "code": "def run(s): s['v3'] = 'override3'; return s"}
                 },
                 "edges": [
                     {"from": "step1", "to": "step2"},
@@ -628,8 +628,8 @@ class TestMultipleNodesOverrideE2E:
                 "name": "Test",
                 "entry": "first",
                 "nodes": {
-                    "first": {"type": "function", "code": "def run(s): s['steps'] = ['first']; return s"},
-                    "last": {"type": "function", "code": "def run(s): s['steps'].append('last'); return s"}
+                    "first": {"type": "code", "code": "def run(s): s['steps'] = ['first']; return s"},
+                    "last": {"type": "code", "code": "def run(s): s['steps'].append('last'); return s"}
                 },
                 "edges": [
                     {"from": "first", "to": "last"},
@@ -654,9 +654,9 @@ class TestMultipleNodesOverrideE2E:
                 "name": "Test",
                 "entry": "first",
                 "nodes": {
-                    "first": {"type": "function", "code": "def run(s): s['steps'] = ['first']; return s"},
-                    "middle": {"type": "function", "code": "def run(s): s['steps'].append('middle'); return s"},
-                    "last": {"type": "function", "code": "def run(s): s['steps'].append('last'); return s"}
+                    "first": {"type": "code", "code": "def run(s): s['steps'] = ['first']; return s"},
+                    "middle": {"type": "code", "code": "def run(s): s['steps'].append('middle'); return s"},
+                    "last": {"type": "code", "code": "def run(s): s['steps'].append('last'); return s"}
                 },
                 "edges": [
                     {"from": "first", "to": "middle"},

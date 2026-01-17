@@ -28,7 +28,7 @@ class TestSkillValidationAndPersistence:
             "entry": "main",
             "nodes": {
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "async def run(state):\n    return state"
                 }
             },
@@ -149,7 +149,7 @@ class TestSkillValidationAndPersistence:
             "entry": "main",
             "nodes": {
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "async def run(state):\n    state['path'] = 'base'\n    return state"
                 }
             },
@@ -168,11 +168,11 @@ class TestSkillValidationAndPersistence:
                 "entry": "skill_main",
                 "nodes": {
                     "skill_main": {
-                        "type": "function",
+                        "type": "code",
                         "code": "async def run(state):\n    state['path'] = 'skill'\n    return state"
                     },
                     "skill_helper": {
-                        "type": "function",
+                        "type": "code",
                         "code": "async def run(state):\n    state['helper'] = True\n    return state"
                     }
                 },
@@ -214,15 +214,15 @@ class TestSkillValidationAndPersistence:
             "entry": "main",
             "nodes": {
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "async def run(state):\n    state['value'] = 10\n    return state"
                 },
                 "branch_a": {
-                    "type": "function",
+                    "type": "code",
                     "code": "async def run(state):\n    state['branch'] = 'a'\n    return state"
                 },
                 "branch_b": {
-                    "type": "function",
+                    "type": "code",
                     "code": "async def run(state):\n    state['branch'] = 'b'\n    return state"
                 }
             },
@@ -285,7 +285,7 @@ class TestSkillValidationAndPersistence:
             "entry": "main",
             "nodes": {
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "async def run(state):\n    return state"
                 }
             },
@@ -345,7 +345,7 @@ class TestSkillValidationAndPersistence:
             "entry": "main",
             "nodes": {
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "async def run(state):\n    return state"
                 }
             },
@@ -444,7 +444,7 @@ class TestSkillValidationAndPersistence:
             "entry": "main",
             "nodes": {
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "async def run(state):\n    return state"
                 }
             },
@@ -549,7 +549,7 @@ class TestSkillValidationAndPersistence:
             "entry": "main",
             "nodes": {
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "async def run(state):\n    return state"
                 }
             },
@@ -568,7 +568,7 @@ class TestSkillValidationAndPersistence:
                 "entry": "nonexistent_node",
                 "nodes": {
                     "some_node": {
-                        "type": "function",
+                        "type": "code",
                         "code": "async def run(state):\n    return state"
                     }
                 }
@@ -590,7 +590,7 @@ class TestSkillValidationAndPersistence:
             "entry": "main",
             "nodes": {
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "async def run(state):\n    return state"
                 }
             },
@@ -608,7 +608,7 @@ class TestSkillValidationAndPersistence:
             "skill_body": {
                 "nodes": {
                     "node_a": {
-                        "type": "function",
+                        "type": "code",
                         "code": "async def run(state):\n    return state"
                     }
                 },
@@ -633,7 +633,7 @@ class TestSkillValidationAndPersistence:
             "entry": "main",
             "nodes": {
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "async def run(state):\n    return state"
                 }
             },
@@ -651,7 +651,7 @@ class TestSkillValidationAndPersistence:
             "skill_body": {
                 "nodes": {
                     "skill_node": {
-                        "type": "function",
+                        "type": "code",
                         "code": "async def run(state):\n    return state"
                     }
                 },
@@ -671,7 +671,7 @@ class TestSkillValidationAndPersistence:
                 "entry": "nonexistent_entry",
                 "nodes": {
                     "skill_node": {
-                        "type": "function",
+                        "type": "code",
                         "code": "async def run(state):\n    return state"
                     }
                 }
@@ -699,7 +699,7 @@ class TestSkillValidationAndPersistence:
             "entry": "main",
             "nodes": {
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "async def run(state):\n    return state"
                 }
             },
@@ -718,7 +718,7 @@ class TestSkillValidationAndPersistence:
                 "entry": "code_node",
                 "nodes": {
                     "code_node": {
-                        "type": "function",
+                        "type": "code",
                         "code": """async def run(state):
     state['result'] = state.get('a', 0) + state.get('b', 0)
     state['variables']['output'] = state['result']
@@ -751,7 +751,7 @@ class TestSkillValidationAndPersistence:
             "entry": "main",
             "nodes": {
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "async def run(state):\n    return state"
                 }
             },
@@ -828,7 +828,7 @@ class TestSkillValidationAndPersistence:
             "entry": "main",
             "nodes": {
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "async def run(state):\n    return state"
                 }
             },

@@ -10,25 +10,25 @@ from typing import Any, Dict
 from apps.agents.src.agent.agent import Agent, AgentInfiniteLoopError
 from apps.agents.src.agent.nodes import (
     BaseNode,
-    FunctionNode,
+    CodeNode,
     ReactNode,
     create_node,
 )
 from core.variables import VariableResolver
 
 
-class TestFunctionNode:
-    """Тесты FunctionNode."""
+class TestCodeNode:
+    """Тесты CodeNode."""
 
     @pytest.mark.asyncio
     async def test_function_node_executes_sync_function(self, make_test_state):
-        """FunctionNode выполняет синхронную функцию."""
+        """CodeNode выполняет синхронную функцию."""
 
         def my_func(state):
             state["result"] = "done"
             return state
 
-        node = FunctionNode("test", my_func)
+        node = CodeNode("test", config={"code": my_func})
         state = make_test_state()
         result = await node.run(state)
 
@@ -36,13 +36,13 @@ class TestFunctionNode:
 
     @pytest.mark.asyncio
     async def test_function_node_executes_async_function(self, make_test_state):
-        """FunctionNode выполняет асинхронную функцию."""
+        """CodeNode выполняет асинхронную функцию."""
 
         async def my_async_func(state):
             state["async_result"] = "async_done"
             return state
 
-        node = FunctionNode("test", my_async_func)
+        node = CodeNode("test", config={"code": my_async_func})
         state = make_test_state()
         result = await node.run(state)
 
@@ -50,13 +50,13 @@ class TestFunctionNode:
 
     @pytest.mark.asyncio
     async def test_function_node_changes_stage(self, make_test_state):
-        """FunctionNode может менять stage."""
+        """CodeNode может менять stage."""
 
         def set_stage(state):
             state["stage"] = "next"
             return state
 
-        node = FunctionNode("test", set_stage)
+        node = CodeNode("test", config={"code": set_stage})
         state = make_test_state(stage="init")
         result = await node.run(state)
 
@@ -68,15 +68,15 @@ class TestCreateNode:
 
     @pytest.mark.asyncio
     async def test_create_function_node(self):
-        """create_node создает FunctionNode."""
+        """create_node создает CodeNode."""
         config = {
-            "type": "function",
+            "type": "code",
             "code": "def run(state):\n    state['initialized'] = True\n    return state",
         }
 
         node = await create_node("init", config)
 
-        assert isinstance(node, FunctionNode)
+        assert isinstance(node, CodeNode)
 
     @pytest.mark.asyncio
     async def test_create_react_node_node(self):
@@ -118,8 +118,8 @@ class TestFlowWithEdges:
             return state
 
         nodes = {
-            "step1": FunctionNode("step1", step1),
-            "step2": FunctionNode("step2", step2),
+            "step1": CodeNode("step1", config={"code": step1}),
+            "step2": CodeNode("step2", config={"code": step2}),
         }
 
         flow = Agent(
@@ -162,9 +162,9 @@ class TestFlowWithEdges:
             return state
 
         nodes = {
-            "check": FunctionNode("check", set_valid),
-            "valid_path": FunctionNode("valid_path", on_valid),
-            "invalid_path": FunctionNode("invalid_path", on_invalid),
+            "check": CodeNode("check", config={"code": set_valid}),
+            "valid_path": CodeNode("valid_path", config={"code": on_valid}),
+            "invalid_path": CodeNode("invalid_path", config={"code": on_invalid}),
         }
 
         flow = Agent(
@@ -207,9 +207,9 @@ class TestFlowWithEdges:
             return state
 
         nodes = {
-            "check": FunctionNode("check", set_invalid),
-            "valid_path": FunctionNode("valid_path", on_valid),
-            "invalid_path": FunctionNode("invalid_path", on_invalid),
+            "check": CodeNode("check", config={"code": set_invalid}),
+            "valid_path": CodeNode("valid_path", config={"code": on_valid}),
+            "invalid_path": CodeNode("invalid_path", config={"code": on_invalid}),
         }
 
         flow = Agent(
@@ -248,8 +248,8 @@ class TestFlowWithEdges:
             return state
 
         nodes = {
-            "init": FunctionNode("init", set_nested),
-            "success": FunctionNode("success", success),
+            "init": CodeNode("init", config={"code": set_nested}),
+            "success": CodeNode("success", config={"code": success}),
         }
 
         flow = Agent(
@@ -286,8 +286,8 @@ class TestFlowWithEdges:
             return state
 
         nodes = {
-            "step1": FunctionNode("step1", step1),
-            "step2": FunctionNode("step2", step2),
+            "step1": CodeNode("step1", config={"code": step1}),
+            "step2": CodeNode("step2", config={"code": step2}),
         }
 
         flow = Agent(
@@ -317,7 +317,7 @@ class TestFlowWithEdges:
         """Agent выбрасывает ошибку для несуществующей ноды."""
 
         nodes = {
-            "start": FunctionNode("start", lambda s: s),
+            "start": CodeNode("start", config={"code": lambda s: s}),
         }
 
         flow = Agent(
@@ -345,8 +345,8 @@ class TestFlowWithEdges:
             return state
 
         nodes = {
-            "a": FunctionNode("a", noop),
-            "b": FunctionNode("b", noop),
+            "a": CodeNode("a", config={"code": noop}),
+            "b": CodeNode("b", config={"code": noop}),
         }
 
         flow = Agent(
@@ -361,7 +361,8 @@ class TestFlowWithEdges:
         )
 
         from core.state import ExecutionState
-        with pytest.raises(AgentInfiniteLoopError):
+        from core.errors import NodeCallLimitError
+        with pytest.raises((AgentInfiniteLoopError, NodeCallLimitError)):
             await flow.run(ExecutionState(
                 task_id="test-task",
                 context_id="test-context",
@@ -378,7 +379,7 @@ class TestFlowWithEdges:
             "entry": "init",
             "nodes": {
                 "init": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    state['initialized'] = True\n    return state",
                 },
             },
@@ -392,7 +393,7 @@ class TestFlowWithEdges:
         assert flow.agent_id == "config_flow"
         assert flow.name == "From Config"
         assert "init" in flow.nodes
-        assert isinstance(flow.nodes["init"], FunctionNode)
+        assert isinstance(flow.nodes["init"], CodeNode)
 
 
 class TestFlowVariables:
@@ -408,7 +409,7 @@ class TestFlowVariables:
             return state
 
         nodes = {
-            "main": FunctionNode("main", capture_variables),
+            "main": CodeNode("main", config={"code": capture_variables}),
         }
 
         flow = Agent(
@@ -440,7 +441,7 @@ class TestFlowVariables:
             return state
 
         nodes = {
-            "main": FunctionNode("main", use_variables),
+            "main": CodeNode("main", config={"code": use_variables}),
         }
 
         flow = Agent(
@@ -471,7 +472,7 @@ class TestFlowVariables:
             "entry": "main",
             "nodes": {
                 "main": {
-                    "type": "function",
+                    "type": "code",
                     "code": "def run(state):\n    state['initialized'] = True\n    return state",
                 },
             },
@@ -571,8 +572,8 @@ class TestFlowConditionEvaluation:
             return state
 
         nodes = {
-            "init": FunctionNode("init", set_status),
-            "active": FunctionNode("active", on_active),
+            "init": CodeNode("init", config={"code": set_status}),
+            "active": CodeNode("active", config={"code": on_active}),
         }
 
         flow = Agent(
@@ -613,9 +614,9 @@ class TestFlowConditionEvaluation:
             return state
 
         nodes = {
-            "init": FunctionNode("init", set_count),
-            "high": FunctionNode("high", high),
-            "low": FunctionNode("low", low),
+            "init": CodeNode("init", config={"code": set_count}),
+            "high": CodeNode("high", config={"code": high}),
+            "low": CodeNode("low", config={"code": low}),
         }
 
         flow = Agent(

@@ -216,7 +216,7 @@ class TestDeepMergeNodeConfig:
     def test_function_node_code_override(self):
         """Переопределение code в function node."""
         base = {
-            "type": "function",
+            "type": "code",
             "code": "def run(s): return s"
         }
         override = {
@@ -322,7 +322,7 @@ class TestDeepMergeSkillConfig:
         """Merge nodes в skill."""
         base_nodes = {
             "main": {"type": "react_node", "prompt": "Base", "tools": ["t1"]},
-            "helper": {"type": "function", "code": "def run(s): return s"}
+            "helper": {"type": "code", "code": "def run(s): return s"}
         }
         skill_nodes = {
             "main": {"prompt": "Skill prompt", "llm": {"temperature": 0.1}}

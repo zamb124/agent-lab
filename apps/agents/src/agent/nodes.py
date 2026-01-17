@@ -6,11 +6,11 @@
 
 Типы нод:
 - ReactNode - LLM нода с ReAct циклом
-- FunctionNode - Python функция (inline код)
-- ToolNode - BaseTool как нода графа
+- CodeNode - выполнение кода (Python, JavaScript, Go)
 - AgentNode - вложенный agent
 - RemoteAgentNode - внешний агент по A2A протоколу
 - ExternalAPINode - вызов внешнего HTTP API
+- MCPNode - вызов MCP tool
 """
 
 from __future__ import annotations
@@ -35,13 +35,55 @@ from apps.agents.src.mock import get_mock_for_node
 from apps.agents.src.models import NodeLLMOverride, NodeConfig, ReactConfig
 from apps.agents.src.models.enums import NodeType
 from apps.agents.src.models.external_api import ExternalAPIConfig, ParameterSchema
-from apps.agents.src.models.tool_reference import CallParameter
 from core.state import ExecutionState, InterruptData
-from apps.agents.src.tools.base import BaseTool, InlineTool
 from core.logging import get_logger
 from core.errors import ResourceNotFoundError
 
 logger = get_logger(__name__)
+
+
+class NodeRunMethod:
+    """Callable wrapper для node.run() с поддержкой .kiq()"""
+
+    def __init__(self, node: "BaseNode"):
+        self._node = node
+
+    async def __call__(self, state: ExecutionState) -> ExecutionState:
+        """Прямой вызов в текущем процессе."""
+        return await self._node._run_internal(state)
+
+    async def kiq(self, state: ExecutionState) -> ExecutionState:
+        """Через воркер если use_worker=True, иначе локально."""
+        from apps.agents.src.container import get_container
+
+        container = get_container()
+        
+        # Внутри воркера выполняем локально
+        if not container.use_worker:
+            return await self._node._run_internal(state)
+
+        # Отправляем в воркер
+        from apps.agents.src.tasks.node_tasks import execute_node
+
+        state_dict = state.model_dump(exclude_none=False)
+        task = await execute_node.kiq(
+            self._node.node_id,
+            self._node.config,
+            state_dict
+        )
+        result = await task.wait_result()
+        if result.is_err:
+            raise result.error
+        return ExecutionState.model_validate(result.return_value)
+
+
+class NodeRunDescriptor:
+    """Descriptor для node.run"""
+
+    def __get__(self, obj, objtype=None):
+        if obj is None:
+            return self
+        return NodeRunMethod(obj)
 
 
 class BaseNode(ABC):
@@ -49,7 +91,7 @@ class BaseNode(ABC):
     Базовый класс для нод. Node = функция ExecutionState -> ExecutionState.
     
     Template Method паттерн:
-    - run() - единая точка входа для всех нод
+    - run(state) или run.kiq(state) - единая точка входа для всех нод
     - _resolve_inputs() - единообразный резолвинг input_mapping
     - _get_filtered_messages() - фильтрация messages
     - _run_impl() - конкретная логика каждой ноды
@@ -159,9 +201,12 @@ class BaseNode(ABC):
         """Проверяет является ли сообщение от пользователя."""
         return getattr(msg, "role", None) == Role.user
 
-    async def run(self, state: ExecutionState) -> ExecutionState:
+    # Descriptor для унифицированного вызова: node.run(state) или node.run.kiq(state)
+    run = NodeRunDescriptor()
+
+    async def _run_internal(self, state: ExecutionState) -> ExecutionState:
         """
-        Единая точка входа для ВСЕХ нод.
+        Внутренняя реализация выполнения ноды.
         
         1. Проверка mock
         2. Сохранение snapshot для diff (если save_to_messages без message_field)
@@ -292,6 +337,7 @@ class BaseNode(ABC):
         """
         Создает state для вложенного выполнения.
         Применяет inputs и фильтрует messages.
+        Сбрасывает current_nodes чтобы nested agent начал со своего entry.
         """
         new_state = ExecutionState.model_validate(state.model_dump(exclude_none=False))
         
@@ -299,6 +345,9 @@ class BaseNode(ABC):
             setattr(new_state, key, value)
         
         new_state.messages = self._get_filtered_messages(state)
+        
+        # Сбрасываем current_nodes - nested agent начнет со своего entry
+        new_state.current_nodes = []
         
         return new_state
 
@@ -356,25 +405,15 @@ class ReactNode(BaseNode):
     def __init__(
         self,
         node_id: Optional[str] = None,
-        prompt: Optional[str] = None,
-        tools: Optional[List[Any]] = None,
-        llm_config: Optional[Dict[str, Any]] = None,
-        input_mapping: Optional[Dict[str, Any]] = None,
         config: Optional[Dict[str, Any]] = None,
         node_config: Optional[NodeConfig] = None,
     ):
         super().__init__(node_id or self.name, config)
+        cfg = self.config
         
-        cfg = config or {}
-        
-        self.prompt_template = prompt or self.prompt or cfg.get("prompt", "")
-        self.tool_refs = tools if tools is not None else cfg.get("tools", [])
-        self.llm_config_dict = llm_config or cfg.get("llm", {})
-        
-        if input_mapping is not None:
-            self.input_mapping = input_mapping
-        elif cfg.get("input_mapping"):
-            self.input_mapping = cfg.get("input_mapping")
+        self.prompt_template = self.prompt or cfg.get("prompt", "")
+        self.tool_refs = cfg.get("tools", []) or self.tools
+        self.llm_config_dict = cfg.get("llm", {})
         
         self._node_config = node_config
         self._runner = None
@@ -641,141 +680,94 @@ class NodeAsTool:
         }
 
 
-class FunctionNode(BaseNode):
+class CodeNode(BaseNode):
     """
-    Python функция из inline кода или callable.
+    Универсальная нода для выполнения кода.
     
-    Функция получает state и может:
-    - Модифицировать state напрямую
-    - Вернуть dict с изменениями (применится через output_mapping)
-    - Вернуть None (если все изменения уже в state)
+    Поддерживает разные языки (python, javascript, go).
+    Унифицированный вызов через runner.execute_tool(code, args, state).
+    
+    args_schema опционален - если задан, args заполняются из inputs,
+    если нет - args будет пустым dict.
+    
+    tool_id - загрузка готового tool из реестра вместо inline кода.
     """
 
-    def __init__(
-        self,
-        node_id: str,
-        code: Any = None,
-        config: Optional[Dict[str, Any]] = None,
-    ):
+    def __init__(self, node_id: str, config: Optional[Dict[str, Any]] = None):
         super().__init__(node_id, config)
-        self._callable = None
-        
-        self.code = code
-        cfg = config or {}
-        
-        if self.code is None:
-            self.code = cfg.get("code")
-            
-        if self.code is None and cfg.get("function"):
-            function_path = cfg["function"]
-            try:
-                module_path, func_name = function_path.rsplit(".", 1)
-                module = importlib.import_module(module_path)
-                func = getattr(module, func_name)
-                if not self.code:
-                    self.code = inspect.getsource(func)
-                    self._callable = func
-            except Exception as e:
-                logger.error(f"Node '{node_id}': failed to load code from {function_path}: {e}")
-        
-        if callable(self.code):
-            self._callable = self.code
-            self.code = None
-
-    async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
-        """
-        Выполняет функцию.
-        
-        Функция может модифицировать state напрямую.
-        Возвращаемый результат (dict или Any) применяется через output_mapping.
-        """
-        if self._callable is not None:
-            if asyncio.iscoroutinefunction(self._callable):
-                result = await self._callable(state, **inputs)
-            else:
-                result = self._callable(state, **inputs)
-        elif self.code:
-            run_inline_code = get_container().run_inline_code
-            result = await run_inline_code(self.code, state, **inputs)
-        else:
-            raise ValueError(f"Node '{self.node_id}': code required")
-        
-        return result
-
-
-class ToolNode(BaseNode):
-    """Tool как нода графа."""
-
-    def __init__(
-        self,
-        node_id: str,
-        tool: Optional[BaseTool] = None,
-        input_mapping: Optional[Dict[str, Any]] = None,
-        config: Optional[Dict[str, Any]] = None,
-    ):
-        super().__init__(node_id, config)
-        self.tool = tool
-        
-        cfg = config or {}
-        if input_mapping is not None:
-            self.input_mapping = input_mapping
-        elif cfg.get("input_mapping"):
-            self.input_mapping = cfg.get("input_mapping")
-
-    async def _ensure_tool(self):
-        """Загружает tool если он еще не загружен."""
-        if self.tool:
-            return
-
         cfg = self.config
-        code = cfg.get("code")
-        tool_id = cfg.get("tool_id") or self.node_id
         
-        if tool_id and not code:
-            container = get_container()
-            tool = await container.tool_registry.create_tool({"tool_id": tool_id})
-            if tool is None:
-                raise ValueError(f"Node '{self.node_id}': tool '{tool_id}' not found")
-            self.tool = tool
-            return
-            
-        if not code:
-            raise ValueError(f"Node '{self.node_id}': code or tool_id required for type=tool")
-             
-        parameters = None
-        args_schema = cfg.get("args_schema")
-        if args_schema:
-            parameters = {}
-            for name, schema in args_schema.items():
-                parameters[name] = CallParameter(
-                    type=schema.get("type", "string"),
-                    description=schema.get("description", ""),
-                )
+        self.language = cfg.get("language", "python")
+        self.code = cfg.get("code")
+        self.tool_id = cfg.get("tool_id")
+        self.args_schema = cfg.get("args_schema")
         
-        self.tool = InlineTool(
-            tool_id=tool_id,
-            code=code,
-            description=cfg.get("description"),
-            parameters=parameters,
-        )
+        self._runner = None
+        self._registry_tool = None
+        
+        # Для Python можно загрузить из function path
+        if self.language == "python" and self.code is None and cfg.get("function"):
+            self._load_from_function_path(cfg["function"])
+
+    def _load_from_function_path(self, function_path: str):
+        """Загружает код из module.function path."""
+        try:
+            module_path, func_name = function_path.rsplit(".", 1)
+            module = importlib.import_module(module_path)
+            func = getattr(module, func_name)
+            self.code = inspect.getsource(func)
+        except Exception as e:
+            raise ValueError(f"Node '{self.node_id}': failed to load from {function_path}: {e}")
+
+    def _get_runner(self):
+        """Возвращает runner для текущего языка."""
+        if self._runner:
+            return self._runner
+        
+        container = get_container()
+        self._runner = container.get_code_runner(self.language)
+        return self._runner
 
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
-        """Выполняет tool с inputs как аргументами."""
-        await self._ensure_tool()
+        """
+        Выполняет код через runner.execute_tool().
         
-        args = self._build_args_with_defaults(inputs)
-        logger.info(f"[node:{self.node_id}] Вызов tool '{self.tool.name}' с args: {list(args.keys())}")
-        result = await self.tool.run(args, state)
-        return result
+        Унифицированный путь: всегда execute_tool(code, args, state).
+        args формируется из inputs (может быть пустым).
+        """
+        # Загрузка tool из реестра
+        if self.tool_id:
+            return await self._run_registry_tool(state, inputs)
+        
+        if not self.code:
+            raise ValueError(f"Node '{self.node_id}': code or tool_id required")
+        
+        args = self._build_args(inputs)
+        logger.info(f"[node:{self.node_id}] execute_tool с args: {list(args.keys())}")
+        
+        runner = self._get_runner()
+        return await runner.execute_tool(self.code, args, state)
 
-    def _build_args_with_defaults(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Добавляет default значения из параметров tool к inputs."""
+    async def _run_registry_tool(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
+        """Выполняет tool загруженный из реестра."""
+        if self._registry_tool is None:
+            container = get_container()
+            self._registry_tool = await container.tool_registry.create_tool({"tool_id": self.tool_id})
+            if self._registry_tool is None:
+                raise ValueError(f"Tool '{self.tool_id}' not found")
+        
+        args = self._build_args(inputs)
+        logger.info(f"[node:{self.node_id}] registry tool '{self._registry_tool.name}' с args: {list(args.keys())}")
+        return await self._registry_tool.run(args, state)
+
+    def _build_args(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Формирует args из inputs с учетом defaults из args_schema."""
         args = {}
-        if hasattr(self.tool, "parameters") and self.tool.parameters:
-            properties = self.tool.parameters.get("properties", {})
-            for prop_name, prop_schema in properties.items():
-                if "default" in prop_schema:
-                    args[prop_name] = prop_schema["default"]
+        
+        if self.args_schema:
+            for name, schema in self.args_schema.items():
+                if "default" in schema:
+                    args[name] = schema["default"]
         
         args.update(inputs)
         return args
@@ -784,25 +776,12 @@ class ToolNode(BaseNode):
 class AgentNode(BaseNode):
     """Вложенный Agent с поддержкой skill."""
 
-    def __init__(
-        self,
-        node_id: str,
-        agent_id: Optional[str] = None,
-        skill_id: str = "default",
-        input_mapping: Optional[Dict[str, Any]] = None,
-        config: Optional[Dict[str, Any]] = None,
-    ):
+    def __init__(self, node_id: str, config: Optional[Dict[str, Any]] = None):
         super().__init__(node_id, config)
-        cfg = config or {}
+        cfg = self.config
         
-        self.agent_id = agent_id or cfg.get("agent_id")
-        self.skill_id = skill_id or cfg.get("skill_id", "default")
-        
-        if input_mapping is not None:
-            self.input_mapping = input_mapping
-        elif cfg.get("input_mapping"):
-            self.input_mapping = cfg.get("input_mapping")
-            
+        self.agent_id = cfg.get("agent_id")
+        self.skill_id = cfg.get("skill_id", "default")
         self._agent = None
 
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
@@ -829,28 +808,14 @@ class AgentNode(BaseNode):
 class RemoteAgentNode(BaseNode):
     """Внешний агент по A2A протоколу."""
 
-    def __init__(
-        self,
-        node_id: str,
-        url: Optional[str] = None,
-        agent_id: Optional[str] = None,
-        skill_id: Optional[str] = None,
-        auth_headers: Optional[Dict[str, str]] = None,
-        input_mapping: Optional[Dict[str, Any]] = None,
-        config: Optional[Dict[str, Any]] = None,
-    ):
+    def __init__(self, node_id: str, config: Optional[Dict[str, Any]] = None):
         super().__init__(node_id, config)
-        cfg = config or {}
+        cfg = self.config
         
-        self.url = url if url is not None else cfg.get("url")
-        self.remote_agent_id = agent_id if agent_id is not None else cfg.get("agent_id")
-        self.skill_id = skill_id if skill_id is not None else cfg.get("skill_id", "default")
-        self.auth_headers_config = auth_headers if auth_headers is not None else cfg.get("auth_headers", {})
-        
-        if input_mapping is not None:
-            self.input_mapping = input_mapping
-        elif cfg.get("input_mapping"):
-            self.input_mapping = cfg.get("input_mapping")
+        self.url = cfg.get("url")
+        self.remote_agent_id = cfg.get("agent_id")
+        self.skill_id = cfg.get("skill_id", "default")
+        self.auth_headers_config = cfg.get("auth_headers", {})
 
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
         """Вызывает внешнего агента."""
@@ -912,19 +877,9 @@ class RemoteAgentNode(BaseNode):
 class ExternalAPINode(BaseNode):
     """Вызов внешнего HTTP API."""
 
-    def __init__(
-        self,
-        node_id: str,
-        api_config: Optional[Dict[str, Any]] = None,
-        config: Optional[Dict[str, Any]] = None,
-    ):
+    def __init__(self, node_id: str, config: Optional[Dict[str, Any]] = None):
         super().__init__(node_id, config)
-        self.api_config = api_config or config or {}
-
-    @classmethod
-    def from_config(cls, node_id: str, config: Dict[str, Any]) -> "ExternalAPINode":
-        """Создает ExternalAPINode из конфига."""
-        return cls(node_id=node_id, api_config=config, config=config)
+        self.api_config = self.config
 
     def _build_api_config(self) -> ExternalAPIConfig:
         """Строит конфиг API."""
@@ -987,22 +942,14 @@ class MCPNode(BaseNode):
     Подключается к MCP серверу и вызывает указанный tool.
     """
 
-    def __init__(
-        self,
-        node_id: str,
-        config: Optional[Dict[str, Any]] = None,
-    ):
+    def __init__(self, node_id: str, config: Optional[Dict[str, Any]] = None):
         super().__init__(node_id, config)
-        cfg = config or {}
+        cfg = self.config
+        
         self.server_id = cfg.get("server_id")
         self.tool_name = cfg.get("tool_name")
         self.extra_headers = cfg.get("headers", {})
         self.state_mapping = cfg.get("state_mapping", {})
-
-    @classmethod
-    def from_config(cls, node_id: str, config: Dict[str, Any]) -> "MCPNode":
-        """Создает MCPNode из конфига."""
-        return cls(node_id=node_id, config=config)
 
     async def _run_impl(self, state: ExecutionState, inputs: Dict[str, Any]) -> Any:
         """Вызывает MCP tool."""

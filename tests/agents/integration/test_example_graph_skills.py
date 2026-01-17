@@ -198,7 +198,7 @@ class TestOrdersOnlySkill:
         assert "[GENERAL]" in result.get("response", "")
 
 
-class TestFunctionNodesSkill:
+class TestCodeNodesSkill:
     """
     Тесты для skill 'test_function_nodes'.
     

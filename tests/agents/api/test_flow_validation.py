@@ -297,7 +297,7 @@ class TestFlowValidationReferences:
             json={
                 "nodes": {
                     "main": {
-                        "type": "tool",
+                        "type": "code",
                         "tool_id": "calculator",
                     }
                 },
@@ -320,7 +320,7 @@ class TestFlowValidationReferences:
             json={
                 "nodes": {
                     "main": {
-                        "type": "tool",
+                        "type": "code",
                         "tool_id": "nonexistent_tool_xyz_12345",
                     }
                 },
@@ -344,7 +344,7 @@ class TestFlowValidationReferences:
             json={
                 "nodes": {
                     "main": {
-                        "type": "tool",
+                        "type": "code",
                         "code": "def execute(args, state): return 'ok'",
                     }
                 },
@@ -532,7 +532,7 @@ class TestFlowValidationInlineCode:
             json={
                 "nodes": {
                     "main": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    content = state.get('content', '')\n    state['result'] = content.upper()\n    return state",
                     }
                 },
@@ -556,7 +556,7 @@ class TestFlowValidationInlineCode:
             json={
                 "nodes": {
                     "classifier": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    content = state['content'].lower()\n    if 'order' in content:\n        state['route'] = 'order'\n    return state",
                     }
                 },
@@ -671,7 +671,7 @@ class TestFlowValidationComplexCases:
             json={
                 "nodes": {
                     "router": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state):\n    state['route'] = 'a' if state.get('flag') else 'b'\n    return state",
                     },
                     "handler_a": {"type": "react_node", "prompt": "Handler A"},
@@ -703,7 +703,7 @@ class TestFlowValidationComplexCases:
             json={
                 "nodes": {
                     "router": {
-                        "type": "function",
+                        "type": "code",
                         "code": "def run(state): state['route'] = 'a'; return state",
                     },
                     "exit_a": {"type": "react_node", "prompt": "Exit A"},

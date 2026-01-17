@@ -4,8 +4,8 @@
 SGR: ReactNode с Structured Output управляет flow через edges по state.
 
 Flow:
-    AgentSO -> (state.next_action == "tool1") -> ToolNode
-           -> (state.next_action == "tool2") -> FunctionNode  
+    AgentSO -> (state.next_action == "tool1") -> CodeNode
+           -> (state.next_action == "tool2") -> CodeNode  
            -> (state.next_action == "tool3") -> RemoteAgentNode
            -> (state.next_action == "done") -> ExitNode
 
@@ -19,8 +19,8 @@ import pytest
 from apps.agents.src.agent import Agent
 from apps.agents.src.agent.nodes import (
     ReactNode,
-    FunctionNode,
-    ToolNode,
+    CodeNode,
+    CodeNode,
     RemoteAgentNode,
 )
 from apps.agents.src.models import Edge
@@ -75,10 +75,10 @@ class TestSGRWithStructuredOutput:
         # AgentSO - ReactNode с Structured Output
         agent_so = ReactNode(
             node_id="agent_so",
-            prompt="""You are a coordinator. Based on current state, decide next action.
+            config={
+                "prompt": """You are a coordinator. Based on current state, decide next action.
 Available actions: tool1, tool2, done.
 Return JSON with next_action and reason.""",
-            config={
                 "structured_output": True,
                 "output_schema": {
                     "type": "object",
@@ -93,7 +93,7 @@ Return JSON with next_action and reason.""",
             }
         )
         
-        # Tool1 - ToolNode (InlineTool)
+        # Tool1 - CodeNode (InlineTool)
         tool1 = InlineTool(
             tool_id="data_fetcher",
             code="""
@@ -101,25 +101,25 @@ def execute(args, state):
     return {"tool1_result": "Data fetched successfully", "data": [1, 2, 3]}
 """,
         )
-        tool1_node = ToolNode(
+        tool1_node = CodeNode(
             node_id="tool1",
-            tool=tool1,
-            input_mapping={},
+            config={"input_mapping": {}},
         )
+        tool1_node.tool = tool1
         
-        # Tool2 - FunctionNode: доступ строго через state.field
+        # Tool2 - CodeNode: доступ строго через state.field
         tool2_code = """
 def run(state):
     data = state.data
     processed = [x * 2 for x in data]
     return {"tool2_result": "Data processed", "processed_data": processed}
 """
-        tool2_node = FunctionNode(
+        tool2_node = CodeNode(
             node_id="tool2",
-            code=tool2_code,
+            config={"code": tool2_code},
         )
         
-        # Done - FunctionNode (exit type): строгий доступ к полям
+        # Done - CodeNode (exit type): строгий доступ к полям
         done_code = """
 def run(state):
     return {
@@ -127,10 +127,9 @@ def run(state):
         "execution_log": [state.tool1_result, state.tool2_result]
     }
 """
-        done_node = FunctionNode(
+        done_node = CodeNode(
             node_id="done",
-            code=done_code,
-            config={"type": "exit"}
+            config={"code": done_code, "type": "exit"}
         )
         
         # Создаем Agent с conditional edges
@@ -190,8 +189,8 @@ def run(state):
         # AgentSO
         agent_so = ReactNode(
             node_id="agent_so",
-            prompt="Coordinator",
             config={
+                "prompt": "Coordinator",
                 "structured_output": True,
                 "output_schema": {
                     "type": "object",
@@ -210,24 +209,29 @@ def run(state):
             tool_id="fetcher",
             code="def execute(args, state):\n    return {'tool1_done': True, 'payload': 'data123'}",
         )
-        tool1_node = ToolNode(node_id="tool1", tool=tool1, input_mapping={})
+        tool1_node = CodeNode(node_id="tool1", config={"input_mapping": {}})
+        tool1_node.tool = tool1
         
         # RemoteAgent - реальный сервер из docker-compose
         remote_node = RemoteAgentNode(
             node_id="remote",
-            url=test_a2a_agent,
-            input_mapping={"content": "@state:payload"},
-            auth_headers={"X-API-Key": "test-api-key-12345"},
+            config={
+                "url": test_a2a_agent,
+                "input_mapping": {"content": "@state:payload"},
+                "auth_headers": {"X-API-Key": "test-api-key-12345"},
+            }
         )
         
         # Done - строгий доступ к полям
-        done_node = FunctionNode(
+        done_node = CodeNode(
             node_id="done",
-            code="""
+            config={
+                "code": """
 def run(state):
     return {"final": f"Summary: {state.summary}", "remote_result": state.response}
 """,
-            config={"type": "exit"}
+                "type": "exit"
+            }
         )
         
         flow = Agent(
@@ -280,8 +284,8 @@ def run(state):
         
         agent_so = ReactNode(
             node_id="agent_so",
-            prompt="Check counter. If < 3, return increment. Otherwise done.",
             config={
+                "prompt": "Check counter. If < 3, return increment. Otherwise done.",
                 "structured_output": True,
                 "output_schema": {
                     "type": "object",
@@ -295,24 +299,28 @@ def run(state):
         )
         
         # Increment: инициализируем counter и history в начальном state
-        increment_node = FunctionNode(
+        increment_node = CodeNode(
             node_id="increment",
-            code="""
+            config={
+                "code": """
 def run(state):
     current = state.counter
     history = state.history
     return {"counter": current + 1, "history": history + [f"inc_{current}"]}
-""",
+"""
+            }
         )
         
         # Done: строгий доступ
-        done_node = FunctionNode(
+        done_node = CodeNode(
             node_id="done",
-            code="""
+            config={
+                "code": """
 def run(state):
     return {"response": f"Done! Counter={state.counter}, History={state.history}"}
 """,
-            config={"type": "exit"}
+                "type": "exit"
+            }
         )
         
         flow = Agent(
@@ -361,8 +369,8 @@ def run(state):
         
         agent_so = ReactNode(
             node_id="agent_so",
-            prompt="Analyze request. Urgent -> fast_track, Normal -> standard_track, then done.",
             config={
+                "prompt": "Analyze request. Urgent -> fast_track, Normal -> standard_track, then done.",
                 "structured_output": True,
                 "output_schema": {
                     "type": "object",
@@ -377,30 +385,36 @@ def run(state):
         )
         
         # fast_track: строгий доступ к state.priority
-        fast_track = FunctionNode(
+        fast_track = CodeNode(
             node_id="fast_track",
-            code="""
+            config={
+                "code": """
 def run(state):
     return {"processed_by": "FAST", "fast_result": f"Urgent handling: {state.priority}"}
-""",
+"""
+            }
         )
         
-        standard_track = FunctionNode(
+        standard_track = CodeNode(
             node_id="standard_track",
-            code="""
+            config={
+                "code": """
 def run(state):
     return {"processed_by": "STANDARD", "standard_result": "Normal handling"}
-""",
+"""
+            }
         )
         
         # done: строгий доступ к state.processed_by и state.result
-        done_node = FunctionNode(
+        done_node = CodeNode(
             node_id="done",
-            code="""
+            config={
+                "code": """
 def run(state):
     return {"response": f"Completed via {state.processed_by}: {state.result}"}
 """,
-            config={"type": "exit"}
+                "type": "exit"
+            }
         )
         
         flow = Agent(
@@ -437,10 +451,10 @@ def run(state):
         """
         Полный тест SGR со ВСЕМИ типами нод:
         1. ReactNode (agent_so) - координатор с SO
-        2. ToolNode (tool1) - InlineTool
-        3. FunctionNode (tool2) - Python функция
+        2. CodeNode (tool1) - InlineTool
+        3. CodeNode (tool2) - Python функция
         4. RemoteAgentNode (tool3) - удалённый агент из docker-compose
-        5. FunctionNode (done) - exit node
+        5. CodeNode (done) - exit node
         
         Flow: agent_so -> tool1 -> agent_so -> tool2 -> agent_so -> tool3 -> agent_so -> done
         """
@@ -454,8 +468,8 @@ def run(state):
         # 1. AgentSO - ReactNode с Structured Output
         agent_so = ReactNode(
             node_id="agent_so",
-            prompt="Coordinator. Execute tool1, tool2, tool3, then done.",
             config={
+                "prompt": "Coordinator. Execute tool1, tool2, tool3, then done.",
                 "structured_output": True,
                 "output_schema": {
                     "type": "object",
@@ -469,7 +483,7 @@ def run(state):
             }
         )
         
-        # 2. ToolNode - InlineTool
+        # 2. CodeNode - InlineTool
         tool1 = InlineTool(
             tool_id="inline_tool",
             code="""
@@ -477,30 +491,36 @@ def execute(args, state):
     return {"tool1_executed": True, "tool1_data": "from_inline_tool"}
 """,
         )
-        tool1_node = ToolNode(node_id="tool1", tool=tool1, input_mapping={})
+        tool1_node = CodeNode(node_id="tool1", config={"input_mapping": {}})
+        tool1_node.tool = tool1
         
-        # 3. FunctionNode: строгий доступ к state.tool1_data
-        tool2_node = FunctionNode(
+        # 3. CodeNode: строгий доступ к state.tool1_data
+        tool2_node = CodeNode(
             node_id="tool2",
-            code="""
+            config={
+                "code": """
 def run(state):
     prev = state.tool1_data
     return {"tool2_executed": True, "tool2_data": f"processed_{prev}"}
-""",
+"""
+            }
         )
         
         # 4. RemoteAgentNode (реальный test-a2a-agent из docker-compose)
         tool3_node = RemoteAgentNode(
             node_id="tool3",
-            url=test_a2a_agent,
-            input_mapping={"content": "@state:tool2_data"},
-            auth_headers={"X-API-Key": "test-api-key-12345"},
+            config={
+                "url": test_a2a_agent,
+                "input_mapping": {"content": "@state:tool2_data"},
+                "auth_headers": {"X-API-Key": "test-api-key-12345"},
+            }
         )
         
-        # 5. Exit FunctionNode: строгий доступ ко всем полям
-        done_node = FunctionNode(
+        # 5. Exit CodeNode: строгий доступ ко всем полям
+        done_node = CodeNode(
             node_id="done",
-            code="""
+            config={
+                "code": """
 def run(state):
     return {
         "final_response": f"SGR completed: {state.summary}",
@@ -511,7 +531,8 @@ def run(state):
         }
     }
 """,
-            config={"type": "exit"}
+                "type": "exit"
+            }
         )
         
         flow = Agent(
@@ -546,11 +567,11 @@ def run(state):
         
         # === Assertions ===
         
-        # Tool1 (ToolNode) executed
+        # Tool1 (CodeNode) executed
         assert result.tool1_executed is True, "Tool1 should be executed"
         assert result.tool1_data == "from_inline_tool", "Tool1 should set tool1_data"
         
-        # Tool2 (FunctionNode) executed
+        # Tool2 (CodeNode) executed
         assert result.tool2_executed is True, "Tool2 should be executed"
         assert result.tool2_data == "processed_from_inline_tool", "Tool2 should process tool1 data"
         
@@ -585,8 +606,8 @@ def run(state):
         
         agent_so = ReactNode(
             node_id="agent_so",
-            prompt="Coordinator with error handling",
             config={
+                "prompt": "Coordinator with error handling",
                 "structured_output": True,
                 "output_schema": {
                     "type": "object",
@@ -600,27 +621,32 @@ def run(state):
             }
         )
         
-        risky_node = FunctionNode(
+        risky_node = CodeNode(
             node_id="risky",
-            code="""
+            config={
+                "code": """
 def run(state):
     return {"error_occurred": True, "error_message": "Operation failed safely"}
-""",
+"""
+            }
         )
         
         # recovery: строгий доступ к state.error_message
-        recovery_node = FunctionNode(
+        recovery_node = CodeNode(
             node_id="recovery",
-            code="""
+            config={
+                "code": """
 def run(state):
     return {"recovered": True, "recovery_log": f"Recovered from: {state.error_message}"}
-""",
+"""
+            }
         )
         
         # done: строгий доступ ко всем полям
-        done_node = FunctionNode(
+        done_node = CodeNode(
             node_id="done",
-            code="""
+            config={
+                "code": """
 def run(state):
     return {
         "response": f"Flow finished with status: {state.final_status}",
@@ -628,7 +654,8 @@ def run(state):
         "recovery_details": state.recovery_log
     }
 """,
-            config={"type": "exit"}
+                "type": "exit"
+            }
         )
         
         flow = Agent(

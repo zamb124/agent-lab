@@ -296,9 +296,9 @@ def _generate_mermaid(skill_schema: Dict[str, Any]) -> str:
         display_name = node_info.get("name", node_id)
 
         # Форма и класс зависит от типа
-        if node_type == "function":
-            # Ромб для function (условия)
-            lines.append(f"    {safe_id}{{{display_name}}}:::function")
+        if node_type == "code":
+            # Ромб для code (условия)
+            lines.append(f"    {safe_id}{{{display_name}}}:::code")
         elif node_type == "agent":
             # Двойной закругленный для agent
             lines.append(f'    {safe_id}[["{display_name}"]]:::agent')

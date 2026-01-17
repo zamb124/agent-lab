@@ -15,6 +15,7 @@ Agent - выполнение графа нод.
 
 from __future__ import annotations
 
+import asyncio
 import operator
 import re
 from typing import Any, Dict, List, Optional, Union
@@ -134,7 +135,7 @@ class Agent:
 
     async def _execute_loop(self, state: ExecutionState) -> ExecutionState:
         """Цикл выполнения."""
-        current_node_id = state.current_nodes[0] if state.current_nodes else self.entry
+        current_nodes = list(state.current_nodes) if state.current_nodes else [self.entry]
         iterations = 0
 
         container = get_container()
@@ -148,7 +149,7 @@ class Agent:
 
         tracer = get_tracer()
         async with tracer.flow_span(self.agent_id, self.entry, trace_ctx):
-            while current_node_id is not None:
+            while current_nodes:
                 iterations += 1
                 if iterations > MAX_ITERATIONS:
                     raise AgentInfiniteLoopError(
@@ -156,59 +157,94 @@ class Agent:
                         max_iterations=MAX_ITERATIONS
                     )
 
-                if current_node_id not in self.nodes:
-                    raise ValueError(f"Node '{current_node_id}' not found in agent '{self.agent_id}'")
+                # Валидация и подготовка нод
+                for node_id in current_nodes:
+                    if node_id not in self.nodes:
+                        raise ValueError(f"Node '{node_id}' not found in agent '{self.agent_id}'")
+                    
+                    node = self.nodes[node_id]
+                    node_type = node.config.get("type", "function")
+                    self._check_node_call_limit(state, node_id, node_type)
+                    
+                    # Проверка breakpoint
+                    if await self._check_breakpoint(state, node_id, node_type, emitter):
+                        return state
 
-                node = self.nodes[current_node_id]
-                node_type = node.config.get("type", "unknown")
+                # Emit node_start для всех нод
+                for node_id in current_nodes:
+                    node_type = self.nodes[node_id].config.get("type", "function")
+                    logger.debug(f"Agent {self.agent_id}: executing node '{node_id}' (type={node_type})")
+                    await emitter.emit_node_start(node_id, node_type)
 
-                self._check_node_call_limit(state, current_node_id, node_type)
-
-                # Проверка breakpoint перед выполнением ноды
-                if await self._check_breakpoint(state, current_node_id, node_type, emitter):
+                # Выполнение всех нод текущего уровня
+                try:
+                    tasks = [self.nodes[node_id].run.kiq(state) for node_id in current_nodes]
+                    results = await asyncio.gather(*tasks)
+                    state = self._merge_results(state, results)
+                except AgentInterrupt as e:
+                    node_id = current_nodes[0]  # interrupt от первой ноды
+                    logger.info(f"Agent {self.agent_id}: interrupt at '{node_id}': {e.question}")
+                    state.interrupt = InterruptData(question=e.question)
+                    state.current_nodes = current_nodes
+                    await emitter.emit_node_complete(node_id, f"interrupt: {e.question[:100]}")
                     return state
+                except Exception as e:
+                    for node_id in current_nodes:
+                        await emitter.emit_node_error(node_id, str(e))
+                    raise
 
-                logger.debug(f"Agent {self.agent_id}: executing node '{current_node_id}' (type={node_type})")
+                # Emit node_complete и record calls для всех нод
+                for node_id in current_nodes:
+                    node = self.nodes[node_id]
+                    node_type = node.config.get("type", "function")
+                    result_preview = str(state.response)[:200] if state.response else ""
+                    await emitter.emit_node_complete(node_id, result_preview)
+                    self._record_node_call(state, node_id, node_type)
 
-                await emitter.emit_node_start(current_node_id, node_type)
-
-                async with tracer.node_span(current_node_id, node_type, trace_ctx) as span:
-                    try:
-                        state = await node.run(state)
-                        tracer.record_state_snapshot(span, state)
-                        
-                        result_preview = str(state.response)[:200] if state.response else ""
-                        await emitter.emit_node_complete(current_node_id, result_preview)
-                    except Exception as e:
-                        if isinstance(e, AgentInterrupt):
-                            logger.info(
-                                f"Agent {self.agent_id}: interrupt at '{current_node_id}': {e.question}"
-                            )
-                            state.interrupt = InterruptData(question=e.question)
-                            state.current_nodes = [current_node_id]
-                            tracer.record_state_snapshot(span, state)
-                            await emitter.emit_node_complete(current_node_id, f"interrupt: {e.question[:100]}")
-                            return state
-                        await emitter.emit_node_error(current_node_id, str(e))
-                        raise
-
-                self._record_node_call(state, current_node_id, node_type)
-
+                # Проверка interrupt
                 if state.interrupt:
-                    logger.info(f"Agent {self.agent_id}: interrupted at '{current_node_id}'")
-                    state.current_nodes = [current_node_id]
+                    logger.info(f"Agent {self.agent_id}: interrupted")
+                    state.current_nodes = current_nodes
                     return state
 
-                next_nodes = self._find_next_nodes(current_node_id, state)
+                # Собираем все next_nodes от всех выполненных
+                next_nodes = set()
+                for node_id in current_nodes:
+                    for next_id in self._find_next_nodes(node_id, state):
+                        next_nodes.add(next_id)
 
                 if not next_nodes:
-                    logger.debug(f"Agent {self.agent_id}: completed at '{current_node_id}'")
+                    logger.debug(f"Agent {self.agent_id}: completed")
                     state.current_nodes = []
                     return state
 
-                current_node_id = next_nodes[0]
+                current_nodes = list(next_nodes)
         
         return state
+
+    def _merge_results(
+        self,
+        original_state: ExecutionState,
+        results: List[ExecutionState]
+    ) -> ExecutionState:
+        """Мержит результаты нод. messages - extend, остальное - кто последний."""
+        merged = original_state.model_copy(deep=True)
+        original_msg_count = len(original_state.messages)
+
+        for result in results:
+            # messages - добавляем новые
+            new_messages = result.messages[original_msg_count:]
+            merged.messages.extend(new_messages)
+
+            # Все поля (включая динамические) - перезаписываем
+            result_dict = result.model_dump(exclude_none=False)
+            for field, value in result_dict.items():
+                if field == "messages":
+                    continue
+                if value is not None:
+                    setattr(merged, field, value)
+
+        return merged
 
 
     async def _check_breakpoint(
@@ -265,7 +301,7 @@ class Agent:
         node_history = state.node_history.get(node_id, {})
         call_count = len(node_history.get("calls", []))
 
-        if node_type == "function" and call_count >= MAX_FUNCTION_CALLS:
+        if node_type == "code" and call_count >= MAX_FUNCTION_CALLS:
             raise NodeCallLimitError(
                 f"Node '{node_id}' (type={node_type}): превышен лимит {MAX_FUNCTION_CALLS} вызовов",
                 limit=MAX_FUNCTION_CALLS

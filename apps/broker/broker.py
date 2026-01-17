@@ -41,6 +41,9 @@ async def worker_startup(state: TaskiqState) -> None:
     container = get_container()
     state.container = container
     
+    # Внутри воркера выполняем ноды напрямую, без рекурсивного kiq()
+    container.use_worker = False
+    
     logger.info("Worker: connecting to Redis...")
     max_retries = 5
     for attempt in range(max_retries):

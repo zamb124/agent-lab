@@ -12,8 +12,8 @@ from apps.agents.src.agent.nodes import (
     AgentNode,
     RemoteAgentNode,
     ExternalAPINode,
-    ToolNode,
-    FunctionNode,
+    CodeNode,
+    CodeNode,
 )
 from apps.agents.src.models.external_api import ParameterSchema
 from core.state import ExecutionState
@@ -26,8 +26,10 @@ class TestBaseNodeInputMapping:
         """Без input_mapping возвращается пустой dict"""
         node = ReactNode(
             node_id="test_agent",
-            prompt="Test prompt",
-            input_mapping=None
+            config={
+                "prompt": "Test prompt",
+                "input_mapping": None
+            }
         )
         state = ExecutionState(
             task_id="test-task",
@@ -47,10 +49,12 @@ class TestBaseNodeInputMapping:
         """Простой маппинг @state:field"""
         node = ReactNode(
             node_id="test_agent",
-            prompt="Test prompt",
-            input_mapping={
-                "content": "@state:user_query",
-                "name": "@state:user_name"
+            config={
+                "prompt": "Test prompt",
+                "input_mapping": {
+                    "content": "@state:user_query",
+                    "name": "@state:user_name"
+                }
             }
         )
         state = ExecutionState(
@@ -75,10 +79,12 @@ class TestBaseNodeInputMapping:
         """Маппинг с вложенными путями @state:user.profile.name"""
         node = ReactNode(
             node_id="test_agent",
-            prompt="Test prompt",
-            input_mapping={
-                "user_name": "@state:user.profile.name",
-                "user_city": "@state:user.address.city"
+            config={
+                "prompt": "Test prompt",
+                "input_mapping": {
+                    "user_name": "@state:user.profile.name",
+                    "user_city": "@state:user.address.city"
+                }
             }
         )
         state = ExecutionState(
@@ -102,11 +108,13 @@ class TestBaseNodeInputMapping:
         """Маппинг с @var: для переменных"""
         node = ReactNode(
             node_id="test_agent",
-            prompt="Test prompt",
-            input_mapping={
-                "content": "@state:query",
-                "company": "@var:company_name",
-                "api_key": "@var:config.api_key"
+            config={
+                "prompt": "Test prompt",
+                "input_mapping": {
+                    "content": "@state:query",
+                    "company": "@var:company_name",
+                    "api_key": "@var:config.api_key"
+                }
             }
         )
         state = ExecutionState(
@@ -131,12 +139,14 @@ class TestBaseNodeInputMapping:
         """Маппинг с константами"""
         node = ReactNode(
             node_id="test_agent",
-            prompt="Test prompt",
-            input_mapping={
-                "content": "@state:query",
-                "fixed_value": "constant",
-                "number": 42,
-                "flag": True
+            config={
+                "prompt": "Test prompt",
+                "input_mapping": {
+                    "content": "@state:query",
+                    "fixed_value": "constant",
+                    "number": 42,
+                    "flag": True
+                }
             }
         )
         state = ExecutionState(
@@ -159,10 +169,12 @@ class TestBaseNodeInputMapping:
         """Отсутствующий путь -> None"""
         node = ReactNode(
             node_id="test_agent",
-            prompt="Test prompt",
-            input_mapping={
-                "existing": "@state:existing",
-                "missing": "@state:missing.path"
+            config={
+                "prompt": "Test prompt",
+                "input_mapping": {
+                    "existing": "@state:existing",
+                    "missing": "@state:missing.path"
+                }
             }
         )
         state = ExecutionState(
@@ -187,8 +199,10 @@ class TestPrepareState:
         """_prepare_state применяет inputs к state"""
         node = ReactNode(
             node_id="test_agent",
-            prompt="Test prompt",
-            input_mapping={"content": "@state:query"}
+            config={
+                "prompt": "Test prompt",
+                "input_mapping": {"content": "@state:query"}
+            }
         )
         state = ExecutionState(
             task_id="test-task",
@@ -217,8 +231,10 @@ class TestAgentNodeInputMapping:
         """Без input_mapping inputs пустой"""
         node = AgentNode(
             node_id="test_subflow",
-            agent_id="inner_flow",
-            input_mapping=None
+            config={
+                "agent_id": "inner_flow",
+                "input_mapping": None
+            }
         )
         state = ExecutionState(
             task_id="test-task",
@@ -239,10 +255,12 @@ class TestAgentNodeInputMapping:
         """Простой маппинг"""
         node = AgentNode(
             node_id="test_subflow",
-            agent_id="inner_flow",
-            input_mapping={
-                "content": "@state:user_query",
-                "context": "@state:ctx"
+            config={
+                "agent_id": "inner_flow",
+                "input_mapping": {
+                    "content": "@state:user_query",
+                    "context": "@state:ctx"
+                }
             }
         )
         state = ExecutionState(
@@ -267,10 +285,12 @@ class TestAgentNodeInputMapping:
         """Вложенные пути"""
         node = AgentNode(
             node_id="test_subflow",
-            agent_id="inner_flow",
-            input_mapping={
-                "name": "@state:user.profile.name",
-                "city": "@state:delivery.address.city"
+            config={
+                "agent_id": "inner_flow",
+                "input_mapping": {
+                    "name": "@state:user.profile.name",
+                    "city": "@state:delivery.address.city"
+                }
             }
         )
         state = ExecutionState(
@@ -293,10 +313,12 @@ class TestAgentNodeInputMapping:
         """Маппинг с @var:"""
         node = AgentNode(
             node_id="test_subflow",
-            agent_id="inner_flow",
-            input_mapping={
-                "content": "@state:query",
-                "api_url": "@var:config.api_url"
+            config={
+                "agent_id": "inner_flow",
+                "input_mapping": {
+                    "content": "@state:query",
+                    "api_url": "@var:config.api_url"
+                }
             }
         )
         state = ExecutionState(
@@ -324,8 +346,10 @@ class TestRemoteAgentNodeInputMapping:
         """input_mapping: {"content": "@state:field"}"""
         node = RemoteAgentNode(
             node_id="test_remote",
-            url="http://agent:8080",
-            input_mapping={"content": "@state:user_query"}
+            config={
+                "url": "http://agent:8080",
+                "input_mapping": {"content": "@state:user_query"}
+            }
         )
         state = ExecutionState(
             task_id="test-task",
@@ -344,8 +368,10 @@ class TestRemoteAgentNodeInputMapping:
         """input_mapping с вложенным путём"""
         node = RemoteAgentNode(
             node_id="test_remote",
-            url="http://agent:8080",
-            input_mapping={"content": "@state:request.body.text"}
+            config={
+                "url": "http://agent:8080",
+                "input_mapping": {"content": "@state:request.body.text"}
+            }
         )
         state = ExecutionState(
             task_id="test-task",
@@ -364,8 +390,10 @@ class TestRemoteAgentNodeInputMapping:
         """input_mapping с @var:"""
         node = RemoteAgentNode(
             node_id="test_remote",
-            url="http://agent:8080",
-            input_mapping={"content": "@var:default_prompt"}
+            config={
+                "url": "http://agent:8080",
+                "input_mapping": {"content": "@var:default_prompt"}
+            }
         )
         state = ExecutionState(
             task_id="test-task",
@@ -383,7 +411,7 @@ class TestRemoteAgentNodeInputMapping:
         """Без input_mapping используется state.content"""
         node = RemoteAgentNode(
             node_id="test_remote",
-            url="http://agent:8080"
+            config={"url": "http://agent:8080"}
         )
         state = ExecutionState(
             task_id="test-task",
@@ -550,7 +578,7 @@ class TestAuthHeadersWithNestedVars:
         """RemoteAgentNode._resolve_value с простым @var:"""
         node = RemoteAgentNode(
             node_id="test",
-            url="http://agent:8080"
+            config={"url": "http://agent:8080"}
         )
         variables = {"token": "abc123"}
         
@@ -562,7 +590,7 @@ class TestAuthHeadersWithNestedVars:
         """RemoteAgentNode._resolve_value с вложенным @var:"""
         node = RemoteAgentNode(
             node_id="test",
-            url="http://agent:8080"
+            config={"url": "http://agent:8080"}
         )
         variables = {
             "auth": {
@@ -578,10 +606,12 @@ class TestAuthHeadersWithNestedVars:
         """RemoteAgentNode._resolve_auth_headers с вложенными @var:"""
         node = RemoteAgentNode(
             node_id="test",
-            url="http://agent:8080",
-            auth_headers={
-                "Authorization": "Bearer @var:auth.token",
-                "X-API-Key": "@var:api.keys.primary"
+            config={
+                "url": "http://agent:8080",
+                "auth_headers": {
+                    "Authorization": "Bearer @var:auth.token",
+                    "X-API-Key": "@var:api.keys.primary"
+                }
             }
         )
         variables = {
@@ -598,7 +628,7 @@ class TestAuthHeadersWithNestedVars:
         """RemoteAgentNode URL с вложенным @var:"""
         node = RemoteAgentNode(
             node_id="test",
-            url="https://@var:config.api.host/v1"
+            config={"url": "https://@var:config.api.host/v1"}
         )
         variables = {
             "config": {
@@ -734,13 +764,15 @@ class TestRealWorldScenarios:
         """Агент обработки заказов с вложенными данными"""
         node = ReactNode(
             node_id="order_agent",
-            prompt="Process order",
-            input_mapping={
-                "order_id": "@state:order.id",
-                "customer_name": "@state:order.customer.name",
-                "items": "@state:order.items",
-                "total": "@state:order.total",
-                "company": "@var:company_name"
+            config={
+                "prompt": "Process order",
+                "input_mapping": {
+                    "order_id": "@state:order.id",
+                    "customer_name": "@state:order.customer.name",
+                    "items": "@state:order.items",
+                    "total": "@state:order.total",
+                    "company": "@var:company_name"
+                }
             }
         )
         state = ExecutionState(
@@ -798,11 +830,13 @@ class TestRealWorldScenarios:
         """Subflow получает только нужные данные"""
         node = AgentNode(
             node_id="analysis_subflow",
-            agent_id="document_analysis",
-            input_mapping={
-                "content": "@state:document.text",
-                "metadata": "@state:document.meta",
-                "analysis_type": "@var:settings.analysis_type"
+            config={
+                "agent_id": "document_analysis",
+                "input_mapping": {
+                    "content": "@state:document.text",
+                    "metadata": "@state:document.meta",
+                    "analysis_type": "@var:settings.analysis_type"
+                }
             }
         )
         state = ExecutionState(
@@ -833,11 +867,13 @@ class TestRealWorldScenarios:
         """Remote agent получает контекст из переменных"""
         node = RemoteAgentNode(
             node_id="external_agent",
-            url="http://agent:8080",
-            input_mapping={
-                "content": "@state:user_message",
-                "system_context": "@var:agent.system_prompt",
-                "user_info": "@state:session.user"
+            config={
+                "url": "http://agent:8080",
+                "input_mapping": {
+                    "content": "@state:user_message",
+                    "system_context": "@var:agent.system_prompt",
+                    "user_info": "@state:session.user"
+                }
             }
         )
         state = ExecutionState(
@@ -872,8 +908,10 @@ class TestMessagesFilter:
         
         node = ReactNode(
             node_id="test_node",
-            prompt="Test",
-            config={"messages_filter": "all"}
+            config={
+                "prompt": "Test",
+                "messages_filter": "all"
+            }
         )
         messages = [
             Message(
@@ -907,8 +945,10 @@ class TestMessagesFilter:
         
         node = ReactNode(
             node_id="test_node",
-            prompt="Test",
-            config={"messages_filter": "own"}
+            config={
+                "prompt": "Test",
+                "messages_filter": "own"
+            }
         )
         messages = [
             Message(
@@ -944,8 +984,10 @@ class TestMessagesFilter:
         
         node = ReactNode(
             node_id="test_node",
-            prompt="Test",
-            config={"messages_filter": ["node1", "node2"]}
+            config={
+                "prompt": "Test",
+                "messages_filter": ["node1", "node2"]
+            }
         )
         messages = [
             Message(
@@ -991,8 +1033,10 @@ class TestSaveToMessages:
         """_append_to_messages добавляет сообщение с node_id в metadata"""
         node = ReactNode(
             node_id="my_node",
-            prompt="Test",
-            config={"save_to_messages": True}
+            config={
+                "prompt": "Test",
+                "save_to_messages": True
+            }
         )
         state = ExecutionState(
             task_id="test-task", context_id="ctx", user_id="u",
@@ -1010,18 +1054,20 @@ class TestSaveToMessages:
         """output_mapping можно задать в config"""
         node = ReactNode(
             node_id="my_agent",
-            prompt="Test",
-            config={"output_mapping": {"response": "agent_response"}}
+            config={
+                "prompt": "Test",
+                "output_mapping": {"response": "agent_response"}
+            }
         )
         
         assert node.output_mapping == {"response": "agent_response"}
 
 
-class TestToolNodeInputMapping:
-    """Тесты для ToolNode с input_mapping."""
+class TestCodeNodeInputMapping:
+    """Тесты для CodeNode с input_mapping."""
 
     def test_tool_node_resolves_inputs(self):
-        """ToolNode использует input_mapping для аргументов"""
+        """CodeNode использует input_mapping для аргументов"""
         from apps.agents.src.tools.base import BaseTool
         
         class MockTool(BaseTool):
@@ -1031,11 +1077,11 @@ class TestToolNodeInputMapping:
             async def _run_impl(self, args, state):
                 return f"Got: {args.get('query')}"
         
-        node = ToolNode(
+        node = CodeNode(
             node_id="test_tool",
-            tool=MockTool(),
-            input_mapping={"query": "@state:user_input"}
+            config={"input_mapping": {"query": "@state:user_input"}}
         )
+        node.tool = MockTool()
         state = ExecutionState(
             task_id="test", context_id="ctx", user_id="u",
             session_id="test:ctx", user_input="Hello", variables={}
@@ -1046,15 +1092,21 @@ class TestToolNodeInputMapping:
         assert inputs["query"] == "Hello"
 
 
-class TestFunctionNodeInputMapping:
-    """Тесты для FunctionNode с input_mapping."""
+class TestCodeNodeInputMapping:
+    """Тесты для CodeNode с input_mapping."""
 
     def test_function_node_resolves_inputs(self):
-        """FunctionNode использует input_mapping для kwargs"""
-        node = FunctionNode(
+        """CodeNode использует input_mapping для kwargs"""
+        # Lambda не поддерживается напрямую в config, используем callable в code
+        def test_func(state, name=""):
+            return state
+        
+        node = CodeNode(
             node_id="test_func",
-            code=lambda state, name="": state,
-            config={"input_mapping": {"name": "@state:user_name"}}
+            config={
+                "code": test_func,
+                "input_mapping": {"name": "@state:user_name"}
+            }
         )
         state = ExecutionState(
             task_id="test", context_id="ctx", user_id="u",

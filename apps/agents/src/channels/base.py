@@ -1048,8 +1048,8 @@ class BaseChannel(ABC):
         for node_id, node_config in effective["nodes"].items():
             node_type = node_config.get("type")
             
-            # Собираем inline tools из tool nodes
-            if node_type == NodeType.TOOL.value:
+            # Собираем inline tools из code nodes
+            if node_type == NodeType.CODE.value:
                 if node_config.get("code"):
                     tool_id = node_config.get("tool_id") or node_id
                     inline_tools[tool_id] = {
@@ -1156,8 +1156,8 @@ class BaseChannel(ABC):
                 description = f"Нода типа '{node_type}'"
                 if node_config.get("agent_id"):
                     description = f"Агент: {node_name}"
-                elif node_type == NodeType.FUNCTION.value:
-                    description = "Function нода"
+                elif node_type == NodeType.CODE.value:
+                    description = "Code нода"
                 elif node_type == NodeType.REACT_NODE.value:
                     description = "ReAct агент"
                 
